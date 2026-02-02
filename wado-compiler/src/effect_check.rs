@@ -294,6 +294,26 @@ impl<'a> EffectChecker<'a> {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.check_expr(value);
             }
+            TirExprKind::IsNotNull { expr }
+            | TirExprKind::UnwrapOption { expr, .. }
+            | TirExprKind::VariantTag { expr } => {
+                self.check_expr(expr);
+            }
+            TirExprKind::VariantPayload { expr, .. } => {
+                self.check_expr(expr);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.check_expr(scrutinee);
+                for arm in arms {
+                    self.check_block(arm);
+                }
+                self.check_block(default);
+            }
             // Leaf expressions - no sub-expressions to check
             TirExprKind::IntLiteral { .. }
             | TirExprKind::FloatLiteral { .. }

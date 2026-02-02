@@ -291,6 +291,26 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
                 insert_moves_in_expr(&mut arm.body, type_table);
             }
         }
+        TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner } => {
+            insert_moves_in_expr(inner, type_table);
+        }
+        TirExprKind::VariantPayload { expr: inner, .. } => {
+            insert_moves_in_expr(inner, type_table);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            insert_moves_in_expr(scrutinee, type_table);
+            for arm in arms {
+                insert_moves_in_block(arm, type_table);
+            }
+            insert_moves_in_block(default, type_table);
+        }
         // Leaf nodes - no nested expressions
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -522,6 +542,26 @@ fn collect_value_copy_types_in_expr(
             for arm in arms {
                 collect_value_copy_types_in_expr(&arm.body, type_table, copy_types);
             }
+        }
+        TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner } => {
+            collect_value_copy_types_in_expr(inner, type_table, copy_types);
+        }
+        TirExprKind::VariantPayload { expr: inner, .. } => {
+            collect_value_copy_types_in_expr(inner, type_table, copy_types);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_value_copy_types_in_expr(scrutinee, type_table, copy_types);
+            for arm in arms {
+                collect_value_copy_types_in_block(arm, type_table, copy_types);
+            }
+            collect_value_copy_types_in_block(default, type_table, copy_types);
         }
         // Leaf nodes - no nested expressions
         TirExprKind::IntLiteral { .. }

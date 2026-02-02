@@ -275,6 +275,26 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_assigned_in_expr(value, assigned);
         }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr } => {
+            collect_assigned_in_expr(expr, assigned);
+        }
+        TirExprKind::VariantPayload { expr, .. } => {
+            collect_assigned_in_expr(expr, assigned);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_assigned_in_expr(scrutinee, assigned);
+            for arm in arms {
+                collect_assigned_in_stmts(&arm.stmts, assigned);
+            }
+            collect_assigned_in_stmts(&default.stmts, assigned);
+        }
         // Terminals - no nested expressions
         TirExprKind::Local { .. }
         | TirExprKind::Global { .. }
@@ -478,6 +498,26 @@ fn collect_usage_in_expr(
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_usage_in_expr(value, usage, in_loop, in_condition);
+        }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr } => {
+            collect_usage_in_expr(expr, usage, in_loop, in_condition);
+        }
+        TirExprKind::VariantPayload { expr, .. } => {
+            collect_usage_in_expr(expr, usage, in_loop, in_condition);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_usage_in_expr(scrutinee, usage, in_loop, in_condition);
+            for arm in arms {
+                collect_usage_in_block(arm, usage, in_loop);
+            }
+            collect_usage_in_block(default, usage, in_loop);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
@@ -771,6 +811,26 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
         TirExprKind::GlobalVarSet { value, .. } => {
             substitute_in_expr(value, from_local, source);
         }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr } => {
+            substitute_in_expr(expr, from_local, source);
+        }
+        TirExprKind::VariantPayload { expr, .. } => {
+            substitute_in_expr(expr, from_local, source);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            substitute_in_expr(scrutinee, from_local, source);
+            for arm in arms {
+                substitute_in_block(arm, from_local, source);
+            }
+            substitute_in_block(default, from_local, source);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -958,6 +1018,26 @@ fn collect_copy_bindings_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_copy_bindings_in_expr(value, bindings, block_local_assigned);
         }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr } => {
+            collect_copy_bindings_in_expr(expr, bindings, block_local_assigned);
+        }
+        TirExprKind::VariantPayload { expr, .. } => {
+            collect_copy_bindings_in_expr(expr, bindings, block_local_assigned);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_copy_bindings_in_expr(scrutinee, bindings, block_local_assigned);
+            for arm in arms {
+                collect_copy_bindings(&arm.stmts, bindings, block_local_assigned);
+            }
+            collect_copy_bindings(&default.stmts, bindings, block_local_assigned);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1132,6 +1212,26 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             remove_copy_bindings_in_expr(value, dead_locals);
+        }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr } => {
+            remove_copy_bindings_in_expr(expr, dead_locals);
+        }
+        TirExprKind::VariantPayload { expr, .. } => {
+            remove_copy_bindings_in_expr(expr, dead_locals);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            remove_copy_bindings_in_expr(scrutinee, dead_locals);
+            for arm in arms {
+                remove_copy_bindings(&mut arm.stmts, dead_locals);
+            }
+            remove_copy_bindings(&mut default.stmts, dead_locals);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }

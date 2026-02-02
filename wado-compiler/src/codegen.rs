@@ -6417,6 +6417,182 @@ impl Codegen {
                 func.instruction(&Instruction::I32Const(*case_index as i32));
             }
 
+            TirExprKind::IsNotNull { expr: inner } => {
+                // Check if Option/nullable reference has a value (is not null)
+                // Result type is bool (i32: 1 if not null, 0 if null)
+                self.generate_expr(func, inner, type_table, ctx, builder);
+                func.instruction(&Instruction::RefIsNull);
+                func.instruction(&Instruction::I32Eqz); // NOT: true if NOT null
+            }
+
+            TirExprKind::UnwrapOption {
+                expr: inner,
+                inner_type,
+            } => {
+                // Unwrap Option to get the inner value, assuming not null
+                // For reference types: use ref.as_non_null
+                // For primitive types: unbox from the wrapper struct
+                self.generate_expr(func, inner, type_table, ctx, builder);
+                func.instruction(&Instruction::RefAsNonNull);
+
+                // For primitive types, unbox the value
+                if let ResolvedType::Primitive(prim) = type_table.get(*inner_type) {
+                    let val_type = primitive_to_valtype(prim);
+                    if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
+                        func.instruction(&Instruction::StructGet {
+                            struct_type_index: box_type_idx,
+                            field_index: 0,
+                        });
+                    }
+                }
+            }
+
+            TirExprKind::VariantTag { expr: inner } => {
+                // Get the discriminant (tag) of a variant value
+                // Variant layout: struct { tag: i32, ... }
+                // Result type is i32
+                self.generate_expr(func, inner, type_table, ctx, builder);
+                // Variant base type index is field 0 (tag) of the base struct
+                // All variant case structs inherit from a common base with tag at field 0
+                // Use struct.get with field_index 0 to get the tag
+                // We need to find the variant base type index
+                let variant_type_id = inner.type_id;
+                let variant_name = match type_table.get(variant_type_id) {
+                    ResolvedType::Variant { name, .. } => name.clone(),
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => {
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| type_table.mangle_type_name(*t))
+                            .collect();
+                        mangle_generic_name(name, &type_arg_names)
+                    }
+                    other => panic!("Expected Variant type for VariantTag, got: {other:?}"),
+                };
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
+                    panic!("Variant type not registered: {variant_name}");
+                });
+                let base_type_idx = variant_info.base_type_idx;
+                drop(variant_types);
+
+                func.instruction(&Instruction::StructGet {
+                    struct_type_index: base_type_idx,
+                    field_index: 0,
+                });
+            }
+
+            TirExprKind::VariantPayload {
+                expr: inner,
+                case_index,
+                payload_type,
+            } => {
+                // Extract the payload from a variant value at a specific case index
+                // Need to cast to the case-specific struct type, then get field 1 (payload)
+                self.generate_expr(func, inner, type_table, ctx, builder);
+
+                let variant_type_id = inner.type_id;
+                let variant_name = match type_table.get(variant_type_id) {
+                    ResolvedType::Variant { name, .. } => name.clone(),
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => {
+                        let type_arg_names: Vec<String> = type_args
+                            .iter()
+                            .map(|t| type_table.mangle_type_name(*t))
+                            .collect();
+                        mangle_generic_name(name, &type_arg_names)
+                    }
+                    other => panic!("Expected Variant type for VariantPayload, got: {other:?}"),
+                };
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
+                    panic!("Variant type not registered: {variant_name}");
+                });
+                let case_info = &variant_info.cases[*case_index as usize];
+                let case_type_idx = case_info.type_idx;
+                drop(variant_types);
+
+                // Cast to the case-specific struct type
+                func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                    case_type_idx,
+                )));
+
+                // Get the payload field (field 1, after the tag)
+                func.instruction(&Instruction::StructGet {
+                    struct_type_index: case_type_idx,
+                    field_index: 1,
+                });
+
+                // If payload is a primitive and inner type indicates it needs unboxing
+                // (handled by the lowering phase - payload_type should already be correct)
+                let _ = payload_type; // Used by type system, not code generation
+            }
+
+            TirExprKind::Switch {
+                scrutinee,
+                min_value,
+                arms,
+                default,
+            } => {
+                // Switch expression using br_table for O(1) dispatch
+                // Each arm index corresponds to (scrutinee_value - min_value)
+                let result_valtype = self.type_id_to_valtype(type_table, expr.type_id);
+
+                // Outer block for the switch result
+                func.instruction(&Instruction::Block(wasm_encoder::BlockType::Result(
+                    result_valtype,
+                )));
+
+                // Nested blocks for each arm (in reverse order for br_table targeting)
+                // Block 0 = innermost = default, Block 1 = arm[n-1], ..., Block n = arm[0]
+                for _ in 0..=arms.len() {
+                    func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+                }
+
+                // Generate scrutinee and adjust for min_value
+                self.generate_expr(func, scrutinee, type_table, ctx, builder);
+                let scrutinee_base = type_table.get_ultimate_base_type(scrutinee.type_id);
+                let is_i64 = matches!(
+                    type_table.get(scrutinee_base),
+                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
+                );
+
+                if is_i64 {
+                    func.instruction(&Instruction::I64Const(*min_value));
+                    func.instruction(&Instruction::I64Sub);
+                    func.instruction(&Instruction::I32WrapI64);
+                } else {
+                    func.instruction(&Instruction::I32Const(*min_value as i32));
+                    func.instruction(&Instruction::I32Sub);
+                }
+
+                // br_table: indices 0..arms.len() -> blocks arms.len()..1, default -> block 0
+                // targets[i] = arms.len() - i (maps value i to arm[i]'s block)
+                let targets: Vec<u32> = (0..arms.len() as u32)
+                    .map(|i| arms.len() as u32 - i)
+                    .collect();
+                let default_target = 0u32; // Default block is innermost
+
+                func.instruction(&Instruction::BrTable(targets.into(), default_target));
+
+                // End default block and generate default code
+                func.instruction(&Instruction::End);
+                self.generate_block(func, default, type_table, ctx, builder);
+                func.instruction(&Instruction::Br(arms.len() as u32)); // Jump to result
+
+                // Generate each arm (in order)
+                for (i, arm) in arms.iter().enumerate() {
+                    func.instruction(&Instruction::End);
+                    self.generate_block(func, arm, type_table, ctx, builder);
+                    func.instruction(&Instruction::Br((arms.len() - 1 - i) as u32));
+                }
+
+                // End outer result block
+                func.instruction(&Instruction::End);
+            }
+
             TirExprKind::Move { value } => {
                 // Move semantics: generate the inner value without copying
                 // The value is moved directly, no value copy is generated
@@ -12432,6 +12608,22 @@ impl Codegen {
             TirExprKind::GlobalVarSet { value, .. } => self.expr_needs_async_scratch_locals(value),
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.expr_needs_async_scratch_locals(functor)
+            }
+            TirExprKind::IsNotNull { expr }
+            | TirExprKind::UnwrapOption { expr, .. }
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantPayload { expr, .. } => {
+                self.expr_needs_async_scratch_locals(expr)
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.expr_needs_async_scratch_locals(scrutinee)
+                    || arms.iter().any(|arm| self.needs_async_scratch_locals(arm))
+                    || self.needs_async_scratch_locals(default)
             }
             // Leaf nodes - no calls
             TirExprKind::IntLiteral { .. }

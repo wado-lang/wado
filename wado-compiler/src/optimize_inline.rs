@@ -345,6 +345,24 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::GlobalVarSet { value, .. } => {
             expr_has_complex_generic_types(value, type_table)
         }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantPayload { expr, .. } => {
+            expr_has_complex_generic_types(expr, type_table)
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            expr_has_complex_generic_types(scrutinee, type_table)
+                || arms
+                    .iter()
+                    .any(|arm| block_has_complex_generic_types(arm, type_table))
+                || block_has_complex_generic_types(default, type_table)
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -560,6 +578,24 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_callees_from_expr(value, callees);
+        }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantPayload { expr, .. } => {
+            collect_callees_from_expr(expr, callees);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_callees_from_expr(scrutinee, callees);
+            for arm in arms {
+                collect_callees_from_block(arm, callees);
+            }
+            collect_callees_from_block(default, callees);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
@@ -2256,6 +2292,83 @@ fn remap_expr(
                 param_count,
                 source_module,
             )),
+        },
+        TirExprKind::IsNotNull { expr } => TirExprKind::IsNotNull {
+            expr: Box::new(remap_expr(
+                expr,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+        },
+        TirExprKind::UnwrapOption { expr, inner_type } => TirExprKind::UnwrapOption {
+            expr: Box::new(remap_expr(
+                expr,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+            inner_type: *inner_type,
+        },
+        TirExprKind::VariantTag { expr } => TirExprKind::VariantTag {
+            expr: Box::new(remap_expr(
+                expr,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+        },
+        TirExprKind::VariantPayload {
+            expr,
+            case_index,
+            payload_type,
+        } => TirExprKind::VariantPayload {
+            expr: Box::new(remap_expr(
+                expr,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+            case_index: *case_index,
+            payload_type: *payload_type,
+        },
+        TirExprKind::Switch {
+            scrutinee,
+            min_value,
+            arms,
+            default,
+        } => TirExprKind::Switch {
+            scrutinee: Box::new(remap_expr(
+                scrutinee,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+            min_value: *min_value,
+            arms: arms
+                .iter()
+                .map(|arm| {
+                    remap_block(
+                        arm,
+                        param_to_local,
+                        local_offset,
+                        param_count,
+                        source_module,
+                    )
+                })
+                .collect(),
+            default: remap_block(
+                default,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            ),
         },
         // Leaf nodes - no remapping needed
         TirExprKind::IntLiteral { .. }

@@ -1051,6 +1051,26 @@ fn analyze_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             analyze_expr(value, current_module, type_table, analysis);
         }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr } => {
+            analyze_expr(expr, current_module, type_table, analysis);
+        }
+        TirExprKind::VariantPayload { expr, .. } => {
+            analyze_expr(expr, current_module, type_table, analysis);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            analyze_expr(scrutinee, current_module, type_table, analysis);
+            for arm in arms {
+                analyze_block(arm, current_module, type_table, analysis);
+            }
+            analyze_block(default, current_module, type_table, analysis);
+        }
         // Leaf nodes - no calls
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -1634,6 +1654,29 @@ fn collect_types_from_expr(
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_types_from_expr(value, type_table, reachable);
+        }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr } => {
+            collect_types_from_expr(expr, type_table, reachable);
+        }
+        TirExprKind::VariantPayload {
+            expr, payload_type, ..
+        } => {
+            collect_types_from_expr(expr, type_table, reachable);
+            collect_type_transitive(*payload_type, type_table, reachable);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_types_from_expr(scrutinee, type_table, reachable);
+            for arm in arms {
+                collect_types_from_block(arm, type_table, reachable);
+            }
+            collect_types_from_block(default, type_table, reachable);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }

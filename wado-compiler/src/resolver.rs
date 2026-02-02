@@ -1914,6 +1914,8 @@ impl<'a> Resolver<'a> {
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
             needed_copy_types: std::collections::HashSet::new(),
+            needs_async_scratch: false,  // Computed by lower phase
+            needs_outptr_scratch: false, // Computed by lower phase
         })
     }
 
@@ -1960,6 +1962,8 @@ impl<'a> Resolver<'a> {
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
             needed_copy_types: std::collections::HashSet::new(),
+            needs_async_scratch: false,
+            needs_outptr_scratch: false,
         };
 
         let tir_test = TirTest {
@@ -2131,6 +2135,8 @@ impl<'a> Resolver<'a> {
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
             needed_copy_types: std::collections::HashSet::new(),
+            needs_async_scratch: false,
+            needs_outptr_scratch: false,
         })
     }
 

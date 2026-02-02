@@ -211,6 +211,27 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
             (all_ok, total)
         }
         TirExprKind::GlobalVarSet { value, .. } => track_local_uses_in_expr(value, local_index),
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantPayload { expr, .. } => track_local_uses_in_expr(expr, local_index),
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            let (s_ok, s_count) = track_local_uses_in_expr(scrutinee, local_index);
+            let mut total = s_count;
+            let mut all_ok = s_ok;
+            for arm in arms {
+                let (ok, count) = track_local_uses_in_block(arm, local_index);
+                all_ok = all_ok && ok;
+                total += count;
+            }
+            let (d_ok, d_count) = track_local_uses_in_block(default, local_index);
+            (all_ok && d_ok, total + d_count)
+        }
         // Leaf nodes - no uses
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -409,6 +430,24 @@ fn replace_ref_field_access_in_expr(
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             replace_ref_field_access_in_expr(value, ref_local, target_local, target_name);
+        }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantPayload { expr, .. } => {
+            replace_ref_field_access_in_expr(expr, ref_local, target_local, target_name);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            replace_ref_field_access_in_expr(scrutinee, ref_local, target_local, target_name);
+            for arm in arms {
+                replace_ref_field_access_in_block(arm, ref_local, target_local, target_name);
+            }
+            replace_ref_field_access_in_block(default, ref_local, target_local, target_name);
         }
         // Leaf nodes - nothing to replace
         TirExprKind::IntLiteral { .. }
@@ -704,6 +743,24 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_ref_bindings_in_expr(value, bindings);
         }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantPayload { expr, .. } => {
+            collect_ref_bindings_in_expr(expr, bindings);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_ref_bindings_in_expr(scrutinee, bindings);
+            for arm in arms {
+                collect_ref_bindings(&arm.stmts, bindings);
+            }
+            collect_ref_bindings(&default.stmts, bindings);
+        }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -886,6 +943,24 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             remove_dead_ref_bindings_in_expr(value, dead_locals);
+        }
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantPayload { expr, .. } => {
+            remove_dead_ref_bindings_in_expr(expr, dead_locals);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            remove_dead_ref_bindings_in_expr(scrutinee, dead_locals);
+            for arm in arms {
+                remove_dead_ref_bindings(&mut arm.stmts, dead_locals);
+            }
+            remove_dead_ref_bindings(&mut default.stmts, dead_locals);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
