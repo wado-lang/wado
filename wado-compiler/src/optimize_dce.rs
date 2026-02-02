@@ -1042,8 +1042,8 @@ fn analyze_expr(
                 analysis.used_box_primitives.insert(*prim);
             }
         }
-        TirExprKind::Move { value } => {
-            analyze_expr(value, current_module, type_table, analysis);
+        TirExprKind::Move { expr } => {
+            analyze_expr(expr, current_module, type_table, analysis);
         }
         TirExprKind::LabeledBlock { block, .. } => {
             analyze_block(block, current_module, type_table, analysis);
@@ -1646,8 +1646,8 @@ fn collect_types_from_expr(
                 collect_types_from_expr(payload_expr, type_table, reachable);
             }
         }
-        TirExprKind::Move { value } => {
-            collect_types_from_expr(value, type_table, reachable);
+        TirExprKind::Move { expr } => {
+            collect_types_from_expr(expr, type_table, reachable);
         }
         TirExprKind::LabeledBlock { block, .. } => {
             collect_types_from_block(block, type_table, reachable);

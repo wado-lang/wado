@@ -307,7 +307,7 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::Move { value: inner } => expr_has_complex_generic_types(inner, type_table),
+        | TirExprKind::Move { expr: inner } => expr_has_complex_generic_types(inner, type_table),
         TirExprKind::Index { expr: base, index } => {
             expr_has_complex_generic_types(base, type_table)
                 || expr_has_complex_generic_types(index, type_table)
@@ -570,8 +570,8 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
                 collect_callees_from_expr(payload_expr, callees);
             }
         }
-        TirExprKind::Move { value } => {
-            collect_callees_from_expr(value, callees);
+        TirExprKind::Move { expr } => {
+            collect_callees_from_expr(expr, callees);
         }
         TirExprKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(block, callees);
@@ -2254,9 +2254,9 @@ fn remap_expr(
                 ))
             }),
         },
-        TirExprKind::Move { value } => TirExprKind::Move {
-            value: Box::new(remap_expr(
-                value,
+        TirExprKind::Move { expr } => TirExprKind::Move {
+            expr: Box::new(remap_expr(
+                expr,
                 param_to_local,
                 local_offset,
                 param_count,
@@ -2915,9 +2915,9 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        TirExprKind::Move { value } => {
+        TirExprKind::Move { expr } => {
             inline_calls_in_expr(
-                value,
+                expr,
                 candidates,
                 current_module,
                 local_count,

@@ -1292,7 +1292,7 @@ pub enum TirExprKind {
     /// (e.g., function call results, literals).
     /// Future: When user-facing, `move x` invalidates `x` after the expression.
     Move {
-        value: Box<TirExpr>,
+        expr: Box<TirExpr>,
     },
 
     /// Labeled block expression: `label: { ... }` that produces a value

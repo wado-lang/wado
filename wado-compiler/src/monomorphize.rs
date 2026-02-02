@@ -820,8 +820,8 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(payload_expr, type_table);
                 }
             }
-            TirExprKind::Move { value } => {
-                self.rewrite_types_in_expr(value, type_table);
+            TirExprKind::Move { expr } => {
+                self.rewrite_types_in_expr(expr, type_table);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.rewrite_types_in_expr(callee, type_table);
@@ -1802,8 +1802,8 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::Move { value } => {
-                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
+            TirExprKind::Move { expr } => {
+                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.collect_func_instantiation_sites_in_block(
@@ -2156,7 +2156,11 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
     ) {
         match pattern {
-            TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Literal(_) => {}
+            TirPattern::Wildcard | TirPattern::Literal(_) => {}
+            TirPattern::Binding { type_id, .. } => {
+                // Substitute the binding's type (e.g., type parameter T -> i32)
+                *type_id = self.substitute_type(*type_id, substitution, type_table);
+            }
             TirPattern::Tuple(patterns) => {
                 for p in patterns {
                     self.substitute_types_in_pattern(p, substitution, type_table);
@@ -2165,9 +2169,12 @@ impl Monomorphizer {
             TirPattern::Variant {
                 enum_type,
                 bindings,
+                payload_type,
                 ..
             } => {
                 *enum_type = self.substitute_type(*enum_type, substitution, type_table);
+                // Also substitute the payload type (e.g., type parameter U -> i32)
+                *payload_type = self.substitute_type(*payload_type, substitution, type_table);
                 for binding in bindings {
                     self.substitute_types_in_pattern(binding, substitution, type_table);
                 }
@@ -2447,8 +2454,8 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(payload_expr, substitution, type_table);
                 }
             }
-            TirExprKind::Move { value } => {
-                self.substitute_types_in_expr(value, substitution, type_table);
+            TirExprKind::Move { expr } => {
+                self.substitute_types_in_expr(expr, substitution, type_table);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
@@ -2999,8 +3006,8 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_expr(payload_expr, type_table);
                 }
             }
-            TirExprKind::Move { value } => {
-                self.rewrite_function_calls_in_expr(value, type_table);
+            TirExprKind::Move { expr } => {
+                self.rewrite_function_calls_in_expr(expr, type_table);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);

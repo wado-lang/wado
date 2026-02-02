@@ -222,8 +222,8 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
         TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
             collect_assigned_in_expr(inner, assigned);
         }
-        TirExprKind::Move { value } => {
-            collect_assigned_in_expr(value, assigned);
+        TirExprKind::Move { expr } => {
+            collect_assigned_in_expr(expr, assigned);
         }
         TirExprKind::Index {
             expr: inner, index, ..
@@ -480,8 +480,8 @@ fn collect_usage_in_expr(
                 collect_usage_in_expr(payload_expr, usage, in_loop, in_condition);
             }
         }
-        TirExprKind::Move { value } => {
-            collect_usage_in_expr(value, usage, in_loop, in_condition);
+        TirExprKind::Move { expr } => {
+            collect_usage_in_expr(expr, usage, in_loop, in_condition);
         }
         TirExprKind::Closure { body, captures, .. } => {
             // Mark all captured variables as captured
@@ -796,8 +796,8 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
                 substitute_in_expr(payload_expr, from_local, source);
             }
         }
-        TirExprKind::Move { value } => {
-            substitute_in_expr(value, from_local, source);
+        TirExprKind::Move { expr } => {
+            substitute_in_expr(expr, from_local, source);
         }
         TirExprKind::Closure { body, .. } => {
             substitute_in_expr(body, from_local, source);
@@ -1003,8 +1003,8 @@ fn collect_copy_bindings_in_expr(
                 collect_copy_bindings_in_expr(payload_expr, bindings, block_local_assigned);
             }
         }
-        TirExprKind::Move { value } => {
-            collect_copy_bindings_in_expr(value, bindings, block_local_assigned);
+        TirExprKind::Move { expr } => {
+            collect_copy_bindings_in_expr(expr, bindings, block_local_assigned);
         }
         TirExprKind::Closure { body, .. } => {
             collect_copy_bindings_in_expr(body, bindings, block_local_assigned);
@@ -1198,8 +1198,8 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
                 remove_copy_bindings_in_expr(payload_expr, dead_locals);
             }
         }
-        TirExprKind::Move { value } => {
-            remove_copy_bindings_in_expr(value, dead_locals);
+        TirExprKind::Move { expr } => {
+            remove_copy_bindings_in_expr(expr, dead_locals);
         }
         TirExprKind::Closure { body, .. } => {
             remove_copy_bindings_in_expr(body, dead_locals);

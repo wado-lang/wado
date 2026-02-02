@@ -196,7 +196,7 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
                 (true, 0)
             }
         }
-        TirExprKind::Move { value } => track_local_uses_in_expr(value, local_index),
+        TirExprKind::Move { expr } => track_local_uses_in_expr(expr, local_index),
         TirExprKind::LabeledBlock { block, .. } => track_local_uses_in_block(block, local_index),
         TirExprKind::Closure { body, .. } => track_local_uses_in_expr(body, local_index),
         TirExprKind::Match { expr: inner, arms } => {
@@ -408,8 +408,8 @@ fn replace_ref_field_access_in_expr(
                 );
             }
         }
-        TirExprKind::Move { value } => {
-            replace_ref_field_access_in_expr(value, ref_local, target_local, target_name);
+        TirExprKind::Move { expr } => {
+            replace_ref_field_access_in_expr(expr, ref_local, target_local, target_name);
         }
         TirExprKind::LabeledBlock { block, .. } => {
             replace_ref_field_access_in_block(block, ref_local, target_local, target_name);
@@ -728,8 +728,8 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
                 collect_ref_bindings_in_expr(payload_expr, bindings);
             }
         }
-        TirExprKind::Move { value } => {
-            collect_ref_bindings_in_expr(value, bindings);
+        TirExprKind::Move { expr } => {
+            collect_ref_bindings_in_expr(expr, bindings);
         }
         TirExprKind::Closure { body, .. } => {
             collect_ref_bindings_in_expr(body, bindings);
@@ -929,8 +929,8 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
                 remove_dead_ref_bindings_in_expr(payload_expr, dead_locals);
             }
         }
-        TirExprKind::Move { value } => {
-            remove_dead_ref_bindings_in_expr(value, dead_locals);
+        TirExprKind::Move { expr } => {
+            remove_dead_ref_bindings_in_expr(expr, dead_locals);
         }
         TirExprKind::Closure { body, .. } => {
             remove_dead_ref_bindings_in_expr(body, dead_locals);

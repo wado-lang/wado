@@ -6593,10 +6593,10 @@ impl Codegen {
                 func.instruction(&Instruction::End);
             }
 
-            TirExprKind::Move { value } => {
+            TirExprKind::Move { expr } => {
                 // Move semantics: generate the inner value without copying
                 // The value is moved directly, no value copy is generated
-                self.generate_expr(func, value, type_table, ctx, builder);
+                self.generate_expr(func, expr, type_table, ctx, builder);
             }
 
             TirExprKind::Unit => {
@@ -9700,7 +9700,7 @@ impl Codegen {
 
         // Unwrap Move wrapper if present
         let inner_value = match &value.kind {
-            TirExprKind::Move { value } => value.as_ref(),
+            TirExprKind::Move { expr } => expr.as_ref(),
             _ => value,
         };
 
@@ -12451,7 +12451,7 @@ impl Codegen {
                         .iter()
                         .any(|arm| self.expr_needs_outptr_scratch_locals(&arm.body))
             }
-            TirExprKind::Move { value } => self.expr_needs_outptr_scratch_locals(value),
+            TirExprKind::Move { expr } => self.expr_needs_outptr_scratch_locals(expr),
             // Leaf nodes
             _ => false,
         }
@@ -12603,7 +12603,7 @@ impl Codegen {
             TirExprKind::VariantConstruct { payload, .. } => payload
                 .as_ref()
                 .is_some_and(|p| self.expr_needs_async_scratch_locals(p)),
-            TirExprKind::Move { value } => self.expr_needs_async_scratch_locals(value),
+            TirExprKind::Move { expr } => self.expr_needs_async_scratch_locals(expr),
             TirExprKind::LabeledBlock { block, .. } => self.needs_async_scratch_locals(block),
             TirExprKind::GlobalVarSet { value, .. } => self.expr_needs_async_scratch_locals(value),
             TirExprKind::ClosureToCanonical { functor, .. } => {
@@ -13245,10 +13245,10 @@ impl Codegen {
                 }
             }
             // Wrapper expressions that may contain nested blocks
-            TirExprKind::Move { value }
-            | TirExprKind::Cast { expr: value, .. }
-            | TirExprKind::OptionSome { value } => {
-                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
+            TirExprKind::Move { expr: inner }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::OptionSome { value: inner } => {
+                self.preallocate_let_pattern_locals_from_expr(inner, type_table, ctx);
             }
             TirExprKind::Index { expr, index, .. } => {
                 self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
@@ -13463,8 +13463,8 @@ impl Codegen {
                 Self::count_indirect_calls_in_expr(target, type_table, codegen, counts);
                 Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
             }
-            TirExprKind::Move { value } => {
-                Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
+            TirExprKind::Move { expr } => {
+                Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 Self::count_indirect_calls_in_block(block, type_table, codegen, counts);
@@ -13639,8 +13639,8 @@ impl Codegen {
                 self.preallocate_locals_from_expr(inner, type_table, ctx);
                 self.preallocate_locals_from_expr(index, type_table, ctx);
             }
-            TirExprKind::Assign { value, .. } | TirExprKind::Move { value } => {
-                self.preallocate_locals_from_expr(value, type_table, ctx);
+            TirExprKind::Assign { value: inner, .. } | TirExprKind::Move { expr: inner } => {
+                self.preallocate_locals_from_expr(inner, type_table, ctx);
             }
             TirExprKind::StructLiteral { fields, .. } => {
                 for field in fields {

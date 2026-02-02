@@ -78,7 +78,7 @@ fn wrap_in_move_if_eligible(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
         let span = expr.span;
         TirExpr::new(
             TirExprKind::Move {
-                value: Box::new(expr),
+                expr: Box::new(expr),
             },
             type_id,
             span,
@@ -259,8 +259,8 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
                 insert_moves_in_expr(payload_expr, type_table);
             }
         }
-        TirExprKind::Move { value } => {
-            insert_moves_in_expr(value, type_table);
+        TirExprKind::Move { expr } => {
+            insert_moves_in_expr(expr, type_table);
         }
         TirExprKind::Block(block) => {
             insert_moves_in_block(block, type_table);
@@ -511,8 +511,8 @@ fn collect_value_copy_types_in_expr(
                 collect_value_copy_types_in_expr(payload_expr, type_table, copy_types);
             }
         }
-        TirExprKind::Move { value } => {
-            collect_value_copy_types_in_expr(value, type_table, copy_types);
+        TirExprKind::Move { expr } => {
+            collect_value_copy_types_in_expr(expr, type_table, copy_types);
         }
         TirExprKind::Block(block) => {
             collect_value_copy_types_in_block(block, type_table, copy_types);

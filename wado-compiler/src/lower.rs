@@ -460,7 +460,7 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::Move { value: inner } => {
+        | TirExprKind::Move { expr: inner } => {
             lower_wide_int_in_expr(inner, type_table);
         }
         TirExprKind::Call { args, .. }
@@ -648,7 +648,7 @@ impl PatternLowerer {
 
         // Unwrap Move wrapper if present
         let inner_value = match &value.kind {
-            TirExprKind::Move { value: v } => v.as_ref(),
+            TirExprKind::Move { expr: v } => v.as_ref(),
             _ => value,
         };
 
@@ -721,22 +721,40 @@ impl PatternLowerer {
                 mut then_block,
                 mut else_block,
             } => {
-                // Keep IfPattern as-is for now (codegen handles it)
-                // Just recursively lower patterns in sub-expressions and blocks
+                // Lower expressions in scrutinee first
                 self.lower_expr(&mut scrutinee, type_table);
-                self.lower_block(&mut then_block, type_table);
-                if let Some(ref mut else_blk) = else_block {
-                    self.lower_block(else_blk, type_table);
-                }
-                out.push(TirStmt::new(
-                    TirStmtKind::IfPattern {
+
+                // Check if this is an Option pattern that we can lower
+                let scrutinee_type = type_table.get(scrutinee.type_id);
+                let is_option_pattern = matches!(scrutinee_type, ResolvedType::Option(_));
+
+                if is_option_pattern {
+                    // Lower Option patterns (Some/None) to Let + If
+                    self.lower_if_pattern_option(
                         scrutinee,
-                        pattern,
+                        &pattern,
                         then_block,
                         else_block,
-                    },
-                    stmt.span,
-                ));
+                        stmt.span,
+                        out,
+                        type_table,
+                    );
+                } else {
+                    // Keep non-Option IfPattern as-is (codegen handles custom variants)
+                    self.lower_block(&mut then_block, type_table);
+                    if let Some(ref mut else_blk) = else_block {
+                        self.lower_block(else_blk, type_table);
+                    }
+                    out.push(TirStmt::new(
+                        TirStmtKind::IfPattern {
+                            scrutinee,
+                            pattern,
+                            then_block,
+                            else_block,
+                        },
+                        stmt.span,
+                    ));
+                }
             }
             TirStmtKind::Let {
                 value,
@@ -1118,9 +1136,86 @@ impl PatternLowerer {
         }
     }
 
+    /// Lower an Option IfPattern to Let + If
+    ///
+    /// Transforms:
+    ///   `if let Some(x) = opt { then } else { else }`
+    /// To:
+    ///   `let $temp = opt;
+    ///    if IsNotNull($temp) { let x = UnwrapOption($temp); then } else { else }`
+    #[allow(clippy::too_many_arguments)]
+    fn lower_if_pattern_option(
+        &mut self,
+        scrutinee: TirExpr,
+        pattern: &TirPattern,
+        mut then_block: TirBlock,
+        mut else_block: Option<TirBlock>,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
+    ) {
+        // Allocate a temp local for the scrutinee to avoid re-evaluation
+        let scrutinee_temp_index = self.alloc_local(scrutinee.type_id);
+        let scrutinee_temp_name = self.next_temp_name();
+
+        // Create Let for the scrutinee temp
+        let scrutinee_let = TirStmt::new(
+            TirStmtKind::Let {
+                name: scrutinee_temp_name.clone(),
+                local_index: scrutinee_temp_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: scrutinee.type_id,
+                value: scrutinee.clone(),
+            },
+            span,
+        );
+        out.push(scrutinee_let);
+
+        // Create a reference to the temp local
+        let temp_ref = TirExpr::new(
+            TirExprKind::Local {
+                index: scrutinee_temp_index,
+                name: scrutinee_temp_name,
+            },
+            scrutinee.type_id,
+            span,
+        );
+
+        // Generate condition and binding statements
+        let (condition, mut binding_stmts) =
+            self.pattern_to_condition_and_bindings(pattern, temp_ref, span, type_table);
+
+        // Lower the binding statements (they may contain nested patterns)
+        let mut lowered_bindings = Vec::new();
+        for stmt in binding_stmts.drain(..) {
+            self.lower_stmt(stmt, &mut lowered_bindings, type_table);
+        }
+
+        // Prepend binding statements to the then block
+        let mut new_then_stmts = lowered_bindings;
+        // Lower the then block
+        self.lower_block(&mut then_block, type_table);
+        new_then_stmts.extend(then_block.stmts);
+        then_block.stmts = new_then_stmts;
+
+        // Lower the else block if present
+        if let Some(ref mut else_blk) = else_block {
+            self.lower_block(else_blk, type_table);
+        }
+
+        // Create a regular If statement
+        out.push(TirStmt::new(
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            },
+            span,
+        ));
+    }
+
     /// Convert a pattern to a condition expression and binding statements
-    /// Note: Currently unused, will be used when `IfPattern` lowering is implemented
-    #[allow(dead_code)]
     fn pattern_to_condition_and_bindings(
         &mut self,
         pattern: &TirPattern,
@@ -1280,7 +1375,7 @@ impl PatternLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { value: inner }
+            | TirExprKind::Move { expr: inner }
             | TirExprKind::IsNotNull { expr: inner }
             | TirExprKind::UnwrapOption { expr: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
@@ -2280,8 +2375,8 @@ impl ClosureLowerer {
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.collect_closures_in_expr(functor);
             }
-            TirExprKind::OptionSome { value } | TirExprKind::Move { value } => {
-                self.collect_closures_in_expr(value);
+            TirExprKind::OptionSome { value: inner } | TirExprKind::Move { expr: inner } => {
+                self.collect_closures_in_expr(inner);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
@@ -2495,8 +2590,8 @@ impl ClosureLowerer {
                     self.analyze_closure_safety_expr(&arm.body, false);
                 }
             }
-            TirExprKind::OptionSome { value } | TirExprKind::Move { value } => {
-                self.analyze_closure_safety_expr(value, false);
+            TirExprKind::OptionSome { value: inner } | TirExprKind::Move { expr: inner } => {
+                self.analyze_closure_safety_expr(inner, false);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
@@ -2799,7 +2894,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { value: inner } => {
+            | TirExprKind::Move { expr: inner } => {
                 Self::collect_locals_from_expr(inner, locals);
             }
             TirExprKind::Call { args, .. }
@@ -3584,7 +3679,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { value: inner } => {
+            | TirExprKind::Move { expr: inner } => {
                 self.fn_param_in_struct_field_expr(inner, fn_param_indices)
             }
             TirExprKind::Call { args, .. }
@@ -3845,7 +3940,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { value: inner } => {
+            | TirExprKind::Move { expr: inner } => {
                 self.collect_fn_param_specs_expr(inner, func_by_name, type_table, requests);
             }
             TirExprKind::EffectCall { args, .. } => {
@@ -4023,7 +4118,7 @@ impl ClosureLowerer {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { value: inner } => {
+            | TirExprKind::Move { expr: inner } => {
                 self.count_closures_in_expr(inner, counter);
             }
             TirExprKind::Call { args, .. }
@@ -4693,9 +4788,9 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::Move { value } => TirExpr::new(
+            TirExprKind::Move { expr: inner } => TirExpr::new(
                 TirExprKind::Move {
-                    value: Box::new(self.specialize_expr(value, param_to_functor, type_table)),
+                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
                 },
                 expr.type_id,
                 expr.span,
@@ -5131,8 +5226,8 @@ impl ClosureLowerer {
                     self.transform_expr(&mut arm.body, type_table);
                 }
             }
-            TirExprKind::OptionSome { value } | TirExprKind::Move { value } => {
-                self.transform_expr(value, type_table);
+            TirExprKind::OptionSome { value: inner } | TirExprKind::Move { expr: inner } => {
+                self.transform_expr(inner, type_table);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
@@ -5418,7 +5513,7 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::Move { value: inner } => {
+            | TirExprKind::Move { expr: inner } => {
                 self.transform_remaining_closures_expr(inner);
             }
             TirExprKind::Assign { target, value } => {
@@ -5754,8 +5849,8 @@ impl StringCollector {
                     self.collect_expr(payload_expr);
                 }
             }
-            TirExprKind::Move { value } => {
-                self.collect_expr(value);
+            TirExprKind::Move { expr } => {
+                self.collect_expr(expr);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);

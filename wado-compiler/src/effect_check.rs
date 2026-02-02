@@ -285,8 +285,8 @@ impl<'a> EffectChecker<'a> {
             TirExprKind::OptionSome { value } => {
                 self.check_expr(value);
             }
-            TirExprKind::Move { value } => {
-                self.check_expr(value);
+            TirExprKind::Move { expr } => {
+                self.check_expr(expr);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.check_block(block);

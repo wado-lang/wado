@@ -2590,9 +2590,9 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("::");
                 self.output.push_str(case_name);
             }
-            TirExprKind::Move { value } => {
+            TirExprKind::Move { expr } => {
                 self.output.push_str("move ");
-                self.unparse_expr(value);
+                self.unparse_expr(expr);
             }
             TirExprKind::Unit => {
                 self.output.push_str("()");
