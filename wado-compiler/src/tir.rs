@@ -1331,6 +1331,19 @@ pub enum TirExprKind {
         expr: Box<TirExpr>,
     },
 
+    /// Test if a variant value is of a specific case.
+    /// Generated from if-let patterns on custom variants.
+    /// For unit variants: checks discriminator == case_index
+    /// For payload variants: uses ref.test on the case type
+    /// Result type is bool.
+    VariantTest {
+        expr: Box<TirExpr>,
+        /// The case index to test for
+        case_index: u32,
+        /// The case name (for error messages)
+        case_name: String,
+    },
+
     /// Extract the payload from a variant value at a specific case index.
     /// Generated from match expressions on variants.
     VariantPayload {

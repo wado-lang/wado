@@ -348,6 +348,7 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             expr_has_complex_generic_types(expr, type_table)
         }
@@ -582,6 +583,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             collect_callees_from_expr(expr, callees);
         }
@@ -2320,6 +2322,21 @@ fn remap_expr(
                 param_count,
                 source_module,
             )),
+        },
+        TirExprKind::VariantTest {
+            expr,
+            case_index,
+            case_name,
+        } => TirExprKind::VariantTest {
+            expr: Box::new(remap_expr(
+                expr,
+                param_to_local,
+                local_offset,
+                param_count,
+                source_module,
+            )),
+            case_index: *case_index,
+            case_name: case_name.clone(),
         },
         TirExprKind::VariantPayload {
             expr,

@@ -6483,6 +6483,62 @@ impl Codegen {
                 });
             }
 
+            TirExprKind::VariantTest {
+                expr: inner,
+                case_index,
+                case_name: _,
+            } => {
+                // Generate the scrutinee expression
+                self.generate_expr(func, inner, type_table, ctx, builder);
+
+                // Look up variant type info from the scrutinee's type
+                let scrutinee_type = type_table.get(inner.type_id);
+                let variant_name = match scrutinee_type {
+                    ResolvedType::Variant { name, .. }
+                    | ResolvedType::GenericInstance { name, .. } => name.clone(),
+                    _ => panic!("VariantTest on non-variant type: {scrutinee_type:?}"),
+                };
+
+                let variant_lookup_name = type_table.mangle_type_name(inner.type_id);
+                let variant_types = self.variant_types.borrow();
+                let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
+                    variant_types.get(&variant_name).unwrap_or_else(|| {
+                        panic!(
+                            "Variant type not registered: {variant_lookup_name} (base: {variant_name})"
+                        );
+                    })
+                });
+
+                // Get case info
+                let case_info = variant_info
+                    .cases
+                    .get(*case_index as usize)
+                    .unwrap_or_else(|| {
+                        panic!("Invalid case index {case_index} for variant {variant_name}")
+                    })
+                    .clone();
+                let case_type_idx = case_info.type_idx;
+                let base_type_idx = variant_info.base_type_idx;
+                let is_unit_variant = case_info.payload_type.is_none();
+                drop(variant_types);
+
+                // For unit variants, check discriminator; for payload variants, use ref.test
+                if is_unit_variant {
+                    // Read discriminator and compare with case index
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: base_type_idx,
+                        field_index: 0,
+                    });
+                    func.instruction(&Instruction::I32Const(*case_index as i32));
+                    func.instruction(&Instruction::I32Eq);
+                } else {
+                    // Use ref.test to check if the value is of the expected case type
+                    func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
+                        case_type_idx,
+                    )));
+                }
+            }
+
             TirExprKind::VariantPayload {
                 expr: inner,
                 case_index,
@@ -12612,6 +12668,7 @@ impl Codegen {
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
             | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. }
             | TirExprKind::VariantPayload { expr, .. } => {
                 self.expr_needs_async_scratch_locals(expr)
             }

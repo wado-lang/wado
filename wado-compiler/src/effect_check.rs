@@ -296,7 +296,8 @@ impl<'a> EffectChecker<'a> {
             }
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr } => {
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. } => {
                 self.check_expr(expr);
             }
             TirExprKind::VariantPayload { expr, .. } => {

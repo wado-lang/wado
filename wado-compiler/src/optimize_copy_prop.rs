@@ -277,7 +277,8 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr } => {
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. } => {
             collect_assigned_in_expr(expr, assigned);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -501,7 +502,8 @@ fn collect_usage_in_expr(
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr } => {
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. } => {
             collect_usage_in_expr(expr, usage, in_loop, in_condition);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -813,7 +815,8 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr } => {
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. } => {
             substitute_in_expr(expr, from_local, source);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -1020,7 +1023,8 @@ fn collect_copy_bindings_in_expr(
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr } => {
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. } => {
             collect_copy_bindings_in_expr(expr, bindings, block_local_assigned);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -1215,7 +1219,8 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr } => {
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. } => {
             remove_copy_bindings_in_expr(expr, dead_locals);
         }
         TirExprKind::VariantPayload { expr, .. } => {

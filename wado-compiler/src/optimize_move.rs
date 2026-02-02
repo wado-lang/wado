@@ -293,7 +293,8 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         }
         TirExprKind::IsNotNull { expr: inner }
         | TirExprKind::UnwrapOption { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner } => {
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. } => {
             insert_moves_in_expr(inner, type_table);
         }
         TirExprKind::VariantPayload { expr: inner, .. } => {
@@ -545,7 +546,8 @@ fn collect_value_copy_types_in_expr(
         }
         TirExprKind::IsNotNull { expr: inner }
         | TirExprKind::UnwrapOption { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner } => {
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. } => {
             collect_value_copy_types_in_expr(inner, type_table, copy_types);
         }
         TirExprKind::VariantPayload { expr: inner, .. } => {

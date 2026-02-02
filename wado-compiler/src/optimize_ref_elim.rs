@@ -214,6 +214,7 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => track_local_uses_in_expr(expr, local_index),
         TirExprKind::Switch {
             scrutinee,
@@ -434,6 +435,7 @@ fn replace_ref_field_access_in_expr(
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             replace_ref_field_access_in_expr(expr, ref_local, target_local, target_name);
         }
@@ -746,6 +748,7 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             collect_ref_bindings_in_expr(expr, bindings);
         }
@@ -947,6 +950,7 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             remove_dead_ref_bindings_in_expr(expr, dead_locals);
         }

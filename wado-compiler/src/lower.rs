@@ -522,7 +522,8 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         // Lowered pattern matching nodes - recurse into sub-expressions
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr } => {
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. } => {
             lower_wide_int_in_expr(expr, type_table);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -568,6 +569,26 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
 ///
 /// By lowering these patterns here, codegen doesn't need preallocate passes.
 fn lower_patterns(module: &mut TirModule) {
+    // Build a map from variant name to case info for quick lookup
+    let mut variant_case_map: HashMap<String, Vec<(String, u32)>> = HashMap::new();
+
+    // Add builtin variant types (Result, etc.)
+    // Result<T, E> has cases: Ok (index 0), Err (index 1)
+    variant_case_map.insert(
+        "Result".to_string(),
+        vec![("Ok".to_string(), 0), ("Err".to_string(), 1)],
+    );
+
+    // Add module-defined variants
+    for variant in &module.variants {
+        let cases: Vec<(String, u32)> = variant
+            .cases
+            .iter()
+            .map(|c| (c.name.clone(), c.index))
+            .collect();
+        variant_case_map.insert(variant.name.clone(), cases);
+    }
+
     let type_table = module.type_table.borrow();
     for func_rc in &module.functions {
         let mut func = func_rc.borrow_mut();
@@ -576,7 +597,7 @@ fn lower_patterns(module: &mut TirModule) {
             let local_count = func.local_count;
             let local_types = std::mem::take(&mut func.local_types);
 
-            let mut lowerer = PatternLowerer::new(local_count, local_types);
+            let mut lowerer = PatternLowerer::new(local_count, local_types, &variant_case_map);
             lowerer.lower_block(&mut body, &type_table);
 
             // Put the values back
@@ -589,19 +610,34 @@ fn lower_patterns(module: &mut TirModule) {
 }
 
 /// Pattern lowering context - tracks local allocation for a function
-struct PatternLowerer {
+struct PatternLowerer<'a> {
     local_count: u32,
     local_types: Vec<TypeId>,
     temp_counter: u32,
+    /// Map from variant name to list of (case_name, case_index) pairs
+    variant_case_map: &'a HashMap<String, Vec<(String, u32)>>,
 }
 
-impl PatternLowerer {
-    fn new(local_count: u32, local_types: Vec<TypeId>) -> Self {
+impl<'a> PatternLowerer<'a> {
+    fn new(
+        local_count: u32,
+        local_types: Vec<TypeId>,
+        variant_case_map: &'a HashMap<String, Vec<(String, u32)>>,
+    ) -> Self {
         Self {
             local_count,
             local_types,
             temp_counter: 0,
+            variant_case_map,
         }
+    }
+
+    /// Look up the case index for a variant case by variant name and case name
+    fn get_case_index(&self, variant_name: &str, case_name: &str) -> Option<u32> {
+        self.variant_case_map
+            .get(variant_name)
+            .and_then(|cases| cases.iter().find(|(name, _)| name == case_name))
+            .map(|(_, index)| *index)
     }
 
     /// Consume the lowerer and return the final local count and types
@@ -718,18 +754,23 @@ impl PatternLowerer {
             TirStmtKind::IfPattern {
                 mut scrutinee,
                 pattern,
-                mut then_block,
-                mut else_block,
+                then_block,
+                else_block,
             } => {
                 // Lower expressions in scrutinee first
                 self.lower_expr(&mut scrutinee, type_table);
 
-                // Check if this is an Option pattern that we can lower
+                // Check if this is an Option or custom Variant pattern that we can lower
                 let scrutinee_type = type_table.get(scrutinee.type_id);
-                let is_option_pattern = matches!(scrutinee_type, ResolvedType::Option(_));
+                let can_lower = matches!(
+                    scrutinee_type,
+                    ResolvedType::Option(_)
+                        | ResolvedType::Variant { .. }
+                        | ResolvedType::GenericInstance { .. }
+                );
 
-                if is_option_pattern {
-                    // Lower Option patterns (Some/None) to Let + If
+                if can_lower {
+                    // Lower Option and Variant patterns to Let + If
                     self.lower_if_pattern_option(
                         scrutinee,
                         &pattern,
@@ -740,7 +781,9 @@ impl PatternLowerer {
                         type_table,
                     );
                 } else {
-                    // Keep non-Option IfPattern as-is (codegen handles custom variants)
+                    // Keep other IfPattern as-is (shouldn't happen after proper type checking)
+                    let mut then_block = then_block;
+                    let mut else_block = else_block;
                     self.lower_block(&mut then_block, type_table);
                     if let Some(ref mut else_blk) = else_block {
                         self.lower_block(else_blk, type_table);
@@ -1236,6 +1279,14 @@ impl PatternLowerer {
                 let is_option_some = variant_name == "Some";
                 let is_option_none = variant_name == "None";
 
+                // Get variant type name for custom variants
+                let scrutinee_type = type_table.get(scrutinee.type_id);
+                let variant_type_name = match scrutinee_type {
+                    ResolvedType::Variant { name, .. }
+                    | ResolvedType::GenericInstance { name, .. } => Some(name.clone()),
+                    _ => None,
+                };
+
                 let condition = if is_option_some {
                     // Option::Some - check if not null
                     TirExpr::new(
@@ -1261,14 +1312,34 @@ impl PatternLowerer {
                         TypeTable::BOOL,
                         span,
                     )
+                } else if let Some(ref vt_name) = variant_type_name {
+                    // Custom variant - use VariantTest
+                    let case_index = self
+                        .get_case_index(vt_name, variant_name)
+                        .unwrap_or_else(|| {
+                            panic!("Unknown case {variant_name} for variant {vt_name}")
+                        });
+                    TirExpr::new(
+                        TirExprKind::VariantTest {
+                            expr: Box::new(scrutinee.clone()),
+                            case_index,
+                            case_name: variant_name.clone(),
+                        },
+                        TypeTable::BOOL,
+                        span,
+                    )
                 } else {
-                    // Custom variant - check tag
-                    // For now, just use a placeholder. Real implementation needs variant info.
+                    // Fallback for unknown types - should not happen after monomorphization
                     TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span)
                 };
 
                 // Generate binding statements for the payload
                 if let Some(binding) = bindings.first() {
+                    let case_index = variant_type_name
+                        .as_ref()
+                        .and_then(|vt| self.get_case_index(vt, variant_name))
+                        .unwrap_or(0);
+
                     let payload_expr = if is_option_some {
                         TirExpr::new(
                             TirExprKind::UnwrapOption {
@@ -1282,7 +1353,7 @@ impl PatternLowerer {
                         TirExpr::new(
                             TirExprKind::VariantPayload {
                                 expr: Box::new(scrutinee),
-                                case_index: 0,
+                                case_index,
                                 payload_type: *payload_type,
                             },
                             *payload_type,
@@ -1379,6 +1450,7 @@ impl PatternLowerer {
             | TirExprKind::IsNotNull { expr: inner }
             | TirExprKind::UnwrapOption { expr: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.lower_expr(inner, type_table);
             }
@@ -2392,7 +2464,8 @@ impl ClosureLowerer {
             // Lowered pattern matching nodes
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr } => {
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. } => {
                 self.collect_closures_in_expr(expr);
             }
             TirExprKind::VariantPayload { expr, .. } => {
@@ -2607,7 +2680,8 @@ impl ClosureLowerer {
             // Lowered pattern matching nodes
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr } => {
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. } => {
                 self.analyze_closure_safety_expr(expr, false);
             }
             TirExprKind::VariantPayload { expr, .. } => {
@@ -3753,7 +3827,8 @@ impl ClosureLowerer {
             // Lowered pattern matching nodes
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr } => {
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. } => {
                 self.fn_param_in_struct_field_expr(expr, fn_param_indices)
             }
             TirExprKind::VariantPayload { expr, .. } => {
@@ -4022,7 +4097,8 @@ impl ClosureLowerer {
             // Lowered pattern matching nodes
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr } => {
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. } => {
                 self.collect_fn_param_specs_expr(expr, func_by_name, type_table, requests);
             }
             TirExprKind::VariantPayload { expr, .. } => {
@@ -4935,6 +5011,19 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
+            TirExprKind::VariantTest {
+                expr: inner,
+                case_index,
+                case_name,
+            } => TirExpr::new(
+                TirExprKind::VariantTest {
+                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
+                    case_index: *case_index,
+                    case_name: case_name.clone(),
+                },
+                expr.type_id,
+                expr.span,
+            ),
             TirExprKind::VariantPayload {
                 expr: inner,
                 case_index,
@@ -5243,7 +5332,8 @@ impl ClosureLowerer {
             // Lowered pattern matching nodes
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr } => {
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. } => {
                 self.transform_expr(expr, type_table);
             }
             TirExprKind::VariantPayload { expr, .. } => {
@@ -5591,6 +5681,7 @@ impl ClosureLowerer {
             TirExprKind::IsNotNull { expr: inner }
             | TirExprKind::UnwrapOption { expr: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.transform_remaining_closures_expr(inner);
             }
@@ -5861,7 +5952,8 @@ impl StringCollector {
             // Lowered pattern matching nodes
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr } => {
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. } => {
                 self.collect_expr(expr);
             }
             TirExprKind::VariantPayload { expr, .. } => {

@@ -844,6 +844,9 @@ impl Monomorphizer {
             TirExprKind::VariantTag { expr } => {
                 self.rewrite_types_in_expr(expr, type_table);
             }
+            TirExprKind::VariantTest { expr, .. } => {
+                self.rewrite_types_in_expr(expr, type_table);
+            }
             TirExprKind::VariantPayload { expr, .. } => {
                 self.rewrite_types_in_expr(expr, type_table);
             }
@@ -1824,6 +1827,9 @@ impl Monomorphizer {
             TirExprKind::VariantTag { expr } => {
                 self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
             }
+            TirExprKind::VariantTest { expr, .. } => {
+                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
+            }
             TirExprKind::VariantPayload { expr, .. } => {
                 self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
             }
@@ -2473,6 +2479,9 @@ impl Monomorphizer {
             TirExprKind::VariantTag { expr } => {
                 self.substitute_types_in_expr(expr, substitution, type_table);
             }
+            TirExprKind::VariantTest { expr, .. } => {
+                self.substitute_types_in_expr(expr, substitution, type_table);
+            }
             TirExprKind::VariantPayload {
                 expr, payload_type, ..
             } => {
@@ -3022,6 +3031,9 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_expr(expr, type_table);
             }
             TirExprKind::VariantTag { expr } => {
+                self.rewrite_function_calls_in_expr(expr, type_table);
+            }
+            TirExprKind::VariantTest { expr, .. } => {
                 self.rewrite_function_calls_in_expr(expr, type_table);
             }
             TirExprKind::VariantPayload { expr, .. } => {

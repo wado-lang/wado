@@ -2953,6 +2953,16 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_expr(expr);
                 self.output.push(')');
             }
+            TirExprKind::VariantTest {
+                expr,
+                case_index,
+                case_name,
+            } => {
+                self.output.push_str("__variant_test(");
+                self.unparse_expr(expr);
+                self.output
+                    .push_str(&format!(", case={case_index}, name={case_name})"));
+            }
             TirExprKind::VariantPayload {
                 expr, case_index, ..
             } => {
