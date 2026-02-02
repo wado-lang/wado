@@ -270,6 +270,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     let (data_section, _comments, shebang) = lexer.into_parts();
 
     // === Phase 2: Parser (for original AST) ===
+    // Note: The AST is parsed here for early error detection, but the Loader
+    // will re-parse the entry module along with all dependencies.
     let mut parser = Parser::with_metadata(tokens, shebang, data_section);
     let ast = parser.parse().map_err(|e| CompileError::Parser {
         message: e.message,
@@ -278,21 +280,10 @@ pub async fn compile_with_options<H: CompilerHost>(
         filename: filename.clone(),
     })?;
 
-    // === Phase 3: Bind (local name resolution) ===
-    let mut binder = Binder::new();
-    binder.bind_module(&ast).map_err(|errors| {
-        let msg = errors
-            .into_iter()
-            .map(|e| e.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        CompileError::Bind {
-            message: msg,
-            filename: filename.clone(),
-        }
-    })?;
+    // Note: Bind phase moved to Loader for all modules (including entry module)
 
-    // === Phase 4: Load all modules upfront ===
+    // === Phase 3: Load all modules upfront ===
+    // Loader performs: parse → bind → desugar for each module
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
