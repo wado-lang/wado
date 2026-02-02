@@ -275,8 +275,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                             // Collect imports from implicit module
                             let mut pending = VecDeque::new();
                             // Implicit modules should only use valid import paths
-                            if let Err(e) =
-                                self.collect_imports(&ast, &module_source, &mut pending)
+                            if let Err(e) = self.collect_imports(&ast, &module_source, &mut pending)
                             {
                                 self.logger().warn(
                                     Code::ModuleParseError,
@@ -307,11 +306,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                                     && let Ok(dep_ast) =
                                         self.parse_source(&dep_source, &dep_module_source)
                                     && self
-                                        .collect_imports(
-                                            &dep_ast,
-                                            &dep_module_source,
-                                            &mut pending,
-                                        )
+                                        .collect_imports(&dep_ast, &dep_module_source, &mut pending)
                                         .is_ok()
                                     && self.bind_module(&dep_ast, &dep_module_source).is_ok()
                                 {
