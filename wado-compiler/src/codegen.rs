@@ -12321,7 +12321,6 @@ impl Codegen {
         }
     }
 
-
     /// Pre-allocate locals for match pattern bindings using resolver's `local_index`
     fn preallocate_match_pattern_locals(
         &self,

@@ -1333,7 +1333,7 @@ pub enum TirExprKind {
 
     /// Test if a variant value is of a specific case.
     /// Generated from if-let patterns on custom variants.
-    /// For unit variants: checks discriminator == case_index
+    /// For unit variants: checks discriminator == `case_index`
     /// For payload variants: uses ref.test on the case type
     /// Result type is bool.
     VariantTest {

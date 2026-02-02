@@ -561,13 +561,13 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
 // Switch Lowering (Match -> br_table optimization)
 // ============================================================================
 
-/// Minimum number of cases required for br_table optimization
+/// Minimum number of cases required for `br_table` optimization
 const SWITCH_MIN_CASES: usize = 8;
 
-/// Minimum density (cases / range) for br_table to be worthwhile
+/// Minimum density (cases / range) for `br_table` to be worthwhile
 const SWITCH_DENSITY_THRESHOLD: f64 = 0.75;
 
-/// Maximum range size for br_table (to avoid huge jump tables)
+/// Maximum range size for `br_table` (to avoid huge jump tables)
 const SWITCH_MAX_RANGE: i64 = 1024;
 
 /// Analysis result for converting Match to Switch
@@ -582,7 +582,7 @@ struct SwitchAnalysis {
     default_arm: Option<usize>,
 }
 
-/// Analyze if a Match expression can be converted to a Switch (for br_table optimization)
+/// Analyze if a Match expression can be converted to a Switch (for `br_table` optimization)
 fn analyze_match_for_switch(
     scrutinee_type: &ResolvedType,
     arms: &[crate::tir::TirMatchArm],
@@ -688,7 +688,10 @@ fn match_to_switch(
             let arm = &arms[arm_idx];
             // Wrap the arm body in a block
             TirBlock {
-                stmts: vec![TirStmt::new(TirStmtKind::Expr(arm.body.clone()), arm.body.span)],
+                stmts: vec![TirStmt::new(
+                    TirStmtKind::Expr(arm.body.clone()),
+                    arm.body.span,
+                )],
                 span: arm.body.span,
             }
         })
@@ -698,7 +701,10 @@ fn match_to_switch(
     let default_block = if let Some(default_idx) = analysis.default_arm {
         let arm = &arms[default_idx];
         TirBlock {
-            stmts: vec![TirStmt::new(TirStmtKind::Expr(arm.body.clone()), arm.body.span)],
+            stmts: vec![TirStmt::new(
+                TirStmtKind::Expr(arm.body.clone()),
+                arm.body.span,
+            )],
             span: arm.body.span,
         }
     } else {
@@ -794,7 +800,7 @@ struct PatternLowerer<'a> {
     local_count: u32,
     local_types: Vec<TypeId>,
     temp_counter: u32,
-    /// Map from variant name to list of (case_name, case_index) pairs
+    /// Map from variant name to list of (`case_name`, `case_index`) pairs
     variant_case_map: &'a HashMap<String, Vec<(String, u32)>>,
 }
 
@@ -952,20 +958,13 @@ impl<'a> PatternLowerer<'a> {
                 if can_lower {
                     // Lower Option and Variant patterns to Let + If
                     self.lower_if_pattern_option(
-                        scrutinee,
-                        &pattern,
-                        then_block,
-                        else_block,
-                        stmt.span,
-                        out,
-                        type_table,
+                        scrutinee, &pattern, then_block, else_block, stmt.span, out, type_table,
                     );
                 } else {
                     // All IfPattern statements should have Option/Variant scrutinee types
                     // after proper type checking. If we reach here, it's a compiler bug.
                     panic!(
-                        "IfPattern with unexpected scrutinee type {:?} - this should not happen after type checking",
-                        scrutinee_type
+                        "IfPattern with unexpected scrutinee type {scrutinee_type:?} - this should not happen after type checking"
                     );
                 }
             }
@@ -1349,7 +1348,7 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// Lower an Option IfPattern to Let + If
+    /// Lower an Option `IfPattern` to Let + If
     ///
     /// Transforms:
     ///   `if let Some(x) = opt { then } else { else }`
@@ -1484,11 +1483,11 @@ impl<'a> PatternLowerer<'a> {
                     )
                 } else if let Some(ref vt_name) = variant_type_name {
                     // Custom variant - use VariantTest
-                    let case_index = self
-                        .get_case_index(vt_name, variant_name)
-                        .unwrap_or_else(|| {
-                            panic!("Unknown case {variant_name} for variant {vt_name}")
-                        });
+                    let case_index =
+                        self.get_case_index(vt_name, variant_name)
+                            .unwrap_or_else(|| {
+                                panic!("Unknown case {variant_name} for variant {vt_name}")
+                            });
                     TirExpr::new(
                         TirExprKind::VariantTest {
                             expr: Box::new(scrutinee.clone()),
@@ -1623,8 +1622,13 @@ impl<'a> PatternLowerer<'a> {
                     );
                     let arms_owned = std::mem::take(arms);
 
-                    let switch_expr =
-                        match_to_switch(scrutinee_owned, &arms_owned, analysis, result_type_id, span);
+                    let switch_expr = match_to_switch(
+                        scrutinee_owned,
+                        &arms_owned,
+                        analysis,
+                        result_type_id,
+                        span,
+                    );
                     expr.kind = switch_expr.kind;
                 }
             }
