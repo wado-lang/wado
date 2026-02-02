@@ -12270,61 +12270,6 @@ impl Codegen {
         }
     }
 
-    /// Pre-allocate locals for match pattern bindings using resolver's `local_index`
-    fn preallocate_match_pattern_locals(
-        &self,
-        pattern: &TirPattern,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match pattern {
-            TirPattern::Binding {
-                name,
-                local_index,
-                type_id,
-            } => {
-                // Pre-allocate the local with the same index as resolver
-                let val_type = self.type_id_to_valtype(type_table, *type_id);
-                let pattern_local_name = format!("__match_bind_{name}");
-                // Ensure we allocate at the correct index
-                while ctx.next_local < *local_index {
-                    // Fill gap with dummy locals if needed
-                    ctx.alloc_local("__gap", ValType::I32);
-                }
-                if ctx.next_local == *local_index {
-                    ctx.alloc_local(&pattern_local_name, val_type);
-                }
-                // If next_local > local_index, the local was already allocated
-            }
-            TirPattern::Tuple(patterns) => {
-                for p in patterns {
-                    self.preallocate_match_pattern_locals(p, type_table, ctx);
-                }
-            }
-            TirPattern::Variant {
-                bindings,
-                payload_type,
-                ..
-            } => {
-                // Pre-allocate binding locals AND scratch locals for tuple destructuring
-                if let Some(binding) = bindings.first() {
-                    // Pre-allocate scratch locals for tuple patterns in variant payloads
-                    self.preallocate_let_pattern_for_pattern(
-                        binding,
-                        *payload_type,
-                        type_table,
-                        ctx,
-                    );
-                    // Also pre-allocate binding locals
-                    self.preallocate_match_pattern_locals(binding, type_table, ctx);
-                }
-            }
-            TirPattern::Wildcard | TirPattern::Literal(_) => {
-                // No locals needed
-            }
-        }
-    }
-
     /// Pre-allocate temp locals for `LetPattern` statements (tuple destructuring).
     /// This must be called before the Function is created.
     fn preallocate_let_pattern_locals(
@@ -12385,6 +12330,28 @@ impl Codegen {
             TirPattern::Binding { .. } | TirPattern::Wildcard | TirPattern::Literal(_) => {
                 // These don't need temp locals
             }
+        }
+    }
+
+    /// Pre-allocate scratch locals for tuple destructuring in variant payloads.
+    /// Pattern binding locals are already in `local_types` from resolver.
+    fn preallocate_let_pattern_for_variant_pattern(
+        &self,
+        pattern: &TirPattern,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        if let TirPattern::Variant {
+            bindings,
+            payload_type,
+            ..
+        } = pattern
+            && let Some(binding) = bindings.first()
+        {
+            // Pre-allocate scratch locals for tuple patterns in variant payloads
+            self.preallocate_let_pattern_for_pattern(binding, *payload_type, type_table, ctx);
+            // Recursively handle nested variant patterns
+            self.preallocate_let_pattern_for_variant_pattern(binding, type_table, ctx);
         }
     }
 
@@ -12492,8 +12459,10 @@ impl Codegen {
                 self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
                 // Don't allocate scrutinee local here - it's done in preallocate_locals_from_expr
                 // to avoid double-counting with let_pattern_counter
+                // Pattern binding locals are already in local_types from resolver
                 for arm in arms {
-                    self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
+                    // Pre-allocate scratch locals for tuple destructuring in variant payloads
+                    self.preallocate_let_pattern_for_variant_pattern(&arm.pattern, type_table, ctx);
                     self.preallocate_let_pattern_locals_from_expr(&arm.body, type_table, ctx);
                 }
             }
@@ -12867,8 +12836,10 @@ impl Codegen {
                 let local_name = ctx.next_match_scrutinee_local_name(&type_key);
                 ctx.alloc_local(&local_name, scrutinee_valtype);
                 for arm in arms {
-                    // Pre-allocate locals for pattern bindings
-                    self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
+                    // Pre-allocate scratch locals for tuple destructuring in variant payloads
+                    // (e.g., Rectangle([w, h]) needs a temp local for the tuple)
+                    // Pattern binding locals are already in local_types from resolver
+                    self.preallocate_let_pattern_for_variant_pattern(&arm.pattern, type_table, ctx);
                     self.preallocate_locals_from_expr(&arm.body, type_table, ctx);
                 }
             }
