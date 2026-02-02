@@ -14,7 +14,7 @@ use lexopt::Arg::{Long, Short, Value};
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{Config, Engine, Store};
+use wasmtime::{Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::p3::bindings::Service;
 use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
@@ -23,6 +23,7 @@ use crate::args::{
     next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
 };
 use crate::compile::{self, OptLevel};
+use crate::runtime;
 use wado_compiler::LogLevel;
 
 pub struct ServeOptions {
@@ -154,27 +155,8 @@ impl WasiHttpView for HttpWasiState {
 // HTTP Engine and Linker
 // ============================================================================
 
-fn create_http_engine() -> Result<Engine> {
-    let mut config = Config::new();
-    config.async_support(true);
-    config.wasm_component_model(true);
-    config.wasm_component_model_async(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_component_model_gc(true);
-    config.wasm_gc(true);
-    config.wasm_function_references(true);
-    config.wasm_wide_arithmetic(true);
-    config.wasm_threads(true);
-    config.wasm_simd(true);
-    // Use minimal optimization for faster compilation during development
-    config.cranelift_opt_level(wasmtime::OptLevel::None);
-    Ok(Engine::new(&config)?)
-}
-
 fn create_http_linker(engine: &Engine) -> Result<Linker<HttpWasiState>> {
     let mut linker: Linker<HttpWasiState> = Linker::new(engine);
-    // Add both P2 and P3 interfaces (like wasmtime tests do)
-    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     Ok(linker)
@@ -264,7 +246,7 @@ async fn handle_http_request(
 // ============================================================================
 
 async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
-    let engine = create_http_engine()?;
+    let engine = runtime::create_engine()?;
     let component = Component::new(&engine, &wasm)?;
     let linker = create_http_linker(&engine)?;
 
