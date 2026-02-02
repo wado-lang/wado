@@ -19,6 +19,7 @@ mod dump;
 mod format;
 mod run;
 mod runtime;
+mod serve;
 mod syntax;
 mod test;
 
@@ -33,7 +34,8 @@ fn print_usage() {
     eprintln!();
     eprintln!("Commands:");
     eprintln!("  compile [options] <file.wado>  Compile a Wado source file");
-    eprintln!("  run [options] <file.wado>      Compile and run a Wado source file");
+    eprintln!("  run [options] <file.wado>      Compile and run a Wado CLI program");
+    eprintln!("  serve [options] <file.wado>    Compile and serve a Wado HTTP service");
     eprintln!("  test [options] <files...>      Run tests in Wado source files");
     eprintln!("  format [options] <file.wado>   Format a Wado source file");
     eprintln!("  dump [options] <file.wado>     Dump compiler internal state");
@@ -42,6 +44,13 @@ fn print_usage() {
     eprintln!("Compile options:");
     eprintln!("  -o <file>        Output file path (default: <input>.wasm)");
     eprintln!("  --format <fmt>   Output format: wasm, wat (default: guessed from -o extension)");
+    eprintln!();
+    eprintln!("Run options:");
+    eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
+    eprintln!();
+    eprintln!("Serve options:");
+    eprintln!("  --addr <addr>    Address to listen on (default: 0.0.0.0:8080)");
+    eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!();
     eprintln!("Test options:");
     eprintln!("  -f, --filter <pattern>  Filter tests by name pattern");
@@ -97,6 +106,10 @@ async fn main() {
                 "run" => {
                     let opts = run::parse_args(parser);
                     run::run(opts).await;
+                }
+                "serve" => {
+                    let opts = serve::parse_args(parser);
+                    serve::run(opts).await;
                 }
                 "dump" => {
                     let opts = dump::parse_args(parser);

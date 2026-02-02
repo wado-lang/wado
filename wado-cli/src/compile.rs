@@ -63,13 +63,12 @@ pub struct CompileOptions {
     pub opt_level: OptLevel,
     pub wat_to_stdout: bool,
     pub log_level: LogLevel,
-    /// Target world for the component (e.g., "wasi:http/service")
-    /// Defaults to "wasi:cli/command" if not specified
-    pub world: Option<String>,
 }
 
 pub fn print_usage() {
     eprintln!("Usage: wado compile [options] <file.wado>");
+    eprintln!();
+    eprintln!("Compile a Wado source file to WebAssembly (wasi:cli/command world).");
     eprintln!();
     eprintln!("Options:");
     eprintln!("  -o <file>        Output file path (default: <input>.wasm)");
@@ -78,8 +77,6 @@ pub fn print_usage() {
         "  --wat-to-stdout  Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
     );
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
-    eprintln!("  --world <world>  Target world (default: wasi:cli/command)");
-    eprintln!("                   Examples: wasi:http/service, wasi:http/middleware");
     eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
     eprintln!("  --help           Show this help message");
 }
@@ -103,7 +100,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     let mut opt_level = OptLevel::default();
     let mut wat_to_stdout = false;
     let mut log_level = LogLevel::default();
-    let mut world: Option<String> = None;
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
@@ -146,9 +142,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
                     process::exit(1);
                 }
             }
-            Long("world") => {
-                world = Some(require_string(&mut parser));
-            }
             Long("log-level") => {
                 let level_str = require_string(&mut parser);
                 if let Some(level) = parse_log_level(&level_str) {
@@ -175,7 +168,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
         opt_level,
         wat_to_stdout,
         log_level,
-        world,
     }
 }
 
@@ -262,8 +254,7 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 }
 
 pub async fn run(opts: CompileOptions) {
-    let wasm =
-        compile_with_full_opts(&opts.input, opts.opt_level, opts.log_level, opts.world).await;
+    let wasm = compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {

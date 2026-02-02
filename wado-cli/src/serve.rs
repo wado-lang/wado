@@ -1,28 +1,29 @@
-use std::process;
+use std::process::{self, Command, Stdio};
 
 use anyhow::Result;
 use lexopt::Arg::{Long, Short, Value};
-use wasmtime::component::Component;
+use tempfile::NamedTempFile;
 
 use crate::args::{
     next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
 };
 use crate::compile::{self, OptLevel};
-use crate::runtime;
 use wado_compiler::LogLevel;
 
-pub struct RunOptions {
+pub struct ServeOptions {
     pub input: String,
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
+    pub addr: String,
 }
 
 pub fn print_usage() {
-    eprintln!("Usage: wado run [options] <file.wado>");
+    eprintln!("Usage: wado serve [options] <file.wado>");
     eprintln!();
-    eprintln!("Compile and run a Wado CLI program (wasi:cli/command world).");
+    eprintln!("Compile and serve a Wado HTTP service using wasmtime serve.");
     eprintln!();
     eprintln!("Options:");
+    eprintln!("  --addr <addr>    Address to listen on (default: 0.0.0.0:8080)");
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
     eprintln!("  --help           Show this help message");
@@ -40,16 +41,20 @@ fn parse_log_level(s: &str) -> Option<LogLevel> {
     }
 }
 
-pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
+pub fn parse_args(mut parser: lexopt::Parser) -> ServeOptions {
     let mut input: Option<String> = None;
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
+    let mut addr = "0.0.0.0:8080".to_string();
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
                 print_usage();
                 process::exit(0);
+            }
+            Long("addr") => {
+                addr = require_string(&mut parser);
             }
             Short('O') => {
                 let val = parser.optional_value();
@@ -90,32 +95,62 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
         }
     }
 
-    RunOptions {
+    ServeOptions {
         input: require_input(input, print_usage),
         opt_level,
         log_level,
+        addr,
     }
 }
 
-async fn run_cli_component(wasm: &[u8]) -> Result<()> {
-    let engine = runtime::create_engine()?;
-    let component = Component::new(&engine, wasm)?;
-    let linker = runtime::create_linker(&engine)?;
-    let mut store = runtime::create_store(&engine);
+fn run_http_service(wasm: &[u8], addr: &str) -> Result<()> {
+    use std::io::Write;
 
-    let instance = linker.instantiate_async(&mut store, &component).await?;
-    let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
+    // Write wasm to a temp file
+    let mut temp_file = NamedTempFile::new()?;
+    temp_file.write_all(wasm)?;
+    temp_file.flush()?;
 
-    let (result,) = run_func.call_async(&mut store, ()).await?;
-    result.map_err(|()| anyhow::anyhow!("Component returned error"))?;
+    let temp_path = temp_file.path();
+    eprintln!("Starting HTTP server with wasmtime serve...");
+    eprintln!("Listening on: http://{addr}/");
+
+    // Run wasmtime serve with P3 support
+    let status = Command::new("wasmtime")
+        .arg("serve")
+        .arg("--addr")
+        .arg(addr)
+        .arg("-W")
+        .arg("all-proposals=y")
+        .arg("-W")
+        .arg("stack-switching=n")
+        .arg("-S")
+        .arg("p3=y")
+        .arg("-S")
+        .arg("http=y")
+        .arg(temp_path)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()?;
+
+    if !status.success() {
+        anyhow::bail!("wasmtime serve exited with status: {status}");
+    }
 
     Ok(())
 }
 
-pub async fn run(opts: RunOptions) {
-    let wasm = compile::compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
+pub async fn run(opts: ServeOptions) {
+    let wasm = compile::compile_with_full_opts(
+        &opts.input,
+        opts.opt_level,
+        opts.log_level,
+        Some("wasi:http/service".to_string()),
+    )
+    .await;
 
-    if let Err(e) = run_cli_component(&wasm).await {
+    if let Err(e) = run_http_service(&wasm, &opts.addr) {
         eprintln!("Runtime error: {e}");
         process::exit(1);
     }
