@@ -45,14 +45,20 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_1: {
         break __inline_TreeMap_String_i32___len_1: map.size;
     }."i32::to_string"()));
-    if Some(val) = map."TreeMap<String,i32>::get"(&"banana") {
+    let __pattern_temp_0: Option<i32> = map."TreeMap<String,i32>::get"(&"banana");
+    if __is_not_null(__pattern_temp_0) {
+        let val: i32 = __unwrap_option(__pattern_temp_0);
         core::cli::println(move "String::concat"(move "banana = ", move val."i32::to_string"()));
     }
-    if Some(val2) = map."TreeMap<String,i32>::get"(&"date") {
+    let __pattern_temp_1: Option<i32> = map."TreeMap<String,i32>::get"(&"date");
+    if __is_not_null(__pattern_temp_1) {
+        let val2: i32 = __unwrap_option(__pattern_temp_1);
         core::cli::println(move "String::concat"(move "date = ", move val2."i32::to_string"()));
     }
     map."TreeMap<String,i32>::insert"(move "banana", 20);
-    if Some(val3) = map."TreeMap<String,i32>::get"(&"banana") {
+    let __pattern_temp_2: Option<i32> = map."TreeMap<String,i32>::get"(&"banana");
+    if __is_not_null(__pattern_temp_2) {
+        let val3: i32 = __unwrap_option(__pattern_temp_2);
         core::cli::println(move "String::concat"(move "banana (updated) = ", move val3."i32::to_string"()));
     }
     core::cli::println(move "\n=== After deleting cherry ===");
@@ -60,7 +66,8 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_2: {
         break __inline_TreeMap_String_i32___len_2: map.size;
     }."i32::to_string"()));
-    if None = map."TreeMap<String,i32>::get"(&"cherry") {
+    let __pattern_temp_3: Option<i32> = map."TreeMap<String,i32>::get"(&"cherry");
+    if !__is_not_null(__pattern_temp_3) {
         core::cli::println(move "cherry = (not found)");
     }
     core::cli::println(move "\n=== Iteration (sorted) ===");
@@ -70,7 +77,9 @@ fn run() with Stdout {
             break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_3: ArrayIter<Tuple<String,i32>> { repr: entries.repr, used: entries.used, index: 0 };
         };
         loop {
-            if Some(entry) = __iter_7."ArrayIter<Tuple<String,i32>>^Iterator::next"() {
+            let __pattern_temp_4: Option<[String, i32]> = move __iter_7."ArrayIter<Tuple<String,i32>>^Iterator::next"();
+            if __is_not_null(__pattern_temp_4) {
+                let entry: [String, i32] = __unwrap_option(__pattern_temp_4);
                 let key: String = entry.0;
                 let value: i32 = entry.1;
                 core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
@@ -97,7 +106,9 @@ fn run() with Stdout {
             break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_6: ArrayIter<Tuple<String,i32>> { repr: final_entries.repr, used: final_entries.used, index: 0 };
         };
         loop {
-            if Some(entry) = __iter_8."ArrayIter<Tuple<String,i32>>^Iterator::next"() {
+            let __pattern_temp_5: Option<[String, i32]> = move __iter_8."ArrayIter<Tuple<String,i32>>^Iterator::next"();
+            if __is_not_null(__pattern_temp_5) {
+                let entry: [String, i32] = __unwrap_option(__pattern_temp_5);
                 let key: String = entry.0;
                 let value: i32 = entry.1;
                 core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
@@ -109,7 +120,9 @@ fn run() with Stdout {
 }
 
 fn "TreeMap<String,i32>::compact"(self: &mut TreeMap<String,i32>) {
-    if Some(root) = self.root {
+    let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
+    if __is_not_null(__pattern_temp_0) {
+        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_0);
         root."BTreeNode<String,i32>::compact"();
         self.deleted_count = 0;
     }
@@ -239,7 +252,9 @@ fn "array_get<Tuple<String,i32>>"(arr: builtin::array<[String, i32]>, idx: i32) 
 
 fn "TreeMap<String,i32>::iter"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
     let mut result: Array<[String, i32]> = move [];
-    if Some(root) = self.root {
+    let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
+    if __is_not_null(__pattern_temp_0) {
+        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_0);
         self."TreeMap<String,i32>::collect_entries"(root, &mut result);
     }
     return result;
@@ -298,7 +313,9 @@ pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value
 }
 
 fn "TreeMap<String,i32>::delete"(self: &mut TreeMap<String,i32>, key: &String) -> bool {
-    if Some(root) = self.root {
+    let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
+    if __is_not_null(__pattern_temp_0) {
+        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_0);
         return self."TreeMap<String,i32>::delete_in_node"(root, key);
     }
     return false;
@@ -347,7 +364,9 @@ fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &
 }
 
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: &String) -> Option<i32> {
-    if Some(root) = self.root {
+    let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
+    if __is_not_null(__pattern_temp_0) {
+        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_0);
         return self."TreeMap<String,i32>::search_in_node"(root, key);
     }
     return null;
@@ -393,7 +412,8 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
 }
 
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
-    if None = self.root {
+    let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
+    if !__is_not_null(__pattern_temp_0) {
         let mut new_root: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_leaf"();
         new_root.keys."Array<String>::append"(key);
         new_root.values."Array<i32>::append"(value);
@@ -402,7 +422,9 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
         self.size = 1;
         return;
     }
-    if Some(root) = self.root {
+    let __pattern_temp_1: Option<&mut BTreeNode<String,i32>> = self.root;
+    if __is_not_null(__pattern_temp_1) {
+        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_1);
         if root."BTreeNode<String,i32>::is_full"(__inline_TreeMap_String_i32___max_keys_0: {
             break __inline_TreeMap_String_i32___max_keys_0: ((2 * self.t) - 1);
         }) {
@@ -411,7 +433,9 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
             self."TreeMap<String,i32>::split_child"(&mut new_root, 0);
             self.root = move Option::Some(&mut new_root);
         }
-        if Some(r) = self.root {
+        let __pattern_temp_2: Option<&mut BTreeNode<String,i32>> = self.root;
+        if __is_not_null(__pattern_temp_2) {
+            let r: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_2);
             self."TreeMap<String,i32>::insert_non_full"(r, key, value);
         }
     }

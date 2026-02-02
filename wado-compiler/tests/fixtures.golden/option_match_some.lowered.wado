@@ -11,7 +11,8 @@
 
 fn run() with Stdout {
     let opt: Option<String> = move Option::Some("hello");
-    if Some(x) = opt {
+    if __is_not_null(opt) {
+        let x: String = __unwrap_option(opt);
         core::cli::println(x);
     } else {
         core::cli::println(move "none");

@@ -20,14 +20,20 @@ fn run() with Stdout {
     dict."MiniDict<String,String>::set"(move "name", move "Wado");
     dict."MiniDict<String,String>::set"(move "type", move "language");
     dict."MiniDict<String,String>::set"(move "target", move "WebAssembly");
-    if Some(name_val) = dict."MiniDict<String,String>::get"(move "name") {
+    let __pattern_temp_0: Option<String> = move dict."MiniDict<String,String>::get"(move "name");
+    if __is_not_null(__pattern_temp_0) {
+        let name_val: String = __unwrap_option(__pattern_temp_0);
         core::cli::println(move "String::concat"(move "name: ", name_val));
     }
-    if Some(type_val) = dict."MiniDict<String,String>::get"(move "type") {
+    let __pattern_temp_1: Option<String> = move dict."MiniDict<String,String>::get"(move "type");
+    if __is_not_null(__pattern_temp_1) {
+        let type_val: String = __unwrap_option(__pattern_temp_1);
         core::cli::println(move "String::concat"(move "type: ", type_val));
     }
     dict."MiniDict<String,String>::set"(move "name", move "Wado Language");
-    if Some(updated_val) = dict."MiniDict<String,String>::get"(move "name") {
+    let __pattern_temp_2: Option<String> = move dict."MiniDict<String,String>::get"(move "name");
+    if __is_not_null(__pattern_temp_2) {
+        let updated_val: String = __unwrap_option(__pattern_temp_2);
         core::cli::println(move "String::concat"(move "updated name: ", updated_val));
     }
     core::cli::println(move "String::concat"(move "has 'target': ", __inline_bool__to_string_1: {
@@ -52,7 +58,8 @@ fn run() with Stdout {
             break __inline_Array_Tuple_String_String____len_0: self.used;
         };
     }."i32::to_string"()));
-    if None = dict."MiniDict<String,String>::get"(move "missing") {
+    let __pattern_temp_3: Option<String> = move dict."MiniDict<String,String>::get"(move "missing");
+    if !__is_not_null(__pattern_temp_3) {
         core::cli::println(move "missing key returned None");
     }
 }

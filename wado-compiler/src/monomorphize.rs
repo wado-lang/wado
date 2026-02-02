@@ -820,8 +820,8 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(payload_expr, type_table);
                 }
             }
-            TirExprKind::Move { value } => {
-                self.rewrite_types_in_expr(value, type_table);
+            TirExprKind::Move { expr } => {
+                self.rewrite_types_in_expr(expr, type_table);
             }
             TirExprKind::IndirectCall { callee, args } => {
                 self.rewrite_types_in_expr(callee, type_table);
@@ -834,6 +834,33 @@ impl Monomorphizer {
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
+            }
+            TirExprKind::IsNotNull { expr } => {
+                self.rewrite_types_in_expr(expr, type_table);
+            }
+            TirExprKind::UnwrapOption { expr, .. } => {
+                self.rewrite_types_in_expr(expr, type_table);
+            }
+            TirExprKind::VariantTag { expr } => {
+                self.rewrite_types_in_expr(expr, type_table);
+            }
+            TirExprKind::VariantTest { expr, .. } => {
+                self.rewrite_types_in_expr(expr, type_table);
+            }
+            TirExprKind::VariantPayload { expr, .. } => {
+                self.rewrite_types_in_expr(expr, type_table);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.rewrite_types_in_expr(scrutinee, type_table);
+                for arm in arms {
+                    self.rewrite_types_in_block(arm, type_table);
+                }
+                self.rewrite_types_in_block(default, type_table);
             }
         }
     }
@@ -1778,8 +1805,8 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::Move { value } => {
-                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
+            TirExprKind::Move { expr } => {
+                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.collect_func_instantiation_sites_in_block(
@@ -1790,6 +1817,45 @@ impl Monomorphizer {
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
+            }
+            TirExprKind::IsNotNull { expr } => {
+                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
+            }
+            TirExprKind::UnwrapOption { expr, .. } => {
+                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
+            }
+            TirExprKind::VariantTag { expr } => {
+                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
+            }
+            TirExprKind::VariantTest { expr, .. } => {
+                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
+            }
+            TirExprKind::VariantPayload { expr, .. } => {
+                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.collect_func_instantiation_sites_in_expr(
+                    scrutinee,
+                    generic_functions,
+                    type_table,
+                );
+                for arm in arms {
+                    self.collect_func_instantiation_sites_in_block(
+                        arm,
+                        generic_functions,
+                        type_table,
+                    );
+                }
+                self.collect_func_instantiation_sites_in_block(
+                    default,
+                    generic_functions,
+                    type_table,
+                );
             }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }
@@ -2015,6 +2081,8 @@ impl Monomorphizer {
             local_types,
             address_taken_locals: generic.address_taken_locals.clone(),
             needed_copy_types: std::collections::HashSet::new(),
+            needs_async_scratch: generic.needs_async_scratch,
+            needs_outptr_scratch: generic.needs_outptr_scratch,
         })
     }
 
@@ -2094,7 +2162,11 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
     ) {
         match pattern {
-            TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Literal(_) => {}
+            TirPattern::Wildcard | TirPattern::Literal(_) => {}
+            TirPattern::Binding { type_id, .. } => {
+                // Substitute the binding's type (e.g., type parameter T -> i32)
+                *type_id = self.substitute_type(*type_id, substitution, type_table);
+            }
             TirPattern::Tuple(patterns) => {
                 for p in patterns {
                     self.substitute_types_in_pattern(p, substitution, type_table);
@@ -2103,9 +2175,12 @@ impl Monomorphizer {
             TirPattern::Variant {
                 enum_type,
                 bindings,
+                payload_type,
                 ..
             } => {
                 *enum_type = self.substitute_type(*enum_type, substitution, type_table);
+                // Also substitute the payload type (e.g., type parameter U -> i32)
+                *payload_type = self.substitute_type(*payload_type, substitution, type_table);
                 for binding in bindings {
                     self.substitute_types_in_pattern(binding, substitution, type_table);
                 }
@@ -2385,14 +2460,45 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(payload_expr, substitution, type_table);
                 }
             }
-            TirExprKind::Move { value } => {
-                self.substitute_types_in_expr(value, substitution, type_table);
+            TirExprKind::Move { expr } => {
+                self.substitute_types_in_expr(expr, substitution, type_table);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.substitute_types_in_expr(value, substitution, type_table);
+            }
+            TirExprKind::IsNotNull { expr } => {
+                self.substitute_types_in_expr(expr, substitution, type_table);
+            }
+            TirExprKind::UnwrapOption { expr, inner_type } => {
+                self.substitute_types_in_expr(expr, substitution, type_table);
+                *inner_type = self.substitute_type(*inner_type, substitution, type_table);
+            }
+            TirExprKind::VariantTag { expr } => {
+                self.substitute_types_in_expr(expr, substitution, type_table);
+            }
+            TirExprKind::VariantTest { expr, .. } => {
+                self.substitute_types_in_expr(expr, substitution, type_table);
+            }
+            TirExprKind::VariantPayload {
+                expr, payload_type, ..
+            } => {
+                self.substitute_types_in_expr(expr, substitution, type_table);
+                *payload_type = self.substitute_type(*payload_type, substitution, type_table);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.substitute_types_in_expr(scrutinee, substitution, type_table);
+                for arm in arms {
+                    self.substitute_types_in_block(arm, substitution, type_table);
+                }
+                self.substitute_types_in_block(default, substitution, type_table);
             }
             // Literals and other simple expressions
             TirExprKind::IntLiteral { .. }
@@ -2909,14 +3015,41 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_expr(payload_expr, type_table);
                 }
             }
-            TirExprKind::Move { value } => {
-                self.rewrite_function_calls_in_expr(value, type_table);
+            TirExprKind::Move { expr } => {
+                self.rewrite_function_calls_in_expr(expr, type_table);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.rewrite_function_calls_in_expr(value, type_table);
+            }
+            TirExprKind::IsNotNull { expr } => {
+                self.rewrite_function_calls_in_expr(expr, type_table);
+            }
+            TirExprKind::UnwrapOption { expr, .. } => {
+                self.rewrite_function_calls_in_expr(expr, type_table);
+            }
+            TirExprKind::VariantTag { expr } => {
+                self.rewrite_function_calls_in_expr(expr, type_table);
+            }
+            TirExprKind::VariantTest { expr, .. } => {
+                self.rewrite_function_calls_in_expr(expr, type_table);
+            }
+            TirExprKind::VariantPayload { expr, .. } => {
+                self.rewrite_function_calls_in_expr(expr, type_table);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.rewrite_function_calls_in_expr(scrutinee, type_table);
+                for arm in arms {
+                    self.rewrite_function_calls_in_block(arm, type_table);
+                }
+                self.rewrite_function_calls_in_block(default, type_table);
             }
             // Literals and simple expressions
             TirExprKind::IntLiteral { .. }

@@ -78,7 +78,7 @@ fn wrap_in_move_if_eligible(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
         let span = expr.span;
         TirExpr::new(
             TirExprKind::Move {
-                value: Box::new(expr),
+                expr: Box::new(expr),
             },
             type_id,
             span,
@@ -259,8 +259,8 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
                 insert_moves_in_expr(payload_expr, type_table);
             }
         }
-        TirExprKind::Move { value } => {
-            insert_moves_in_expr(value, type_table);
+        TirExprKind::Move { expr } => {
+            insert_moves_in_expr(expr, type_table);
         }
         TirExprKind::Block(block) => {
             insert_moves_in_block(block, type_table);
@@ -290,6 +290,27 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
             for arm in arms {
                 insert_moves_in_expr(&mut arm.body, type_table);
             }
+        }
+        TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. } => {
+            insert_moves_in_expr(inner, type_table);
+        }
+        TirExprKind::VariantPayload { expr: inner, .. } => {
+            insert_moves_in_expr(inner, type_table);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            insert_moves_in_expr(scrutinee, type_table);
+            for arm in arms {
+                insert_moves_in_block(arm, type_table);
+            }
+            insert_moves_in_block(default, type_table);
         }
         // Leaf nodes - no nested expressions
         TirExprKind::IntLiteral { .. }
@@ -491,8 +512,8 @@ fn collect_value_copy_types_in_expr(
                 collect_value_copy_types_in_expr(payload_expr, type_table, copy_types);
             }
         }
-        TirExprKind::Move { value } => {
-            collect_value_copy_types_in_expr(value, type_table, copy_types);
+        TirExprKind::Move { expr } => {
+            collect_value_copy_types_in_expr(expr, type_table, copy_types);
         }
         TirExprKind::Block(block) => {
             collect_value_copy_types_in_block(block, type_table, copy_types);
@@ -522,6 +543,27 @@ fn collect_value_copy_types_in_expr(
             for arm in arms {
                 collect_value_copy_types_in_expr(&arm.body, type_table, copy_types);
             }
+        }
+        TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. } => {
+            collect_value_copy_types_in_expr(inner, type_table, copy_types);
+        }
+        TirExprKind::VariantPayload { expr: inner, .. } => {
+            collect_value_copy_types_in_expr(inner, type_table, copy_types);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_value_copy_types_in_expr(scrutinee, type_table, copy_types);
+            for arm in arms {
+                collect_value_copy_types_in_block(arm, type_table, copy_types);
+            }
+            collect_value_copy_types_in_block(default, type_table, copy_types);
         }
         // Leaf nodes - no nested expressions
         TirExprKind::IntLiteral { .. }

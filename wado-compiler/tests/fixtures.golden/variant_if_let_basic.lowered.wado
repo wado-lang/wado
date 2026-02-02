@@ -12,7 +12,8 @@
 
 fn run() with Stdout {
     let c: Shape = move Shape::Circle(5.0);
-    if Circle(r) = c {
+    if __variant_test(c, case=0, name=Circle) {
+        let r: f64 = __variant_payload(c, case=0);
         core::cli::println(move "String::concat"(move "Circle with radius ", __inline_f64__to_string_0: {
             let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
             let len: i32 = core::builtin::f64_to_buffer(r, ptr);
@@ -26,7 +27,8 @@ fn run() with Stdout {
         core::cli::println(move "Not a circle");
     }
     let p: Shape = move Shape::Point;
-    if Circle(r) = p {
+    if __variant_test(p, case=0, name=Circle) {
+        let r: f64 = __variant_payload(p, case=0);
         core::cli::println(move "String::concat"(move "Circle with radius ", __inline_f64__to_string_1: {
             let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
             let len: i32 = core::builtin::f64_to_buffer(r, ptr);
@@ -39,7 +41,7 @@ fn run() with Stdout {
     } else {
         core::cli::println(move "Not a circle");
     }
-    if Point = p {
+    if __variant_test(p, case=1, name=Point) {
         core::cli::println(move "It's a point");
     } else {
         core::cli::println(move "Not a point");

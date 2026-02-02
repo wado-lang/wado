@@ -2590,9 +2590,9 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("::");
                 self.output.push_str(case_name);
             }
-            TirExprKind::Move { value } => {
+            TirExprKind::Move { expr } => {
                 self.output.push_str("move ");
-                self.unparse_expr(value);
+                self.unparse_expr(expr);
             }
             TirExprKind::Unit => {
                 self.output.push_str("()");
@@ -2932,6 +2932,71 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(": {\n");
                 self.indent_level += 1;
                 self.unparse_block(block);
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push('}');
+            }
+
+            // Lowered pattern matching nodes
+            TirExprKind::IsNotNull { expr } => {
+                self.output.push_str("__is_not_null(");
+                self.unparse_expr(expr);
+                self.output.push(')');
+            }
+            TirExprKind::UnwrapOption { expr, .. } => {
+                self.output.push_str("__unwrap_option(");
+                self.unparse_expr(expr);
+                self.output.push(')');
+            }
+            TirExprKind::VariantTag { expr } => {
+                self.output.push_str("__variant_tag(");
+                self.unparse_expr(expr);
+                self.output.push(')');
+            }
+            TirExprKind::VariantTest {
+                expr,
+                case_index,
+                case_name,
+            } => {
+                self.output.push_str("__variant_test(");
+                self.unparse_expr(expr);
+                self.output
+                    .push_str(&format!(", case={case_index}, name={case_name})"));
+            }
+            TirExprKind::VariantPayload {
+                expr, case_index, ..
+            } => {
+                self.output.push_str("__variant_payload(");
+                self.unparse_expr(expr);
+                self.output.push_str(&format!(", case={case_index})"));
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                min_value,
+                arms,
+                default,
+            } => {
+                self.output.push_str("switch ");
+                self.unparse_expr(scrutinee);
+                self.output.push_str(&format!(" (base={min_value}) {{\n"));
+                self.indent_level += 1;
+                for (i, arm) in arms.iter().enumerate() {
+                    self.write_indent();
+                    self.output
+                        .push_str(&format!("{} => {{\n", *min_value + i as i64));
+                    self.indent_level += 1;
+                    self.unparse_block(arm);
+                    self.indent_level -= 1;
+                    self.write_indent();
+                    self.output.push_str("}\n");
+                }
+                self.write_indent();
+                self.output.push_str("_ => {\n");
+                self.indent_level += 1;
+                self.unparse_block(default);
+                self.indent_level -= 1;
+                self.write_indent();
+                self.output.push_str("}\n");
                 self.indent_level -= 1;
                 self.write_indent();
                 self.output.push('}');

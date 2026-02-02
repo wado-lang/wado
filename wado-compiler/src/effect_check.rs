@@ -285,14 +285,35 @@ impl<'a> EffectChecker<'a> {
             TirExprKind::OptionSome { value } => {
                 self.check_expr(value);
             }
-            TirExprKind::Move { value } => {
-                self.check_expr(value);
+            TirExprKind::Move { expr } => {
+                self.check_expr(expr);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.check_block(block);
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.check_expr(value);
+            }
+            TirExprKind::IsNotNull { expr }
+            | TirExprKind::UnwrapOption { expr, .. }
+            | TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. } => {
+                self.check_expr(expr);
+            }
+            TirExprKind::VariantPayload { expr, .. } => {
+                self.check_expr(expr);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.check_expr(scrutinee);
+                for arm in arms {
+                    self.check_block(arm);
+                }
+                self.check_block(default);
             }
             // Leaf expressions - no sub-expressions to check
             TirExprKind::IntLiteral { .. }
