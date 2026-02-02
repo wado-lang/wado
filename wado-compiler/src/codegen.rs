@@ -202,9 +202,6 @@ struct FunctionContext {
     /// Counter for generating unique `IndirectCall` temp locals per closure struct type
     /// Key is the closure struct type index, value is the counter for that type
     indirect_call_counters: HashMap<u32, u32>,
-    /// Counter for generating unique `IfPattern` temp locals per scrutinee type
-    /// Key is the `ValType` (as string), value is the counter for that type
-    if_pattern_counters: HashMap<String, u32>,
     /// Counter for generating unique `LetPattern` temp locals
     let_pattern_counter: u32,
     /// Counter for generating unique match scrutinee locals
@@ -237,7 +234,6 @@ impl FunctionContext {
             local_box_types: HashMap::new(),
             local_index_offset: 0,
             indirect_call_counters: HashMap::new(),
-            if_pattern_counters: HashMap::new(),
             let_pattern_counter: 0,
             match_scrutinee_counter: 0,
             copy_context: CopyContext::new(),
@@ -263,20 +259,12 @@ impl FunctionContext {
             local_box_types: HashMap::new(),
             local_index_offset: 0,
             indirect_call_counters: HashMap::new(),
-            if_pattern_counters: HashMap::new(),
             let_pattern_counter: 0,
             match_scrutinee_counter: 0,
             copy_context: CopyContext::new(),
             skip_tuple_wrap: false,
             is_async_export: false,
             target_world: String::new(),
-        }
-    }
-
-    /// Reset if-pattern counters (called between pre-allocation and code generation phases)
-    fn reset_if_pattern_counters(&mut self) {
-        for counter in self.if_pattern_counters.values_mut() {
-            *counter = 0;
         }
     }
 
@@ -9189,24 +9177,10 @@ impl Codegen {
                         );
                         func.instruction(&Instruction::End);
                     }
-                    TirStmtKind::IfPattern {
-                        scrutinee,
-                        pattern,
-                        then_block,
-                        else_block: Some(else_block),
-                    } => {
-                        // Generate if-pattern statement as expression using a helper
-                        self.generate_if_pattern_as_expr(
-                            func,
-                            scrutinee,
-                            pattern,
-                            then_block,
-                            else_block,
-                            result_type,
-                            type_table,
-                            ctx,
-                            builder,
-                        );
+                    TirStmtKind::IfPattern { .. } => {
+                        // All IfPattern statements should be lowered to Let + If by the lower phase.
+                        // If we reach here, it's a compiler bug.
+                        panic!("IfPattern should be lowered before codegen");
                     }
                     _ => {
                         // Not a statement that can produce a value - generate normally
@@ -9581,15 +9555,10 @@ impl Codegen {
                 ctx.loop_info.pop();
             }
 
-            TirStmtKind::IfPattern {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.generate_if_pattern(
-                    func, scrutinee, pattern, then_block, else_block, type_table, ctx, builder,
-                );
+            TirStmtKind::IfPattern { .. } => {
+                // All IfPattern statements should be lowered to Let + If by the lower phase.
+                // If we reach here, it's a compiler bug.
+                panic!("IfPattern should be lowered before codegen");
             }
         }
     }
@@ -9810,505 +9779,6 @@ impl Codegen {
         }
 
         true
-    }
-
-    /// Generate code for if-pattern statement: `if let Some(x) = expr { ... }`
-    fn generate_if_pattern(
-        &self,
-        func: &mut Function,
-        scrutinee: &TirExpr,
-        pattern: &TirPattern,
-        then_block: &TirBlock,
-        else_block: &Option<TirBlock>,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
-    ) {
-        // Generate the scrutinee expression
-        self.generate_expr(func, scrutinee, type_table, ctx, builder);
-
-        // Get the scrutinee type to determine how to match
-        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-
-        match (&scrutinee_type, pattern) {
-            // Option<T> with Some(x) pattern - check for non-null and bind
-            (
-                ResolvedType::Option(inner_type),
-                TirPattern::Variant {
-                    variant_name,
-                    bindings,
-                    payload_type: pattern_payload_type,
-                    ..
-                },
-            ) if variant_name == "Some" => {
-                // Stack: [option_value]
-                // Store scrutinee in a temp local (using counter-based naming to match pre-allocation)
-                let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                let type_key = format!("{:?}", scrutinee.type_id);
-                let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
-                let local_name = format!("__if_pattern_scrutinee_{type_key}_{counter}");
-                *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
-                func.instruction(&Instruction::LocalSet(scrutinee_local));
-
-                // Generate: if (ref.is_null scrutinee) { else_block } else { then_block }
-                // But wasm if expects condition to be true for then branch, so we flip
-                func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::RefIsNull);
-                func.instruction(&Instruction::I32Eqz); // NOT: true if NOT null (Some)
-
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra += 1;
-                }
-
-                // Then block: pattern matches (value is Some)
-                // Bind the inner value to the pattern binding
-                if let Some(binding) = bindings.first() {
-                    // Get the inner value (the non-null reference)
-                    func.instruction(&Instruction::LocalGet(scrutinee_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-
-                    // For primitive types with simple binding, unbox the value from the box struct
-                    // BUT skip unboxing if the local is address-taken (it expects a box ref)
-                    if let TirPattern::Binding { local_index, .. } = binding {
-                        let is_address_taken = ctx.address_taken_locals.contains(local_index);
-                        if !is_address_taken
-                            && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
-                        {
-                            let val_type = primitive_to_valtype(prim);
-                            if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
-                                func.instruction(&Instruction::StructGet {
-                                    struct_type_index: box_type_idx,
-                                    field_index: 0,
-                                });
-                            }
-                        }
-                    }
-
-                    // Bind the value to the pattern (handles Binding, Tuple, Wildcard, etc.)
-                    self.generate_let_pattern_binding(
-                        func,
-                        binding,
-                        *pattern_payload_type,
-                        type_table,
-                        ctx,
-                        builder,
-                    );
-                }
-
-                // Generate then block body
-                self.generate_block(func, then_block, type_table, ctx, builder);
-
-                // Else block (if any)
-                if let Some(else_blk) = else_block {
-                    func.instruction(&Instruction::Else);
-                    self.generate_block(func, else_blk, type_table, ctx, builder);
-                }
-
-                func.instruction(&Instruction::End);
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra -= 1;
-                }
-            }
-
-            // Option<T> with None pattern - check for null
-            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
-                if variant_name == "None" =>
-            {
-                // Stack: [option_value]
-                // Check if null (None)
-                func.instruction(&Instruction::RefIsNull); // true if null (None)
-
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra += 1;
-                }
-
-                // Then block: pattern matches (value is None)
-                self.generate_block(func, then_block, type_table, ctx, builder);
-
-                // Else block (if any)
-                if let Some(else_blk) = else_block {
-                    func.instruction(&Instruction::Else);
-                    self.generate_block(func, else_blk, type_table, ctx, builder);
-                }
-
-                func.instruction(&Instruction::End);
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra -= 1;
-                }
-            }
-
-            // Custom variant with pattern - check tag and extract payload
-            (
-                ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
-                TirPattern::Variant {
-                    variant_name: case_name,
-                    bindings,
-                    payload_type: pattern_payload_type,
-                    ..
-                },
-            ) => {
-                // Look up variant type info - for GenericInstance, use the mangled name
-                let variant_lookup_name = type_table.mangle_type_name(scrutinee.type_id);
-                let variant_types = self.variant_types.borrow();
-                let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
-                    // Fallback to base name for non-generic variants
-                    variant_types.get(name).unwrap_or_else(|| {
-                        panic!("Variant type not registered: {variant_lookup_name} (base: {name})");
-                    })
-                });
-
-                // Find the case info and case index for this pattern
-                let (case_index, case_info) = variant_info
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .find(|(_, info)| info.name == *case_name)
-                    .map(|(i, info)| (i, info.clone()))
-                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"));
-                let case_type_idx = case_info.type_idx;
-                let base_type_idx = variant_info.base_type_idx;
-                let is_unit_variant = case_info.payload_type.is_none();
-                drop(variant_types);
-
-                // Stack: [variant_value]
-                // Store scrutinee in a temp local
-                let variant_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                let type_key = format!("{:?}", scrutinee.type_id);
-                let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
-                let local_name = format!("__if_pattern_scrutinee_{type_key}_{counter}");
-                *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                let scrutinee_local = ctx.alloc_local(&local_name, variant_valtype);
-                func.instruction(&Instruction::LocalSet(scrutinee_local));
-
-                // For unit variants (no payload), check discriminator value directly
-                // because structurally identical subtypes can't be distinguished by ref.test.
-                // For payload variants, use ref.test since they have different structures.
-                func.instruction(&Instruction::LocalGet(scrutinee_local));
-                if is_unit_variant {
-                    // Read discriminator and compare with case index
-                    func.instruction(&Instruction::StructGet {
-                        struct_type_index: base_type_idx,
-                        field_index: 0,
-                    });
-                    func.instruction(&Instruction::I32Const(case_index as i32));
-                    func.instruction(&Instruction::I32Eq);
-                } else {
-                    // Use ref.test to check if the value is of the expected case type
-                    func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
-                        case_type_idx,
-                    )));
-                }
-
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra += 1;
-                }
-
-                // Then block: pattern matches
-                // With single payload design, extract the single payload (field 1)
-                // and bind it using the pattern (which could be a simple binding or tuple)
-                if let Some(binding) = bindings.first() {
-                    // Get the payload (field 1)
-                    func.instruction(&Instruction::LocalGet(scrutinee_local));
-                    func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                        case_type_idx,
-                    )));
-                    func.instruction(&Instruction::StructGet {
-                        struct_type_index: case_type_idx,
-                        field_index: 1,
-                    });
-
-                    // Bind the payload to the pattern (handles Binding, Tuple, Wildcard, etc.)
-                    self.generate_let_pattern_binding(
-                        func,
-                        binding,
-                        *pattern_payload_type,
-                        type_table,
-                        ctx,
-                        builder,
-                    );
-                }
-
-                // Generate then block body
-                self.generate_block(func, then_block, type_table, ctx, builder);
-
-                // Else block (if any)
-                if let Some(else_blk) = else_block {
-                    func.instruction(&Instruction::Else);
-                    self.generate_block(func, else_blk, type_table, ctx, builder);
-                }
-
-                func.instruction(&Instruction::End);
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra -= 1;
-                }
-            }
-
-            // Unsupported pattern
-            _ => {
-                panic!("Unsupported if-pattern: {pattern:?} on type {scrutinee_type:?}");
-            }
-        }
-    }
-
-    /// Generate code for if-pattern as an expression (produces a value).
-    /// Similar to `generate_if_pattern` but the if block has a result type.
-    #[allow(clippy::too_many_arguments)]
-    fn generate_if_pattern_as_expr(
-        &self,
-        func: &mut Function,
-        scrutinee: &TirExpr,
-        pattern: &TirPattern,
-        then_block: &TirBlock,
-        else_block: &TirBlock,
-        result_type: TypeId,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
-    ) {
-        // Generate the scrutinee expression
-        self.generate_expr(func, scrutinee, type_table, ctx, builder);
-
-        // Get the scrutinee type to determine how to match
-        let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-        let result_valtype = self.type_id_to_valtype(type_table, result_type);
-
-        match (&scrutinee_type, pattern) {
-            // Option<T> with Some(x) pattern - check for non-null and bind
-            (
-                ResolvedType::Option(inner_type),
-                TirPattern::Variant {
-                    variant_name,
-                    bindings,
-                    payload_type: pattern_payload_type,
-                    ..
-                },
-            ) if variant_name == "Some" => {
-                let option_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                let type_key = format!("{:?}", scrutinee.type_id);
-                let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
-                let local_name = format!("__if_pattern_scrutinee_{type_key}_{counter}");
-                *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                let scrutinee_local = ctx.alloc_local(&local_name, option_valtype);
-                func.instruction(&Instruction::LocalSet(scrutinee_local));
-
-                func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::RefIsNull);
-                func.instruction(&Instruction::I32Eqz);
-
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                    result_valtype,
-                )));
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra += 1;
-                }
-
-                // Then block: pattern matches (value is Some)
-                if let Some(binding) = bindings.first() {
-                    func.instruction(&Instruction::LocalGet(scrutinee_local));
-                    func.instruction(&Instruction::RefAsNonNull);
-
-                    if let TirPattern::Binding { local_index, .. } = binding {
-                        let is_address_taken = ctx.address_taken_locals.contains(local_index);
-                        if !is_address_taken
-                            && let ResolvedType::Primitive(prim) = type_table.get(*inner_type)
-                        {
-                            let val_type = primitive_to_valtype(prim);
-                            if let Some(box_type_idx) = self.get_box_type_idx(val_type) {
-                                func.instruction(&Instruction::StructGet {
-                                    struct_type_index: box_type_idx,
-                                    field_index: 0,
-                                });
-                            }
-                        }
-                    }
-
-                    self.generate_let_pattern_binding(
-                        func,
-                        binding,
-                        *pattern_payload_type,
-                        type_table,
-                        ctx,
-                        builder,
-                    );
-                }
-
-                self.generate_block_as_expr(
-                    func,
-                    then_block,
-                    result_type,
-                    type_table,
-                    ctx,
-                    builder,
-                );
-
-                func.instruction(&Instruction::Else);
-                self.generate_block_as_expr(
-                    func,
-                    else_block,
-                    result_type,
-                    type_table,
-                    ctx,
-                    builder,
-                );
-
-                func.instruction(&Instruction::End);
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra -= 1;
-                }
-            }
-
-            // Option<T> with None pattern - check for null
-            (ResolvedType::Option(_), TirPattern::Variant { variant_name, .. })
-                if variant_name == "None" =>
-            {
-                func.instruction(&Instruction::RefIsNull);
-
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                    result_valtype,
-                )));
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra += 1;
-                }
-
-                self.generate_block_as_expr(
-                    func,
-                    then_block,
-                    result_type,
-                    type_table,
-                    ctx,
-                    builder,
-                );
-
-                func.instruction(&Instruction::Else);
-                self.generate_block_as_expr(
-                    func,
-                    else_block,
-                    result_type,
-                    type_table,
-                    ctx,
-                    builder,
-                );
-
-                func.instruction(&Instruction::End);
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra -= 1;
-                }
-            }
-
-            // Custom variant with pattern
-            (
-                ResolvedType::Variant { name, .. } | ResolvedType::GenericInstance { name, .. },
-                TirPattern::Variant {
-                    variant_name: case_name,
-                    bindings,
-                    payload_type: pattern_payload_type,
-                    ..
-                },
-            ) => {
-                let variant_lookup_name = type_table.mangle_type_name(scrutinee.type_id);
-                let variant_types = self.variant_types.borrow();
-                let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
-                    variant_types.get(name).unwrap_or_else(|| {
-                        panic!("Variant type not registered: {variant_lookup_name} (base: {name})");
-                    })
-                });
-
-                let (case_index, case_info) = variant_info
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .find(|(_, info)| info.name == *case_name)
-                    .map(|(i, info)| (i, info.clone()))
-                    .unwrap_or_else(|| panic!("Unknown case {case_name} for variant {name}"));
-                let case_type_idx = case_info.type_idx;
-                let base_type_idx = variant_info.base_type_idx;
-                let is_unit_variant = case_info.payload_type.is_none();
-                drop(variant_types);
-
-                let variant_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                let type_key = format!("{:?}", scrutinee.type_id);
-                let counter = *ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
-                let local_name = format!("__if_pattern_scrutinee_{type_key}_{counter}");
-                *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                let scrutinee_local = ctx.alloc_local(&local_name, variant_valtype);
-                func.instruction(&Instruction::LocalSet(scrutinee_local));
-
-                func.instruction(&Instruction::LocalGet(scrutinee_local));
-                if is_unit_variant {
-                    func.instruction(&Instruction::StructGet {
-                        struct_type_index: base_type_idx,
-                        field_index: 0,
-                    });
-                    func.instruction(&Instruction::I32Const(case_index as i32));
-                    func.instruction(&Instruction::I32Eq);
-                } else {
-                    func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
-                        case_type_idx,
-                    )));
-                }
-
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                    result_valtype,
-                )));
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra += 1;
-                }
-
-                if let Some(binding) = bindings.first() {
-                    func.instruction(&Instruction::LocalGet(scrutinee_local));
-                    func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                        case_type_idx,
-                    )));
-                    func.instruction(&Instruction::StructGet {
-                        struct_type_index: case_type_idx,
-                        field_index: 1,
-                    });
-
-                    self.generate_let_pattern_binding(
-                        func,
-                        binding,
-                        *pattern_payload_type,
-                        type_table,
-                        ctx,
-                        builder,
-                    );
-                }
-
-                self.generate_block_as_expr(
-                    func,
-                    then_block,
-                    result_type,
-                    type_table,
-                    ctx,
-                    builder,
-                );
-
-                func.instruction(&Instruction::Else);
-                self.generate_block_as_expr(
-                    func,
-                    else_block,
-                    result_type,
-                    type_table,
-                    ctx,
-                    builder,
-                );
-
-                func.instruction(&Instruction::End);
-                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
-                    *extra -= 1;
-                }
-            }
-
-            _ => {
-                panic!(
-                    "Unsupported if-pattern as expression: {pattern:?} on type {scrutinee_type:?}"
-                );
-            }
-        }
     }
 
     // =========================================================================
@@ -11339,11 +10809,6 @@ impl Codegen {
             self.preallocate_closure_call_locals(body, type_table, &mut func_ctx);
         }
 
-        // Pre-allocate locals for IfPattern statements
-        if let Some(body) = &tir_func.body {
-            self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
-        }
-
         // Pre-allocate locals for LetPattern statements (tuple destructuring)
         if let Some(body) = &tir_func.body {
             self.preallocate_let_pattern_locals(body, type_table, &mut func_ctx);
@@ -11354,8 +10819,6 @@ impl Codegen {
             self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
         }
 
-        // Reset if-pattern counters so code generation uses the same indices as pre-allocation
-        func_ctx.reset_if_pattern_counters();
         // Reset let-pattern counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_let_pattern_counter();
         // Reset match-scrutinee counter so code generation uses the same indices as pre-allocation
@@ -11481,11 +10944,6 @@ impl Codegen {
             self.preallocate_closure_call_locals(body, type_table, &mut func_ctx);
         }
 
-        // Pre-allocate locals for IfPattern statements
-        if let Some(body) = &tir_func.body {
-            self.preallocate_if_pattern_locals(body, type_table, &mut func_ctx);
-        }
-
         // Pre-allocate locals for LetPattern statements (tuple destructuring)
         if let Some(body) = &tir_func.body {
             self.preallocate_let_pattern_locals(body, type_table, &mut func_ctx);
@@ -11507,8 +10965,6 @@ impl Codegen {
             func_ctx.alloc_local("_response_handle", ValType::I32);
         }
 
-        // Reset if-pattern counters so code generation uses the same indices as pre-allocation
-        func_ctx.reset_if_pattern_counters();
         // Reset let-pattern counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_let_pattern_counter();
         // Reset match-scrutinee counter so code generation uses the same indices as pre-allocation
@@ -12861,202 +12317,10 @@ impl Codegen {
                     self.preallocate_assert_locals(else_blk, type_table, ctx, string_array_type);
                 }
             }
-            TirStmtKind::IfPattern {
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.preallocate_assert_locals(then_block, type_table, ctx, string_array_type);
-                if let Some(else_blk) = else_block {
-                    self.preallocate_assert_locals(else_blk, type_table, ctx, string_array_type);
-                }
-            }
             _ => {}
         }
     }
 
-    /// Pre-allocate locals for `IfPattern` statements in a block
-    fn preallocate_if_pattern_locals(
-        &self,
-        block: &TirBlock,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        for stmt in &block.stmts {
-            self.preallocate_if_pattern_locals_from_stmt(stmt, type_table, ctx);
-        }
-    }
-
-    fn preallocate_if_pattern_locals_from_stmt(
-        &self,
-        stmt: &TirStmt,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::IfPattern {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-                ..
-            } => {
-                // Pre-allocate temp local for the scrutinee using a unique name per type
-                let scrutinee_type = type_table.get(scrutinee.type_id).clone();
-                let needs_temp_local = match &scrutinee_type {
-                    // Option: only Some patterns need a temp local (None doesn't bind)
-                    ResolvedType::Option(_) => matches!(
-                        pattern,
-                        TirPattern::Variant { variant_name, .. } if variant_name == "Some"
-                    ),
-                    // Custom variants always need a temp local for tag checking
-                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => true,
-                    _ => false,
-                };
-                if needs_temp_local {
-                    let scrutinee_valtype = self.type_id_to_valtype(type_table, scrutinee.type_id);
-                    // Use type_id as key since each type should have its own counter
-                    let type_key = format!("{:?}", scrutinee.type_id);
-                    let counter = ctx.if_pattern_counters.entry(type_key.clone()).or_insert(0);
-                    let local_name = format!("__if_pattern_scrutinee_{}_{}", type_key, *counter);
-                    *ctx.if_pattern_counters.get_mut(&type_key).unwrap() += 1;
-                    ctx.alloc_local(&local_name, scrutinee_valtype);
-                }
-                // Recursively handle nested blocks
-                self.preallocate_if_pattern_locals(then_block, type_table, ctx);
-                if let Some(else_blk) = else_block {
-                    self.preallocate_if_pattern_locals(else_blk, type_table, ctx);
-                }
-            }
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.preallocate_if_pattern_locals(then_block, type_table, ctx);
-                if let Some(else_blk) = else_block {
-                    self.preallocate_if_pattern_locals(else_blk, type_table, ctx);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.preallocate_if_pattern_locals(body, type_table, ctx);
-            }
-            TirStmtKind::Let { value, .. } => {
-                // Recurse into the value expression (may contain inlined LabeledBlock)
-                self.preallocate_if_pattern_locals_from_expr(value, type_table, ctx);
-            }
-            TirStmtKind::Expr(expr) => {
-                // Recurse into the expression (may contain inlined LabeledBlock)
-                self.preallocate_if_pattern_locals_from_expr(expr, type_table, ctx);
-            }
-            TirStmtKind::Return { value: Some(expr) } => {
-                self.preallocate_if_pattern_locals_from_expr(expr, type_table, ctx);
-            }
-            _ => {}
-        }
-    }
-
-    /// Pre-allocate `IfPattern` locals from expressions (handles inlined `LabeledBlock`)
-    fn preallocate_if_pattern_locals_from_expr(
-        &self,
-        expr: &TirExpr,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match &expr.kind {
-            TirExprKind::LabeledBlock { block, .. } => {
-                // Recurse into the inlined block
-                self.preallocate_if_pattern_locals(block, type_table, ctx);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.preallocate_if_pattern_locals_from_expr(condition, type_table, ctx);
-                self.preallocate_if_pattern_locals(then_branch, type_table, ctx);
-                if let Some(else_blk) = else_branch {
-                    self.preallocate_if_pattern_locals(else_blk, type_table, ctx);
-                }
-            }
-            TirExprKind::Block(block) => {
-                self.preallocate_if_pattern_locals(block, type_table, ctx);
-            }
-            TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
-            | TirExprKind::StaticCall { args, .. } => {
-                for arg in args {
-                    self.preallocate_if_pattern_locals_from_expr(arg, type_table, ctx);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args, .. } => {
-                self.preallocate_if_pattern_locals_from_expr(callee, type_table, ctx);
-                for arg in args {
-                    self.preallocate_if_pattern_locals_from_expr(arg, type_table, ctx);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.preallocate_if_pattern_locals_from_expr(receiver, type_table, ctx);
-                for arg in args {
-                    self.preallocate_if_pattern_locals_from_expr(arg, type_table, ctx);
-                }
-            }
-            TirExprKind::FieldAccess { expr: base, .. } => {
-                self.preallocate_if_pattern_locals_from_expr(base, type_table, ctx);
-            }
-            TirExprKind::Index { expr: base, index } => {
-                self.preallocate_if_pattern_locals_from_expr(base, type_table, ctx);
-                self.preallocate_if_pattern_locals_from_expr(index, type_table, ctx);
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.preallocate_if_pattern_locals_from_expr(left, type_table, ctx);
-                self.preallocate_if_pattern_locals_from_expr(right, type_table, ctx);
-            }
-            TirExprKind::Unary { expr: inner, .. } => {
-                self.preallocate_if_pattern_locals_from_expr(inner, type_table, ctx);
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.preallocate_if_pattern_locals_from_expr(&field.value, type_table, ctx);
-                }
-            }
-            TirExprKind::ArrayLiteral { elements, .. } => {
-                for elem in elements {
-                    self.preallocate_if_pattern_locals_from_expr(elem, type_table, ctx);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.preallocate_if_pattern_locals_from_expr(elem, type_table, ctx);
-                }
-            }
-            TirExprKind::Assign { value, .. } => {
-                self.preallocate_if_pattern_locals_from_expr(value, type_table, ctx);
-            }
-            TirExprKind::OptionSome { value } => {
-                self.preallocate_if_pattern_locals_from_expr(value, type_table, ctx);
-            }
-            TirExprKind::Cast { expr: inner, .. } => {
-                self.preallocate_if_pattern_locals_from_expr(inner, type_table, ctx);
-            }
-            TirExprKind::Closure { body, .. } => {
-                self.preallocate_if_pattern_locals_from_expr(body, type_table, ctx);
-            }
-            TirExprKind::Match { expr, arms } => {
-                self.preallocate_if_pattern_locals_from_expr(expr, type_table, ctx);
-                // Don't allocate scrutinee local here - it's done in preallocate_locals_from_expr
-                // to avoid double-counting with let_pattern_counter
-                for arm in arms {
-                    // Pre-allocate locals for pattern bindings
-                    self.preallocate_match_pattern_locals(&arm.pattern, type_table, ctx);
-                    self.preallocate_if_pattern_locals_from_expr(&arm.body, type_table, ctx);
-                }
-            }
-            _ => {
-                // Other expressions don't contain blocks
-            }
-        }
-    }
 
     /// Pre-allocate locals for match pattern bindings using resolver's `local_index`
     fn preallocate_match_pattern_locals(
@@ -13217,29 +12481,13 @@ impl Codegen {
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.preallocate_let_pattern_locals(block, type_table, ctx);
             }
-            TirStmtKind::IfPattern {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.preallocate_let_pattern_locals_from_expr(scrutinee, type_table, ctx);
-                // Pre-allocate for nested tuple patterns inside the variant pattern
-                self.preallocate_let_pattern_for_pattern(
-                    pattern,
-                    scrutinee.type_id,
-                    type_table,
-                    ctx,
-                );
-                self.preallocate_let_pattern_locals(then_block, type_table, ctx);
-                if let Some(else_blk) = else_block {
-                    self.preallocate_let_pattern_locals(else_blk, type_table, ctx);
-                }
-            }
             TirStmtKind::Break { value, .. } => {
                 if let Some(v) = value {
                     self.preallocate_let_pattern_locals_from_expr(v, type_table, ctx);
                 }
+            }
+            TirStmtKind::IfPattern { .. } => {
+                panic!("IfPattern should be lowered before codegen");
             }
             TirStmtKind::Continue => {}
         }
@@ -13413,18 +12661,6 @@ impl Codegen {
             TirStmtKind::Return { value: Some(expr) } => {
                 Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
             }
-            TirStmtKind::IfPattern {
-                scrutinee,
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::count_indirect_calls_in_expr(scrutinee, type_table, codegen, counts);
-                Self::count_indirect_calls_in_block(then_block, type_table, codegen, counts);
-                if let Some(else_blk) = else_block {
-                    Self::count_indirect_calls_in_block(else_blk, type_table, codegen, counts);
-                }
-            }
             TirStmtKind::Break { value: Some(v), .. } => {
                 Self::count_indirect_calls_in_expr(v, type_table, codegen, counts);
             }
@@ -13579,20 +12815,6 @@ impl Codegen {
             TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
                 self.preallocate_locals_from_block(body, type_table, ctx);
             }
-            TirStmtKind::IfPattern {
-                scrutinee,
-                pattern,
-                then_block,
-                else_block,
-            } => {
-                self.preallocate_locals_from_expr(scrutinee, type_table, ctx);
-                // Pre-allocate locals for pattern bindings
-                self.preallocate_locals_from_pattern(pattern, type_table, ctx);
-                self.preallocate_locals_from_block(then_block, type_table, ctx);
-                if let Some(else_blk) = else_block {
-                    self.preallocate_locals_from_block(else_blk, type_table, ctx);
-                }
-            }
             TirStmtKind::Expr(expr) => {
                 self.preallocate_locals_from_expr(expr, type_table, ctx);
             }
@@ -13605,40 +12827,6 @@ impl Codegen {
                 self.preallocate_locals_from_expr(expr, type_table, ctx);
             }
             _ => {}
-        }
-    }
-
-    /// Allocate locals for pattern bindings
-    fn preallocate_locals_from_pattern(
-        &self,
-        pattern: &TirPattern,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match pattern {
-            TirPattern::Binding {
-                local_index,
-                type_id,
-                ..
-            } => {
-                let local_name = format!("_local_{local_index}");
-                // Check if already allocated (by matching name)
-                if ctx.locals.get(&local_name).is_none() {
-                    let local_type = self.type_id_to_valtype(type_table, *type_id);
-                    ctx.alloc_local(&local_name, local_type);
-                }
-            }
-            TirPattern::Variant { bindings, .. } => {
-                for binding in bindings {
-                    self.preallocate_locals_from_pattern(binding, type_table, ctx);
-                }
-            }
-            TirPattern::Tuple(patterns) => {
-                for pat in patterns {
-                    self.preallocate_locals_from_pattern(pat, type_table, ctx);
-                }
-            }
-            TirPattern::Wildcard | TirPattern::Literal(_) => {}
         }
     }
 

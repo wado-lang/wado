@@ -961,22 +961,12 @@ impl<'a> PatternLowerer<'a> {
                         type_table,
                     );
                 } else {
-                    // Keep other IfPattern as-is (shouldn't happen after proper type checking)
-                    let mut then_block = then_block;
-                    let mut else_block = else_block;
-                    self.lower_block(&mut then_block, type_table);
-                    if let Some(ref mut else_blk) = else_block {
-                        self.lower_block(else_blk, type_table);
-                    }
-                    out.push(TirStmt::new(
-                        TirStmtKind::IfPattern {
-                            scrutinee,
-                            pattern,
-                            then_block,
-                            else_block,
-                        },
-                        stmt.span,
-                    ));
+                    // All IfPattern statements should have Option/Variant scrutinee types
+                    // after proper type checking. If we reach here, it's a compiler bug.
+                    panic!(
+                        "IfPattern with unexpected scrutinee type {:?} - this should not happen after type checking",
+                        scrutinee_type
+                    );
                 }
             }
             TirStmtKind::Let {
