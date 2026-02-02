@@ -93,8 +93,6 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
         .map_err(|e| anyhow::anyhow!("failed to create component: {e:?}"))?;
 
     let mut linker: Linker<HttpTestState> = Linker::new(&engine);
-    // Add BOTH P2 and P3 interfaces (like wasmtime tests do)
-    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
 
