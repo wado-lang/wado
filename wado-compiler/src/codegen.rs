@@ -74,14 +74,13 @@ struct BuildMainModuleParams<'a> {
 /// Targets WASI P3
 pub struct Codegen {
     string_literals: Vec<String>,
-    /// Registry of WASI imports from lib/wasi/*.wado
+    /// Registry of WASI imports (cloned from Project for borrowing simplicity)
     wasi_registry: WasiRegistry,
     /// Registry of builtin function signatures from lib/core/builtin.wado
     builtin_registry: BuiltinRegistry,
-    /// Registry of world definitions from lib/wasi/*.wado
+    /// Registry of world definitions (cloned from Project for borrowing simplicity)
     world_registry: WorldRegistry,
-    /// Whether the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
-    /// Computed at the start of `generate_wasm` from `world_registry`.
+    /// Whether the target world exports an HTTP handler
     has_http_handler_export: bool,
     /// Registry of user-defined struct types (keyed by `StructName` for type safety)
     struct_types: HashMap<StructName, StructTypeInfo>,
@@ -369,12 +368,6 @@ impl FunctionContext {
 
 // CoreModuleBuilder and ComponentModelContext are in wasm_builder.rs
 
-impl Default for Codegen {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Convert a `snake_case` identifier to kebab-case for Component Model
 fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
@@ -457,24 +450,34 @@ enum UltimateBaseType {
 }
 
 impl Codegen {
-    /// Create a new code generator
+    /// Generate Component Model binary Wasm from a Project.
     ///
-    /// Registries are taken from Project in `generate_wasm`.
-    pub fn new() -> Self {
+    /// This is the main entry point for code generation. Takes ownership of
+    /// the Project since it's not needed after codegen.
+    pub fn generate_wasm(project: Project) -> Vec<u8> {
         use std::cell::RefCell;
-        // Create a temporary TypeTable for building the builtin registry.
-        // The codegen only uses canonical_name/namespace/name/diverges fields,
-        // not the resolved TypeIds.
+
+        // Build builtin registry (needs a temporary type table)
         let temp_type_table = RefCell::new(TypeTable::new());
         let builtin_registry = BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-        Self {
-            string_literals: Vec::new(),
-            // Registries are set from Project in generate_wasm
-            wasi_registry: WasiRegistry::default(),
+        // Collect string literals from all TIR modules
+        let mut string_literals = Vec::new();
+        for tir_module in project.tir_modules.values() {
+            for s in &tir_module.string_literals {
+                if !string_literals.contains(s) {
+                    string_literals.push(s.clone());
+                }
+            }
+        }
+
+        // Clone registries from project (needed for borrowing simplicity)
+        let mut codegen = Self {
+            string_literals,
+            wasi_registry: project.wasi_registry.clone(),
             builtin_registry,
-            world_registry: WorldRegistry::default(),
-            has_http_handler_export: false,
+            world_registry: project.world_registry.clone(),
+            has_http_handler_export: project.has_http_handler_export,
             struct_types: HashMap::new(),
             tuple_types: RefCell::new(HashMap::new()),
             array_types: HashMap::new(),
@@ -486,12 +489,28 @@ impl Codegen {
             closure_canonical_wrappers: RefCell::new(HashMap::new()),
             variant_types: RefCell::new(HashMap::new()),
             pending_type_indices: RefCell::new(HashMap::new()),
-        }
-    }
+        };
 
-    /// Create a new code generator (backwards compatible)
-    pub fn new_with_source(_source_code: String) -> Self {
-        Self::new()
+        let entry_tir = project.entry_module();
+        let all_tir_modules = &project.tir_modules;
+        let symbols = &project.symbols;
+        let implicit_modules = &project.implicit_modules;
+        let module_name = &project.module_name;
+
+        // Generate binary Wasm from TIR
+        let wasm = codegen.generate_component(
+            entry_tir,
+            all_tir_modules,
+            symbols,
+            implicit_modules,
+            &project,
+            module_name,
+        );
+
+        // Validate the generated Wasm
+        Self::validate_wasm(&wasm);
+
+        wasm
     }
 
     /// Validate generated Wasm binary using wasmparser
@@ -717,51 +736,6 @@ impl Codegen {
                 }
             })
             .collect()
-    }
-
-    /// Generate Component Model binary Wasm from a Project.
-    ///
-    /// Takes ownership of the Project since it's not needed after codegen.
-    /// The project must have been optimized (usage fields populated) before calling this.
-    pub fn generate_wasm(&mut self, project: Project) -> Vec<u8> {
-        // Use registries from Project (built once in resolver)
-        // Clone into self since we need to borrow project for other fields
-        self.wasi_registry = project.wasi_registry.clone();
-        self.world_registry = project.world_registry.clone();
-
-        let entry_tir = project.entry_module();
-        let all_tir_modules = &project.tir_modules;
-        let symbols = &project.symbols;
-        let implicit_modules = &project.implicit_modules;
-        let module_name = &project.module_name;
-
-        // Use the http handler flag from project (computed by wasm_adapt phase)
-        self.has_http_handler_export = project.has_http_handler_export;
-
-        // Collect pre-computed string literals from all TIR modules
-        // Note: String DCE is performed in the optimizer, so we just collect all strings here
-        for tir_module in all_tir_modules.values() {
-            for s in &tir_module.string_literals {
-                if !self.string_literals.contains(s) {
-                    self.string_literals.push(s.clone());
-                }
-            }
-        }
-
-        // Generate binary Wasm from TIR
-        let wasm = self.generate_component(
-            entry_tir,
-            all_tir_modules,
-            symbols,
-            implicit_modules,
-            &project,
-            module_name,
-        );
-
-        // Validate the generated Wasm
-        Self::validate_wasm(&wasm);
-
-        wasm
     }
 
     /// Build main core module from TIR

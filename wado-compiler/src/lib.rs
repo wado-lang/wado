@@ -392,9 +392,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     let project = wasm_adapt(project);
 
     // === Phase 12: Codegen ===
-    let mut codegen = Codegen::new();
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        codegen.generate_wasm(project)
+        Codegen::generate_wasm(project)
     }))
     .map_err(|e| {
         let message = if let Some(s) = e.downcast_ref::<&str>() {
