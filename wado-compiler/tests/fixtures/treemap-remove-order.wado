@@ -1,0 +1,45 @@
+// TreeMap remove preserves order of remaining elements
+use { println, print } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let mut map = TreeMap::<String, i32>::new();
+
+    // Insert: first, second, third, fourth, fifth
+    map["first"] = 1;
+    map["second"] = 2;
+    map["third"] = 3;
+    map["fourth"] = 4;
+    map["fifth"] = 5;
+
+    // Remove "third" from the middle
+    assert map.remove("third");
+
+    // Remaining elements should preserve their relative order
+    let keys = map.keys();
+    assert keys.len() == 4;
+    assert keys[0] == "first", "first should still be first";
+    assert keys[1] == "second", "second should still be second";
+    assert keys[2] == "fourth", "fourth should now be third";
+    assert keys[3] == "fifth", "fifth should now be fourth";
+
+    // Remove from beginning
+    assert map.remove("first");
+    let keys2 = map.keys();
+    assert keys2.len() == 3;
+    assert keys2[0] == "second", "second should now be first";
+    assert keys2[1] == "fourth";
+    assert keys2[2] == "fifth";
+
+    // Remove from end
+    assert map.remove("fifth");
+    let keys3 = map.keys();
+    assert keys3.len() == 2;
+    assert keys3[0] == "second";
+    assert keys3[1] == "fourth";
+
+    println("remove preserves order: ok");
+}
+
+__DATA__
+{"stdout": "remove preserves order: ok\n"}

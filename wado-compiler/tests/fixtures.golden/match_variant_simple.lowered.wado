@@ -17,27 +17,11 @@ fn run() with Stdout {
         Circle(r) => (r * r),
         Point => 0.0,
     };
-    core::cli::println(move "String::concat"(move "Circle result: ", __inline_f64__to_string_0: {
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(result1, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_0: {
-            break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
-        };
-    }));
+    core::cli::println(move "String::concat"(move "Circle result: ", move result1."f64::to_string"()));
     let result2: f64 = match point {
         Circle(r) => (r * r),
         Point => 0.0,
     };
-    core::cli::println(move "String::concat"(move "Point result: ", __inline_f64__to_string_1: {
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(result2, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_1: __inline_String__internal_from_utf8_raw_1: {
-            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
-        };
-    }));
+    core::cli::println(move "String::concat"(move "Point result: ", move result2."f64::to_string"()));
 }
 

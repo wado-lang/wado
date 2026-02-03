@@ -1,11 +1,11 @@
-// TreeMap maintains sorted order
+// TreeMap maintains insertion order (indexmap-style)
 use { println, print } from "core:cli";
 use { TreeMap } from "core:collections";
 
 export fn run() with Stdout {
     let mut map = TreeMap::<String, i32>::new();
 
-    // Insert in random order
+    // Insert in arbitrary order - should iterate in this exact order
     map["echo"] = 5;
     map["charlie"] = 3;
     map["golf"] = 7;
@@ -18,23 +18,25 @@ export fn run() with Stdout {
 
     assert map.len() == 9;
 
-    // Keys should be in sorted order
+    // Keys should be in insertion order, NOT sorted order
     let keys = map.keys();
-    assert keys[0] == "alpha";
-    assert keys[1] == "bravo";
-    assert keys[2] == "charlie";
-    assert keys[3] == "delta";
-    assert keys[4] == "echo";
-    assert keys[5] == "foxtrot";
-    assert keys[6] == "golf";
-    assert keys[7] == "hotel";
-    assert keys[8] == "india";
+    assert keys[0] == "echo";
+    assert keys[1] == "charlie";
+    assert keys[2] == "golf";
+    assert keys[3] == "alpha";
+    assert keys[4] == "india";
+    assert keys[5] == "delta";
+    assert keys[6] == "foxtrot";
+    assert keys[7] == "bravo";
+    assert keys[8] == "hotel";
 
-    // Values should be in key-sorted order
+    // Values should be in insertion order
     let values = map.values();
-    assert values[0] == 1;
-    assert values[1] == 2;
-    assert values[2] == 3;
+    assert values[0] == 5;
+    assert values[1] == 3;
+    assert values[2] == 7;
+    assert values[3] == 1;
+    assert values[4] == 9;
 
     print("keys: ");
     for let mut i = 0; i < keys.len(); i += 1 {
@@ -47,4 +49,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "keys: alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india\n"}
+{"stdout": "keys: echo, charlie, golf, alpha, india, delta, foxtrot, bravo, hotel\n"}

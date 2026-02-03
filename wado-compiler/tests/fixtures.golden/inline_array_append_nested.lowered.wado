@@ -13,6 +13,22 @@ struct Container {
     items: Array<i32>,
 }
 
+fn "Container::add_items"(self: &mut Container, count: i32) {
+    __for_0: {
+        let mut i: i32 = 0;
+        loop {
+            if !(i < count) {
+                break __for_0;
+            }
+            __for_0_body: {
+                self.items."Array<i32>::append"(i);
+                self.items."Array<i32>::append"((i * 2));
+            }
+            i = (i + 1);
+        }
+    }
+}
+
 fn "Container::process"(self: &mut Container) {
     let mut temp: Array<i32> = move [];
     __for_1: {
@@ -59,25 +75,11 @@ fn "Container::process"(self: &mut Container) {
 
 fn run() with Stdout {
     let mut c: Container = move Container { items: [] };
-    __inline_Container__add_items_0: {
-        __for_0: {
-            let mut i: i32 = 0;
-            loop {
-                if !(i < 3) {
-                    break __for_0;
-                }
-                __for_0_body: {
-                    c.items."Array<i32>::append"(i);
-                    c.items."Array<i32>::append"((i * 2));
-                }
-                i = (i + 1);
-            }
-        }
-    };
+    c."Container::add_items"(3);
     c."Container::process"();
-    core::cli::println(move "String::concat"(move "len=", move __inline_Array_i32___len_1: {
+    core::cli::println(move "String::concat"(move "len=", move __inline_Array_i32___len_0: {
         let self: &Array<i32> = &c.items;
-        break __inline_Array_i32___len_1: self.used;
+        break __inline_Array_i32___len_0: self.used;
     }."i32::to_string"()));
 }
 

@@ -14,12 +14,14 @@ struct Point {
     y: i32,
 }
 
+fn move_point(p: &mut Point) {
+    p.x = (p.x + 10);
+    p.y = (p.y + 20);
+}
+
 fn run() with Stdout {
     let mut p: Point = move Point { x: 1, y: 2 };
-    __inline_move_point_0: {
-        p.x = (p.x + 10);
-        p.y = (p.y + 20);
-    };
+    move_point(&mut p);
     core::cli::println(move "String::concat"(move "String::concat"(move p.x."i32::to_string"(), move ","), move p.y."i32::to_string"()));
 }
 

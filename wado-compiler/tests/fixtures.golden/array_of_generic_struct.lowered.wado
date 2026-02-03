@@ -24,13 +24,9 @@ struct "Box<i32>" {
 
 fn __test_0_container_of_boxes() {
     let mut c: Container<Box<i32>> = move "Container<Box<i32>>::new"();
-    __inline_Container_Box_i32____add_0: {
-        let item: Box<i32> = __inline_Box_i32___new_1: {
-            break __inline_Box_i32___new_1: Box<i32> { value: 42 };
-        };
-        c.items."Array<Box<i32>>::append"(item);
-        c.size = (c.size + 1);
-    };
+    c."Container<Box<i32>>::add"(__inline_Box_i32___new_0: {
+        break __inline_Box_i32___new_0: Box<i32> { value: 42 };
+    });
     __assert_0: {
         let __v0: i32 = c.size;
         let __cond: bool = (__v0 == 1);
@@ -104,6 +100,11 @@ pub fn "Array<Box<i32>>::append"(self: &mut Array<Box<i32>>, value: Box<i32>) {
 
 fn "Array<Box<i32>>^IndexValue::index_value"(self: &Array<Box<i32>>, index: i32) -> Box<i32> {
     return core::builtin::array_get::<Box<i32>>(self.repr, index);
+}
+
+fn "Container<Box<i32>>::add"(self: &mut Container<Box<i32>>, item: Box<i32>) {
+    self.items."Array<Box<i32>>::append"(item);
+    self.size = (self.size + 1);
 }
 
 fn "Container<Box<i32>>::new"() -> Container<Box<i32>> {

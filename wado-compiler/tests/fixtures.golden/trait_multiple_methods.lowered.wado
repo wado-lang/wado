@@ -20,29 +20,11 @@ fn run() with Stdout {
     core::cli::println(__inline_Rectangle_Shape__name_0: {
         break __inline_Rectangle_Shape__name_0: "Rectangle";
     });
-    core::cli::println(move "String::concat"(move "Area: ", __inline_f64__to_string_2: {
-        let self: f64 = __inline_Rectangle_Shape__area_1: {
-            break __inline_Rectangle_Shape__area_1: (r.width * r.height);
-        };
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_2: __inline_String__internal_from_utf8_raw_0: {
-            break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
-        };
-    }));
-    core::cli::println(move "String::concat"(move "Perimeter: ", __inline_f64__to_string_4: {
-        let self: f64 = __inline_Rectangle_Shape__perimeter_3: {
-            break __inline_Rectangle_Shape__perimeter_3: (2.0 * (r.width + r.height));
-        };
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_4: __inline_String__internal_from_utf8_raw_1: {
-            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
-        };
-    }));
+    core::cli::println(move "String::concat"(move "Area: ", move __inline_Rectangle_Shape__area_1: {
+        break __inline_Rectangle_Shape__area_1: (r.width * r.height);
+    }."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "Perimeter: ", move __inline_Rectangle_Shape__perimeter_2: {
+        break __inline_Rectangle_Shape__perimeter_2: (2.0 * (r.width + r.height));
+    }."f64::to_string"()));
 }
 

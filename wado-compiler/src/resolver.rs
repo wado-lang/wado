@@ -3968,7 +3968,9 @@ impl<'a> Resolver<'a> {
 
         // Standard assignment handling
         let target = self.resolve_expr(&assign.target, ctx);
-        let value = self.resolve_expr(&assign.value, ctx);
+        // Use target's type as expected type for value resolution
+        // This enables coercion of empty array literals [] to the field's Array<T> type
+        let value = self.resolve_expr_with_expected_type(&assign.value, ctx, Some(target.type_id));
 
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
@@ -8897,7 +8899,8 @@ impl<'a> Resolver<'a> {
         };
 
         // Look up the struct in the symbol table to resolve imports/aliases
-        let (struct_name, module_path) = if let Some(symbol) = self.symbols.lookup(name) {
+        // We need both the struct name (for struct_fields lookup) and module_path (for disambiguation)
+        let (struct_name, symbol_module_path) = if let Some(symbol) = self.symbols.lookup(name) {
             match &symbol.kind {
                 crate::symbol::SymbolKind::Struct(_) => {
                     (symbol.name.clone(), symbol.module_path.clone())
@@ -8905,7 +8908,7 @@ impl<'a> Resolver<'a> {
                 _ => (name.clone(), Vec::new()),
             }
         } else {
-            // Fall back to local struct (no module path)
+            // Fall back to local struct name
             (name.clone(), Vec::new())
         };
 
@@ -9020,6 +9023,21 @@ impl<'a> Resolver<'a> {
             })
             .collect();
 
+        // Get module_source for this struct
+        // Priority: symbol table module_path > struct_fields > current_module_source
+        // The symbol table module_path is needed for imported structs (especially with aliases)
+        // to handle name collisions between local and imported structs
+        let struct_module_source = if !symbol_module_path.is_empty() {
+            // Imported struct - use module_path from symbol table
+            ModuleSource::from_path(&symbol_module_path)
+        } else if let Some(info) = self.struct_fields.get(&struct_name) {
+            // Local struct found in struct_fields
+            info.module_source.clone()
+        } else {
+            // Fall back to current module
+            self.current_module_source.clone()
+        };
+
         // Check if this is a generic struct and infer type arguments
         let (struct_type, mangled_struct_name, fields) =
             if self.generic_struct_names.contains(&struct_name) {
@@ -9045,7 +9063,7 @@ impl<'a> Resolver<'a> {
 
                 let struct_type = self.type_table.borrow_mut().make_generic_instance(
                     struct_name.clone(),
-                    ModuleSource::from_path(&module_path),
+                    struct_module_source.clone(),
                     type_args.clone(),
                 );
                 // Build mangled name with type arguments
@@ -9059,7 +9077,7 @@ impl<'a> Resolver<'a> {
                 let struct_type = self
                     .type_table
                     .borrow_mut()
-                    .make_struct(struct_name.clone(), ModuleSource::from_path(&module_path));
+                    .make_struct(struct_name.clone(), struct_module_source.clone());
                 (struct_type, struct_name, fields)
             };
 

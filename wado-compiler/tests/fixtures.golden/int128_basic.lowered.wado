@@ -22,19 +22,13 @@ fn run() with Stdout {
         let value: u64 = 50 as u64;
         break __inline_u128__from_u64_1: u128 { low: value, high: 0 };
     };
-    let sum: u128 = __inline_u128__add_2: {
-        let [lo, hi] = move core::builtin::i64_add128(a.low as i64, a.high as i64, b.low as i64, b.high as i64);
-        break __inline_u128__add_2: u128 { low: lo as u64, high: hi as u64 };
-    };
+    let sum: u128 = move a."u128::add"(&b);
     core::cli::println(move "String::concat"(move "u128 100 + 50 = ", move sum."u128::to_string"()));
-    let diff: u128 = __inline_u128__sub_3: {
-        let [lo, hi] = move core::builtin::i64_sub128(a.low as i64, a.high as i64, b.low as i64, b.high as i64);
-        break __inline_u128__sub_3: u128 { low: lo as u64, high: hi as u64 };
-    };
+    let diff: u128 = move a."u128::sub"(&b);
     core::cli::println(move "String::concat"(move "u128 100 - 50 = ", move diff."u128::to_string"()));
-    let c: u128 = __inline_u128__from_u64_4: {
+    let c: u128 = __inline_u128__from_u64_2: {
         let value: u64 = 100 as u64;
-        break __inline_u128__from_u64_4: u128 { low: value, high: 0 };
+        break __inline_u128__from_u64_2: u128 { low: value, high: 0 };
     };
     if a."u128^Eq::eq"(&c) {
         core::cli::println(move "u128: 100 == 100 is true");
@@ -42,51 +36,19 @@ fn run() with Stdout {
     if b."u128^Ord::lt"(&a) {
         core::cli::println(move "u128: 50 < 100 is true");
     }
-    let x: i128 = __inline_i128__from_i64_5: {
-        let value: i64 = 100 as i64;
-        let high: i64 = if (value < 0 as i64) {
-            -1 as i64;
-        } else {
-            0 as i64;
-        };
-        break __inline_i128__from_i64_5: i128 { low: value as u64, high: high };
-    };
-    let y: i128 = __inline_i128__from_i64_6: {
-        let value: i64 = -50 as i64;
-        let high: i64 = if (value < 0 as i64) {
-            -1 as i64;
-        } else {
-            0 as i64;
-        };
-        break __inline_i128__from_i64_6: i128 { low: value as u64, high: high };
-    };
-    let sum2: i128 = __inline_i128__add_7: {
-        let [lo, hi] = move core::builtin::i64_add128(x.low as i64, x.high, y.low as i64, y.high);
-        break __inline_i128__add_7: i128 { low: lo as u64, high: hi };
-    };
+    let x: i128 = move "i128::from_i64"(100 as i64);
+    let y: i128 = move "i128::from_i64"(-50 as i64);
+    let sum2: i128 = move x."i128::add"(&y);
     core::cli::println(move "String::concat"(move "i128 100 + (-50) = ", move sum2."i128::to_string"()));
-    let z: i128 = __inline_i128__from_i64_8: {
-        let value: i64 = 30 as i64;
-        let high: i64 = if (value < 0 as i64) {
-            -1 as i64;
-        } else {
-            0 as i64;
-        };
-        break __inline_i128__from_i64_8: i128 { low: value as u64, high: high };
-    };
-    let diff2: i128 = __inline_i128__sub_9: {
-        let [lo, hi] = move core::builtin::i64_sub128(z.low as i64, z.high, x.low as i64, x.high);
-        break __inline_i128__sub_9: i128 { low: lo as u64, high: hi };
-    };
+    let z: i128 = move "i128::from_i64"(30 as i64);
+    let diff2: i128 = move z."i128::sub"(&x);
     core::cli::println(move "String::concat"(move "i128 30 - 100 = ", move diff2."i128::to_string"()));
-    let neg_x: i128 = __inline_i128__neg_10: {
-        let zero: i128 = __inline_i128__zero_11: {
-            break __inline_i128__zero_11: i128 { low: 0, high: 0 };
+    let neg_x: i128 = __inline_i128__neg_3: {
+        let self: &i128 = &x;
+        let zero: i128 = __inline_i128__zero_4: {
+            break __inline_i128__zero_4: i128 { low: 0, high: 0 };
         };
-        break __inline_i128__neg_10: __inline_i128__sub_12: {
-            let [lo, hi] = move core::builtin::i64_sub128(zero.low as i64, zero.high, x.low as i64, x.high);
-            break __inline_i128__sub_12: i128 { low: lo as u64, high: hi };
-        };
+        break __inline_i128__neg_3: zero."i128::sub"(self);
     };
     core::cli::println(move "String::concat"(move "i128 -100 = ", move neg_x."i128::to_string"()));
     core::cli::println(move "All i128/u128 tests passed!");

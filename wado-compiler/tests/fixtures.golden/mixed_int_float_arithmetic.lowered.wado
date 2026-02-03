@@ -12,14 +12,6 @@
 
 fn run() with Stdout {
     let dx: f64 = ((1.0 - -2.5) / 100 as f64);
-    core::cli::println(move "String::concat"(move "dx: ", __inline_f64__to_string_0: {
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(dx, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_0: {
-            break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
-        };
-    }));
+    core::cli::println(move "String::concat"(move "dx: ", move dx."f64::to_string"()));
 }
 

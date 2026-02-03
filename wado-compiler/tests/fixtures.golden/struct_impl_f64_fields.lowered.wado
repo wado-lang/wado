@@ -19,56 +19,22 @@ struct Vector2D {
     y: f64,
 }
 
+pub fn "Vector2D::length_squared"(self: &Vector2D) -> f64 {
+    return ((self.x * self.x) + (self.y * self.y));
+}
+
 fn run() with Stdout {
     let c: Circle = move Circle { radius: 5.0 };
-    core::cli::println(move "String::concat"(move "diameter: ", __inline_f64__to_string_1: {
-        let self: f64 = __inline_Circle__diameter_0: {
-            break __inline_Circle__diameter_0: (c.radius * 2.0);
-        };
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_1: __inline_String__internal_from_utf8_raw_0: {
-            break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
-        };
-    }));
-    core::cli::println(move "String::concat"(move "circumference: ", __inline_f64__to_string_3: {
-        let self: f64 = __inline_Circle__circumference_2: {
-            break __inline_Circle__circumference_2: ((2.0 * 3.14159) * c.radius);
-        };
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_3: __inline_String__internal_from_utf8_raw_1: {
-            break __inline_String__internal_from_utf8_raw_1: String { repr: arr, used: len };
-        };
-    }));
+    core::cli::println(move "String::concat"(move "diameter: ", move __inline_Circle__diameter_0: {
+        break __inline_Circle__diameter_0: (c.radius * 2.0);
+    }."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "circumference: ", move __inline_Circle__circumference_1: {
+        break __inline_Circle__circumference_1: ((2.0 * 3.14159) * c.radius);
+    }."f64::to_string"()));
     let v: Vector2D = move Vector2D { x: 3.0, y: 4.0 };
-    core::cli::println(move "String::concat"(move "length_squared: ", __inline_f64__to_string_5: {
-        let self: f64 = __inline_Vector2D__length_squared_4: {
-            break __inline_Vector2D__length_squared_4: ((v.x * v.x) + (v.y * v.y));
-        };
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_5: __inline_String__internal_from_utf8_raw_2: {
-            break __inline_String__internal_from_utf8_raw_2: String { repr: arr, used: len };
-        };
-    }));
-    core::cli::println(move "String::concat"(move "dot(1,2): ", __inline_f64__to_string_7: {
-        let self: f64 = __inline_Vector2D__dot_6: {
-            break __inline_Vector2D__dot_6: ((v.x * 1.0) + (v.y * 2.0));
-        };
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_7: __inline_String__internal_from_utf8_raw_3: {
-            break __inline_String__internal_from_utf8_raw_3: String { repr: arr, used: len };
-        };
-    }));
+    core::cli::println(move "String::concat"(move "length_squared: ", move v."Vector2D::length_squared"()."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "dot(1,2): ", move __inline_Vector2D__dot_2: {
+        break __inline_Vector2D__dot_2: ((v.x * 1.0) + (v.y * 2.0));
+    }."f64::to_string"()));
 }
 

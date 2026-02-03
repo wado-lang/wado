@@ -12,35 +12,125 @@ use crate::tir::{
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-// TODO: The inline threshold is currently a simple statement count.
-// A proper cost model should consider:
-// - Instruction weights (e.g., calls are more expensive than arithmetic)
-// - Code size impact (inlining increases code size)
-// - Register pressure effects
-// - Hot path vs cold path (only inline on hot paths)
-// - Profile-guided optimization (PGO) data when available
-// This would allow more accurate inlining decisions and better performance.
+// The inline threshold is based on expression count, which provides a more
+// accurate measure of function complexity than statement count.
+// - Simple statements like `let x = 1` have 1 expression
+// - Complex statements like `let x = foo() + bar()` have 3+ expressions
+// - Method calls, binary operations, field accesses all contribute
 
-/// Count statements in a TIR block (recursive)
-fn count_stmts(block: &TirBlock) -> usize {
+/// Count expressions in a TIR expression (recursive)
+fn count_expr(expr: &TirExpr) -> usize {
+    1 + match &expr.kind {
+        TirExprKind::Binary { left, right, .. } => count_expr(left) + count_expr(right),
+        TirExprKind::Unary { expr, .. } => count_expr(expr),
+        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+            args.iter().map(count_expr).sum()
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            count_expr(receiver) + args.iter().map(count_expr).sum::<usize>()
+        }
+        TirExprKind::FieldAccess { expr, .. } => count_expr(expr),
+        TirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
+        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
+            elements.iter().map(count_expr).sum()
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            fields.iter().map(|f| count_expr(&f.value)).sum()
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            payload.as_ref().map_or(0, |p| count_expr(p))
+        }
+        TirExprKind::Assign { target, value } => count_expr(target) + count_expr(value),
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            count_expr(condition)
+                + count_block_exprs(then_branch)
+                + else_branch.as_ref().map_or(0, count_block_exprs)
+        }
+        TirExprKind::Match { expr, arms } => {
+            count_expr(expr) + arms.iter().map(|arm| count_expr(&arm.body)).sum::<usize>()
+        }
+        TirExprKind::Block(block) => count_block_exprs(block),
+        TirExprKind::Cast { expr, .. } => count_expr(expr),
+        TirExprKind::GlobalVarSet { value, .. } => count_expr(value),
+        TirExprKind::Move { expr } => count_expr(expr),
+        // Leaf expressions (no children)
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::Null => 0,
+        // Closure and effect-related expressions
+        TirExprKind::Capture { .. } | TirExprKind::EnumConstruct { .. } => 0,
+        TirExprKind::EffectCall { args, .. } => args.iter().map(count_expr).sum(),
+        TirExprKind::IndirectCall { callee, args } => {
+            count_expr(callee) + args.iter().map(count_expr).sum::<usize>()
+        }
+        TirExprKind::Closure { body, .. } => count_expr(body),
+        TirExprKind::ClosureToCanonical { functor, .. } => count_expr(functor),
+        TirExprKind::OptionSome { value } => count_expr(value),
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            count_expr(scrutinee)
+                + arms.iter().map(count_block_exprs).sum::<usize>()
+                + count_block_exprs(default)
+        }
+        // Lowered pattern matching nodes - count inner expressions
+        TirExprKind::IsNotNull { expr }
+        | TirExprKind::UnwrapOption { expr, .. }
+        | TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. } => count_expr(expr),
+        TirExprKind::LabeledBlock { block, .. } => count_block_exprs(block),
+    }
+}
+
+/// Count expressions in a TIR block (recursive)
+fn count_block_exprs(block: &TirBlock) -> usize {
     block
         .stmts
         .iter()
         .map(|s| match &s.kind {
+            TirStmtKind::Expr(expr) => count_expr(expr),
+            TirStmtKind::Let { value, .. } => count_expr(value),
+            TirStmtKind::LetPattern { value, .. } => count_expr(value),
+            TirStmtKind::Return { value } => value.as_ref().map_or(0, count_expr),
             TirStmtKind::If {
+                condition,
                 then_block,
                 else_block,
                 ..
-            } => 1 + count_stmts(then_block) + else_block.as_ref().map_or(0, count_stmts),
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                1 + count_stmts(body)
+            } => {
+                count_expr(condition)
+                    + count_block_exprs(then_block)
+                    + else_block.as_ref().map_or(0, count_block_exprs)
             }
             TirStmtKind::IfPattern {
+                scrutinee,
                 then_block,
                 else_block,
                 ..
-            } => 1 + count_stmts(then_block) + else_block.as_ref().map_or(0, count_stmts),
-            _ => 1,
+            } => {
+                count_expr(scrutinee)
+                    + count_block_exprs(then_block)
+                    + else_block.as_ref().map_or(0, count_block_exprs)
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                count_block_exprs(body)
+            }
+            TirStmtKind::Break { .. } | TirStmtKind::Continue => 0,
         })
         .sum()
 }
@@ -101,8 +191,8 @@ fn is_inline_eligible(
         return false;
     }
 
-    // Small enough
-    count_stmts(body) < inline_threshold
+    // Small enough (based on expression count)
+    count_block_exprs(body) < inline_threshold
 }
 
 /// Check if a type has complex nested generics that could cause type normalization issues.

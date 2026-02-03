@@ -28,28 +28,29 @@ fn run() with Stdout {
 fn "Tree<String>::check"(self: &Tree<String>) -> i32 {
     let active: i32 = self.root."Node<String>::count_active"();
     let full: bool = self.root."Node<String>::is_full"(self.max_keys);
-    let idx: i32 = __inline_Node_String___find_index_0: {
-        let self: &Node<String> = &self.root;
-        let key: &String = &"cherry";
-        let mut i: i32 = 0;
-        loop {
-            if !((i < __inline_Array_String___len_1: {
-                let self: &Array<String> = &self.keys;
-                break __inline_Array_String___len_1: self.used;
-            }) && __inline_Array_String__IndexValue__index_value_2: {
-                let self: &Array<String> = &self.keys;
-                break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);
-            }."String^Ord::lt"(&*key)) {
-                break;
-            }
-            i = (i + 1);
-        }
-        break __inline_Node_String___find_index_0: i;
-    };
+    let idx: i32 = self.root."Node<String>::find_index"(&"cherry");
     if full {
         return (active + 100);
     }
     return (active + idx);
+}
+
+fn "Node<String>::find_index"(self: &Node<String>, key: &String) -> i32 {
+    let mut i: i32 = 0;
+    let _licm_keys: Array<String> = self.keys;
+    let _licm_used: i32 = _licm_keys.used;
+    let _licm_repr: builtin::array<String> = _licm_keys.repr;
+    loop {
+        if !((i < __inline_Array_String___len_0: {
+            break __inline_Array_String___len_0: _licm_used;
+        }) && __inline_Array_String__IndexValue__index_value_1: {
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
+        }."String^Ord::lt"(&*key)) {
+            break;
+        }
+        i = (i + 1);
+    }
+    return i;
 }
 
 fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {

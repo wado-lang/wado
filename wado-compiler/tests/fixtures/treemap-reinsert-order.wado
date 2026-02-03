@@ -1,0 +1,51 @@
+// TreeMap reinsert after remove goes to end (indexmap shift_remove style)
+use { println, print } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let mut map = TreeMap::<String, i32>::new();
+
+    // Insert: a, b, c
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+
+    // Remove b
+    assert map.remove("b");
+
+    // Keys should be: a, c
+    let keys1 = map.keys();
+    assert keys1.len() == 2;
+    assert keys1[0] == "a";
+    assert keys1[1] == "c";
+
+    // Reinsert b - should go to the END, not back to its original position
+    map["b"] = 999;
+
+    // Keys should now be: a, c, b (b at the end)
+    let keys2 = map.keys();
+    assert keys2.len() == 3;
+    assert keys2[0] == "a", "a should be first";
+    assert keys2[1] == "c", "c should be second";
+    assert keys2[2] == "b", "reinserted b should be at end";
+
+    // Verify values
+    let values = map.values();
+    assert values[0] == 1;
+    assert values[1] == 3;
+    assert values[2] == 999;
+
+    // Multiple removes and reinserts
+    map.remove("a");  // order: c, b
+    map["a"] = 111;   // order: c, b, a
+
+    let keys3 = map.keys();
+    assert keys3[0] == "c";
+    assert keys3[1] == "b";
+    assert keys3[2] == "a";
+
+    println("reinsert goes to end: ok");
+}
+
+__DATA__
+{"stdout": "reinsert goes to end: ok\n"}

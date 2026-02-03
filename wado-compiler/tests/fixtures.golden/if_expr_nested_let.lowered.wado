@@ -9,32 +9,21 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+fn compute(mode: Mode, x: i32) -> i32 {
+    let n: i32 = if match mode {
+        A => true,
+        _ => false,
+    } {
+        let a: i32 = (x * 2);
+        a;
+    } else {
+        (x + 1);
+    };
+    return n;
+}
+
 fn run() with Stdout {
-    core::cli::println(move __inline_compute_0: {
-        let mode: Mode = move Mode::A;
-        let n: i32 = if match mode {
-            A => true,
-            _ => false,
-        } {
-            let a: i32 = (5 * 2);
-            a;
-        } else {
-            (5 + 1);
-        };
-        break __inline_compute_0: n;
-    }."i32::to_string"());
-    core::cli::println(move __inline_compute_1: {
-        let mode: Mode = move Mode::B;
-        let n: i32 = if match mode {
-            A => true,
-            _ => false,
-        } {
-            let a: i32 = (5 * 2);
-            a;
-        } else {
-            (5 + 1);
-        };
-        break __inline_compute_1: n;
-    }."i32::to_string"());
+    core::cli::println(move compute(move Mode::A, 5)."i32::to_string"());
+    core::cli::println(move compute(move Mode::B, 5)."i32::to_string"());
 }
 

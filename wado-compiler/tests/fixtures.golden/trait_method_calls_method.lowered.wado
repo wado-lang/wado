@@ -14,13 +14,15 @@ struct Point {
     y: i32,
 }
 
+fn "Point^Describable::describe"(self: &Point) -> String {
+    let s: i32 = __inline_Point__sum_0: {
+        break __inline_Point__sum_0: (self.x + self.y);
+    };
+    return "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Point(", move self.x."i32::to_string"()), move ", "), move self.y."i32::to_string"()), move ") sum="), move s."i32::to_string"());
+}
+
 fn run() with Stdout {
     let p: Point = move Point { x: 3, y: 4 };
-    core::cli::println(__inline_Point_Describable__describe_0: {
-        let s: i32 = __inline_Point__sum_0: {
-            break __inline_Point__sum_0: (p.x + p.y);
-        };
-        break __inline_Point_Describable__describe_0: "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Point(", move p.x."i32::to_string"()), move ", "), move p.y."i32::to_string"()), move ") sum="), move s."i32::to_string"());
-    });
+    core::cli::println(move p."Point^Describable::describe"());
 }
 

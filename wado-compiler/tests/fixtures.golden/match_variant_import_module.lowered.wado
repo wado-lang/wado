@@ -103,15 +103,7 @@ pub fn apply_padding(s: String, spec: FormatSpec) -> String {
 fn run() with Stdout {
     core::cli::println(__inline_f64_to_string_fill_0: {
         let align: Align = move Align::Right;
-        let s: String = __inline_f64__to_string_0: {
-            let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-            let len: i32 = core::builtin::f64_to_buffer(42.0, ptr);
-            let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-            core::builtin::realloc(ptr, 24, 1, 0);
-            break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_0: {
-                break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
-            };
-        };
+        let s: String = move 42.0."f64::to_string"();
         let spec: FormatSpec = move FormatSpec { fill: '_', align: align, width: 8 };
         break __inline_f64_to_string_fill_0: apply_padding(s, spec);
     });

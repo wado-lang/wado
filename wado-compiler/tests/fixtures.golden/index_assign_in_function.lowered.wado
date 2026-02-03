@@ -11,38 +11,42 @@
 
 fn run() with Stdout {
     let mut arr: Array<i32> = move [0, 0, 0];
-    __inline_fill_array_0: {
-        __inline_Array_i32__IndexAssign__index_assign_1: {
-            core::builtin::array_set::<i32>(arr.repr, 0, 100);
-        };
-        __inline_Array_i32__IndexAssign__index_assign_2: {
-            core::builtin::array_set::<i32>(arr.repr, 1, 200);
-        };
-        __inline_Array_i32__IndexAssign__index_assign_3: {
-            core::builtin::array_set::<i32>(arr.repr, 2, 300);
-        };
-    };
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move __inline_Array_i32__IndexValue__index_value_4: {
-        break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(arr.repr, 0);
-    }."i32::to_string"(), move " "), move __inline_Array_i32__IndexValue__index_value_5: {
-        break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(arr.repr, 1);
-    }."i32::to_string"()), move " "), move __inline_Array_i32__IndexValue__index_value_6: {
-        break __inline_Array_i32__IndexValue__index_value_6: core::builtin::array_get::<i32>(arr.repr, 2);
+    fill_array(&mut arr);
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move __inline_Array_i32__IndexValue__index_value_0: {
+        break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(arr.repr, 0);
+    }."i32::to_string"(), move " "), move __inline_Array_i32__IndexValue__index_value_1: {
+        break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(arr.repr, 1);
+    }."i32::to_string"()), move " "), move __inline_Array_i32__IndexValue__index_value_2: {
+        break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(arr.repr, 2);
     }."i32::to_string"()));
-    let result: Array<i32> = __inline_create_and_fill_7: {
-        let mut arr: Array<i32> = move [0, 0];
-        __inline_Array_i32__IndexAssign__index_assign_8: {
-            core::builtin::array_set::<i32>(arr.repr, 0, 42);
-        };
-        __inline_Array_i32__IndexAssign__index_assign_9: {
-            core::builtin::array_set::<i32>(arr.repr, 1, 84);
-        };
-        break __inline_create_and_fill_7: arr;
-    };
-    core::cli::println(move "String::concat"(move "String::concat"(move __inline_Array_i32__IndexValue__index_value_10: {
-        break __inline_Array_i32__IndexValue__index_value_10: core::builtin::array_get::<i32>(result.repr, 0);
-    }."i32::to_string"(), move " "), move __inline_Array_i32__IndexValue__index_value_11: {
-        break __inline_Array_i32__IndexValue__index_value_11: core::builtin::array_get::<i32>(result.repr, 1);
+    let result: Array<i32> = move create_and_fill();
+    core::cli::println(move "String::concat"(move "String::concat"(move __inline_Array_i32__IndexValue__index_value_3: {
+        break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(result.repr, 0);
+    }."i32::to_string"(), move " "), move __inline_Array_i32__IndexValue__index_value_4: {
+        break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(result.repr, 1);
     }."i32::to_string"()));
+}
+
+fn fill_array(arr: &mut Array<i32>) {
+    __inline_Array_i32__IndexAssign__index_assign_0: {
+        core::builtin::array_set::<i32>(arr.repr, 0, 100);
+    };
+    __inline_Array_i32__IndexAssign__index_assign_1: {
+        core::builtin::array_set::<i32>(arr.repr, 1, 200);
+    };
+    __inline_Array_i32__IndexAssign__index_assign_2: {
+        core::builtin::array_set::<i32>(arr.repr, 2, 300);
+    };
+}
+
+fn create_and_fill() -> Array<i32> {
+    let mut arr: Array<i32> = move [0, 0];
+    __inline_Array_i32__IndexAssign__index_assign_0: {
+        core::builtin::array_set::<i32>(arr.repr, 0, 42);
+    };
+    __inline_Array_i32__IndexAssign__index_assign_1: {
+        core::builtin::array_set::<i32>(arr.repr, 1, 84);
+    };
+    return arr;
 }
 

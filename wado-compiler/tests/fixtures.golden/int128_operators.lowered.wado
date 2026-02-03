@@ -26,24 +26,8 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "u128 100 + 50 = ", move sum."u128::to_string"()));
     let diff: u128 = move a."u128^Sub::sub"(&b);
     core::cli::println(move "String::concat"(move "u128 100 - 50 = ", move diff."u128::to_string"()));
-    let x: i128 = __inline_i128__from_i64_2: {
-        let value: i64 = 100 as i64;
-        let high: i64 = if (value < 0 as i64) {
-            -1 as i64;
-        } else {
-            0 as i64;
-        };
-        break __inline_i128__from_i64_2: i128 { low: value as u64, high: high };
-    };
-    let y: i128 = __inline_i128__from_i64_3: {
-        let value: i64 = -50 as i64;
-        let high: i64 = if (value < 0 as i64) {
-            -1 as i64;
-        } else {
-            0 as i64;
-        };
-        break __inline_i128__from_i64_3: i128 { low: value as u64, high: high };
-    };
+    let x: i128 = move "i128::from_i64"(100 as i64);
+    let y: i128 = move "i128::from_i64"(-50 as i64);
     let sum2: i128 = move x."i128^Add::add"(&y);
     core::cli::println(move "String::concat"(move "i128 100 + (-50) = ", move sum2."i128::to_string"()));
     let neg_x: i128 = move x."i128^Neg::neg"();

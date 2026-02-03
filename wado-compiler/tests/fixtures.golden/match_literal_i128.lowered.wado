@@ -10,14 +10,7 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let x: i128 = __inline_i128__from_i64_0: {
-        let high: i64 = if (42 < 0 as i64) {
-            -1 as i64;
-        } else {
-            0 as i64;
-        };
-        break __inline_i128__from_i64_0: i128 { low: 42 as u64, high: high };
-    };
+    let x: i128 = move "i128::from_i64"(42);
     let r1: String = if x."i128^Eq::eq"(&"i128::from_i64"(0)) {
         "zero";
     } else {

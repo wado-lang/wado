@@ -101,21 +101,19 @@ fn run() with Stdout {
         }
     }
     core::cli::println(move "\n=== After compaction ===");
-    if __inline_TreeMap_String_i32___needs_compaction_10: {
-        break __inline_TreeMap_String_i32___needs_compaction_10: ((map.deleted_count > 0) && ((map.deleted_count * 4) > (map.size + map.deleted_count)));
-    } {
+    if map."TreeMap<String,i32>::needs_compaction"() {
         core::cli::println(move "Compaction needed, running...");
         map."TreeMap<String,i32>::compact"();
     }
-    core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_11: {
-        break __inline_TreeMap_String_i32___len_11: map.size;
+    core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_10: {
+        break __inline_TreeMap_String_i32___len_10: map.size;
     }."i32::to_string"()));
     core::cli::println(move "String::concat"(move "Deleted count: ", move map.deleted_count."i32::to_string"()));
     core::cli::println(move "\n=== Final iteration ===");
     let final_entries: Array<[String, i32]> = move map."TreeMap<String,i32>::iter"();
     __for_of_8: {
-        let mut __iter_8: ArrayIter<Tuple<String,i32>> = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_12: {
-            break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_12: ArrayIter<Tuple<String,i32>> { repr: final_entries.repr, used: final_entries.used, index: 0 };
+        let mut __iter_8: ArrayIter<Tuple<String,i32>> = __inline_Array_Tuple_String_i32___IntoIterator__into_iter_11: {
+            break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_11: ArrayIter<Tuple<String,i32>> { repr: final_entries.repr, used: final_entries.used, index: 0 };
         };
         loop {
             let __pattern_temp_1: Option<[String, i32]> = move __iter_8."ArrayIter<Tuple<String,i32>>^Iterator::next"();
@@ -249,6 +247,10 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     }
     core::builtin::array_set::<String>(self.repr, used, value);
     self.used = (used + 1);
+}
+
+fn "TreeMap<String,i32>::needs_compaction"(self: &TreeMap<String,i32>) -> bool {
+    return ((self.deleted_count > 0) && ((self.deleted_count * 4) > (self.size + self.deleted_count)));
 }
 
 fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<String,i32>>) -> Option<[String, i32]> {
