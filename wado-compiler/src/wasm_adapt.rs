@@ -183,40 +183,51 @@ pub fn get_cm_converter_for_type(return_type: &Type) -> Option<&'static str> {
     }
 }
 
+/// Types of CM converters that may be needed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CmConverterKind {
+    /// `cm_list_string_to_array` converter
+    ListString,
+    /// `cm_list_u8_to_array` converter
+    ListU8,
+    /// `cm_list_tuple_string_string_to_array` converter
+    ListTupleString,
+    /// `cm_option_string_to_option` converter
+    OptionString,
+}
+
 /// Information about what CM converters are needed for a set of WASI functions.
 #[derive(Debug, Clone, Default)]
 pub struct CmConverterRequirements {
-    /// Needs `cm_list_string_to_array` converter
-    pub needs_list_string: bool,
-    /// Needs `cm_list_u8_to_array` converter
-    pub needs_list_u8: bool,
-    /// Needs `cm_list_tuple_string_string_to_array` converter
-    pub needs_list_tuple_string: bool,
-    /// Needs `cm_option_string_to_option` converter
-    pub needs_option_string: bool,
+    /// Set of required converters
+    needed: std::collections::HashSet<CmConverterKind>,
 }
 
 impl CmConverterRequirements {
     /// Analyze a return type and update requirements.
     pub fn analyze_type(&mut self, return_type: &Type) {
         if let Some(converter) = get_cm_converter_for_type(return_type) {
-            match converter {
-                "cm_list_string_to_array" => self.needs_list_string = true,
-                "cm_list_u8_to_array" => self.needs_list_u8 = true,
-                "cm_list_tuple_string_string_to_array" => self.needs_list_tuple_string = true,
-                "cm_option_string_to_option" => self.needs_option_string = true,
-                _ => {}
-            }
+            let kind = match converter {
+                "cm_list_string_to_array" => CmConverterKind::ListString,
+                "cm_list_u8_to_array" => CmConverterKind::ListU8,
+                "cm_list_tuple_string_string_to_array" => CmConverterKind::ListTupleString,
+                "cm_option_string_to_option" => CmConverterKind::OptionString,
+                _ => return,
+            };
+            self.needed.insert(kind);
         }
     }
 
     /// Check if any converters are needed.
     #[must_use]
     pub fn any_needed(&self) -> bool {
-        self.needs_list_string
-            || self.needs_list_u8
-            || self.needs_list_tuple_string
-            || self.needs_option_string
+        !self.needed.is_empty()
+    }
+
+    /// Check if a specific converter is needed.
+    #[must_use]
+    pub fn needs(&self, kind: CmConverterKind) -> bool {
+        self.needed.contains(&kind)
     }
 }
 
@@ -254,6 +265,21 @@ pub fn wasm_adapt(mut project: Project) -> Project {
                     break;
                 }
             }
+        }
+    }
+
+    // Attach CmExportInfo to test functions (__test_*)
+    // Test functions are async exports that use task.return, just like CLI Command's run
+    let entry_module = project
+        .tir_modules
+        .get_mut(&project.entry_module_source)
+        .expect("entry module should exist");
+
+    for func_rc in &entry_module.functions {
+        let mut func = func_rc.borrow_mut();
+        if func.name.starts_with("__test_") && func.cm_export_info.is_none() {
+            // Test functions are async (need task.return) but not HTTP handlers
+            func.cm_export_info = Some(CmExportInfo::async_export(false));
         }
     }
 
@@ -393,7 +419,7 @@ mod tests {
             span: make_span(),
         });
         req.analyze_type(&array_string);
-        assert!(req.needs_list_string);
+        assert!(req.needs(CmConverterKind::ListString));
         assert!(req.any_needed());
 
         // Analyze Option<String>
@@ -406,6 +432,6 @@ mod tests {
             span: make_span(),
         });
         req.analyze_type(&option_string);
-        assert!(req.needs_option_string);
+        assert!(req.needs(CmConverterKind::OptionString));
     }
 }

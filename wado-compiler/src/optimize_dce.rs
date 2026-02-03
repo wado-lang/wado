@@ -19,7 +19,7 @@ use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule,
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::wasm_adapt::CmConverterRequirements;
+use crate::wasm_adapt::{CmConverterKind, CmConverterRequirements};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
@@ -127,19 +127,19 @@ pub fn analyze_project(project: &mut Project) {
     }
 
     // Add converter functions and their transitive dependencies
-    if cm_requirements.needs_list_string {
+    if cm_requirements.needs(CmConverterKind::ListString) {
         let cm_list_func = core_internal("cm_list_string_to_array");
         reachable.extend(compute_reachable(&call_graph, &cm_list_func));
     }
-    if cm_requirements.needs_list_u8 {
+    if cm_requirements.needs(CmConverterKind::ListU8) {
         let cm_list_func = core_internal("cm_list_u8_to_array");
         reachable.extend(compute_reachable(&call_graph, &cm_list_func));
     }
-    if cm_requirements.needs_list_tuple_string {
+    if cm_requirements.needs(CmConverterKind::ListTupleString) {
         let cm_list_func = core_internal("cm_list_tuple_string_string_to_array");
         reachable.extend(compute_reachable(&call_graph, &cm_list_func));
     }
-    if cm_requirements.needs_option_string {
+    if cm_requirements.needs(CmConverterKind::OptionString) {
         let cm_option_func = core_internal("cm_option_string_to_option");
         let copy_string_func = core_internal("copy_string_from_linear");
         reachable.extend(compute_reachable(&call_graph, &cm_option_func));
