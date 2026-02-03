@@ -9582,11 +9582,16 @@ pub fn resolve_to_project(
         .map(|p| ModuleSource::from_path(&p))
         .collect();
 
+    // Build registries once here, shared across all subsequent phases
+    let (wasi_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
+
     Ok(Project::new(
         entry_module_source,
         tir_modules_by_source,
         symbols,
         implicit_modules_by_source,
         module_name,
+        wasi_registry,
+        world_registry,
     ))
 }

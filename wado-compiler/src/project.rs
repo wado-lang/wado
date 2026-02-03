@@ -8,9 +8,11 @@
 //! 2. Optimize -> Project (optimized, with usage analysis)
 //! 3. Codegen takes Project and generates Wasm
 
+use crate::component_model::WasiRegistry;
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{PrimitiveType, TirModule};
+use crate::world_registry::WorldRegistry;
 use indexmap::IndexMap;
 use std::collections::HashSet;
 
@@ -34,6 +36,14 @@ pub struct Project {
     pub implicit_modules: HashSet<ModuleSource>,
     /// Module name for the output (derived from filename)
     pub module_name: String,
+
+    // ========================================
+    // Registries (built once, shared across phases)
+    // ========================================
+    /// Registry of WASI imports from lib/wasi/*.wado
+    pub wasi_registry: WasiRegistry,
+    /// Registry of world definitions from lib/wasi/*.wado
+    pub world_registry: WorldRegistry,
 
     // ========================================
     // Usage analysis results (what the project contains)
@@ -74,6 +84,8 @@ impl Project {
         symbols: SymbolTable,
         implicit_modules: HashSet<ModuleSource>,
         module_name: String,
+        wasi_registry: WasiRegistry,
+        world_registry: WorldRegistry,
     ) -> Self {
         Self {
             entry_module_source,
@@ -81,6 +93,8 @@ impl Project {
             symbols,
             implicit_modules,
             module_name,
+            wasi_registry,
+            world_registry,
             // Usage analysis fields default to empty/false
             reachable_functions: HashSet::new(),
             all_reachable: false,

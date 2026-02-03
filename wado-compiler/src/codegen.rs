@@ -457,11 +457,12 @@ enum UltimateBaseType {
 }
 
 impl Codegen {
-    /// Create a new code generator with registries built from stdlib
+    /// Create a new code generator
+    ///
+    /// Registries are taken from Project in `generate_wasm`.
     pub fn new() -> Self {
         use std::cell::RefCell;
-        let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
-        // Create a temporary TypeTable for building the registry.
+        // Create a temporary TypeTable for building the builtin registry.
         // The codegen only uses canonical_name/namespace/name/diverges fields,
         // not the resolved TypeIds.
         let temp_type_table = RefCell::new(TypeTable::new());
@@ -469,9 +470,10 @@ impl Codegen {
 
         Self {
             string_literals: Vec::new(),
-            wasi_registry,
+            // Registries are set from Project in generate_wasm
+            wasi_registry: WasiRegistry::default(),
             builtin_registry,
-            world_registry,
+            world_registry: WorldRegistry::default(),
             has_http_handler_export: false,
             struct_types: HashMap::new(),
             tuple_types: RefCell::new(HashMap::new()),
@@ -721,6 +723,10 @@ impl Codegen {
     ///
     /// The project must have been optimized (usage fields populated) before calling this.
     pub fn generate_wasm(&mut self, project: &Project) -> Vec<u8> {
+        // Take registries from Project (built once in resolver, shared across phases)
+        self.wasi_registry = project.wasi_registry.clone();
+        self.world_registry = project.world_registry.clone();
+
         let entry_tir = project.entry_module();
         let all_tir_modules = &project.tir_modules;
         let symbols = &project.symbols;

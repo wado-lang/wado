@@ -16,7 +16,6 @@
 //! - Keep codegen simple: codegen should just convert TIR to Wasm without
 //!   needing to analyze world definitions or export signatures
 
-use crate::component_model::WasiRegistry;
 use crate::project::Project;
 use crate::tir::ScratchLocal;
 
@@ -75,10 +74,8 @@ impl CmExportInfo {
 /// This analyzes world exports and attaches `CmExportInfo` to the corresponding
 /// `TirFunctions`. The Project is modified in place.
 pub fn wasm_adapt(mut project: Project) -> Project {
-    let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
-
-    // Look up the target world
-    let world_info = world_registry.get(&project.target_world);
+    // Look up the target world from the registry in Project
+    let world_info = project.world_registry.get(&project.target_world).cloned();
 
     if let Some(world_info) = world_info {
         // Update project's HTTP handler flag based on world analysis
@@ -108,10 +105,6 @@ pub fn wasm_adapt(mut project: Project) -> Project {
             }
         }
     }
-
-    // Drop registries explicitly (they're not needed after this phase)
-    drop(wasi_registry);
-    drop(world_registry);
 
     project
 }

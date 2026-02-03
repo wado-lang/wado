@@ -562,12 +562,18 @@ pub async fn dump_with_host<H: CompilerHost>(
                     .map(|p| ModuleSource::from_path(p))
                     .collect();
 
+            // Build registries once here
+            let (wasi_registry, world_registry) =
+                component_model::WasiRegistry::build_from_stdlib();
+
             let project = Project::new(
                 load_result.entry_module_source.clone(),
                 modules_by_source,
                 symbols.clone(),
                 implicit_modules_by_source,
                 module_name,
+                wasi_registry,
+                world_registry,
             );
             let project = optimize(project, opt_level);
             wasm_adapt(project)

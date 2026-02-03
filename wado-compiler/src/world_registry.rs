@@ -81,7 +81,7 @@ impl WorldInfo {
 ///
 /// Collects world definitions from wasi/*.wado and provides:
 /// - Export signature lookup for component generation
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct WorldRegistry {
     /// `world_name` -> world info
     worlds: HashMap<String, WorldInfo>,

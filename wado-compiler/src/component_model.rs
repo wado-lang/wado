@@ -90,7 +90,7 @@ pub struct WasiInterfaceInfo {
 /// Collects information from effect definitions and provides:
 /// - Resolution of effect calls (e.g., "`Stdout::write_via_stream`") to local names
 /// - Iteration over interfaces for Component Model import generation
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct WasiRegistry {
     /// `Effect::method` -> function info
     effect_to_func: HashMap<String, WasiFunctionInfo>,
