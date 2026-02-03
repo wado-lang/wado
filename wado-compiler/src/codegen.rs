@@ -10015,15 +10015,10 @@ impl Codegen {
             // Generate this arm's body
             let arm = &arms[arm_idx];
 
-            // Bind pattern variables (for bindings in the pattern)
-            // For integer literals, there's nothing to bind
-            // For wildcard/binding, bind the scrutinee value
-            if let TirPattern::Binding { name, type_id, .. } = &arm.pattern {
-                let valtype = self.type_id_to_valtype(type_table, *type_id);
-                let local = ctx.alloc_local(name, valtype);
-                ctx.locals.insert(name.clone(), local);
+            if let TirPattern::Binding { local_index, .. } = &arm.pattern {
+                let adjusted_index = *local_index + ctx.local_index_offset;
                 func.instruction(&Instruction::LocalGet(scrutinee_local));
-                func.instruction(&Instruction::LocalSet(local));
+                func.instruction(&Instruction::LocalSet(adjusted_index));
             }
 
             // Generate body expression
