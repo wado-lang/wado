@@ -50,16 +50,18 @@ pub fn analyze_project(project: &mut Project) {
     // Build call graph, effect usage, and box primitives from all modules
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
-    // Determine entry functions based on target world
-    // Each world has specific export functions that are entry points
-    let entry_func_names: Vec<&str> = match project.target_world.as_str() {
-        "Service" => vec!["handle"],  // wasi:http/service
-        "Command" | _ => vec!["run"], // wasi:cli/command (default)
-    };
+    // Get world registry to determine entry functions and HTTP handler status
+    let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
+
+    // Determine entry functions from world exports
+    let entry_func_names: Vec<String> = world_registry
+        .get(&project.target_world)
+        .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
+        .unwrap_or_else(|| vec!["run".to_string()]);
 
     // Compute reachable functions from all entry points
     let mut reachable = HashSet::new();
-    for entry_name in entry_func_names {
+    for entry_name in &entry_func_names {
         let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
             &project.entry_module_source,
             entry_name,
@@ -113,7 +115,6 @@ pub fn analyze_project(project: &mut Project) {
     // Add CM converter functions based on WASI function return types
     // These conversion functions are called from codegen, not Wado code
     // We need to compute transitive closure to include all functions they call
-    let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
     let mut needs_list_string_converter = false;
     let mut needs_list_tuple_string_converter = false;
     let mut needs_option_string_converter = false;
@@ -281,9 +282,10 @@ pub fn analyze_project(project: &mut Project) {
 
     // Effect usage requires TaskReturn for async entry point
     // But waitable-set builtins are only needed when effect_wait is actually called
-    // Service world always needs TaskReturn since the handler is an async export
-    let is_async_world = project.target_world == "Service";
-    if !used_wasi_functions.is_empty() || uses_stream_builtins || is_async_world {
+    let has_http_handler_export = world_registry
+        .get(&project.target_world)
+        .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
+    if !used_wasi_functions.is_empty() || uses_stream_builtins || has_http_handler_export {
         // TaskReturn is always needed for async exports
         add_import_by_name(&mut imports, "task_return");
 
@@ -297,9 +299,9 @@ pub fn analyze_project(project: &mut Project) {
             add_import_by_name(&mut imports, "subtask_drop");
         }
 
-        // Service world needs future intrinsics for response creation
+        // HTTP handler exports need future intrinsics for response creation
         // (trailers parameter to response.new is a future)
-        if is_async_world {
+        if has_http_handler_export {
             add_import_by_name(&mut imports, "future_new");
             add_import_by_name(&mut imports, "future_write");
             add_import_by_name(&mut imports, "future_drop_writable");
@@ -380,7 +382,7 @@ pub fn populate_all_features(project: &mut Project) {
     project.reachable_functions = HashSet::new();
     project.all_reachable = true;
     // Standard WASI functions from the stdlib registry
-    let (wasi_registry, _world_registry) = WasiRegistry::build_from_stdlib();
+    let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
     project.used_wasi_functions = wasi_registry
         .standard_function_names()
         .map(std::string::ToString::to_string)
@@ -389,13 +391,15 @@ pub fn populate_all_features(project: &mut Project) {
     // Build all imports from the builtin registry
     let type_table = RefCell::new(TypeTable::new());
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-    let is_service_world = project.target_world == "Service";
+    let has_http_handler_export = world_registry
+        .get(&project.target_world)
+        .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
 
     let mut imports: Vec<TirImport> = Vec::new();
     for info in builtin_registry.imported_builtins() {
         if let Some(canonical_name) = &info.canonical_name {
-            // Skip future intrinsics unless in Service world
-            if canonical_name.starts_with("future-") && !is_service_world {
+            // Skip future intrinsics unless HTTP handler export needs them
+            if canonical_name.starts_with("future-") && !has_http_handler_export {
                 continue;
             }
             imports.push(TirImport {

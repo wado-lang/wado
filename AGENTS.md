@@ -274,6 +274,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Newtype Semantics](./docs/wep-2026-01-29-newtype-semantics.md)
 - [SIMD v128 Types](./docs/wep-2026-01-31-simd-v128.md)
 - [Format Traits](./docs/wep-2026-02-01-format-traits.md)
+- [Wasm Adapt Phase](./docs/wep-2026-02-03-wasm-adapt-phase.md)
 
 ### Structure
 
