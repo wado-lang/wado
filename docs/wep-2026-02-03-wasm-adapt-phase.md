@@ -64,23 +64,36 @@ CM helper functions (type converters) are generated as TIR because:
 ### Data Structures
 
 ```rust
+/// Wasm value type for CM scratch locals (mirrors wasm_encoder::ValType)
+pub enum CmValType {
+    I32, I64, F32, F64,
+    AnyRef, // Nullable anyref for storing GC objects
+}
+
+/// A scratch local variable needed for CM glue code
+pub struct CmScratchLocal {
+    pub name: String,
+    pub val_type: CmValType,
+}
+
 /// CM export information attached to TirFunction
 pub struct CmExportInfo {
-    /// Kind of CM export signature
-    pub signature_kind: CmSignatureKind,
-    /// Additional scratch locals needed for CM glue code
-    pub scratch_locals: Vec<ScratchLocal>,
+    /// Whether this is an async export
+    pub is_async: bool,
+    /// Whether this export is an HTTP handler
+    pub is_http_handler: bool,
+    /// Scratch locals needed for CM glue code
+    pub scratch_locals: Vec<CmScratchLocal>,
     /// CM functions that must be imported
     pub required_imports: Vec<String>,
 }
 
-pub enum CmSignatureKind {
-    /// Command world: async fn run() -> Result<(), ()>
-    Command,
-    /// HTTP handler: async fn handle(Request) -> Result<Response, ErrorCode>
-    HttpHandler,
-    /// Other async export with custom signature
-    AsyncExport { return_type: TypeId },
+/// Tracks which CM converters are needed (used by optimize_dce)
+pub struct CmConverterRequirements {
+    pub needs_list_string: bool,
+    pub needs_list_u8: bool,
+    pub needs_list_tuple_string: bool,
+    pub needs_option_string: bool,
 }
 ```
 
@@ -104,10 +117,29 @@ Function naming convention: `__cm_{operation}_{type_signature}`
 
 ### Migration Path
 
-1. Move scratch local analysis for CM operations from codegen to wasm_adapt
-2. Add CmExportInfo metadata to TirFunction
-3. Generate CM helper functions dynamically instead of hardcoding
-4. Simplify codegen to use metadata and generated TIR
+1. ✓ Move scratch local analysis for CM operations from codegen to wasm_adapt
+2. ✓ Add CmExportInfo metadata to TirFunction
+3. ✓ Centralize CM converter analysis in wasm_adapt (shared by optimize_dce)
+4. (Future) Generate CM helper functions dynamically instead of hardcoding
+5. ✓ Simplify codegen to use metadata from wasm_adapt
+
+### Current Status
+
+The wasm_adapt phase is implemented with:
+
+1. **CmExportInfo metadata** - Attached to TirFunctions that are world exports
+2. **Scratch local computation** - Pre-computed in wasm_adapt, used by codegen
+3. **CM converter analysis** - Centralized functions for determining required converters
+
+**CM Helper Functions**: Currently implemented in `lib/core/internal.wado` as Wado source code.
+This approach works well because:
+
+- Helpers go through normal compilation pipeline
+- They appear in golden fixtures for debugging
+- DCE correctly identifies which helpers are needed
+
+Dynamic TIR generation is deferred until we need complex type combinations like
+`Array<Option<String>>` that aren't covered by the current helpers.
 
 ## Consequences
 
