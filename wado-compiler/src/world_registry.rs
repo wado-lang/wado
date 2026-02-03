@@ -36,6 +36,25 @@ impl WorldExportInfo {
             return_type: export.return_type.clone(),
         }
     }
+
+    /// Check if this export returns an HTTP response.
+    ///
+    /// Returns true if the return type is `Result<Response, ErrorCode>`,
+    /// which indicates this is an HTTP handler export.
+    pub fn returns_http_response(&self) -> bool {
+        let Some(return_type) = &self.return_type else {
+            return false;
+        };
+
+        if let Type::Generic(generic) = return_type {
+            if generic.name == "Result" && generic.args.len() == 2 {
+                if let Type::Named(ok_type) = &generic.args[0] {
+                    return ok_type.name == "Response";
+                }
+            }
+        }
+        false
+    }
 }
 
 /// Information about a world definition
@@ -45,6 +64,15 @@ pub struct WorldInfo {
     pub name: String,
     /// Exported functions
     pub exports: Vec<WorldExportInfo>,
+}
+
+impl WorldInfo {
+    /// Check if this world has an HTTP handler export.
+    ///
+    /// Returns true if any export returns `Result<Response, ErrorCode>`.
+    pub fn has_http_handler_export(&self) -> bool {
+        self.exports.iter().any(WorldExportInfo::returns_http_response)
+    }
 }
 
 /// Registry of world definitions for code generation

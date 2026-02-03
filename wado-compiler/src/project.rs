@@ -57,6 +57,13 @@ pub struct Project {
     pub target_world: String,
     /// When true, apply DCE to bundled Wasm module (enabled for -O1+, disabled for -O0)
     pub wasm_dce_enabled: bool,
+
+    // ========================================
+    // CM export characteristics (derived from target_world)
+    // ========================================
+    /// When true, the target world exports an HTTP handler (returns Result<Response, ErrorCode>).
+    /// This determines whether HTTP-related glue code is needed.
+    pub has_http_handler_export: bool,
 }
 
 impl Project {
@@ -83,6 +90,8 @@ impl Project {
             strip_names: false,
             target_world: "Command".to_string(),
             wasm_dce_enabled: true, // Enabled by default, disabled for -O0
+            // CM export characteristics
+            has_http_handler_export: false,
         }
     }
 

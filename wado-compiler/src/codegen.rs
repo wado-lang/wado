@@ -80,6 +80,9 @@ pub struct Codegen {
     builtin_registry: BuiltinRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
     world_registry: WorldRegistry,
+    /// Whether the target world exports an HTTP handler (returns Result<Response, ErrorCode>).
+    /// Computed at the start of `generate_wasm` from `world_registry`.
+    has_http_handler_export: bool,
     /// Registry of user-defined struct types (keyed by `StructName` for type safety)
     struct_types: HashMap<StructName, StructTypeInfo>,
     /// Registry of tuple types (keyed by element `TypeIds`, maps to GC struct type index)
@@ -213,8 +216,8 @@ struct FunctionContext {
     skip_tuple_wrap: bool,
     /// When true, this function is an async export and returns should use task-return
     is_async_export: bool,
-    /// Target world for async export handling
-    target_world: String,
+    /// When true, the target world exports an HTTP handler (returns Result<Response, ErrorCode>)
+    has_http_handler_export: bool,
 }
 
 impl FunctionContext {
@@ -239,7 +242,7 @@ impl FunctionContext {
             copy_context: CopyContext::new(),
             skip_tuple_wrap: false,
             is_async_export: false,
-            target_world: String::new(),
+            has_http_handler_export: false,
         }
     }
 
@@ -264,7 +267,7 @@ impl FunctionContext {
             copy_context: CopyContext::new(),
             skip_tuple_wrap: false,
             is_async_export: false,
-            target_world: String::new(),
+            has_http_handler_export: false,
         }
     }
 
@@ -469,6 +472,7 @@ impl Codegen {
             wasi_registry,
             builtin_registry,
             world_registry,
+            has_http_handler_export: false,
             struct_types: HashMap::new(),
             tuple_types: RefCell::new(HashMap::new()),
             array_types: HashMap::new(),
@@ -723,6 +727,11 @@ impl Codegen {
         let implicit_modules = &project.implicit_modules;
         let module_name = &project.module_name;
 
+        self.has_http_handler_export = self
+            .world_registry
+            .get(&project.target_world)
+            .is_some_and(|w| w.has_http_handler_export());
+
         // Collect pre-computed string literals from all TIR modules
         // Note: String DCE is performed in the optimizer, so we just collect all strings here
         for tir_module in all_tir_modules.values() {
@@ -970,7 +979,7 @@ impl Codegen {
             // - i32: Ok/Err discriminant
             // - i32: Response handle (Ok) or error-code discriminant (Err)
             // - Remaining: Space for largest error-code payload (records with option<string>, etc.)
-            if canonical_name == "task-return" && project.target_world == "Service" {
+            if canonical_name == "task-return" && self.has_http_handler_export {
                 builder.define_func_type(
                     canonical_name,
                     &[
@@ -993,7 +1002,7 @@ impl Codegen {
         }
 
         // Define HTTP function types for Service world
-        if project.target_world == "Service" {
+        if self.has_http_handler_export {
             // [constructor]fields: () -> i32 (resource handle)
             builder.define_func_type("http-fields-constructor", &[], &[ValType::I32]);
 
@@ -1576,7 +1585,7 @@ impl Codegen {
         }
 
         // Import HTTP functions for Service world
-        if project.target_world == "Service" {
+        if self.has_http_handler_export {
             builder.import_func("wasi", "http-fields-constructor");
             builder.import_func("wasi", "http-response-new");
         }
@@ -1823,7 +1832,6 @@ impl Codegen {
                     &tir_func,
                     type_table,
                     &builder,
-                    &project.target_world,
                 );
                 code.function(&wasm_func);
             } else {
@@ -1891,12 +1899,12 @@ impl Codegen {
             let export_wasm_func = if let Some(tir_rc) = export_tir_rc {
                 // Generate function body using the TIR function body generation
                 let tir_func = tir_rc.borrow();
-                self.generate_run_function(&tir_func, type_table, &builder, &project.target_world)
+                self.generate_run_function(&tir_func, type_table, &builder)
             } else {
                 // No matching function - create empty entry point
                 let mut func = Function::new(vec![]);
                 let task_return_idx = builder.func_idx("task-return");
-                if project.target_world == "Service" {
+                if self.has_http_handler_export {
                     // Service world: result<own<response>, error-code> with complex payloads
                     // Flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
                     func.instruction(&Instruction::I32Const(1)); // Err discriminant
@@ -2388,7 +2396,7 @@ impl Codegen {
         }
 
         // Add lowered HTTP types functions for Service world
-        if project.target_world == "Service" && ctx.has_core_func("http-fields-constructor") {
+        if self.has_http_handler_export && ctx.has_core_func("http-fields-constructor") {
             wasi_exports.push((
                 "http-fields-constructor".to_string(),
                 ExportKind::Func,
@@ -2490,7 +2498,7 @@ impl Codegen {
                 let (_, enc) = builder.ty(Some(&func_type_name));
 
                 // Check if this is the Service world's handle function with Request param
-                let is_service_handle = project.target_world == "Service"
+                let is_service_handle = self.has_http_handler_export
                     && export.name == "handle"
                     && !export.params.is_empty();
 
@@ -2595,7 +2603,7 @@ impl Codegen {
         // For Service world, add the handler interface export
         // This creates a component instance containing the handle function
         // and exports it as wasi:http/handler interface
-        if project.target_world == "Service" {
+        if self.has_http_handler_export {
             Self::append_http_handler_export(&mut component_bytes, &ctx);
         }
 
@@ -3150,7 +3158,7 @@ impl Codegen {
 
         // For Service world, import wasi:http/types to get Request resource type
         // This is needed for the handle function's parameter type
-        if project.target_world == "Service" {
+        if self.has_http_handler_export {
             self.import_http_types_for_service(builder, ctx);
         }
     }
@@ -9300,7 +9308,7 @@ impl Codegen {
             TirStmtKind::Return { value } => {
                 if ctx.is_async_export {
                     // For async exports, call task-return with the result value
-                    if ctx.target_world == "Service" {
+                    if ctx.has_http_handler_export {
                         // Service world: result<response, error-code>
                         // Generate the return expression but drop it for now
                         if let Some(expr) = value {
@@ -10807,14 +10815,13 @@ impl Codegen {
         tir_func: &TirFunction,
         type_table: &TypeTable,
         builder: &CoreModuleBuilder,
-        target_world: &str,
     ) -> Function {
         // Create function context
         let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
 
         // Mark this as an async export - returns should use task-return
         func_ctx.is_async_export = true;
-        func_ctx.target_world = target_world.to_string();
+        func_ctx.has_http_handler_export = self.has_http_handler_export;
 
         // Copy address-taken locals from TIR
         func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();
@@ -10863,7 +10870,7 @@ impl Codegen {
         self.allocate_precomputed_scratch_locals(tir_func, type_table, &mut func_ctx);
 
         // Pre-allocate scratch locals for Service world HTTP response creation
-        if func_ctx.is_async_export && func_ctx.target_world == "Service" {
+        if func_ctx.is_async_export && func_ctx.has_http_handler_export {
             func_ctx.alloc_local("_http_future", ValType::I64);
             func_ctx.alloc_local("_trailers_rx", ValType::I32);
             func_ctx.alloc_local("_trailers_tx", ValType::I32);
@@ -10891,7 +10898,7 @@ impl Codegen {
             // For Service world: result<own<response>, error-code> with complex payloads
             // The full error-code variant flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
             // For Command world: result<_, _> needs just (i32)
-            if func_ctx.target_world == "Service" {
+            if func_ctx.has_http_handler_export {
                 wasm_func.instruction(&Instruction::I32Const(1)); // Err discriminant
                 wasm_func.instruction(&Instruction::I32Const(38)); // internal-error discriminant
                 wasm_func.instruction(&Instruction::I32Const(1)); // option<string> = Some
