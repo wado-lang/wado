@@ -18,8 +18,8 @@ use crate::name::{LocalMethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    ClosureFunctor, ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirField,
-    TirFunction, TirGlobal, TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt,
+    ClosureFunctor, ResolvedType, ScratchLocal, TirBlock, TirCapture, TirExpr, TirExprKind,
+    TirField, TirFunction, TirGlobal, TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
@@ -65,6 +65,9 @@ pub fn lower(mut module: TirModule) -> TirModule {
     module.string_literals = strings;
     module.function_strings = function_strings;
     module.function_method_info = function_method_info;
+
+    // Note: Scratch local analysis is done in optimize phase (after inlining)
+    // since the function body may change due to inlining.
 
     module
 }
@@ -1916,8 +1919,11 @@ fn lower_global_initializers(module: &mut TirModule) {
         local_types: Vec::new(),
         address_taken_locals: std::collections::HashSet::new(),
         needed_copy_types: std::collections::HashSet::new(),
-        needs_async_scratch: false,
-        needs_outptr_scratch: false,
+        scratch_locals: Vec::new(),
+        copy_source_types: std::collections::HashSet::new(),
+        indirect_call_counts: std::collections::HashMap::new(),
+        match_scrutinee_types: Vec::new(),
+        let_pattern_types: Vec::new(),
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -2244,8 +2250,11 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         local_types: Vec::new(),
         address_taken_locals: std::collections::HashSet::new(),
         needed_copy_types: std::collections::HashSet::new(),
-        needs_async_scratch: false,
-        needs_outptr_scratch: false,
+        scratch_locals: Vec::new(),
+        copy_source_types: std::collections::HashSet::new(),
+        indirect_call_counts: std::collections::HashMap::new(),
+        match_scrutinee_types: Vec::new(),
+        let_pattern_types: Vec::new(),
     };
 
     entry_module
@@ -3063,8 +3072,11 @@ impl ClosureLowerer {
                 local_types,
                 address_taken_locals: std::collections::HashSet::new(),
                 needed_copy_types: std::collections::HashSet::new(),
-                needs_async_scratch: false,
-                needs_outptr_scratch: false,
+                scratch_locals: Vec::new(),
+                copy_source_types: std::collections::HashSet::new(),
+                indirect_call_counts: std::collections::HashMap::new(),
+                match_scrutinee_types: Vec::new(),
+                let_pattern_types: Vec::new(),
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -4612,8 +4624,11 @@ impl ClosureLowerer {
             local_types: new_local_types,
             address_taken_locals: callee.address_taken_locals.clone(),
             needed_copy_types: callee.needed_copy_types.clone(),
-            needs_async_scratch: callee.needs_async_scratch,
-            needs_outptr_scratch: callee.needs_outptr_scratch,
+            scratch_locals: callee.scratch_locals.clone(),
+            copy_source_types: callee.copy_source_types.clone(),
+            indirect_call_counts: callee.indirect_call_counts.clone(),
+            match_scrutinee_types: callee.match_scrutinee_types.clone(),
+            let_pattern_types: callee.let_pattern_types.clone(),
         };
 
         self.generated_functions
@@ -6177,6 +6192,597 @@ impl StringCollector {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+        }
+    }
+}
+
+/// Analyze scratch local requirements for all functions in the project.
+/// Must be called AFTER optimization/inlining since the function body may change.
+pub fn analyze_scratch_locals_project(project: &mut Project) {
+    let (wasi_registry, _) = crate::component_model::WasiRegistry::build_from_stdlib();
+    for module in project.tir_modules.values() {
+        analyze_scratch_locals_module(module, &wasi_registry);
+    }
+}
+
+fn analyze_scratch_locals_module(
+    module: &TirModule,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) {
+    let type_table = module.type_table.borrow();
+
+    for func_rc in &module.functions {
+        let mut func = func_rc.borrow_mut();
+        if let Some(body) = &func.body {
+            let mut analyzer = ScratchLocalAnalyzer::new(&type_table);
+            analyzer.analyze_block(body);
+
+            let (needs_async, needs_outptr) =
+                analyze_effect_scratch_needs(body, &func.effects, &type_table, wasi_registry);
+            if needs_async {
+                func.scratch_locals
+                    .push(ScratchLocal::new("__subtask".to_string(), TypeTable::I32));
+                func.scratch_locals.push(ScratchLocal::new(
+                    "__waitable_set".to_string(),
+                    TypeTable::I32,
+                ));
+            }
+            if needs_outptr {
+                func.scratch_locals
+                    .push(ScratchLocal::new("__cm_outptr".to_string(), TypeTable::I32));
+                func.scratch_locals.push(ScratchLocal::new(
+                    "__cm_i32_result".to_string(),
+                    TypeTable::I32,
+                ));
+            }
+
+            func.indirect_call_counts = analyzer.indirect_call_counts;
+            func.match_scrutinee_types = analyzer.match_scrutinee_types;
+            func.let_pattern_types = analyzer.let_pattern_types;
+        }
+    }
+}
+
+struct ScratchLocalAnalyzer<'a> {
+    type_table: &'a TypeTable,
+    indirect_call_counts: HashMap<TypeId, u32>,
+    match_scrutinee_types: Vec<TypeId>,
+    let_pattern_types: Vec<TypeId>,
+}
+
+impl<'a> ScratchLocalAnalyzer<'a> {
+    fn new(type_table: &'a TypeTable) -> Self {
+        Self {
+            type_table,
+            indirect_call_counts: HashMap::new(),
+            match_scrutinee_types: Vec::new(),
+            let_pattern_types: Vec::new(),
+        }
+    }
+
+    fn analyze_block(&mut self, block: &TirBlock) {
+        for stmt in &block.stmts {
+            self.analyze_stmt(stmt);
+        }
+    }
+
+    fn analyze_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } => {
+                self.analyze_expr(value);
+            }
+            TirStmtKind::LetPattern { pattern, value, .. } => {
+                // Collect types for let pattern temp locals
+                self.collect_let_pattern_types(pattern, value.type_id);
+                self.analyze_expr(value);
+            }
+            TirStmtKind::Expr(expr) => {
+                self.analyze_expr(expr);
+            }
+            TirStmtKind::Return { value } => {
+                if let Some(v) = value {
+                    self.analyze_expr(v);
+                }
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.analyze_expr(condition);
+                self.analyze_block(then_block);
+                if let Some(else_blk) = else_block {
+                    self.analyze_block(else_blk);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                self.analyze_block(body);
+            }
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.analyze_expr(v);
+                }
+            }
+            TirStmtKind::IfPattern { .. } => {
+                panic!("IfPattern should be lowered before scratch local analysis");
+            }
+            TirStmtKind::Continue => {}
+        }
+    }
+
+    fn analyze_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::IndirectCall { callee, args } => {
+                // Count indirect calls by closure type
+                let closure_type = callee.type_id;
+                *self.indirect_call_counts.entry(closure_type).or_insert(0) += 1;
+                self.analyze_expr(callee);
+                for arg in args {
+                    self.analyze_expr(arg);
+                }
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                // Match scrutinee needs a scratch local
+                self.match_scrutinee_types.push(scrutinee.type_id);
+                self.analyze_expr(scrutinee);
+                for arm in arms {
+                    // Collect types for tuple destructuring in variant payloads
+                    self.collect_variant_pattern_types(&arm.pattern);
+                    self.analyze_expr(&arm.body);
+                }
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                self.analyze_block(block);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.analyze_expr(condition);
+                self.analyze_block(then_branch);
+                if let Some(else_blk) = else_branch {
+                    self.analyze_block(else_blk);
+                }
+            }
+            TirExprKind::Call { args, .. }
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    self.analyze_expr(arg);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.analyze_expr(receiver);
+                for arg in args {
+                    self.analyze_expr(arg);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.analyze_expr(left);
+                self.analyze_expr(right);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::Move { expr: inner }
+            | TirExprKind::OptionSome { value: inner } => {
+                self.analyze_expr(inner);
+            }
+            TirExprKind::Index { expr: inner, index } => {
+                self.analyze_expr(inner);
+                self.analyze_expr(index);
+            }
+            TirExprKind::Assign { target, value } => {
+                self.analyze_expr(target);
+                self.analyze_expr(value);
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.analyze_expr(&field.value);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.analyze_expr(elem);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload {
+                    self.analyze_expr(p);
+                }
+            }
+            TirExprKind::Closure { body, .. } => {
+                self.analyze_expr(body);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.analyze_expr(value);
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.analyze_expr(functor);
+            }
+            TirExprKind::IsNotNull { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::UnwrapOption { expr: inner, .. }
+            | TirExprKind::VariantTag { expr: inner } => {
+                self.analyze_expr(inner);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.analyze_expr(scrutinee);
+                for arm in arms {
+                    self.analyze_block(arm);
+                }
+                self.analyze_block(default);
+            }
+            // Leaf expressions - no nested expressions
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral { .. }
+            | TirExprKind::Null
+            | TirExprKind::Unit
+            | TirExprKind::Local { .. }
+            | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
+        }
+    }
+
+    /// Collect types for let pattern temp locals (tuple destructuring).
+    fn collect_let_pattern_types(&mut self, pattern: &TirPattern, type_id: TypeId) {
+        match pattern {
+            TirPattern::Tuple(sub_patterns) => {
+                // This tuple pattern needs a temp local
+                self.let_pattern_types.push(type_id);
+
+                // Recursively handle nested tuple patterns
+                if let ResolvedType::Tuple(elem_types) = self.type_table.get(type_id) {
+                    for (sub_pattern, elem_type) in sub_patterns.iter().zip(elem_types.iter()) {
+                        self.collect_let_pattern_types(sub_pattern, *elem_type);
+                    }
+                }
+            }
+            TirPattern::Variant {
+                bindings,
+                payload_type,
+                ..
+            } => {
+                // Recurse into variant bindings
+                if let Some(binding) = bindings.first() {
+                    self.collect_let_pattern_types(binding, *payload_type);
+                }
+            }
+            TirPattern::Binding { .. } | TirPattern::Wildcard | TirPattern::Literal(_) => {
+                // These don't need temp locals
+            }
+        }
+    }
+
+    /// Collect types for tuple destructuring in variant payloads (match arms).
+    fn collect_variant_pattern_types(&mut self, pattern: &TirPattern) {
+        if let TirPattern::Variant {
+            bindings,
+            payload_type,
+            ..
+        } = pattern
+            && let Some(binding) = bindings.first()
+        {
+            // Collect types for tuple patterns in variant payloads
+            self.collect_let_pattern_types(binding, *payload_type);
+            // Recursively handle nested variant patterns
+            self.collect_variant_pattern_types(binding);
+        }
+    }
+}
+
+/// Returns `(needs_async, needs_outptr)`.
+/// Analyzes the body regardless of declared effects because internal functions
+/// may call async builtins without declaring effects.
+fn analyze_effect_scratch_needs(
+    body: &TirBlock,
+    _effects: &[String],
+    _type_table: &TypeTable,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> (bool, bool) {
+    let mut analyzer = EffectScratchAnalyzer::new(wasi_registry);
+    analyzer.analyze_block(body);
+    (analyzer.needs_async, analyzer.needs_outptr)
+}
+
+struct EffectScratchAnalyzer<'a> {
+    wasi_registry: &'a crate::component_model::WasiRegistry,
+    needs_async: bool,
+    needs_outptr: bool,
+}
+
+impl<'a> EffectScratchAnalyzer<'a> {
+    fn new(wasi_registry: &'a crate::component_model::WasiRegistry) -> Self {
+        Self {
+            wasi_registry,
+            needs_async: false,
+            needs_outptr: false,
+        }
+    }
+
+    fn analyze_block(&mut self, block: &TirBlock) {
+        for stmt in &block.stmts {
+            self.analyze_stmt(stmt);
+            if self.needs_async && self.needs_outptr {
+                return; // Early exit if both are already true
+            }
+        }
+    }
+
+    fn analyze_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+                self.analyze_expr(value);
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.analyze_expr(value);
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.analyze_expr(condition);
+                self.analyze_block(then_block);
+                if let Some(else_blk) = else_block {
+                    self.analyze_block(else_blk);
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                self.analyze_block(body);
+            }
+            TirStmtKind::Return { value: Some(expr) }
+            | TirStmtKind::Break {
+                value: Some(expr), ..
+            } => {
+                self.analyze_expr(expr);
+            }
+            _ => {}
+        }
+    }
+
+    fn analyze_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::EffectCall {
+                cm_convention,
+                args,
+                ..
+            } => {
+                if let Some(conv) = cm_convention {
+                    if conv.is_async {
+                        self.needs_async = true;
+                    }
+                    if conv.outptr_alloc.is_some() {
+                        self.needs_outptr = true;
+                    }
+                }
+                for arg in args {
+                    self.analyze_expr(arg);
+                }
+            }
+            TirExprKind::Call { func, args, .. } => {
+                // Check for effect calls (represented as Call with effect name as module path)
+                // Effect calls have ModuleSource::Local { path } where path is the effect name
+                // (e.g., "Stdout", "Stderr")
+                if let FunctionRef::External {
+                    module_source,
+                    name,
+                    ..
+                } = func
+                {
+                    match module_source {
+                        ModuleSource::Local { path } => {
+                            // Check if this is an effect call by looking up in wasi_registry
+                            // Effect names start with uppercase (e.g., "Stdout", "Stderr")
+                            if path.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+                                let qualified_name = format!("{path}::{name}");
+                                if let Some(func_info) =
+                                    self.wasi_registry.get_function(&qualified_name)
+                                {
+                                    let conv = &func_info.call_convention;
+                                    if conv.is_async {
+                                        self.needs_async = true;
+                                    }
+                                    if conv.outptr_alloc.is_some() {
+                                        self.needs_outptr = true;
+                                    }
+                                }
+                            }
+                        }
+                        ModuleSource::Wasi { .. } => {
+                            // WASI function calls - name is already qualified (e.g., "TcpSocket::static_tcp_socket_create")
+                            if let Some(func_info) = self.wasi_registry.get_function(name) {
+                                let conv = &func_info.call_convention;
+                                if conv.is_async {
+                                    self.needs_async = true;
+                                }
+                                if conv.outptr_alloc.is_some() {
+                                    self.needs_outptr = true;
+                                }
+                            }
+                        }
+                        ModuleSource::Core { name: module_name } if module_name == "builtin" => {
+                            // Check for async-requiring builtins
+                            if name == "effect_wait"
+                                || name == "waitable_set_new"
+                                || name == "waitable_set_wait"
+                                || name == "call_indirect_stdout_write_via_stream"
+                                || name == "call_indirect_stderr_write_via_stream"
+                            {
+                                self.needs_async = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                for arg in args {
+                    self.analyze_expr(arg);
+                }
+            }
+            TirExprKind::StaticCall { func, args, .. } => {
+                // Check for WASI/effect calls and builtin calls
+                if let FunctionRef::External {
+                    module_source,
+                    name,
+                    ..
+                } = func
+                {
+                    match module_source {
+                        ModuleSource::Local { path } => {
+                            // Check if this is a WASI effect call (e.g., TcpSocket::static_tcp_socket_create)
+                            if path.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
+                                let qualified_name = format!("{path}::{name}");
+                                if let Some(func_info) =
+                                    self.wasi_registry.get_function(&qualified_name)
+                                {
+                                    let conv = &func_info.call_convention;
+                                    if conv.is_async {
+                                        self.needs_async = true;
+                                    }
+                                    if conv.outptr_alloc.is_some() {
+                                        self.needs_outptr = true;
+                                    }
+                                }
+                            }
+                        }
+                        ModuleSource::Wasi { .. } => {
+                            // WASI function calls - name is already qualified (e.g., "TcpSocket::static_tcp_socket_create")
+                            if let Some(func_info) = self.wasi_registry.get_function(name) {
+                                let conv = &func_info.call_convention;
+                                if conv.is_async {
+                                    self.needs_async = true;
+                                }
+                                if conv.outptr_alloc.is_some() {
+                                    self.needs_outptr = true;
+                                }
+                            }
+                        }
+                        ModuleSource::Core { name: module_name } if module_name == "builtin" => {
+                            // Check for async-requiring builtins
+                            if name == "effect_wait"
+                                || name == "waitable_set_new"
+                                || name == "waitable_set_wait"
+                                || name == "call_indirect_stdout_write_via_stream"
+                                || name == "call_indirect_stderr_write_via_stream"
+                            {
+                                self.needs_async = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                for arg in args {
+                    self.analyze_expr(arg);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.analyze_expr(receiver);
+                for arg in args {
+                    self.analyze_expr(arg);
+                }
+            }
+            TirExprKind::Binary { left, right, .. } => {
+                self.analyze_expr(left);
+                self.analyze_expr(right);
+            }
+            TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::Move { expr: inner }
+            | TirExprKind::OptionSome { value: inner }
+            | TirExprKind::GlobalVarSet { value: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. }
+            | TirExprKind::IsNotNull { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::UnwrapOption { expr: inner, .. }
+            | TirExprKind::VariantTag { expr: inner } => {
+                self.analyze_expr(inner);
+            }
+            TirExprKind::Index { expr: inner, index } => {
+                self.analyze_expr(inner);
+                self.analyze_expr(index);
+            }
+            TirExprKind::Assign { target, value } => {
+                self.analyze_expr(target);
+                self.analyze_expr(value);
+            }
+            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+                self.analyze_block(block);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.analyze_expr(condition);
+                self.analyze_block(then_branch);
+                if let Some(else_blk) = else_branch {
+                    self.analyze_block(else_blk);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.analyze_expr(&field.value);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.analyze_expr(elem);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(p) = payload {
+                    self.analyze_expr(p);
+                }
+            }
+            TirExprKind::Closure { body, .. } => {
+                self.analyze_expr(body);
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.analyze_expr(callee);
+                for arg in args {
+                    self.analyze_expr(arg);
+                }
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                self.analyze_expr(scrutinee);
+                for arm in arms {
+                    self.analyze_expr(&arm.body);
+                }
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.analyze_expr(scrutinee);
+                for arm in arms {
+                    self.analyze_block(arm);
+                }
+                self.analyze_block(default);
+            }
+            // Leaf expressions
+            _ => {}
         }
     }
 }

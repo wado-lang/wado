@@ -1587,6 +1587,27 @@ pub struct TirGlobal {
     pub is_nullable: bool,
 }
 
+// ============================================================================
+// Scratch Locals (computed by lower phase for codegen)
+// ============================================================================
+
+/// A scratch local to be allocated during codegen.
+/// Lower phase computes what scratch locals a function needs, and codegen
+/// allocates them without needing to analyze the TIR body.
+#[derive(Debug, Clone)]
+pub struct ScratchLocal {
+    /// Local variable name (for debugging in WAT output)
+    pub name: String,
+    /// Type of the local (codegen uses `type_id_to_valtype` to convert)
+    pub type_id: TypeId,
+}
+
+impl ScratchLocal {
+    pub fn new(name: String, type_id: TypeId) -> Self {
+        Self { name, type_id }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TirFunction {
     pub name: String,
@@ -1617,15 +1638,30 @@ pub struct TirFunction {
 
     // ========================================================================
     // Scratch local requirements (computed by lower phase)
-    // These flags indicate what scratch locals codegen needs to allocate.
+    // These fields are populated by the lower phase to tell codegen what
+    // scratch locals to allocate, avoiding analysis during codegen.
     // ========================================================================
-    /// True if function contains async effect calls requiring scratch locals
-    /// (for subtask handle and waitable set).
-    pub needs_async_scratch: bool,
+    /// Scratch locals computed by lower phase.
+    /// Each entry specifies a name and type; codegen allocates them in order.
+    pub scratch_locals: Vec<ScratchLocal>,
 
-    /// True if function contains effect calls with outptr convention
-    /// (for CM result pointer and i32 result).
-    pub needs_outptr_scratch: bool,
+    /// Types needing copy source locals (expanded from `needed_copy_types`).
+    /// Codegen creates nullable refs for these types and registers them
+    /// in `CopyContext`. Computed by lower phase.
+    pub copy_source_types: std::collections::HashSet<TypeId>,
+
+    /// Number of indirect call locals needed per closure struct type.
+    /// Key is the closure's captured variable tuple type (or Unit for no captures).
+    /// Codegen uses this to pre-allocate `__indirect_call_{type}_{id}` locals.
+    pub indirect_call_counts: std::collections::HashMap<TypeId, u32>,
+
+    /// Types for match scrutinee scratch locals.
+    /// Codegen allocates `__match_scrutinee_{id}` locals in order.
+    pub match_scrutinee_types: Vec<TypeId>,
+
+    /// Types for let pattern temp locals (tuple destructuring).
+    /// Codegen allocates `__let_pattern_{id}` locals in order.
+    pub let_pattern_types: Vec<TypeId>,
 }
 
 impl TirFunction {
