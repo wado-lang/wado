@@ -3968,7 +3968,9 @@ impl<'a> Resolver<'a> {
 
         // Standard assignment handling
         let target = self.resolve_expr(&assign.target, ctx);
-        let value = self.resolve_expr(&assign.value, ctx);
+        // Use target's type as expected type for value resolution
+        // This enables coercion of empty array literals [] to the field's Array<T> type
+        let value = self.resolve_expr_with_expected_type(&assign.value, ctx, Some(target.type_id));
 
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
