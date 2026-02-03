@@ -10775,47 +10775,8 @@ impl Codegen {
             func_ctx.alloc_local(&local_name, local_type);
         }
 
-        // Pre-allocate locals for value copy operations (struct, array, tuple)
-        if !tir_func.needed_copy_types.is_empty() {
-            self.preallocate_value_copy_locals(
-                &tir_func.needed_copy_types,
-                type_table,
-                &mut func_ctx,
-            );
-        }
-
-        // Pre-allocate scratch locals for async effect handling (only if needed)
-        if let Some(body) = &tir_func.body
-            && self.needs_async_scratch_locals(body)
-        {
-            Self::preallocate_async_scratch_locals(&mut func_ctx);
-        }
-
-        // Pre-allocate scratch locals for CM calls with outptr (only if needed)
-        if let Some(body) = &tir_func.body
-            && self.needs_outptr_scratch_locals(body)
-        {
-            Self::preallocate_outptr_scratch_locals(&mut func_ctx);
-        }
-
-        // Pre-allocate locals for closure calls
-        if let Some(body) = &tir_func.body {
-            self.preallocate_closure_call_locals(body, type_table, &mut func_ctx);
-        }
-
-        // Pre-allocate locals for LetPattern statements (tuple destructuring)
-        if let Some(body) = &tir_func.body {
-            self.preallocate_let_pattern_locals(body, type_table, &mut func_ctx);
-        }
-
-        // Pre-allocate locals for labeled block expressions (which may contain for-of loops)
-        if let Some(body) = &tir_func.body {
-            self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
-        }
-
-        // Reset let-pattern counter so code generation uses the same indices as pre-allocation
+        self.allocate_precomputed_scratch_locals(tir_func, type_table, &mut func_ctx);
         func_ctx.reset_let_pattern_counter();
-        // Reset match-scrutinee counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_match_scrutinee_counter();
 
         // Generate the function code
@@ -10904,43 +10865,7 @@ impl Codegen {
             func_ctx.alloc_local(&local_name, local_type);
         }
 
-        // Pre-allocate locals for value copy operations (struct, array, tuple)
-        if !tir_func.needed_copy_types.is_empty() {
-            self.preallocate_value_copy_locals(
-                &tir_func.needed_copy_types,
-                type_table,
-                &mut func_ctx,
-            );
-        }
-
-        // Pre-allocate scratch locals for async effect handling (only if needed)
-        if let Some(body) = &tir_func.body
-            && self.needs_async_scratch_locals(body)
-        {
-            Self::preallocate_async_scratch_locals(&mut func_ctx);
-        }
-
-        // Pre-allocate scratch locals for CM calls with outptr (only if needed)
-        if let Some(body) = &tir_func.body
-            && self.needs_outptr_scratch_locals(body)
-        {
-            Self::preallocate_outptr_scratch_locals(&mut func_ctx);
-        }
-
-        // Pre-allocate locals for closure calls
-        if let Some(body) = &tir_func.body {
-            self.preallocate_closure_call_locals(body, type_table, &mut func_ctx);
-        }
-
-        // Pre-allocate locals for LetPattern statements (tuple destructuring)
-        if let Some(body) = &tir_func.body {
-            self.preallocate_let_pattern_locals(body, type_table, &mut func_ctx);
-        }
-
-        // Pre-allocate locals for labeled block expressions (which may contain for-of loops)
-        if let Some(body) = &tir_func.body {
-            self.preallocate_locals_from_block(body, type_table, &mut func_ctx);
-        }
+        self.allocate_precomputed_scratch_locals(tir_func, type_table, &mut func_ctx);
 
         // Pre-allocate scratch locals for Service world HTTP response creation
         if func_ctx.is_async_export && func_ctx.target_world == "Service" {
@@ -11787,377 +11712,59 @@ impl Codegen {
         }
     }
 
-    /// Pre-allocate scratch locals for async effect handling
-    ///
-    /// These are needed for `builtin::call_indirect_stdout/stderr_write_via_stream`
-    /// and `builtin::effect_wait` (used by ambient logging functions like `log_stdout`).
-    /// Only allocate when the function actually uses these builtins.
-    fn preallocate_async_scratch_locals(ctx: &mut FunctionContext) {
-        // Scratch locals for write_via_stream async handling
-        ctx.alloc_local("__subtask", ValType::I32);
-        ctx.alloc_local("__waitable_set", ValType::I32);
-    }
-
-    /// Pre-allocate scratch locals for CM calls with outptr
-    ///
-    /// CM effect calls with outptr allocation need a local to hold the outptr.
-    /// Some also need a local for the i32 result.
-    fn preallocate_outptr_scratch_locals(ctx: &mut FunctionContext) {
-        ctx.alloc_local("__cm_outptr", ValType::I32);
-        ctx.alloc_local("__cm_i32_result", ValType::I32);
-    }
-
-    /// Check if a function body uses CM calls that need outptr scratch locals.
-    ///
-    /// This is convention-driven: we check if any effect call has `outptr_alloc` set.
-    /// For Call expressions that might be effect calls (`module_path` like ["Stdout"]),
-    /// we look up the convention from the registry.
-    fn needs_outptr_scratch_locals(&self, block: &TirBlock) -> bool {
-        for stmt in &block.stmts {
-            if self.stmt_needs_outptr_scratch_locals(stmt) {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn stmt_needs_outptr_scratch_locals(&self, stmt: &TirStmt) -> bool {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-                self.expr_needs_outptr_scratch_locals(value)
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.expr_needs_outptr_scratch_locals(condition)
-                    || self.needs_outptr_scratch_locals(then_block)
-                    || else_block
-                        .as_ref()
-                        .is_some_and(|b| self.needs_outptr_scratch_locals(b))
-            }
-            TirStmtKind::Loop { body } => self.needs_outptr_scratch_locals(body),
-            TirStmtKind::Return { value: Some(expr) } => {
-                self.expr_needs_outptr_scratch_locals(expr)
-            }
-            _ => false,
-        }
-    }
-
-    fn expr_needs_outptr_scratch_locals(&self, expr: &TirExpr) -> bool {
-        match &expr.kind {
-            TirExprKind::Call { func, args, .. } => {
-                let module_path = func.module_path();
-                let func_name = func.name();
-                // Check if this is an effect call by looking up in the registry
-                if module_path.len() == 1
-                    && module_path[0]
-                        .chars()
-                        .next()
-                        .is_some_and(|c| c.is_ascii_uppercase())
-                {
-                    // Look up the convention from the registry
-                    let qualified_name = format!("{}::{}", module_path[0], func_name);
-                    if let Some(func_info) = self.wasi_registry.get_function(&qualified_name)
-                        && func_info.call_convention.outptr_alloc.is_some()
-                    {
-                        return true;
-                    }
-                }
-                args.iter()
-                    .any(|a| self.expr_needs_outptr_scratch_locals(a))
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.expr_needs_outptr_scratch_locals(receiver)
-                    || args
-                        .iter()
-                        .any(|a| self.expr_needs_outptr_scratch_locals(a))
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.expr_needs_outptr_scratch_locals(left)
-                    || self.expr_needs_outptr_scratch_locals(right)
-            }
-            TirExprKind::Unary { expr, .. } => self.expr_needs_outptr_scratch_locals(expr),
-            TirExprKind::Assign { target, value } => {
-                self.expr_needs_outptr_scratch_locals(target)
-                    || self.expr_needs_outptr_scratch_locals(value)
-            }
-            TirExprKind::Cast { expr, .. } => self.expr_needs_outptr_scratch_locals(expr),
-            TirExprKind::EffectCall {
-                cm_convention,
-                args,
-                ..
-            } => {
-                // Effect calls with outptr allocation need scratch locals
-                if let Some(conv) = cm_convention
-                    && conv.outptr_alloc.is_some()
-                {
-                    return true;
-                }
-                args.iter()
-                    .any(|a| self.expr_needs_outptr_scratch_locals(a))
-            }
-            TirExprKind::StaticCall {
-                func: static_func,
-                args,
-            } => {
-                // Check if this is a WASI resource method that needs outptr
-                let func_name = static_func.name();
-                if let Some(func_info) = self.wasi_registry.get_function(&func_name)
-                    && func_info.call_convention.outptr_alloc.is_some()
-                {
-                    return true;
-                }
-                args.iter()
-                    .any(|a| self.expr_needs_outptr_scratch_locals(a))
-            }
-            TirExprKind::FieldAccess { expr, .. } => self.expr_needs_outptr_scratch_locals(expr),
-            TirExprKind::Index { expr, index } => {
-                self.expr_needs_outptr_scratch_locals(expr)
-                    || self.expr_needs_outptr_scratch_locals(index)
-            }
-            TirExprKind::Block(block) => self.needs_outptr_scratch_locals(block),
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.expr_needs_outptr_scratch_locals(condition)
-                    || self.needs_outptr_scratch_locals(then_branch)
-                    || else_branch
-                        .as_ref()
-                        .is_some_and(|b| self.needs_outptr_scratch_locals(b))
-            }
-            TirExprKind::StructLiteral { fields, .. } => fields
-                .iter()
-                .any(|f| self.expr_needs_outptr_scratch_locals(&f.value)),
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
-                elements
-                    .iter()
-                    .any(|e| self.expr_needs_outptr_scratch_locals(e))
-            }
-            TirExprKind::Closure { body, .. } => self.expr_needs_outptr_scratch_locals(body),
-            TirExprKind::IndirectCall { callee, args } => {
-                self.expr_needs_outptr_scratch_locals(callee)
-                    || args
-                        .iter()
-                        .any(|a| self.expr_needs_outptr_scratch_locals(a))
-            }
-            TirExprKind::Match { expr, arms } => {
-                self.expr_needs_outptr_scratch_locals(expr)
-                    || arms
-                        .iter()
-                        .any(|arm| self.expr_needs_outptr_scratch_locals(&arm.body))
-            }
-            TirExprKind::Move { expr } => self.expr_needs_outptr_scratch_locals(expr),
-            // Leaf nodes
-            _ => false,
-        }
-    }
-
-    /// Check if a function body uses async calls that need scratch locals.
-    ///
-    /// This is convention-driven: we check if any effect call has `is_async` set.
-    /// For Call expressions that might be effect calls (`module_path` like ["Stdout"]),
-    /// we look up the convention from the registry.
-    ///
-    /// Also checks for builtin async helpers like `effect_wait`.
-    fn needs_async_scratch_locals(&self, block: &TirBlock) -> bool {
-        for stmt in &block.stmts {
-            if self.stmt_needs_async_scratch_locals(stmt) {
-                return true;
-            }
-        }
-        false
-    }
-
-    fn stmt_needs_async_scratch_locals(&self, stmt: &TirStmt) -> bool {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-                self.expr_needs_async_scratch_locals(value)
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.expr_needs_async_scratch_locals(condition)
-                    || self.needs_async_scratch_locals(then_block)
-                    || else_block
-                        .as_ref()
-                        .is_some_and(|b| self.needs_async_scratch_locals(b))
-            }
-            TirStmtKind::Loop { body } => self.needs_async_scratch_locals(body),
-            TirStmtKind::Return { value: Some(expr) } => self.expr_needs_async_scratch_locals(expr),
-            TirStmtKind::LabeledBlock { block, .. } => self.needs_async_scratch_locals(block),
-            TirStmtKind::Break { value: Some(v), .. } => self.expr_needs_async_scratch_locals(v),
-            _ => false,
-        }
-    }
-
-    fn expr_needs_async_scratch_locals(&self, expr: &TirExpr) -> bool {
-        match &expr.kind {
-            TirExprKind::Call { func, args, .. } => {
-                // Check if this is a builtin call that needs async scratch locals
-                if let Some(builtin) = func.builtin_name()
-                    && matches!(
-                        builtin.as_str(),
-                        "builtin::call_indirect_stdout_write_via_stream"
-                            | "builtin::call_indirect_stderr_write_via_stream"
-                            | "builtin::effect_wait"
-                    )
-                {
-                    return true;
-                }
-
-                // Check if this is an async effect call by looking up in the registry
-                let module_path = func.module_path();
-                let func_name = func.name();
-                if module_path.len() == 1
-                    && module_path[0]
-                        .chars()
-                        .next()
-                        .is_some_and(|c| c.is_ascii_uppercase())
-                {
-                    let qualified_name = format!("{}::{}", module_path[0], func_name);
-                    if let Some(func_info) = self.wasi_registry.get_function(&qualified_name)
-                        && func_info.call_convention.is_async
-                    {
-                        return true;
-                    }
-                }
-
-                // Check args recursively
-                args.iter().any(|a| self.expr_needs_async_scratch_locals(a))
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.expr_needs_async_scratch_locals(receiver)
-                    || args.iter().any(|a| self.expr_needs_async_scratch_locals(a))
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.expr_needs_async_scratch_locals(left)
-                    || self.expr_needs_async_scratch_locals(right)
-            }
-            TirExprKind::Unary { expr, .. } => self.expr_needs_async_scratch_locals(expr),
-            TirExprKind::Assign { target, value } => {
-                self.expr_needs_async_scratch_locals(target)
-                    || self.expr_needs_async_scratch_locals(value)
-            }
-            TirExprKind::Cast { expr, .. } => self.expr_needs_async_scratch_locals(expr),
-            TirExprKind::EffectCall {
-                cm_convention,
-                args,
-                ..
-            } => {
-                // Async effect calls need async scratch locals (subtask handling)
-                if let Some(conv) = cm_convention
-                    && conv.is_async
-                {
-                    return true;
-                }
-                args.iter().any(|a| self.expr_needs_async_scratch_locals(a))
-            }
-            TirExprKind::StaticCall { args, .. } => {
-                args.iter().any(|a| self.expr_needs_async_scratch_locals(a))
-            }
-            TirExprKind::FieldAccess { expr, .. } => self.expr_needs_async_scratch_locals(expr),
-            TirExprKind::Block(block) => self.needs_async_scratch_locals(block),
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.expr_needs_async_scratch_locals(condition)
-                    || self.needs_async_scratch_locals(then_branch)
-                    || else_branch
-                        .as_ref()
-                        .is_some_and(|b| self.needs_async_scratch_locals(b))
-            }
-            TirExprKind::StructLiteral { fields, .. } => fields
-                .iter()
-                .any(|f| self.expr_needs_async_scratch_locals(&f.value)),
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
-                elements
-                    .iter()
-                    .any(|e| self.expr_needs_async_scratch_locals(e))
-            }
-            TirExprKind::Closure { body, .. } => self.expr_needs_async_scratch_locals(body),
-            TirExprKind::IndirectCall { callee, args } => {
-                self.expr_needs_async_scratch_locals(callee)
-                    || args.iter().any(|a| self.expr_needs_async_scratch_locals(a))
-            }
-            TirExprKind::Index { expr, index } => {
-                self.expr_needs_async_scratch_locals(expr)
-                    || self.expr_needs_async_scratch_locals(index)
-            }
-            TirExprKind::Match { expr, arms } => {
-                self.expr_needs_async_scratch_locals(expr)
-                    || arms
-                        .iter()
-                        .any(|arm| self.expr_needs_async_scratch_locals(&arm.body))
-            }
-            TirExprKind::OptionSome { value } => self.expr_needs_async_scratch_locals(value),
-            TirExprKind::VariantConstruct { payload, .. } => payload
-                .as_ref()
-                .is_some_and(|p| self.expr_needs_async_scratch_locals(p)),
-            TirExprKind::Move { expr } => self.expr_needs_async_scratch_locals(expr),
-            TirExprKind::LabeledBlock { block, .. } => self.needs_async_scratch_locals(block),
-            TirExprKind::GlobalVarSet { value, .. } => self.expr_needs_async_scratch_locals(value),
-            TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.expr_needs_async_scratch_locals(functor)
-            }
-            TirExprKind::IsNotNull { expr }
-            | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. }
-            | TirExprKind::VariantPayload { expr, .. } => {
-                self.expr_needs_async_scratch_locals(expr)
-            }
-            TirExprKind::Switch {
-                scrutinee,
-                arms,
-                default,
-                ..
-            } => {
-                self.expr_needs_async_scratch_locals(scrutinee)
-                    || arms.iter().any(|arm| self.needs_async_scratch_locals(arm))
-                    || self.needs_async_scratch_locals(default)
-            }
-            // Leaf nodes - no calls
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::Global { .. }
-            | TirExprKind::GlobalVarGet { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. } => false,
-        }
-    }
-
-    /// Pre-allocate locals for value copy operations (struct, array, tuple, option).
-    ///
-    /// Uses `CopyContext` to:
-    /// 1. Recursively expand types to include nested types (e.g., Option<Variant>)
-    /// 2. Pre-allocate all required scratch locals
-    /// 3. Register them in the `CopyContext` for type-safe lookup during code generation
-    fn preallocate_value_copy_locals(
+    fn allocate_precomputed_scratch_locals(
         &self,
-        needed_types: &std::collections::HashSet<TypeId>,
+        tir_func: &TirFunction,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
     ) {
-        // Expand types to include nested types that need copy locals
-        let expanded_types = CopyContext::expand_copy_types(needed_types, type_table);
+        for scratch in &tir_func.scratch_locals {
+            let val_type = self.type_id_to_valtype(type_table, scratch.type_id);
+            ctx.alloc_local(&scratch.name, val_type);
+        }
 
-        for &type_id in &expanded_types {
+        if !tir_func.copy_source_types.is_empty() {
+            self.allocate_copy_source_locals(&tir_func.copy_source_types, type_table, ctx);
+        }
+
+        for (&closure_type_id, &count) in &tir_func.indirect_call_counts {
+            if let Some(struct_type_idx) =
+                self.get_closure_struct_type_idx(closure_type_id, type_table)
+            {
+                for i in 0..count {
+                    let name = format!("__indirect_call_{struct_type_idx}_{i}");
+                    ctx.alloc_local(
+                        &name,
+                        ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(struct_type_idx),
+                        }),
+                    );
+                }
+            }
+        }
+
+        for (i, &type_id) in tir_func.let_pattern_types.iter().enumerate() {
+            let val_type = self.type_id_to_valtype(type_table, type_id);
+            let name = format!("__let_pattern_temp_{i}");
+            ctx.alloc_local(&name, val_type);
+        }
+
+        for (i, &type_id) in tir_func.match_scrutinee_types.iter().enumerate() {
+            let val_type = self.type_id_to_valtype(type_table, type_id);
+            let type_key = format!("match_{type_id:?}");
+            let name = format!("__match_scrutinee_{type_key}_{i}");
+            ctx.alloc_local(&name, val_type);
+        }
+    }
+
+    fn allocate_copy_source_locals(
+        &self,
+        copy_source_types: &std::collections::HashSet<TypeId>,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+    ) {
+        for &type_id in copy_source_types {
             match type_table.get(type_id) {
                 ResolvedType::Struct {
                     name,
@@ -12199,7 +11806,6 @@ impl Codegen {
                             0 // Fallback, should not happen
                         };
 
-                        // Allocate locals for raw array copy operations
                         let source = ctx.alloc_local(
                             &format!("__copy_array_source_{raw_array_type_idx}"),
                             CopyContext::nullable_ref(raw_array_type_idx),
@@ -12216,7 +11822,6 @@ impl Codegen {
                             &format!("__copy_array_len_{raw_array_type_idx}"),
                             ValType::I32,
                         );
-
                         ctx.copy_context.register_array_copy_locals(
                             raw_array_type_idx,
                             ArrayCopyLocals {
@@ -12227,19 +11832,6 @@ impl Codegen {
                                 len,
                             },
                         );
-                    }
-                }
-                ResolvedType::Variant { name, .. } => {
-                    let variant_types = self.variant_types.borrow();
-                    if let Some(info) = variant_types.get(name) {
-                        let base_type_idx = info.base_type_idx;
-                        drop(variant_types);
-                        let local_idx = ctx.alloc_local(
-                            &format!("__copy_source_{base_type_idx}"),
-                            CopyContext::nullable_ref(base_type_idx),
-                        );
-                        ctx.copy_context
-                            .register_struct_copy_local(base_type_idx, local_idx);
                     }
                 }
                 ResolvedType::Option(inner) => {
@@ -12265,586 +11857,47 @@ impl Codegen {
                         }
                     }
                 }
-                _ => {}
-            }
-        }
-    }
-
-    /// Pre-allocate temp locals for `LetPattern` statements (tuple destructuring).
-    /// This must be called before the Function is created.
-    fn preallocate_let_pattern_locals(
-        &self,
-        block: &TirBlock,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        for stmt in &block.stmts {
-            self.preallocate_let_pattern_locals_from_stmt(stmt, type_table, ctx);
-        }
-    }
-
-    /// Recursively pre-allocate temp locals for tuple patterns (including nested ones).
-    /// Must be called in the same order as code generation to ensure counter alignment.
-    fn preallocate_let_pattern_for_pattern(
-        &self,
-        pattern: &TirPattern,
-        type_id: TypeId,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match pattern {
-            TirPattern::Tuple(sub_patterns) => {
-                // Allocate a temp local for this tuple
-                let tuple_val_type = self.type_id_to_valtype(type_table, type_id);
-                let local_name = ctx.next_let_pattern_local_name();
-                ctx.alloc_local(&local_name, tuple_val_type);
-
-                // Recursively handle nested tuple patterns
-                if let ResolvedType::Tuple(elem_types) = type_table.get(type_id) {
-                    for (sub_pattern, elem_type) in sub_patterns.iter().zip(elem_types.iter()) {
-                        self.preallocate_let_pattern_for_pattern(
-                            sub_pattern,
-                            *elem_type,
-                            type_table,
-                            ctx,
+                ResolvedType::Variant { name, .. } => {
+                    // Variants need a copy local for the variant struct
+                    let variant_types = self.variant_types.borrow();
+                    if let Some(info) = variant_types.get(name) {
+                        let base_type_idx = info.base_type_idx;
+                        drop(variant_types);
+                        let local_idx = ctx.alloc_local(
+                            &format!("__copy_source_{base_type_idx}"),
+                            CopyContext::nullable_ref(base_type_idx),
                         );
+                        ctx.copy_context
+                            .register_struct_copy_local(base_type_idx, local_idx);
                     }
                 }
-            }
-            TirPattern::Variant {
-                bindings,
-                payload_type,
-                ..
-            } => {
-                // Pre-allocate for nested patterns in variant bindings
-                // With single payload design, there's at most one binding
-                if let Some(binding) = bindings.first() {
-                    self.preallocate_let_pattern_for_pattern(
-                        binding,
-                        *payload_type,
-                        type_table,
-                        ctx,
-                    );
+                _ => {
+                    // Other types don't need special copy locals
                 }
-            }
-            TirPattern::Binding { .. } | TirPattern::Wildcard | TirPattern::Literal(_) => {
-                // These don't need temp locals
             }
         }
     }
 
-    /// Pre-allocate scratch locals for tuple destructuring in variant payloads.
-    /// Pattern binding locals are already in `local_types` from resolver.
-    fn preallocate_let_pattern_for_variant_pattern(
+    /// Get the closure struct type index for a closure type (by function signature).
+    fn get_closure_struct_type_idx(
         &self,
-        pattern: &TirPattern,
+        closure_type_id: TypeId,
         type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        if let TirPattern::Variant {
-            bindings,
-            payload_type,
+    ) -> Option<u32> {
+        // The TypeId is a Function type - extract params and return_type
+        if let ResolvedType::Function {
+            params,
+            return_type,
             ..
-        } = pattern
-            && let Some(binding) = bindings.first()
+        } = type_table.get(closure_type_id)
         {
-            // Pre-allocate scratch locals for tuple patterns in variant payloads
-            self.preallocate_let_pattern_for_pattern(binding, *payload_type, type_table, ctx);
-            // Recursively handle nested variant patterns
-            self.preallocate_let_pattern_for_variant_pattern(binding, type_table, ctx);
-        }
-    }
-
-    fn preallocate_let_pattern_locals_from_stmt(
-        &self,
-        stmt: &TirStmt,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::LetPattern { pattern, value, .. } => {
-                // Pre-allocate temp locals for all tuple patterns (including nested ones)
-                self.preallocate_let_pattern_for_pattern(pattern, value.type_id, type_table, ctx);
-                // Check value expression for nested blocks
-                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
-            }
-            TirStmtKind::Let { value, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
-            }
-            TirStmtKind::Expr(expr) => {
-                self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
-            }
-            TirStmtKind::Return { value } => {
-                if let Some(v) = value {
-                    self.preallocate_let_pattern_locals_from_expr(v, type_table, ctx);
-                }
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => {
-                self.preallocate_let_pattern_locals_from_expr(condition, type_table, ctx);
-                self.preallocate_let_pattern_locals(then_block, type_table, ctx);
-                if let Some(else_blk) = else_block {
-                    self.preallocate_let_pattern_locals(else_blk, type_table, ctx);
-                }
-            }
-            TirStmtKind::Loop { body } => {
-                self.preallocate_let_pattern_locals(body, type_table, ctx);
-            }
-            TirStmtKind::LabeledBlock { block, .. } => {
-                self.preallocate_let_pattern_locals(block, type_table, ctx);
-            }
-            TirStmtKind::Break { value, .. } => {
-                if let Some(v) = value {
-                    self.preallocate_let_pattern_locals_from_expr(v, type_table, ctx);
-                }
-            }
-            TirStmtKind::IfPattern { .. } => {
-                panic!("IfPattern should be lowered before codegen");
-            }
-            TirStmtKind::Continue => {}
-        }
-    }
-
-    fn preallocate_let_pattern_locals_from_expr(
-        &self,
-        expr: &TirExpr,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match &expr.kind {
-            TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
-                self.preallocate_let_pattern_locals(block, type_table, ctx);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.preallocate_let_pattern_locals_from_expr(condition, type_table, ctx);
-                self.preallocate_let_pattern_locals(then_branch, type_table, ctx);
-                if let Some(else_blk) = else_branch {
-                    self.preallocate_let_pattern_locals(else_blk, type_table, ctx);
-                }
-            }
-            TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
-            | TirExprKind::StaticCall { args, .. } => {
-                for arg in args {
-                    self.preallocate_let_pattern_locals_from_expr(arg, type_table, ctx);
-                }
-            }
-            TirExprKind::IndirectCall { callee, args, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(callee, type_table, ctx);
-                for arg in args {
-                    self.preallocate_let_pattern_locals_from_expr(arg, type_table, ctx);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(receiver, type_table, ctx);
-                for arg in args {
-                    self.preallocate_let_pattern_locals_from_expr(arg, type_table, ctx);
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(left, type_table, ctx);
-                self.preallocate_let_pattern_locals_from_expr(right, type_table, ctx);
-            }
-            TirExprKind::Unary { expr: inner, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(inner, type_table, ctx);
-            }
-            TirExprKind::Match { expr, arms } => {
-                self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
-                // Don't allocate scrutinee local here - it's done in preallocate_locals_from_expr
-                // to avoid double-counting with let_pattern_counter
-                // Pattern binding locals are already in local_types from resolver
-                for arm in arms {
-                    // Pre-allocate scratch locals for tuple destructuring in variant payloads
-                    self.preallocate_let_pattern_for_variant_pattern(&arm.pattern, type_table, ctx);
-                    self.preallocate_let_pattern_locals_from_expr(&arm.body, type_table, ctx);
-                }
-            }
-            // Wrapper expressions that may contain nested blocks
-            TirExprKind::Move { expr: inner }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner } => {
-                self.preallocate_let_pattern_locals_from_expr(inner, type_table, ctx);
-            }
-            TirExprKind::Index { expr, index, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
-                self.preallocate_let_pattern_locals_from_expr(index, type_table, ctx);
-            }
-            TirExprKind::FieldAccess { expr, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(expr, type_table, ctx);
-            }
-            TirExprKind::Assign { target, value } => {
-                self.preallocate_let_pattern_locals_from_expr(target, type_table, ctx);
-                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.preallocate_let_pattern_locals_from_expr(&field.value, type_table, ctx);
-                }
-            }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    self.preallocate_let_pattern_locals_from_expr(elem, type_table, ctx);
-                }
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(p) = payload {
-                    self.preallocate_let_pattern_locals_from_expr(p, type_table, ctx);
-                }
-            }
-            TirExprKind::Closure { body, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(body, type_table, ctx);
-            }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                self.preallocate_let_pattern_locals_from_expr(value, type_table, ctx);
-            }
-            _ => {
-                // Other expressions don't contain nested blocks or let patterns
-            }
-        }
-    }
-
-    /// Pre-allocate locals for closure call expressions.
-    /// This must be called before the Function is created.
-    fn preallocate_closure_call_locals(
-        &self,
-        block: &TirBlock,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        // Count IndirectCall expressions and pre-allocate a unique temp local for each.
-        // This supports nested closure calls without temp local collisions.
-        let mut call_counts: HashMap<u32, u32> = HashMap::new();
-        Self::count_indirect_calls_in_block(block, type_table, self, &mut call_counts);
-
-        // Pre-allocate temp locals for each call site
-        for (struct_type_idx, count) in &call_counts {
-            for i in 0..*count {
-                let name = format!("__indirect_call_{struct_type_idx}_{i}");
-                ctx.alloc_local(
-                    &name,
-                    ValType::Ref(RefType {
-                        nullable: true,
-                        heap_type: HeapType::Concrete(*struct_type_idx),
-                    }),
-                );
-            }
-        }
-    }
-
-    /// Count `IndirectCall` expressions in a block, grouped by closure struct type
-    fn count_indirect_calls_in_block(
-        block: &TirBlock,
-        type_table: &TypeTable,
-        codegen: &Codegen,
-        counts: &mut HashMap<u32, u32>,
-    ) {
-        for stmt in &block.stmts {
-            Self::count_indirect_calls_in_stmt(stmt, type_table, codegen, counts);
-        }
-    }
-
-    fn count_indirect_calls_in_stmt(
-        stmt: &TirStmt,
-        type_table: &TypeTable,
-        codegen: &Codegen,
-        counts: &mut HashMap<u32, u32>,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-                Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-                ..
-            } => {
-                Self::count_indirect_calls_in_expr(condition, type_table, codegen, counts);
-                Self::count_indirect_calls_in_block(then_block, type_table, codegen, counts);
-                if let Some(else_blk) = else_block {
-                    Self::count_indirect_calls_in_block(else_blk, type_table, codegen, counts);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                Self::count_indirect_calls_in_block(body, type_table, codegen, counts);
-            }
-            TirStmtKind::Return { value: Some(expr) } => {
-                Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
-            }
-            TirStmtKind::Break { value: Some(v), .. } => {
-                Self::count_indirect_calls_in_expr(v, type_table, codegen, counts);
-            }
-            _ => {}
-        }
-    }
-
-    fn count_indirect_calls_in_expr(
-        expr: &TirExpr,
-        type_table: &TypeTable,
-        codegen: &Codegen,
-        counts: &mut HashMap<u32, u32>,
-    ) {
-        match &expr.kind {
-            TirExprKind::IndirectCall { callee, args } => {
-                // Count this call
-                let callee_type_id = callee.type_id;
-                if let ResolvedType::Function {
-                    params,
-                    return_type,
-                    ..
-                } = type_table.get(callee_type_id)
-                {
-                    let key = (params.clone(), *return_type);
-                    if let Some((_, _, struct_type_idx)) =
-                        codegen.canonical_closure_types.borrow().get(&key).cloned()
-                    {
-                        *counts.entry(struct_type_idx).or_insert(0) += 1;
-                    }
-                }
-                // Also count in callee and args
-                Self::count_indirect_calls_in_expr(callee, type_table, codegen, counts);
-                for arg in args {
-                    Self::count_indirect_calls_in_expr(arg, type_table, codegen, counts);
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                Self::count_indirect_calls_in_expr(left, type_table, codegen, counts);
-                Self::count_indirect_calls_in_expr(right, type_table, codegen, counts);
-            }
-            TirExprKind::Unary { expr: operand, .. } => {
-                Self::count_indirect_calls_in_expr(operand, type_table, codegen, counts);
-            }
-            TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
-                for arg in args {
-                    Self::count_indirect_calls_in_expr(arg, type_table, codegen, counts);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                Self::count_indirect_calls_in_expr(receiver, type_table, codegen, counts);
-                for arg in args {
-                    Self::count_indirect_calls_in_expr(arg, type_table, codegen, counts);
-                }
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    Self::count_indirect_calls_in_expr(&field.value, type_table, codegen, counts);
-                }
-            }
-            TirExprKind::FieldAccess { expr, .. } => {
-                Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
-            }
-            TirExprKind::Index { expr, index, .. } => {
-                Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
-                Self::count_indirect_calls_in_expr(index, type_table, codegen, counts);
-            }
-            TirExprKind::Block(block) => {
-                Self::count_indirect_calls_in_block(block, type_table, codegen, counts);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                Self::count_indirect_calls_in_expr(condition, type_table, codegen, counts);
-                Self::count_indirect_calls_in_block(then_branch, type_table, codegen, counts);
-                if let Some(else_blk) = else_branch {
-                    Self::count_indirect_calls_in_block(else_blk, type_table, codegen, counts);
-                }
-            }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
-                for elem in elements {
-                    Self::count_indirect_calls_in_expr(elem, type_table, codegen, counts);
-                }
-            }
-            TirExprKind::Closure { body, .. } => {
-                Self::count_indirect_calls_in_expr(body, type_table, codegen, counts);
-            }
-            TirExprKind::Cast { expr: inner, .. } => {
-                Self::count_indirect_calls_in_expr(inner, type_table, codegen, counts);
-            }
-            TirExprKind::Assign { target, value } => {
-                Self::count_indirect_calls_in_expr(target, type_table, codegen, counts);
-                Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
-            }
-            TirExprKind::Move { expr } => {
-                Self::count_indirect_calls_in_expr(expr, type_table, codegen, counts);
-            }
-            TirExprKind::LabeledBlock { block, .. } => {
-                Self::count_indirect_calls_in_block(block, type_table, codegen, counts);
-            }
-            TirExprKind::OptionSome { value } => {
-                Self::count_indirect_calls_in_expr(value, type_table, codegen, counts);
-            }
-            _ => {}
-        }
-    }
-
-    /// Pre-allocate locals from Let statements in a block (used for closure block bodies)
-    fn preallocate_locals_from_block(
-        &self,
-        block: &TirBlock,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        for stmt in &block.stmts {
-            self.preallocate_locals_from_stmt(stmt, type_table, ctx);
-        }
-    }
-
-    fn preallocate_locals_from_stmt(
-        &self,
-        stmt: &TirStmt,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                local_index,
-                type_id,
-                value,
-                ..
-            } => {
-                let local_type = self.type_id_to_valtype(type_table, *type_id);
-                let local_name = format!("_local_{local_index}");
-                ctx.alloc_local(&local_name, local_type);
-                // Recurse into value expression to find labeled block expressions
-                self.preallocate_locals_from_expr(value, type_table, ctx);
-            }
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-                ..
-            } => {
-                self.preallocate_locals_from_expr(condition, type_table, ctx);
-                self.preallocate_locals_from_block(then_block, type_table, ctx);
-                if let Some(else_blk) = else_block {
-                    self.preallocate_locals_from_block(else_blk, type_table, ctx);
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                self.preallocate_locals_from_block(body, type_table, ctx);
-            }
-            TirStmtKind::Expr(expr) => {
-                self.preallocate_locals_from_expr(expr, type_table, ctx);
-            }
-            TirStmtKind::Return { value: Some(expr) } => {
-                self.preallocate_locals_from_expr(expr, type_table, ctx);
-            }
-            TirStmtKind::Break {
-                value: Some(expr), ..
-            } => {
-                self.preallocate_locals_from_expr(expr, type_table, ctx);
-            }
-            _ => {}
-        }
-    }
-
-    /// Recurse into expressions to find labeled block expressions that contain statements
-    fn preallocate_locals_from_expr(
-        &self,
-        expr: &TirExpr,
-        type_table: &TypeTable,
-        ctx: &mut FunctionContext,
-    ) {
-        match &expr.kind {
-            TirExprKind::LabeledBlock { block, .. } => {
-                // Labeled block expression contains a block that may have for-of loops
-                self.preallocate_locals_from_block(block, type_table, ctx);
-            }
-            TirExprKind::Block(block) => {
-                self.preallocate_locals_from_block(block, type_table, ctx);
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                self.preallocate_locals_from_expr(condition, type_table, ctx);
-                self.preallocate_locals_from_block(then_branch, type_table, ctx);
-                if let Some(else_blk) = else_branch {
-                    self.preallocate_locals_from_block(else_blk, type_table, ctx);
-                }
-            }
-            TirExprKind::Binary { left, right, .. } => {
-                self.preallocate_locals_from_expr(left, type_table, ctx);
-                self.preallocate_locals_from_expr(right, type_table, ctx);
-            }
-            TirExprKind::Unary { expr: inner, .. } => {
-                self.preallocate_locals_from_expr(inner, type_table, ctx);
-            }
-            TirExprKind::Call { args, .. }
-            | TirExprKind::IndirectCall { args, .. }
-            | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::EffectCall { args, .. } => {
-                for arg in args {
-                    self.preallocate_locals_from_expr(arg, type_table, ctx);
-                }
-            }
-            TirExprKind::MethodCall { receiver, args, .. } => {
-                self.preallocate_locals_from_expr(receiver, type_table, ctx);
-                for arg in args {
-                    self.preallocate_locals_from_expr(arg, type_table, ctx);
-                }
-            }
-            TirExprKind::FieldAccess { expr: inner, .. } => {
-                self.preallocate_locals_from_expr(inner, type_table, ctx);
-            }
-            TirExprKind::Index { expr: inner, index } => {
-                self.preallocate_locals_from_expr(inner, type_table, ctx);
-                self.preallocate_locals_from_expr(index, type_table, ctx);
-            }
-            TirExprKind::Assign { value: inner, .. } | TirExprKind::Move { expr: inner } => {
-                self.preallocate_locals_from_expr(inner, type_table, ctx);
-            }
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.preallocate_locals_from_expr(&field.value, type_table, ctx);
-                }
-            }
-            TirExprKind::VariantConstruct { payload, .. } => {
-                if let Some(payload_expr) = payload {
-                    self.preallocate_locals_from_expr(payload_expr, type_table, ctx);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements, .. } => {
-                for elem in elements {
-                    self.preallocate_locals_from_expr(elem, type_table, ctx);
-                }
-            }
-            TirExprKind::Cast { expr: inner, .. } => {
-                self.preallocate_locals_from_expr(inner, type_table, ctx);
-            }
-            TirExprKind::OptionSome { value } => {
-                self.preallocate_locals_from_expr(value, type_table, ctx);
-            }
-            TirExprKind::Closure { body, .. } => {
-                self.preallocate_locals_from_expr(body, type_table, ctx);
-            }
-            TirExprKind::Match { expr, arms } => {
-                self.preallocate_locals_from_expr(expr, type_table, ctx);
-                // Pre-allocate scrutinee local
-                let scrutinee_valtype = self.type_id_to_valtype(type_table, expr.type_id);
-                let type_key = format!("match_{:?}", expr.type_id);
-                let local_name = ctx.next_match_scrutinee_local_name(&type_key);
-                ctx.alloc_local(&local_name, scrutinee_valtype);
-                for arm in arms {
-                    // Pre-allocate scratch locals for tuple destructuring in variant payloads
-                    // (e.g., Rectangle([w, h]) needs a temp local for the tuple)
-                    // Pattern binding locals are already in local_types from resolver
-                    self.preallocate_let_pattern_for_variant_pattern(&arm.pattern, type_table, ctx);
-                    self.preallocate_locals_from_expr(&arm.body, type_table, ctx);
-                }
-            }
-            // Leaf nodes - no nested expressions containing blocks
-            _ => {}
+            let key = (params.clone(), *return_type);
+            self.canonical_closure_types
+                .borrow()
+                .get(&key)
+                .map(|(_, _, struct_type_idx)| *struct_type_idx)
+        } else {
+            None
         }
     }
 

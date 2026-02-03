@@ -1914,8 +1914,12 @@ impl<'a> Resolver<'a> {
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
             needed_copy_types: std::collections::HashSet::new(),
-            needs_async_scratch: false,  // Computed by lower phase
-            needs_outptr_scratch: false, // Computed by lower phase
+            // Scratch local fields - computed by lower phase
+            scratch_locals: Vec::new(),
+            copy_source_types: std::collections::HashSet::new(),
+            indirect_call_counts: std::collections::HashMap::new(),
+            match_scrutinee_types: Vec::new(),
+            let_pattern_types: Vec::new(),
         })
     }
 
@@ -1962,8 +1966,11 @@ impl<'a> Resolver<'a> {
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
             needed_copy_types: std::collections::HashSet::new(),
-            needs_async_scratch: false,
-            needs_outptr_scratch: false,
+            scratch_locals: Vec::new(),
+            copy_source_types: std::collections::HashSet::new(),
+            indirect_call_counts: std::collections::HashMap::new(),
+            match_scrutinee_types: Vec::new(),
+            let_pattern_types: Vec::new(),
         };
 
         let tir_test = TirTest {
@@ -2135,8 +2142,11 @@ impl<'a> Resolver<'a> {
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
             needed_copy_types: std::collections::HashSet::new(),
-            needs_async_scratch: false,
-            needs_outptr_scratch: false,
+            scratch_locals: Vec::new(),
+            copy_source_types: std::collections::HashSet::new(),
+            indirect_call_counts: std::collections::HashMap::new(),
+            match_scrutinee_types: Vec::new(),
+            let_pattern_types: Vec::new(),
         })
     }
 

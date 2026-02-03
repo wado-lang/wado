@@ -131,6 +131,16 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
     // This populates needed_copy_types for codegen to pre-allocate scratch locals
     collect_value_copy_types(&mut project);
 
+    // Expand copy source types for all functions
+    // This creates the expanded set of types that need copy source locals,
+    // including nested types (e.g., Option<Variant> expands to include the Variant type)
+    expand_copy_source_types(&mut project);
+
+    // Analyze scratch local requirements for all functions
+    // This must run AFTER inlining since the function body may change.
+    // Populates scratch_locals, indirect_call_counts, match_scrutinee_types, let_pattern_types.
+    crate::lower::analyze_scratch_locals_project(&mut project);
+
     project
 }
 
@@ -150,5 +160,25 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         eliminate_unnecessary_refs(project);
         propagate_copies(project);
         apply_licm(project);
+    }
+}
+
+/// Expand copy source types for all functions in the project.
+///
+/// This takes the `needed_copy_types` set (computed by `collect_value_copy_types`)
+/// and expands it to include all nested types that also need copy source locals.
+/// For example, `Option<Variant>` expands to include both Option and Variant types.
+fn expand_copy_source_types(project: &mut Project) {
+    use crate::copy_context::CopyContext;
+
+    for module in project.tir_modules.values() {
+        let type_table = module.type_table.borrow();
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if !func.needed_copy_types.is_empty() {
+                func.copy_source_types =
+                    CopyContext::expand_copy_types(&func.needed_copy_types, &type_table);
+            }
+        }
     }
 }

@@ -2081,8 +2081,12 @@ impl Monomorphizer {
             local_types,
             address_taken_locals: generic.address_taken_locals.clone(),
             needed_copy_types: std::collections::HashSet::new(),
-            needs_async_scratch: generic.needs_async_scratch,
-            needs_outptr_scratch: generic.needs_outptr_scratch,
+            // Scratch local fields - computed by lower phase (after monomorphization)
+            scratch_locals: Vec::new(),
+            copy_source_types: std::collections::HashSet::new(),
+            indirect_call_counts: std::collections::HashMap::new(),
+            match_scrutinee_types: Vec::new(),
+            let_pattern_types: Vec::new(),
         })
     }
 
