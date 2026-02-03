@@ -6,10 +6,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
-use crate::builtin_registry::{BuiltinFunctionInfo, BuiltinRegistry};
+use crate::builtin_registry::BuiltinFunctionInfo;
 use crate::bundled::wado_bundled_wasm;
 use crate::component_model::{
-    CmPrimitiveType, WasiFunctionInfo, WasiInterfaceInfo, WasiRegistry, build_local_alias_name,
+    CmPrimitiveType, WasiFunctionInfo, WasiInterfaceInfo, build_local_alias_name,
     return_type_requires_outptr, type_id_to_valtype, wasi_type_to_valtype,
 };
 use crate::copy_context::{ArrayCopyLocals, CopyContext};
@@ -26,7 +26,7 @@ use crate::tir::{
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_postprocess;
-use crate::world_registry::{WorldExportInfo, WorldRegistry};
+use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
@@ -70,24 +70,18 @@ struct BuildMainModuleParams<'a> {
     available_wasi_funcs: &'a HashSet<String>,
 }
 
-/// Code generator that produces Component Model components
-/// Targets WASI P3
-pub struct Codegen {
+/// Code generator state.
+///
+/// Contains mutable state accumulated during code generation,
+/// plus a reference to immutable project data (registries, symbols, etc.).
+pub struct Codegen<'a> {
+    /// Reference to the immutable project data
+    project: &'a Project,
     string_literals: Vec<String>,
-    /// Registry of WASI imports from lib/wasi/*.wado
-    wasi_registry: WasiRegistry,
-    /// Registry of builtin function signatures from lib/core/builtin.wado
-    builtin_registry: BuiltinRegistry,
-    /// Registry of world definitions from lib/wasi/*.wado
-    world_registry: WorldRegistry,
-    /// Whether the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
-    /// Computed at the start of `generate_wasm` from `world_registry`.
-    has_http_handler_export: bool,
     /// Registry of user-defined struct types (keyed by `StructName` for type safety)
     struct_types: HashMap<StructName, StructTypeInfo>,
     /// Registry of tuple types (keyed by element `TypeIds`, maps to GC struct type index)
-    /// Uses `RefCell` for lazy registration during codegen
-    tuple_types: RefCell<HashMap<Vec<TypeId>, u32>>,
+    tuple_types: HashMap<Vec<TypeId>, u32>,
     /// Registry of raw array types (keyed by element `TypeId`, maps to GC array type index)
     /// These are the underlying `builtin::array`<T> types used in Array<T>.repr
     array_types: HashMap<TypeId, u32>,
@@ -97,29 +91,29 @@ pub struct Codegen {
     /// Box types are single-field mutable structs that allow references to primitives
     box_types: HashMap<ValType, u32>,
     /// Counter for generating unique closure IDs
-    closure_counter: RefCell<u32>,
+    closure_counter: u32,
     /// Registry of closure struct types (env + funcref pair)
     /// Key: (`env_type_idx`, `fn_type_idx`)
     /// Value: `closure_struct_type_idx`
     #[allow(dead_code)]
-    closure_struct_types: RefCell<HashMap<(u32, u32), u32>>,
+    closure_struct_types: HashMap<(u32, u32), u32>,
     /// Registry of canonical closure types based on user-visible function signature.
     /// Used for function type parameters (e.g., `fn(i32) -> i32`).
     /// Key: (`param_type_ids`, `return_type_id`)
     /// Value: (`canonical_fn_type_idx`, `canonical_fn_type_name`, `canonical_closure_struct_type_idx`)
-    canonical_closure_types: RefCell<HashMap<(Vec<TypeId>, TypeId), (u32, String, u32)>>,
+    canonical_closure_types: HashMap<(Vec<TypeId>, TypeId), (u32, String, u32)>,
     /// Canonical wrapper function indices for closure __call methods.
     /// Key: `functor_id` (from `ClosureToCanonical`)
     /// Value: wrapper function index (has canonical signature)
-    closure_canonical_wrappers: RefCell<HashMap<u32, u32>>,
+    closure_canonical_wrappers: HashMap<u32, u32>,
     /// Registry of custom variant types
     /// Key: variant name (e.g., "Shape")
     /// Value: `VariantTypeInfo` with struct type index and case metadata
-    variant_types: RefCell<HashMap<String, VariantTypeInfo>>,
+    variant_types: HashMap<String, VariantTypeInfo>,
     /// Pre-allocated type indices for user types during rec group construction.
     /// This allows `type_id_to_valtype` to resolve forward references within a rec group.
     /// Cleared after the rec group is defined.
-    pending_type_indices: RefCell<HashMap<String, u32>>,
+    pending_type_indices: HashMap<String, u32>,
 }
 
 /// Information about a single variant case's Wasm GC representation
@@ -369,12 +363,6 @@ impl FunctionContext {
 
 // CoreModuleBuilder and ComponentModelContext are in wasm_builder.rs
 
-impl Default for Codegen {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Convert a `snake_case` identifier to kebab-case for Component Model
 fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
@@ -456,40 +444,46 @@ enum UltimateBaseType {
     Primitive(crate::tir::PrimitiveType),
 }
 
-impl Codegen {
-    /// Create a new code generator with registries built from stdlib
-    pub fn new() -> Self {
-        use std::cell::RefCell;
-        let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
-        // Create a temporary TypeTable for building the registry.
-        // The codegen only uses canonical_name/namespace/name/diverges fields,
-        // not the resolved TypeIds.
-        let temp_type_table = RefCell::new(TypeTable::new());
-        let builtin_registry = BuiltinRegistry::build_from_stdlib(&temp_type_table);
+impl Codegen<'_> {
+    /// Generate Component Model binary Wasm from a Project.
+    ///
+    /// This is the main entry point for code generation. Takes a reference to
+    /// the Project for immutable data access.
+    pub fn generate_wasm(project: &Project) -> Vec<u8> {
+        // Collect string literals from all TIR modules
+        let mut string_literals = Vec::new();
+        for tir_module in project.tir_modules.values() {
+            for s in &tir_module.string_literals {
+                if !string_literals.contains(s) {
+                    string_literals.push(s.clone());
+                }
+            }
+        }
 
-        Self {
-            string_literals: Vec::new(),
-            wasi_registry,
-            builtin_registry,
-            world_registry,
-            has_http_handler_export: false,
+        // Create codegen with reference to project
+        let mut codegen = Codegen {
+            project,
+            string_literals,
             struct_types: HashMap::new(),
-            tuple_types: RefCell::new(HashMap::new()),
+            tuple_types: HashMap::new(),
             array_types: HashMap::new(),
             array_types_by_name: HashMap::new(),
             box_types: HashMap::new(),
-            closure_counter: RefCell::new(0),
-            closure_struct_types: RefCell::new(HashMap::new()),
-            canonical_closure_types: RefCell::new(HashMap::new()),
-            closure_canonical_wrappers: RefCell::new(HashMap::new()),
-            variant_types: RefCell::new(HashMap::new()),
-            pending_type_indices: RefCell::new(HashMap::new()),
-        }
-    }
+            closure_counter: 0,
+            closure_struct_types: HashMap::new(),
+            canonical_closure_types: HashMap::new(),
+            closure_canonical_wrappers: HashMap::new(),
+            variant_types: HashMap::new(),
+            pending_type_indices: HashMap::new(),
+        };
 
-    /// Create a new code generator (backwards compatible)
-    pub fn new_with_source(_source_code: String) -> Self {
-        Self::new()
+        // Generate binary Wasm from TIR
+        let wasm = codegen.generate_component();
+
+        // Validate the generated Wasm
+        Self::validate_wasm(&wasm);
+
+        wasm
     }
 
     /// Validate generated Wasm binary using wasmparser
@@ -615,11 +609,11 @@ impl Codegen {
     /// Sort structs and variants together topologically so dependencies are registered before dependents.
     /// This handles mutual dependencies between structs and variants (e.g., struct with variant field,
     /// variant with struct payload).
-    fn sort_types_topologically<'a>(
-        structs: &'a [crate::tir::TirStruct],
-        variants: &'a [crate::tir::TirVariantDecl],
+    fn sort_types_topologically<'b>(
+        structs: &'b [crate::tir::TirStruct],
+        variants: &'b [crate::tir::TirVariantDecl],
         type_table: &TypeTable,
-    ) -> Vec<TypeDecl<'a>> {
+    ) -> Vec<TypeDecl<'b>> {
         // Collect all type names
         let struct_names: HashSet<String> = structs.iter().map(|s| s.name.clone()).collect();
         let variant_names: HashSet<String> = variants.iter().map(|v| v.name.clone()).collect();
@@ -715,47 +709,6 @@ impl Codegen {
                 }
             })
             .collect()
-    }
-
-    /// Generate Component Model binary Wasm from a Project.
-    ///
-    /// The project must have been optimized (usage fields populated) before calling this.
-    pub fn generate_wasm(&mut self, project: &Project) -> Vec<u8> {
-        let entry_tir = project.entry_module();
-        let all_tir_modules = &project.tir_modules;
-        let symbols = &project.symbols;
-        let implicit_modules = &project.implicit_modules;
-        let module_name = &project.module_name;
-
-        self.has_http_handler_export = self
-            .world_registry
-            .get(&project.target_world)
-            .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
-
-        // Collect pre-computed string literals from all TIR modules
-        // Note: String DCE is performed in the optimizer, so we just collect all strings here
-        for tir_module in all_tir_modules.values() {
-            for s in &tir_module.string_literals {
-                if !self.string_literals.contains(s) {
-                    self.string_literals.push(s.clone());
-                }
-            }
-        }
-
-        // Generate binary Wasm from TIR
-        let wasm = self.generate_component(
-            entry_tir,
-            all_tir_modules,
-            symbols,
-            implicit_modules,
-            project,
-            module_name,
-        );
-
-        // Validate the generated Wasm
-        Self::validate_wasm(&wasm);
-
-        wasm
     }
 
     /// Build main core module from TIR
@@ -966,7 +919,7 @@ impl Codegen {
             .iter()
             .map(|i| i.canonical_name.as_str())
             .collect();
-        for func in self.builtin_registry.imported_builtins() {
+        for func in self.project.builtin_registry.imported_builtins() {
             let canonical_name = func.canonical_name.as_ref().unwrap();
             // Skip if this builtin is not used
             if !imported_canonical_names.contains(canonical_name.as_str()) {
@@ -979,7 +932,7 @@ impl Codegen {
             // - i32: Ok/Err discriminant
             // - i32: Response handle (Ok) or error-code discriminant (Err)
             // - Remaining: Space for largest error-code payload (records with option<string>, etc.)
-            if canonical_name == "task-return" && self.has_http_handler_export {
+            if canonical_name == "task-return" && self.project.has_http_handler_export {
                 builder.define_func_type(
                     canonical_name,
                     &[
@@ -1002,7 +955,7 @@ impl Codegen {
         }
 
         // Define HTTP function types for Service world
-        if self.has_http_handler_export {
+        if self.project.has_http_handler_export {
             // [constructor]fields: () -> i32 (resource handle)
             builder.define_func_type("http-fields-constructor", &[], &[ValType::I32]);
 
@@ -1384,7 +1337,7 @@ impl Codegen {
 
         // WASI effect function types - derived from wasi/*.wado definitions
         // DCE: Only define types for WASI functions that are actually available (lowered)
-        for interface in self.wasi_registry.interfaces() {
+        for interface in self.project.wasi_registry.interfaces() {
             for func in &interface.functions {
                 let local_name = func.local_alias_name();
                 // Only define type if this function is available (lowered at component level)
@@ -1530,7 +1483,7 @@ impl Codegen {
 
         // World export types - derived from target world (default: Command)
         // If a matching TIR function exists, use its params; otherwise use world definition
-        if let Some(world_info) = self.world_registry.get(&project.target_world) {
+        if let Some(world_info) = self.project.world_registry.get(&project.target_world) {
             for export in &world_info.exports {
                 // Check if there's a matching TIR function in the entry module
                 let tir_func_match = entry_tir
@@ -1585,7 +1538,7 @@ impl Codegen {
         }
 
         // Import HTTP functions for Service world
-        if self.has_http_handler_export {
+        if self.project.has_http_handler_export {
             builder.import_func("wasi", "http-fields-constructor");
             builder.import_func("wasi", "http-response-new");
         }
@@ -1597,7 +1550,7 @@ impl Codegen {
         // Function section
         // ========================================
         // Collect world export names to skip (they are handled as entry points)
-        let world_export_names: HashSet<String> = self
+        let world_export_names: HashSet<String> = project
             .world_registry
             .get(&project.target_world)
             .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
@@ -1713,12 +1666,11 @@ impl Codegen {
                 wrapper_info.param_type_ids.clone(),
                 wrapper_info.return_type_id,
             );
-            if let Some((_, fn_type_name, _)) = self.canonical_closure_types.borrow().get(&key) {
+            if let Some((_, fn_type_name, _)) = self.canonical_closure_types.get(&key) {
                 let wrapper_name = format!("__Closure_{}_canonical", wrapper_info.functor_id);
                 let wrapper_func_idx = builder.define_func(&wrapper_name, fn_type_name);
                 // Track wrapper for use in ClosureToCanonical
                 self.closure_canonical_wrappers
-                    .borrow_mut()
                     .insert(wrapper_info.functor_id, wrapper_func_idx);
                 // Also add to element segment for ref.func
                 closure_call_func_indices.push(wrapper_func_idx);
@@ -1773,7 +1725,7 @@ impl Codegen {
         // Export section
         // ========================================
         // Export world functions based on target world
-        if let Some(world_info) = self.world_registry.get(&project.target_world) {
+        if let Some(world_info) = self.project.world_registry.get(&project.target_world) {
             for export in &world_info.exports {
                 builder.export_func(&export.name, &export.name);
             }
@@ -1900,7 +1852,7 @@ impl Codegen {
                 // No matching function - create empty entry point
                 let mut func = Function::new(vec![]);
                 let task_return_idx = builder.func_idx("task-return");
-                if self.has_http_handler_export {
+                if self.project.has_http_handler_export {
                     // Service world: result<own<response>, error-code> with complex payloads
                     // Flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
                     func.instruction(&Instruction::I32Const(1)); // Err discriminant
@@ -1929,7 +1881,6 @@ impl Codegen {
             // Skip if wrapper wasn't defined (canonical type not registered)
             if !self
                 .closure_canonical_wrappers
-                .borrow()
                 .contains_key(&wrapper_info.functor_id)
             {
                 continue;
@@ -1996,15 +1947,13 @@ impl Codegen {
 
     /// Generate component from TIR for WASI P3
     /// Uses native stream<T> types and imports wasi:cli/stdout
-    fn generate_component(
-        &mut self,
-        entry_tir: &TirModule,
-        all_tir_modules: &IndexMap<ModuleSource, TirModule>,
-        symbols: &SymbolTable,
-        _implicit_modules: &std::collections::HashSet<ModuleSource>,
-        project: &Project,
-        module_name: &str,
-    ) -> Vec<u8> {
+    fn generate_component(&mut self) -> Vec<u8> {
+        let project = self.project;
+        let entry_tir = project.entry_module();
+        let all_tir_modules = &project.tir_modules;
+        let symbols = &project.symbols;
+        let module_name = &project.module_name;
+
         let mut builder = ComponentBuilder::default();
         let mut ctx = ComponentModelContext::new();
 
@@ -2330,7 +2279,7 @@ impl Codegen {
         // Collect available WASI functions (those that were lowered)
         // ========================================
         let mut available_wasi_funcs: HashSet<String> = HashSet::new();
-        for interface in self.wasi_registry.interfaces() {
+        for interface in self.project.wasi_registry.interfaces() {
             for func in &interface.functions {
                 let local_name = func.local_alias_name();
                 if ctx.has_core_func(&local_name) {
@@ -2392,7 +2341,7 @@ impl Codegen {
         }
 
         // Add lowered HTTP types functions for Service world
-        if self.has_http_handler_export && ctx.has_core_func("http-fields-constructor") {
+        if self.project.has_http_handler_export && ctx.has_core_func("http-fields-constructor") {
             wasi_exports.push((
                 "http-fields-constructor".to_string(),
                 ExportKind::Func,
@@ -2460,7 +2409,7 @@ impl Codegen {
         builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
         // Export world functions based on target world
-        let world_exports: Vec<_> = self
+        let world_exports: Vec<_> = project
             .world_registry
             .get(&project.target_world)
             .map(|w| w.exports.clone())
@@ -2494,7 +2443,7 @@ impl Codegen {
                 let (_, enc) = builder.ty(Some(&func_type_name));
 
                 // Check if this is the Service world's handle function with Request param
-                let is_service_handle = self.has_http_handler_export
+                let is_service_handle = self.project.has_http_handler_export
                     && export.name == "handle"
                     && !export.params.is_empty();
 
@@ -2599,7 +2548,7 @@ impl Codegen {
         // For Service world, add the handler interface export
         // This creates a component instance containing the handle function
         // and exports it as wasi:http/handler interface
-        if self.has_http_handler_export {
+        if self.project.has_http_handler_export {
             Self::append_http_handler_export(&mut component_bytes, &ctx);
         }
 
@@ -2665,7 +2614,7 @@ impl Codegen {
         project: &Project,
     ) {
         // Get the CLI version from the registry
-        let cli_version = self
+        let cli_version = project
             .wasi_registry
             .get_cli_version()
             .expect("WASI CLI version not found in registry - lib/wasi/*.wado not loaded?");
@@ -2703,7 +2652,7 @@ impl Codegen {
 
         // Now generate imports for each interface in the registry
         // Dynamically filter based on whether function types are supported
-        for interface_info in self.wasi_registry.interfaces() {
+        for interface_info in self.project.wasi_registry.interfaces() {
             // Skip interfaces that define exports (not imports)
             // The "run" interface defines the component's entry point export.
             // Note: "run" is needed for the wasi:cli Command world, which Wado
@@ -2727,7 +2676,7 @@ impl Codegen {
                 .iter()
                 .filter(|func| {
                     // Check if function has supported types
-                    if !self.wasi_registry.is_function_supported(func) {
+                    if !self.project.wasi_registry.is_function_supported(func) {
                         return false;
                     }
                     // DCE: Only include functions that are actually used
@@ -2761,7 +2710,7 @@ impl Codegen {
                             && g.name == "Result"
                             && !g.args.is_empty()
                             && let Type::Named(named) = &g.args[0]
-                            && self.wasi_registry.is_resource(&named.name)
+                            && self.project.wasi_registry.is_resource(&named.name)
                             && !needed_resources.contains(&named.name)
                         {
                             needed_resources.push(named.name.clone());
@@ -2776,7 +2725,11 @@ impl Codegen {
                 let mut resource_type_indices: HashMap<String, u32> = HashMap::new();
                 let mut own_resource_type_indices: HashMap<String, u32> = HashMap::new();
                 for resource_name in &needed_resources {
-                    if let Some(cm_name) = self.wasi_registry.get_resource_cm_name(resource_name) {
+                    if let Some(cm_name) = self
+                        .project
+                        .wasi_registry
+                        .get_resource_cm_name(resource_name)
+                    {
                         // Export resource type (SubResource for imported resources)
                         instance_type.export(
                             cm_name,
@@ -2798,7 +2751,7 @@ impl Codegen {
                 for func in &supported_functions {
                     for (_, ty) in &func.params {
                         if let Type::Named(named) = ty
-                            && self.wasi_registry.is_enum(&named.name)
+                            && self.project.wasi_registry.is_enum(&named.name)
                             && !needed_enums.contains(&named.name)
                         {
                             needed_enums.push(named.name.clone());
@@ -2812,7 +2765,7 @@ impl Codegen {
                         // Check Ok and Err types for enums
                         for arg in &g.args {
                             if let Type::Named(named) = arg
-                                && self.wasi_registry.is_enum(&named.name)
+                                && self.project.wasi_registry.is_enum(&named.name)
                                 && !needed_enums.contains(&named.name)
                             {
                                 // Skip ErrorCode for non-sockets interfaces
@@ -2840,7 +2793,7 @@ impl Codegen {
                 let interface_path = &interface_info.path;
 
                 for enum_name in &needed_enums {
-                    if let Some(variants) = self
+                    if let Some(variants) = project
                         .wasi_registry
                         .get_enum_variants_by_interface(interface_path, enum_name)
                     {
@@ -2855,7 +2808,7 @@ impl Codegen {
 
                         // Export the enum type immediately (increments the combined index)
                         // Function parameters must use this EXPORT index, not the type index
-                        if let Some(cm_name) = self
+                        if let Some(cm_name) = project
                             .wasi_registry
                             .get_enum_cm_name_by_interface(interface_path, enum_name)
                         {
@@ -3086,7 +3039,7 @@ impl Codegen {
 
                     // Build result - resolve type aliases first (e.g., Mark -> u64)
                     let result_type = func.return_type.as_ref().map(|ty| {
-                        let resolved_ty = self.wasi_registry.resolve_type(ty);
+                        let resolved_ty = self.project.wasi_registry.resolve_type(ty);
                         self.wado_type_to_cm_result_type(
                             &resolved_ty,
                             result_type_idx,
@@ -3131,7 +3084,7 @@ impl Codegen {
 
             // Alias each function from the instance
             for func in &supported_functions {
-                let local_name = self
+                let local_name = project
                     .wasi_registry
                     .get_local_name(&interface_info.path, &func.wasi_func_name)
                     .cloned()
@@ -3154,7 +3107,7 @@ impl Codegen {
 
         // For Service world, import wasi:http/types to get Request resource type
         // This is needed for the handle function's parameter type
-        if self.has_http_handler_export {
+        if self.project.has_http_handler_export {
             self.import_http_types_for_service(builder, ctx);
         }
     }
@@ -3677,7 +3630,7 @@ impl Codegen {
         ctx: &mut ComponentModelContext,
         project: &Project,
     ) {
-        for interface_info in self.wasi_registry.interfaces() {
+        for interface_info in self.project.wasi_registry.interfaces() {
             // Only handle interfaces that have a resource type
             if interface_info.resource_type.is_some() {
                 self.import_interface_with_resource(builder, ctx, &interface_info, project);
@@ -3699,7 +3652,7 @@ impl Codegen {
         ctx: &mut ComponentModelContext,
     ) {
         // Iterate over all interfaces and their functions
-        for interface_info in self.wasi_registry.interfaces() {
+        for interface_info in self.project.wasi_registry.interfaces() {
             for func in &interface_info.functions {
                 let local_name = func.local_alias_name();
 
@@ -4141,8 +4094,8 @@ impl Codegen {
         }
 
         // Already registered?
-        if self.variant_types.borrow().contains_key(&variant.name) {
-            return self.variant_types.borrow()[&variant.name].base_type_idx;
+        if self.variant_types.contains_key(&variant.name) {
+            return self.variant_types[&variant.name].base_type_idx;
         }
 
         // Define the base type with just the tag field
@@ -4189,7 +4142,7 @@ impl Codegen {
         }
 
         // Store in registry
-        self.variant_types.borrow_mut().insert(
+        self.variant_types.insert(
             variant.name.clone(),
             VariantTypeInfo {
                 base_type_idx,
@@ -4223,7 +4176,7 @@ impl Codegen {
                 if is_variant {
                     let mangled_name = type_table.mangle_type_name(type_id);
                     // Skip if already registered
-                    if !self.variant_types.borrow().contains_key(&mangled_name) {
+                    if !self.variant_types.contains_key(&mangled_name) {
                         generic_variants.push((name.clone(), type_args.clone()));
                     }
                 }
@@ -4258,7 +4211,7 @@ impl Codegen {
             };
 
             // Skip if already registered (double-check)
-            if self.variant_types.borrow().contains_key(&mangled_name) {
+            if self.variant_types.contains_key(&mangled_name) {
                 continue;
             }
 
@@ -4309,7 +4262,7 @@ impl Codegen {
             }
 
             // Store in registry
-            self.variant_types.borrow_mut().insert(
+            self.variant_types.insert(
                 mangled_name,
                 VariantTypeInfo {
                     base_type_idx,
@@ -4333,7 +4286,7 @@ impl Codegen {
             if let ResolvedType::Result { ok, err } = type_table.get(type_id) {
                 let mangled_name = type_table.mangle_type_name(type_id);
                 // Skip if already registered
-                if !self.variant_types.borrow().contains_key(&mangled_name) {
+                if !self.variant_types.contains_key(&mangled_name) {
                     result_types.push((type_id, *ok, *err));
                 }
             }
@@ -4381,7 +4334,7 @@ impl Codegen {
                 builder.define_gc_struct_subtype(&err_case_name, base_type_idx, &err_fields);
 
             // Store in registry with Ok and Err cases
-            self.variant_types.borrow_mut().insert(
+            self.variant_types.insert(
                 mangled_name,
                 VariantTypeInfo {
                     base_type_idx,
@@ -4466,7 +4419,7 @@ impl Codegen {
     /// Get the tuple type index for a `TypeId` that is known to be a tuple.
     /// Returns None if the type is not a registered tuple.
     fn get_tuple_type_idx(&self, element_types: &[TypeId]) -> Option<u32> {
-        self.tuple_types.borrow().get(element_types).copied()
+        self.tuple_types.get(element_types).copied()
     }
 
     /// Get the Wasm GC type index for a struct or tuple type.
@@ -4648,11 +4601,10 @@ impl Codegen {
             ResolvedType::Variant { name, .. } => {
                 // Variant types use subtype-based representation.
                 // We need to check the tag and copy based on the specific case type.
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 if let Some(info) = variant_types.get(name) {
                     let base_type_idx = info.base_type_idx;
                     let cases = info.cases.clone();
-                    drop(variant_types);
                     self.generate_variant_copy(func, base_type_idx, &cases, ctx);
                 } else {
                     panic!("unknown variant type: {name}");
@@ -5090,7 +5042,7 @@ impl Codegen {
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::Tuple(elements) = type_table.get(type_id)
                 && !elements.is_empty()
-                && !self.tuple_types.borrow().contains_key(elements)
+                && !self.tuple_types.contains_key(elements)
                 // Skip tuples that contain type parameters (these are from generic templates)
                 && !elements.iter().any(|&elem| type_table.contains_type_param(elem))
                 // Skip tuples that contain unregistered generic instances
@@ -5116,9 +5068,7 @@ impl Codegen {
 
                 let type_name = format!("tuple_{}", elements.len());
                 let type_idx = builder.define_gc_struct_type(&type_name, &fields);
-                self.tuple_types
-                    .borrow_mut()
-                    .insert(elements.clone(), type_idx);
+                self.tuple_types.insert(elements.clone(), type_idx);
             }
         }
     }
@@ -5306,10 +5256,9 @@ impl Codegen {
     }
 
     /// Get the next unique closure ID
-    fn get_next_closure_id(&self) -> u32 {
-        let mut counter = self.closure_counter.borrow_mut();
-        let id = *counter;
-        *counter += 1;
+    fn get_next_closure_id(&mut self) -> u32 {
+        let id = self.closure_counter;
+        self.closure_counter += 1;
         id
     }
 
@@ -5320,7 +5269,7 @@ impl Codegen {
     /// The canonical closure uses `(ref struct)` as the environment type,
     /// allowing any closure with the same user-visible signature to be compatible.
     fn get_or_create_canonical_closure_type(
-        &self,
+        &mut self,
         params: &[TypeId],
         return_type: TypeId,
         type_table: &TypeTable,
@@ -5330,7 +5279,7 @@ impl Codegen {
 
         // Check if already registered
         if let Some((fn_type_idx, fn_type_name, struct_type_idx)) =
-            self.canonical_closure_types.borrow().get(&key).cloned()
+            self.canonical_closure_types.get(&key).cloned()
         {
             return (fn_type_idx, fn_type_name, struct_type_idx);
         }
@@ -5385,7 +5334,6 @@ impl Codegen {
         let struct_type_idx = builder.define_gc_struct_type(&struct_type_name, &fields);
 
         self.canonical_closure_types
-            .borrow_mut()
             .insert(key, (fn_type_idx, fn_type_name.clone(), struct_type_idx));
 
         (fn_type_idx, fn_type_name, struct_type_idx)
@@ -5693,7 +5641,7 @@ impl Codegen {
     /// Pre-register canonical closure types for all function types found in the type table.
     /// This is needed so that function type parameters can be properly typed.
     fn register_canonical_closure_types_from_table(
-        &self,
+        &mut self,
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
     ) {
@@ -5876,7 +5824,7 @@ impl Codegen {
                 ..
             } => {
                 // Check pending_type_indices first (for rec group construction)
-                if let Some(&type_idx) = self.pending_type_indices.borrow().get(name) {
+                if let Some(&type_idx) = self.pending_type_indices.get(name) {
                     return ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(type_idx),
@@ -5991,7 +5939,7 @@ impl Codegen {
             } => {
                 let key = (params.clone(), *return_type);
                 if let Some((_, _, struct_type_idx)) =
-                    self.canonical_closure_types.borrow().get(&key).cloned()
+                    self.canonical_closure_types.get(&key).cloned()
                 {
                     ValType::Ref(RefType {
                         nullable: false,
@@ -6013,7 +5961,7 @@ impl Codegen {
             ResolvedType::Tuple(elements) => {
                 if elements.is_empty() {
                     ValType::I32 // Empty tuple represented as i32(0)
-                } else if let Some(&type_idx) = self.tuple_types.borrow().get(elements) {
+                } else if let Some(&type_idx) = self.tuple_types.get(elements) {
                     // Use registered tuple type
                     ValType::Ref(RefType {
                         nullable: false,
@@ -6049,14 +5997,14 @@ impl Codegen {
             }
             ResolvedType::Variant { name, .. } => {
                 // Check pending_type_indices first (for rec group construction)
-                if let Some(&type_idx) = self.pending_type_indices.borrow().get(name) {
+                if let Some(&type_idx) = self.pending_type_indices.get(name) {
                     return ValType::Ref(RefType {
                         nullable: true,
                         heap_type: HeapType::Concrete(type_idx),
                     });
                 }
                 // Custom variant types are represented as GC struct references (base type)
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 if let Some(info) = variant_types.get(name) {
                     ValType::Ref(RefType {
                         nullable: true,
@@ -6081,7 +6029,7 @@ impl Codegen {
             ResolvedType::GenericInstance { .. } => {
                 let mangled_name = type_table.mangle_type_name(type_id);
                 // Check pending_type_indices first (for rec group construction)
-                if let Some(&type_idx) = self.pending_type_indices.borrow().get(&mangled_name) {
+                if let Some(&type_idx) = self.pending_type_indices.get(&mangled_name) {
                     return ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(type_idx),
@@ -6094,7 +6042,7 @@ impl Codegen {
                         nullable: false,
                         heap_type: HeapType::Concrete(struct_info.type_idx),
                     })
-                } else if let Some(variant_info) = self.variant_types.borrow().get(&mangled_name) {
+                } else if let Some(variant_info) = self.variant_types.get(&mangled_name) {
                     // Generic variant (like Result<i32, String>) - use base type
                     ValType::Ref(RefType {
                         nullable: true,
@@ -6382,7 +6330,7 @@ impl Codegen {
                 }
 
                 // Look up the registered variant type
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
                     panic!("Variant type not registered: {variant_name}");
                 });
@@ -6390,7 +6338,6 @@ impl Codegen {
                 // Get the case-specific type index
                 let case_info = &variant_info.cases[*case_index as usize];
                 let case_type_idx = case_info.type_idx;
-                drop(variant_types);
 
                 // Push the tag (case index)
                 func.instruction(&Instruction::I32Const(*case_index as i32));
@@ -6462,12 +6409,11 @@ impl Codegen {
                     }
                     other => panic!("Expected Variant type for VariantTag, got: {other:?}"),
                 };
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
                     panic!("Variant type not registered: {variant_name}");
                 });
                 let base_type_idx = variant_info.base_type_idx;
-                drop(variant_types);
 
                 func.instruction(&Instruction::StructGet {
                     struct_type_index: base_type_idx,
@@ -6492,7 +6438,7 @@ impl Codegen {
                 };
 
                 let variant_lookup_name = type_table.mangle_type_name(inner.type_id);
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
                     variant_types.get(&variant_name).unwrap_or_else(|| {
                         panic!(
@@ -6512,7 +6458,6 @@ impl Codegen {
                 let case_type_idx = case_info.type_idx;
                 let base_type_idx = variant_info.base_type_idx;
                 let is_unit_variant = case_info.payload_type.is_none();
-                drop(variant_types);
 
                 // For unit variants, check discriminator; for payload variants, use ref.test
                 if is_unit_variant {
@@ -6554,13 +6499,12 @@ impl Codegen {
                     }
                     other => panic!("Expected Variant type for VariantPayload, got: {other:?}"),
                 };
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
                     panic!("Variant type not registered: {variant_name}");
                 });
                 let case_info = &variant_info.cases[*case_index as usize];
                 let case_type_idx = case_info.type_idx;
-                drop(variant_types);
 
                 // Cast to the case-specific struct type
                 func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
@@ -7338,7 +7282,8 @@ impl Codegen {
                         // Build the method name for wasi_registry lookup: ResourceName::method_name
                         let func_name = format!("{name}::{method_name}");
 
-                        if let Some(func_info) = self.wasi_registry.get_function(&func_name) {
+                        if let Some(func_info) = self.project.wasi_registry.get_function(&func_name)
+                        {
                             let local_name = func_info.local_alias_name();
 
                             // Generate receiver (resource handle is i32)
@@ -7771,11 +7716,8 @@ impl Codegen {
                         }
 
                         // Check if this is a generic variant constructor (e.g., Result<i32,String>::Ok)
-                        if let Some(variant_info) = self
-                            .variant_types
-                            .borrow()
-                            .get(&struct_name_to_lookup)
-                            .cloned()
+                        if let Some(variant_info) =
+                            self.variant_types.get(&struct_name_to_lookup).cloned()
                         {
                             // Find the case index by method name
                             // The method name is the last part after ::
@@ -7812,7 +7754,7 @@ impl Codegen {
                     // Try WASI function resolution for resource methods
                     // Resource methods like TcpSocket::static_tcp_socket_create are registered
                     // in wasi_registry under "TcpSocket::static_tcp_socket_create"
-                    if let Some(func_info) = self.wasi_registry.get_function(&func_name) {
+                    if let Some(func_info) = self.project.wasi_registry.get_function(&func_name) {
                         let conv = &func_info.call_convention;
                         let local_name = func_info.local_alias_name();
 
@@ -7846,7 +7788,7 @@ impl Codegen {
                             // Get Result type info for Ok and Err subtypes
                             let result_type_id = expr.type_id;
                             let mangled_name = type_table.mangle_type_name(result_type_id);
-                            let variant_types = self.variant_types.borrow();
+                            let variant_types = &self.variant_types;
                             let result_info =
                                 variant_types.get(&mangled_name).unwrap_or_else(|| {
                                     panic!("Result type not registered: {mangled_name}")
@@ -7855,7 +7797,6 @@ impl Codegen {
                             let ok_type_idx = result_info.cases[0].type_idx;
                             let err_type_idx = result_info.cases[1].type_idx;
                             let base_type_idx = result_info.base_type_idx;
-                            drop(variant_types);
 
                             // Result type for block result
                             let result_ref_type = ValType::Ref(RefType {
@@ -7963,7 +7904,7 @@ impl Codegen {
                             ..
                         } = element_resolved
                         {
-                            let canonical = self.canonical_closure_types.borrow();
+                            let canonical = &self.canonical_closure_types;
                             canonical
                                 .get(&(params.clone(), *return_type))
                                 .map(|(_, _, struct_idx)| *struct_idx)
@@ -8243,7 +8184,7 @@ impl Codegen {
                     // Look up canonical closure types for this function signature
                     let key = (params.clone(), *return_type);
                     if let Some((fn_idx, _, struct_idx)) =
-                        self.canonical_closure_types.borrow().get(&key).cloned()
+                        self.canonical_closure_types.get(&key).cloned()
                     {
                         (fn_idx, struct_idx)
                     } else {
@@ -8316,7 +8257,6 @@ impl Codegen {
                 // The wrapper has signature (ref struct, params...) -> result
                 let wrapper_func_idx = self
                     .closure_canonical_wrappers
-                    .borrow()
                     .get(functor_id)
                     .copied()
                     .unwrap_or_else(|| {
@@ -8334,7 +8274,7 @@ impl Codegen {
                     // These should have been registered during closure collection phase
                     let key = (params.clone(), *return_type);
                     if let Some((_, _, struct_idx)) =
-                        self.canonical_closure_types.borrow().get(&key).cloned()
+                        self.canonical_closure_types.get(&key).cloned()
                     {
                         struct_idx
                     } else {
@@ -10353,7 +10293,7 @@ impl Codegen {
                 let err_name = _type_table.mangle_type_name(*err);
                 let mangled_name = mangle_result_type(&ok_name, &err_name);
 
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 let variant_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
                     panic!("Result type not registered: {mangled_name}");
                 });
@@ -10362,7 +10302,6 @@ impl Codegen {
                 let case_index = usize::from(case_name != "Ok");
                 let case_info = &variant_info.cases[case_index];
                 let case_type_idx = case_info.type_idx;
-                drop(variant_types);
 
                 // Use ref.test to check if the value is of the expected case type
                 func.instruction(&Instruction::RefTestNonNull(HeapType::Concrete(
@@ -10379,7 +10318,7 @@ impl Codegen {
                     ..
                 },
             ) => {
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 let variant_info = variant_types.get(name).unwrap_or_else(|| {
                     panic!("Variant type not registered: {name}");
                 });
@@ -10394,7 +10333,6 @@ impl Codegen {
                 let case_type_idx = case_info.type_idx;
                 let base_type_idx = variant_info.base_type_idx;
                 let is_unit_variant = case_info.payload_type.is_none();
-                drop(variant_types);
 
                 if is_unit_variant {
                     // Read discriminator and compare with case index
@@ -10430,7 +10368,7 @@ impl Codegen {
                     .collect();
                 let mangled_name = mangle_generic_name(name, &type_arg_names);
 
-                let variant_types = self.variant_types.borrow();
+                let variant_types = &self.variant_types;
                 let variant_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
                     panic!("Variant type not registered: {mangled_name}");
                 });
@@ -10447,7 +10385,6 @@ impl Codegen {
                 let case_type_idx = case_info.type_idx;
                 let base_type_idx = variant_info.base_type_idx;
                 let is_unit_variant = case_info.payload_type.is_none();
-                drop(variant_types);
 
                 if is_unit_variant {
                     // Read discriminator and compare with case index
@@ -10562,12 +10499,11 @@ impl Codegen {
                     let err_name = type_table.mangle_type_name(err);
                     let mangled_name = mangle_result_type(&ok_name, &err_name);
 
-                    let variant_types = self.variant_types.borrow();
+                    let variant_types = &self.variant_types;
                     let variant_info = variant_types.get(&mangled_name).unwrap();
                     let case_index = usize::from(case_name != "Ok");
                     let case_info = variant_info.cases[case_index].clone();
                     let case_type_idx = case_info.type_idx;
-                    drop(variant_types);
 
                     // Get payload (field 1)
                     func.instruction(&Instruction::LocalGet(scrutinee_local));
@@ -10601,7 +10537,7 @@ impl Codegen {
                 },
             ) => {
                 if let Some(binding) = bindings.first() {
-                    let variant_types = self.variant_types.borrow();
+                    let variant_types = &self.variant_types;
                     let variant_info = variant_types.get(&name).unwrap();
                     let case_info = variant_info
                         .cases
@@ -10610,7 +10546,6 @@ impl Codegen {
                         .unwrap()
                         .clone();
                     let case_type_idx = case_info.type_idx;
-                    drop(variant_types);
 
                     // Get payload (field 1)
                     func.instruction(&Instruction::LocalGet(scrutinee_local));
@@ -10653,7 +10588,7 @@ impl Codegen {
                         .collect();
                     let mangled_name = mangle_generic_name(&name, &type_arg_names);
 
-                    let variant_types = self.variant_types.borrow();
+                    let variant_types = &self.variant_types;
                     let variant_info = variant_types.get(&mangled_name).unwrap();
                     let case_info = variant_info
                         .cases
@@ -10662,7 +10597,6 @@ impl Codegen {
                         .unwrap()
                         .clone();
                     let case_type_idx = case_info.type_idx;
-                    drop(variant_types);
 
                     // Get payload (field 1)
                     func.instruction(&Instruction::LocalGet(scrutinee_local));
@@ -10815,9 +10749,15 @@ impl Codegen {
         // Create function context
         let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
 
-        // Mark this as an async export - returns should use task-return
-        func_ctx.is_async_export = true;
-        func_ctx.has_http_handler_export = self.has_http_handler_export;
+        // Set async export flags from CmExportInfo (computed by wasm_adapt phase)
+        if let Some(cm_info) = &tir_func.cm_export_info {
+            func_ctx.is_async_export = cm_info.is_async;
+            func_ctx.has_http_handler_export = cm_info.is_http_handler;
+        } else {
+            // Fallback for functions without CmExportInfo (shouldn't happen for world exports)
+            func_ctx.is_async_export = true;
+            func_ctx.has_http_handler_export = self.project.has_http_handler_export;
+        }
 
         // Copy address-taken locals from TIR
         func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();
@@ -10937,7 +10877,7 @@ impl Codegen {
 
         // Strategy 2: Check if it's a builtin function (module_path == ["core", "builtin"])
         if module_path == ["core", "builtin"]
-            && let Some(builtin_info) = self.builtin_registry.get(func_name)
+            && let Some(builtin_info) = self.project.builtin_registry.get(func_name)
             && let Some(canonical_name) = &builtin_info.canonical_name
             && let Some(idx) = builder.try_func_idx(canonical_name)
         {
@@ -10992,7 +10932,8 @@ impl Codegen {
         // When module_path has a single element like ["Stdout"], try resolving as an effect operation
         if module_path.len() == 1 {
             let effect_qualified_name = format!("{}::{}", module_path[0], func_name);
-            if let Some(wasi_local_name) = self.wasi_registry.resolve(&effect_qualified_name)
+            if let Some(wasi_local_name) =
+                self.project.wasi_registry.resolve(&effect_qualified_name)
                 && let Some(idx) = builder.try_func_idx(&wasi_local_name)
             {
                 return idx;
@@ -11029,7 +10970,7 @@ impl Codegen {
         args: &[TirExpr],
     ) -> bool {
         let qualified_name = format!("{effect_name}::{op_name}");
-        let Some(func_info) = self.wasi_registry.get_function(&qualified_name) else {
+        let Some(func_info) = self.project.wasi_registry.get_function(&qualified_name) else {
             return false;
         };
 
@@ -11647,6 +11588,7 @@ impl Codegen {
                 // Look up the canonical name from the builtin registry
                 let func_name = builtin_name.strip_prefix("builtin::").unwrap();
                 let builtin_info = self
+                    .project
                     .builtin_registry
                     .get(func_name)
                     .unwrap_or_else(|| panic!("builtin not found in registry: {func_name}"));
@@ -11857,10 +11799,9 @@ impl Codegen {
                 }
                 ResolvedType::Variant { name, .. } => {
                     // Variants need a copy local for the variant struct
-                    let variant_types = self.variant_types.borrow();
+                    let variant_types = &self.variant_types;
                     if let Some(info) = variant_types.get(name) {
                         let base_type_idx = info.base_type_idx;
-                        drop(variant_types);
                         let local_idx = ctx.alloc_local(
                             &format!("__copy_source_{base_type_idx}"),
                             CopyContext::nullable_ref(base_type_idx),
@@ -11891,7 +11832,6 @@ impl Codegen {
         {
             let key = (params.clone(), *return_type);
             self.canonical_closure_types
-                .borrow()
                 .get(&key)
                 .map(|(_, _, struct_type_idx)| *struct_type_idx)
         } else {
@@ -11910,7 +11850,7 @@ impl Codegen {
             .iter()
             .map(|(_, ty)| {
                 // Resolve type aliases (e.g., Mark -> u64) before converting to ValType
-                let resolved_ty = self.wasi_registry.resolve_type(ty);
+                let resolved_ty = self.project.wasi_registry.resolve_type(ty);
                 wasi_type_to_valtype(&resolved_ty)
             })
             .collect();
@@ -11922,7 +11862,7 @@ impl Codegen {
         // Sync functions with complex return types also need an outptr
         // Resolve type aliases first to correctly detect complex types
         else if let Some(ret_ty) = &func.return_type {
-            let resolved_ret_ty = self.wasi_registry.resolve_type(ret_ty);
+            let resolved_ret_ty = self.project.wasi_registry.resolve_type(ret_ty);
             if return_type_requires_outptr(&resolved_ret_ty) {
                 params.push(ValType::I32); // outptr
             }
@@ -11942,7 +11882,7 @@ impl Codegen {
             vec![ValType::I32]
         } else if let Some(ret_ty) = &func.return_type {
             // Resolve type aliases (e.g., Mark -> u64) before checking/converting
-            let resolved_ty = self.wasi_registry.resolve_type(ret_ty);
+            let resolved_ty = self.project.wasi_registry.resolve_type(ret_ty);
             // Complex types are returned via outptr, so no direct return value
             if return_type_requires_outptr(&resolved_ty) {
                 vec![]
@@ -11995,7 +11935,7 @@ impl Codegen {
             vec![]
         } else if let Some(ret_ty) = &export.return_type {
             // Resolve type aliases (e.g., newtypes) before converting to ValType
-            let resolved_ty = self.wasi_registry.resolve_type(ret_ty);
+            let resolved_ty = self.project.wasi_registry.resolve_type(ret_ty);
             vec![wasi_type_to_valtype(&resolved_ty)]
         } else {
             vec![]

@@ -18,6 +18,7 @@ use indexmap::IndexMap;
 use crate::component_model::CmCallConvention;
 use crate::name::{LocalMethodName, ModuleSource, TypeNameInfo, format_type_name};
 use crate::token::Span;
+use crate::wasm_adapt::CmExportInfo;
 
 // ============================================================================
 // Type Parameter Substitution System
@@ -1662,6 +1663,13 @@ pub struct TirFunction {
     /// Types for let pattern temp locals (tuple destructuring).
     /// Codegen allocates `__let_pattern_{id}` locals in order.
     pub let_pattern_types: Vec<TypeId>,
+
+    // ========================================================================
+    // CM export metadata (computed by wasm_adapt phase)
+    // ========================================================================
+    /// Component Model export info (set by `wasm_adapt` phase for world exports).
+    /// Contains async flag, HTTP handler flag, and required CM imports.
+    pub cm_export_info: Option<CmExportInfo>,
 }
 
 impl TirFunction {

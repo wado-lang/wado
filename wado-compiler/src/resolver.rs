@@ -1920,6 +1920,7 @@ impl<'a> Resolver<'a> {
             indirect_call_counts: std::collections::HashMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            cm_export_info: None,
         })
     }
 
@@ -1971,6 +1972,7 @@ impl<'a> Resolver<'a> {
             indirect_call_counts: std::collections::HashMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            cm_export_info: None,
         };
 
         let tir_test = TirTest {
@@ -2147,6 +2149,7 @@ impl<'a> Resolver<'a> {
             indirect_call_counts: std::collections::HashMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            cm_export_info: None,
         })
     }
 
@@ -9579,11 +9582,22 @@ pub fn resolve_to_project(
         .map(|p| ModuleSource::from_path(&p))
         .collect();
 
+    // Build registries once here, shared across all subsequent phases
+    let (wasi_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
+
+    // Build builtin registry (uses a temporary type table for type resolution)
+    let temp_type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
+    let builtin_registry =
+        crate::builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
+
     Ok(Project::new(
         entry_module_source,
         tir_modules_by_source,
         symbols,
         implicit_modules_by_source,
         module_name,
+        wasi_registry,
+        world_registry,
+        builtin_registry,
     ))
 }

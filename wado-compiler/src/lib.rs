@@ -102,6 +102,7 @@ pub mod syntax;
 pub mod tir;
 pub mod token;
 pub mod unparse;
+pub mod wasm_adapt;
 pub mod wasm_builder;
 pub mod wasm_postprocess;
 pub mod world_registry;
@@ -127,6 +128,7 @@ pub use parser::{ParseError, Parser};
 pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
+pub use wasm_adapt::wasm_adapt;
 
 use indexmap::IndexMap;
 
@@ -386,10 +388,12 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 10: Optimize (Project -> Project) ===
     let project = optimize(project, options.opt_level);
 
-    // === Phase 11: Codegen ===
-    let mut codegen = Codegen::new();
+    // === Phase 11: Wasm Adapt (Project -> Project) ===
+    let project = wasm_adapt(project);
+
+    // === Phase 12: Codegen ===
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        codegen.generate_wasm(&project)
+        Codegen::generate_wasm(&project)
     }))
     .map_err(|e| {
         let message = if let Some(s) = e.downcast_ref::<&str>() {
@@ -557,14 +561,27 @@ pub async fn dump_with_host<H: CompilerHost>(
                     .map(|p| ModuleSource::from_path(p))
                     .collect();
 
+            // Build registries once here
+            let (wasi_registry, world_registry) =
+                component_model::WasiRegistry::build_from_stdlib();
+
+            // Build builtin registry (uses a temporary type table for type resolution)
+            let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
+            let builtin_registry =
+                builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
+
             let project = Project::new(
                 load_result.entry_module_source.clone(),
                 modules_by_source,
                 symbols.clone(),
                 implicit_modules_by_source,
                 module_name,
+                wasi_registry,
+                world_registry,
+                builtin_registry,
             );
-            optimize(project, opt_level)
+            let project = optimize(project, opt_level);
+            wasm_adapt(project)
         });
 
     Ok(DumpResult {
