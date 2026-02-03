@@ -284,7 +284,7 @@ pub fn analyze_project(project: &mut Project) {
     // But waitable-set builtins are only needed when effect_wait is actually called
     let has_http_handler_export = world_registry
         .get(&project.target_world)
-        .is_some_and(|w| w.has_http_handler_export());
+        .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
     if !used_wasi_functions.is_empty() || uses_stream_builtins || has_http_handler_export {
         // TaskReturn is always needed for async exports
         add_import_by_name(&mut imports, "task_return");
@@ -393,7 +393,7 @@ pub fn populate_all_features(project: &mut Project) {
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
     let has_http_handler_export = world_registry
         .get(&project.target_world)
-        .is_some_and(|w| w.has_http_handler_export());
+        .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
 
     let mut imports: Vec<TirImport> = Vec::new();
     for info in builtin_registry.imported_builtins() {

@@ -46,12 +46,12 @@ impl WorldExportInfo {
             return false;
         };
 
-        if let Type::Generic(generic) = return_type {
-            if generic.name == "Result" && generic.args.len() == 2 {
-                if let Type::Named(ok_type) = &generic.args[0] {
-                    return ok_type.name == "Response";
-                }
-            }
+        if let Type::Generic(generic) = return_type
+            && generic.name == "Result"
+            && generic.args.len() == 2
+            && let Type::Named(ok_type) = &generic.args[0]
+        {
+            return ok_type.name == "Response";
         }
         false
     }
@@ -71,7 +71,9 @@ impl WorldInfo {
     ///
     /// Returns true if any export returns `Result<Response, ErrorCode>`.
     pub fn has_http_handler_export(&self) -> bool {
-        self.exports.iter().any(WorldExportInfo::returns_http_response)
+        self.exports
+            .iter()
+            .any(WorldExportInfo::returns_http_response)
     }
 }
 

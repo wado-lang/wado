@@ -61,7 +61,7 @@ pub struct Project {
     // ========================================
     // CM export characteristics (derived from target_world)
     // ========================================
-    /// When true, the target world exports an HTTP handler (returns Result<Response, ErrorCode>).
+    /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
     /// This determines whether HTTP-related glue code is needed.
     pub has_http_handler_export: bool,
 }

@@ -46,6 +46,7 @@ The `wasm_adapt` phase handles all Wasm-specific preparation:
 #### Metadata over TIR for Glue Code
 
 CM glue code (e.g., HTTP response creation in return statements) uses:
+
 - CM canonical ABI calls (future-new, task-return)
 - Linear memory operations (I32Load/Store at specific offsets)
 - CM type flattening (result<response, error-code> → multiple i32/i64)
@@ -55,6 +56,7 @@ These are too low-level and Wasm-specific to represent in TIR cleanly. Instead, 
 #### TIR for Helper Functions
 
 CM helper functions (type converters) are generated as TIR because:
+
 - They appear in golden fixtures for debugging
 - They can be inspected with `--lower --unparse`
 - Codegen simply converts TIR to Wasm without special cases

@@ -80,7 +80,7 @@ pub struct Codegen {
     builtin_registry: BuiltinRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
     world_registry: WorldRegistry,
-    /// Whether the target world exports an HTTP handler (returns Result<Response, ErrorCode>).
+    /// Whether the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
     /// Computed at the start of `generate_wasm` from `world_registry`.
     has_http_handler_export: bool,
     /// Registry of user-defined struct types (keyed by `StructName` for type safety)
@@ -216,7 +216,7 @@ struct FunctionContext {
     skip_tuple_wrap: bool,
     /// When true, this function is an async export and returns should use task-return
     is_async_export: bool,
-    /// When true, the target world exports an HTTP handler (returns Result<Response, ErrorCode>)
+    /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>)
     has_http_handler_export: bool,
 }
 
@@ -730,7 +730,7 @@ impl Codegen {
         self.has_http_handler_export = self
             .world_registry
             .get(&project.target_world)
-            .is_some_and(|w| w.has_http_handler_export());
+            .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
 
         // Collect pre-computed string literals from all TIR modules
         // Note: String DCE is performed in the optimizer, so we just collect all strings here
@@ -1828,11 +1828,7 @@ impl Codegen {
             }
             // Test functions need task.return wrapper like run
             if tir_func.name.starts_with("__test_") {
-                let wasm_func = self.generate_run_function(
-                    &tir_func,
-                    type_table,
-                    &builder,
-                );
+                let wasm_func = self.generate_run_function(&tir_func, type_table, &builder);
                 code.function(&wasm_func);
             } else {
                 let (wasm_func, hints) =
