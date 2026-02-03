@@ -721,9 +721,11 @@ impl Codegen {
 
     /// Generate Component Model binary Wasm from a Project.
     ///
+    /// Takes ownership of the Project since it's not needed after codegen.
     /// The project must have been optimized (usage fields populated) before calling this.
-    pub fn generate_wasm(&mut self, project: &Project) -> Vec<u8> {
-        // Take registries from Project (built once in resolver, shared across phases)
+    pub fn generate_wasm(&mut self, project: Project) -> Vec<u8> {
+        // Use registries from Project (built once in resolver)
+        // Clone into self since we need to borrow project for other fields
         self.wasi_registry = project.wasi_registry.clone();
         self.world_registry = project.world_registry.clone();
 
@@ -752,7 +754,7 @@ impl Codegen {
             all_tir_modules,
             symbols,
             implicit_modules,
-            project,
+            &project,
             module_name,
         );
 
