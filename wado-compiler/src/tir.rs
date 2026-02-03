@@ -1613,6 +1613,8 @@ impl ScratchLocal {
 pub struct TirFunction {
     pub name: String,
     pub is_pub: bool,
+    /// Whether this function is exported at the Component Model boundary (world export)
+    pub is_export: bool,
     /// Generic type parameters (empty for non-generic functions)
     pub type_params: Vec<TirTypeParam>,
     /// Type parameters from the impl block (for methods on generic structs)

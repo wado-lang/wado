@@ -1901,6 +1901,7 @@ impl<'a> Resolver<'a> {
         Some(TirFunction {
             name: func.name.clone(),
             is_pub: func.is_pub,
+            is_export: func.is_export,
             type_params,
             impl_type_params: vec![], // Not a method, no impl type params
             monomorph_info: None,     // Not from monomorphization
@@ -1953,7 +1954,8 @@ impl<'a> Resolver<'a> {
 
         let tir_func = TirFunction {
             name: function_name.clone(),
-            is_pub: false, // Tests are not public
+            is_pub: false,    // Tests are not public
+            is_export: false, // Tests are not world exports
             type_params: vec![],
             impl_type_params: vec![],
             monomorph_info: None,
@@ -2125,6 +2127,7 @@ impl<'a> Resolver<'a> {
         Some(TirFunction {
             name: func.name.clone(), // Will be mangled by caller
             is_pub: func.is_pub,
+            is_export: false, // Methods are not world exports
             type_params,
             impl_type_params, // Type params from impl block (e.g., T from impl Counter<T>)
             monomorph_info: None, // Not from monomorphization

@@ -2046,7 +2046,8 @@ impl Monomorphizer {
         Some(TirFunction {
             name: mangled_name,
             is_pub: generic.is_pub,
-            type_params: vec![],      // Concrete function has no type params
+            is_export: generic.is_export, // Inherit from generic
+            type_params: vec![],          // Concrete function has no type params
             impl_type_params: vec![], // Already monomorphized, no impl type params
             monomorph_info: Some(MonomorphInfo {
                 generic_name: generic.name.clone(),

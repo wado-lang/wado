@@ -260,7 +260,7 @@ pub fn wasm_adapt(mut project: Project) -> Project {
 
             for func_rc in &entry_module.functions {
                 let mut func = func_rc.borrow_mut();
-                if func.name == export.name {
+                if func.name == export.name && func.is_export {
                     func.cm_export_info = Some(cm_export_info.clone());
                     break;
                 }
