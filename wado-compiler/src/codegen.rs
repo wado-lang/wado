@@ -727,10 +727,8 @@ impl Codegen {
         let implicit_modules = &project.implicit_modules;
         let module_name = &project.module_name;
 
-        self.has_http_handler_export = self
-            .world_registry
-            .get(&project.target_world)
-            .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
+        // Use the http handler flag from project (computed by wasm_adapt phase)
+        self.has_http_handler_export = project.has_http_handler_export;
 
         // Collect pre-computed string literals from all TIR modules
         // Note: String DCE is performed in the optimizer, so we just collect all strings here
@@ -10815,9 +10813,15 @@ impl Codegen {
         // Create function context
         let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
 
-        // Mark this as an async export - returns should use task-return
-        func_ctx.is_async_export = true;
-        func_ctx.has_http_handler_export = self.has_http_handler_export;
+        // Set async export flags from CmExportInfo (computed by wasm_adapt phase)
+        if let Some(cm_info) = &tir_func.cm_export_info {
+            func_ctx.is_async_export = cm_info.is_async;
+            func_ctx.has_http_handler_export = cm_info.is_http_handler;
+        } else {
+            // Fallback for functions without CmExportInfo (shouldn't happen for world exports)
+            func_ctx.is_async_export = true;
+            func_ctx.has_http_handler_export = self.has_http_handler_export;
+        }
 
         // Copy address-taken locals from TIR
         func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();

@@ -102,6 +102,7 @@ pub mod syntax;
 pub mod tir;
 pub mod token;
 pub mod unparse;
+pub mod wasm_adapt;
 pub mod wasm_builder;
 pub mod wasm_postprocess;
 pub mod world_registry;
@@ -127,6 +128,7 @@ pub use parser::{ParseError, Parser};
 pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
+pub use wasm_adapt::wasm_adapt;
 
 use indexmap::IndexMap;
 
@@ -386,7 +388,10 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 10: Optimize (Project -> Project) ===
     let project = optimize(project, options.opt_level);
 
-    // === Phase 11: Codegen ===
+    // === Phase 11: Wasm Adapt (Project -> Project) ===
+    let project = wasm_adapt(project);
+
+    // === Phase 12: Codegen ===
     let mut codegen = Codegen::new();
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         codegen.generate_wasm(&project)
@@ -564,7 +569,8 @@ pub async fn dump_with_host<H: CompilerHost>(
                 implicit_modules_by_source,
                 module_name,
             );
-            optimize(project, opt_level)
+            let project = optimize(project, opt_level);
+            wasm_adapt(project)
         });
 
     Ok(DumpResult {

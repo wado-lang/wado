@@ -2087,6 +2087,7 @@ impl Monomorphizer {
             indirect_call_counts: std::collections::HashMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            cm_export_info: None,
         })
     }
 

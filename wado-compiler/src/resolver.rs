@@ -1920,6 +1920,7 @@ impl<'a> Resolver<'a> {
             indirect_call_counts: std::collections::HashMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            cm_export_info: None,
         })
     }
 
@@ -1971,6 +1972,7 @@ impl<'a> Resolver<'a> {
             indirect_call_counts: std::collections::HashMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            cm_export_info: None,
         };
 
         let tir_test = TirTest {
@@ -2147,6 +2149,7 @@ impl<'a> Resolver<'a> {
             indirect_call_counts: std::collections::HashMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            cm_export_info: None,
         })
     }
 
