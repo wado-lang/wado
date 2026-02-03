@@ -17,26 +17,10 @@ struct "Container<String,i32>" {
 
 fn run() with Stdout {
     let c: Container<String,i32> = move Container<String,i32> { keys: ["apple", "banana", "cherry"], values: [10, 20, 30], deleted: [false, true, false] };
-    let idx: i32 = __inline_Container_String_i32___find_key_index_0: {
-        let key: &String = &"cherry";
-        let mut i: i32 = 0;
-        loop {
-            if !((i < __inline_Array_String___len_1: {
-                let self: &Array<String> = &c.keys;
-                break __inline_Array_String___len_1: self.used;
-            }) && __inline_Array_String__IndexValue__index_value_2: {
-                let self: &Array<String> = &c.keys;
-                break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);
-            }."String^Ord::lt"(&*key)) {
-                break;
-            }
-            i = (i + 1);
-        }
-        break __inline_Container_String_i32___find_key_index_0: i;
-    };
+    let idx: i32 = c."Container<String,i32>::find_key_index"(&"cherry");
     let full: bool = c."Container<String,i32>::is_full"(5);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "index: ", move idx."i32::to_string"()), move ", full: "), __inline_bool__to_string_3: {
-        break __inline_bool__to_string_3: if full {
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "index: ", move idx."i32::to_string"()), move ", full: "), __inline_bool__to_string_0: {
+        break __inline_bool__to_string_0: if full {
             "true";
         } else {
             "false";
@@ -69,5 +53,23 @@ fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32)
         }
     }
     return (count >= max_keys);
+}
+
+fn "Container<String,i32>::find_key_index"(self: &Container<String,i32>, key: &String) -> i32 {
+    let mut i: i32 = 0;
+    let _licm_keys: Array<String> = self.keys;
+    let _licm_used: i32 = _licm_keys.used;
+    let _licm_repr: builtin::array<String> = _licm_keys.repr;
+    loop {
+        if !((i < __inline_Array_String___len_0: {
+            break __inline_Array_String___len_0: _licm_used;
+        }) && __inline_Array_String__IndexValue__index_value_1: {
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
+        }."String^Ord::lt"(&*key)) {
+            break;
+        }
+        i = (i + 1);
+    }
+    return i;
 }
 

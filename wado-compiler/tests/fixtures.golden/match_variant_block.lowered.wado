@@ -9,60 +9,27 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+fn apply_align(align: Align) -> String {
+    let mut result: String = move "";
+    return match align {
+        Left => {
+            result = move "left";
+            result;
+        },
+        Center => {
+            result = move "center";
+            result;
+        },
+        Right => {
+            result = move "right";
+            result;
+        },
+    };
+}
+
 fn run() with Stdout {
-    core::cli::println(__inline_apply_align_0: {
-        let align: Align = move Align::Left;
-        let mut result: String = move "";
-        break __inline_apply_align_0: match align {
-            Left => {
-                result = move "left";
-                result;
-            },
-            Center => {
-                result = move "center";
-                result;
-            },
-            Right => {
-                result = move "right";
-                result;
-            },
-        };
-    });
-    core::cli::println(__inline_apply_align_1: {
-        let align: Align = move Align::Center;
-        let mut result: String = move "";
-        break __inline_apply_align_1: match align {
-            Left => {
-                result = move "left";
-                result;
-            },
-            Center => {
-                result = move "center";
-                result;
-            },
-            Right => {
-                result = move "right";
-                result;
-            },
-        };
-    });
-    core::cli::println(__inline_apply_align_2: {
-        let align: Align = move Align::Right;
-        let mut result: String = move "";
-        break __inline_apply_align_2: match align {
-            Left => {
-                result = move "left";
-                result;
-            },
-            Center => {
-                result = move "center";
-                result;
-            },
-            Right => {
-                result = move "right";
-                result;
-            },
-        };
-    });
+    core::cli::println(move apply_align(move Align::Left));
+    core::cli::println(move apply_align(move Align::Center));
+    core::cli::println(move apply_align(move Align::Right));
 }
 

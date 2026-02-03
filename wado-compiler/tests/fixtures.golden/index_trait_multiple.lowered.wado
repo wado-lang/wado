@@ -18,28 +18,25 @@ struct PointHolder {
     point: Point,
 }
 
+fn "Point::move_by"(self: &mut Point, dx: i32, dy: i32) {
+    self.x = (self.x + dx);
+    self.y = (self.y + dy);
+}
+
 fn run() with Stdout {
     let mut h1: PointHolder = move PointHolder { point: Point { x: 0, y: 0 } };
     let mut h2: PointHolder = move PointHolder { point: Point { x: 10, y: 10 } };
-    __inline_Point__move_by_0: {
-        let self: &mut Point = __inline_PointHolder_IndexMut__index_mut_1: {
-            break __inline_PointHolder_IndexMut__index_mut_1: &mut h1.point;
-        };
-        self.x = (self.x + 5);
-        self.y = (self.y + 5);
+    __inline_PointHolder_IndexMut__index_mut_0: {
+        break __inline_PointHolder_IndexMut__index_mut_0: &mut h1.point;
+    }."Point::move_by"(5, 5);
+    __inline_PointHolder_IndexMut__index_mut_1: {
+        break __inline_PointHolder_IndexMut__index_mut_1: &mut h2.point;
+    }."Point::move_by"(-3, -3);
+    let p1: Point = *__inline_PointHolder_Index__index_2: {
+        break __inline_PointHolder_Index__index_2: &h1.point;
     };
-    __inline_Point__move_by_2: {
-        let self: &mut Point = __inline_PointHolder_IndexMut__index_mut_3: {
-            break __inline_PointHolder_IndexMut__index_mut_3: &mut h2.point;
-        };
-        self.x = (self.x + -3);
-        self.y = (self.y + -3);
-    };
-    let p1: Point = *__inline_PointHolder_Index__index_4: {
-        break __inline_PointHolder_Index__index_4: &h1.point;
-    };
-    let p2: Point = *__inline_PointHolder_Index__index_5: {
-        break __inline_PointHolder_Index__index_5: &h2.point;
+    let p2: Point = *__inline_PointHolder_Index__index_3: {
+        break __inline_PointHolder_Index__index_3: &h2.point;
     };
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "h1: (", move p1.x."i32::to_string"()), move ", "), move p1.y."i32::to_string"()), move ")"));
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "h2: (", move p2.x."i32::to_string"()), move ", "), move p2.y."i32::to_string"()), move ")"));

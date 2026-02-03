@@ -41,20 +41,11 @@ fn run() with Stdout {
     let bool_box: Box<bool> = move Box<bool> { value: true };
     let char_box: Box<char> = move Box<char> { value: 'A' };
     core::cli::println(move "String::concat"(move "i32: ", move int_box.value."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "f64: ", __inline_f64__to_string_0: {
-        let self: f64 = float_box.value;
-        let ptr: i32 = core::builtin::realloc(0, 0, 1, 24);
-        let len: i32 = core::builtin::f64_to_buffer(self, ptr);
-        let arr: builtin::array<u8> = core::prelude/primitives::memory_to_gc_array(ptr, len);
-        core::builtin::realloc(ptr, 24, 1, 0);
-        break __inline_f64__to_string_0: __inline_String__internal_from_utf8_raw_0: {
-            break __inline_String__internal_from_utf8_raw_0: String { repr: arr, used: len };
-        };
-    }));
+    core::cli::println(move "String::concat"(move "f64: ", move float_box.value."f64::to_string"()));
     core::cli::println(move "String::concat"(move "str: ", str_box.value));
-    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_1: {
+    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_0: {
         let self: bool = bool_box.value;
-        break __inline_bool__to_string_1: if self {
+        break __inline_bool__to_string_0: if self {
             "true";
         } else {
             "false";

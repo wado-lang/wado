@@ -22,6 +22,14 @@ struct Container {
     write_count: i32,
 }
 
+fn "Container::stats"(self: &Container) -> String {
+    return "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move self.read_count."i32::to_string"()), move ", writes="), move self.write_count."i32::to_string"());
+}
+
+fn "Container::total"(self: &Container) -> i32 {
+    return ((self.v0.n + self.v1.n) + self.v2.n);
+}
+
 fn "Container^Index::index"(self: &Container, idx: i32) -> &Value {
     if (idx == 0) {
         return &self.v0;
@@ -43,6 +51,19 @@ fn "Container^IndexMut::index_mut"(self: &mut Container, idx: i32) -> &mut Value
             return &mut self.v1;
         } else {
             return &mut self.v2;
+        }
+    }
+}
+
+fn "Container^IndexAssign::index_assign"(self: &mut Container, idx: i32, value: Value) {
+    self.write_count = (self.write_count + 1);
+    if (idx == 0) {
+        self.v0 = value;
+    } else {
+        if (idx == 1) {
+            self.v1 = value;
+        } else {
+            self.v2 = value;
         }
     }
 }
@@ -96,49 +117,29 @@ fn run() with Stdout {
         let self: &Value = &c.v2;
         break __inline_Value__describe_11: "String::concat"(move "String::concat"(self.tag, move ":"), move self.n."i32::to_string"());
     }));
-    __inline_Container_IndexAssign__index_assign_12: {
-        let value: Value = __inline_Value__new_13: {
-            let tag: String = move "replaced";
-            break __inline_Value__new_13: Value { n: 999, tag: tag };
-        };
-        c.write_count = (c.write_count + 1);
-        if (2 == 0) {
-            c.v0 = value;
-        } else {
-            if (2 == 1) {
-                c.v1 = value;
-            } else {
-                c.v2 = value;
-            }
-        }
-    };
-    core::cli::println(move "String::concat"(move "After replace: ", __inline_Value__describe_14: {
+    c."Container^IndexAssign::index_assign"(2, __inline_Value__new_12: {
+        let tag: String = move "replaced";
+        break __inline_Value__new_12: Value { n: 999, tag: tag };
+    });
+    core::cli::println(move "String::concat"(move "After replace: ", __inline_Value__describe_13: {
         let self: &Value = &c.v2;
-        break __inline_Value__describe_14: "String::concat"(move "String::concat"(self.tag, move ":"), move self.n."i32::to_string"());
+        break __inline_Value__describe_13: "String::concat"(move "String::concat"(self.tag, move ":"), move self.n."i32::to_string"());
     }));
-    core::cli::println(move "String::concat"(move "Total: ", move __inline_Container__total_15: {
-        break __inline_Container__total_15: ((c.v0.n + c.v1.n) + c.v2.n);
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "Stats: ", __inline_Container__stats_16: {
-        break __inline_Container__stats_16: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move c.read_count."i32::to_string"()), move ", writes="), move c.write_count."i32::to_string"());
-    }));
-    __inline_Container__reset_stats_17: {
+    core::cli::println(move "String::concat"(move "Total: ", move c."Container::total"()."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "Stats: ", move c."Container::stats"()));
+    __inline_Container__reset_stats_14: {
         c.read_count = 0;
         c.write_count = 0;
     };
-    core::cli::println(move "String::concat"(move "After reset: ", __inline_Container__stats_18: {
-        break __inline_Container__stats_18: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move c.read_count."i32::to_string"()), move ", writes="), move c.write_count."i32::to_string"());
-    }));
-    __inline_Value__increment_19: {
+    core::cli::println(move "String::concat"(move "After reset: ", move c."Container::stats"()));
+    __inline_Value__increment_15: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(0);
         self.n = (self.n + 1);
     };
-    __inline_Value__increment_20: {
+    __inline_Value__increment_16: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(1);
         self.n = (self.n + 1);
     };
-    core::cli::println(move "String::concat"(move "Final stats: ", __inline_Container__stats_21: {
-        break __inline_Container__stats_21: "String::concat"(move "String::concat"(move "String::concat"(move "reads=", move c.read_count."i32::to_string"()), move ", writes="), move c.write_count."i32::to_string"());
-    }));
+    core::cli::println(move "String::concat"(move "Final stats: ", move c."Container::stats"()));
 }
 

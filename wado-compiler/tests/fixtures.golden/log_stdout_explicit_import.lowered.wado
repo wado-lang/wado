@@ -14,14 +14,6 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() {
-    __inline_log_stdout_0: {
-        let message: String = move "stdout logging works";
-        let handles: i64 = core::builtin::stream_new();
-        let rx: i32 = handles as i32;
-        let tx: i32 = (handles >> 32) as i32;
-        core::builtin::call_indirect_stdout_write_via_stream(rx);
-        core::internal::write_string_to_stream(tx, message, true);
-        core::builtin::effect_wait();
-    };
+    core::internal::log_stdout(move "stdout logging works");
 }
 

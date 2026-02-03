@@ -14,26 +14,13 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    let ascii_chars: Array<char> = __inline_StrCharIter__collect_0: {
-        let self: &mut StrCharIter = &mut __inline_String__chars_1: {
-            let self: &String = &"ABC";
-            break __inline_String__chars_1: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
-        };
-        let mut result: Array<char> = move [];
-        loop {
-            let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let item: char = __unwrap_option(__pattern_temp_0);
-                result."Array<char>::append"(item);
-            } else {
-                break;
-            }
-        }
-        break __inline_StrCharIter__collect_0: result;
-    };
+    let ascii_chars: Array<char> = move __inline_String__chars_0: {
+        let self: &String = &"ABC";
+        break __inline_String__chars_0: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
+    }."StrCharIter::collect"();
     __assert_0: {
-        let __v0: i32 = __inline_Array_char___len_2: {
-            break __inline_Array_char___len_2: ascii_chars.used;
+        let __v0: i32 = __inline_Array_char___len_1: {
+            break __inline_Array_char___len_1: ascii_chars.used;
         };
         let __cond: bool = (__v0 == 3);
         if !__cond {
@@ -41,8 +28,8 @@ fn run() with Stdout {
         }
     }
     __assert_1: {
-        let __v0: char = __inline_Array_char__IndexValue__index_value_3: {
-            break __inline_Array_char__IndexValue__index_value_3: core::builtin::array_get::<char>(ascii_chars.repr, 0);
+        let __v0: char = __inline_Array_char__IndexValue__index_value_2: {
+            break __inline_Array_char__IndexValue__index_value_2: core::builtin::array_get::<char>(ascii_chars.repr, 0);
         };
         let __cond: bool = (__v0 == 'A');
         if !__cond {
@@ -50,8 +37,8 @@ fn run() with Stdout {
         }
     }
     __assert_2: {
-        let __v0: char = __inline_Array_char__IndexValue__index_value_4: {
-            break __inline_Array_char__IndexValue__index_value_4: core::builtin::array_get::<char>(ascii_chars.repr, 1);
+        let __v0: char = __inline_Array_char__IndexValue__index_value_3: {
+            break __inline_Array_char__IndexValue__index_value_3: core::builtin::array_get::<char>(ascii_chars.repr, 1);
         };
         let __cond: bool = (__v0 == 'B');
         if !__cond {
@@ -59,34 +46,21 @@ fn run() with Stdout {
         }
     }
     __assert_3: {
-        let __v0: char = __inline_Array_char__IndexValue__index_value_5: {
-            break __inline_Array_char__IndexValue__index_value_5: core::builtin::array_get::<char>(ascii_chars.repr, 2);
+        let __v0: char = __inline_Array_char__IndexValue__index_value_4: {
+            break __inline_Array_char__IndexValue__index_value_4: core::builtin::array_get::<char>(ascii_chars.repr, 2);
         };
         let __cond: bool = (__v0 == 'C');
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 11."i32::to_string"()), move "\ncondition: ascii_chars[2] == 'C'\n"), move "ascii_chars[2]: "), move __v0."char::to_string"()), move "\n"));
         }
     }
-    let two_chars: Array<char> = __inline_StrCharIter__collect_6: {
-        let self: &mut StrCharIter = &mut __inline_String__chars_7: {
-            let self: &String = &"ñé";
-            break __inline_String__chars_7: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
-        };
-        let mut result: Array<char> = move [];
-        loop {
-            let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let item: char = __unwrap_option(__pattern_temp_0);
-                result."Array<char>::append"(item);
-            } else {
-                break;
-            }
-        }
-        break __inline_StrCharIter__collect_6: result;
-    };
+    let two_chars: Array<char> = move __inline_String__chars_5: {
+        let self: &String = &"ñé";
+        break __inline_String__chars_5: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
+    }."StrCharIter::collect"();
     __assert_4: {
-        let __v0: i32 = __inline_Array_char___len_8: {
-            break __inline_Array_char___len_8: two_chars.used;
+        let __v0: i32 = __inline_Array_char___len_6: {
+            break __inline_Array_char___len_6: two_chars.used;
         };
         let __cond: bool = (__v0 == 2);
         if !__cond {
@@ -94,41 +68,28 @@ fn run() with Stdout {
         }
     }
     __assert_5: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_9: {
-            break __inline_Array_char__IndexValue__index_value_9: core::builtin::array_get::<char>(two_chars.repr, 0);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_7: {
+            break __inline_Array_char__IndexValue__index_value_7: core::builtin::array_get::<char>(two_chars.repr, 0);
         } as i32 == 0x00F1);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 17."i32::to_string"()), move "\ncondition: two_chars[0] as i32 == 0x00F1\n"));
         }
     }
     __assert_6: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_10: {
-            break __inline_Array_char__IndexValue__index_value_10: core::builtin::array_get::<char>(two_chars.repr, 1);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_8: {
+            break __inline_Array_char__IndexValue__index_value_8: core::builtin::array_get::<char>(two_chars.repr, 1);
         } as i32 == 0x00E9);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 18."i32::to_string"()), move "\ncondition: two_chars[1] as i32 == 0x00E9\n"));
         }
     }
-    let three_chars: Array<char> = __inline_StrCharIter__collect_11: {
-        let self: &mut StrCharIter = &mut __inline_String__chars_12: {
-            let self: &String = &"日本";
-            break __inline_String__chars_12: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
-        };
-        let mut result: Array<char> = move [];
-        loop {
-            let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let item: char = __unwrap_option(__pattern_temp_0);
-                result."Array<char>::append"(item);
-            } else {
-                break;
-            }
-        }
-        break __inline_StrCharIter__collect_11: result;
-    };
+    let three_chars: Array<char> = move __inline_String__chars_9: {
+        let self: &String = &"日本";
+        break __inline_String__chars_9: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
+    }."StrCharIter::collect"();
     __assert_7: {
-        let __v0: i32 = __inline_Array_char___len_13: {
-            break __inline_Array_char___len_13: three_chars.used;
+        let __v0: i32 = __inline_Array_char___len_10: {
+            break __inline_Array_char___len_10: three_chars.used;
         };
         let __cond: bool = (__v0 == 2);
         if !__cond {
@@ -136,41 +97,28 @@ fn run() with Stdout {
         }
     }
     __assert_8: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_14: {
-            break __inline_Array_char__IndexValue__index_value_14: core::builtin::array_get::<char>(three_chars.repr, 0);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_11: {
+            break __inline_Array_char__IndexValue__index_value_11: core::builtin::array_get::<char>(three_chars.repr, 0);
         } as i32 == 0x65E5);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 24."i32::to_string"()), move "\ncondition: three_chars[0] as i32 == 0x65E5\n"));
         }
     }
     __assert_9: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_15: {
-            break __inline_Array_char__IndexValue__index_value_15: core::builtin::array_get::<char>(three_chars.repr, 1);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_12: {
+            break __inline_Array_char__IndexValue__index_value_12: core::builtin::array_get::<char>(three_chars.repr, 1);
         } as i32 == 0x672C);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 25."i32::to_string"()), move "\ncondition: three_chars[1] as i32 == 0x672C\n"));
         }
     }
-    let four_chars: Array<char> = __inline_StrCharIter__collect_16: {
-        let self: &mut StrCharIter = &mut __inline_String__chars_17: {
-            let self: &String = &"😀";
-            break __inline_String__chars_17: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
-        };
-        let mut result: Array<char> = move [];
-        loop {
-            let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let item: char = __unwrap_option(__pattern_temp_0);
-                result."Array<char>::append"(item);
-            } else {
-                break;
-            }
-        }
-        break __inline_StrCharIter__collect_16: result;
-    };
+    let four_chars: Array<char> = move __inline_String__chars_13: {
+        let self: &String = &"😀";
+        break __inline_String__chars_13: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
+    }."StrCharIter::collect"();
     __assert_10: {
-        let __v0: i32 = __inline_Array_char___len_18: {
-            break __inline_Array_char___len_18: four_chars.used;
+        let __v0: i32 = __inline_Array_char___len_14: {
+            break __inline_Array_char___len_14: four_chars.used;
         };
         let __cond: bool = (__v0 == 1);
         if !__cond {
@@ -178,56 +126,30 @@ fn run() with Stdout {
         }
     }
     __assert_11: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_19: {
-            break __inline_Array_char__IndexValue__index_value_19: core::builtin::array_get::<char>(four_chars.repr, 0);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_15: {
+            break __inline_Array_char__IndexValue__index_value_15: core::builtin::array_get::<char>(four_chars.repr, 0);
         } as i32 == 0x1F600);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 31."i32::to_string"()), move "\ncondition: four_chars[0] as i32 == 0x1F600\n"));
         }
     }
     __assert_12: {
-        let __v0: i32 = __inline_StrCharIter__count_20: {
-            let self: &mut StrCharIter = &mut __inline_String__chars_21: {
-                let self: &String = &"";
-                break __inline_String__chars_21: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
-            };
-            let mut n: i32 = 0;
-            loop {
-                let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-                if __is_not_null(__pattern_temp_0) {
-                    __unwrap_option(__pattern_temp_0);
-                    n = (n + 1);
-                } else {
-                    break;
-                }
-            }
-            break __inline_StrCharIter__count_20: n;
-        };
+        let __v0: i32 = __inline_String__chars_16: {
+            let self: &String = &"";
+            break __inline_String__chars_16: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
+        }."StrCharIter::count"();
         let __cond: bool = (__v0 == 0);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 34."i32::to_string"()), move "\ncondition: \"\".chars().count() == 0\n"), move "\"\".chars().count(): "), move __v0."i32::to_string"()), move "\n"));
         }
     }
-    let mixed_chars: Array<char> = __inline_StrCharIter__collect_22: {
-        let self: &mut StrCharIter = &mut __inline_String__chars_23: {
-            let self: &String = &"Aéï日😀";
-            break __inline_String__chars_23: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
-        };
-        let mut result: Array<char> = move [];
-        loop {
-            let __pattern_temp_0: Option<char> = self."StrCharIter^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let item: char = __unwrap_option(__pattern_temp_0);
-                result."Array<char>::append"(item);
-            } else {
-                break;
-            }
-        }
-        break __inline_StrCharIter__collect_22: result;
-    };
+    let mixed_chars: Array<char> = move __inline_String__chars_17: {
+        let self: &String = &"Aéï日😀";
+        break __inline_String__chars_17: StrCharIter { repr: self.repr, used: self.used, byte_index: 0 };
+    }."StrCharIter::collect"();
     __assert_13: {
-        let __v0: i32 = __inline_Array_char___len_24: {
-            break __inline_Array_char___len_24: mixed_chars.used;
+        let __v0: i32 = __inline_Array_char___len_18: {
+            break __inline_Array_char___len_18: mixed_chars.used;
         };
         let __cond: bool = (__v0 == 5);
         if !__cond {
@@ -235,8 +157,8 @@ fn run() with Stdout {
         }
     }
     __assert_14: {
-        let __v0: char = __inline_Array_char__IndexValue__index_value_25: {
-            break __inline_Array_char__IndexValue__index_value_25: core::builtin::array_get::<char>(mixed_chars.repr, 0);
+        let __v0: char = __inline_Array_char__IndexValue__index_value_19: {
+            break __inline_Array_char__IndexValue__index_value_19: core::builtin::array_get::<char>(mixed_chars.repr, 0);
         };
         let __cond: bool = (__v0 == 'A');
         if !__cond {
@@ -244,32 +166,32 @@ fn run() with Stdout {
         }
     }
     __assert_15: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_26: {
-            break __inline_Array_char__IndexValue__index_value_26: core::builtin::array_get::<char>(mixed_chars.repr, 1);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_20: {
+            break __inline_Array_char__IndexValue__index_value_20: core::builtin::array_get::<char>(mixed_chars.repr, 1);
         } as i32 == 0x00E9);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 41."i32::to_string"()), move "\ncondition: mixed_chars[1] as i32 == 0x00E9\n"));
         }
     }
     __assert_16: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_27: {
-            break __inline_Array_char__IndexValue__index_value_27: core::builtin::array_get::<char>(mixed_chars.repr, 2);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_21: {
+            break __inline_Array_char__IndexValue__index_value_21: core::builtin::array_get::<char>(mixed_chars.repr, 2);
         } as i32 == 0x00EF);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 42."i32::to_string"()), move "\ncondition: mixed_chars[2] as i32 == 0x00EF\n"));
         }
     }
     __assert_17: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_28: {
-            break __inline_Array_char__IndexValue__index_value_28: core::builtin::array_get::<char>(mixed_chars.repr, 3);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_22: {
+            break __inline_Array_char__IndexValue__index_value_22: core::builtin::array_get::<char>(mixed_chars.repr, 3);
         } as i32 == 0x65E5);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 43."i32::to_string"()), move "\ncondition: mixed_chars[3] as i32 == 0x65E5\n"));
         }
     }
     __assert_18: {
-        let __cond: bool = (__inline_Array_char__IndexValue__index_value_29: {
-            break __inline_Array_char__IndexValue__index_value_29: core::builtin::array_get::<char>(mixed_chars.repr, 4);
+        let __cond: bool = (__inline_Array_char__IndexValue__index_value_23: {
+            break __inline_Array_char__IndexValue__index_value_23: core::builtin::array_get::<char>(mixed_chars.repr, 4);
         } as i32 == 0x1F600);
         if !__cond {
             core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/string_chars_iter.wado"), move ":"), move 44."i32::to_string"()), move "\ncondition: mixed_chars[4] as i32 == 0x1F600\n"));

@@ -9,28 +9,20 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
+fn compute(x: i32) -> i32 {
+    let result: i32 = if (x > 0) {
+        let a: i32 = (x * 2);
+        let b: i32 = (a + 1);
+        b;
+    } else {
+        let c: i32 = (x * 3);
+        c;
+    };
+    return result;
+}
+
 fn run() with Stdout {
-    core::cli::println(move __inline_compute_0: {
-        let result: i32 = if (5 > 0) {
-            let a: i32 = (5 * 2);
-            let b: i32 = (a + 1);
-            b;
-        } else {
-            let c: i32 = (5 * 3);
-            c;
-        };
-        break __inline_compute_0: result;
-    }."i32::to_string"());
-    core::cli::println(move __inline_compute_1: {
-        let result: i32 = if (-2 > 0) {
-            let a: i32 = (-2 * 2);
-            let b: i32 = (a + 1);
-            b;
-        } else {
-            let c: i32 = (-2 * 3);
-            c;
-        };
-        break __inline_compute_1: result;
-    }."i32::to_string"());
+    core::cli::println(move compute(5)."i32::to_string"());
+    core::cli::println(move compute(-2)."i32::to_string"());
 }
 
