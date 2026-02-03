@@ -277,18 +277,16 @@ pub fn wasm_adapt(mut project: Project) -> Result<Project, String> {
             }
 
             // Check for errors
-            if !found_with_export {
-                if found_without_export {
-                    return Err(format!(
-                        "function `{}` exists but is not marked with `export` keyword. \
+            if !found_with_export && found_without_export {
+                return Err(format!(
+                    "function `{}` exists but is not marked with `export` keyword. \
                          Add `export` to make it a world entry point: `export fn {}(...)`",
-                        export.name, export.name
-                    ));
-                }
-                // Note: We don't error on missing functions here because some worlds
-                // have optional exports (e.g., HTTP Service's handle is optional if
-                // you're just testing). The codegen will fail later if needed.
+                    export.name, export.name
+                ));
             }
+            // Note: We don't error on missing functions here because some worlds
+            // have optional exports (e.g., HTTP Service's handle is optional if
+            // you're just testing). The codegen will fail later if needed.
         }
     }
 

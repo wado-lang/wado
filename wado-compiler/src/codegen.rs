@@ -12053,7 +12053,7 @@ mod tests {
                 return a + b;
             }
 
-            fn run() {
+            export fn run() {
                 let result = add(1, 2);
             }
         "#,

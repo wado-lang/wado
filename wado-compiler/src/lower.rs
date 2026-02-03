@@ -1905,7 +1905,7 @@ fn lower_global_initializers(module: &mut TirModule) {
 
     let init_func = TirFunction {
         name: "__initialize_module".to_string(),
-        is_pub: true,     // pub so it can be called from entry module's __initialize_modules
+        is_pub: true, // pub so it can be called from entry module's __initialize_modules
         is_export: false, // Internal function, not a world export
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
