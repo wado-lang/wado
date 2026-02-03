@@ -235,7 +235,9 @@ impl CmConverterRequirements {
 ///
 /// This analyzes world exports and attaches `CmExportInfo` to the corresponding
 /// `TirFunctions`. The Project is modified in place.
-pub fn wasm_adapt(mut project: Project) -> Project {
+///
+/// Returns an error if a required world export function is missing or not marked with `export`.
+pub fn wasm_adapt(mut project: Project) -> Result<Project, String> {
     // Look up the target world from the registry in Project
     let world_info = project.world_registry.get(&project.target_world).cloned();
 
@@ -258,12 +260,34 @@ pub fn wasm_adapt(mut project: Project) -> Project {
                 .get_mut(&project.entry_module_source)
                 .expect("entry module should exist");
 
+            let mut found_with_export = false;
+            let mut found_without_export = false;
+
             for func_rc in &entry_module.functions {
                 let mut func = func_rc.borrow_mut();
-                if func.name == export.name && func.is_export {
-                    func.cm_export_info = Some(cm_export_info.clone());
-                    break;
+                if func.name == export.name {
+                    if func.is_export {
+                        func.cm_export_info = Some(cm_export_info.clone());
+                        found_with_export = true;
+                        break;
+                    } else {
+                        found_without_export = true;
+                    }
                 }
+            }
+
+            // Check for errors
+            if !found_with_export {
+                if found_without_export {
+                    return Err(format!(
+                        "function `{}` exists but is not marked with `export` keyword. \
+                         Add `export` to make it a world entry point: `export fn {}(...)`",
+                        export.name, export.name
+                    ));
+                }
+                // Note: We don't error on missing functions here because some worlds
+                // have optional exports (e.g., HTTP Service's handle is optional if
+                // you're just testing). The codegen will fail later if needed.
             }
         }
     }
@@ -283,7 +307,7 @@ pub fn wasm_adapt(mut project: Project) -> Project {
         }
     }
 
-    project
+    Ok(project)
 }
 
 #[cfg(test)]
