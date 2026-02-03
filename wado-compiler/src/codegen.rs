@@ -24,6 +24,7 @@ use crate::tir::{
     TirImport, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
+use crate::wasm_adapt::CmValType;
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_postprocess;
 use crate::world_registry::WorldExportInfo;
@@ -9246,13 +9247,14 @@ impl Codegen<'_> {
                     // For async exports, call task-return with the result value
                     if ctx.has_http_handler_export {
                         // Service world: result<response, error-code>
-                        // Generate the return expression but drop it for now
+                        // TODO: Properly handle user's return value (deferred to future PR)
+                        // For now, drop the return value and create HTTP 200 response
                         if let Some(expr) = value {
                             self.generate_expr(func, expr, type_table, ctx, builder);
                             func.instruction(&Instruction::Drop);
                         }
 
-                        // Try creating HTTP 200 response:
+                        // Create HTTP 200 response:
                         // 1. Create headers
                         // 2. Create trailers future (rx, tx)
                         // 3. Call response.new(rx) - this starts the reader!
@@ -10750,14 +10752,12 @@ impl Codegen<'_> {
         let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
 
         // Set async export flags from CmExportInfo (computed by wasm_adapt phase)
-        if let Some(cm_info) = &tir_func.cm_export_info {
-            func_ctx.is_async_export = cm_info.is_async;
-            func_ctx.has_http_handler_export = cm_info.is_http_handler;
-        } else {
-            // Fallback for functions without CmExportInfo (shouldn't happen for world exports)
-            func_ctx.is_async_export = true;
-            func_ctx.has_http_handler_export = self.project.has_http_handler_export;
-        }
+        let cm_info = tir_func
+            .cm_export_info
+            .as_ref()
+            .expect("world export should have CmExportInfo from wasm_adapt phase");
+        func_ctx.is_async_export = cm_info.is_async;
+        func_ctx.has_http_handler_export = cm_info.is_http_handler;
 
         // Copy address-taken locals from TIR
         func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();
@@ -10805,15 +10805,10 @@ impl Codegen<'_> {
 
         self.allocate_precomputed_scratch_locals(tir_func, type_table, &mut func_ctx);
 
-        // Pre-allocate scratch locals for Service world HTTP response creation
-        if func_ctx.is_async_export && func_ctx.has_http_handler_export {
-            func_ctx.alloc_local("_http_future", ValType::I64);
-            func_ctx.alloc_local("_trailers_rx", ValType::I32);
-            func_ctx.alloc_local("_trailers_tx", ValType::I32);
-            func_ctx.alloc_local("_headers_handle", ValType::I32);
-            func_ctx.alloc_local("_write_result", ValType::I32);
-            func_ctx.alloc_local("_result_disc", ValType::I32);
-            func_ctx.alloc_local("_response_handle", ValType::I32);
+        // Pre-allocate CM scratch locals from wasm_adapt phase
+        for scratch_local in &cm_info.scratch_locals {
+            let val_type = cm_valtype_to_valtype(scratch_local.val_type);
+            func_ctx.alloc_local(&scratch_local.name, val_type);
         }
 
         // Reset let-pattern counter so code generation uses the same indices as pre-allocation
@@ -12027,6 +12022,23 @@ fn primitive_to_valtype(prim: &PrimitiveType) -> ValType {
     }
 }
 
+/// Convert a `CmValType` (from `wasm_adapt` phase) to Wasm `ValType`.
+fn cm_valtype_to_valtype(cm_type: CmValType) -> ValType {
+    match cm_type {
+        CmValType::I32 => ValType::I32,
+        CmValType::I64 => ValType::I64,
+        CmValType::F32 => ValType::F32,
+        CmValType::F64 => ValType::F64,
+        CmValType::AnyRef => ValType::Ref(RefType {
+            nullable: true,
+            heap_type: HeapType::Abstract {
+                shared: false,
+                ty: AbstractHeapType::Any,
+            },
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::compiler_host::InMemoryCompilerHost;
@@ -12041,7 +12053,7 @@ mod tests {
                 return a + b;
             }
 
-            fn run() {
+            export fn run() {
                 let result = add(1, 2);
             }
         "#,

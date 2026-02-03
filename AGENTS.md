@@ -98,7 +98,27 @@ The CLI is implemented in `wado-cli/` with sub-command style CLI:
 cargo run --bin wado -- compile -o file.wasm file.wado    # generates Wasm
 cargo run --bin wado -- compile -o file.wat file.wado     # generates WAT
 cargo run --bin wado -- compile --wat-to-stdout file.wado # outputs WAT to stdout
-cargo run --bin wado -- run file.wado                     # run it directly using wasmtime
+cargo run --bin wado -- run file.wado                     # run CLI program using wasmtime
+cargo run --bin wado -- serve file.wado                   # serve HTTP service using wasmtime
+```
+
+### Serve Command
+
+Use `wado serve` to run a Wado HTTP service (wasi:http/service world):
+
+```sh
+wado serve file.wado                 # serve on 0.0.0.0:8080 (default)
+wado serve --addr 127.0.0.1:3000 file.wado  # serve on custom address
+```
+
+The source file must export an HTTP handler function:
+
+```wado
+use {Request, Response, ErrorCode} from "wasi:http";
+
+export fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Handle HTTP request and return response
+}
 ```
 
 ### Dump Command

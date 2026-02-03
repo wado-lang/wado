@@ -1906,6 +1906,7 @@ fn lower_global_initializers(module: &mut TirModule) {
     let init_func = TirFunction {
         name: "__initialize_module".to_string(),
         is_pub: true, // pub so it can be called from entry module's __initialize_modules
+        is_export: false, // Internal function, not a world export
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
         monomorph_info: None,
@@ -2237,7 +2238,8 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
 
     let init_modules_func = TirFunction {
         name: "__initialize_modules".to_string(),
-        is_pub: false, // Not pub - internal to entry module
+        is_pub: false,    // Not pub - internal to entry module
+        is_export: false, // Internal function, not a world export
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
         monomorph_info: None,
@@ -3061,6 +3063,7 @@ impl ClosureLowerer {
             let call_method = TirFunction {
                 name: qualified_method_name,
                 is_pub: false,
+                is_export: false, // Closure method, not a world export
                 type_params: Vec::new(),
                 impl_type_params: Vec::new(),
                 monomorph_info: None,
@@ -4613,7 +4616,8 @@ impl ClosureLowerer {
 
         let specialized_func = TirFunction {
             name: specialized_name.clone(),
-            is_pub: false, // Specialized functions are always private
+            is_pub: false,    // Specialized functions are always private
+            is_export: false, // Specialized functions are not world exports
             type_params: callee.type_params.clone(),
             impl_type_params: callee.impl_type_params.clone(),
             monomorph_info: callee.monomorph_info.clone(),

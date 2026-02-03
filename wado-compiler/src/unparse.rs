@@ -201,6 +201,10 @@ impl<'a> Unparser<'a> {
             self.output.push_str("pub ");
         }
 
+        if f.is_export {
+            self.output.push_str("export ");
+        }
+
         self.output.push_str("fn ");
         self.output.push_str(&f.name);
         self.unparse_generic_params(&f.type_params);

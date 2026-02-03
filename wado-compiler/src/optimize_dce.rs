@@ -8,7 +8,6 @@ use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;
 
-use crate::ast::Type;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::name::{
@@ -20,6 +19,7 @@ use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule,
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
+use crate::wasm_adapt::{CmConverterKind, CmConverterRequirements};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
@@ -115,50 +115,31 @@ pub fn analyze_project(project: &mut Project) {
     // Add CM converter functions based on WASI function return types
     // These conversion functions are called from codegen, not Wado code
     // We need to compute transitive closure to include all functions they call
-    let mut needs_list_string_converter = false;
-    let mut needs_list_tuple_string_converter = false;
-    let mut needs_option_string_converter = false;
+    // Analysis is centralized in wasm_adapt::CmConverterRequirements
+    let mut cm_requirements = CmConverterRequirements::default();
 
     for func_name in &used_wasi_functions {
         if let Some(func_info) = wasi_registry.get_function(func_name)
             && let Some(return_type) = &func_info.return_type
         {
-            match return_type {
-                // Array<String> -> cm_list_string_to_array
-                Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
-                    if matches!(&g.args[0], Type::Named(n) if n.name == "String") {
-                        needs_list_string_converter = true;
-                    }
-                    // Array<[String, String]> -> cm_list_tuple_string_string_to_array
-                    if let Type::Tuple(tuple_types) = &g.args[0]
-                        && tuple_types.len() == 2
-                        && matches!(&tuple_types[0], Type::Named(n) if n.name == "String")
-                        && matches!(&tuple_types[1], Type::Named(n) if n.name == "String")
-                    {
-                        needs_list_tuple_string_converter = true;
-                    }
-                }
-                // Option<String> -> cm_option_string_to_option + copy_string_from_linear
-                Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
-                    if matches!(&g.args[0], Type::Named(n) if n.name == "String") {
-                        needs_option_string_converter = true;
-                    }
-                }
-                _ => {}
-            }
+            cm_requirements.analyze_type(return_type);
         }
     }
 
     // Add converter functions and their transitive dependencies
-    if needs_list_string_converter {
+    if cm_requirements.needs(CmConverterKind::ListString) {
         let cm_list_func = core_internal("cm_list_string_to_array");
         reachable.extend(compute_reachable(&call_graph, &cm_list_func));
     }
-    if needs_list_tuple_string_converter {
+    if cm_requirements.needs(CmConverterKind::ListU8) {
+        let cm_list_func = core_internal("cm_list_u8_to_array");
+        reachable.extend(compute_reachable(&call_graph, &cm_list_func));
+    }
+    if cm_requirements.needs(CmConverterKind::ListTupleString) {
         let cm_list_func = core_internal("cm_list_tuple_string_string_to_array");
         reachable.extend(compute_reachable(&call_graph, &cm_list_func));
     }
-    if needs_option_string_converter {
+    if cm_requirements.needs(CmConverterKind::OptionString) {
         let cm_option_func = core_internal("cm_option_string_to_option");
         let copy_string_func = core_internal("copy_string_from_linear");
         reachable.extend(compute_reachable(&call_graph, &cm_option_func));

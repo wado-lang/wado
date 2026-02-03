@@ -389,7 +389,10 @@ pub async fn compile_with_options<H: CompilerHost>(
     let project = optimize(project, options.opt_level);
 
     // === Phase 11: Wasm Adapt (Project -> Project) ===
-    let project = wasm_adapt(project);
+    let project = wasm_adapt(project).map_err(|message| CompileError::Analyzer {
+        message,
+        filename: filename.clone(),
+    })?;
 
     // === Phase 12: Codegen ===
     let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -581,8 +584,9 @@ pub async fn dump_with_host<H: CompilerHost>(
                 builtin_registry,
             );
             let project = optimize(project, opt_level);
-            wasm_adapt(project)
-        });
+            wasm_adapt(project).ok()
+        })
+        .flatten();
 
     Ok(DumpResult {
         source: source.to_string(),
