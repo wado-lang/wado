@@ -9585,6 +9585,11 @@ pub fn resolve_to_project(
     // Build registries once here, shared across all subsequent phases
     let (wasi_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
 
+    // Build builtin registry (uses a temporary type table for type resolution)
+    let temp_type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
+    let builtin_registry =
+        crate::builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
+
     Ok(Project::new(
         entry_module_source,
         tir_modules_by_source,
@@ -9593,5 +9598,6 @@ pub fn resolve_to_project(
         module_name,
         wasi_registry,
         world_registry,
+        builtin_registry,
     ))
 }

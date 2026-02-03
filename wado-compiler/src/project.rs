@@ -8,6 +8,7 @@
 //! 2. Optimize -> Project (optimized, with usage analysis)
 //! 3. Codegen takes Project and generates Wasm
 
+use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
@@ -44,6 +45,8 @@ pub struct Project {
     pub wasi_registry: WasiRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
     pub world_registry: WorldRegistry,
+    /// Registry of builtin function signatures from lib/core/builtin.wado
+    pub builtin_registry: BuiltinRegistry,
 
     // ========================================
     // Usage analysis results (what the project contains)
@@ -86,6 +89,7 @@ impl Project {
         module_name: String,
         wasi_registry: WasiRegistry,
         world_registry: WorldRegistry,
+        builtin_registry: BuiltinRegistry,
     ) -> Self {
         Self {
             entry_module_source,
@@ -95,6 +99,7 @@ impl Project {
             module_name,
             wasi_registry,
             world_registry,
+            builtin_registry,
             // Usage analysis fields default to empty/false
             reachable_functions: HashSet::new(),
             all_reachable: false,
