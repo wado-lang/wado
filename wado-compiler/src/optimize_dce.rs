@@ -50,16 +50,18 @@ pub fn analyze_project(project: &mut Project) {
     // Build call graph, effect usage, and box primitives from all modules
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
-    // Determine entry functions based on target world
-    // Each world has specific export functions that are entry points
-    let entry_func_names: Vec<&str> = match project.target_world.as_str() {
-        "Service" => vec!["handle"],  // wasi:http/service
-        "Command" | _ => vec!["run"], // wasi:cli/command (default)
-    };
+    // Get world registry to determine entry functions and HTTP handler status
+    let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
+
+    // Determine entry functions from world exports
+    let entry_func_names: Vec<String> = world_registry
+        .get(&project.target_world)
+        .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
+        .unwrap_or_else(|| vec!["run".to_string()]);
 
     // Compute reachable functions from all entry points
     let mut reachable = HashSet::new();
-    for entry_name in entry_func_names {
+    for entry_name in &entry_func_names {
         let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
             &project.entry_module_source,
             entry_name,
@@ -113,7 +115,6 @@ pub fn analyze_project(project: &mut Project) {
     // Add CM converter functions based on WASI function return types
     // These conversion functions are called from codegen, not Wado code
     // We need to compute transitive closure to include all functions they call
-    let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
     let mut needs_list_string_converter = false;
     let mut needs_list_tuple_string_converter = false;
     let mut needs_option_string_converter = false;
