@@ -90,6 +90,9 @@ pub struct Codegen<'a> {
     /// Registry of box types for primitive references (keyed by `ValType`, maps to GC struct type index)
     /// Box types are single-field mutable structs that allow references to primitives
     box_types: HashMap<ValType, u32>,
+    /// Generic box type for non-primitive mutable references (stores anyref)
+    /// Used for `&mut T` where T is a reference type (struct, array, etc.)
+    ref_box_type: Option<u32>,
     /// Counter for generating unique closure IDs
     closure_counter: u32,
     /// Registry of closure struct types (env + funcref pair)
@@ -469,6 +472,7 @@ impl Codegen<'_> {
             array_types: HashMap::new(),
             array_types_by_name: HashMap::new(),
             box_types: HashMap::new(),
+            ref_box_type: None,
             closure_counter: 0,
             closure_struct_types: HashMap::new(),
             canonical_closure_types: HashMap::new(),
@@ -4407,6 +4411,23 @@ impl Codegen<'_> {
             }];
             let type_idx = builder.define_gc_struct_type(name, &fields);
             self.box_types.insert(val_type, type_idx);
+        }
+
+        // Register generic ref_box type for non-primitive mutable references
+        // This box can hold any reference type (struct, array, variant, etc.)
+        if project.needs_ref_box {
+            let fields = vec![FieldType {
+                element_type: StorageType::Val(ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Abstract {
+                        shared: false,
+                        ty: AbstractHeapType::Any,
+                    },
+                })),
+                mutable: true,
+            }];
+            let type_idx = builder.define_gc_struct_type("$ref_box", &fields);
+            self.ref_box_type = Some(type_idx);
         }
     }
 

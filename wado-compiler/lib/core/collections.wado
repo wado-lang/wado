@@ -14,6 +14,9 @@ struct TreeMapNode<K, V> {
     left: Option<&mut TreeMapNode<K, V>>,
     right: Option<&mut TreeMapNode<K, V>>,
     deleted: bool,
+    // Insertion order doubly-linked list
+    insert_prev: Option<&mut TreeMapNode<K, V>>,
+    insert_next: Option<&mut TreeMapNode<K, V>>,
 }
 
 impl TreeMapNode<K, V> {
@@ -25,16 +28,21 @@ impl TreeMapNode<K, V> {
             left: null,
             right: null,
             deleted: false,
+            insert_prev: null,
+            insert_next: null,
         };
     }
 }
 
-/// A sorted map backed by a self-balancing binary search tree (AA tree).
-/// Keys are stored in sorted order, enabling efficient range queries.
+/// A map backed by a self-balancing binary search tree (AA tree).
+/// Iterates in insertion order while maintaining O(log n) lookup.
 pub struct TreeMap<K, V> {
     root: Option<&mut TreeMapNode<K, V>>,
     size: i32,
     deleted_count: i32,
+    // Insertion order doubly-linked list head/tail
+    first_inserted: Option<&mut TreeMapNode<K, V>>,
+    last_inserted: Option<&mut TreeMapNode<K, V>>,
 }
 
 impl TreeMap<K, V> {
@@ -44,6 +52,8 @@ impl TreeMap<K, V> {
             root: null,
             size: 0,
             deleted_count: 0,
+            first_inserted: null,
+            last_inserted: null,
         };
     }
 
@@ -52,6 +62,40 @@ impl TreeMap<K, V> {
 
     /// Returns true if the map contains no elements
     pub fn is_empty(&self) -> bool { return self.size == 0; }
+
+    // Remove a node from the insertion order linked list
+    fn unlink_from_insertion_list(&mut self, node: &mut TreeMapNode<K, V>) {
+        let prev = node.insert_prev;
+        let next = node.insert_next;
+
+        if let Some(p) = prev {
+            p.insert_next = next;
+        } else {
+            self.first_inserted = next;
+        }
+
+        if let Some(n) = next {
+            n.insert_prev = prev;
+        } else {
+            self.last_inserted = prev;
+        }
+
+        node.insert_prev = null;
+        node.insert_next = null;
+    }
+
+    // Append a node to the end of the insertion order linked list
+    fn append_to_insertion_list(&mut self, node: &mut TreeMapNode<K, V>) {
+        node.insert_prev = self.last_inserted;
+        node.insert_next = null;
+
+        if let Some(last) = self.last_inserted {
+            last.insert_next = Option::Some(node);
+        } else {
+            self.first_inserted = Option::Some(node);
+        }
+        self.last_inserted = Option::Some(node);
+    }
 
     // Skew: right rotation to fix left horizontal link
     fn skew(&mut self, node: Option<&mut TreeMapNode<K, V>>) -> Option<&mut TreeMapNode<K, V>> {
@@ -95,6 +139,7 @@ impl TreeMap<K, V> {
     ) -> Option<&mut TreeMapNode<K, V>> {
         if let Some(n) = node {
             if n.deleted && key == n.key {
+                // Reusing a deleted node - it was already unlinked from insertion list
                 n.value = value;
                 n.deleted = false;
                 *inserted = true;
@@ -102,6 +147,7 @@ impl TreeMap<K, V> {
             }
 
             if !n.deleted && key == n.key {
+                // Updating existing key - don't change insertion order
                 n.value = value;
                 return Option::Some(n);
             }
@@ -127,6 +173,10 @@ impl TreeMap<K, V> {
         let mut inserted = false;
         self.root = self.insert_at(self.root, key, value, &mut inserted);
         if inserted {
+            // Find the newly inserted node and add to insertion list
+            if let Some(node) = self.find_node_mut(key) {
+                self.append_to_insertion_list(node);
+            }
             self.size = self.size + 1;
         }
     }
@@ -177,6 +227,8 @@ impl TreeMap<K, V> {
     /// Removes a key from the map. Returns true if the key was present.
     pub fn remove(&mut self, key: K) -> bool {
         if let Some(node) = self.find_node_mut(key) {
+            // Unlink from insertion order list before marking deleted
+            self.unlink_from_insertion_list(node);
             node.deleted = true;
             self.deleted_count = self.deleted_count + 1;
             self.size = self.size - 1;
@@ -188,62 +240,49 @@ impl TreeMap<K, V> {
         return false;
     }
 
-    fn collect_pairs(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<[K, V]>) {
-        if let Some(n) = node {
-            self.collect_pairs(n.left, result);
-            if !n.deleted {
-                result.append([n.key, n.value]);
-            }
-            self.collect_pairs(n.right, result);
-        }
-    }
-
     fn compact(&mut self) {
         if self.deleted_count == 0 { return; }
 
+        // Collect pairs in insertion order (deleted nodes are not in the list)
         let mut pairs: Array<[K, V]> = [];
-        self.collect_pairs(self.root, &mut pairs);
+        let mut current = self.first_inserted;
+        while let Some(n) = current {
+            pairs.append([n.key, n.value]);
+            current = n.insert_next;
+        }
 
+        // Reset the map
         self.root = null;
         self.deleted_count = 0;
         self.size = 0;
+        self.first_inserted = null;
+        self.last_inserted = null;
 
+        // Re-insert all pairs in insertion order
         for let pair of pairs {
             self.insert(pair.0, pair.1);
         }
     }
 
-    fn collect_keys(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<K>) {
-        if let Some(n) = node {
-            self.collect_keys(n.left, result);
-            if !n.deleted {
-                result.append(n.key);
-            }
-            self.collect_keys(n.right, result);
-        }
-    }
-
-    /// Returns all keys in sorted order
+    /// Returns all keys in insertion order
     pub fn keys(&self) -> Array<K> {
         let mut result: Array<K> = [];
-        self.collect_keys(self.root, &mut result);
+        let mut current = self.first_inserted;
+        while let Some(n) = current {
+            result.append(n.key);
+            current = n.insert_next;
+        }
         return result;
     }
 
-    fn collect_values(&self, node: Option<&TreeMapNode<K, V>>, result: &mut Array<V>) {
-        if let Some(n) = node {
-            self.collect_values(n.left, result);
-            if !n.deleted {
-                result.append(n.value);
-            }
-            self.collect_values(n.right, result);
-        }
-    }
-
-    /// Returns all values in key-sorted order
+    /// Returns all values in insertion order
     pub fn values(&self) -> Array<V> {
         let mut result: Array<V> = [];
-        self.collect_values(self.root, &mut result);
+        let mut current = self.first_inserted;
+        while let Some(n) = current {
+            result.append(n.value);
+            current = n.insert_next;
+        }
         return result;
     }
 
@@ -252,6 +291,8 @@ impl TreeMap<K, V> {
         self.root = null;
         self.size = 0;
         self.deleted_count = 0;
+        self.first_inserted = null;
+        self.last_inserted = null;
     }
 }
 

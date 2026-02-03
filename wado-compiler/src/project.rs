@@ -59,6 +59,8 @@ pub struct Project {
     pub used_wasi_functions: HashSet<String>,
     /// Primitive types that need box types (for references like &i32, &mut f64)
     pub used_box_primitives: HashSet<PrimitiveType>,
+    /// When true, generic `ref_box` type is needed (for `&mut T` where T is non-primitive)
+    pub needs_ref_box: bool,
 
     // ========================================
     // Codegen options
@@ -105,6 +107,7 @@ impl Project {
             all_reachable: false,
             used_wasi_functions: HashSet::new(),
             used_box_primitives: HashSet::new(),
+            needs_ref_box: false,
             // Codegen options
             strip_names: false,
             target_world: "Command".to_string(),

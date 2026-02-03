@@ -30,6 +30,9 @@ type EffectUsageMap = HashMap<FunctionId, HashSet<(String, String)>>;
 /// Per-function box primitives usage
 type BoxPrimitivesMap = HashMap<FunctionId, HashSet<PrimitiveType>>;
 
+/// Functions that need the generic `ref_box` type
+type NeedsRefBoxSet = HashSet<FunctionId>;
+
 /// Analysis results for a single function
 #[derive(Debug, Clone, Default)]
 struct FunctionAnalysis {
@@ -39,6 +42,8 @@ struct FunctionAnalysis {
     effect_calls: HashSet<(String, String)>,
     /// Primitive types that need box types (for references like &i32, &mut f64)
     used_box_primitives: HashSet<PrimitiveType>,
+    /// Whether this function needs `ref_box` (for `&mut T` where T is non-primitive)
+    needs_ref_box: bool,
 }
 
 /// Analyze the project and populate its usage fields with DCE analysis results.
@@ -48,7 +53,8 @@ struct FunctionAnalysis {
 /// `used_box_primitives` fields, and the entry module's `imports` list.
 pub fn analyze_project(project: &mut Project) {
     // Build call graph, effect usage, and box primitives from all modules
-    let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
+    let (call_graph, effect_usage, box_primitives_map, needs_ref_box_funcs) =
+        build_analysis_graph(&project.tir_modules);
 
     // Get world registry to determine entry functions and HTTP handler status
     let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
@@ -83,9 +89,10 @@ pub fn analyze_project(project: &mut Project) {
         }
     }
 
-    // Collect used WASI functions and box primitives from reachable functions
+    // Collect used WASI functions, box primitives, and ref_box needs from reachable functions
     let mut used_wasi_functions: HashSet<String> = HashSet::new();
     let mut used_box_primitives: HashSet<PrimitiveType> = HashSet::new();
+    let mut needs_ref_box = false;
     for func_id in &reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
@@ -94,6 +101,9 @@ pub fn analyze_project(project: &mut Project) {
         }
         if let Some(prims) = box_primitives_map.get(func_id) {
             used_box_primitives.extend(prims.iter().copied());
+        }
+        if needs_ref_box_funcs.contains(func_id) {
+            needs_ref_box = true;
         }
     }
 
@@ -322,6 +332,7 @@ pub fn analyze_project(project: &mut Project) {
     project.all_reachable = false;
     project.used_wasi_functions = used_wasi_functions;
     project.used_box_primitives = used_box_primitives;
+    project.needs_ref_box = needs_ref_box;
 
     // Filter string literals in each module to only include strings from reachable functions
     for module in project.tir_modules.values_mut() {
@@ -422,16 +433,19 @@ pub fn populate_all_features(project: &mut Project) {
 
     // All primitives that map to box types when DCE is disabled
     project.used_box_primitives = HashSet::from([I32, I64, F32, F64]);
+    // Enable ref_box for all non-primitive mutable references when DCE is disabled
+    project.needs_ref_box = true;
 }
 
 /// Build call graph and effect usage from all TIR modules
-/// Returns (`call_graph`, `effect_usage`, `box_primitives_map`)
+/// Returns (`call_graph`, `effect_usage`, `box_primitives_map`, `needs_ref_box_funcs`)
 fn build_analysis_graph(
     modules: &IndexMap<ModuleSource, TirModule>,
-) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap) {
+) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap, NeedsRefBoxSet) {
     let mut call_graph: CallGraph = HashMap::new();
     let mut effect_usage: EffectUsageMap = HashMap::new();
     let mut box_primitives_map: BoxPrimitivesMap = HashMap::new();
+    let mut needs_ref_box_funcs: NeedsRefBoxSet = HashSet::new();
 
     for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
@@ -477,7 +491,10 @@ fn build_analysis_graph(
                 effect_usage.insert(func_id.clone(), analysis.effect_calls);
             }
             if !analysis.used_box_primitives.is_empty() {
-                box_primitives_map.insert(func_id, analysis.used_box_primitives);
+                box_primitives_map.insert(func_id.clone(), analysis.used_box_primitives);
+            }
+            if analysis.needs_ref_box {
+                needs_ref_box_funcs.insert(func_id);
             }
         }
 
@@ -502,13 +519,21 @@ fn build_analysis_graph(
                     effect_usage.insert(method_id.clone(), analysis.effect_calls);
                 }
                 if !analysis.used_box_primitives.is_empty() {
-                    box_primitives_map.insert(method_id, analysis.used_box_primitives);
+                    box_primitives_map.insert(method_id.clone(), analysis.used_box_primitives);
+                }
+                if analysis.needs_ref_box {
+                    needs_ref_box_funcs.insert(method_id);
                 }
             }
         }
     }
 
-    (call_graph, effect_usage, box_primitives_map)
+    (
+        call_graph,
+        effect_usage,
+        box_primitives_map,
+        needs_ref_box_funcs,
+    )
 }
 
 /// Analyze a TIR function for callees and effect usage
@@ -520,12 +545,21 @@ fn analyze_function(
     let mut analysis = FunctionAnalysis::default();
 
     // Check parameters for references to primitives (e.g., &i32, &mut f64)
+    // and mutable references to non-primitives (needs ref_box)
     for param in &func.params {
-        if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-            type_table.get(param.type_id)
-            && let ResolvedType::Primitive(prim) = type_table.get(*inner)
+        match type_table.get(param.type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                if let ResolvedType::Primitive(prim) = type_table.get(*inner) {
+                    analysis.used_box_primitives.insert(*prim);
+                }
+            }
+            _ => {}
+        }
+        // Check for &mut T where T is non-primitive (needs ref_box)
+        if let ResolvedType::MutRef(inner) = type_table.get(param.type_id)
+            && !matches!(type_table.get(*inner), ResolvedType::Primitive(_))
         {
-            analysis.used_box_primitives.insert(*prim);
+            analysis.needs_ref_box = true;
         }
     }
 
@@ -551,6 +585,12 @@ fn analyze_block(
                     && let ResolvedType::Primitive(prim) = type_table.get(*inner)
                 {
                     analysis.used_box_primitives.insert(*prim);
+                }
+                // Check for &mut T where T is non-primitive (needs ref_box)
+                if let ResolvedType::MutRef(inner) = type_table.get(*type_id)
+                    && !matches!(type_table.get(*inner), ResolvedType::Primitive(_))
+                {
+                    analysis.needs_ref_box = true;
                 }
             }
             TirStmtKind::Expr(expr) => {
@@ -842,13 +882,19 @@ fn analyze_expr(
             analyze_expr(left, current_module, type_table, analysis);
             analyze_expr(right, current_module, type_table, analysis);
         }
-        TirExprKind::Unary { op, expr } => {
-            analyze_expr(expr, current_module, type_table, analysis);
+        TirExprKind::Unary { op, expr: inner } => {
+            analyze_expr(inner, current_module, type_table, analysis);
             // Track box types needed for references to primitives
             if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-                && let ResolvedType::Primitive(prim) = type_table.get(expr.type_id)
+                && let ResolvedType::Primitive(prim) = type_table.get(inner.type_id)
             {
                 analysis.used_box_primitives.insert(*prim);
+            }
+            // Track ref_box need for &mut T where T is non-primitive
+            if matches!(op, TirUnaryOp::MutRef)
+                && !matches!(type_table.get(inner.type_id), ResolvedType::Primitive(_))
+            {
+                analysis.needs_ref_box = true;
             }
         }
         TirExprKind::Assign { target, value } => {
