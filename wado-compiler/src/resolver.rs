@@ -3518,42 +3518,41 @@ impl<'a> Resolver<'a> {
                         binary.span,
                     );
 
-                    // Determine comparison using VariantTest:
-                    // < : cmp(a, b) matches { Less }
-                    // > : cmp(a, b) matches { Greater }
-                    // <= : !(cmp(a, b) matches { Greater })
-                    // >= : !(cmp(a, b) matches { Less })
-                    let (negate, case_name, case_index): (bool, &str, u32) = match binary.op {
-                        BinaryOp::Lt => (false, "Less", 0),
-                        BinaryOp::Gt => (false, "Greater", 2),
-                        BinaryOp::LtEq => (true, "Greater", 2),
-                        BinaryOp::GtEq => (true, "Less", 0),
-                        _ => unreachable!(),
-                    };
+                    // Determine comparison operator and Ordering variant:
+                    // < : cmp(a, b) == Ordering::Less
+                    // > : cmp(a, b) == Ordering::Greater
+                    // <= : cmp(a, b) != Ordering::Greater
+                    // >= : cmp(a, b) != Ordering::Less
+                    let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) =
+                        match binary.op {
+                            BinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
+                            BinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
+                            BinaryOp::LtEq => (TirBinaryOp::NotEq, "Greater", 2),
+                            BinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
+                            _ => unreachable!(),
+                        };
 
-                    // Create VariantTest to check if cmp result matches the expected case
-                    let variant_test = TirExpr::new(
-                        TirExprKind::VariantTest {
-                            expr: Box::new(cmp_call),
-                            case_index,
+                    // Create Ordering variant for comparison
+                    let ordering_variant = TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type: ordering_type_id,
                             case_name: case_name.to_string(),
+                            case_index,
+                            payload: None,
+                        },
+                        ordering_type_id,
+                        binary.span,
+                    );
+
+                    return TirExpr::new(
+                        TirExprKind::Binary {
+                            op: compare_op,
+                            left: Box::new(cmp_call),
+                            right: Box::new(ordering_variant),
                         },
                         TypeTable::BOOL,
                         binary.span,
                     );
-
-                    if negate {
-                        // For <= and >=, we need to negate the test
-                        return TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Not,
-                                expr: Box::new(variant_test),
-                            },
-                            TypeTable::BOOL,
-                            binary.span,
-                        );
-                    }
-                    return variant_test;
                 }
             }
         }

@@ -221,10 +221,6 @@ pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     self.used = (used + 1);
 }
 
-fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    return core::builtin::array_get::<String>(self.repr, index);
-}
-
 pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
@@ -331,26 +327,29 @@ fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &
     let mut i: i32 = 0;
     let _licm_keys: Array<String> = node.keys;
     let _licm_used: i32 = _licm_keys.used;
+    let _licm_repr: builtin::array<String> = _licm_keys.repr;
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && __variant_test(*key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(i)), case=2, name=Greater)) {
+        }) && (*key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_1: {
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
+        }) == Ordering::Greater)) {
             break;
         }
         i = (i + 1);
     }
-    if ((i < __inline_Array_String___len_1: {
+    if ((i < __inline_Array_String___len_2: {
         let self: &Array<String> = &node.keys;
-        break __inline_Array_String___len_1: self.used;
-    }) && *key."String^Eq::eq"(&__inline_Array_String__IndexValue__index_value_2: {
+        break __inline_Array_String___len_2: self.used;
+    }) && *key."String^Eq::eq"(&__inline_Array_String__IndexValue__index_value_3: {
         let self: &Array<String> = &node.keys;
-        break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);
+        break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, i);
     })) {
-        if !__inline_Array_bool__IndexValue__index_value_3: {
+        if !__inline_Array_bool__IndexValue__index_value_4: {
             let self: &Array<bool> = &node.deleted;
-            break __inline_Array_bool__IndexValue__index_value_3: core::builtin::array_get::<bool>(self.repr, i);
+            break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(self.repr, i);
         } {
-            __inline_Array_bool__IndexAssign__index_assign_4: {
+            __inline_Array_bool__IndexAssign__index_assign_5: {
                 let self: &mut Array<bool> = &mut node.deleted;
                 core::builtin::array_set::<bool>(self.repr, i, true);
             };
@@ -379,28 +378,31 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
     let mut i: i32 = 0;
     let _licm_keys: Array<String> = node.keys;
     let _licm_used: i32 = _licm_keys.used;
+    let _licm_repr: builtin::array<String> = _licm_keys.repr;
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && __variant_test(*key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(i)), case=2, name=Greater)) {
+        }) && (*key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_1: {
+            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
+        }) == Ordering::Greater)) {
             break;
         }
         i = (i + 1);
     }
-    if ((i < __inline_Array_String___len_1: {
+    if ((i < __inline_Array_String___len_2: {
         let self: &Array<String> = &node.keys;
-        break __inline_Array_String___len_1: self.used;
-    }) && *key."String^Eq::eq"(&__inline_Array_String__IndexValue__index_value_2: {
+        break __inline_Array_String___len_2: self.used;
+    }) && *key."String^Eq::eq"(&__inline_Array_String__IndexValue__index_value_3: {
         let self: &Array<String> = &node.keys;
-        break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);
+        break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, i);
     })) {
-        if !__inline_Array_bool__IndexValue__index_value_3: {
+        if !__inline_Array_bool__IndexValue__index_value_4: {
             let self: &Array<bool> = &node.deleted;
-            break __inline_Array_bool__IndexValue__index_value_3: core::builtin::array_get::<bool>(self.repr, i);
+            break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(self.repr, i);
         } {
-            return Option::Some(__inline_Array_i32__IndexValue__index_value_4: {
+            return Option::Some(__inline_Array_i32__IndexValue__index_value_5: {
                 let self: &Array<i32> = &node.values;
-                break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(self.repr, i);
+                break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(self.repr, i);
             });
         }
         return null;
@@ -446,30 +448,33 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
         let mut pos: i32 = 0;
         let _licm_keys: Array<String> = node.keys;
         let _licm_used: i32 = _licm_keys.used;
+        let _licm_repr: builtin::array<String> = _licm_keys.repr;
         loop {
             if !((pos < __inline_Array_String___len_0: {
                 break __inline_Array_String___len_0: _licm_used;
-            }) && __variant_test(_licm_keys."Array<String>^IndexValue::index_value"(pos)."String^Ord::cmp"(&key), case=0, name=Less)) {
+            }) && (__inline_Array_String__IndexValue__index_value_1: {
+                break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, pos);
+            }."String^Ord::cmp"(&key) == Ordering::Less)) {
                 break;
             }
             pos = (pos + 1);
         }
-        if ((pos < __inline_Array_String___len_1: {
+        if ((pos < __inline_Array_String___len_2: {
             let self: &Array<String> = &node.keys;
-            break __inline_Array_String___len_1: self.used;
-        }) && __inline_Array_String__IndexValue__index_value_2: {
+            break __inline_Array_String___len_2: self.used;
+        }) && __inline_Array_String__IndexValue__index_value_3: {
             let self: &Array<String> = &node.keys;
-            break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, pos);
+            break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, pos);
         }."String^Eq::eq"(&key)) {
-            __inline_Array_i32__IndexAssign__index_assign_3: {
+            __inline_Array_i32__IndexAssign__index_assign_4: {
                 let self: &mut Array<i32> = &mut node.values;
                 core::builtin::array_set::<i32>(self.repr, pos, value);
             };
-            if __inline_Array_bool__IndexValue__index_value_4: {
+            if __inline_Array_bool__IndexValue__index_value_5: {
                 let self: &Array<bool> = &node.deleted;
-                break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(self.repr, pos);
+                break __inline_Array_bool__IndexValue__index_value_5: core::builtin::array_get::<bool>(self.repr, pos);
             } {
-                __inline_Array_bool__IndexAssign__index_assign_5: {
+                __inline_Array_bool__IndexAssign__index_assign_6: {
                     let self: &mut Array<bool> = &mut node.deleted;
                     core::builtin::array_set::<bool>(self.repr, pos, false);
                 };
@@ -486,19 +491,25 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
         let mut pos: i32 = 0;
         let _licm_keys: Array<String> = node.keys;
         let _licm_used: i32 = _licm_keys.used;
+        let _licm_repr: builtin::array<String> = _licm_keys.repr;
         loop {
-            if !((pos < __inline_Array_String___len_6: {
-                break __inline_Array_String___len_6: _licm_used;
-            }) && __variant_test(key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(pos)), case=2, name=Greater)) {
+            if !((pos < __inline_Array_String___len_7: {
+                break __inline_Array_String___len_7: _licm_used;
+            }) && (key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_8: {
+                break __inline_Array_String__IndexValue__index_value_8: core::builtin::array_get::<String>(_licm_repr, pos);
+            }) == Ordering::Greater)) {
                 break;
             }
             pos = (pos + 1);
         }
-        if node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(pos)."BTreeNode<String,i32>::is_full"(__inline_TreeMap_String_i32___max_keys_7: {
-            break __inline_TreeMap_String_i32___max_keys_7: ((2 * self.t) - 1);
+        if node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(pos)."BTreeNode<String,i32>::is_full"(__inline_TreeMap_String_i32___max_keys_9: {
+            break __inline_TreeMap_String_i32___max_keys_9: ((2 * self.t) - 1);
         }) {
             self."TreeMap<String,i32>::split_child"(node, pos);
-            if __variant_test(key."String^Ord::cmp"(&node.keys."Array<String>^IndexValue::index_value"(pos)), case=2, name=Greater) {
+            if (key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_10: {
+                let self: &Array<String> = &node.keys;
+                break __inline_Array_String__IndexValue__index_value_10: core::builtin::array_get::<String>(self.repr, pos);
+            }) == Ordering::Greater) {
                 pos = (pos + 1);
             }
         }
@@ -527,52 +538,58 @@ fn "TreeMap<String,i32>::sort_node_entries"(self: &TreeMap<String,i32>, node: &m
                             break __for_6;
                         }
                         __for_6_body: {
-                            if __variant_test(node.keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&node.keys."Array<String>^IndexValue::index_value"(j)), case=2, name=Greater) {
-                                let temp_k: String = __inline_Array_String__IndexValue__index_value_2: {
+                            if (__inline_Array_String__IndexValue__index_value_2: {
+                                let self: &Array<String> = &node.keys;
+                                break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);
+                            }."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_3: {
+                                let self: &Array<String> = &node.keys;
+                                break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, j);
+                            }) == Ordering::Greater) {
+                                let temp_k: String = __inline_Array_String__IndexValue__index_value_4: {
                                     let self: &Array<String> = &node.keys;
-                                    break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);
-                                };
-                                __inline_Array_String__IndexAssign__index_assign_3: {
-                                    let self: &mut Array<String> = &mut node.keys;
-                                    let value: String = __inline_Array_String__IndexValue__index_value_4: {
-                                        let self: &Array<String> = &node.keys;
-                                        break __inline_Array_String__IndexValue__index_value_4: core::builtin::array_get::<String>(self.repr, j);
-                                    };
-                                    core::builtin::array_set::<String>(self.repr, i, value);
+                                    break __inline_Array_String__IndexValue__index_value_4: core::builtin::array_get::<String>(self.repr, i);
                                 };
                                 __inline_Array_String__IndexAssign__index_assign_5: {
                                     let self: &mut Array<String> = &mut node.keys;
+                                    let value: String = __inline_Array_String__IndexValue__index_value_6: {
+                                        let self: &Array<String> = &node.keys;
+                                        break __inline_Array_String__IndexValue__index_value_6: core::builtin::array_get::<String>(self.repr, j);
+                                    };
+                                    core::builtin::array_set::<String>(self.repr, i, value);
+                                };
+                                __inline_Array_String__IndexAssign__index_assign_7: {
+                                    let self: &mut Array<String> = &mut node.keys;
                                     core::builtin::array_set::<String>(self.repr, j, temp_k);
                                 };
-                                let temp_v: i32 = __inline_Array_i32__IndexValue__index_value_6: {
+                                let temp_v: i32 = __inline_Array_i32__IndexValue__index_value_8: {
                                     let self: &Array<i32> = &node.values;
-                                    break __inline_Array_i32__IndexValue__index_value_6: core::builtin::array_get::<i32>(self.repr, i);
-                                };
-                                __inline_Array_i32__IndexAssign__index_assign_7: {
-                                    let self: &mut Array<i32> = &mut node.values;
-                                    let value: i32 = __inline_Array_i32__IndexValue__index_value_8: {
-                                        let self: &Array<i32> = &node.values;
-                                        break __inline_Array_i32__IndexValue__index_value_8: core::builtin::array_get::<i32>(self.repr, j);
-                                    };
-                                    core::builtin::array_set::<i32>(self.repr, i, value);
+                                    break __inline_Array_i32__IndexValue__index_value_8: core::builtin::array_get::<i32>(self.repr, i);
                                 };
                                 __inline_Array_i32__IndexAssign__index_assign_9: {
                                     let self: &mut Array<i32> = &mut node.values;
+                                    let value: i32 = __inline_Array_i32__IndexValue__index_value_10: {
+                                        let self: &Array<i32> = &node.values;
+                                        break __inline_Array_i32__IndexValue__index_value_10: core::builtin::array_get::<i32>(self.repr, j);
+                                    };
+                                    core::builtin::array_set::<i32>(self.repr, i, value);
+                                };
+                                __inline_Array_i32__IndexAssign__index_assign_11: {
+                                    let self: &mut Array<i32> = &mut node.values;
                                     core::builtin::array_set::<i32>(self.repr, j, temp_v);
                                 };
-                                let temp_d: bool = __inline_Array_bool__IndexValue__index_value_10: {
+                                let temp_d: bool = __inline_Array_bool__IndexValue__index_value_12: {
                                     let self: &Array<bool> = &node.deleted;
-                                    break __inline_Array_bool__IndexValue__index_value_10: core::builtin::array_get::<bool>(self.repr, i);
+                                    break __inline_Array_bool__IndexValue__index_value_12: core::builtin::array_get::<bool>(self.repr, i);
                                 };
-                                __inline_Array_bool__IndexAssign__index_assign_11: {
+                                __inline_Array_bool__IndexAssign__index_assign_13: {
                                     let self: &mut Array<bool> = &mut node.deleted;
-                                    let value: bool = __inline_Array_bool__IndexValue__index_value_12: {
+                                    let value: bool = __inline_Array_bool__IndexValue__index_value_14: {
                                         let self: &Array<bool> = &node.deleted;
-                                        break __inline_Array_bool__IndexValue__index_value_12: core::builtin::array_get::<bool>(self.repr, j);
+                                        break __inline_Array_bool__IndexValue__index_value_14: core::builtin::array_get::<bool>(self.repr, j);
                                     };
                                     core::builtin::array_set::<bool>(self.repr, i, value);
                                 };
-                                __inline_Array_bool__IndexAssign__index_assign_13: {
+                                __inline_Array_bool__IndexAssign__index_assign_15: {
                                     let self: &mut Array<bool> = &mut node.deleted;
                                     core::builtin::array_set::<bool>(self.repr, j, temp_d);
                                 };

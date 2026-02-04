@@ -6715,6 +6715,59 @@ impl Codegen<'_> {
                     return;
                 }
 
+                // Handle variant type comparisons (compare discriminants with i32.eq/ne)
+                let left_is_variant =
+                    matches!(type_table.get(left.type_id), ResolvedType::Variant { .. });
+                let right_is_variant =
+                    matches!(type_table.get(right.type_id), ResolvedType::Variant { .. });
+                if (left_is_variant || right_is_variant)
+                    && (*op == TirBinaryOp::Eq || *op == TirBinaryOp::NotEq)
+                {
+                    // Get the variant type from whichever side is a variant
+                    let variant_type_id = if left_is_variant {
+                        left.type_id
+                    } else {
+                        right.type_id
+                    };
+                    let variant_name = match type_table.get(variant_type_id) {
+                        ResolvedType::Variant { name, .. } => name.clone(),
+                        ResolvedType::GenericInstance {
+                            name, type_args, ..
+                        } => {
+                            let type_arg_names: Vec<String> = type_args
+                                .iter()
+                                .map(|t| type_table.mangle_type_name(*t))
+                                .collect();
+                            mangle_generic_name(name, &type_arg_names)
+                        }
+                        other => panic!("Expected Variant type, got: {other:?}"),
+                    };
+                    let variant_types = &self.variant_types;
+                    let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
+                        panic!("Variant type not registered: {variant_name}");
+                    });
+                    let base_type_idx = variant_info.base_type_idx;
+
+                    // Generate both expressions and get their discriminants
+                    self.generate_expr(func, left, type_table, ctx, builder);
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: base_type_idx,
+                        field_index: 0,
+                    });
+                    self.generate_expr(func, right, type_table, ctx, builder);
+                    func.instruction(&Instruction::StructGet {
+                        struct_type_index: base_type_idx,
+                        field_index: 0,
+                    });
+                    // Compare discriminants
+                    func.instruction(&Instruction::I32Eq);
+                    if *op == TirBinaryOp::NotEq {
+                        // Invert the result for !=
+                        func.instruction(&Instruction::I32Eqz);
+                    }
+                    return;
+                }
+
                 // Handle reference type comparisons (use ref.eq instead of i32.eq/ne)
                 let left_is_ref = self.is_reference_type(left.type_id, type_table);
                 let right_is_ref = self.is_reference_type(right.type_id, type_table);

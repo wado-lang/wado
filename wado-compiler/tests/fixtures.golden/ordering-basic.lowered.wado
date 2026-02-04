@@ -34,16 +34,16 @@ fn run() with Stdout {
     let arr1: Array<i32> = move [1, 2, 3];
     let arr2: Array<i32> = move [1, 2, 4];
     let arr3: Array<i32> = move [1, 2, 3];
-    if __variant_test(arr1."Array<i32>^Ord::cmp"(&arr2), case=0, name=Less) {
+    if (arr1."Array<i32>^Ord::cmp"(&arr2) == Ordering::Less) {
         core::cli::println(move "arr1 < arr2");
     }
-    if !__variant_test(arr1."Array<i32>^Ord::cmp"(&arr3), case=2, name=Greater) {
+    if (arr1."Array<i32>^Ord::cmp"(&arr3) != Ordering::Greater) {
         core::cli::println(move "arr1 <= arr3");
     }
-    if __variant_test(arr2."Array<i32>^Ord::cmp"(&arr1), case=2, name=Greater) {
+    if (arr2."Array<i32>^Ord::cmp"(&arr1) == Ordering::Greater) {
         core::cli::println(move "arr2 > arr1");
     }
-    if !__variant_test(arr3."Array<i32>^Ord::cmp"(&arr1), case=0, name=Less) {
+    if (arr3."Array<i32>^Ord::cmp"(&arr1) != Ordering::Less) {
         core::cli::println(move "arr3 >= arr1");
     }
     if arr1."Array<i32>^Eq::eq"(&arr3) {
@@ -52,13 +52,13 @@ fn run() with Stdout {
     let s1: String = move "apple";
     let s2: String = move "banana";
     let s3: String = move "apple";
-    if __variant_test(s1."String^Ord::cmp"(&s2), case=0, name=Less) {
+    if (s1."String^Ord::cmp"(&s2) == Ordering::Less) {
         core::cli::println(move "apple < banana");
     }
-    if !__variant_test(s1."String^Ord::cmp"(&s3), case=2, name=Greater) {
+    if (s1."String^Ord::cmp"(&s3) != Ordering::Greater) {
         core::cli::println(move "apple <= apple");
     }
-    if __variant_test(s2."String^Ord::cmp"(&s1), case=2, name=Greater) {
+    if (s2."String^Ord::cmp"(&s1) == Ordering::Greater) {
         core::cli::println(move "banana > apple");
     }
     if s1."String^Eq::eq"(&s3) {
