@@ -334,7 +334,7 @@ fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && (__variant_tag(*key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(i))) == 2)) {
+        }) && __variant_test(*key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(i)), case=2, name=Greater)) {
             break;
         }
         i = (i + 1);
@@ -382,7 +382,7 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && (__variant_tag(*key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(i))) == 2)) {
+        }) && __variant_test(*key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(i)), case=2, name=Greater)) {
             break;
         }
         i = (i + 1);
@@ -449,7 +449,7 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
         loop {
             if !((pos < __inline_Array_String___len_0: {
                 break __inline_Array_String___len_0: _licm_used;
-            }) && (__variant_tag(_licm_keys."Array<String>^IndexValue::index_value"(pos)."String^Ord::cmp"(&key)) == 0)) {
+            }) && __variant_test(_licm_keys."Array<String>^IndexValue::index_value"(pos)."String^Ord::cmp"(&key), case=0, name=Less)) {
                 break;
             }
             pos = (pos + 1);
@@ -489,7 +489,7 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
         loop {
             if !((pos < __inline_Array_String___len_6: {
                 break __inline_Array_String___len_6: _licm_used;
-            }) && (__variant_tag(key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(pos))) == 2)) {
+            }) && __variant_test(key."String^Ord::cmp"(&_licm_keys."Array<String>^IndexValue::index_value"(pos)), case=2, name=Greater)) {
                 break;
             }
             pos = (pos + 1);
@@ -498,7 +498,7 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
             break __inline_TreeMap_String_i32___max_keys_7: ((2 * self.t) - 1);
         }) {
             self."TreeMap<String,i32>::split_child"(node, pos);
-            if (__variant_tag(key."String^Ord::cmp"(&node.keys."Array<String>^IndexValue::index_value"(pos))) == 2) {
+            if __variant_test(key."String^Ord::cmp"(&node.keys."Array<String>^IndexValue::index_value"(pos)), case=2, name=Greater) {
                 pos = (pos + 1);
             }
         }
@@ -527,7 +527,7 @@ fn "TreeMap<String,i32>::sort_node_entries"(self: &TreeMap<String,i32>, node: &m
                             break __for_6;
                         }
                         __for_6_body: {
-                            if (__variant_tag(node.keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&node.keys."Array<String>^IndexValue::index_value"(j))) == 2) {
+                            if __variant_test(node.keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&node.keys."Array<String>^IndexValue::index_value"(j)), case=2, name=Greater) {
                                 let temp_k: String = __inline_Array_String__IndexValue__index_value_2: {
                                     let self: &Array<String> = &node.keys;
                                     break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);

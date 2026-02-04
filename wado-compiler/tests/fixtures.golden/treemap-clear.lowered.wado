@@ -181,7 +181,7 @@ fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) ->
                 }
                 return n.index;
             }
-            if (__variant_tag(key."String^Ord::cmp"(&n.key)) == 0) {
+            if __variant_test(key."String^Ord::cmp"(&n.key), case=0, name=Less) {
                 current = n.left;
             } else {
                 current = n.right;
@@ -224,7 +224,7 @@ fn "TreeMap<String,i32>::insert_node"(self: &mut TreeMap<String,i32>, node: Opti
             n.index = index;
             return Option::Some(n);
         }
-        if (__variant_tag(key."String^Ord::cmp"(&n.key)) == 0) {
+        if __variant_test(key."String^Ord::cmp"(&n.key), case=0, name=Less) {
             n.left = self."TreeMap<String,i32>::insert_node"(n.left, key, index);
         } else {
             n.right = self."TreeMap<String,i32>::insert_node"(n.right, key, index);

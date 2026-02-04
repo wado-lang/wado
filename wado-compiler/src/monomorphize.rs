@@ -3216,45 +3216,34 @@ impl Monomorphizer {
                 span,
             );
 
-            // Get the tag (discriminant) from the Ordering result
-            let i32_type =
-                type_table.intern(ResolvedType::Primitive(crate::tir::PrimitiveType::I32));
-            let tag_expr = TirExpr::new(
-                TirExprKind::VariantTag {
-                    expr: Box::new(cmp_call),
-                },
-                i32_type,
-                span,
-            );
-
-            // Compare tag with appropriate constant:
-            // Less=0, Equal=1, Greater=2
-            // < : tag == 0
-            // > : tag == 2
-            // <= : tag != 2 (i.e., tag < 2)
-            // >= : tag != 0 (i.e., tag > 0)
-            let (compare_op, compare_value): (TirBinaryOp, u64) = match op {
-                TirBinaryOp::Lt => (TirBinaryOp::Eq, 0),
-                TirBinaryOp::Gt => (TirBinaryOp::Eq, 2),
-                TirBinaryOp::LtEq => (TirBinaryOp::NotEq, 2),
-                TirBinaryOp::GtEq => (TirBinaryOp::NotEq, 0),
+            // Determine comparison using VariantTest:
+            // < : cmp(a, b) matches { Less }
+            // > : cmp(a, b) matches { Greater }
+            // <= : !(cmp(a, b) matches { Greater })
+            // >= : !(cmp(a, b) matches { Less })
+            let (negate, case_name, case_index): (bool, &str, u32) = match op {
+                TirBinaryOp::Lt => (false, "Less", 0),
+                TirBinaryOp::Gt => (false, "Greater", 2),
+                TirBinaryOp::LtEq => (true, "Greater", 2),
+                TirBinaryOp::GtEq => (true, "Less", 0),
                 _ => unreachable!(),
             };
 
-            let const_expr = TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: compare_value,
-                    repr: compare_value.to_string(),
-                },
-                i32_type,
-                span,
-            );
+            // Create VariantTest to check if cmp result matches the expected case
+            let variant_test = TirExprKind::VariantTest {
+                expr: Box::new(cmp_call),
+                case_index,
+                case_name: case_name.to_string(),
+            };
 
-            return Some(TirExprKind::Binary {
-                op: compare_op,
-                left: Box::new(tag_expr),
-                right: Box::new(const_expr),
-            });
+            if negate {
+                // For <= and >=, we need to negate the test
+                return Some(TirExprKind::Unary {
+                    op: TirUnaryOp::Not,
+                    expr: Box::new(TirExpr::new(variant_test, TypeTable::BOOL, span)),
+                });
+            }
+            return Some(variant_test);
         }
 
         None

@@ -3518,47 +3518,42 @@ impl<'a> Resolver<'a> {
                         binary.span,
                     );
 
-                    // Get the tag (discriminant) from the Ordering result
-                    let tag_expr = TirExpr::new(
-                        TirExprKind::VariantTag {
-                            expr: Box::new(cmp_call),
-                        },
-                        TypeTable::I32,
-                        binary.span,
-                    );
-
-                    // Compare tag with appropriate constant:
-                    // Less=0, Equal=1, Greater=2
-                    // < : tag == 0
-                    // > : tag == 2
-                    // <= : tag != 2 (i.e., tag < 2)
-                    // >= : tag != 0 (i.e., tag > 0)
-                    let (compare_op, compare_value): (TirBinaryOp, u64) = match binary.op {
-                        BinaryOp::Lt => (TirBinaryOp::Eq, 0),
-                        BinaryOp::Gt => (TirBinaryOp::Eq, 2),
-                        BinaryOp::LtEq => (TirBinaryOp::NotEq, 2),
-                        BinaryOp::GtEq => (TirBinaryOp::NotEq, 0),
+                    // Determine comparison using VariantTest:
+                    // < : cmp(a, b) matches { Less }
+                    // > : cmp(a, b) matches { Greater }
+                    // <= : !(cmp(a, b) matches { Greater })
+                    // >= : !(cmp(a, b) matches { Less })
+                    let (negate, case_name, case_index): (bool, &str, u32) = match binary.op {
+                        BinaryOp::Lt => (false, "Less", 0),
+                        BinaryOp::Gt => (false, "Greater", 2),
+                        BinaryOp::LtEq => (true, "Greater", 2),
+                        BinaryOp::GtEq => (true, "Less", 0),
                         _ => unreachable!(),
                     };
 
-                    let const_expr = TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: compare_value,
-                            repr: compare_value.to_string(),
-                        },
-                        TypeTable::I32,
-                        binary.span,
-                    );
-
-                    return TirExpr::new(
-                        TirExprKind::Binary {
-                            op: compare_op,
-                            left: Box::new(tag_expr),
-                            right: Box::new(const_expr),
+                    // Create VariantTest to check if cmp result matches the expected case
+                    let variant_test = TirExpr::new(
+                        TirExprKind::VariantTest {
+                            expr: Box::new(cmp_call),
+                            case_index,
+                            case_name: case_name.to_string(),
                         },
                         TypeTable::BOOL,
                         binary.span,
                     );
+
+                    if negate {
+                        // For <= and >=, we need to negate the test
+                        return TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Not,
+                                expr: Box::new(variant_test),
+                            },
+                            TypeTable::BOOL,
+                            binary.span,
+                        );
+                    }
+                    return variant_test;
                 }
             }
         }

@@ -15,6 +15,19 @@ pub variant Ordering {
     Greater,
 }
 
+/// Eq implementation for Ordering
+impl Eq for Ordering {
+    pub fn eq(&self, other: &Self) -> bool {
+        let self_val = *self;
+        let other_val = *other;
+        return match self_val {
+            Less => other_val matches { Less },
+            Equal => other_val matches { Equal },
+            Greater => other_val matches { Greater },
+        };
+    }
+}
+
 /// Trait for equality comparisons.
 /// Types implementing this trait can be compared with `==` and `!=` operators.
 pub trait Eq {
