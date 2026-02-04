@@ -3090,17 +3090,6 @@ impl Monomorphizer {
         right: &TirExpr,
         type_table: &mut TypeTable,
     ) -> Option<TirExprKind> {
-        // Only handle comparison operators
-        let (trait_name, method_name, needs_negation, swap_operands) = match op {
-            TirBinaryOp::Eq => ("Eq", "eq", false, false),
-            TirBinaryOp::NotEq => ("Eq", "eq", true, false),
-            TirBinaryOp::Lt => ("Ord", "lt", false, false),
-            TirBinaryOp::Gt => ("Ord", "lt", false, true),
-            TirBinaryOp::LtEq => ("Ord", "lt", true, true),
-            TirBinaryOp::GtEq => ("Ord", "lt", true, false),
-            _ => return None,
-        };
-
         // Get the base struct name and type args from the operand type
         let operand_type = type_table.get(left.type_id);
         let (base_struct_name, impl_type_args): (String, Vec<String>) = match operand_type {
@@ -3118,67 +3107,147 @@ impl Monomorphizer {
             _ => return None,
         };
 
-        // Choose receiver and argument based on operand order
-        let (receiver_expr, arg_expr) = if swap_operands {
-            (right.clone(), left.clone())
-        } else {
-            (left.clone(), right.clone())
-        };
+        // Handle Eq trait (== and !=)
+        if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
+            let needs_negation = op == TirBinaryOp::NotEq;
 
-        // Create receiver with reference (trait methods take &self)
-        let receiver_ref_type = type_table.intern(ResolvedType::Ref(receiver_expr.type_id));
-        let receiver = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: Box::new(receiver_expr),
-            },
-            receiver_ref_type,
-            span,
-        );
+            // Create receiver with reference (trait methods take &self)
+            let receiver_ref_type = type_table.intern(ResolvedType::Ref(left.type_id));
+            let receiver = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(left.clone()),
+                },
+                receiver_ref_type,
+                span,
+            );
 
-        // Create argument with reference (other: &Self)
-        let arg_ref_type = type_table.intern(ResolvedType::Ref(arg_expr.type_id));
-        let arg_ref = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: Box::new(arg_expr),
-            },
-            arg_ref_type,
-            span,
-        );
+            // Create argument with reference (other: &Self)
+            let arg_ref_type = type_table.intern(ResolvedType::Ref(right.type_id));
+            let arg_ref = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(right.clone()),
+                },
+                arg_ref_type,
+                span,
+            );
 
-        // Create the method call with proper method_info
-        // Use base_struct_name for LocalMethodName, then apply type args
-        let method_info = LocalMethodName::new(
-            base_struct_name,
-            Some(trait_name.to_string()),
-            method_name.to_string(),
-        )
-        .with_struct_type_args(&impl_type_args);
-        let mangled_name = method_info.to_mangled_name();
+            let method_info =
+                LocalMethodName::new(base_struct_name, Some("Eq".to_string()), "eq".to_string())
+                    .with_struct_type_args(&impl_type_args);
+            let mangled_name = method_info.to_mangled_name();
 
-        let method_call = TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude"),
-                name: mangled_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            },
-            type_args: vec![],
-            args: vec![arg_ref],
-        };
+            let method_call = TirExprKind::MethodCall {
+                receiver: Box::new(receiver),
+                func: FunctionRef::External {
+                    module_source: ModuleSource::core("prelude"),
+                    name: mangled_name,
+                    monomorph_info: None,
+                    method_info: Some(method_info),
+                },
+                type_args: vec![],
+                args: vec![arg_ref],
+            };
 
-        // If we need to negate the result (for !=, <=, >=)
-        if needs_negation {
-            let bool_type =
-                type_table.intern(ResolvedType::Primitive(crate::tir::PrimitiveType::Bool));
-            Some(TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(TirExpr::new(method_call, bool_type, span)),
-            })
-        } else {
-            Some(method_call)
+            if needs_negation {
+                let bool_type =
+                    type_table.intern(ResolvedType::Primitive(crate::tir::PrimitiveType::Bool));
+                return Some(TirExprKind::Unary {
+                    op: TirUnaryOp::Not,
+                    expr: Box::new(TirExpr::new(method_call, bool_type, span)),
+                });
+            }
+            return Some(method_call);
         }
+
+        // Handle Ord trait (<, >, <=, >=)
+        // Ord::cmp returns Ordering variant with discriminants: Less=0, Equal=1, Greater=2
+        if matches!(
+            op,
+            TirBinaryOp::Lt | TirBinaryOp::Gt | TirBinaryOp::LtEq | TirBinaryOp::GtEq
+        ) {
+            // Create receiver with reference (trait methods take &self)
+            let receiver_ref_type = type_table.intern(ResolvedType::Ref(left.type_id));
+            let receiver = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(left.clone()),
+                },
+                receiver_ref_type,
+                span,
+            );
+
+            // Create argument with reference (other: &Self)
+            let arg_ref_type = type_table.intern(ResolvedType::Ref(right.type_id));
+            let arg_ref = TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Ref,
+                    expr: Box::new(right.clone()),
+                },
+                arg_ref_type,
+                span,
+            );
+
+            // Get Ordering type for cmp return value
+            let ordering_type_id = type_table.intern(ResolvedType::Variant {
+                name: "Ordering".to_string(),
+                module_source: ModuleSource::core("prelude"),
+            });
+
+            let method_info =
+                LocalMethodName::new(base_struct_name, Some("Ord".to_string()), "cmp".to_string())
+                    .with_struct_type_args(&impl_type_args);
+            let mangled_name = method_info.to_mangled_name();
+
+            let cmp_call = TirExpr::new(
+                TirExprKind::MethodCall {
+                    receiver: Box::new(receiver),
+                    func: FunctionRef::External {
+                        module_source: ModuleSource::core("prelude"),
+                        name: mangled_name,
+                        monomorph_info: None,
+                        method_info: Some(method_info),
+                    },
+                    type_args: vec![],
+                    args: vec![arg_ref],
+                },
+                ordering_type_id,
+                span,
+            );
+
+            // Determine comparison operator and Ordering variant:
+            // < : cmp(a, b) == Ordering::Less
+            // > : cmp(a, b) == Ordering::Greater
+            // <= : cmp(a, b) != Ordering::Greater
+            // >= : cmp(a, b) != Ordering::Less
+            let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) = match op {
+                TirBinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
+                TirBinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
+                TirBinaryOp::LtEq => (TirBinaryOp::NotEq, "Greater", 2),
+                TirBinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
+                _ => unreachable!(),
+            };
+
+            // Create Ordering variant for comparison
+            let ordering_variant = TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type: ordering_type_id,
+                    case_name: case_name.to_string(),
+                    case_index,
+                    payload: None,
+                },
+                ordering_type_id,
+                span,
+            );
+
+            return Some(TirExprKind::Binary {
+                op: compare_op,
+                left: Box::new(cmp_call),
+                right: Box::new(ordering_variant),
+            });
+        }
+
+        None
     }
 }

@@ -9,8 +9,9 @@ use {log_stderr} from "core:internal";
 // Re-exports from prelude sub-modules
 // ============================================================================
 
-/// Traits (Eq, Ord, Index*, Iterator, Add, Sub, etc.)
+/// Traits and Ordering type (Eq, Ord, Index*, Iterator, Add, Sub, etc.)
 pub use {
+    Ordering,
     Eq, Ord,
     Index, IndexMut, IndexAssign, IndexValue,
     Add, Sub, Mul, Div, Rem, Neg,
@@ -101,6 +102,7 @@ impl Array<T> {
     pub fn set(&mut self, index: i32, value: T) {
         builtin::array_set::<T>(self.repr, index, value);
     }
+
 }
 
 // IndexValue implementation for Array<T> - value-based read
@@ -140,19 +142,25 @@ impl Eq for Array<T> {
 
 // Ord implementation for Array<T> - lexicographic ordering
 impl Ord for Array<T> {
-    pub fn lt(&self, other: &Self) -> bool {
+    pub fn cmp(&self, other: &Self) -> Ordering {
         let min_len = if other.used < self.used { other.used } else { self.used };
         for let mut i = 0; i < min_len; i += 1 {
             let a = builtin::array_get::<T>(self.repr, i);
             let b = builtin::array_get::<T>(other.repr, i);
             if a < b {
-                return true;
+                return Ordering::Less;
             }
             if a > b {
-                return false;
+                return Ordering::Greater;
             }
         }
-        return self.used < other.used;
+        if self.used < other.used {
+            return Ordering::Less;
+        }
+        if self.used > other.used {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
     }
 }
 

@@ -471,14 +471,22 @@ Associated types allow traits to declare placeholder types that are specified by
 The prelude defines several builtin traits for common operations:
 
 ```wado
+// Ordering - result of a three-way comparison
+variant Ordering {
+    Less,    // first value is less than second
+    Equal,   // values are equal
+    Greater, // first value is greater than second
+}
+
 // Eq - equality comparisons (== and !=)
 trait Eq {
     fn eq(&self, other: &Self) -> bool;
 }
 
 // Ord - ordering comparisons (<, <=, >, >=)
+// Returns Ordering for three-way comparison (like C++20 <=> or Rust's cmp)
 trait Ord {
-    fn lt(&self, other: &Self) -> bool;
+    fn cmp(&self, other: &Self) -> Ordering;
 }
 
 // IndexValue - value-based index access (arr[i] returns a copy)
@@ -523,6 +531,27 @@ let p1 = Point { x: 1, y: 2 };
 let p2 = Point { x: 1, y: 2 };
 if p1 == p2 {
     println("Points are equal");
+}
+
+// Custom Ord implementation (compare by distance from origin)
+impl Ord for Point {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let dist_self = self.x * self.x + self.y * self.y;
+        let dist_other = other.x * other.x + other.y * other.y;
+        if dist_self < dist_other {
+            return Ordering::Less;
+        }
+        if dist_self > dist_other {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}
+
+let origin = Point { x: 0, y: 0 };
+let far = Point { x: 10, y: 10 };
+if origin < far {
+    println("origin is closer");
 }
 ```
 

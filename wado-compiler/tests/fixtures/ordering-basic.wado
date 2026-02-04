@@ -1,0 +1,61 @@
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Test Ordering variant construction
+    let less = Ordering::Less;
+    let equal = Ordering::Equal;
+    let greater = Ordering::Greater;
+
+    // Test pattern matching
+    if less matches { Less } {
+        println("Less matches Less");
+    }
+    if equal matches { Equal } {
+        println("Equal matches Equal");
+    }
+    if greater matches { Greater } {
+        println("Greater matches Greater");
+    }
+
+    // Test that comparison operators work with structs implementing Ord::cmp
+    let arr1: Array<i32> = [1, 2, 3];
+    let arr2: Array<i32> = [1, 2, 4];
+    let arr3: Array<i32> = [1, 2, 3];
+
+    if arr1 < arr2 {
+        println("arr1 < arr2");
+    }
+    if arr1 <= arr3 {
+        println("arr1 <= arr3");
+    }
+    if arr2 > arr1 {
+        println("arr2 > arr1");
+    }
+    if arr3 >= arr1 {
+        println("arr3 >= arr1");
+    }
+    if arr1 == arr3 {
+        println("arr1 == arr3");
+    }
+
+    // Test String comparison (uses Ord::cmp)
+    let s1 = "apple";
+    let s2 = "banana";
+    let s3 = "apple";
+
+    if s1 < s2 {
+        println("apple < banana");
+    }
+    if s1 <= s3 {
+        println("apple <= apple");
+    }
+    if s2 > s1 {
+        println("banana > apple");
+    }
+    if s1 == s3 {
+        println("apple == apple");
+    }
+}
+
+__DATA__
+{"stdout": "Less matches Less\nEqual matches Equal\nGreater matches Greater\narr1 < arr2\narr1 <= arr3\narr2 > arr1\narr3 >= arr1\narr1 == arr3\napple < banana\napple <= apple\nbanana > apple\napple == apple\n"}

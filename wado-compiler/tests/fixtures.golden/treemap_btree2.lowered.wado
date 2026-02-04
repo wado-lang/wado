@@ -343,9 +343,9 @@ fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && __inline_Array_String__IndexValue__index_value_1: {
+        }) && (*key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_1: {
             break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
-        }."String^Ord::lt"(&*key)) {
+        }) == Ordering::Greater)) {
             break;
         }
         i = (i + 1);
@@ -403,9 +403,9 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && __inline_Array_String__IndexValue__index_value_1: {
+        }) && (*key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_1: {
             break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
-        }."String^Ord::lt"(&*key)) {
+        }) == Ordering::Greater)) {
             break;
         }
         i = (i + 1);
@@ -473,9 +473,9 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
         loop {
             if !((pos < __inline_Array_String___len_0: {
                 break __inline_Array_String___len_0: _licm_used;
-            }) && __inline_Array_String__IndexValue__index_value_1: {
+            }) && (__inline_Array_String__IndexValue__index_value_1: {
                 break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, pos);
-            }."String^Ord::lt"(&key)) {
+            }."String^Ord::cmp"(&key) == Ordering::Less)) {
                 break;
             }
             pos = (pos + 1);
@@ -516,9 +516,9 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
         loop {
             if !((pos < __inline_Array_String___len_7: {
                 break __inline_Array_String___len_7: _licm_used;
-            }) && __inline_Array_String__IndexValue__index_value_8: {
+            }) && (key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_8: {
                 break __inline_Array_String__IndexValue__index_value_8: core::builtin::array_get::<String>(_licm_repr, pos);
-            }."String^Ord::lt"(&key)) {
+            }) == Ordering::Greater)) {
                 break;
             }
             pos = (pos + 1);
@@ -527,10 +527,10 @@ fn "TreeMap<String,i32>::insert_non_full"(self: &mut TreeMap<String,i32>, node: 
             break __inline_TreeMap_String_i32___max_keys_9: ((2 * self.t) - 1);
         }) {
             self."TreeMap<String,i32>::split_child"(node, pos);
-            if __inline_Array_String__IndexValue__index_value_10: {
+            if (key."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_10: {
                 let self: &Array<String> = &node.keys;
                 break __inline_Array_String__IndexValue__index_value_10: core::builtin::array_get::<String>(self.repr, pos);
-            }."String^Ord::lt"(&key) {
+            }) == Ordering::Greater) {
                 pos = (pos + 1);
             }
         }
@@ -559,13 +559,13 @@ fn "TreeMap<String,i32>::sort_node_entries"(self: &TreeMap<String,i32>, node: &m
                             break __for_6;
                         }
                         __for_6_body: {
-                            if __inline_Array_String__IndexValue__index_value_2: {
+                            if (__inline_Array_String__IndexValue__index_value_2: {
                                 let self: &Array<String> = &node.keys;
-                                break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, j);
-                            }."String^Ord::lt"(&__inline_Array_String__IndexValue__index_value_3: {
+                                break __inline_Array_String__IndexValue__index_value_2: core::builtin::array_get::<String>(self.repr, i);
+                            }."String^Ord::cmp"(&__inline_Array_String__IndexValue__index_value_3: {
                                 let self: &Array<String> = &node.keys;
-                                break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, i);
-                            }) {
+                                break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, j);
+                            }) == Ordering::Greater) {
                                 let temp_k: String = __inline_Array_String__IndexValue__index_value_4: {
                                     let self: &Array<String> = &node.keys;
                                     break __inline_Array_String__IndexValue__index_value_4: core::builtin::array_get::<String>(self.repr, i);

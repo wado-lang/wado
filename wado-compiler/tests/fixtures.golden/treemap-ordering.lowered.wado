@@ -354,7 +354,7 @@ fn "TreeMap<String,i32>::insert_node"(self: &mut TreeMap<String,i32>, node: Opti
             n.index = index;
             return Option::Some(n);
         }
-        if key."String^Ord::lt"(&n.key) {
+        if (key."String^Ord::cmp"(&n.key) == Ordering::Less) {
             n.left = self."TreeMap<String,i32>::insert_node"(n.left, key, index);
         } else {
             n.right = self."TreeMap<String,i32>::insert_node"(n.right, key, index);
@@ -442,7 +442,7 @@ fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) ->
                 }
                 return n.index;
             }
-            if key."String^Ord::lt"(&n.key) {
+            if (key."String^Ord::cmp"(&n.key) == Ordering::Less) {
                 current = n.left;
             } else {
                 current = n.right;
