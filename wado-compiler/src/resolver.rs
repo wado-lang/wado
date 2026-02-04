@@ -3399,57 +3399,32 @@ impl<'a> Resolver<'a> {
             };
 
             if let Some(struct_name) = struct_name {
-                // Determine which trait and method to use based on operator
-                let (trait_name, method_name, needs_negation, swap_operands) = match binary.op {
-                    BinaryOp::Eq => ("Eq", "eq", false, false),
-                    BinaryOp::NotEq => ("Eq", "eq", true, false), // !a.eq(&b)
-                    BinaryOp::Lt => ("Ord", "lt", false, false),
-                    BinaryOp::Gt => ("Ord", "lt", false, true), // b.lt(&a)
-                    BinaryOp::LtEq => ("Ord", "lt", true, true), // !b.lt(&a)
-                    BinaryOp::GtEq => ("Ord", "lt", true, false), // !a.lt(&b)
-                    _ => unreachable!(),
-                };
-
-                // Find the appropriate trait implementation
-                let trait_info = if trait_name == "Eq" {
-                    self.find_eq_trait_impl(&struct_name, left.type_id)
-                } else {
-                    self.find_ord_trait_impl(&struct_name, left.type_id)
-                };
-
-                if let Some(trait_info) = trait_info {
-                    // Choose receiver and argument based on operand order
-                    let (receiver_expr, arg_expr) = if swap_operands {
-                        (right.clone(), left.clone())
-                    } else {
-                        (left.clone(), right.clone())
-                    };
-
-                    // Adjust receiver for self kind (&self)
+                // Handle Eq trait (== and !=)
+                if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq)
+                    && let Some(trait_info) = self.find_eq_trait_impl(&struct_name, left.type_id)
+                {
                     let receiver = self.adjust_receiver_for_self_kind(
-                        receiver_expr,
+                        left.clone(),
                         trait_info.self_kind,
                         binary.span,
                     );
 
-                    // Create reference type for the argument (other: &Self)
                     let arg_ref_type = self
                         .type_table
                         .borrow_mut()
-                        .intern(ResolvedType::Ref(arg_expr.type_id));
+                        .intern(ResolvedType::Ref(right.type_id));
 
                     let arg_ref = TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::Ref,
-                            expr: Box::new(arg_expr),
+                            expr: Box::new(right.clone()),
                         },
                         arg_ref_type,
                         binary.span,
                     );
 
-                    // Get the mangled method name: StructName^Eq::eq or StructName^Ord::lt
                     let mangled_method_name =
-                        format!("{}^{}::{}", struct_name, trait_info.trait_name, method_name);
+                        format!("{}^{}::{}", struct_name, trait_info.trait_name, "eq");
 
                     let call_expr = TirExpr::new(
                         TirExprKind::MethodCall {
@@ -3461,7 +3436,7 @@ impl<'a> Resolver<'a> {
                                 method_info: Some(LocalMethodName::new(
                                     struct_name.clone(),
                                     Some(trait_info.trait_name.clone()),
-                                    method_name.to_string(),
+                                    "eq".to_string(),
                                 )),
                             },
                             type_args: vec![],
@@ -3471,8 +3446,8 @@ impl<'a> Resolver<'a> {
                         binary.span,
                     );
 
-                    // Apply negation if needed (for !=, <=, >=)
-                    if needs_negation {
+                    // Apply negation for !=
+                    if binary.op == BinaryOp::NotEq {
                         return TirExpr::new(
                             TirExprKind::Unary {
                                 op: TirUnaryOp::Not,
@@ -3484,6 +3459,106 @@ impl<'a> Resolver<'a> {
                     }
 
                     return call_expr;
+                }
+
+                // Handle Ord trait (<, >, <=, >=)
+                // Ord::cmp returns Ordering variant with discriminants: Less=0, Equal=1, Greater=2
+                if matches!(
+                    binary.op,
+                    BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
+                ) && let Some(trait_info) = self.find_ord_trait_impl(&struct_name, left.type_id)
+                {
+                    let receiver = self.adjust_receiver_for_self_kind(
+                        left.clone(),
+                        trait_info.self_kind,
+                        binary.span,
+                    );
+
+                    let arg_ref_type = self
+                        .type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Ref(right.type_id));
+
+                    let arg_ref = TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(right.clone()),
+                        },
+                        arg_ref_type,
+                        binary.span,
+                    );
+
+                    // Get Ordering type for cmp return value
+                    let ordering_type_id =
+                        self.type_table.borrow_mut().intern(ResolvedType::Variant {
+                            name: "Ordering".to_string(),
+                            module_source: ModuleSource::core("prelude"),
+                        });
+
+                    let mangled_method_name =
+                        format!("{}^{}::{}", struct_name, trait_info.trait_name, "cmp");
+
+                    let cmp_call = TirExpr::new(
+                        TirExprKind::MethodCall {
+                            receiver: Box::new(receiver),
+                            func: FunctionRef::External {
+                                module_source: ModuleSource::core("prelude"),
+                                name: mangled_method_name,
+                                monomorph_info: None,
+                                method_info: Some(LocalMethodName::new(
+                                    struct_name.clone(),
+                                    Some(trait_info.trait_name.clone()),
+                                    "cmp".to_string(),
+                                )),
+                            },
+                            type_args: vec![],
+                            args: vec![arg_ref],
+                        },
+                        ordering_type_id,
+                        binary.span,
+                    );
+
+                    // Get the tag (discriminant) from the Ordering result
+                    let tag_expr = TirExpr::new(
+                        TirExprKind::VariantTag {
+                            expr: Box::new(cmp_call),
+                        },
+                        TypeTable::I32,
+                        binary.span,
+                    );
+
+                    // Compare tag with appropriate constant:
+                    // Less=0, Equal=1, Greater=2
+                    // < : tag == 0
+                    // > : tag == 2
+                    // <= : tag != 2 (i.e., tag < 2)
+                    // >= : tag != 0 (i.e., tag > 0)
+                    let (compare_op, compare_value): (TirBinaryOp, u64) = match binary.op {
+                        BinaryOp::Lt => (TirBinaryOp::Eq, 0),
+                        BinaryOp::Gt => (TirBinaryOp::Eq, 2),
+                        BinaryOp::LtEq => (TirBinaryOp::NotEq, 2),
+                        BinaryOp::GtEq => (TirBinaryOp::NotEq, 0),
+                        _ => unreachable!(),
+                    };
+
+                    let const_expr = TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: compare_value,
+                            repr: compare_value.to_string(),
+                        },
+                        TypeTable::I32,
+                        binary.span,
+                    );
+
+                    return TirExpr::new(
+                        TirExprKind::Binary {
+                            op: compare_op,
+                            left: Box::new(tag_expr),
+                            right: Box::new(const_expr),
+                        },
+                        TypeTable::BOOL,
+                        binary.span,
+                    );
                 }
             }
         }
@@ -7166,7 +7241,7 @@ impl<'a> Resolver<'a> {
         struct_name: &str,
         base_type_id: TypeId,
     ) -> Option<ComparisonTraitInfo> {
-        self.find_comparison_trait_impl(struct_name, base_type_id, "Ord", "lt")
+        self.find_comparison_trait_impl(struct_name, base_type_id, "Ord", "cmp")
     }
 
     /// Find arithmetic trait implementation (`Add`, `Sub`, `Mul`, `Div`, `Rem`)

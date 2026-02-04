@@ -227,14 +227,20 @@ impl Eq for u128 {
 
 // Ord implementation for u128
 impl Ord for u128 {
-    pub fn lt(&self, other: &Self) -> bool {
+    pub fn cmp(&self, other: &Self) -> Ordering {
         if self.high < other.high {
-            return true;
+            return Ordering::Less;
         }
         if self.high > other.high {
-            return false;
+            return Ordering::Greater;
         }
-        return self.low < other.low;
+        if self.low < other.low {
+            return Ordering::Less;
+        }
+        if self.low > other.low {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
     }
 }
 
@@ -640,17 +646,23 @@ impl Eq for i128 {
 
 // Ord implementation for i128 (signed comparison)
 impl Ord for i128 {
-    pub fn lt(&self, other: &Self) -> bool {
+    pub fn cmp(&self, other: &Self) -> Ordering {
         // For signed comparison:
         // 1. Compare high parts as signed
         // 2. If equal, compare low parts as unsigned
         if self.high < other.high {
-            return true;
+            return Ordering::Less;
         }
         if self.high > other.high {
-            return false;
+            return Ordering::Greater;
         }
-        return self.low < other.low;
+        if self.low < other.low {
+            return Ordering::Less;
+        }
+        if self.low > other.low {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
     }
 }
 

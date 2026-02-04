@@ -170,7 +170,7 @@ impl Eq for String {
 
 // Ord implementation for String - lexicographic ordering
 impl Ord for String {
-    pub fn lt(&self, other: &Self) -> bool {
+    pub fn cmp(&self, other: &Self) -> Ordering {
         let len_a = self.len();
         let len_b = other.len();
         let min_len = if len_b < len_a { len_b } else { len_a };
@@ -181,15 +181,21 @@ impl Ord for String {
             let a_byte = builtin::array_get_u8(a_repr, i);
             let b_byte = builtin::array_get_u8(b_repr, i);
             if a_byte < b_byte {
-                return true;
+                return Ordering::Less;
             }
             if a_byte > b_byte {
-                return false;
+                return Ordering::Greater;
             }
         }
 
-        // All compared bytes are equal, shorter string is less
-        return len_a < len_b;
+        // All compared bytes are equal, compare lengths
+        if len_a < len_b {
+            return Ordering::Less;
+        }
+        if len_a > len_b {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
     }
 }
 

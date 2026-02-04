@@ -5,6 +5,16 @@
 // Comparison Traits
 // ============================================================================
 
+/// Result of a comparison between two values.
+pub variant Ordering {
+    /// The first value is less than the second.
+    Less,
+    /// The two values are equal.
+    Equal,
+    /// The first value is greater than the second.
+    Greater,
+}
+
 /// Trait for equality comparisons.
 /// Types implementing this trait can be compared with `==` and `!=` operators.
 pub trait Eq {
@@ -15,8 +25,8 @@ pub trait Eq {
 /// Trait for ordering comparisons.
 /// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
 pub trait Ord {
-    /// Returns true if self is less than other.
-    fn lt(&self, other: &Self) -> bool;
+    /// Compares self with other and returns an Ordering.
+    fn cmp(&self, other: &Self) -> Ordering;
 }
 
 // ============================================================================

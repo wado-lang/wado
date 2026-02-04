@@ -12,13 +12,10 @@
 fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
     let mut i: i32 = 0;
     let _licm_used: i32 = keys.used;
-    let _licm_repr: builtin::array<String> = keys.repr;
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && __inline_Array_String__IndexValue__index_value_1: {
-            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
-        }."String^Ord::lt"(&*key)) {
+        }) && (__variant_tag(keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key)) == 0)) {
             break;
         }
         i = (i + 1);
@@ -30,5 +27,9 @@ fn run() with Stdout {
     let keys: Array<String> = move ["apple", "banana", "cherry", "date"];
     let result: i32 = find_key_index(&keys, &"cherry");
     core::cli::println(move "String::concat"(move "index: ", move result."i32::to_string"()));
+}
+
+fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
+    return core::builtin::array_get::<String>(self.repr, index);
 }
 
