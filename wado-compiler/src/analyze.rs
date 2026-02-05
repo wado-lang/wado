@@ -6,7 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
-use crate::name::{resolve_import, ModuleSource, validate_module_path};
+use crate::name::{ModuleSource, resolve_import, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, ResourceSymbol,
     StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol,

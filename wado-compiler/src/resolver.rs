@@ -1101,7 +1101,7 @@ impl<'a> Resolver<'a> {
     ) -> Vec<ModuleSource> {
         // Collect and sort sources for deterministic ordering
         let mut sources: Vec<&ModuleSource> = modules.keys().collect();
-        sources.sort_by_key(|a| a.to_string());
+        sources.sort_by_key(std::string::ToString::to_string);
         let source_to_idx: HashMap<&ModuleSource, usize> =
             sources.iter().enumerate().map(|(i, s)| (*s, i)).collect();
 
