@@ -148,18 +148,6 @@ impl ModuleSource {
         Self::Remote { url: url.into() }
     }
 
-    /// Create an entry point module source with a default inline filename.
-    ///
-    /// Use `entry_point_with_filename()` when you have an actual filename.
-    /// This method uses `"<inline>"` as a synthetic filename for cases like
-    /// REPL, embedded code, or legacy path conversion.
-    #[must_use]
-    pub fn entry_point() -> Self {
-        Self::EntryPoint {
-            filename: Some("<inline>".to_string()),
-        }
-    }
-
     /// Create an entry point module source with a filename.
     #[must_use]
     pub fn entry_point_with_filename(filename: impl Into<String>) -> Self {
@@ -174,7 +162,7 @@ impl ModuleSource {
     #[must_use]
     pub fn from_path(path: &[String]) -> Self {
         match path {
-            [] => Self::entry_point(),
+            [] => Self::entry_point_with_filename("<inline>"),
             [first] if first.starts_with("./") || first.starts_with("../") => Self::Local {
                 path: first.clone(),
             },
@@ -1491,7 +1479,7 @@ mod tests {
         let source = ModuleSource::local("./geometry.wado");
         assert_eq!(source.to_path(), vec!["./geometry.wado"]);
 
-        let source = ModuleSource::entry_point();
+        let source = ModuleSource::entry_point_with_filename("test.wado");
         assert!(source.to_path().is_empty());
     }
 
@@ -1503,7 +1491,6 @@ mod tests {
             ModuleSource::local("./geometry.wado").to_string(),
             "./geometry.wado"
         );
-        assert_eq!(ModuleSource::entry_point().to_string(), "<inline>");
         assert_eq!(
             ModuleSource::entry_point_with_filename("hello.wado").to_string(),
             "hello.wado"

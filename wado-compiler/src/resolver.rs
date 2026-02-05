@@ -568,7 +568,7 @@ impl<'a> Resolver<'a> {
             function_return_types: HashMap::new(),
             imported_functions: HashSet::new(),
             errors: Vec::new(),
-            current_module_source: ModuleSource::entry_point(),
+            current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),
             current_type_params: HashMap::new(),
             generic_struct_names: HashSet::new(),
@@ -1067,8 +1067,8 @@ impl<'a> Resolver<'a> {
                 function_return_types,
                 imported_functions,
                 errors: Vec::new(),
-                current_module_source: ModuleSource::entry_point(), // Set in resolve_module
-                current_module_items: Vec::new(),                   // Set in resolve_module
+                current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"), // Set in resolve_module
+                current_module_items: Vec::new(), // Set in resolve_module
                 current_type_params: HashMap::new(),
                 generic_struct_names: HashSet::new(),
                 generic_function_params: HashMap::new(),
@@ -3311,7 +3311,7 @@ impl<'a> Resolver<'a> {
                 self.symbols
                     .lookup(&ident.name)
                     .map(|s| ModuleSource::from_path(&s.module_path))
-                    .unwrap_or_else(ModuleSource::entry_point)
+                    .unwrap_or_else(|| self.current_module_source.clone())
             };
             return TirExpr::new(
                 TirExprKind::Global {
