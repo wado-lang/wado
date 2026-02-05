@@ -1,0 +1,17 @@
+// Module B: defines pub variant Status with a payload case (different from module A)
+
+pub variant Status {
+    Ok(i32),
+    Error,
+}
+
+pub fn status_b_value(s: Status) -> i32 {
+    return match s {
+        Ok(v) => v,
+        Error => -1,
+    };
+}
+
+pub fn make_ok(v: i32) -> Status {
+    return Status::Ok(v);
+}
