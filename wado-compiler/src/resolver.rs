@@ -444,7 +444,7 @@ pub struct Resolver<'a> {
     symbols: &'a SymbolTable,
     /// Loaded modules from analyzer
     #[allow(dead_code)]
-    loaded_modules: &'a HashMap<Vec<String>, Module>,
+    loaded_modules: &'a HashMap<ModuleSource, Module>,
     /// Type aliases (name -> resolved type)
     type_aliases: HashMap<String, TypeId>,
     /// Struct field info (struct name -> (`module_path`, fields))
@@ -552,7 +552,7 @@ struct ArithmeticTraitInfo {
 
 impl<'a> Resolver<'a> {
     /// Create a new resolver
-    pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<Vec<String>, Module>) -> Self {
+    pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<ModuleSource, Module>) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
         let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
@@ -619,12 +619,12 @@ impl<'a> Resolver<'a> {
                 let source_module_source = ModuleSource::from_path(&source_module_path);
 
                 // Look up the source module to find global declarations
-                if let Some(source_module) = self.loaded_modules.get(&source_module_path) {
+                if let Some(source_module) = self.loaded_modules.get(&source_module_source) {
                     for use_item in &use_decl.items {
                         if let ast::UseItem::Simple { name, alias } = use_item {
                             // Check if this import refers to a global variable
                             if let Some(symbol) =
-                                self.symbols.lookup_in_module(&source_module_path, name)
+                                self.symbols.lookup_in_module(&source_module_source, name)
                                 && let crate::symbol::SymbolKind::Global(global_sym) = &symbol.kind
                             {
                                 // Find the global declaration in the source module to get its type
@@ -779,9 +779,9 @@ impl<'a> Resolver<'a> {
     /// Modules are returned in topological order based on struct field dependencies.
     pub fn resolve_all_modules(
         symbols: &'a SymbolTable,
-        modules: &'a HashMap<Vec<String>, Module>,
-        entry_module_source: ModuleSource,
-    ) -> Result<IndexMap<Vec<String>, TirModule>, Vec<TypeError>> {
+        modules: &'a HashMap<ModuleSource, Module>,
+        _entry_module_source: ModuleSource,
+    ) -> Result<IndexMap<ModuleSource, TirModule>, Vec<TypeError>> {
         let mut result = IndexMap::new();
         let mut all_errors = Vec::new();
 
@@ -794,14 +794,7 @@ impl<'a> Resolver<'a> {
         let mut resource_types: HashMap<String, ResourceInfo> = HashMap::new();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
-        for (path, module) in modules {
-            // Use the provided entry_module_source for the entry module (empty path)
-            // to preserve filename information
-            let module_source = if path.is_empty() {
-                entry_module_source.clone()
-            } else {
-                ModuleSource::from_path(path)
-            };
+        for (module_source, module) in modules {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -866,13 +859,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Second sub-pass: resolve struct fields and type aliases
-        for (path, module) in modules {
-            // Use the provided entry_module_source for the entry module (empty path)
-            let module_source = if path.is_empty() {
-                entry_module_source.clone()
-            } else {
-                ModuleSource::from_path(path)
-            };
+        for (module_source, module) in modules {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -1001,12 +988,12 @@ impl<'a> Resolver<'a> {
 
         // Topologically sort modules based on struct field type dependencies
         // A module depends on another if it has a struct with a field of a type defined there
-        let sorted_paths =
+        let sorted_sources =
             Self::topological_sort_modules(modules, &struct_fields, &type_table.borrow());
 
         // Second pass: resolve each module with per-module function_return_types and imports
-        for path in &sorted_paths {
-            let module = modules.get(path).expect("module should exist");
+        for module_source in &sorted_sources {
+            let module = modules.get(module_source).expect("module should exist");
             // Build function_return_types for this module only
             // (functions defined in this module)
             let mut function_return_types = HashMap::new();
@@ -1081,17 +1068,10 @@ impl<'a> Resolver<'a> {
                 imported_globals: HashMap::new(),
             };
 
-            // Use the provided entry_module_source for the entry module (empty path)
-            // to preserve filename information
-            let module_source = if path.is_empty() {
-                entry_module_source.clone()
-            } else {
-                ModuleSource::from_path(path)
-            };
-            match resolver.resolve_module(module, module_source) {
+            match resolver.resolve_module(module, module_source.clone()) {
                 Ok(tir_module) => {
                     // TypeTable is already shared via Rc, no need to merge
-                    result.insert(path.clone(), tir_module);
+                    result.insert(module_source.clone(), tir_module);
                 }
                 Err(errors) => {
                     all_errors.extend(errors);
@@ -1114,27 +1094,26 @@ impl<'a> Resolver<'a> {
     /// is a struct defined in B. This ensures that when we register struct types in
     /// codegen, dependency structs are registered before the structs that reference them.
     fn topological_sort_modules(
-        modules: &HashMap<Vec<String>, Module>,
+        modules: &HashMap<ModuleSource, Module>,
         struct_fields: &HashMap<String, StructFieldInfo>,
         type_table: &TypeTable,
-    ) -> Vec<Vec<String>> {
-        // Collect and sort paths for deterministic ordering
-        let mut paths: Vec<&Vec<String>> = modules.keys().collect();
-        paths.sort();
-        let path_to_idx: HashMap<&Vec<String>, usize> =
-            paths.iter().enumerate().map(|(i, p)| (*p, i)).collect();
+    ) -> Vec<ModuleSource> {
+        // Collect and sort sources for deterministic ordering
+        let mut sources: Vec<&ModuleSource> = modules.keys().collect();
+        sources.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+        let source_to_idx: HashMap<&ModuleSource, usize> =
+            sources.iter().enumerate().map(|(i, s)| (*s, i)).collect();
 
         // Track dependency counts directly (no need for full dependency sets)
-        let mut dependency_count: Vec<usize> = vec![0; paths.len()];
+        let mut dependency_count: Vec<usize> = vec![0; sources.len()];
         // Track which edges we've already added to avoid duplicates
         let mut seen_edges: HashSet<(usize, usize)> = HashSet::new();
         // Build reverse graph: dependents[i] = modules that depend on module i
-        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); paths.len()];
+        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); sources.len()];
 
         // Analyze struct fields to find cross-module dependencies
         for (struct_name, info) in struct_fields {
-            let module_path = info.module_source.to_path();
-            let Some(&from_idx) = path_to_idx.get(&module_path) else {
+            let Some(&from_idx) = source_to_idx.get(&info.module_source) else {
                 continue;
             };
             for (_field_name, field_type_id) in &info.fields {
@@ -1145,11 +1124,10 @@ impl<'a> Resolver<'a> {
                 } = type_table.get(*field_type_id)
                 {
                     // Skip self-references (same struct or same module)
-                    let ref_module_path = ref_module_source.to_path();
-                    if ref_struct_name == struct_name || ref_module_path == module_path {
+                    if ref_struct_name == struct_name || ref_module_source == &info.module_source {
                         continue;
                     }
-                    if let Some(&to_idx) = path_to_idx.get(&ref_module_path) {
+                    if let Some(&to_idx) = source_to_idx.get(ref_module_source) {
                         // from_idx depends on to_idx (dependency edge)
                         if seen_edges.insert((from_idx, to_idx)) {
                             dependency_count[from_idx] += 1;
@@ -1168,7 +1146,7 @@ impl<'a> Resolver<'a> {
             .map(|(i, _)| i)
             .collect();
 
-        let mut sorted_indices = Vec::with_capacity(paths.len());
+        let mut sorted_indices = Vec::with_capacity(sources.len());
         while let Some(idx) = queue.pop_front() {
             sorted_indices.push(idx);
             // Update dependents using reverse graph (O(1) per edge)
@@ -1181,12 +1159,12 @@ impl<'a> Resolver<'a> {
         }
 
         // Cycle detection with warning (O(n) using HashSet)
-        if sorted_indices.len() < paths.len() {
+        if sorted_indices.len() < sources.len() {
             let sorted_set: HashSet<usize> = sorted_indices.iter().copied().collect();
-            let in_cycle: Vec<usize> = (0..paths.len())
+            let in_cycle: Vec<usize> = (0..sources.len())
                 .filter(|i| !sorted_set.contains(i))
                 .collect();
-            let cycle_modules: Vec<_> = in_cycle.iter().map(|&i| paths[i].join("::")).collect();
+            let cycle_modules: Vec<_> = in_cycle.iter().map(|&i| sources[i].to_string()).collect();
             eprintln!(
                 "Warning: circular struct dependencies detected among modules: {}",
                 cycle_modules.join(", ")
@@ -1195,8 +1173,11 @@ impl<'a> Resolver<'a> {
             sorted_indices.extend(in_cycle);
         }
 
-        // Convert indices back to paths
-        sorted_indices.iter().map(|&i| paths[i].clone()).collect()
+        // Convert indices back to sources
+        sorted_indices
+            .iter()
+            .map(|&i| sources[i].clone())
+            .collect()
     }
 
     /// Static version of `resolve_type` for use before the resolver is fully constructed
@@ -1431,8 +1412,7 @@ impl<'a> Resolver<'a> {
     /// Collect type definitions from the module
     fn collect_types(&mut self, module: &Module) {
         // First, collect types from loaded modules (so aliases like Instant = u64 are available)
-        for (path, loaded_module) in self.loaded_modules {
-            let module_source = ModuleSource::from_path(path);
+        for (module_source, loaded_module) in self.loaded_modules {
             for item in &loaded_module.items {
                 if let Item::Type(type_alias) = item {
                     // Only add if not already present (main module takes priority)
@@ -3310,7 +3290,7 @@ impl<'a> Resolver<'a> {
                 // For imported functions, look up the module source from symbols
                 self.symbols
                     .lookup(&ident.name)
-                    .map(|s| ModuleSource::from_path(&s.module_path))
+                    .map(|s| s.module_source.clone())
                     .unwrap_or_else(|| self.current_module_source.clone())
             };
             return TirExpr::new(
@@ -4388,7 +4368,7 @@ impl<'a> Resolver<'a> {
                 else if self.imported_functions.contains(&ident.name) {
                     // Get module path from symbol table for codegen
                     if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                        (symbol.module_path.clone(), symbol.name.clone(), true)
+                        (symbol.module_source.to_path(), symbol.name.clone(), true)
                     } else {
                         // Imported but not in symbols - shouldn't happen but allow
                         (Vec::new(), ident.name.clone(), true)
@@ -4486,7 +4466,8 @@ impl<'a> Resolver<'a> {
         // Try looking up in loaded modules
         if !module_path.is_empty() {
             // Clone the return type AST and type params to avoid borrow issues
-            let func_info = self.loaded_modules.get(module_path).and_then(|module| {
+            let module_source = ModuleSource::from_path(module_path);
+            let func_info = self.loaded_modules.get(&module_source).and_then(|module| {
                 module.items.iter().find_map(|item| {
                     if let Item::Function(func) = item
                         && func.name == func_name
@@ -4708,7 +4689,7 @@ impl<'a> Resolver<'a> {
 
                 // Check imported functions
                 if let Some(symbol) = self.symbols.lookup(&ident.name)
-                    && let Some(module) = self.loaded_modules.get(&symbol.module_path)
+                    && let Some(module) = self.loaded_modules.get(&symbol.module_source)
                 {
                     // Clone params to avoid borrow issues
                     let params: Option<Vec<_>> = module.items.iter().find_map(|item| {
@@ -5805,8 +5786,9 @@ impl<'a> Resolver<'a> {
         }
 
         // Try looking up in loaded modules
+        let module_source = ModuleSource::from_path(module_path);
         if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(module_path)
+            && let Some(module) = self.loaded_modules.get(&module_source)
         {
             for item in &module.items {
                 // Check impl blocks
@@ -6195,14 +6177,14 @@ impl<'a> Resolver<'a> {
         }
 
         // Check loaded modules
-        for (path, module) in self.loaded_modules {
+        for (module_source, module) in self.loaded_modules {
             for item in &module.items {
                 match item {
                     Item::Struct(s) if s.name == struct_name => {
-                        return ModuleSource::from_path(path);
+                        return module_source.clone();
                     }
                     Item::Resource(r) if r.name == struct_name => {
-                        return ModuleSource::from_path(path);
+                        return module_source.clone();
                     }
                     _ => {}
                 }
@@ -6297,8 +6279,9 @@ impl<'a> Resolver<'a> {
 
         // Try looking up in loaded modules (for imported structs)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
+        let module_source_for_lookup = ModuleSource::from_path(&module_path);
         if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&module_path)
+            && let Some(module) = self.loaded_modules.get(&module_source_for_lookup)
         {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item {
@@ -6451,7 +6434,7 @@ impl<'a> Resolver<'a> {
         // Search resource declarations in loaded modules for instance methods
         // Resource methods have &self or &mut self parameter (first param is reference to resource type)
         if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&module_path)
+            && let Some(module) = self.loaded_modules.get(&module_source_for_lookup)
         {
             for item in &module.items {
                 if let Item::Resource(resource) = item
@@ -6753,8 +6736,9 @@ impl<'a> Resolver<'a> {
         };
 
         // Check specific module first
+        let module_source_for_lookup = ModuleSource::from_path(&module_path);
         if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&module_path)
+            && let Some(module) = self.loaded_modules.get(&module_source_for_lookup)
         {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
@@ -6998,10 +6982,10 @@ impl<'a> Resolver<'a> {
         )> = Vec::new();
 
         // Check specific module if provided
+        let impl_module_source = ModuleSource::from_path(module_path);
         if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(module_path)
+            && let Some(module) = self.loaded_modules.get(&impl_module_source)
         {
-            let impl_module_source = ModuleSource::from_path(module_path);
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
                     && let Some(trait_type) = &impl_block.trait_type
@@ -7018,8 +7002,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Also check all loaded modules
-        for (path, module) in self.loaded_modules {
-            let impl_module_source = ModuleSource::from_path(path);
+        for (module_src, module) in self.loaded_modules {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
                     && let Some(trait_type) = &impl_block.trait_type
@@ -7029,7 +7012,7 @@ impl<'a> Resolver<'a> {
                         trait_type.clone(),
                         impl_block.methods.clone(),
                         impl_block.associated_types.clone(),
-                        impl_module_source.clone(),
+                        module_src.clone(),
                     ));
                 }
             }
@@ -8968,17 +8951,17 @@ impl<'a> Resolver<'a> {
         };
 
         // Look up the struct in the symbol table to resolve imports/aliases
-        // We need both the struct name (for struct_fields lookup) and module_path (for disambiguation)
-        let (struct_name, symbol_module_path) = if let Some(symbol) = self.symbols.lookup(name) {
+        // We need both the struct name (for struct_fields lookup) and module_source (for disambiguation)
+        let (struct_name, symbol_module_source) = if let Some(symbol) = self.symbols.lookup(name) {
             match &symbol.kind {
                 crate::symbol::SymbolKind::Struct(_) => {
-                    (symbol.name.clone(), symbol.module_path.clone())
+                    (symbol.name.clone(), Some(symbol.module_source.clone()))
                 }
-                _ => (name.clone(), Vec::new()),
+                _ => (name.clone(), None),
             }
         } else {
             // Fall back to local struct name
-            (name.clone(), Vec::new())
+            (name.clone(), None)
         };
 
         // Get expected field types for coercion (for generic structs)
@@ -9093,12 +9076,12 @@ impl<'a> Resolver<'a> {
             .collect();
 
         // Get module_source for this struct
-        // Priority: symbol table module_path > struct_fields > current_module_source
-        // The symbol table module_path is needed for imported structs (especially with aliases)
+        // Priority: symbol table module_source > struct_fields > current_module_source
+        // The symbol table module_source is needed for imported structs (especially with aliases)
         // to handle name collisions between local and imported structs
-        let struct_module_source = if !symbol_module_path.is_empty() {
-            // Imported struct - use module_path from symbol table
-            ModuleSource::from_path(&symbol_module_path)
+        let struct_module_source = if let Some(ms) = symbol_module_source {
+            // Imported struct - use module_source from symbol table
+            ms
         } else if let Some(info) = self.struct_fields.get(&struct_name) {
             // Local struct found in struct_fields
             info.module_source.clone()
@@ -9483,7 +9466,7 @@ impl<'a> Resolver<'a> {
     /// Resolve a generic type
     fn resolve_generic_type(&mut self, name: &str, args: &[Type], span: Span) -> TypeId {
         // Prelude module path for looking up Option/Result
-        let prelude_path = vec!["core".to_string(), "prelude".to_string()];
+        let prelude_source = ModuleSource::core("prelude");
 
         match name {
             "Option" => {
@@ -9492,7 +9475,7 @@ impl<'a> Resolver<'a> {
                 let found_as_variant = self
                     .symbols
                     .lookup("Option")
-                    .or_else(|| self.symbols.lookup_in_module(&prelude_path, "Option"))
+                    .or_else(|| self.symbols.lookup_in_module(&prelude_source, "Option"))
                     .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
 
                 if !found_as_variant {
@@ -9633,7 +9616,7 @@ pub fn resolve_module(
     module: &Module,
     module_source: ModuleSource,
     symbols: &SymbolTable,
-    loaded_modules: &HashMap<Vec<String>, Module>,
+    loaded_modules: &HashMap<ModuleSource, Module>,
 ) -> Result<TirModule, Vec<TypeError>> {
     let mut resolver = Resolver::new(symbols, loaded_modules);
     resolver.resolve_module(module, module_source)
@@ -9645,32 +9628,13 @@ pub fn resolve_module(
 /// to TIR and packages them into a Project struct.
 pub fn resolve_to_project(
     symbols: SymbolTable,
-    modules: &HashMap<Vec<String>, Module>,
+    modules: &HashMap<ModuleSource, Module>,
     entry_module_source: ModuleSource,
-    implicit_modules: HashSet<Vec<String>>,
+    implicit_modules: HashSet<ModuleSource>,
     module_name: String,
 ) -> Result<Project, Vec<TypeError>> {
     let tir_modules =
         Resolver::resolve_all_modules(&symbols, modules, entry_module_source.clone())?;
-
-    // Convert Vec<String> to ModuleSource at the boundary
-    // Use the provided entry_module_source for the entry module (empty path)
-    // to preserve filename information
-    let tir_modules_by_source: IndexMap<ModuleSource, TirModule> = tir_modules
-        .into_iter()
-        .map(|(path, tir)| {
-            let module_source = if path.is_empty() {
-                entry_module_source.clone()
-            } else {
-                ModuleSource::from_path(&path)
-            };
-            (module_source, tir)
-        })
-        .collect();
-    let implicit_modules_by_source: HashSet<ModuleSource> = implicit_modules
-        .into_iter()
-        .map(|p| ModuleSource::from_path(&p))
-        .collect();
 
     // Build registries once here, shared across all subsequent phases
     let (wasi_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
@@ -9682,9 +9646,9 @@ pub fn resolve_to_project(
 
     Ok(Project::new(
         entry_module_source,
-        tir_modules_by_source,
+        tir_modules,
         symbols,
-        implicit_modules_by_source,
+        implicit_modules,
         module_name,
         wasi_registry,
         world_registry,

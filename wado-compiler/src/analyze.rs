@@ -6,7 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
-use crate::name::{resolve_import_path, validate_module_path};
+use crate::name::{resolve_import_path, validate_module_path, ModuleSource};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, ResourceSymbol,
     StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol,
@@ -19,12 +19,12 @@ use crate::token::Span;
 pub enum AnalyzeError {
     /// Module not found (not in pre-loaded modules)
     ModuleNotFound {
-        module_path: Vec<String>,
+        module_source: ModuleSource,
         span: Span,
     },
     /// Symbol not found in module
     ImportNotFound {
-        module_path: Vec<String>,
+        module_source: ModuleSource,
         name: String,
         span: Span,
     },
@@ -43,17 +43,17 @@ pub enum AnalyzeError {
 impl std::fmt::Display for AnalyzeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AnalyzeError::ModuleNotFound { module_path, span } => {
+            AnalyzeError::ModuleNotFound { module_source, span } => {
                 write!(
                     f,
                     "{}:{}: module not found: '{}'",
                     span.line,
                     span.column,
-                    module_path.join("::")
+                    module_source
                 )
             }
             AnalyzeError::ImportNotFound {
-                module_path,
+                module_source,
                 name,
                 span,
             } => {
@@ -63,7 +63,7 @@ impl std::fmt::Display for AnalyzeError {
                     span.line,
                     span.column,
                     name,
-                    module_path.join("::")
+                    module_source
                 )
             }
             AnalyzeError::DuplicateDefinition { name, span } => {
@@ -106,7 +106,7 @@ pub struct Analyzer {
     /// Collected errors
     errors: Vec<AnalyzeError>,
     /// Modules loaded implicitly by the compiler (not by user imports)
-    implicit_modules: std::collections::HashSet<Vec<String>>,
+    implicit_modules: std::collections::HashSet<ModuleSource>,
 }
 
 impl Analyzer {
@@ -120,7 +120,7 @@ impl Analyzer {
     }
 
     /// Collect all definitions from a module into the symbol table
-    fn collect_definitions(&mut self, module: &Module, module_path: &[String]) {
+    fn collect_definitions(&mut self, module: &Module, module_source: &ModuleSource) {
         for item in &module.items {
             match item {
                 Item::Function(func) => {
@@ -128,7 +128,7 @@ impl Analyzer {
                     // 1. It has no body (bodyless declaration like `pub fn foo();`)
                     // 2. Or it's defined in a core::* module
                     let is_builtin = func.body.is_none()
-                        || module_path.first().map(|s| s == "core").unwrap_or(false);
+                        || matches!(module_source, ModuleSource::Core { .. });
 
                     let kind = SymbolKind::Function(FunctionSymbol {
                         params: func.params.iter().map(|p| p.name.clone()).collect(),
@@ -139,7 +139,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&func.name, kind, module_path, Some(func.span));
+                        .define(&func.name, kind, module_source, Some(func.span));
                 }
 
                 Item::Effect(effect) => {
@@ -153,7 +153,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&effect.name, kind, module_path, Some(effect.span));
+                        .define(&effect.name, kind, module_source, Some(effect.span));
 
                     // Also register each effect method as a function symbol
                     // with the fully qualified name "{Effect}.{method}"
@@ -165,7 +165,7 @@ impl Analyzer {
                             params: method.params.iter().map(|p| p.name.clone()).collect(),
                             return_type: method.return_type.as_ref().map(|_| "unknown".to_string()),
                             effects: vec![effect.name.clone()], // Effect methods implicitly require their effect
-                            is_builtin: module_path.first().map(|s| s == "core").unwrap_or(false),
+                            is_builtin: matches!(module_source, ModuleSource::Core { .. }),
                             wasi_import,
                         });
 
@@ -174,7 +174,7 @@ impl Analyzer {
                         self.symbols.define(
                             &qualified_name,
                             func_kind,
-                            module_path,
+                            module_source,
                             Some(method.span),
                         );
                     }
@@ -188,7 +188,7 @@ impl Analyzer {
                     self.symbols.define(
                         &struct_decl.name,
                         kind,
-                        module_path,
+                        module_source,
                         Some(struct_decl.span),
                     );
                 }
@@ -199,7 +199,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&enum_decl.name, kind, module_path, Some(enum_decl.span));
+                        .define(&enum_decl.name, kind, module_source, Some(enum_decl.span));
                 }
 
                 Item::Variant(variant_decl) => {
@@ -210,7 +210,7 @@ impl Analyzer {
                     self.symbols.define(
                         &variant_decl.name,
                         kind,
-                        module_path,
+                        module_source,
                         Some(variant_decl.span),
                     );
                 }
@@ -226,7 +226,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&trait_decl.name, kind, module_path, Some(trait_decl.span));
+                        .define(&trait_decl.name, kind, module_source, Some(trait_decl.span));
                 }
 
                 Item::Type(type_alias) => {
@@ -235,7 +235,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&type_alias.name, kind, module_path, Some(type_alias.span));
+                        .define(&type_alias.name, kind, module_source, Some(type_alias.span));
                 }
 
                 Item::Resource(resource) => {
@@ -245,7 +245,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&resource.name, kind, module_path, Some(resource.span));
+                        .define(&resource.name, kind, module_source, Some(resource.span));
 
                     // Register each resource method as a function symbol
                     // with the fully qualified name "{Resource}::{method}"
@@ -256,7 +256,7 @@ impl Analyzer {
                             params: method.params.iter().map(|p| p.name.clone()).collect(),
                             return_type: method.return_type.as_ref().map(|_| "unknown".to_string()),
                             effects: vec![], // Resource methods don't have effect requirements
-                            is_builtin: module_path.first().map(|s| s == "core").unwrap_or(false),
+                            is_builtin: matches!(module_source, ModuleSource::Core { .. }),
                             wasi_import,
                         });
 
@@ -265,7 +265,7 @@ impl Analyzer {
                         self.symbols.define(
                             &qualified_name,
                             func_kind,
-                            module_path,
+                            module_source,
                             Some(method.span),
                         );
                     }
@@ -294,7 +294,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&world.name, kind, module_path, Some(world.span));
+                        .define(&world.name, kind, module_source, Some(world.span));
                 }
 
                 Item::Use(_) => {
@@ -311,7 +311,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&flags_decl.name, kind, module_path, Some(flags_decl.span));
+                        .define(&flags_decl.name, kind, module_source, Some(flags_decl.span));
                 }
 
                 Item::Test(_) => {
@@ -325,7 +325,7 @@ impl Analyzer {
                     });
 
                     self.symbols
-                        .define(&global.name, kind, module_path, Some(global.span));
+                        .define(&global.name, kind, module_source, Some(global.span));
                 }
             }
         }
@@ -337,8 +337,8 @@ impl Analyzer {
     }
 
     /// Look up a symbol in a specific module
-    pub fn lookup_in_module(&self, module_path: &[String], name: &str) -> Option<&Symbol> {
-        self.symbols.lookup_in_module(module_path, name)
+    pub fn lookup_in_module(&self, module_source: &ModuleSource, name: &str) -> Option<&Symbol> {
+        self.symbols.lookup_in_module(module_source, name)
     }
 
     /// Get the symbol table
@@ -358,29 +358,29 @@ impl Analyzer {
     ///
     /// # Arguments
     /// * `modules` - All modules including entry and dependencies
-    /// * `entry_path` - Path of the entry module
+    /// * `entry_source` - Source of the entry module
     /// * `implicit_modules` - Set of implicitly loaded modules
     pub fn analyze_loaded_modules(
         &mut self,
-        modules: &std::collections::HashMap<Vec<String>, Module>,
-        _entry_path: &[String],
-        implicit_modules: std::collections::HashSet<Vec<String>>,
+        modules: &std::collections::HashMap<ModuleSource, Module>,
+        _entry_source: &ModuleSource,
+        implicit_modules: std::collections::HashSet<ModuleSource>,
     ) -> Result<(), Vec<AnalyzeError>> {
         self.implicit_modules = implicit_modules;
 
         // First pass: collect definitions from all modules (excluding pub use)
-        for (path, module) in modules {
-            self.collect_definitions(module, path);
+        for (source, module) in modules {
+            self.collect_definitions(module, source);
         }
 
         // Second pass: process pub use (re-exports) now that all symbols are collected
-        for (path, module) in modules {
-            self.process_pub_use(module, path, modules);
+        for (source, module) in modules {
+            self.process_pub_use(module, source, modules);
         }
 
         // Third pass: validate imports in each module
-        for (path, module) in modules {
-            self.validate_imports(module, path, modules)?;
+        for (source, module) in modules {
+            self.validate_imports(module, source, modules)?;
         }
 
         if self.errors.is_empty() {
@@ -398,8 +398,8 @@ impl Analyzer {
     fn process_pub_use(
         &mut self,
         module: &Module,
-        module_path: &[String],
-        all_modules: &std::collections::HashMap<Vec<String>, Module>,
+        module_source: &ModuleSource,
+        all_modules: &std::collections::HashMap<ModuleSource, Module>,
     ) {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
@@ -412,11 +412,12 @@ impl Analyzer {
                     continue; // Error already collected in validate_imports
                 }
 
-                // Resolve the source path
-                let source_path = resolve_import_path(module_path, &use_decl.source);
+                // Resolve the source path and convert to ModuleSource
+                let source_path = resolve_import_path(&module_source.to_path(), &use_decl.source);
+                let source_module = ModuleSource::from_path(&source_path);
 
                 // Check the module exists
-                if !all_modules.contains_key(&source_path) {
+                if !all_modules.contains_key(&source_module) {
                     continue; // Error already collected in validate_imports
                 }
 
@@ -426,9 +427,9 @@ impl Analyzer {
                         UseItem::Simple { name, alias } => {
                             let export_name = alias.as_ref().unwrap_or(name);
                             self.symbols.register_reexport(
-                                module_path,
+                                module_source,
                                 export_name,
-                                &source_path,
+                                &source_module,
                                 name,
                             );
                         }
@@ -441,9 +442,9 @@ impl Analyzer {
                                 let export_name =
                                     func_item.alias.as_ref().unwrap_or(&func_item.name);
                                 self.symbols.register_reexport(
-                                    module_path,
+                                    module_source,
                                     export_name,
-                                    &source_path,
+                                    &source_module,
                                     &source_name,
                                 );
                             }
@@ -458,8 +459,8 @@ impl Analyzer {
     fn validate_imports(
         &mut self,
         module: &Module,
-        from_module_path: &[String],
-        all_modules: &std::collections::HashMap<Vec<String>, Module>,
+        from_module_source: &ModuleSource,
+        all_modules: &std::collections::HashMap<ModuleSource, Module>,
     ) -> Result<(), Vec<AnalyzeError>> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
@@ -473,13 +474,14 @@ impl Analyzer {
                     continue;
                 }
 
-                // Resolve the import path using name utilities
-                let module_path = resolve_import_path(from_module_path, &use_decl.source);
+                // Resolve the import path using name utilities and convert to ModuleSource
+                let module_path = resolve_import_path(&from_module_source.to_path(), &use_decl.source);
+                let module_source = ModuleSource::from_path(&module_path);
 
                 // Check the module exists in pre-loaded modules
-                if !all_modules.contains_key(&module_path) {
+                if !all_modules.contains_key(&module_source) {
                     self.errors.push(AnalyzeError::ModuleNotFound {
-                        module_path: module_path.clone(),
+                        module_source: module_source.clone(),
                         span: use_decl.span,
                     });
                     continue;
@@ -489,14 +491,14 @@ impl Analyzer {
                 for use_item in &use_decl.items {
                     match use_item {
                         UseItem::Simple { name, alias } => {
-                            if let Some(symbol) = self.symbols.lookup_in_module(&module_path, name)
+                            if let Some(symbol) = self.symbols.lookup_in_module(&module_source, name)
                             {
                                 let symbol_id = symbol.id;
                                 let import_name = alias.as_ref().unwrap_or(name);
                                 self.symbols.register_import(import_name, symbol_id);
                             } else {
                                 self.errors.push(AnalyzeError::ImportNotFound {
-                                    module_path: module_path.clone(),
+                                    module_source: module_source.clone(),
                                     name: name.clone(),
                                     span: use_decl.span,
                                 });
@@ -509,7 +511,7 @@ impl Analyzer {
                             for func_item in functions {
                                 let lookup_name = format!("{}::{}", effect_name, func_item.name);
                                 if let Some(symbol) =
-                                    self.symbols.lookup_in_module(&module_path, &lookup_name)
+                                    self.symbols.lookup_in_module(&module_source, &lookup_name)
                                 {
                                     let symbol_id = symbol.id;
                                     let import_name =
@@ -517,7 +519,7 @@ impl Analyzer {
                                     self.symbols.register_import(import_name, symbol_id);
                                 } else {
                                     self.errors.push(AnalyzeError::ImportNotFound {
-                                        module_path: module_path.clone(),
+                                        module_source: module_source.clone(),
                                         name: lookup_name,
                                         span: use_decl.span,
                                     });
@@ -537,7 +539,7 @@ impl Analyzer {
     }
 
     /// Get a copy of the implicit modules set
-    pub fn get_implicit_modules(&self) -> &std::collections::HashSet<Vec<String>> {
+    pub fn get_implicit_modules(&self) -> &std::collections::HashSet<ModuleSource> {
         &self.implicit_modules
     }
 }

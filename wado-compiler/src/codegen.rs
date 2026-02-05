@@ -1132,14 +1132,15 @@ impl Codegen<'_> {
         }
 
         // Register struct type aliases (e.g., `Point as OtherPoint`)
-        for (alias_name, alias_module_path, original_name) in symbols.get_struct_aliases() {
+        for (alias_name, alias_module_source, original_name) in symbols.get_struct_aliases() {
             let alias_struct_name =
                 StructName::new(entry_module_source.clone(), alias_name.clone());
             // Check if there's a collision (main module has same-named struct)
-            if main_module_struct_names.contains(&original_name) && !alias_module_path.is_empty() {
+            // A collision occurs when the alias comes from a different module
+            let is_from_different_module = alias_module_source != *entry_module_source;
+            if main_module_struct_names.contains(&original_name) && is_from_different_module {
                 // Collision case - use qualified name from the alias's module
-                let qualified_name =
-                    StructName::from_path_and_name(&alias_module_path, &original_name);
+                let qualified_name = StructName::new(alias_module_source, original_name.clone());
                 if let Some(info) = self.struct_types.get(&qualified_name).cloned() {
                     self.struct_types.insert(alias_struct_name, info);
                 }
