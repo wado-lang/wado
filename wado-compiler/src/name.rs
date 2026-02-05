@@ -162,7 +162,9 @@ impl ModuleSource {
     #[must_use]
     pub fn from_path(path: &[String]) -> Self {
         match path {
-            [] => Self::entry_point_with_filename("<inline>"),
+            // Legacy: empty path represents entry module
+            // TODO: Remove this case by changing resolve_all_modules to return IndexMap<ModuleSource, _>
+            [] => Self::entry_point_with_filename("<entry>"),
             [first] if first.starts_with("./") || first.starts_with("../") => Self::Local {
                 path: first.clone(),
             },
@@ -1464,6 +1466,7 @@ mod tests {
 
     #[test]
     fn test_module_source_from_path_entry_point() {
+        // Legacy: empty path represents entry module
         let source = ModuleSource::from_path(&[]);
         assert!(source.is_entry_point());
     }
