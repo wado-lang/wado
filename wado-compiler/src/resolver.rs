@@ -552,7 +552,10 @@ struct ArithmeticTraitInfo {
 
 impl<'a> Resolver<'a> {
     /// Create a new resolver
-    pub fn new(symbols: &'a SymbolTable, loaded_modules: &'a HashMap<ModuleSource, Module>) -> Self {
+    pub fn new(
+        symbols: &'a SymbolTable,
+        loaded_modules: &'a HashMap<ModuleSource, Module>,
+    ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
         let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
@@ -1100,7 +1103,7 @@ impl<'a> Resolver<'a> {
     ) -> Vec<ModuleSource> {
         // Collect and sort sources for deterministic ordering
         let mut sources: Vec<&ModuleSource> = modules.keys().collect();
-        sources.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+        sources.sort_by_key(|a| a.to_string());
         let source_to_idx: HashMap<&ModuleSource, usize> =
             sources.iter().enumerate().map(|(i, s)| (*s, i)).collect();
 
@@ -1174,10 +1177,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Convert indices back to sources
-        sorted_indices
-            .iter()
-            .map(|&i| sources[i].clone())
-            .collect()
+        sorted_indices.iter().map(|&i| sources[i].clone()).collect()
     }
 
     /// Static version of `resolve_type` for use before the resolver is fully constructed
@@ -4376,7 +4376,11 @@ impl<'a> Resolver<'a> {
                 else if self.imported_functions.contains(&ident.name) {
                     // Get module source from symbol table for codegen
                     if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                        (Some(symbol.module_source.clone()), symbol.name.clone(), true)
+                        (
+                            Some(symbol.module_source.clone()),
+                            symbol.name.clone(),
+                            true,
+                        )
                     } else {
                         // Imported but not in symbols - shouldn't happen but allow
                         (None, ident.name.clone(), true)
@@ -4421,7 +4425,8 @@ impl<'a> Resolver<'a> {
 
         // For local function calls (None), use the current module source
         // to ensure DCE and codegen can find the function correctly
-        let callee_module = callee_module_source.unwrap_or_else(|| self.current_module_source.clone());
+        let callee_module =
+            callee_module_source.unwrap_or_else(|| self.current_module_source.clone());
 
         // Look up function return type
         let mut return_type = self.lookup_function_return_type(&callee_module, &func_name);
@@ -4448,7 +4453,11 @@ impl<'a> Resolver<'a> {
     }
 
     /// Look up the return type of a function
-    fn lookup_function_return_type(&mut self, callee_module: &ModuleSource, func_name: &str) -> TypeId {
+    fn lookup_function_return_type(
+        &mut self,
+        callee_module: &ModuleSource,
+        func_name: &str,
+    ) -> TypeId {
         // Handle builtin functions
         if callee_module.is_core_builtin() {
             return self.get_builtin_return_type(func_name);
@@ -5110,40 +5119,39 @@ impl<'a> Resolver<'a> {
 
         // Get struct name and module source from base type
         // The struct_module is where the struct is defined (and inherent methods live)
-        let (struct_name, struct_module) =
-            match self.type_table.borrow().get(base_type_id) {
-                ResolvedType::Struct {
-                    name,
-                    module_source,
-                    ..
-                } => (name.clone(), module_source.clone()),
-                ResolvedType::GenericInstance {
-                    name,
-                    module_source,
-                    ..
-                } => (name.clone(), module_source.clone()),
-                // Primitive types have impl blocks in core:prelude/primitives
-                ResolvedType::Primitive(_) => {
-                    let prim_module = ModuleSource::Core {
-                        name: "prelude/primitives".to_string(),
-                    };
-                    (
-                        self.type_table.borrow().mangle_type_name(base_type_id),
-                        prim_module,
-                    )
-                }
-                // BuiltinArray is Array - impl blocks are in core:prelude
-                ResolvedType::BuiltinArray(_) => {
-                    let prelude_module = ModuleSource::Core {
-                        name: "prelude".to_string(),
-                    };
-                    ("Array".to_string(), prelude_module)
-                }
-                _ => (
+        let (struct_name, struct_module) = match self.type_table.borrow().get(base_type_id) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.clone()),
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => (name.clone(), module_source.clone()),
+            // Primitive types have impl blocks in core:prelude/primitives
+            ResolvedType::Primitive(_) => {
+                let prim_module = ModuleSource::Core {
+                    name: "prelude/primitives".to_string(),
+                };
+                (
                     self.type_table.borrow().mangle_type_name(base_type_id),
-                    self.current_module_source.clone(),
-                ),
-            };
+                    prim_module,
+                )
+            }
+            // BuiltinArray is Array - impl blocks are in core:prelude
+            ResolvedType::BuiltinArray(_) => {
+                let prelude_module = ModuleSource::Core {
+                    name: "prelude".to_string(),
+                };
+                ("Array".to_string(), prelude_module)
+            }
+            _ => (
+                self.type_table.borrow().mangle_type_name(base_type_id),
+                self.current_module_source.clone(),
+            ),
+        };
 
         // Look up method info based on receiver type
         // First try inherent method, then trait methods

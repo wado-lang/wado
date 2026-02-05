@@ -339,7 +339,11 @@ impl SymbolTable {
     }
 
     /// Check if a name is re-exported from a module
-    pub fn get_reexport(&self, module_source: &ModuleSource, name: &str) -> Option<&ReExportTarget> {
+    pub fn get_reexport(
+        &self,
+        module_source: &ModuleSource,
+        name: &str,
+    ) -> Option<&ReExportTarget> {
         self.reexports
             .get(module_source)
             .and_then(|reexports| reexports.get(name))

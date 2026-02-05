@@ -6,7 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
-use crate::name::{resolve_import_path, validate_module_path, ModuleSource};
+use crate::name::{ModuleSource, resolve_import_path, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, ResourceSymbol,
     StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol,
@@ -43,13 +43,14 @@ pub enum AnalyzeError {
 impl std::fmt::Display for AnalyzeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AnalyzeError::ModuleNotFound { module_source, span } => {
+            AnalyzeError::ModuleNotFound {
+                module_source,
+                span,
+            } => {
                 write!(
                     f,
                     "{}:{}: module not found: '{}'",
-                    span.line,
-                    span.column,
-                    module_source
+                    span.line, span.column, module_source
                 )
             }
             AnalyzeError::ImportNotFound {
@@ -60,10 +61,7 @@ impl std::fmt::Display for AnalyzeError {
                 write!(
                     f,
                     "{}:{}: symbol '{}' not found in module '{}'",
-                    span.line,
-                    span.column,
-                    name,
-                    module_source
+                    span.line, span.column, name, module_source
                 )
             }
             AnalyzeError::DuplicateDefinition { name, span } => {
@@ -127,8 +125,8 @@ impl Analyzer {
                     // A function is a builtin if:
                     // 1. It has no body (bodyless declaration like `pub fn foo();`)
                     // 2. Or it's defined in a core::* module
-                    let is_builtin = func.body.is_none()
-                        || matches!(module_source, ModuleSource::Core { .. });
+                    let is_builtin =
+                        func.body.is_none() || matches!(module_source, ModuleSource::Core { .. });
 
                     let kind = SymbolKind::Function(FunctionSymbol {
                         params: func.params.iter().map(|p| p.name.clone()).collect(),
@@ -225,8 +223,12 @@ impl Analyzer {
                             .collect(),
                     });
 
-                    self.symbols
-                        .define(&trait_decl.name, kind, module_source, Some(trait_decl.span));
+                    self.symbols.define(
+                        &trait_decl.name,
+                        kind,
+                        module_source,
+                        Some(trait_decl.span),
+                    );
                 }
 
                 Item::Type(type_alias) => {
@@ -234,8 +236,12 @@ impl Analyzer {
                         aliased_type: "unknown".to_string(), // TODO: store actual type
                     });
 
-                    self.symbols
-                        .define(&type_alias.name, kind, module_source, Some(type_alias.span));
+                    self.symbols.define(
+                        &type_alias.name,
+                        kind,
+                        module_source,
+                        Some(type_alias.span),
+                    );
                 }
 
                 Item::Resource(resource) => {
@@ -310,8 +316,12 @@ impl Analyzer {
                         members: flags_decl.flags.iter().map(|m| m.name.clone()).collect(),
                     });
 
-                    self.symbols
-                        .define(&flags_decl.name, kind, module_source, Some(flags_decl.span));
+                    self.symbols.define(
+                        &flags_decl.name,
+                        kind,
+                        module_source,
+                        Some(flags_decl.span),
+                    );
                 }
 
                 Item::Test(_) => {
@@ -475,7 +485,8 @@ impl Analyzer {
                 }
 
                 // Resolve the import path using name utilities and convert to ModuleSource
-                let module_path = resolve_import_path(&from_module_source.to_path(), &use_decl.source);
+                let module_path =
+                    resolve_import_path(&from_module_source.to_path(), &use_decl.source);
                 let module_source = ModuleSource::from_path(&module_path);
 
                 // Check the module exists in pre-loaded modules
@@ -491,7 +502,8 @@ impl Analyzer {
                 for use_item in &use_decl.items {
                     match use_item {
                         UseItem::Simple { name, alias } => {
-                            if let Some(symbol) = self.symbols.lookup_in_module(&module_source, name)
+                            if let Some(symbol) =
+                                self.symbols.lookup_in_module(&module_source, name)
                             {
                                 let symbol_id = symbol.id;
                                 let import_name = alias.as_ref().unwrap_or(name);

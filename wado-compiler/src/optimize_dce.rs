@@ -448,7 +448,10 @@ fn build_analysis_graph(
                         monomorph_info.generic_name.clone(),
                     ))
                 } else {
-                    FunctionId::Free(FreeFunctionName::from_module_source(module_source, &func.name))
+                    FunctionId::Free(FreeFunctionName::from_module_source(
+                        module_source,
+                        &func.name,
+                    ))
                 }
             };
             let analysis = analyze_function(&func, module_source, type_table);
@@ -1177,10 +1180,11 @@ pub fn remove_unreachable_functions(project: &mut Project) {
                 // Monomorphized functions are tracked in the call graph with entry point source
                 // regardless of which module they were generated in
                 if func.monomorph_info.is_some() {
-                    let entry_module_free_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                        &ModuleSource::entry_point_with_filename("<monomorph>"),
-                        &func.name,
-                    ));
+                    let entry_module_free_id =
+                        FunctionId::Free(FreeFunctionName::from_module_source(
+                            &ModuleSource::entry_point_with_filename("<monomorph>"),
+                            &func.name,
+                        ));
                     if project.reachable_functions.contains(&entry_module_free_id) {
                         return true;
                     }

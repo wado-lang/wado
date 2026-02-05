@@ -266,10 +266,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             }
 
             // Try to load - errors are warnings for implicit modules
-            match self
-                .get_source(&module_source, entry_module_source)
-                .await
-            {
+            match self.get_source(&module_source, entry_module_source).await {
                 Ok(source) => {
                     match self.parse_source(&source, &module_source) {
                         Ok(ast) => {

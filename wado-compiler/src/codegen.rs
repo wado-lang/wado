@@ -515,8 +515,7 @@ impl Codegen<'_> {
             return Some(info);
         }
         // Fall back to entry point module (using actual entry module source, not entry_point())
-        let entry_key =
-            StructName::new(self.project.entry_module_source.clone(), name.to_string());
+        let entry_key = StructName::new(self.project.entry_module_source.clone(), name.to_string());
         self.struct_types.get(&entry_key)
     }
 
@@ -4036,8 +4035,10 @@ impl Codegen<'_> {
             // Register Array struct type in struct_types (unified with other generic structs)
             let elem_mangled = type_table.mangle_type_name(element_type_id);
             let array_struct_mangled = mangle_generic_name("Array", &[elem_mangled]);
-            let array_struct_name =
-                StructName::new(self.project.entry_module_source.clone(), array_struct_mangled);
+            let array_struct_name = StructName::new(
+                self.project.entry_module_source.clone(),
+                array_struct_mangled,
+            );
             self.struct_types.insert(
                 array_struct_name,
                 StructTypeInfo {
@@ -10708,8 +10709,10 @@ impl Codegen<'_> {
         module_source: &ModuleSource,
     ) -> (Function, Vec<(u32, bool)>) {
         // Create function context - TIR already has local count and types
-        let mut func_ctx =
-            FunctionContext::with_module_source(tir_func.params.len() as u32, module_source.clone());
+        let mut func_ctx = FunctionContext::with_module_source(
+            tir_func.params.len() as u32,
+            module_source.clone(),
+        );
 
         // Copy address-taken locals from TIR
         func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();
@@ -10990,7 +10993,7 @@ impl Codegen<'_> {
         let full_name = if callee_module.is_entry_point() {
             func_name.to_string()
         } else {
-            format!("{}::{func_name}", callee_module)
+            format!("{callee_module}::{func_name}")
         };
         panic!("unknown function: {full_name}");
     }

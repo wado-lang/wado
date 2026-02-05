@@ -245,7 +245,7 @@ impl ModuleSource {
         matches!(self, Self::EntryPoint { .. })
     }
 
-    /// Check if this looks like an effect module (single PascalCase name).
+    /// Check if this looks like an effect module (single `PascalCase` name).
     /// Effects are represented as Local paths with a single element like "Stdout".
     #[must_use]
     pub fn is_effect_like(&self) -> bool {
@@ -372,7 +372,11 @@ impl FreeFunctionName {
     }
 
     /// Create a `FreeFunctionName` with monomorphization metadata.
-    pub fn with_monomorph_info(module_source: ModuleSource, name: String, base_name: String) -> Self {
+    pub fn with_monomorph_info(
+        module_source: ModuleSource,
+        name: String,
+        base_name: String,
+    ) -> Self {
         Self {
             module_source,
             name,
