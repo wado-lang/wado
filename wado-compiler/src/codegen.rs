@@ -514,9 +514,10 @@ impl Codegen<'_> {
         if let Some(info) = self.struct_types.get(&qualified) {
             return Some(info);
         }
-        // Fall back to entry point module
-        let simple = StructName::from_name(name);
-        self.struct_types.get(&simple)
+        // Fall back to entry point module (using actual entry module source, not entry_point())
+        let entry_key =
+            StructName::new(self.project.entry_module_source.clone(), name.to_string());
+        self.struct_types.get(&entry_key)
     }
 
     /// Extract struct names that a type depends on (for field types)
@@ -883,8 +884,8 @@ impl Codegen<'_> {
                         // Collision - use qualified StructName
                         StructName::new(module_source.clone(), struct_name.clone())
                     } else {
-                        // No collision - use simple StructName (entry point)
-                        StructName::new(ModuleSource::entry_point(), struct_name.clone())
+                        // No collision - use entry module source
+                        StructName::new(entry_module_source.clone(), struct_name.clone())
                     };
                     // Use the same fully mangled name for registration
                     // This ensures consistency between DCE tracking and codegen
@@ -903,7 +904,7 @@ impl Codegen<'_> {
         // Build import name → qualified name lookup table for call resolution
         let mut _import_lookup: HashMap<String, String> = HashMap::new();
         for (module_source, tir_func_rc, _, qualified_name) in &loaded_funcs {
-            if *module_source != ModuleSource::entry_point() {
+            if module_source != entry_module_source {
                 _import_lookup.insert(tir_func_rc.borrow().name.clone(), qualified_name.clone());
             }
         }
@@ -1039,8 +1040,8 @@ impl Codegen<'_> {
                             // Collision - use qualified name with full module source
                             StructName::new(module_source.clone(), tir_struct.name.clone())
                         } else {
-                            // No collision - use simple name (entry point)
-                            StructName::new(ModuleSource::entry_point(), tir_struct.name.clone())
+                            // No collision - use entry module source
+                            StructName::new(entry_module_source.clone(), tir_struct.name.clone())
                         };
                         self.register_struct_type(
                             struct_name,
@@ -1115,7 +1116,7 @@ impl Codegen<'_> {
                         deferred_non_mono_structs.push(tir_struct.clone());
                     } else {
                         let struct_name =
-                            StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
+                            StructName::new(entry_module_source.clone(), tir_struct.name.clone());
                         self.register_struct_type(
                             struct_name,
                             tir_struct,
@@ -1133,7 +1134,7 @@ impl Codegen<'_> {
         // Register struct type aliases (e.g., `Point as OtherPoint`)
         for (alias_name, alias_module_path, original_name) in symbols.get_struct_aliases() {
             let alias_struct_name =
-                StructName::new(ModuleSource::entry_point(), alias_name.clone());
+                StructName::new(entry_module_source.clone(), alias_name.clone());
             // Check if there's a collision (main module has same-named struct)
             if main_module_struct_names.contains(&original_name) && !alias_module_path.is_empty() {
                 // Collision case - use qualified name from the alias's module
@@ -1143,9 +1144,9 @@ impl Codegen<'_> {
                     self.struct_types.insert(alias_struct_name, info);
                 }
             } else {
-                // No collision - use simple name (empty module path)
+                // No collision - use entry module source
                 let original_struct_name =
-                    StructName::new(ModuleSource::entry_point(), original_name.clone());
+                    StructName::new(entry_module_source.clone(), original_name.clone());
                 if let Some(info) = self.struct_types.get(&original_struct_name).cloned() {
                     self.struct_types.insert(alias_struct_name, info);
                 }
@@ -1211,7 +1212,7 @@ impl Codegen<'_> {
                     continue;
                 };
                 let struct_name =
-                    StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
+                    StructName::new(entry_module_source.clone(), tir_struct.name.clone());
                 // Check for self-referential structs using full struct name
                 let self_ref_fields = Self::get_self_referential_field_types(
                     &tir_struct.name,
@@ -1272,7 +1273,7 @@ impl Codegen<'_> {
             let TypeDecl::Struct(tir_struct) = type_decl else {
                 continue;
             };
-            let struct_name = StructName::new(ModuleSource::entry_point(), tir_struct.name.clone());
+            let struct_name = StructName::new(entry_module_source.clone(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
             let self_ref_fields =
                 Self::get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
@@ -4039,7 +4040,7 @@ impl Codegen<'_> {
             let elem_mangled = type_table.mangle_type_name(element_type_id);
             let array_struct_mangled = mangle_generic_name("Array", &[elem_mangled]);
             let array_struct_name =
-                StructName::new(ModuleSource::entry_point(), array_struct_mangled);
+                StructName::new(self.project.entry_module_source.clone(), array_struct_mangled);
             self.struct_types.insert(
                 array_struct_name,
                 StructTypeInfo {
@@ -4442,7 +4443,7 @@ impl Codegen<'_> {
                 // All generic instances (including Array<T>) use the mangled name lookup
                 let mangled_name = type_table.mangle_type_name(type_id);
                 if let Some(info) =
-                    self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
+                    self.lookup_struct_type(&mangled_name, &self.project.entry_module_source)
                 {
                     info.type_idx
                 } else {
@@ -5019,9 +5020,10 @@ impl Codegen<'_> {
             ResolvedType::GenericInstance { .. } => {
                 // Check if this generic instance is registered
                 let mangled_name = type_table.mangle_type_name(type_id);
-                !self
-                    .struct_types
-                    .contains_key(&StructName::new(ModuleSource::entry_point(), mangled_name))
+                !self.struct_types.contains_key(&StructName::new(
+                    self.project.entry_module_source.clone(),
+                    mangled_name,
+                ))
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.contains_unregistered_generic_instance(*inner, type_table)
@@ -5200,7 +5202,9 @@ impl Codegen<'_> {
         let mangled_name = mangle_array_type(&element_name);
 
         // Check if already registered in struct_types
-        if let Some(info) = self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point()) {
+        if let Some(info) =
+            self.lookup_struct_type(&mangled_name, &self.project.entry_module_source)
+        {
             return info.type_idx;
         }
 
@@ -5230,7 +5234,7 @@ impl Codegen<'_> {
         let type_idx = builder.define_gc_struct_type(&type_name, &fields);
 
         // Register in struct_types for consistency with other generic structs
-        let struct_name = StructName::new(ModuleSource::entry_point(), mangled_name);
+        let struct_name = StructName::new(self.project.entry_module_source.clone(), mangled_name);
         self.struct_types.insert(
             struct_name,
             StructTypeInfo {
@@ -5252,7 +5256,7 @@ impl Codegen<'_> {
     ) -> Option<u32> {
         let element_name = type_table.mangle_type_name(element_type_id);
         let mangled_name = mangle_array_type(&element_name);
-        self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
+        self.lookup_struct_type(&mangled_name, &self.project.entry_module_source)
             .map(|info| info.type_idx)
     }
 
@@ -5457,7 +5461,7 @@ impl Codegen<'_> {
                 // Check if this GenericInstance is already registered in struct_types
                 let mangled_name = type_table.mangle_type_name(type_id);
                 let is_registered_in_struct_types = self
-                    .lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
+                    .lookup_struct_type(&mangled_name, &self.project.entry_module_source)
                     .is_some();
 
                 // If not in struct_types and it's an Array type, register it.
@@ -6037,7 +6041,7 @@ impl Codegen<'_> {
                     });
                 }
                 if let Some(struct_info) =
-                    self.lookup_struct_type(&mangled_name, &ModuleSource::entry_point())
+                    self.lookup_struct_type(&mangled_name, &self.project.entry_module_source)
                 {
                     ValType::Ref(RefType {
                         nullable: false,
@@ -8119,7 +8123,7 @@ impl Codegen<'_> {
                             return;
                         } else {
                             // Fall back to simple name lookup
-                            self.lookup_struct_type(struct_name, &ModuleSource::entry_point())
+                            self.lookup_struct_type(struct_name, &self.project.entry_module_source)
                         }
                     }
                     ResolvedType::GenericInstance {
@@ -8137,7 +8141,7 @@ impl Codegen<'_> {
                     }
                     _ => {
                         // Fall back to simple name lookup using struct_name
-                        self.lookup_struct_type(struct_name, &ModuleSource::entry_point())
+                        self.lookup_struct_type(struct_name, &self.project.entry_module_source)
                     }
                 };
 

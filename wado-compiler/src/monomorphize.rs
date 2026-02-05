@@ -30,7 +30,8 @@ use crate::token::Span;
 /// This performs monomorphization of generic types and functions
 /// within a single module without cross-module generic function support.
 pub fn monomorphize_module(module: TirModule) -> TirModule {
-    let mut monomorph = Monomorphizer::new();
+    let entry_module_source = module.module_source.clone();
+    let mut monomorph = Monomorphizer::new(entry_module_source);
     monomorph.monomorphize(module)
 }
 
@@ -91,7 +92,7 @@ pub fn monomorphize_modules_indexed(
                 .keys()
                 .last()
                 .cloned()
-                .unwrap_or(ModuleSource::EntryPoint { filename: None })
+                .expect("monomorphize_modules_indexed called with empty modules")
         });
 
     let entry_generic_struct_names: std::collections::HashSet<String> = modules
@@ -201,12 +202,14 @@ fn monomorphize_with_externals(
         }
     }
 
-    let mut monomorph = Monomorphizer::new();
+    let mut monomorph = Monomorphizer::new(entry_module_source.clone());
     monomorph.monomorphize_with_externals(module, all_generic_functions, &all_generic_structs)
 }
 
 /// Monomorphizer collects generic instantiations and generates concrete types
 struct Monomorphizer {
+    /// The entry module source for generated code
+    entry_module_source: ModuleSource,
     /// Map from (`generic_name`, `type_args`) to mangled name for structs
     instantiated: HashMap<InstantiationKey, String>,
     /// Work queue of pending struct instantiations
@@ -226,8 +229,9 @@ struct Monomorphizer {
 }
 
 impl Monomorphizer {
-    fn new() -> Self {
+    fn new(entry_module_source: ModuleSource) -> Self {
         Self {
+            entry_module_source,
             instantiated: HashMap::new(),
             pending: Vec::new(),
             type_substitutions: HashMap::new(),
@@ -1041,7 +1045,7 @@ impl Monomorphizer {
         // monomorphized struct type, not a GenericInstance.
         let concrete_type_id = type_table.make_monomorphized_struct(
             mangled_name.clone(),
-            ModuleSource::entry_point(),
+            self.entry_module_source.clone(),
             key.name.clone(), // base_name: the original generic struct name
         );
 
@@ -2768,11 +2772,11 @@ impl Monomorphizer {
                         method_info: original_method_info.clone(),
                     };
                     if let Some(mangled) = self.function_instantiated.get(&key) {
-                        // Use EntryPoint module source since monomorphized functions are
+                        // Use entry module source since monomorphized functions are
                         // generated in the current (calling) module, not the original
                         // module where the generic function was defined.
                         *func = FunctionRef::External {
-                            module_source: ModuleSource::EntryPoint { filename: None },
+                            module_source: self.entry_module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: func_name,

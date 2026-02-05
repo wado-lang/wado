@@ -148,10 +148,16 @@ impl ModuleSource {
         Self::Remote { url: url.into() }
     }
 
-    /// Create an entry point module source without a filename.
+    /// Create an entry point module source with a default inline filename.
+    ///
+    /// Use `entry_point_with_filename()` when you have an actual filename.
+    /// This method uses `"<inline>"` as a synthetic filename for cases like
+    /// REPL, embedded code, or legacy path conversion.
     #[must_use]
     pub fn entry_point() -> Self {
-        Self::EntryPoint { filename: None }
+        Self::EntryPoint {
+            filename: Some("<inline>".to_string()),
+        }
     }
 
     /// Create an entry point module source with a filename.
@@ -696,14 +702,6 @@ impl StructName {
         Self {
             module_source,
             name,
-        }
-    }
-
-    #[must_use]
-    pub fn from_name(name: &str) -> Self {
-        Self {
-            module_source: ModuleSource::entry_point(),
-            name: name.to_string(),
         }
     }
 
@@ -1505,7 +1503,7 @@ mod tests {
             ModuleSource::local("./geometry.wado").to_string(),
             "./geometry.wado"
         );
-        assert_eq!(ModuleSource::entry_point().to_string(), "<entry>");
+        assert_eq!(ModuleSource::entry_point().to_string(), "<inline>");
         assert_eq!(
             ModuleSource::entry_point_with_filename("hello.wado").to_string(),
             "hello.wado"
