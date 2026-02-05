@@ -306,7 +306,7 @@ pub fn analyze_project(project: &mut Project) {
 
     // Filter string literals in each module to only include strings from reachable functions
     for module in project.tir_modules.values_mut() {
-        let module_path = module.module_source.to_path();
+        let module_source = &module.module_source;
         let mut reachable_strings: Vec<String> = Vec::new();
 
         for (func_name, strings) in &module.function_strings {
@@ -318,7 +318,7 @@ pub fn analyze_project(project: &mut Project) {
                     // Method with method_info
                     // Check as MethodName first (for non-monomorphized methods)
                     let method_id = FunctionId::Method(MethodName::new(
-                        module_path.join("/"),
+                        module_source.clone(),
                         method_info.struct_name.clone(),
                         method_info.trait_name.clone(),
                         method_info.method_name.clone(),
@@ -328,16 +328,16 @@ pub fn analyze_project(project: &mut Project) {
                     } else {
                         // For monomorphized methods, also check as FreeFunctionName
                         // Monomorphized methods have type args in the struct name (e.g., "TreeMap<String,i32>")
-                        let free_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                            &module_path,
+                        let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                            module_source,
                             func_name,
                         ));
                         reachable.contains(&free_id)
                     }
                 } else {
                     // Regular function (no method_info)
-                    let func_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                        &module_path,
+                    let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                        module_source,
                         func_name,
                     ));
                     reachable.contains(&func_id)
@@ -432,11 +432,11 @@ fn build_analysis_graph(
                     ))
                 } else {
                     // Non-monomorphized method - use method_info
-                    FunctionId::Method(MethodName::from_module_source(
-                        module_source,
-                        &info.struct_name,
-                        info.trait_name.as_deref(),
-                        &info.method_name,
+                    FunctionId::Method(MethodName::new(
+                        module_source.clone(),
+                        info.struct_name.clone(),
+                        info.trait_name.clone(),
+                        info.method_name.clone(),
                     ))
                 }
             } else {
@@ -473,11 +473,11 @@ fn build_analysis_graph(
             };
 
             for method in &impl_block.methods {
-                let method_id = FunctionId::Method(MethodName::from_module_source(
-                    module_source,
-                    &struct_name,
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    struct_name.clone(),
                     None,
-                    &method.name,
+                    method.name.clone(),
                 ));
                 let analysis = analyze_function(method, module_source, type_table);
                 call_graph.insert(method_id.clone(), analysis.callees);
@@ -747,11 +747,11 @@ fn analyze_expr(
                         ..
                     } => {
                         // Regular struct method call - use FunctionId::Method
-                        let method_id = FunctionId::Method(MethodName::from_module_source(
-                            &module_source,
-                            &name,
-                            trait_name.as_deref(),
-                            &method_name,
+                        let method_id = FunctionId::Method(MethodName::new(
+                            module_source.clone(),
+                            name.clone(),
+                            trait_name.clone(),
+                            method_name.clone(),
                         ));
                         analysis.callees.insert(method_id);
                     }
@@ -903,11 +903,11 @@ fn analyze_expr(
                         } else {
                             (prefix, None)
                         };
-                    FunctionId::Method(MethodName::from_module_source(
-                        &callee_module,
-                        struct_name,
-                        trait_name,
-                        method_name,
+                    FunctionId::Method(MethodName::new(
+                        callee_module.clone(),
+                        struct_name.to_string(),
+                        trait_name.map(String::from),
+                        method_name.to_string(),
                     ))
                 } else {
                     FunctionId::Free(FreeFunctionName::from_module_source(
@@ -991,11 +991,11 @@ fn analyze_expr(
         } => {
             analyze_expr(functor, current_module, type_table, analysis);
             // Mark the __call method as reachable (it's referenced via ref.func)
-            let method_name = MethodName::from_module_source(
-                current_module,
-                &format!("__Closure_{functor_id}"),
+            let method_name = MethodName::new(
+                current_module.clone(),
+                format!("__Closure_{functor_id}"),
                 None,
-                "__call",
+                "__call".to_string(),
             );
             analysis.callees.insert(FunctionId::Method(method_name));
         }
@@ -1087,9 +1087,9 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
             // Primitive to_string methods are defined in core:prelude/primitives as impl blocks
             // e.g., impl i32 { fn to_string(&self) -> String { ... } }
             let prim_name = prim.as_str();
-            // Method format: module_path/StructName::method_name
+            // Method format: module_source/StructName::method_name
             let method_id = FunctionId::Method(MethodName::new(
-                "core/prelude/primitives".to_string(),
+                ModuleSource::core("prelude/primitives"),
                 prim_name.to_string(),
                 None,
                 "to_string".to_string(),
@@ -1157,11 +1157,11 @@ pub fn remove_unreachable_functions(project: &mut Project) {
                 // - Static method tracked as FunctionId::Free with mangled name
                 // Use method_info to build the method ID
                 // Try as instance method (FunctionId::Method)
-                let method_id = FunctionId::Method(MethodName::from_module_source(
-                    module_source,
-                    &info.struct_name,
-                    info.trait_name.as_deref(),
-                    &info.method_name,
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    info.struct_name.clone(),
+                    info.trait_name.clone(),
+                    info.method_name.clone(),
                 ));
                 if project.reachable_functions.contains(&method_id) {
                     return true;

@@ -269,6 +269,19 @@ impl ModuleSource {
             None
         }
     }
+
+    /// Convert to a path string format used for method name mangling.
+    ///
+    /// Returns `self.to_path().join("/")`:
+    /// - `EntryPoint` → `""`
+    /// - `Local { path }` → `"{path}"`
+    /// - `Core { name }` → `"core/{name}"`
+    /// - `Wasi { interface }` → `"wasi/{interface}"`
+    /// - `Remote { url }` → `"{url}"`
+    #[must_use]
+    pub fn to_path_string(&self) -> String {
+        self.to_path().join("/")
+    }
 }
 
 impl fmt::Display for ModuleSource {
@@ -402,15 +415,15 @@ impl fmt::Display for FreeFunctionName {
 ///
 /// Format:
 /// - Without trait: `{filename}/{struct_name}::{method_name}`
-/// - With trait: `{filename}/{struct_name}^{trait_name}::{method_name}`
+/// - With trait: `{module_source}/{struct_name}^{trait_name}::{method_name}`
 ///
 /// Examples:
 /// - `./geometry.wado/Point::sum`
 /// - `./geometry.wado/Point^Display::fmt`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MethodName {
-    /// The source filename (e.g., `./geometry.wado`)
-    pub filename: String,
+    /// The module source where the method is defined
+    pub module_source: ModuleSource,
     /// The struct name (e.g., `Point`)
     pub struct_name: String,
     /// The trait name if this is a trait implementation (e.g., `Display`)
@@ -421,31 +434,16 @@ pub struct MethodName {
 
 impl MethodName {
     pub fn new(
-        filename: String,
+        module_source: ModuleSource,
         struct_name: String,
         trait_name: Option<String>,
         method_name: String,
     ) -> Self {
         Self {
-            filename,
+            module_source,
             struct_name,
             trait_name,
             method_name,
-        }
-    }
-
-    /// Create a `MethodName` from `ModuleSource`.
-    pub fn from_module_source(
-        module_source: &ModuleSource,
-        struct_name: &str,
-        trait_name: Option<&str>,
-        method_name: &str,
-    ) -> Self {
-        Self {
-            filename: module_source.to_path().join("/"),
-            struct_name: struct_name.to_string(),
-            trait_name: trait_name.map(String::from),
-            method_name: method_name.to_string(),
         }
     }
 
@@ -505,11 +503,11 @@ impl MethodName {
 
 impl fmt::Display for MethodName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // For entry point (empty filename), don't include the leading slash
-        let prefix = if self.filename.is_empty() {
+        // For entry point, don't include the module prefix
+        let prefix = if self.module_source.is_entry_point() {
             String::new()
         } else {
-            format!("{}/", self.filename)
+            format!("{}/", self.module_source.to_path_string())
         };
 
         match &self.trait_name {
@@ -1231,7 +1229,9 @@ mod tests {
     #[test]
     fn test_method_name_to_string_simple() {
         let method = MethodName::new(
-            "./geometry.wado".to_string(),
+            ModuleSource::Local {
+                path: "./geometry.wado".to_string(),
+            },
             "Point".to_string(),
             None,
             "sum".to_string(),
@@ -1242,7 +1242,9 @@ mod tests {
     #[test]
     fn test_method_name_to_string_with_trait() {
         let method = MethodName::new(
-            "./geometry.wado".to_string(),
+            ModuleSource::Local {
+                path: "./geometry.wado".to_string(),
+            },
             "Point".to_string(),
             Some("Display".to_string()),
             "fmt".to_string(),
