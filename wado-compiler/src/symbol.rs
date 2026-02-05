@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::ops::Index;
 
 use crate::ast::WasiImport;
+use crate::name::ModuleSource;
 use crate::token::Span;
 
 /// Unique identifier for a symbol in the table.
@@ -206,8 +207,8 @@ pub struct Symbol {
     pub name: String,
     /// Symbol kind and data
     pub kind: SymbolKind,
-    /// Module path where this symbol is defined (e.g., ["core", "cli"])
-    pub module_path: Vec<String>,
+    /// Module where this symbol is defined
+    pub module_source: ModuleSource,
     /// Source location (if available)
     pub span: Option<Span>,
 }
@@ -234,8 +235,8 @@ impl Symbol {
 /// Represents where a re-exported symbol originally comes from.
 #[derive(Debug, Clone)]
 pub struct ReExportTarget {
-    /// Module path where the symbol is originally defined (or re-exported from)
-    pub source_module: Vec<String>,
+    /// Module where the symbol is originally defined (or re-exported from)
+    pub source_module: ModuleSource,
     /// Original name in the source module
     pub source_name: String,
 }
@@ -248,10 +249,10 @@ pub struct ReExportTarget {
 pub struct SymbolTable {
     /// All symbols in the table
     symbols: SymbolVec,
-    /// Module path → symbol name → symbol id
-    modules: HashMap<Vec<String>, HashMap<String, SymbolId>>,
-    /// Re-exports: module path → exported name → re-export target
-    reexports: HashMap<Vec<String>, HashMap<String, ReExportTarget>>,
+    /// Module → symbol name → symbol id
+    modules: HashMap<ModuleSource, HashMap<String, SymbolId>>,
+    /// Re-exports: module → exported name → re-export target
+    reexports: HashMap<ModuleSource, HashMap<String, ReExportTarget>>,
     /// Imported symbols in the current module (name → symbol id)
     imports: HashMap<String, SymbolId>,
     /// Current scope stack for local variables (innermost scope last)
@@ -269,7 +270,7 @@ impl SymbolTable {
     /// # Arguments
     /// * `name` - Symbol name
     /// * `kind` - Symbol kind and data
-    /// * `module_path` - Module where symbol is defined
+    /// * `module_source` - Module where symbol is defined
     /// * `span` - Source location (optional)
     ///
     /// # Returns
@@ -278,7 +279,7 @@ impl SymbolTable {
         &mut self,
         name: &str,
         kind: SymbolKind,
-        module_path: &[String],
+        module_source: &ModuleSource,
         span: Option<Span>,
     ) -> SymbolId {
         let id = SymbolId(self.symbols.len());
@@ -286,13 +287,13 @@ impl SymbolTable {
             id,
             name: name.to_string(),
             kind,
-            module_path: module_path.to_vec(),
+            module_source: module_source.clone(),
             span,
         };
         self.symbols.push(symbol);
 
         // Register in module map
-        let module = self.modules.entry(module_path.to_vec()).or_default();
+        let module = self.modules.entry(module_source.clone()).or_default();
         module.insert(name.to_string(), id);
 
         id
@@ -312,46 +313,50 @@ impl SymbolTable {
 
     /// Register a re-export in a module
     ///
-    /// This records that `export_name` in `module_path` is a re-export of
+    /// This records that `export_name` in `module_source` is a re-export of
     /// `source_name` from `source_module`.
     ///
     /// # Arguments
-    /// * `module_path` - Module where the re-export is declared
+    /// * `module_source` - Module where the re-export is declared
     /// * `export_name` - Name under which the symbol is re-exported
     /// * `source_module` - Module from which the symbol is imported
     /// * `source_name` - Original name in the source module
     pub fn register_reexport(
         &mut self,
-        module_path: &[String],
+        module_source: &ModuleSource,
         export_name: &str,
-        source_module: &[String],
+        source_module: &ModuleSource,
         source_name: &str,
     ) {
-        let module_reexports = self.reexports.entry(module_path.to_vec()).or_default();
+        let module_reexports = self.reexports.entry(module_source.clone()).or_default();
         module_reexports.insert(
             export_name.to_string(),
             ReExportTarget {
-                source_module: source_module.to_vec(),
+                source_module: source_module.clone(),
                 source_name: source_name.to_string(),
             },
         );
     }
 
     /// Check if a name is re-exported from a module
-    pub fn get_reexport(&self, module_path: &[String], name: &str) -> Option<&ReExportTarget> {
+    pub fn get_reexport(
+        &self,
+        module_source: &ModuleSource,
+        name: &str,
+    ) -> Option<&ReExportTarget> {
         self.reexports
-            .get(module_path)
+            .get(module_source)
             .and_then(|reexports| reexports.get(name))
     }
 
     /// Get all struct import aliases
     ///
-    /// Returns tuples of (`alias_name`, `module_path`, `original_struct_name`) for imports where:
+    /// Returns tuples of (`alias_name`, `module_source`, `original_struct_name`) for imports where:
     /// - The alias name differs from the original name
     /// - The imported symbol is a struct
     ///
-    /// The `module_path` can be used to construct qualified names for collision handling.
-    pub fn get_struct_aliases(&self) -> Vec<(String, Vec<String>, String)> {
+    /// The `module_source` can be used to construct qualified names for collision handling.
+    pub fn get_struct_aliases(&self) -> Vec<(String, ModuleSource, String)> {
         let mut aliases = Vec::new();
         for (alias_name, &symbol_id) in &self.imports {
             if let Some(symbol) = self.symbols.get(symbol_id)
@@ -360,7 +365,7 @@ impl SymbolTable {
             {
                 aliases.push((
                     alias_name.clone(),
-                    symbol.module_path.clone(),
+                    symbol.module_source.clone(),
                     symbol.name.clone(),
                 ));
             }
@@ -394,19 +399,19 @@ impl SymbolTable {
     ///
     /// This resolves re-exports transparently, following re-export chains
     /// to find the original symbol definition.
-    pub fn lookup_in_module(&self, module_path: &[String], name: &str) -> Option<&Symbol> {
-        self.lookup_in_module_with_visited(module_path, name, &mut Vec::new())
+    pub fn lookup_in_module(&self, module_source: &ModuleSource, name: &str) -> Option<&Symbol> {
+        self.lookup_in_module_with_visited(module_source, name, &mut Vec::new())
     }
 
     /// Internal lookup that tracks visited modules to detect cycles
     fn lookup_in_module_with_visited(
         &self,
-        module_path: &[String],
+        module_source: &ModuleSource,
         name: &str,
-        visited: &mut Vec<(Vec<String>, String)>,
+        visited: &mut Vec<(ModuleSource, String)>,
     ) -> Option<&Symbol> {
         // Check for cycles
-        let key = (module_path.to_vec(), name.to_string());
+        let key = (module_source.clone(), name.to_string());
         if visited.contains(&key) {
             return None; // Cycle detected
         }
@@ -415,7 +420,7 @@ impl SymbolTable {
         // First, try direct lookup in the module
         if let Some(symbol) = self
             .modules
-            .get(module_path)
+            .get(module_source)
             .and_then(|module| module.get(name))
             .map(|&id| &self.symbols[id])
         {
@@ -423,7 +428,7 @@ impl SymbolTable {
         }
 
         // If not found directly, check re-exports
-        if let Some(reexport) = self.get_reexport(module_path, name) {
+        if let Some(reexport) = self.get_reexport(module_source, name) {
             return self.lookup_in_module_with_visited(
                 &reexport.source_module,
                 &reexport.source_name,
@@ -459,7 +464,8 @@ impl SymbolTable {
             id,
             name: name.to_string(),
             kind,
-            module_path: vec![], // Locals don't have module paths
+            // Locals use a placeholder module source since they're looked up via scope chains
+            module_source: ModuleSource::entry_point_with_filename("<local>"),
             span,
         };
         self.symbols.push(symbol);
@@ -475,17 +481,17 @@ impl SymbolTable {
     }
 
     /// Check if a symbol exists in a module
-    pub fn exists_in_module(&self, module_path: &[String], name: &str) -> bool {
+    pub fn exists_in_module(&self, module_source: &ModuleSource, name: &str) -> bool {
         self.modules
-            .get(module_path)
+            .get(module_source)
             .map(|m| m.contains_key(name))
             .unwrap_or(false)
     }
 
     /// Get all symbols in a module
-    pub fn get_module_symbols(&self, module_path: &[String]) -> Vec<&Symbol> {
+    pub fn get_module_symbols(&self, module_source: &ModuleSource) -> Vec<&Symbol> {
         self.modules
-            .get(module_path)
+            .get(module_source)
             .map(|module| module.values().map(|&id| &self.symbols[id]).collect())
             .unwrap_or_default()
     }
@@ -504,6 +510,7 @@ mod tests {
     fn test_define_and_lookup() {
         let mut table = SymbolTable::new();
 
+        let core_cli = ModuleSource::core("cli");
         let id = table.define(
             "println",
             SymbolKind::Function(FunctionSymbol {
@@ -513,11 +520,11 @@ mod tests {
                 is_builtin: true,
                 wasi_import: None,
             }),
-            &["core".to_string(), "cli".to_string()],
+            &core_cli,
             None,
         );
 
-        let symbol = table.lookup_in_module(&["core".to_string(), "cli".to_string()], "println");
+        let symbol = table.lookup_in_module(&core_cli, "println");
         assert!(symbol.is_some());
         assert_eq!(symbol.unwrap().id, id);
         assert_eq!(symbol.unwrap().name, "println");
@@ -527,6 +534,7 @@ mod tests {
     fn test_import_lookup() {
         let mut table = SymbolTable::new();
 
+        let core_cli = ModuleSource::core("cli");
         let id = table.define(
             "println",
             SymbolKind::Function(FunctionSymbol {
@@ -536,7 +544,7 @@ mod tests {
                 is_builtin: true,
                 wasi_import: None,
             }),
-            &["core".to_string(), "cli".to_string()],
+            &core_cli,
             None,
         );
 
@@ -618,24 +626,26 @@ mod tests {
     fn test_struct_aliases() {
         let mut table = SymbolTable::new();
 
+        let geometry = ModuleSource::local("./geometry.wado");
+
         // Define a struct in a module
         let id = table.define(
             "Point",
             SymbolKind::Struct(StructSymbol {
                 fields: vec!["x".to_string(), "y".to_string()],
             }),
-            &["geometry".to_string()],
+            &geometry,
             None,
         );
 
         // Import the struct with an alias
         table.register_import("OtherPoint", id);
 
-        // get_struct_aliases should return the alias mapping with module path
+        // get_struct_aliases should return the alias mapping with module source
         let aliases = table.get_struct_aliases();
         assert_eq!(aliases.len(), 1);
         assert_eq!(aliases[0].0, "OtherPoint"); // alias name
-        assert_eq!(aliases[0].1, vec!["geometry".to_string()]); // module path
+        assert_eq!(aliases[0].1, geometry); // module source
         assert_eq!(aliases[0].2, "Point"); // original struct name
     }
 
@@ -643,13 +653,15 @@ mod tests {
     fn test_struct_aliases_same_name() {
         let mut table = SymbolTable::new();
 
+        let geometry = ModuleSource::local("./geometry.wado");
+
         // Define a struct in a module
         let id = table.define(
             "Point",
             SymbolKind::Struct(StructSymbol {
                 fields: vec!["x".to_string(), "y".to_string()],
             }),
-            &["geometry".to_string()],
+            &geometry,
             None,
         );
 

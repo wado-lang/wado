@@ -9,13 +9,6 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-pub struct "TreeMap<String,i32>" {
-    root: Option<&mut TreeMapNode<String>>,
-    entries: Array<TreeMapEntry<String, i32>>,
-    size: i32,
-    deleted_count: i32,
-}
-
 struct "TreeMapEntry<String,i32>" {
     key: String,
     value: i32,
@@ -28,6 +21,13 @@ struct "TreeMapNode<String>" {
     level: i32,
     left: Option<&mut TreeMapNode<String>>,
     right: Option<&mut TreeMapNode<String>>,
+}
+
+pub struct "TreeMap<String,i32>" {
+    root: Option<&mut TreeMapNode<String>>,
+    entries: Array<TreeMapEntry<String,i32>>,
+    size: i32,
+    deleted_count: i32,
 }
 
 fn run() with Stdout {

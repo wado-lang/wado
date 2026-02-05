@@ -297,25 +297,13 @@ pub async fn compile_with_options<H: CompilerHost>(
             })?
     };
 
-    // Convert ModuleSource keys to Vec<String> for analyzer/resolver compatibility
-    let modules_by_path: std::collections::HashMap<Vec<String>, ast::Module> = load_result
-        .modules
-        .iter()
-        .map(|(ms, m)| (ms.to_path(), m.clone()))
-        .collect();
-    let implicit_modules_by_path: std::collections::HashSet<Vec<String>> = load_result
-        .implicit_modules
-        .iter()
-        .map(ModuleSource::to_path)
-        .collect();
-
     // === Phase 5: Analyze all modules ===
     let mut analyzer = Analyzer::new();
     analyzer
         .analyze_loaded_modules(
-            &modules_by_path,
-            &load_result.entry_module_source.to_path(),
-            implicit_modules_by_path.clone(),
+            &load_result.modules,
+            &load_result.entry_module_source,
+            load_result.implicit_modules.clone(),
         )
         .map_err(|errors| {
             let msg = errors
@@ -342,9 +330,9 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 6: Resolve all modules to Project ===
     let project = resolve_to_project(
         symbols,
-        &modules_by_path,
+        &load_result.modules,
         load_result.entry_module_source.clone(),
-        implicit_modules_by_path,
+        load_result.implicit_modules.clone(),
         module_name,
     )
     .map_err(|errors| {
@@ -482,25 +470,13 @@ pub async fn dump_with_host<H: CompilerHost>(
             })?
     };
 
-    // Convert ModuleSource keys to Vec<String> for analyzer/resolver compatibility
-    let modules_by_path: std::collections::HashMap<Vec<String>, ast::Module> = load_result
-        .modules
-        .iter()
-        .map(|(ms, m)| (ms.to_path(), m.clone()))
-        .collect();
-    let implicit_modules_by_path: std::collections::HashSet<Vec<String>> = load_result
-        .implicit_modules
-        .iter()
-        .map(ModuleSource::to_path)
-        .collect();
-
     // === Phase 6: Analyze all modules ===
     let mut analyzer = Analyzer::new();
     analyzer
         .analyze_loaded_modules(
-            &modules_by_path,
-            &load_result.entry_module_source.to_path(),
-            implicit_modules_by_path.clone(),
+            &load_result.modules,
+            &load_result.entry_module_source,
+            load_result.implicit_modules.clone(),
         )
         .map_err(|errors| {
             let msg = errors
@@ -519,18 +495,13 @@ pub async fn dump_with_host<H: CompilerHost>(
     // === Phase 7: Resolve all modules to TIR ===
     let tir_modules = Resolver::resolve_all_modules(
         &symbols,
-        &modules_by_path,
+        &load_result.modules,
         load_result.entry_module_source.clone(),
     )
     .ok();
 
-    // Convert TIR modules to ModuleSource keys for DumpResult
-    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
-        tir_modules.clone().map(|m| {
-            m.into_iter()
-                .map(|(path, tir)| (ModuleSource::from_path(&path), tir))
-                .collect()
-        });
+    // TIR modules already use ModuleSource keys
+    let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> = tir_modules.clone();
 
     // === Phase 8: Monomorphize all modules ===
     // Use monomorphize_modules_indexed for cross-module generic function support
@@ -558,11 +529,7 @@ pub async fn dump_with_host<H: CompilerHost>(
                 .unwrap_or("module")
                 .to_string();
 
-            let implicit_modules_by_source: std::collections::HashSet<ModuleSource> =
-                implicit_modules_by_path
-                    .iter()
-                    .map(|p| ModuleSource::from_path(p))
-                    .collect();
+            let implicit_modules_by_source = load_result.implicit_modules.clone();
 
             // Build registries once here
             let (wasi_registry, world_registry) =

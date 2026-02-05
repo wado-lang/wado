@@ -162,11 +162,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger().span_start("load");
 
         // Parse, bind, and desugar entry module
-        let entry_module_source = if let Some(filename) = entry_filename {
-            ModuleSource::entry_point_with_filename(filename)
-        } else {
-            ModuleSource::entry_point()
-        };
+        // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
+        let entry_module_source =
+            ModuleSource::entry_point_with_filename(entry_filename.unwrap_or("<stdin>"));
         // Parse first to collect imports before binding
         let entry_ast = self.parse_source(entry_source, &entry_module_source)?;
 
@@ -210,7 +208,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         // Load implicit modules (for compiler-generated code)
-        self.load_implicit_modules().await?;
+        self.load_implicit_modules(&entry_module_source).await?;
 
         self.logger().span_end("load");
 
@@ -238,7 +236,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     }
 
     /// Load implicit modules required by the compiler
-    async fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
+    async fn load_implicit_modules(
+        &mut self,
+        entry_module_source: &ModuleSource,
+    ) -> Result<(), LoadError> {
         // Order matters: dependencies must be listed before dependents
         // - builtin: no dependencies
         // - string: depends on prelude/traits
@@ -265,10 +266,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             }
 
             // Try to load - errors are warnings for implicit modules
-            match self
-                .get_source(&module_source, &ModuleSource::entry_point())
-                .await
-            {
+            match self.get_source(&module_source, entry_module_source).await {
                 Ok(source) => {
                     match self.parse_source(&source, &module_source) {
                         Ok(ast) => {

@@ -423,11 +423,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     if opts.show_symbols {
         println!("=== Symbol Table (Analyze) ===");
         for symbol in result.symbols.all_symbols() {
-            let module_path = if symbol.module_path.is_empty() {
-                "(local)".to_string()
-            } else {
-                symbol.module_path.join("::")
-            };
+            let module_path = symbol.module_source.to_string();
             let kind_str = match &symbol.kind {
                 wado_compiler::symbol::SymbolKind::Function(f) => {
                     let effects = if f.effects.is_empty() {

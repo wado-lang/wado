@@ -148,12 +148,6 @@ impl ModuleSource {
         Self::Remote { url: url.into() }
     }
 
-    /// Create an entry point module source without a filename.
-    #[must_use]
-    pub fn entry_point() -> Self {
-        Self::EntryPoint { filename: None }
-    }
-
     /// Create an entry point module source with a filename.
     #[must_use]
     pub fn entry_point_with_filename(filename: impl Into<String>) -> Self {
@@ -168,7 +162,9 @@ impl ModuleSource {
     #[must_use]
     pub fn from_path(path: &[String]) -> Self {
         match path {
-            [] => Self::entry_point(),
+            // Legacy: empty path represents entry module
+            // TODO: Remove this case by changing resolve_all_modules to return IndexMap<ModuleSource, _>
+            [] => Self::entry_point_with_filename("<entry>"),
             [first] if first.starts_with("./") || first.starts_with("../") => Self::Local {
                 path: first.clone(),
             },
@@ -248,6 +244,44 @@ impl ModuleSource {
     pub fn is_entry_point(&self) -> bool {
         matches!(self, Self::EntryPoint { .. })
     }
+
+    /// Check if this looks like an effect module (single `PascalCase` name).
+    /// Effects are represented as Local paths with a single element like "Stdout".
+    #[must_use]
+    pub fn is_effect_like(&self) -> bool {
+        let path = self.to_path();
+        path.len() == 1
+            && path[0]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase())
+            && !path[0].contains('/')
+            && !path[0].contains('.')
+    }
+
+    /// Get the effect name if this is an effect-like module.
+    #[must_use]
+    pub fn effect_name(&self) -> Option<String> {
+        if self.is_effect_like() {
+            let path = self.to_path();
+            path.into_iter().next()
+        } else {
+            None
+        }
+    }
+
+    /// Convert to a path string format used for method name mangling.
+    ///
+    /// Returns `self.to_path().join("/")`:
+    /// - `EntryPoint` → `""`
+    /// - `Local { path }` → `"{path}"`
+    /// - `Core { name }` → `"core/{name}"`
+    /// - `Wasi { interface }` → `"wasi/{interface}"`
+    /// - `Remote { url }` → `"{url}"`
+    #[must_use]
+    pub fn to_path_string(&self) -> String {
+        self.to_path().join("/")
+    }
 }
 
 impl fmt::Display for ModuleSource {
@@ -274,15 +308,15 @@ impl fmt::Display for ModuleSource {
 
 /// A free function name (not a method on a struct).
 ///
-/// Format: `{module_path}/{name}`
+/// Format: `{module_source}/{name}`
 ///
 /// Examples:
 /// - `./geometry.wado/helper`
 /// - `core/internal/log_stdout`
 #[derive(Debug, Clone)]
 pub struct FreeFunctionName {
-    /// The module path segments (e.g., `[".", "geometry.wado"]`)
-    pub module_path: Vec<String>,
+    /// The module where the function is defined
+    pub module_source: ModuleSource,
     /// The function name (e.g., `helper`)
     pub name: String,
     /// Whether this function is monomorphized (instantiated from a generic)
@@ -291,35 +325,37 @@ pub struct FreeFunctionName {
     pub base_name: Option<String>,
 }
 
-// Manually implement Hash/Eq to only use module_path and name (not metadata)
+// Manually implement Hash/Eq to only use module_source and name (not metadata)
 impl Hash for FreeFunctionName {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.module_path.hash(state);
+        self.module_source.hash(state);
         self.name.hash(state);
     }
 }
 
 impl PartialEq for FreeFunctionName {
     fn eq(&self, other: &Self) -> bool {
-        self.module_path == other.module_path && self.name == other.name
+        self.module_source == other.module_source && self.name == other.name
     }
 }
 
 impl Eq for FreeFunctionName {}
 
 impl FreeFunctionName {
-    pub fn new(module_path: Vec<String>, name: String) -> Self {
+    pub fn new(module_source: ModuleSource, name: String) -> Self {
         Self {
-            module_path,
+            module_source,
             name,
             is_monomorphized: false,
             base_name: None,
         }
     }
 
+    /// Create a `FreeFunctionName` from a module path and name.
+    /// This is a convenience method for code that still uses `Vec<String>` paths.
     pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
         Self {
-            module_path: module_path.to_vec(),
+            module_source: ModuleSource::from_path(module_path),
             name: name.to_string(),
             is_monomorphized: false,
             base_name: None,
@@ -329,8 +365,9 @@ impl FreeFunctionName {
     /// Create a `FreeFunctionName` from string literal slices.
     /// Convenience method for when you have &[&str] instead of &[String].
     pub fn from_strs(module_path: &[&str], name: &str) -> Self {
+        let path: Vec<String> = module_path.iter().map(|s| (*s).to_string()).collect();
         Self {
-            module_path: module_path.iter().map(|s| (*s).to_string()).collect(),
+            module_source: ModuleSource::from_path(&path),
             name: name.to_string(),
             is_monomorphized: false,
             base_name: None,
@@ -340,7 +377,7 @@ impl FreeFunctionName {
     /// Create a `FreeFunctionName` from `ModuleSource` and name.
     pub fn from_module_source(module_source: &ModuleSource, name: &str) -> Self {
         Self {
-            module_path: module_source.to_path(),
+            module_source: module_source.clone(),
             name: name.to_string(),
             is_monomorphized: false,
             base_name: None,
@@ -348,9 +385,13 @@ impl FreeFunctionName {
     }
 
     /// Create a `FreeFunctionName` with monomorphization metadata.
-    pub fn with_monomorph_info(module_path: Vec<String>, name: String, base_name: String) -> Self {
+    pub fn with_monomorph_info(
+        module_source: ModuleSource,
+        name: String,
+        base_name: String,
+    ) -> Self {
         Self {
-            module_path,
+            module_source,
             name,
             is_monomorphized: true,
             base_name: Some(base_name),
@@ -360,10 +401,12 @@ impl FreeFunctionName {
 
 impl fmt::Display for FreeFunctionName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.module_path.is_empty() {
-            write!(f, "{}", self.name)
-        } else {
-            write!(f, "{}/{}", self.module_path.join("/"), self.name)
+        match &self.module_source {
+            ModuleSource::EntryPoint { .. } => write!(f, "{}", self.name),
+            ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
+            ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
+            ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
+            ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
         }
     }
 }
@@ -372,15 +415,15 @@ impl fmt::Display for FreeFunctionName {
 ///
 /// Format:
 /// - Without trait: `{filename}/{struct_name}::{method_name}`
-/// - With trait: `{filename}/{struct_name}^{trait_name}::{method_name}`
+/// - With trait: `{module_source}/{struct_name}^{trait_name}::{method_name}`
 ///
 /// Examples:
 /// - `./geometry.wado/Point::sum`
 /// - `./geometry.wado/Point^Display::fmt`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MethodName {
-    /// The source filename (e.g., `./geometry.wado`)
-    pub filename: String,
+    /// The module source where the method is defined
+    pub module_source: ModuleSource,
     /// The struct name (e.g., `Point`)
     pub struct_name: String,
     /// The trait name if this is a trait implementation (e.g., `Display`)
@@ -391,31 +434,16 @@ pub struct MethodName {
 
 impl MethodName {
     pub fn new(
-        filename: String,
+        module_source: ModuleSource,
         struct_name: String,
         trait_name: Option<String>,
         method_name: String,
     ) -> Self {
         Self {
-            filename,
+            module_source,
             struct_name,
             trait_name,
             method_name,
-        }
-    }
-
-    /// Create a `MethodName` from `ModuleSource`.
-    pub fn from_module_source(
-        module_source: &ModuleSource,
-        struct_name: &str,
-        trait_name: Option<&str>,
-        method_name: &str,
-    ) -> Self {
-        Self {
-            filename: module_source.to_path().join("/"),
-            struct_name: struct_name.to_string(),
-            trait_name: trait_name.map(String::from),
-            method_name: method_name.to_string(),
         }
     }
 
@@ -475,11 +503,11 @@ impl MethodName {
 
 impl fmt::Display for MethodName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // For entry point (empty filename), don't include the leading slash
-        let prefix = if self.filename.is_empty() {
+        // For entry point, don't include the module prefix
+        let prefix = if self.module_source.is_entry_point() {
             String::new()
         } else {
-            format!("{}/", self.filename)
+            format!("{}/", self.module_source.to_path_string())
         };
 
         match &self.trait_name {
@@ -699,14 +727,6 @@ impl StructName {
         }
     }
 
-    #[must_use]
-    pub fn from_name(name: &str) -> Self {
-        Self {
-            module_source: ModuleSource::entry_point(),
-            name: name.to_string(),
-        }
-    }
-
     /// Create a `StructName` from a module path and name.
     /// This is a convenience method for code that still uses `Vec<String>` paths.
     #[must_use]
@@ -866,34 +886,39 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
     normalize_module_path(&joined)
 }
 
-/// Resolve an import source to a module path (Vec<String> format).
+/// Resolve an import source to a `ModuleSource`.
 ///
-/// This is used by the analyzer to resolve import paths to module identifiers.
+/// This is the primary function for resolving import paths to module identifiers.
 ///
 /// # Arguments
-/// * `from_module` - The path of the importing module (e.g., `["./sub/main.wado"]`)
+/// * `from_module` - The `ModuleSource` of the importing module
 /// * `import_source` - The import source string (e.g., `"./geometry.wado"` or `"core:cli"`)
 ///
 /// # Returns
-/// The resolved module path as a Vec<String>.
-pub fn resolve_import_path(from_module: &[String], import_source: &str) -> Vec<String> {
-    // Handle special prefixes - parse into path segments
+/// The resolved `ModuleSource`.
+pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> ModuleSource {
+    // Handle special prefixes
     if let Some(name) = import_source.strip_prefix("core:") {
-        return vec!["core".to_string(), name.to_string()];
+        return ModuleSource::Core {
+            name: name.to_string(),
+        };
     }
     if let Some(interface) = import_source.strip_prefix("wasi:") {
-        return vec!["wasi".to_string(), interface.to_string()];
+        return ModuleSource::Wasi {
+            interface: interface.to_string(),
+        };
     }
     if import_source.starts_with("https://") || import_source.starts_with("http://") {
-        return vec![import_source.to_string()];
+        return ModuleSource::Remote {
+            url: import_source.to_string(),
+        };
     }
 
     // Handle relative imports from core: modules
-    // e.g., from ["core", "prelude"] importing "./prelude/int128.wado" -> ["core", "prelude/int128"]
-    if from_module.first().is_some_and(|s| s == "core")
+    // e.g., from Core { name: "prelude" } importing "./prelude/int128.wado" -> Core { name: "prelude/int128" }
+    if let ModuleSource::Core { name: from_name } = from_module
         && (import_source.starts_with("./") || import_source.starts_with("../"))
     {
-        let from_name = from_module.get(1).map_or("", |s| s.as_str());
         let relative = import_source
             .strip_prefix("./")
             .unwrap_or(import_source)
@@ -912,19 +937,23 @@ pub fn resolve_import_path(from_module: &[String], import_source: &str) -> Vec<S
             // from_name is like "prelude", relative path is the new name
             relative.to_string()
         };
-        return vec!["core".to_string(), resolved];
+        return ModuleSource::Core { name: resolved };
     }
 
-    // For relative imports, resolve against the from_module path
-    if let Some(from_path) = from_module.first()
+    // Handle relative imports from local modules
+    // For entry points, we don't resolve against the filename - just use the import directly
+    if let ModuleSource::Local { path: from_path } = from_module
         && (from_path.starts_with("./") || from_path.starts_with("../"))
     {
         let resolved = resolve_module_path(from_path, import_source);
-        return vec![resolved];
+        return ModuleSource::Local { path: resolved };
     }
 
-    // Fallback: normalize and return as single-element path
-    vec![normalize_module_path(import_source)]
+    // Fallback: normalize and return as Local path
+    // This handles EntryPoint imports and bare imports
+    ModuleSource::Local {
+        path: normalize_module_path(import_source),
+    }
 }
 
 /// Get the canonical name for an entry point file.
@@ -1200,7 +1229,9 @@ mod tests {
     #[test]
     fn test_method_name_to_string_simple() {
         let method = MethodName::new(
-            "./geometry.wado".to_string(),
+            ModuleSource::Local {
+                path: "./geometry.wado".to_string(),
+            },
             "Point".to_string(),
             None,
             "sum".to_string(),
@@ -1211,7 +1242,9 @@ mod tests {
     #[test]
     fn test_method_name_to_string_with_trait() {
         let method = MethodName::new(
-            "./geometry.wado".to_string(),
+            ModuleSource::Local {
+                path: "./geometry.wado".to_string(),
+            },
             "Point".to_string(),
             Some("Display".to_string()),
             "fmt".to_string(),
@@ -1287,7 +1320,7 @@ mod tests {
     fn test_build_core_internal_name() {
         let name = build_core_internal_name("log_stdout");
         assert_eq!(name.to_string(), "core/internal/log_stdout");
-        assert_eq!(name.module_path, vec!["core", "internal"]);
+        assert_eq!(name.module_source, ModuleSource::core("internal"));
         assert_eq!(name.name, "log_stdout");
     }
 
@@ -1478,6 +1511,7 @@ mod tests {
 
     #[test]
     fn test_module_source_from_path_entry_point() {
+        // Legacy: empty path represents entry module
         let source = ModuleSource::from_path(&[]);
         assert!(source.is_entry_point());
     }
@@ -1493,7 +1527,7 @@ mod tests {
         let source = ModuleSource::local("./geometry.wado");
         assert_eq!(source.to_path(), vec!["./geometry.wado"]);
 
-        let source = ModuleSource::entry_point();
+        let source = ModuleSource::entry_point_with_filename("test.wado");
         assert!(source.to_path().is_empty());
     }
 
@@ -1505,7 +1539,6 @@ mod tests {
             ModuleSource::local("./geometry.wado").to_string(),
             "./geometry.wado"
         );
-        assert_eq!(ModuleSource::entry_point().to_string(), "<entry>");
         assert_eq!(
             ModuleSource::entry_point_with_filename("hello.wado").to_string(),
             "hello.wado"
