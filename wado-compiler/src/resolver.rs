@@ -447,11 +447,11 @@ pub struct Resolver<'a> {
     loaded_modules: &'a HashMap<ModuleSource, Module>,
     /// Type aliases (name -> resolved type)
     type_aliases: HashMap<String, TypeId>,
-    /// Struct field info (struct name -> (`module_path`, fields))
+    /// Struct field info (struct name -> (`module_source`, fields))
     struct_fields: HashMap<String, StructFieldInfo>,
-    /// Variant case info (variant name -> (`module_path`, `type_params`, cases))
+    /// Variant case info (variant name -> (`module_source`, `type_params`, cases))
     variant_cases: HashMap<String, VariantInfo>,
-    /// Enum case info (enum name -> (`module_path`, cases))
+    /// Enum case info (enum name -> (`module_source`, cases))
     enum_cases: HashMap<String, EnumInfo>,
     /// Resource info (resource name -> module source and methods)
     resource_types: HashMap<String, ResourceInfo>,
@@ -4254,7 +4254,8 @@ impl<'a> Resolver<'a> {
             .collect();
 
         // Get function name from callee
-        let (module_path, func_name, is_known) = match &call.callee {
+        // callee_module_source is None for local calls (uses current module), Some for external calls
+        let (callee_module_source, func_name, is_known) = match &call.callee {
             Expr::Ident(ident) => {
                 // Check for qualified name with :: (e.g., "Stdout::write_via_stream")
                 // Parser creates a single ident for Effect::operation syntax
@@ -4265,7 +4266,7 @@ impl<'a> Resolver<'a> {
                     // Builtin functions: resolve through core:builtin module
                     if prefix == "builtin" {
                         (
-                            vec!["core".to_string(), "builtin".to_string()],
+                            Some(ModuleSource::core("builtin")),
                             suffix.to_string(),
                             true,
                         )
@@ -4345,7 +4346,14 @@ impl<'a> Resolver<'a> {
                     // Effect operations and other qualified calls - always allowed
                     // (validated by effect system/codegen)
                     else {
-                        (vec![prefix.to_string()], suffix.to_string(), true)
+                        // Effect-like modules (e.g., "Stdout") use Local module source
+                        (
+                            Some(ModuleSource::Local {
+                                path: prefix.to_string(),
+                            }),
+                            suffix.to_string(),
+                            true,
+                        )
                     }
                 }
                 // Check if it's a local function (defined in this module) or
@@ -4353,41 +4361,47 @@ impl<'a> Resolver<'a> {
                 else if self.function_return_types.contains_key(&ident.name)
                     || matches!(ident.name.as_str(), "Ok" | "Err" | "Some" | "None")
                 {
-                    (Vec::new(), ident.name.clone(), true)
+                    (None, ident.name.clone(), true)
                 }
                 // Check for prelude functions (panic, unreachable)
                 // These are actual functions in core::prelude
                 else if matches!(ident.name.as_str(), "panic" | "unreachable") {
                     (
-                        vec!["core".to_string(), "prelude".to_string()],
+                        Some(ModuleSource::core("prelude")),
                         ident.name.clone(),
                         true,
                     )
                 }
                 // Check if this is an imported function (per-module imports)
                 else if self.imported_functions.contains(&ident.name) {
-                    // Get module path from symbol table for codegen
+                    // Get module source from symbol table for codegen
                     if let Some(symbol) = self.symbols.lookup(&ident.name) {
-                        (symbol.module_source.to_path(), symbol.name.clone(), true)
+                        (Some(symbol.module_source.clone()), symbol.name.clone(), true)
                     } else {
                         // Imported but not in symbols - shouldn't happen but allow
-                        (Vec::new(), ident.name.clone(), true)
+                        (None, ident.name.clone(), true)
                     }
                 } else {
                     // Unknown function - will report error
-                    (Vec::new(), ident.name.clone(), false)
+                    (None, ident.name.clone(), false)
                 }
             }
             Expr::FieldAccess(field_access) => {
                 // e.g., Stdout.write (unlikely but possible)
                 // These are always considered known - validated elsewhere
                 if let Expr::Ident(ident) = &field_access.expr {
-                    (vec![ident.name.clone()], field_access.field.clone(), true)
+                    (
+                        Some(ModuleSource::Local {
+                            path: ident.name.clone(),
+                        }),
+                        field_access.field.clone(),
+                        true,
+                    )
                 } else {
-                    (Vec::new(), String::from("unknown"), false)
+                    (None, String::from("unknown"), false)
                 }
             }
-            _ => (Vec::new(), String::from("unknown"), false),
+            _ => (None, String::from("unknown"), false),
         };
 
         // Report error for unknown functions
@@ -4405,26 +4419,22 @@ impl<'a> Resolver<'a> {
             .map(|ty| self.resolve_type(ty))
             .collect();
 
+        // For local function calls (None), use the current module source
+        // to ensure DCE and codegen can find the function correctly
+        let callee_module = callee_module_source.unwrap_or_else(|| self.current_module_source.clone());
+
         // Look up function return type
-        let mut return_type = self.lookup_function_return_type(&module_path, &func_name);
+        let mut return_type = self.lookup_function_return_type(&callee_module, &func_name);
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
             return_type = self.substitute_type_params(return_type, &type_args);
         }
 
-        // For local function calls (empty module_path), use the current module source
-        // to ensure DCE and codegen can find the function correctly
-        let module_source = if module_path.is_empty() {
-            self.current_module_source.clone()
-        } else {
-            ModuleSource::from_path(&module_path)
-        };
-
         TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef::External {
-                    module_source,
+                    module_source: callee_module,
                     name: func_name,
                     monomorph_info: None,
                     method_info: None, // Free function call
@@ -4438,10 +4448,9 @@ impl<'a> Resolver<'a> {
     }
 
     /// Look up the return type of a function
-    fn lookup_function_return_type(&mut self, module_path: &[String], func_name: &str) -> TypeId {
+    fn lookup_function_return_type(&mut self, callee_module: &ModuleSource, func_name: &str) -> TypeId {
         // Handle builtin functions
-        // Normal resolution: module_path == ["core", "builtin"]
-        if module_path.len() == 2 && module_path[0] == "core" && module_path[1] == "builtin" {
+        if callee_module.is_core_builtin() {
             return self.get_builtin_return_type(func_name);
         }
         // Legacy: builtin::name pattern
@@ -4450,24 +4459,24 @@ impl<'a> Resolver<'a> {
         }
 
         // Handle WASI effect operations (e.g., Environment::get_arguments)
-        if module_path.len() == 1
-            && let Some(return_type) = self.get_wasi_effect_return_type(&module_path[0], func_name)
+        if callee_module.is_effect_like()
+            && let Some(effect_name) = callee_module.effect_name()
+            && let Some(return_type) = self.get_wasi_effect_return_type(&effect_name, func_name)
         {
             return return_type;
         }
 
-        // First, try local functions (no module path)
-        if module_path.is_empty()
+        // First, try local functions (entry point module)
+        if callee_module.is_entry_point()
             && let Some(&return_type) = self.function_return_types.get(func_name)
         {
             return return_type;
         }
 
         // Try looking up in loaded modules
-        if !module_path.is_empty() {
+        if !callee_module.is_entry_point() {
             // Clone the return type AST and type params to avoid borrow issues
-            let module_source = ModuleSource::from_path(module_path);
-            let func_info = self.loaded_modules.get(&module_source).and_then(|module| {
+            let func_info = self.loaded_modules.get(callee_module).and_then(|module| {
                 module.items.iter().find_map(|item| {
                     if let Item::Function(func) = item
                         && func.name == func_name
@@ -5100,27 +5109,19 @@ impl<'a> Resolver<'a> {
         let base_type_id = self.get_base_type(receiver.type_id);
 
         // Get struct name and module source from base type
-        // The struct_module_source is where the struct is defined (and inherent methods live)
-        let (struct_name, module_path, struct_module_source) =
+        // The struct_module is where the struct is defined (and inherent methods live)
+        let (struct_name, struct_module) =
             match self.type_table.borrow().get(base_type_id) {
                 ResolvedType::Struct {
                     name,
                     module_source,
                     ..
-                } => (
-                    name.clone(),
-                    module_source.to_path(),
-                    Some(module_source.clone()),
-                ),
+                } => (name.clone(), module_source.clone()),
                 ResolvedType::GenericInstance {
                     name,
                     module_source,
                     ..
-                } => (
-                    name.clone(),
-                    module_source.to_path(),
-                    Some(module_source.clone()),
-                ),
+                } => (name.clone(), module_source.clone()),
                 // Primitive types have impl blocks in core:prelude/primitives
                 ResolvedType::Primitive(_) => {
                     let prim_module = ModuleSource::Core {
@@ -5128,8 +5129,7 @@ impl<'a> Resolver<'a> {
                     };
                     (
                         self.type_table.borrow().mangle_type_name(base_type_id),
-                        prim_module.to_path(),
-                        Some(prim_module),
+                        prim_module,
                     )
                 }
                 // BuiltinArray is Array - impl blocks are in core:prelude
@@ -5137,16 +5137,11 @@ impl<'a> Resolver<'a> {
                     let prelude_module = ModuleSource::Core {
                         name: "prelude".to_string(),
                     };
-                    (
-                        "Array".to_string(),
-                        prelude_module.to_path(),
-                        Some(prelude_module),
-                    )
+                    ("Array".to_string(), prelude_module)
                 }
                 _ => (
                     self.type_table.borrow().mangle_type_name(base_type_id),
-                    vec![],
-                    None,
+                    self.current_module_source.clone(),
                 ),
             };
 
@@ -5173,7 +5168,7 @@ impl<'a> Resolver<'a> {
             && let Some((found_trait, info, impl_source)) = self.find_trait_method_for_type(
                 &struct_name,
                 &method_call.method,
-                &module_path,
+                &struct_module,
                 receiver_type_args_for_trait.as_deref(),
             )
         {
@@ -5380,7 +5375,7 @@ impl<'a> Resolver<'a> {
         // Use trait impl module source if this is a trait method,
         // otherwise use the struct's module (where inherent methods are defined)
         let method_module_source = trait_impl_module_source
-            .or(struct_module_source)
+            .or(Some(struct_module.clone()))
             .unwrap_or_else(|| self.current_module_source.clone());
 
         TirExpr::new(
@@ -5605,7 +5600,7 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        let (struct_name, module_path, mangled_struct_name, struct_type_args) = match self
+        let (struct_name, struct_module, mangled_struct_name, struct_type_args) = match self
             .type_table
             .borrow()
             .get(target_type_id)
@@ -5614,11 +5609,11 @@ impl<'a> Resolver<'a> {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+            } => (name.clone(), module_source.clone(), name.clone(), vec![]),
             ResolvedType::Resource {
                 name,
                 module_source,
-            } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+            } => (name.clone(), module_source.clone(), name.clone(), vec![]),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -5632,7 +5627,7 @@ impl<'a> Resolver<'a> {
                 let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                 (
                     name.clone(),
-                    module_source.to_path(),
+                    module_source.clone(),
                     mangled,
                     type_args.clone(),
                 )
@@ -5644,7 +5639,7 @@ impl<'a> Resolver<'a> {
                         name,
                         module_source,
                         ..
-                    } => (name.clone(), module_source.to_path(), name.clone(), vec![]),
+                    } => (name.clone(), module_source.clone(), name.clone(), vec![]),
                     ResolvedType::GenericInstance {
                         name,
                         module_source,
@@ -5657,7 +5652,7 @@ impl<'a> Resolver<'a> {
                         let mangled = format!("{}<{}>", name, type_arg_names.join(","));
                         (
                             name.clone(),
-                            module_source.to_path(),
+                            module_source.clone(),
                             mangled,
                             type_args.clone(),
                         )
@@ -5678,7 +5673,7 @@ impl<'a> Resolver<'a> {
                                 } => {
                                     break (
                                         name.clone(),
-                                        module_source.to_path(),
+                                        module_source.clone(),
                                         name.clone(),
                                         vec![],
                                     );
@@ -5713,7 +5708,7 @@ impl<'a> Resolver<'a> {
         // Look up return type
         let mut return_type = self.lookup_static_method_return_type(
             &struct_name,
-            &module_path,
+            &struct_module,
             &static_call.method,
             &mangled_func_name,
         );
@@ -5754,7 +5749,7 @@ impl<'a> Resolver<'a> {
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source: ModuleSource::from_path(&module_path),
+                    module_source: struct_module,
                     name: mangled_func_name,
                     monomorph_info,
                     method_info: Some(method_info),
@@ -5770,7 +5765,7 @@ impl<'a> Resolver<'a> {
     fn lookup_static_method_return_type(
         &mut self,
         struct_name: &str,
-        module_path: &[String],
+        struct_module: &ModuleSource,
         method_name: &str,
         mangled_func_name: &str,
     ) -> TypeId {
@@ -5786,9 +5781,8 @@ impl<'a> Resolver<'a> {
         }
 
         // Try looking up in loaded modules
-        let module_source = ModuleSource::from_path(module_path);
-        if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&module_source)
+        if !struct_module.is_entry_point()
+            && let Some(module) = self.loaded_modules.get(struct_module)
         {
             for item in &module.items {
                 // Check impl blocks
@@ -5860,8 +5854,8 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Search all loaded modules if module_path is empty
-        if module_path.is_empty() {
+        // Search all loaded modules if struct_module is entry point
+        if struct_module.is_entry_point() {
             for module in self.loaded_modules.values() {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {
@@ -6118,21 +6112,21 @@ impl<'a> Resolver<'a> {
                 (struct_name.to_string(), mangled_func_name.to_string())
             };
 
+        // Determine module source for the actual struct
+        let struct_module = self.find_struct_module_source(&actual_struct_name);
+
         // Look up return type using the actual struct name
         let return_type = self.lookup_static_method_return_type(
             &actual_struct_name,
-            &[], // Module path will be looked up during lookup
+            &struct_module,
             method_name,
             &actual_mangled_name,
         );
 
-        // Determine module source for the actual struct
-        let module_source = self.find_struct_module_source(&actual_struct_name);
-
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source,
+                    module_source: struct_module,
                     name: actual_mangled_name,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
@@ -6206,18 +6200,20 @@ impl<'a> Resolver<'a> {
         let base_type_id = self.get_base_type(receiver_type);
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
-        // Get the struct name, module path, and type args from the base type
-        let (struct_name, module_path, receiver_type_args, newtype_base) = match &base_type {
+        // Get the struct name, module source, and type args from the base type
+        // For primitives, module_source is None to trigger "search all loaded modules" logic
+        let (struct_name, struct_module_source, receiver_type_args, newtype_base) = match &base_type
+        {
             ResolvedType::Struct {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.to_path(), None, None),
+            } => (name.clone(), Some(module_source.clone()), None, None),
             // Resource types use reference semantics - handle like struct for method lookup
             ResolvedType::Resource {
                 name,
                 module_source,
-            } => (name.clone(), module_source.to_path(), None, None),
+            } => (name.clone(), Some(module_source.clone()), None, None),
             // Generic instances like Box<i32> use the base name "Box" for method lookup
             ResolvedType::GenericInstance {
                 name,
@@ -6225,7 +6221,7 @@ impl<'a> Resolver<'a> {
                 type_args,
             } => (
                 name.clone(),
-                module_source.to_path(),
+                Some(module_source.clone()),
                 if type_args.is_empty() {
                     None
                 } else {
@@ -6241,15 +6237,15 @@ impl<'a> Resolver<'a> {
                 base_type,
             } => (
                 name.clone(),
-                module_source.to_path(),
+                Some(module_source.clone()),
                 None,
                 Some(*base_type),
             ),
             // Primitive types - search for impl blocks in loaded modules
             // (e.g., impl i32 { fn to_string(&self) -> String { ... } })
             ResolvedType::Primitive(prim) => {
-                // Use empty module path to trigger "search all loaded modules" logic
-                (prim.as_str().to_string(), Vec::new(), None, None)
+                // Use None to trigger "search all loaded modules" logic
+                (prim.as_str().to_string(), None, None, None)
             }
             _ => return None,
         };
@@ -6279,9 +6275,8 @@ impl<'a> Resolver<'a> {
 
         // Try looking up in loaded modules (for imported structs)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
-        let module_source_for_lookup = ModuleSource::from_path(&module_path);
-        if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&module_source_for_lookup)
+        if let Some(ref module_source) = struct_module_source
+            && let Some(module) = self.loaded_modules.get(module_source)
         {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item {
@@ -6353,9 +6348,9 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Search all loaded modules if module_path is empty (for prelude types)
+        // Search all loaded modules if no specific module (for prelude types)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
-        if module_path.is_empty() {
+        if struct_module_source.is_none() {
             for module in self.loaded_modules.values() {
                 for item in &module.items {
                     if let Item::Impl(impl_block) = item {
@@ -6433,8 +6428,8 @@ impl<'a> Resolver<'a> {
 
         // Search resource declarations in loaded modules for instance methods
         // Resource methods have &self or &mut self parameter (first param is reference to resource type)
-        if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&module_source_for_lookup)
+        if let Some(ref module_source) = struct_module_source
+            && let Some(module) = self.loaded_modules.get(module_source)
         {
             for item in &module.items {
                 if let Item::Resource(resource) = item
@@ -6469,8 +6464,8 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Also search all modules for resources if module_path is empty
-        if module_path.is_empty() {
+        // Also search all modules for resources if no specific module
+        if struct_module_source.is_none() {
             for module in self.loaded_modules.values() {
                 for item in &module.items {
                     if let Item::Resource(resource) = item
@@ -6698,17 +6693,17 @@ impl<'a> Resolver<'a> {
         let base_type_id = self.get_base_type(receiver_type);
         let base_type = self.type_table.borrow().get(base_type_id).clone();
 
-        let (struct_name, module_path) = match &base_type {
+        let (struct_name, struct_module_source) = match &base_type {
             ResolvedType::Struct {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.to_path()),
+            } => (name.clone(), Some(module_source.clone())),
             ResolvedType::GenericInstance {
                 name,
                 module_source,
                 ..
-            } => (name.clone(), module_source.to_path()),
+            } => (name.clone(), Some(module_source.clone())),
             _ => return vec![],
         };
 
@@ -6736,9 +6731,8 @@ impl<'a> Resolver<'a> {
         };
 
         // Check specific module first
-        let module_source_for_lookup = ModuleSource::from_path(&module_path);
-        if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&module_source_for_lookup)
+        if let Some(ref module_source) = struct_module_source
+            && let Some(module) = self.loaded_modules.get(module_source)
         {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
@@ -6965,7 +6959,7 @@ impl<'a> Resolver<'a> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        module_path: &[String],
+        struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<(String, MethodInfo, ModuleSource)> {
         let mut found_traits: Vec<(String, MethodInfo, ModuleSource)> = Vec::new();
@@ -6982,9 +6976,8 @@ impl<'a> Resolver<'a> {
         )> = Vec::new();
 
         // Check specific module if provided
-        let impl_module_source = ModuleSource::from_path(module_path);
-        if !module_path.is_empty()
-            && let Some(module) = self.loaded_modules.get(&impl_module_source)
+        if !struct_module.is_entry_point()
+            && let Some(module) = self.loaded_modules.get(struct_module)
         {
             for item in &module.items {
                 if let Item::Impl(impl_block) = item
@@ -6995,7 +6988,7 @@ impl<'a> Resolver<'a> {
                         trait_type.clone(),
                         impl_block.methods.clone(),
                         impl_block.associated_types.clone(),
-                        impl_module_source.clone(),
+                        struct_module.clone(),
                     ));
                 }
             }
@@ -7766,17 +7759,9 @@ impl<'a> Resolver<'a> {
         };
 
         // Get struct name from base type
-        let (struct_name, _module_path) = match self.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => (name, module_source.to_path()),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => (name, module_source.to_path()),
+        let struct_name = match self.type_table.borrow().get(base_type_id).clone() {
+            ResolvedType::Struct { name, .. } => name,
+            ResolvedType::GenericInstance { name, .. } => name,
             _ => return None, // Not a struct type
         };
 
@@ -7795,20 +7780,20 @@ impl<'a> Resolver<'a> {
             _ => output_type,
         };
 
-        let (output_struct_name, output_module_path, output_type_args) =
+        let (output_struct_name, output_module_source, output_type_args) =
             match self.type_table.borrow().get(output_base_type_id).clone() {
                 ResolvedType::Struct {
                     name,
                     module_source,
                     ..
-                } => (name, module_source.to_path(), None),
+                } => (name, module_source, None),
                 ResolvedType::GenericInstance {
                     name,
                     module_source,
                     type_args,
                 } => (
                     name,
-                    module_source.to_path(),
+                    module_source,
                     if type_args.is_empty() {
                         None
                     } else {
@@ -7819,7 +7804,7 @@ impl<'a> Resolver<'a> {
                     self.type_table
                         .borrow()
                         .mangle_type_name(output_base_type_id),
-                    vec![],
+                    self.current_module_source.clone(),
                     None,
                 ),
             };
@@ -7833,7 +7818,7 @@ impl<'a> Resolver<'a> {
             && let Some((found_trait, info, impl_source)) = self.find_trait_method_for_type(
                 &output_struct_name,
                 &method_call.method,
-                &output_module_path,
+                &output_module_source,
                 output_type_args.as_deref(),
             )
         {

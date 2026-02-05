@@ -244,6 +244,31 @@ impl ModuleSource {
     pub fn is_entry_point(&self) -> bool {
         matches!(self, Self::EntryPoint { .. })
     }
+
+    /// Check if this looks like an effect module (single PascalCase name).
+    /// Effects are represented as Local paths with a single element like "Stdout".
+    #[must_use]
+    pub fn is_effect_like(&self) -> bool {
+        let path = self.to_path();
+        path.len() == 1
+            && path[0]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase())
+            && !path[0].contains('/')
+            && !path[0].contains('.')
+    }
+
+    /// Get the effect name if this is an effect-like module.
+    #[must_use]
+    pub fn effect_name(&self) -> Option<String> {
+        if self.is_effect_like() {
+            let path = self.to_path();
+            path.into_iter().next()
+        } else {
+            None
+        }
+    }
 }
 
 impl fmt::Display for ModuleSource {

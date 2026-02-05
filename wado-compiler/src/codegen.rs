@@ -177,8 +177,8 @@ struct FunctionContext {
     pending_branch_hint: Option<bool>,
     /// Collected branch hints for this function (offset, taken)
     branch_hints: Vec<(u32, bool)>,
-    /// Module path of the current function (for access control checks)
-    current_module_path: Vec<String>,
+    /// Module source of the current function (for access control checks)
+    current_module_source: ModuleSource,
     /// Stack of break targets for loops and labeled blocks.
     /// Each entry contains: (label, `extra_depth`, `break_offset`, `is_loop`, `result_type`)
     /// - `label`: None for anonymous loop, Some(name) for labeled blocks/loops
@@ -226,7 +226,7 @@ impl FunctionContext {
             return_type: None,
             pending_branch_hint: None,
             branch_hints: Vec::new(),
-            current_module_path: Vec::new(),
+            current_module_source: ModuleSource::entry_point_with_filename("<unknown>"),
             loop_info: Vec::new(),
             address_taken_locals: std::collections::HashSet::new(),
             local_box_types: HashMap::new(),
@@ -241,7 +241,7 @@ impl FunctionContext {
         }
     }
 
-    fn with_module_path(param_count: u32, module_path: Vec<String>) -> Self {
+    fn with_module_source(param_count: u32, module_source: ModuleSource) -> Self {
         Self {
             locals: HashMap::new(),
             local_type_map: HashMap::new(),
@@ -251,7 +251,7 @@ impl FunctionContext {
             return_type: None,
             pending_branch_hint: None,
             branch_hints: Vec::new(),
-            current_module_path: module_path,
+            current_module_source: module_source,
             loop_info: Vec::new(),
             address_taken_locals: std::collections::HashSet::new(),
             local_box_types: HashMap::new(),
@@ -1764,8 +1764,6 @@ impl Codegen<'_> {
         let mut code = CodeSection::new();
         let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
         let mut func_idx = builder.import_func_count;
-        let empty_path: &[String] = &[];
-
         // Generate user-defined functions from entry TIR (excluding world exports which are handled specially)
         for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
@@ -1787,7 +1785,7 @@ impl Codegen<'_> {
                 code.function(&wasm_func);
             } else {
                 let (wasm_func, hints) =
-                    self.generate_function(&tir_func, type_table, &builder, empty_path);
+                    self.generate_function(&tir_func, type_table, &builder, entry_module_source);
                 code.function(&wasm_func);
                 if !hints.is_empty() {
                     all_branch_hints.push((func_idx, hints));
@@ -1807,9 +1805,8 @@ impl Codegen<'_> {
                 continue;
             }
 
-            let module_path = module_source.to_path();
             let (wasm_func, hints) =
-                self.generate_function(&tir_func, func_type_table, &builder, &module_path);
+                self.generate_function(&tir_func, func_type_table, &builder, module_source);
             code.function(&wasm_func);
             if !hints.is_empty() {
                 all_branch_hints.push((func_idx, hints));
@@ -1830,9 +1827,8 @@ impl Codegen<'_> {
                 continue;
             }
 
-            let module_path = module_source.to_path();
             let (wasm_func, hints) =
-                self.generate_function(&tir_method, method_type_table, &builder, &module_path);
+                self.generate_function(&tir_method, method_type_table, &builder, module_source);
             code.function(&wasm_func);
             if !hints.is_empty() {
                 all_branch_hints.push((func_idx, hints));
@@ -7098,7 +7094,7 @@ impl Codegen<'_> {
                 args,
                 ..
             } => {
-                let module_path = call_func.module_path();
+                let callee_module = call_func.module_source();
                 let func_name = call_func.name();
 
                 // Handle builtin functions (intrinsics and canonical mappings)
@@ -7110,23 +7106,19 @@ impl Codegen<'_> {
                     self.generate_builtin_call(
                         &builtin, args, expr, func, type_table, ctx, builder,
                     );
-                } else if module_path.is_empty()
+                } else if callee_module.is_entry_point()
                     && self.generate_variant_constructor(
                         &func_name, args, func, type_table, ctx, builder,
                     )
                 {
                     // Variant constructor was handled
-                } else if module_path.len() == 1
-                    && module_path[0]
-                        .chars()
-                        .next()
-                        .is_some_and(|c| c.is_ascii_uppercase())
+                } else if callee_module.is_effect_like()
                     && self.generate_cm_effect_call(
                         func,
                         ctx,
                         builder,
                         type_table,
-                        &module_path[0],
+                        &callee_module.effect_name().unwrap_or_default(),
                         &func_name,
                         args,
                     )
@@ -7138,9 +7130,9 @@ impl Codegen<'_> {
 
                     // Resolve function index using multiple strategies
                     let func_idx = self.resolve_call_target(
-                        &module_path,
+                        &callee_module,
                         &func_name,
-                        &ctx.current_module_path,
+                        &ctx.current_module_source,
                         builder,
                     );
                     func.instruction(&Instruction::Call(func_idx));
@@ -10713,11 +10705,11 @@ impl Codegen<'_> {
         tir_func: &TirFunction,
         type_table: &TypeTable,
         builder: &CoreModuleBuilder,
-        module_path: &[String],
+        module_source: &ModuleSource,
     ) -> (Function, Vec<(u32, bool)>) {
         // Create function context - TIR already has local count and types
         let mut func_ctx =
-            FunctionContext::with_module_path(tir_func.params.len() as u32, module_path.to_vec());
+            FunctionContext::with_module_source(tir_func.params.len() as u32, module_source.clone());
 
         // Copy address-taken locals from TIR
         func_ctx.address_taken_locals = tir_func.address_taken_locals.clone();
@@ -10916,20 +10908,20 @@ impl Codegen<'_> {
     /// 4. Qualified names from imported modules
     fn resolve_call_target(
         &self,
-        module_path: &[String],
+        callee_module: &ModuleSource,
         func_name: &str,
-        current_module_path: &[String],
+        current_module: &ModuleSource,
         builder: &CoreModuleBuilder,
     ) -> u32 {
         // Strategy 1: Try simple name lookup first (for local functions)
-        if module_path.is_empty()
+        if callee_module.is_entry_point()
             && let Some(idx) = builder.try_func_idx(func_name)
         {
             return idx;
         }
 
-        // Strategy 2: Check if it's a builtin function (module_path == ["core", "builtin"])
-        if module_path == ["core", "builtin"]
+        // Strategy 2: Check if it's a builtin function (core/builtin module)
+        if matches!(callee_module, ModuleSource::Core { name } if name == "builtin")
             && let Some(builtin_info) = self.project.builtin_registry.get(func_name)
             && let Some(canonical_name) = &builtin_info.canonical_name
             && let Some(idx) = builder.try_func_idx(canonical_name)
@@ -10945,28 +10937,28 @@ impl Codegen<'_> {
         );
 
         // Strategy 3: Build mangled name and try lookup
-        let mangled_name = if module_path.is_empty() {
+        let mangled_name = if callee_module.is_entry_point() {
             func_name.to_string()
         } else {
-            FreeFunctionName::from_path_and_name(module_path, func_name).to_string()
+            FreeFunctionName::from_module_source(callee_module, func_name).to_string()
         };
 
         if let Some(idx) = builder.try_func_idx(&mangled_name) {
             return idx;
         }
 
-        // Strategy 4: Try current module path for local function calls
-        // When module_path is empty, try the current function's module
-        if module_path.is_empty() && !current_module_path.is_empty() {
+        // Strategy 4: Try current module for local function calls
+        // When callee_module is entry point, try the current function's module
+        if callee_module.is_entry_point() && !current_module.is_entry_point() {
             let current_mangled_name =
-                FreeFunctionName::from_path_and_name(current_module_path, func_name).to_string();
+                FreeFunctionName::from_module_source(current_module, func_name).to_string();
             if let Some(idx) = builder.try_func_idx(&current_mangled_name) {
                 return idx;
             }
         }
 
         // Strategy 5: Try core internal name format
-        if module_path == ["core", "internal"] {
+        if matches!(callee_module, ModuleSource::Core { name } if name == "internal") {
             let internal_name = build_core_internal_name(func_name).to_string();
             if let Some(idx) = builder.try_func_idx(&internal_name) {
                 return idx;
@@ -10974,7 +10966,7 @@ impl Codegen<'_> {
         }
 
         // Strategy 6: Try core/cli function format (for println, eprintln, etc.)
-        if module_path == ["core", "cli"] {
+        if matches!(callee_module, ModuleSource::Core { name } if name == "cli") {
             let cli_name = FreeFunctionName::from_strs(&["core", "cli"], func_name).to_string();
             if let Some(idx) = builder.try_func_idx(&cli_name) {
                 return idx;
@@ -10982,9 +10974,10 @@ impl Codegen<'_> {
         }
 
         // Strategy 7: Try WASI effect operation resolution
-        // When module_path has a single element like ["Stdout"], try resolving as an effect operation
-        if module_path.len() == 1 {
-            let effect_qualified_name = format!("{}::{}", module_path[0], func_name);
+        // Effects are represented with a single-element path like ["Stdout"]
+        let callee_path = callee_module.to_path();
+        if callee_path.len() == 1 {
+            let effect_qualified_name = format!("{}::{}", callee_path[0], func_name);
             if let Some(wasi_local_name) =
                 self.project.wasi_registry.resolve(&effect_qualified_name)
                 && let Some(idx) = builder.try_func_idx(&wasi_local_name)
@@ -10994,10 +10987,10 @@ impl Codegen<'_> {
         }
 
         // If we get here, the function wasn't found
-        let full_name = if module_path.is_empty() {
+        let full_name = if callee_module.is_entry_point() {
             func_name.to_string()
         } else {
-            format!("{}::{}", module_path.join("::"), func_name)
+            format!("{}::{func_name}", callee_module)
         };
         panic!("unknown function: {full_name}");
     }
