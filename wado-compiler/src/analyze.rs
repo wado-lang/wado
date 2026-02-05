@@ -6,7 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
-use crate::name::{ModuleSource, resolve_import_path, validate_module_path};
+use crate::name::{resolve_import, ModuleSource, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, ResourceSymbol,
     StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol,
@@ -422,9 +422,8 @@ impl Analyzer {
                     continue; // Error already collected in validate_imports
                 }
 
-                // Resolve the source path and convert to ModuleSource
-                let source_path = resolve_import_path(&module_source.to_path(), &use_decl.source);
-                let source_module = ModuleSource::from_path(&source_path);
+                // Resolve the source path to ModuleSource
+                let source_module = resolve_import(module_source, &use_decl.source);
 
                 // Check the module exists
                 if !all_modules.contains_key(&source_module) {
@@ -484,10 +483,8 @@ impl Analyzer {
                     continue;
                 }
 
-                // Resolve the import path using name utilities and convert to ModuleSource
-                let module_path =
-                    resolve_import_path(&from_module_source.to_path(), &use_decl.source);
-                let module_source = ModuleSource::from_path(&module_path);
+                // Resolve the import path to ModuleSource
+                let module_source = resolve_import(from_module_source, &use_decl.source);
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_source) {

@@ -617,9 +617,7 @@ impl<'a> Resolver<'a> {
         // Also collect imported globals from use declarations
         for item in &module.items {
             if let Item::Use(use_decl) = item {
-                let source_module_path =
-                    name::resolve_import_path(&module_source.to_path(), &use_decl.source);
-                let source_module_source = ModuleSource::from_path(&source_module_path);
+                let source_module_source = name::resolve_import(&module_source, &use_decl.source);
 
                 // Look up the source module to find global declarations
                 if let Some(source_module) = self.loaded_modules.get(&source_module_source) {

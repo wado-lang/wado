@@ -888,34 +888,39 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
     normalize_module_path(&joined)
 }
 
-/// Resolve an import source to a module path (Vec<String> format).
+/// Resolve an import source to a `ModuleSource`.
 ///
-/// This is used by the analyzer to resolve import paths to module identifiers.
+/// This is the primary function for resolving import paths to module identifiers.
 ///
 /// # Arguments
-/// * `from_module` - The path of the importing module (e.g., `["./sub/main.wado"]`)
+/// * `from_module` - The `ModuleSource` of the importing module
 /// * `import_source` - The import source string (e.g., `"./geometry.wado"` or `"core:cli"`)
 ///
 /// # Returns
-/// The resolved module path as a Vec<String>.
-pub fn resolve_import_path(from_module: &[String], import_source: &str) -> Vec<String> {
-    // Handle special prefixes - parse into path segments
+/// The resolved `ModuleSource`.
+pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> ModuleSource {
+    // Handle special prefixes
     if let Some(name) = import_source.strip_prefix("core:") {
-        return vec!["core".to_string(), name.to_string()];
+        return ModuleSource::Core {
+            name: name.to_string(),
+        };
     }
     if let Some(interface) = import_source.strip_prefix("wasi:") {
-        return vec!["wasi".to_string(), interface.to_string()];
+        return ModuleSource::Wasi {
+            interface: interface.to_string(),
+        };
     }
     if import_source.starts_with("https://") || import_source.starts_with("http://") {
-        return vec![import_source.to_string()];
+        return ModuleSource::Remote {
+            url: import_source.to_string(),
+        };
     }
 
     // Handle relative imports from core: modules
-    // e.g., from ["core", "prelude"] importing "./prelude/int128.wado" -> ["core", "prelude/int128"]
-    if from_module.first().is_some_and(|s| s == "core")
+    // e.g., from Core { name: "prelude" } importing "./prelude/int128.wado" -> Core { name: "prelude/int128" }
+    if let ModuleSource::Core { name: from_name } = from_module
         && (import_source.starts_with("./") || import_source.starts_with("../"))
     {
-        let from_name = from_module.get(1).map_or("", |s| s.as_str());
         let relative = import_source
             .strip_prefix("./")
             .unwrap_or(import_source)
@@ -934,19 +939,23 @@ pub fn resolve_import_path(from_module: &[String], import_source: &str) -> Vec<S
             // from_name is like "prelude", relative path is the new name
             relative.to_string()
         };
-        return vec!["core".to_string(), resolved];
+        return ModuleSource::Core { name: resolved };
     }
 
-    // For relative imports, resolve against the from_module path
-    if let Some(from_path) = from_module.first()
+    // Handle relative imports from local modules
+    // For entry points, we don't resolve against the filename - just use the import directly
+    if let ModuleSource::Local { path: from_path } = from_module
         && (from_path.starts_with("./") || from_path.starts_with("../"))
     {
         let resolved = resolve_module_path(from_path, import_source);
-        return vec![resolved];
+        return ModuleSource::Local { path: resolved };
     }
 
-    // Fallback: normalize and return as single-element path
-    vec![normalize_module_path(import_source)]
+    // Fallback: normalize and return as Local path
+    // This handles EntryPoint imports and bare imports
+    ModuleSource::Local {
+        path: normalize_module_path(import_source),
+    }
 }
 
 /// Get the canonical name for an entry point file.
