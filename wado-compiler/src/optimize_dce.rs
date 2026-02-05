@@ -154,8 +154,8 @@ pub fn analyze_project(project: &mut Project) {
     // 2. Any builtin stream_* functions being called (for ambient logging)
     // 3. Any builtin call_indirect_* functions (ambient effect calls)
     let is_builtin_func = |f: &FreeFunctionName| {
-        // New format: module_path == ["core", "builtin"]
-        (f.module_path.len() == 2 && f.module_path[0] == "core" && f.module_path[1] == "builtin")
+        // Check if module_source is core/builtin
+        matches!(&f.module_source, ModuleSource::Core { name } if name == "builtin")
             // Legacy format: name starts with "builtin::"
             || f.name.starts_with("builtin::")
     };
@@ -416,7 +416,6 @@ fn build_analysis_graph(
 
     for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
-        let path = module_source.to_path();
 
         // Analyze functions (including methods stored as functions)
         for func_rc in &module.functions {
@@ -427,32 +426,32 @@ fn build_analysis_graph(
                 if let Some(monomorph_info) = &func.monomorph_info {
                     // Monomorphized method - use FreeFunctionName with metadata
                     FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        path.clone(),
+                        module_source.clone(),
                         func.name.clone(),
                         monomorph_info.generic_name.clone(),
                     ))
                 } else {
                     // Non-monomorphized method - use method_info
-                    FunctionId::Method(MethodName::new(
-                        path.join("/"),
-                        info.struct_name.clone(),
-                        info.trait_name.clone(),
-                        info.method_name.clone(),
+                    FunctionId::Method(MethodName::from_module_source(
+                        module_source,
+                        &info.struct_name,
+                        info.trait_name.as_deref(),
+                        &info.method_name,
                     ))
                 }
             } else {
                 // Regular function - use FreeFunctionName
                 if let Some(monomorph_info) = &func.monomorph_info {
                     FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        path.clone(),
+                        module_source.clone(),
                         func.name.clone(),
                         monomorph_info.generic_name.clone(),
                     ))
                 } else {
-                    FunctionId::Free(FreeFunctionName::from_path_and_name(&path, &func.name))
+                    FunctionId::Free(FreeFunctionName::from_module_source(module_source, &func.name))
                 }
             };
-            let analysis = analyze_function(&func, &path, type_table);
+            let analysis = analyze_function(&func, module_source, type_table);
             call_graph.insert(func_id.clone(), analysis.callees);
             if !analysis.effect_calls.is_empty() {
                 effect_usage.insert(func_id.clone(), analysis.effect_calls);
@@ -471,13 +470,13 @@ fn build_analysis_graph(
             };
 
             for method in &impl_block.methods {
-                let method_id = FunctionId::Method(MethodName::new(
-                    path.join("/"),
-                    struct_name.clone(),
+                let method_id = FunctionId::Method(MethodName::from_module_source(
+                    module_source,
+                    &struct_name,
                     None,
-                    method.name.clone(),
+                    &method.name,
                 ));
-                let analysis = analyze_function(method, &path, type_table);
+                let analysis = analyze_function(method, module_source, type_table);
                 call_graph.insert(method_id.clone(), analysis.callees);
                 if !analysis.effect_calls.is_empty() {
                     effect_usage.insert(method_id.clone(), analysis.effect_calls);
@@ -495,7 +494,7 @@ fn build_analysis_graph(
 /// Analyze a TIR function for callees and effect usage
 fn analyze_function(
     func: &TirFunction,
-    current_module: &[String],
+    current_module: &ModuleSource,
     type_table: &TypeTable,
 ) -> FunctionAnalysis {
     let mut analysis = FunctionAnalysis::default();
@@ -518,7 +517,7 @@ fn analyze_function(
 
 fn analyze_block(
     block: &TirBlock,
-    current_module: &[String],
+    current_module: &ModuleSource,
     type_table: &TypeTable,
     analysis: &mut FunctionAnalysis,
 ) {
@@ -586,13 +585,13 @@ fn analyze_block(
 
 fn analyze_expr(
     expr: &TirExpr,
-    current_module: &[String],
+    current_module: &ModuleSource,
     type_table: &TypeTable,
     analysis: &mut FunctionAnalysis,
 ) {
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
-            let module_path = func.module_path();
+            let original_callee_module = func.module_source();
             let func_name = func.name();
 
             // Invariant: TirExprKind::Call should never have method names (containing "::")
@@ -603,20 +602,23 @@ fn analyze_expr(
             );
 
             // Build function ID for the called function
-            let callee_path = if module_path.is_empty() {
-                current_module
+            // If the callee has an entry point module source (local call), use current module
+            let callee_module = if original_callee_module.is_entry_point() {
+                current_module.clone()
             } else {
-                module_path.as_slice()
+                original_callee_module.clone()
             };
-            let callee_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                callee_path,
+            let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                &callee_module,
                 &func_name,
             ));
             analysis.callees.insert(callee_id);
 
-            // Detect effect calls: single-element module_path with PascalCase name
+            // Detect effect calls: Effects have a single-element path with PascalCase name
             // (e.g., ["Stdout"], ["Stderr"], ["MonotonicClock"])
             // Effect calls are represented as Call in TIR, not as EffectCall
+            // Check using the original module path to detect effect-style paths
+            let module_path = original_callee_module.to_path();
             if module_path.len() == 1 {
                 let potential_effect = &module_path[0];
                 // Check if it looks like an effect name (starts with uppercase, no file path chars)
@@ -674,10 +676,10 @@ fn analyze_expr(
                     })
                     .unwrap_or_else(|| func_name.clone());
 
-                // Use empty path because monomorphized functions are added
+                // Use entry point module because monomorphized functions are added
                 // to the entry module, not the original struct's module
                 let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    vec![],
+                    ModuleSource::entry_point_with_filename("<monomorph>"),
                     func_name.clone(),
                     base_name,
                 ));
@@ -726,10 +728,10 @@ fn analyze_expr(
                         } else {
                             format!("{base_struct}::{method_name}")
                         };
-                        // Use empty path because monomorphized functions are added
+                        // Use entry point module because monomorphized functions are added
                         // to the entry module, not the original struct's module
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                            vec![],
+                            ModuleSource::entry_point_with_filename("<monomorph>"),
                             mangled_func_name,
                             base_method_name,
                         ));
@@ -742,11 +744,11 @@ fn analyze_expr(
                         ..
                     } => {
                         // Regular struct method call - use FunctionId::Method
-                        let method_id = FunctionId::Method(MethodName::new(
-                            module_source.to_path().join("/"),
-                            name.clone(),
-                            trait_name.clone(),
-                            method_name,
+                        let method_id = FunctionId::Method(MethodName::from_module_source(
+                            &module_source,
+                            &name,
+                            trait_name.as_deref(),
+                            &method_name,
                         ));
                         analysis.callees.insert(method_id);
                     }
@@ -781,7 +783,7 @@ fn analyze_expr(
                             (mangled, base)
                         };
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                            vec![],
+                            ModuleSource::entry_point_with_filename("<monomorph>"),
                             mangled_func_name,
                             base_name,
                         ));
@@ -804,7 +806,7 @@ fn analyze_expr(
                             (mangled, base)
                         };
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                            vec![],
+                            ModuleSource::entry_point_with_filename("<monomorph>"),
                             mangled_func_name,
                             base_name,
                         ));
@@ -872,16 +874,17 @@ fn analyze_expr(
                     })
                     .unwrap_or_else(|| func_name.clone());
                 FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                    vec![],
+                    ModuleSource::entry_point_with_filename("<monomorph>"),
                     func_name.clone(),
                     base_name,
                 ))
             } else {
-                let module_path = func.module_path();
-                let callee_path = if module_path.is_empty() {
-                    current_module
+                let callee_module = func.module_source();
+                // Use current module for local calls (entry point source)
+                let callee_module = if callee_module.is_entry_point() {
+                    current_module.clone()
                 } else {
-                    module_path.as_slice()
+                    callee_module
                 };
                 // Check if this is a method call (contains "::") or a regular function
                 if let Some(sep_pos) = func_name.find("::") {
@@ -897,16 +900,15 @@ fn analyze_expr(
                         } else {
                             (prefix, None)
                         };
-                    let filename = callee_path.join("/");
-                    FunctionId::Method(MethodName::new(
-                        filename,
-                        struct_name.to_string(),
-                        trait_name.map(String::from),
-                        method_name.to_string(),
+                    FunctionId::Method(MethodName::from_module_source(
+                        &callee_module,
+                        struct_name,
+                        trait_name,
+                        method_name,
                     ))
                 } else {
-                    FunctionId::Free(FreeFunctionName::from_path_and_name(
-                        callee_path,
+                    FunctionId::Free(FreeFunctionName::from_module_source(
+                        &callee_module,
                         &func_name,
                     ))
                 }
@@ -986,11 +988,11 @@ fn analyze_expr(
         } => {
             analyze_expr(functor, current_module, type_table, analysis);
             // Mark the __call method as reachable (it's referenced via ref.func)
-            let method_name = MethodName::new(
-                current_module.join("/"),
-                format!("__Closure_{functor_id}"),
+            let method_name = MethodName::from_module_source(
+                current_module,
+                &format!("__Closure_{functor_id}"),
                 None,
-                "__call".to_string(),
+                "__call",
             );
             analysis.callees.insert(FunctionId::Method(method_name));
         }
@@ -1137,7 +1139,6 @@ pub fn remove_unreachable_functions(project: &mut Project) {
     }
 
     for (module_source, module) in &mut project.tir_modules {
-        let module_path = module_source.to_path();
         // Retain only reachable functions
         module.functions.retain(|func_rc| {
             let func = func_rc.borrow();
@@ -1153,31 +1154,33 @@ pub fn remove_unreachable_functions(project: &mut Project) {
                 // - Static method tracked as FunctionId::Free with mangled name
                 // Use method_info to build the method ID
                 // Try as instance method (FunctionId::Method)
-                let method_id = FunctionId::Method(MethodName::new(
-                    module_path.join("/"),
-                    info.struct_name.clone(),
-                    info.trait_name.clone(),
-                    info.method_name.clone(),
+                let method_id = FunctionId::Method(MethodName::from_module_source(
+                    module_source,
+                    &info.struct_name,
+                    info.trait_name.as_deref(),
+                    &info.method_name,
                 ));
                 if project.reachable_functions.contains(&method_id) {
                     return true;
                 }
 
                 // Try as static method (FunctionId::Free with mangled name)
-                let free_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                    &module_path,
+                let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                    module_source,
                     &func.name,
                 ));
                 if project.reachable_functions.contains(&free_id) {
                     return true;
                 }
 
-                // For monomorphized methods, also check with empty module_path (entry module)
-                // Monomorphized functions are tracked in the call graph with module_path = []
+                // For monomorphized methods, also check with entry point module source
+                // Monomorphized functions are tracked in the call graph with entry point source
                 // regardless of which module they were generated in
                 if func.monomorph_info.is_some() {
-                    let entry_module_free_id =
-                        FunctionId::Free(FreeFunctionName::from_path_and_name(&[], &func.name));
+                    let entry_module_free_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                        &ModuleSource::entry_point_with_filename("<monomorph>"),
+                        &func.name,
+                    ));
                     if project.reachable_functions.contains(&entry_module_free_id) {
                         return true;
                     }
@@ -1186,11 +1189,11 @@ pub fn remove_unreachable_functions(project: &mut Project) {
                 // For generic methods/static methods, check if any monomorphized version is reachable
                 // Generic functions are named "Array::with_capacity" but calls use "Array<i32>::with_capacity"
                 // Check if any function ID in reachable_functions matches this base name
-                is_generic_func_reachable(&project.reachable_functions, &module_path, &func.name)
+                is_generic_func_reachable(&project.reachable_functions, module_source, &func.name)
             } else {
                 // Regular function
-                let func_id = FunctionId::Free(FreeFunctionName::from_path_and_name(
-                    &module_path,
+                let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                    module_source,
                     &func.name,
                 ));
                 project.reachable_functions.contains(&func_id)
@@ -1203,7 +1206,7 @@ pub fn remove_unreachable_functions(project: &mut Project) {
 /// For example, "`Array::with_capacity`" should be kept if "Array<i32>`::with_capacity`" is reachable.
 fn is_generic_func_reachable(
     reachable: &HashSet<FunctionId>,
-    module_path: &[String],
+    module_source: &ModuleSource,
     func_name: &str,
 ) -> bool {
     // func_name is like "Array::with_capacity"
@@ -1219,8 +1222,8 @@ fn is_generic_func_reachable(
             // For monomorphized functions, the actual function may be in a different module
             // (e.g., entry module []) than the original definition (e.g., ["core", "prelude"]).
             // So we relax the module path check for monomorphized names using metadata.
-            let module_matches = free_name.module_path.as_slice() == module_path
-                || (free_name.is_monomorphized && module_path.is_empty());
+            let module_matches = free_name.module_source == *module_source
+                || (free_name.is_monomorphized && module_source.is_entry_point());
 
             if !module_matches {
                 continue;

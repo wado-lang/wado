@@ -270,15 +270,15 @@ impl fmt::Display for ModuleSource {
 
 /// A free function name (not a method on a struct).
 ///
-/// Format: `{module_path}/{name}`
+/// Format: `{module_source}/{name}`
 ///
 /// Examples:
 /// - `./geometry.wado/helper`
 /// - `core/internal/log_stdout`
 #[derive(Debug, Clone)]
 pub struct FreeFunctionName {
-    /// The module path segments (e.g., `[".", "geometry.wado"]`)
-    pub module_path: Vec<String>,
+    /// The module where the function is defined
+    pub module_source: ModuleSource,
     /// The function name (e.g., `helper`)
     pub name: String,
     /// Whether this function is monomorphized (instantiated from a generic)
@@ -287,35 +287,37 @@ pub struct FreeFunctionName {
     pub base_name: Option<String>,
 }
 
-// Manually implement Hash/Eq to only use module_path and name (not metadata)
+// Manually implement Hash/Eq to only use module_source and name (not metadata)
 impl Hash for FreeFunctionName {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.module_path.hash(state);
+        self.module_source.hash(state);
         self.name.hash(state);
     }
 }
 
 impl PartialEq for FreeFunctionName {
     fn eq(&self, other: &Self) -> bool {
-        self.module_path == other.module_path && self.name == other.name
+        self.module_source == other.module_source && self.name == other.name
     }
 }
 
 impl Eq for FreeFunctionName {}
 
 impl FreeFunctionName {
-    pub fn new(module_path: Vec<String>, name: String) -> Self {
+    pub fn new(module_source: ModuleSource, name: String) -> Self {
         Self {
-            module_path,
+            module_source,
             name,
             is_monomorphized: false,
             base_name: None,
         }
     }
 
+    /// Create a `FreeFunctionName` from a module path and name.
+    /// This is a convenience method for code that still uses `Vec<String>` paths.
     pub fn from_path_and_name(module_path: &[String], name: &str) -> Self {
         Self {
-            module_path: module_path.to_vec(),
+            module_source: ModuleSource::from_path(module_path),
             name: name.to_string(),
             is_monomorphized: false,
             base_name: None,
@@ -325,8 +327,9 @@ impl FreeFunctionName {
     /// Create a `FreeFunctionName` from string literal slices.
     /// Convenience method for when you have &[&str] instead of &[String].
     pub fn from_strs(module_path: &[&str], name: &str) -> Self {
+        let path: Vec<String> = module_path.iter().map(|s| (*s).to_string()).collect();
         Self {
-            module_path: module_path.iter().map(|s| (*s).to_string()).collect(),
+            module_source: ModuleSource::from_path(&path),
             name: name.to_string(),
             is_monomorphized: false,
             base_name: None,
@@ -336,7 +339,7 @@ impl FreeFunctionName {
     /// Create a `FreeFunctionName` from `ModuleSource` and name.
     pub fn from_module_source(module_source: &ModuleSource, name: &str) -> Self {
         Self {
-            module_path: module_source.to_path(),
+            module_source: module_source.clone(),
             name: name.to_string(),
             is_monomorphized: false,
             base_name: None,
@@ -344,9 +347,9 @@ impl FreeFunctionName {
     }
 
     /// Create a `FreeFunctionName` with monomorphization metadata.
-    pub fn with_monomorph_info(module_path: Vec<String>, name: String, base_name: String) -> Self {
+    pub fn with_monomorph_info(module_source: ModuleSource, name: String, base_name: String) -> Self {
         Self {
-            module_path,
+            module_source,
             name,
             is_monomorphized: true,
             base_name: Some(base_name),
@@ -356,10 +359,12 @@ impl FreeFunctionName {
 
 impl fmt::Display for FreeFunctionName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.module_path.is_empty() {
-            write!(f, "{}", self.name)
-        } else {
-            write!(f, "{}/{}", self.module_path.join("/"), self.name)
+        match &self.module_source {
+            ModuleSource::EntryPoint { .. } => write!(f, "{}", self.name),
+            ModuleSource::Core { name: module } => write!(f, "core/{}/{}", module, self.name),
+            ModuleSource::Wasi { interface } => write!(f, "wasi/{}/{}", interface, self.name),
+            ModuleSource::Local { path } => write!(f, "{}/{}", path, self.name),
+            ModuleSource::Remote { url } => write!(f, "{}/{}", url, self.name),
         }
     }
 }
@@ -1275,7 +1280,7 @@ mod tests {
     fn test_build_core_internal_name() {
         let name = build_core_internal_name("log_stdout");
         assert_eq!(name.to_string(), "core/internal/log_stdout");
-        assert_eq!(name.module_path, vec!["core", "internal"]);
+        assert_eq!(name.module_source, ModuleSource::core("internal"));
         assert_eq!(name.name, "log_stdout");
     }
 
