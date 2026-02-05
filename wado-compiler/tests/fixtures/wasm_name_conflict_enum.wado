@@ -1,0 +1,26 @@
+// Test: two library modules defining enums with the same name but different cases.
+// Module A: Direction { Up=0, Down=1 }
+// Module B: Direction { Left=0, Right=1 }
+// The resolver's enum_cases map (keyed by simple name "Direction") only keeps one
+// module's definition. We reference cases from BOTH modules so that regardless of
+// which definition wins, at least one case will be unresolvable:
+//   - If A wins: Direction::Up OK, Direction::Left → unknown
+//   - If B wins: Direction::Left OK, Direction::Up → unknown
+
+use { println } from "core:cli";
+use { Direction, is_up } from "./sub/wasm_name_conflict_enum_mod_a.wado";
+use { is_left_b } from "./sub/wasm_name_conflict_enum_mod_b.wado";
+
+export fn run() with Stdout {
+    let u = Direction::Up;
+    let l = Direction::Left;
+    if is_up(u) {
+        println("up: true");
+    }
+    if is_left_b(l) {
+        println("left: true");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "up: true\nleft: true\n"}

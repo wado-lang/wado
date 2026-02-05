@@ -1,0 +1,19 @@
+// Test: two library modules defining newtypes with the same name but different base types
+// The resolver's type_aliases map (keyed by simple name) may have module B's
+// definition, causing module A's Measurement to resolve to the wrong base type.
+
+use { println } from "core:cli";
+use { Measurement, make_measurement_a, measurement_a_value } from "./sub/wasm_name_conflict_newtype_mod_a.wado";
+use { make_measurement_b, measurement_b_value } from "./sub/wasm_name_conflict_newtype_mod_b.wado";
+
+export fn run() with Stdout {
+    let a = make_measurement_a();
+    let va = measurement_a_value(a);
+    println(`a: {va}`);
+    let b = make_measurement_b();
+    let vb = measurement_b_value(b);
+    println(`b: {vb}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "a: 3.14\nb: 42\n"}
