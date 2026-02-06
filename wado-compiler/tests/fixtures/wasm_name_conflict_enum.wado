@@ -1,0 +1,23 @@
+// Test: two library modules defining enums with the same name but different cases.
+// Module A: Direction { Up=0, Down=1 }
+// Module B: Direction { Left=0, Right=1 }
+// Each module's function receives its own Direction type, so the entry module
+// only needs to construct the correct enum value for each call.
+
+use { println } from "core:cli";
+use { Direction, is_up } from "./sub/wasm_name_conflict_enum_mod_a.wado";
+use { Direction as DirectionB, is_left_b } from "./sub/wasm_name_conflict_enum_mod_b.wado";
+
+export fn run() with Stdout {
+    let u = Direction::Up;
+    let l = DirectionB::Left;
+    if is_up(u) {
+        println("up: true");
+    }
+    if is_left_b(l) {
+        println("left: true");
+    }
+}
+
+__DATA__
+{"stdout": "up: true\nleft: true\n"}

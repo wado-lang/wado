@@ -282,6 +282,20 @@ impl ModuleSource {
     pub fn to_path_string(&self) -> String {
         self.to_path().join("/")
     }
+
+    /// Create a module-qualified name using `//` as separator.
+    ///
+    /// The `//` separator cannot appear in file paths, making it safe
+    /// for disambiguating same-named types from different modules.
+    ///
+    /// Examples:
+    /// - `ModuleSource::core("prelude").qualify_name("Option")` → `"core:prelude//Option"`
+    /// - `ModuleSource::local("./geometry.wado").qualify_name("Point")` → `"./geometry.wado//Point"`
+    /// - `ModuleSource::entry_point_with_filename("main.wado").qualify_name("Foo")` → `"main.wado//Foo"`
+    #[must_use]
+    pub fn qualify_name(&self, name: &str) -> String {
+        format!("{self}//{name}")
+    }
 }
 
 impl fmt::Display for ModuleSource {
@@ -1566,6 +1580,26 @@ mod tests {
         let local = ModuleSource::local("./file.wado");
         assert!(local.is_local());
         assert!(!local.is_core());
+    }
+
+    #[test]
+    fn test_module_source_qualify_name() {
+        assert_eq!(
+            ModuleSource::core("prelude").qualify_name("Option"),
+            "core:prelude//Option"
+        );
+        assert_eq!(
+            ModuleSource::local("./geometry.wado").qualify_name("Point"),
+            "./geometry.wado//Point"
+        );
+        assert_eq!(
+            ModuleSource::wasi("cli").qualify_name("Stdout"),
+            "wasi:cli//Stdout"
+        );
+        assert_eq!(
+            ModuleSource::entry_point_with_filename("main.wado").qualify_name("Foo"),
+            "main.wado//Foo"
+        );
     }
 
     #[test]

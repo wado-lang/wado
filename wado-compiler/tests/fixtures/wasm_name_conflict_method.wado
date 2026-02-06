@@ -1,0 +1,21 @@
+// Test: method return types resolved in callee context.
+// Both modules define a struct Config with different fields.
+// Instance methods return their own module's Config type.
+// lookup_method_info resolves return types in caller context,
+// which can confuse same-named types from different modules.
+
+use { println } from "core:cli";
+use { ContainerA } from "./sub/wasm_name_conflict_method_mod_a.wado";
+use { ContainerB } from "./sub/wasm_name_conflict_method_mod_b.wado";
+
+export fn run() with Stdout {
+    let ca = ContainerA::make(42);
+    let cfg_a = ca.get_config();
+    println(`a: {cfg_a.value}`);
+    let cb = ContainerB::make("hello", 7);
+    let cfg_b = cb.get_config();
+    println(`b: {cfg_b.name} {cfg_b.count}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "a: 42\nb: hello 7\n"}

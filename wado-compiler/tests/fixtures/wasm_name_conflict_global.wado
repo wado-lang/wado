@@ -1,0 +1,14 @@
+// Test: two library modules defining globals with the same name
+// Globals are properly qualified with module path, so this should work.
+
+use { println } from "core:cli";
+use { get_limit_a } from "./sub/wasm_name_conflict_global_mod_a.wado";
+use { get_limit_b } from "./sub/wasm_name_conflict_global_mod_b.wado";
+
+export fn run() with Stdout {
+    println(`a: {get_limit_a()}`);
+    println(`b: {get_limit_b()}`);
+}
+
+__DATA__
+{"stdout": "a: 100\nb: 999\n"}

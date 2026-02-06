@@ -2227,7 +2227,7 @@ fn remap_expr(
             arms: arms
                 .iter()
                 .map(|arm| crate::tir::TirMatchArm {
-                    pattern: arm.pattern.clone(), // Patterns don't contain locals in the same sense
+                    pattern: remap_pattern(&arm.pattern, param_to_local, local_offset, param_count),
                     body: remap_expr(
                         &arm.body,
                         param_to_local,
@@ -3048,9 +3048,179 @@ fn inline_calls_in_expr(
                 inline_counter,
             );
         }
-        // For if/match expressions, we don't inline recursively here
-        // as they would need proper block handling
-        _ => {}
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            inline_calls_in_expr(
+                condition,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+                inline_counter,
+            );
+            inline_calls_in_block(
+                then_branch,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                inlined_funcs,
+                inline_counter,
+            );
+            if let Some(else_block) = else_branch {
+                inline_calls_in_block(
+                    else_block,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                    inline_counter,
+                );
+            }
+        }
+        TirExprKind::Match { expr: inner, arms } => {
+            inline_calls_in_expr(
+                inner,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+                inline_counter,
+            );
+            for arm in arms {
+                inline_calls_in_expr(
+                    &mut arm.body,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                    inline_counter,
+                );
+            }
+        }
+        TirExprKind::Block(block) => {
+            inline_calls_in_block(
+                block,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                inlined_funcs,
+                inline_counter,
+            );
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            inline_calls_in_expr(
+                value,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+                inline_counter,
+            );
+        }
+        TirExprKind::Closure { body, .. } => {
+            inline_calls_in_expr(
+                body,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+                inline_counter,
+            );
+        }
+        TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
+            inline_calls_in_expr(
+                inner,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+                inline_counter,
+            );
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            inline_calls_in_expr(
+                scrutinee,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                pre_stmts,
+                inlined_funcs,
+                inline_counter,
+            );
+            for arm_block in arms {
+                inline_calls_in_block(
+                    arm_block,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    inlined_funcs,
+                    inline_counter,
+                );
+            }
+            inline_calls_in_block(
+                default,
+                candidates,
+                current_module,
+                local_count,
+                local_types,
+                type_table,
+                inlined_funcs,
+                inline_counter,
+            );
+        }
+        // Leaf expressions (no sub-expressions to recurse into)
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
     }
 }
 

@@ -1,0 +1,14 @@
+// Test: pub use with type aliasing across module boundaries.
+// Inner module defines struct Metric. Facade re-exports it as Measurement.
+// Entry imports Measurement from the facade.
+
+use { println } from "core:cli";
+use { Measurement, make_measurement } from "./sub/wasm_name_conflict_pub_use_alias_facade.wado";
+
+export fn run() with Stdout {
+    let m = make_measurement(3.14, "meters");
+    println(`{m.value} {m.unit}`);
+}
+
+__DATA__
+{"stdout": "3.14 meters\n"}
