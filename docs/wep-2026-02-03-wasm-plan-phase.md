@@ -32,11 +32,13 @@ lower → optimize → wasm_plan → codegen
 ### File Organization
 
 ```
-codegen.rs            Codegen struct, generate_wasm(), build_main_module() orchestration
-codegen_types.rs      Type registration methods, type_id_to_valtype()
-codegen_component.rs  generate_component(), WASI imports, canonical intrinsics, module wiring
+wasm_plan.rs          WasmPlan production (TypePlan, ComponentPlan, CmExportInfo)
+codegen.rs            Orchestration, type encoding (execute TypePlan → CoreModuleBuilder)
+codegen_component.rs  Component encoding (execute ComponentPlan → ComponentBuilder)
 codegen_expr.rs       generate_expr(), generate_stmt(), expression-level code generation
 ```
+
+Analysis (scanning TypeTable, querying WasiRegistry, topological sort, dependency resolution) lives in `wasm_plan.rs`. Encoding (allocating indices, calling `wasm_encoder` APIs) lives in `codegen*.rs`.
 
 ### WasmPlan
 
