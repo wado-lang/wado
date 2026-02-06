@@ -24,8 +24,8 @@ struct OptConfig {
     inline_threshold: usize,
 }
 use crate::optimize_licm::apply_licm;
-use crate::optimize_rewrite::{collect_value_copy_types, insert_moves};
 use crate::optimize_ref_elim::eliminate_unnecessary_refs;
+use crate::optimize_rewrite::{collect_value_copy_types, insert_moves};
 use crate::project::Project;
 
 /// Optimization level for the compiler.
