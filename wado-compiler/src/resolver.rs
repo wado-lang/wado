@@ -788,11 +788,14 @@ impl<'a> Resolver<'a> {
 
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let mut type_aliases = HashMap::new();
-        let mut struct_fields = HashMap::new();
-        let mut variant_cases: HashMap<String, VariantInfo> = HashMap::new();
-        let mut enum_cases: HashMap<String, EnumInfo> = HashMap::new();
-        let mut resource_types: HashMap<String, ResourceInfo> = HashMap::new();
+        let mut all_type_aliases: HashMap<ModuleSource, HashMap<String, TypeId>> = HashMap::new();
+        let mut all_struct_fields: HashMap<ModuleSource, HashMap<String, StructFieldInfo>> =
+            HashMap::new();
+        let mut all_variant_cases: HashMap<ModuleSource, HashMap<String, VariantInfo>> =
+            HashMap::new();
+        let mut all_enum_cases: HashMap<ModuleSource, HashMap<String, EnumInfo>> = HashMap::new();
+        let mut all_resource_types: HashMap<ModuleSource, HashMap<String, ResourceInfo>> =
+            HashMap::new();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -806,14 +809,17 @@ impl<'a> Resolver<'a> {
                             .iter()
                             .map(|p| (p.name.clone(), p.bounds.clone()))
                             .collect();
-                        struct_fields.insert(
-                            struct_decl.name.clone(),
-                            StructFieldInfo {
-                                module_source: module_source.clone(),
-                                fields: Vec::new(),
-                                type_param_bounds,
-                            },
-                        );
+                        all_struct_fields
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                struct_decl.name.clone(),
+                                StructFieldInfo {
+                                    module_source: module_source.clone(),
+                                    fields: Vec::new(),
+                                    type_param_bounds,
+                                },
+                            );
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
@@ -822,37 +828,46 @@ impl<'a> Resolver<'a> {
                             .iter()
                             .map(|p| p.name.clone())
                             .collect();
-                        variant_cases.insert(
-                            variant_decl.name.clone(),
-                            VariantInfo {
-                                module_source: module_source.clone(),
-                                type_params,
-                                cases: Vec::new(),
-                            },
-                        );
+                        all_variant_cases
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                variant_decl.name.clone(),
+                                VariantInfo {
+                                    module_source: module_source.clone(),
+                                    type_params,
+                                    cases: Vec::new(),
+                                },
+                            );
                     }
                     Item::Enum(enum_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
-                        enum_cases.insert(
-                            enum_decl.name.clone(),
-                            EnumInfo {
-                                module_source: module_source.clone(),
-                                cases: Vec::new(),
-                            },
-                        );
+                        all_enum_cases
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                enum_decl.name.clone(),
+                                EnumInfo {
+                                    module_source: module_source.clone(),
+                                    cases: Vec::new(),
+                                },
+                            );
                     }
                     Item::Resource(resource_decl) => {
-                        resource_types.insert(
-                            resource_decl.name.clone(),
-                            ResourceInfo {
-                                module_source: module_source.clone(),
-                                methods: resource_decl
-                                    .methods
-                                    .iter()
-                                    .map(|m| m.name.clone())
-                                    .collect(),
-                            },
-                        );
+                        all_resource_types
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                resource_decl.name.clone(),
+                                ResourceInfo {
+                                    module_source: module_source.clone(),
+                                    methods: resource_decl
+                                        .methods
+                                        .iter()
+                                        .map(|m| m.name.clone())
+                                        .collect(),
+                                },
+                            );
                     }
                     _ => {}
                 }
@@ -861,6 +876,15 @@ impl<'a> Resolver<'a> {
 
         // Second sub-pass: resolve struct fields and type aliases
         for (module_source, module) in modules {
+            // Build imported type sources for this module
+            let imported_type_sources = Self::build_imported_type_sources(module, module_source);
+
+            // Build module-specific flat maps for resolving types in this module
+            let mut flat_type_aliases =
+                Self::build_module_map(&all_type_aliases, module_source, &imported_type_sources);
+            let mut flat_struct_fields =
+                Self::build_module_map(&all_struct_fields, module_source, &imported_type_sources);
+
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
@@ -878,15 +902,15 @@ impl<'a> Resolver<'a> {
                                 Self::resolve_type_static(
                                     &field.ty,
                                     &mut type_table.borrow_mut(),
-                                    &type_aliases,
-                                    &struct_fields,
+                                    &flat_type_aliases,
+                                    &flat_struct_fields,
                                 )
                             } else {
                                 Self::resolve_type_static_with_params(
                                     &field.ty,
                                     &mut type_table.borrow_mut(),
-                                    &type_aliases,
-                                    &struct_fields,
+                                    &flat_type_aliases,
+                                    &flat_struct_fields,
                                     &type_params,
                                 )
                             };
@@ -898,23 +922,26 @@ impl<'a> Resolver<'a> {
                             .iter()
                             .map(|p| (p.name.clone(), p.bounds.clone()))
                             .collect();
-                        // Update the struct_fields entry with actual fields
-                        struct_fields.insert(
-                            struct_decl.name.clone(),
-                            StructFieldInfo {
-                                module_source: module_source.clone(),
-                                fields,
-                                type_param_bounds,
-                            },
-                        );
+                        // Update the nested map entry with actual fields
+                        let info = StructFieldInfo {
+                            module_source: module_source.clone(),
+                            fields,
+                            type_param_bounds,
+                        };
+                        all_struct_fields
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(struct_decl.name.clone(), info.clone());
+                        // Also update flat map for subsequent items in this module
+                        flat_struct_fields.insert(struct_decl.name.clone(), info);
                     }
                     Item::Type(type_alias) => {
                         // Resolve the base type
                         let base_type_id = Self::resolve_type_static(
                             &type_alias.ty,
                             &mut type_table.borrow_mut(),
-                            &type_aliases,
-                            &struct_fields,
+                            &flat_type_aliases,
+                            &flat_struct_fields,
                         );
                         // Create a newtype wrapping the base type
                         let newtype_id = type_table.borrow_mut().make_newtype(
@@ -922,7 +949,12 @@ impl<'a> Resolver<'a> {
                             module_source.clone(),
                             base_type_id,
                         );
-                        type_aliases.insert(type_alias.name.clone(), newtype_id);
+                        all_type_aliases
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(type_alias.name.clone(), newtype_id);
+                        // Also update flat map for subsequent items in this module
+                        flat_type_aliases.insert(type_alias.name.clone(), newtype_id);
                     }
                     Item::Variant(variant_decl) => {
                         // Resolve variant case field types
@@ -941,8 +973,8 @@ impl<'a> Resolver<'a> {
                                 Self::resolve_type_static_with_params(
                                     payload_ty,
                                     &mut type_table.borrow_mut(),
-                                    &type_aliases,
-                                    &struct_fields,
+                                    &flat_type_aliases,
+                                    &flat_struct_fields,
                                     &type_params,
                                 )
                             } else {
@@ -954,14 +986,17 @@ impl<'a> Resolver<'a> {
                                 payload,
                             });
                         }
-                        variant_cases.insert(
-                            variant_decl.name.clone(),
-                            VariantInfo {
-                                module_source: module_source.clone(),
-                                type_params,
-                                cases,
-                            },
-                        );
+                        all_variant_cases
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                variant_decl.name.clone(),
+                                VariantInfo {
+                                    module_source: module_source.clone(),
+                                    type_params,
+                                    cases,
+                                },
+                            );
                     }
                     Item::Enum(enum_decl) => {
                         // Populate enum cases (no field types, just names and indices)
@@ -974,13 +1009,16 @@ impl<'a> Resolver<'a> {
                                 index: index as u32,
                             })
                             .collect();
-                        enum_cases.insert(
-                            enum_decl.name.clone(),
-                            EnumInfo {
-                                module_source: module_source.clone(),
-                                cases,
-                            },
-                        );
+                        all_enum_cases
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                enum_decl.name.clone(),
+                                EnumInfo {
+                                    module_source: module_source.clone(),
+                                    cases,
+                                },
+                            );
                     }
                     _ => {}
                 }
@@ -990,11 +1028,25 @@ impl<'a> Resolver<'a> {
         // Topologically sort modules based on struct field type dependencies
         // A module depends on another if it has a struct with a field of a type defined there
         let sorted_sources =
-            Self::topological_sort_modules(modules, &struct_fields, &type_table.borrow());
+            Self::topological_sort_modules(modules, &all_struct_fields, &type_table.borrow());
 
         // Second pass: resolve each module with per-module function_return_types and imports
         for module_source in &sorted_sources {
             let module = modules.get(module_source).expect("module should exist");
+
+            // Build imported type sources and module-specific flat maps for this module
+            let imported_type_sources = Self::build_imported_type_sources(module, module_source);
+            let type_aliases =
+                Self::build_module_map(&all_type_aliases, module_source, &imported_type_sources);
+            let struct_fields =
+                Self::build_module_map(&all_struct_fields, module_source, &imported_type_sources);
+            let variant_cases =
+                Self::build_module_map(&all_variant_cases, module_source, &imported_type_sources);
+            let enum_cases =
+                Self::build_module_map(&all_enum_cases, module_source, &imported_type_sources);
+            let resource_types =
+                Self::build_module_map(&all_resource_types, module_source, &imported_type_sources);
+
             // Build function_return_types for this module only
             // (functions defined in this module)
             let mut function_return_types = HashMap::new();
@@ -1047,11 +1099,11 @@ impl<'a> Resolver<'a> {
                 type_table: Rc::clone(&type_table),
                 symbols,
                 loaded_modules: modules,
-                type_aliases: type_aliases.clone(),
-                struct_fields: struct_fields.clone(),
-                variant_cases: variant_cases.clone(),
-                enum_cases: enum_cases.clone(),
-                resource_types: resource_types.clone(),
+                type_aliases,
+                struct_fields,
+                variant_cases,
+                enum_cases,
+                resource_types,
                 function_return_types,
                 imported_functions,
                 errors: Vec::new(),
@@ -1089,6 +1141,61 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Build a module-specific flat map from per-module entries.
+    ///
+    /// Priority: current module > imported types > any available definition.
+    fn build_module_map<V: Clone>(
+        per_module: &HashMap<ModuleSource, HashMap<String, V>>,
+        current_module: &ModuleSource,
+        imported_type_sources: &HashMap<String, ModuleSource>,
+    ) -> HashMap<String, V> {
+        let mut result = HashMap::new();
+        // First: add all entries from all modules (arbitrary winner for conflicts)
+        for name_map in per_module.values() {
+            for (name, value) in name_map {
+                result.entry(name.clone()).or_insert_with(|| value.clone());
+            }
+        }
+        // Second: override with imported modules' types
+        for (name, import_src) in imported_type_sources {
+            if let Some(name_map) = per_module.get(import_src)
+                && let Some(value) = name_map.get(name)
+            {
+                result.insert(name.clone(), value.clone());
+            }
+        }
+        // Third: override with current module's types (highest priority)
+        if let Some(name_map) = per_module.get(current_module) {
+            for (name, value) in name_map {
+                result.insert(name.clone(), value.clone());
+            }
+        }
+        result
+    }
+
+    /// Build a map of imported names to their source modules from use declarations.
+    fn build_imported_type_sources(
+        module: &Module,
+        from_module: &ModuleSource,
+    ) -> HashMap<String, ModuleSource> {
+        let mut result = HashMap::new();
+        for item in &module.items {
+            if let Item::Use(use_decl) = item {
+                let source = name::resolve_import(from_module, &use_decl.source);
+                for use_item in &use_decl.items {
+                    match use_item {
+                        ast::UseItem::Simple { name, alias } => {
+                            let local_name = alias.as_ref().unwrap_or(name);
+                            result.insert(local_name.clone(), source.clone());
+                        }
+                        ast::UseItem::EffectFunctions { .. } => {}
+                    }
+                }
+            }
+        }
+        result
+    }
+
     /// Topologically sort modules based on struct field type dependencies.
     ///
     /// A module A depends on module B if A contains a struct with a field whose type
@@ -1096,7 +1203,7 @@ impl<'a> Resolver<'a> {
     /// codegen, dependency structs are registered before the structs that reference them.
     fn topological_sort_modules(
         modules: &HashMap<ModuleSource, Module>,
-        struct_fields: &HashMap<String, StructFieldInfo>,
+        all_struct_fields: &HashMap<ModuleSource, HashMap<String, StructFieldInfo>>,
         type_table: &TypeTable,
     ) -> Vec<ModuleSource> {
         // Collect and sort sources for deterministic ordering
@@ -1113,26 +1220,28 @@ impl<'a> Resolver<'a> {
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); sources.len()];
 
         // Analyze struct fields to find cross-module dependencies
-        for (struct_name, info) in struct_fields {
-            let Some(&from_idx) = source_to_idx.get(&info.module_source) else {
+        for (module_src, name_map) in all_struct_fields {
+            let Some(&from_idx) = source_to_idx.get(module_src) else {
                 continue;
             };
-            for (_field_name, field_type_id) in &info.fields {
-                if let ResolvedType::Struct {
-                    name: ref_struct_name,
-                    module_source: ref_module_source,
-                    ..
-                } = type_table.get(*field_type_id)
-                {
-                    // Skip self-references (same struct or same module)
-                    if ref_struct_name == struct_name || ref_module_source == &info.module_source {
-                        continue;
-                    }
-                    if let Some(&to_idx) = source_to_idx.get(ref_module_source) {
-                        // from_idx depends on to_idx (dependency edge)
-                        if seen_edges.insert((from_idx, to_idx)) {
-                            dependency_count[from_idx] += 1;
-                            dependents[to_idx].push(from_idx);
+            for (struct_name, info) in name_map {
+                for (_field_name, field_type_id) in &info.fields {
+                    if let ResolvedType::Struct {
+                        name: ref_struct_name,
+                        module_source: ref_module_source,
+                        ..
+                    } = type_table.get(*field_type_id)
+                    {
+                        // Skip self-references (same struct or same module)
+                        if ref_struct_name == struct_name || ref_module_source == module_src {
+                            continue;
+                        }
+                        if let Some(&to_idx) = source_to_idx.get(ref_module_source) {
+                            // from_idx depends on to_idx (dependency edge)
+                            if seen_edges.insert((from_idx, to_idx)) {
+                                dependency_count[from_idx] += 1;
+                                dependents[to_idx].push(from_idx);
+                            }
                         }
                     }
                 }

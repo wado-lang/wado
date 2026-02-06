@@ -503,20 +503,13 @@ impl Codegen<'_> {
     }
 
     /// Look up a struct type by name and module source.
-    /// Tries qualified `StructName` first, falls back to entry point module.
     fn lookup_struct_type(
         &self,
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<&StructTypeInfo> {
-        // Try qualified name first
         let qualified = StructName::new(module_source.clone(), name.to_string());
-        if let Some(info) = self.struct_types.get(&qualified) {
-            return Some(info);
-        }
-        // Fall back to entry point module (using actual entry module source, not entry_point())
-        let entry_key = StructName::new(self.project.entry_module_source.clone(), name.to_string());
-        self.struct_types.get(&entry_key)
+        self.struct_types.get(&qualified)
     }
 
     /// Extract struct names that a type depends on (for field types)
@@ -807,10 +800,6 @@ impl Codegen<'_> {
             }
         }
 
-        // Collect main module struct names first (for collision detection)
-        let main_module_struct_names: std::collections::HashSet<String> =
-            entry_tir.structs.iter().map(|s| s.name.clone()).collect();
-
         // Collect impl methods from loaded TIR modules
         // Note: With the current TIR design, methods are added as regular functions
         // (with mangled names like "Point::sum") in tir_mod.functions, not in impls.
@@ -878,14 +867,9 @@ impl Codegen<'_> {
                         continue;
                     }
                     let method_mangled = method_id.to_string();
-                    // Determine struct lookup name - use qualified name if there's a collision
-                    let struct_lookup_name = if main_module_struct_names.contains(struct_name) {
-                        // Collision - use qualified StructName
-                        StructName::new(module_source.clone(), struct_name.clone())
-                    } else {
-                        // No collision - use entry module source
-                        StructName::new(entry_module_source.clone(), struct_name.clone())
-                    };
+                    // Always use qualified struct name from the actual module
+                    let struct_lookup_name =
+                        StructName::new(module_source.clone(), struct_name.clone());
                     // Use the same fully mangled name for registration
                     // This ensures consistency between DCE tracking and codegen
                     drop(func); // Release borrow before cloning Rc
@@ -1035,13 +1019,8 @@ impl Codegen<'_> {
             for type_decl in sorted_types {
                 match type_decl {
                     TypeDecl::Struct(tir_struct) => {
-                        let struct_name = if main_module_struct_names.contains(&tir_struct.name) {
-                            // Collision - use qualified name with full module source
-                            StructName::new(module_source.clone(), tir_struct.name.clone())
-                        } else {
-                            // No collision - use entry module source
-                            StructName::new(entry_module_source.clone(), tir_struct.name.clone())
-                        };
+                        let struct_name =
+                            StructName::new(module_source.clone(), tir_struct.name.clone());
                         self.register_struct_type(
                             struct_name,
                             tir_struct,
@@ -1052,6 +1031,7 @@ impl Codegen<'_> {
                     TypeDecl::Variant(tir_variant) => {
                         self.register_variant_type(
                             tir_variant,
+                            module_source,
                             &tir_mod.type_table.borrow(),
                             &mut builder,
                         );
@@ -1125,7 +1105,12 @@ impl Codegen<'_> {
                     }
                 }
                 TypeDecl::Variant(tir_variant) => {
-                    self.register_variant_type(tir_variant, type_table, &mut builder);
+                    self.register_variant_type(
+                        tir_variant,
+                        entry_module_source,
+                        type_table,
+                        &mut builder,
+                    );
                 }
             }
         }
@@ -1134,22 +1119,26 @@ impl Codegen<'_> {
         for (alias_name, alias_module_source, original_name) in symbols.get_struct_aliases() {
             let alias_struct_name =
                 StructName::new(entry_module_source.clone(), alias_name.clone());
-            // Check if there's a collision (main module has same-named struct)
-            // A collision occurs when the alias comes from a different module
-            let is_from_different_module = alias_module_source != *entry_module_source;
-            if main_module_struct_names.contains(&original_name) && is_from_different_module {
-                // Collision case - use qualified name from the alias's module
-                let qualified_name = StructName::new(alias_module_source, original_name.clone());
-                if let Some(info) = self.struct_types.get(&qualified_name).cloned() {
-                    self.struct_types.insert(alias_struct_name, info);
-                }
-            } else {
-                // No collision - use entry module source
-                let original_struct_name =
-                    StructName::new(entry_module_source.clone(), original_name.clone());
-                if let Some(info) = self.struct_types.get(&original_struct_name).cloned() {
-                    self.struct_types.insert(alias_struct_name, info);
-                }
+            // Always look up the original struct using its qualified name from the alias's module
+            let original_struct_name = StructName::new(alias_module_source, original_name.clone());
+            if let Some(info) = self.struct_types.get(&original_struct_name).cloned() {
+                self.struct_types.insert(alias_struct_name, info);
+            }
+        }
+
+        // Register type aliases for re-exported types.
+        // This handles cases like core:prelude re-exporting types from sub-modules:
+        // - Ordering variant from core:prelude/traits
+        // - Option/Result variants from core:prelude/types
+        // - i128/u128 structs from core:prelude/int128
+        // Types are registered under the defining module's source, but lookups use
+        // the re-exporting module's source from the ResolvedType.
+        self.register_variant_aliases_from_table(type_table);
+        self.register_struct_aliases_from_table(type_table);
+        for (module_source, tir_mod) in all_tir_modules {
+            if module_source != entry_module_source {
+                self.register_variant_aliases_from_table(&tir_mod.type_table.borrow());
+                self.register_struct_aliases_from_table(&tir_mod.type_table.borrow());
             }
         }
 
@@ -1306,11 +1295,17 @@ impl Codegen<'_> {
 
         // PHASE 4.5b: Register monomorphized generic variants from type tables
         // Scan for GenericInstance types that refer to variants and register them
-        self.register_monomorphized_variants_from_table(entry_tir, type_table, &mut builder);
+        self.register_monomorphized_variants_from_table(
+            entry_tir,
+            entry_module_source,
+            type_table,
+            &mut builder,
+        );
         for (module_source, tir_mod) in all_tir_modules {
             if module_source != entry_module_source {
                 self.register_monomorphized_variants_from_table(
                     tir_mod,
+                    module_source,
                     &tir_mod.type_table.borrow(),
                     &mut builder,
                 );
@@ -3854,8 +3849,8 @@ impl Codegen<'_> {
             });
         }
 
-        // Use the struct name's string representation for Wasm type naming
-        let type_idx = builder.define_gc_struct_type(&struct_name.name, &fields);
+        // Use the fully qualified struct name for Wasm type naming
+        let type_idx = builder.define_gc_struct_type(&struct_name.to_string(), &fields);
 
         let field_count = tir_struct.fields.len();
         let is_monomorphized = tir_struct.monomorph_info.is_some();
@@ -4085,6 +4080,7 @@ impl Codegen<'_> {
     fn register_variant_type(
         &mut self,
         variant: &crate::tir::TirVariantDecl,
+        module_source: &ModuleSource,
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
     ) -> u32 {
@@ -4093,9 +4089,12 @@ impl Codegen<'_> {
             return u32::MAX;
         }
 
+        // Use module-qualified name for variant type key
+        let qualified_name = module_source.qualify_name(&variant.name);
+
         // Already registered?
-        if self.variant_types.contains_key(&variant.name) {
-            return self.variant_types[&variant.name].base_type_idx;
+        if self.variant_types.contains_key(&qualified_name) {
+            return self.variant_types[&qualified_name].base_type_idx;
         }
 
         // Define the base type with just the tag field
@@ -4103,7 +4102,7 @@ impl Codegen<'_> {
             element_type: StorageType::Val(ValType::I32),
             mutable: false, // Tag is immutable once set
         }];
-        let base_type_idx = builder.define_gc_struct_type(&variant.name, &base_fields);
+        let base_type_idx = builder.define_gc_struct_type(&qualified_name, &base_fields);
 
         // Define each case as a subtype
         let mut case_infos = Vec::with_capacity(variant.cases.len());
@@ -4129,8 +4128,8 @@ impl Codegen<'_> {
                 Some(wasm_type)
             };
 
-            // Define the case subtype
-            let case_type_name = format!("{}::{}", variant.name, case.name);
+            // Define the case subtype (use qualified name for Wasm type)
+            let case_type_name = format!("{}::{}", qualified_name, case.name);
             let case_type_idx =
                 builder.define_gc_struct_subtype(&case_type_name, base_type_idx, &case_fields);
 
@@ -4141,9 +4140,9 @@ impl Codegen<'_> {
             });
         }
 
-        // Store in registry
+        // Store in registry with qualified name
         self.variant_types.insert(
-            variant.name.clone(),
+            qualified_name,
             VariantTypeInfo {
                 base_type_idx,
                 cases: case_infos,
@@ -4153,6 +4152,74 @@ impl Codegen<'_> {
         base_type_idx
     }
 
+    /// Register variant type aliases for re-exported types.
+    ///
+    /// When a sub-module defines a variant (e.g., `Ordering` in `core:prelude/traits`)
+    /// and the parent module re-exports it (via `pub use`), the resolver assigns the
+    /// parent module's source (e.g., `core:prelude`) to the `ResolvedType::Variant`.
+    /// But the variant was registered under the defining module's source.
+    ///
+    /// This method scans a type table for Variant types whose qualified name is not
+    /// yet registered, and creates aliases pointing to the already-registered variant.
+    fn register_variant_aliases_from_table(&mut self, type_table: &TypeTable) {
+        let mut aliases: Vec<(String, VariantTypeInfo)> = Vec::new();
+        for type_id in type_table.iter_type_ids() {
+            if let ResolvedType::Variant {
+                name,
+                module_source,
+            } = type_table.get(type_id)
+            {
+                let qualified = module_source.qualify_name(name);
+                if self.variant_types.contains_key(&qualified) {
+                    continue;
+                }
+                // Find the same variant registered under a different module_source
+                for (existing_key, info) in &self.variant_types {
+                    if let Some(existing_name) = existing_key.split("//").last()
+                        && existing_name == name
+                    {
+                        aliases.push((qualified.clone(), info.clone()));
+                        break;
+                    }
+                }
+            }
+        }
+        for (key, info) in aliases {
+            self.variant_types.entry(key).or_insert(info);
+        }
+    }
+
+    /// Register struct type aliases for re-exported types.
+    ///
+    /// Same as `register_variant_aliases_from_table` but for struct types.
+    /// Handles cases like `core:prelude` re-exporting `i128` from `core:prelude/int128`.
+    fn register_struct_aliases_from_table(&mut self, type_table: &TypeTable) {
+        let mut aliases: Vec<(StructName, StructTypeInfo)> = Vec::new();
+        for type_id in type_table.iter_type_ids() {
+            if let ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } = type_table.get(type_id)
+            {
+                let qualified = StructName::new(module_source.clone(), name.clone());
+                if self.struct_types.contains_key(&qualified) {
+                    continue;
+                }
+                // Find the same struct registered under a different module_source
+                for (existing_key, info) in &self.struct_types {
+                    if existing_key.name == *name {
+                        aliases.push((qualified.clone(), info.clone()));
+                        break;
+                    }
+                }
+            }
+        }
+        for (key, info) in aliases {
+            self.struct_types.entry(key).or_insert(info);
+        }
+    }
+
     /// Register monomorphized generic variants from the type table.
     ///
     /// Scans for `GenericInstance` types that refer to variants (like `Result<i32, String>`)
@@ -4160,6 +4227,7 @@ impl Codegen<'_> {
     fn register_monomorphized_variants_from_table(
         &mut self,
         tir_module: &TirModule,
+        module_source: &ModuleSource,
         type_table: &TypeTable,
         builder: &mut CoreModuleBuilder,
     ) {
@@ -4175,8 +4243,9 @@ impl Codegen<'_> {
                 let is_variant = tir_module.variants.iter().any(|v| v.name == *name);
                 if is_variant {
                     let mangled_name = type_table.mangle_type_name(type_id);
+                    let qualified_mangled_name = module_source.qualify_name(&mangled_name);
                     // Skip if already registered
-                    if !self.variant_types.contains_key(&mangled_name) {
+                    if !self.variant_types.contains_key(&qualified_mangled_name) {
                         generic_variants.push((name.clone(), type_args.clone()));
                     }
                 }
@@ -4209,18 +4278,20 @@ impl Codegen<'_> {
                     .collect();
                 format!("{}<{}>", base_name, arg_names.join(","))
             };
+            let qualified_mangled_name = module_source.qualify_name(&mangled_name);
 
             // Skip if already registered (double-check)
-            if self.variant_types.contains_key(&mangled_name) {
+            if self.variant_types.contains_key(&qualified_mangled_name) {
                 continue;
             }
 
-            // Define the base type with just the tag field
+            // Define the base type with just the tag field (use qualified name)
             let base_fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
             }];
-            let base_type_idx = builder.define_gc_struct_type(&mangled_name, &base_fields);
+            let base_type_idx =
+                builder.define_gc_struct_type(&qualified_mangled_name, &base_fields);
 
             // Define each case as a subtype
             let mut case_infos = Vec::with_capacity(base_variant.cases.len());
@@ -4249,8 +4320,8 @@ impl Codegen<'_> {
                     Some(wasm_type)
                 };
 
-                // Define the case subtype
-                let case_type_name = format!("{}::{}", mangled_name, case.name);
+                // Define the case subtype (use qualified name)
+                let case_type_name = format!("{}::{}", qualified_mangled_name, case.name);
                 let case_type_idx =
                     builder.define_gc_struct_subtype(&case_type_name, base_type_idx, &case_fields);
 
@@ -4261,9 +4332,9 @@ impl Codegen<'_> {
                 });
             }
 
-            // Store in registry
+            // Store in registry with qualified name
             self.variant_types.insert(
-                mangled_name,
+                qualified_mangled_name,
                 VariantTypeInfo {
                     base_type_idx,
                     cases: case_infos,
@@ -4282,11 +4353,15 @@ impl Codegen<'_> {
         // Collect all Result types from the type table
         let mut result_types: Vec<(TypeId, TypeId, TypeId)> = Vec::new(); // (type_id, ok, err)
 
+        // Result is always from core:prelude
+        let result_module_source = ModuleSource::core("prelude");
+
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::Result { ok, err } = type_table.get(type_id) {
                 let mangled_name = type_table.mangle_type_name(type_id);
+                let qualified_mangled_name = result_module_source.qualify_name(&mangled_name);
                 // Skip if already registered
-                if !self.variant_types.contains_key(&mangled_name) {
+                if !self.variant_types.contains_key(&qualified_mangled_name) {
                     result_types.push((type_id, *ok, *err));
                 }
             }
@@ -4295,20 +4370,22 @@ impl Codegen<'_> {
         // Register each Result type as a variant with subtype hierarchy
         for (type_id, ok_type_id, err_type_id) in result_types {
             let mangled_name = type_table.mangle_type_name(type_id);
+            let qualified_mangled_name = result_module_source.qualify_name(&mangled_name);
 
-            // Define the base type with just the tag field
+            // Define the base type with just the tag field (use qualified name)
             let base_fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
             }];
-            let base_type_idx = builder.define_gc_struct_type(&mangled_name, &base_fields);
+            let base_type_idx =
+                builder.define_gc_struct_type(&qualified_mangled_name, &base_fields);
 
             // Determine the payload types
             let ok_type = self.type_id_to_valtype(type_table, ok_type_id);
             let err_type = self.type_id_to_valtype(type_table, err_type_id);
 
-            // Define Ok case subtype
-            let ok_case_name = format!("{mangled_name}::Ok");
+            // Define Ok case subtype (use qualified name)
+            let ok_case_name = format!("{qualified_mangled_name}::Ok");
             let mut ok_fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
@@ -4320,8 +4397,8 @@ impl Codegen<'_> {
             let ok_type_idx =
                 builder.define_gc_struct_subtype(&ok_case_name, base_type_idx, &ok_fields);
 
-            // Define Err case subtype
-            let err_case_name = format!("{mangled_name}::Err");
+            // Define Err case subtype (use qualified name)
+            let err_case_name = format!("{qualified_mangled_name}::Err");
             let mut err_fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
@@ -4333,9 +4410,9 @@ impl Codegen<'_> {
             let err_type_idx =
                 builder.define_gc_struct_subtype(&err_case_name, base_type_idx, &err_fields);
 
-            // Store in registry with Ok and Err cases
+            // Store in registry with Ok and Err cases (use qualified name)
             self.variant_types.insert(
-                mangled_name,
+                qualified_mangled_name,
                 VariantTypeInfo {
                     base_type_idx,
                     cases: vec![
@@ -4598,16 +4675,20 @@ impl Codegen<'_> {
                 }
                 // If inner doesn't need copying, the option value is already on stack
             }
-            ResolvedType::Variant { name, .. } => {
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } => {
                 // Variant types use subtype-based representation.
                 // We need to check the tag and copy based on the specific case type.
+                let qualified_name = module_source.qualify_name(name);
                 let variant_types = &self.variant_types;
-                if let Some(info) = variant_types.get(name) {
+                if let Some(info) = variant_types.get(&qualified_name) {
                     let base_type_idx = info.base_type_idx;
                     let cases = info.cases.clone();
                     self.generate_variant_copy(func, base_type_idx, &cases, ctx);
                 } else {
-                    panic!("unknown variant type: {name}");
+                    panic!("unknown variant type: {qualified_name}");
                 }
             }
             _ => {
@@ -5826,8 +5907,9 @@ impl Codegen<'_> {
                 module_source,
                 ..
             } => {
+                let qualified_name = module_source.qualify_name(name);
                 // Check pending_type_indices first (for rec group construction)
-                if let Some(&type_idx) = self.pending_type_indices.get(name) {
+                if let Some(&type_idx) = self.pending_type_indices.get(&qualified_name) {
                     return ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(type_idx),
@@ -5998,9 +6080,13 @@ impl Codegen<'_> {
             ResolvedType::Result { .. } => {
                 panic!("Result type codegen not yet implemented")
             }
-            ResolvedType::Variant { name, .. } => {
+            ResolvedType::Variant {
+                name,
+                module_source,
+            } => {
+                let qualified_name = module_source.qualify_name(name);
                 // Check pending_type_indices first (for rec group construction)
-                if let Some(&type_idx) = self.pending_type_indices.get(name) {
+                if let Some(&type_idx) = self.pending_type_indices.get(&qualified_name) {
                     return ValType::Ref(RefType {
                         nullable: true,
                         heap_type: HeapType::Concrete(type_idx),
@@ -6008,13 +6094,13 @@ impl Codegen<'_> {
                 }
                 // Custom variant types are represented as GC struct references (base type)
                 let variant_types = &self.variant_types;
-                if let Some(info) = variant_types.get(name) {
+                if let Some(info) = variant_types.get(&qualified_name) {
                     ValType::Ref(RefType {
                         nullable: true,
                         heap_type: HeapType::Concrete(info.base_type_idx),
                     })
                 } else {
-                    panic!("Variant type not registered: {name}");
+                    panic!("Variant type not registered: {qualified_name}");
                 }
             }
             // Placeholder types (shouldn't appear in final TIR)
@@ -6029,23 +6115,23 @@ impl Codegen<'_> {
 
             // Generic instances (other than Array, which is handled above)
             // Look up the monomorphized struct or variant type
-            ResolvedType::GenericInstance { .. } => {
+            ResolvedType::GenericInstance { module_source, .. } => {
                 let mangled_name = type_table.mangle_type_name(type_id);
+                let qualified_mangled_name = module_source.qualify_name(&mangled_name);
                 // Check pending_type_indices first (for rec group construction)
-                if let Some(&type_idx) = self.pending_type_indices.get(&mangled_name) {
+                if let Some(&type_idx) = self.pending_type_indices.get(&qualified_mangled_name) {
                     return ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(type_idx),
                     });
                 }
-                if let Some(struct_info) =
-                    self.lookup_struct_type(&mangled_name, &self.project.entry_module_source)
-                {
+                if let Some(struct_info) = self.lookup_struct_type(&mangled_name, module_source) {
                     ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(struct_info.type_idx),
                     })
-                } else if let Some(variant_info) = self.variant_types.get(&mangled_name) {
+                } else if let Some(variant_info) = self.variant_types.get(&qualified_mangled_name)
+                {
                     // Generic variant (like Result<i32, String>) - use base type
                     ValType::Ref(RefType {
                         nullable: true,
@@ -6053,7 +6139,7 @@ impl Codegen<'_> {
                     })
                 } else {
                     panic!(
-                        "unknown monomorphized generic type in type_id_to_valtype: {mangled_name}"
+                        "unknown monomorphized generic type in type_id_to_valtype: {qualified_mangled_name}"
                     )
                 }
             }
@@ -6267,18 +6353,26 @@ impl Codegen<'_> {
                 // Custom variant construction: Shape::Circle(5.0)
                 // Layout: struct { tag: i32, payload? }
 
-                // Get the variant name from the type (handle both Variant and GenericInstance)
-                let variant_name = match type_table.get(*variant_type) {
-                    ResolvedType::Variant { name, .. } => name.clone(),
+                // Get the variant name and module source from the type (handle both Variant and GenericInstance)
+                let (variant_name, variant_module_source) = match type_table.get(*variant_type) {
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                    } => (name.clone(), module_source.clone()),
                     ResolvedType::GenericInstance {
-                        name, type_args, ..
+                        name,
+                        module_source,
+                        type_args,
                     } => {
                         // Build mangled name for generic variant: Result<i32,String>
                         let type_arg_names: Vec<String> = type_args
                             .iter()
                             .map(|t| type_table.mangle_type_name(*t))
                             .collect();
-                        mangle_generic_name(name, &type_arg_names)
+                        (
+                            mangle_generic_name(name, &type_arg_names),
+                            module_source.clone(),
+                        )
                     }
                     other => panic!("Expected Variant type for VariantConstruct, got: {other:?}"),
                 };
@@ -6332,11 +6426,15 @@ impl Codegen<'_> {
                     return;
                 }
 
-                // Look up the registered variant type
+                // Look up the registered variant type (use qualified name)
+                let qualified_variant_name = variant_module_source.qualify_name(&variant_name);
                 let variant_types = &self.variant_types;
-                let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {variant_name}");
-                });
+                let variant_info =
+                    variant_types
+                        .get(&qualified_variant_name)
+                        .unwrap_or_else(|| {
+                            panic!("Variant type not registered: {qualified_variant_name}");
+                        });
 
                 // Get the case-specific type index
                 let case_info = &variant_info.cases[*case_index as usize];
@@ -6399,23 +6497,35 @@ impl Codegen<'_> {
                 // Use struct.get with field_index 0 to get the tag
                 // We need to find the variant base type index
                 let variant_type_id = inner.type_id;
-                let variant_name = match type_table.get(variant_type_id) {
-                    ResolvedType::Variant { name, .. } => name.clone(),
+                let (variant_name, variant_module_source) = match type_table.get(variant_type_id) {
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                    } => (name.clone(), module_source.clone()),
                     ResolvedType::GenericInstance {
-                        name, type_args, ..
+                        name,
+                        module_source,
+                        type_args,
                     } => {
                         let type_arg_names: Vec<String> = type_args
                             .iter()
                             .map(|t| type_table.mangle_type_name(*t))
                             .collect();
-                        mangle_generic_name(name, &type_arg_names)
+                        (
+                            mangle_generic_name(name, &type_arg_names),
+                            module_source.clone(),
+                        )
                     }
                     other => panic!("Expected Variant type for VariantTag, got: {other:?}"),
                 };
+                let qualified_variant_name = variant_module_source.qualify_name(&variant_name);
                 let variant_types = &self.variant_types;
-                let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {variant_name}");
-                });
+                let variant_info =
+                    variant_types
+                        .get(&qualified_variant_name)
+                        .unwrap_or_else(|| {
+                            panic!("Variant type not registered: {qualified_variant_name}");
+                        });
                 let base_type_idx = variant_info.base_type_idx;
 
                 func.instruction(&Instruction::StructGet {
@@ -6434,21 +6544,33 @@ impl Codegen<'_> {
 
                 // Look up variant type info from the scrutinee's type
                 let scrutinee_type = type_table.get(inner.type_id);
-                let variant_name = match scrutinee_type {
-                    ResolvedType::Variant { name, .. }
-                    | ResolvedType::GenericInstance { name, .. } => name.clone(),
+                let (variant_name, variant_module_source) = match scrutinee_type {
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                    } => (name.clone(), module_source.clone()),
+                    ResolvedType::GenericInstance {
+                        name,
+                        module_source,
+                        ..
+                    } => (name.clone(), module_source.clone()),
                     _ => panic!("VariantTest on non-variant type: {scrutinee_type:?}"),
                 };
 
                 let variant_lookup_name = type_table.mangle_type_name(inner.type_id);
+                let qualified_lookup_name =
+                    variant_module_source.qualify_name(&variant_lookup_name);
+                let qualified_base_name = variant_module_source.qualify_name(&variant_name);
                 let variant_types = &self.variant_types;
-                let variant_info = variant_types.get(&variant_lookup_name).unwrap_or_else(|| {
-                    variant_types.get(&variant_name).unwrap_or_else(|| {
-                        panic!(
-                            "Variant type not registered: {variant_lookup_name} (base: {variant_name})"
+                let variant_info = variant_types
+                    .get(&qualified_lookup_name)
+                    .unwrap_or_else(|| {
+                        variant_types.get(&qualified_base_name).unwrap_or_else(|| {
+                            panic!(
+                            "Variant type not registered: {qualified_lookup_name} (base: {qualified_base_name})"
                         );
-                    })
-                });
+                        })
+                    });
 
                 // Get case info
                 let case_info = variant_info
@@ -6489,23 +6611,35 @@ impl Codegen<'_> {
                 self.generate_expr(func, inner, type_table, ctx, builder);
 
                 let variant_type_id = inner.type_id;
-                let variant_name = match type_table.get(variant_type_id) {
-                    ResolvedType::Variant { name, .. } => name.clone(),
+                let (variant_name, variant_module_source) = match type_table.get(variant_type_id) {
+                    ResolvedType::Variant {
+                        name,
+                        module_source,
+                    } => (name.clone(), module_source.clone()),
                     ResolvedType::GenericInstance {
-                        name, type_args, ..
+                        name,
+                        module_source,
+                        type_args,
                     } => {
                         let type_arg_names: Vec<String> = type_args
                             .iter()
                             .map(|t| type_table.mangle_type_name(*t))
                             .collect();
-                        mangle_generic_name(name, &type_arg_names)
+                        (
+                            mangle_generic_name(name, &type_arg_names),
+                            module_source.clone(),
+                        )
                     }
                     other => panic!("Expected Variant type for VariantPayload, got: {other:?}"),
                 };
+                let qualified_variant_name = variant_module_source.qualify_name(&variant_name);
                 let variant_types = &self.variant_types;
-                let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {variant_name}");
-                });
+                let variant_info =
+                    variant_types
+                        .get(&qualified_variant_name)
+                        .unwrap_or_else(|| {
+                            panic!("Variant type not registered: {qualified_variant_name}");
+                        });
                 let case_info = &variant_info.cases[*case_index as usize];
                 let case_type_idx = case_info.type_idx;
 
@@ -6730,23 +6864,36 @@ impl Codegen<'_> {
                     } else {
                         right.type_id
                     };
-                    let variant_name = match type_table.get(variant_type_id) {
-                        ResolvedType::Variant { name, .. } => name.clone(),
-                        ResolvedType::GenericInstance {
-                            name, type_args, ..
-                        } => {
-                            let type_arg_names: Vec<String> = type_args
-                                .iter()
-                                .map(|t| type_table.mangle_type_name(*t))
-                                .collect();
-                            mangle_generic_name(name, &type_arg_names)
-                        }
-                        other => panic!("Expected Variant type, got: {other:?}"),
-                    };
+                    let (variant_name, variant_module_source) =
+                        match type_table.get(variant_type_id) {
+                            ResolvedType::Variant {
+                                name,
+                                module_source,
+                            } => (name.clone(), module_source.clone()),
+                            ResolvedType::GenericInstance {
+                                name,
+                                module_source,
+                                type_args,
+                            } => {
+                                let type_arg_names: Vec<String> = type_args
+                                    .iter()
+                                    .map(|t| type_table.mangle_type_name(*t))
+                                    .collect();
+                                (
+                                    mangle_generic_name(name, &type_arg_names),
+                                    module_source.clone(),
+                                )
+                            }
+                            other => panic!("Expected Variant type, got: {other:?}"),
+                        };
+                    let qualified_variant_name = variant_module_source.qualify_name(&variant_name);
                     let variant_types = &self.variant_types;
-                    let variant_info = variant_types.get(&variant_name).unwrap_or_else(|| {
-                        panic!("Variant type not registered: {variant_name}");
-                    });
+                    let variant_info =
+                        variant_types
+                            .get(&qualified_variant_name)
+                            .unwrap_or_else(|| {
+                                panic!("Variant type not registered: {qualified_variant_name}");
+                            });
                     let base_type_idx = variant_info.base_type_idx;
 
                     // Generate both expressions and get their discriminants
@@ -7762,8 +7909,10 @@ impl Codegen<'_> {
                         }
 
                         // Check if this is a generic variant constructor (e.g., Result<i32,String>::Ok)
+                        let qualified_variant_name =
+                            struct_module_source.qualify_name(&struct_name_to_lookup);
                         if let Some(variant_info) =
-                            self.variant_types.get(&struct_name_to_lookup).cloned()
+                            self.variant_types.get(&qualified_variant_name).cloned()
                         {
                             // Find the case index by method name
                             // The method name is the last part after ::
@@ -7834,10 +7983,21 @@ impl Codegen<'_> {
                             // Get Result type info for Ok and Err subtypes
                             let result_type_id = expr.type_id;
                             let mangled_name = type_table.mangle_type_name(result_type_id);
+                            let result_module_source = match type_table.get(result_type_id) {
+                                ResolvedType::GenericInstance { module_source, .. } => {
+                                    module_source.clone()
+                                }
+                                other => {
+                                    panic!("Expected GenericInstance (Result), got: {other:?}")
+                                }
+                            };
+                            let qualified_mangled_name =
+                                result_module_source.qualify_name(&mangled_name);
                             let variant_types = &self.variant_types;
-                            let result_info =
-                                variant_types.get(&mangled_name).unwrap_or_else(|| {
-                                    panic!("Result type not registered: {mangled_name}")
+                            let result_info = variant_types
+                                .get(&qualified_mangled_name)
+                                .unwrap_or_else(|| {
+                                    panic!("Result type not registered: {qualified_mangled_name}")
                                 });
                             // Result has cases [Ok (0), Err (1)]
                             let ok_type_idx = result_info.cases[0].type_idx;
@@ -10336,14 +10496,20 @@ impl Codegen<'_> {
                 },
             ) => {
                 // Build mangled name for Result<ok, err>
+                // Result is always from core:prelude
+                let result_module_source = ModuleSource::core("prelude");
                 let ok_name = _type_table.mangle_type_name(*ok);
                 let err_name = _type_table.mangle_type_name(*err);
                 let mangled_name = mangle_result_type(&ok_name, &err_name);
+                let qualified_mangled_name = result_module_source.qualify_name(&mangled_name);
 
                 let variant_types = &self.variant_types;
-                let variant_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
-                    panic!("Result type not registered: {mangled_name}");
-                });
+                let variant_info =
+                    variant_types
+                        .get(&qualified_mangled_name)
+                        .unwrap_or_else(|| {
+                            panic!("Result type not registered: {qualified_mangled_name}");
+                        });
 
                 // Result has cases: Ok (0), Err (1)
                 let case_index = usize::from(case_name != "Ok");
@@ -10359,15 +10525,19 @@ impl Codegen<'_> {
 
             // Non-generic variant patterns
             (
-                ResolvedType::Variant { name, .. },
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                },
                 TirPattern::Variant {
                     variant_name: case_name,
                     ..
                 },
             ) => {
+                let qualified_name = module_source.qualify_name(name);
                 let variant_types = &self.variant_types;
-                let variant_info = variant_types.get(name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {name}");
+                let variant_info = variant_types.get(&qualified_name).unwrap_or_else(|| {
+                    panic!("Variant type not registered: {qualified_name}");
                 });
 
                 let (case_index, case_info) = variant_info
@@ -10401,7 +10571,9 @@ impl Codegen<'_> {
             // Generic instance variant patterns (Result<T,E>, Maybe<T>, etc.)
             (
                 ResolvedType::GenericInstance {
-                    name, type_args, ..
+                    name,
+                    module_source,
+                    type_args,
                 },
                 TirPattern::Variant {
                     variant_name: case_name,
@@ -10414,11 +10586,15 @@ impl Codegen<'_> {
                     .map(|t| _type_table.mangle_type_name(*t))
                     .collect();
                 let mangled_name = mangle_generic_name(name, &type_arg_names);
+                let qualified_mangled_name = module_source.qualify_name(&mangled_name);
 
                 let variant_types = &self.variant_types;
-                let variant_info = variant_types.get(&mangled_name).unwrap_or_else(|| {
-                    panic!("Variant type not registered: {mangled_name}");
-                });
+                let variant_info =
+                    variant_types
+                        .get(&qualified_mangled_name)
+                        .unwrap_or_else(|| {
+                            panic!("Variant type not registered: {qualified_mangled_name}");
+                        });
 
                 let (case_index, case_info) = variant_info
                     .cases
@@ -10542,12 +10718,15 @@ impl Codegen<'_> {
             ) => {
                 if let Some(binding) = bindings.first() {
                     // Build mangled name for Result<ok, err>
+                    // Result is always from core:prelude
+                    let result_module_source = ModuleSource::core("prelude");
                     let ok_name = type_table.mangle_type_name(ok);
                     let err_name = type_table.mangle_type_name(err);
                     let mangled_name = mangle_result_type(&ok_name, &err_name);
+                    let qualified_mangled_name = result_module_source.qualify_name(&mangled_name);
 
                     let variant_types = &self.variant_types;
-                    let variant_info = variant_types.get(&mangled_name).unwrap();
+                    let variant_info = variant_types.get(&qualified_mangled_name).unwrap();
                     let case_index = usize::from(case_name != "Ok");
                     let case_info = variant_info.cases[case_index].clone();
                     let case_type_idx = case_info.type_idx;
@@ -10575,7 +10754,10 @@ impl Codegen<'_> {
 
             // Non-generic variant patterns
             (
-                ResolvedType::Variant { name, .. },
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                },
                 TirPattern::Variant {
                     variant_name: case_name,
                     bindings,
@@ -10584,8 +10766,9 @@ impl Codegen<'_> {
                 },
             ) => {
                 if let Some(binding) = bindings.first() {
+                    let qualified_name = module_source.qualify_name(&name);
                     let variant_types = &self.variant_types;
-                    let variant_info = variant_types.get(&name).unwrap();
+                    let variant_info = variant_types.get(&qualified_name).unwrap();
                     let case_info = variant_info
                         .cases
                         .iter()
@@ -10618,7 +10801,9 @@ impl Codegen<'_> {
             // Generic instance variant patterns (Result<T,E>, Maybe<T>, etc.)
             (
                 ResolvedType::GenericInstance {
-                    name, type_args, ..
+                    name,
+                    module_source,
+                    type_args,
                 },
                 TirPattern::Variant {
                     variant_name: case_name,
@@ -10634,9 +10819,10 @@ impl Codegen<'_> {
                         .map(|t| type_table.mangle_type_name(*t))
                         .collect();
                     let mangled_name = mangle_generic_name(&name, &type_arg_names);
+                    let qualified_mangled_name = module_source.qualify_name(&mangled_name);
 
                     let variant_types = &self.variant_types;
-                    let variant_info = variant_types.get(&mangled_name).unwrap();
+                    let variant_info = variant_types.get(&qualified_mangled_name).unwrap();
                     let case_info = variant_info
                         .cases
                         .iter()
@@ -11840,10 +12026,14 @@ impl Codegen<'_> {
                         }
                     }
                 }
-                ResolvedType::Variant { name, .. } => {
+                ResolvedType::Variant {
+                    name,
+                    module_source,
+                } => {
                     // Variants need a copy local for the variant struct
+                    let qualified_name = module_source.qualify_name(name);
                     let variant_types = &self.variant_types;
-                    if let Some(info) = variant_types.get(name) {
+                    if let Some(info) = variant_types.get(&qualified_name) {
                         let base_type_idx = info.base_type_idx;
                         let local_idx = ctx.alloc_local(
                             &format!("__copy_source_{base_type_idx}"),
