@@ -496,6 +496,20 @@ pub struct Resolver<'a> {
     current_module_globals: HashMap<String, (TypeId, bool)>,
     /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
     imported_globals: HashMap<String, (ModuleSource, String, TypeId, bool)>,
+    /// Cache of per-module type maps for cross-module type resolution.
+    /// Built lazily on first access per module. Avoids rebuilding `build_module_map`
+    /// on every imported method call or field access.
+    module_type_maps_cache: HashMap<ModuleSource, ModuleTypeMaps>,
+}
+
+/// Cached per-module type maps for cross-module type resolution.
+/// These are the five flat maps that `build_module_map` produces.
+struct ModuleTypeMaps {
+    struct_fields: HashMap<String, StructFieldInfo>,
+    variant_cases: HashMap<String, VariantInfo>,
+    enum_cases: HashMap<String, EnumInfo>,
+    type_aliases: HashMap<String, TypeId>,
+    resource_types: HashMap<String, ResourceInfo>,
 }
 
 /// Info about an Index trait implementation
@@ -594,6 +608,7 @@ impl<'a> Resolver<'a> {
             builtin_registry,
             current_module_globals: HashMap::new(),
             imported_globals: HashMap::new(),
+            module_type_maps_cache: HashMap::new(),
         }
     }
 
@@ -1165,6 +1180,7 @@ impl<'a> Resolver<'a> {
                 builtin_registry,
                 current_module_globals: HashMap::new(),
                 imported_globals: HashMap::new(),
+                module_type_maps_cache: HashMap::new(),
             };
 
             match resolver.resolve_module(module, module_source.clone()) {
@@ -1251,6 +1267,57 @@ impl<'a> Resolver<'a> {
             }
         }
         (sources, original_names)
+    }
+
+    /// Lazily build and cache per-module type maps for cross-module type resolution.
+    ///
+    /// Must be called before borrowing `loaded_modules` for the same module,
+    /// so the cache is populated without borrow conflicts. After calling this,
+    /// use `self.module_type_maps_cache.remove(module_source)` to get the cached
+    /// maps and swap them into the resolver's active maps.
+    fn ensure_module_maps_cached(&mut self, module_source: &ModuleSource) {
+        if self.module_type_maps_cache.contains_key(module_source) {
+            return;
+        }
+        let Some(module) = self.loaded_modules.get(module_source) else {
+            return;
+        };
+        let (imported_sources, import_names) =
+            Self::build_imported_type_sources(module, module_source);
+        let maps = ModuleTypeMaps {
+            struct_fields: Self::build_module_map(
+                &self.all_struct_fields,
+                module_source,
+                &imported_sources,
+                &import_names,
+            ),
+            variant_cases: Self::build_module_map(
+                &self.all_variant_cases,
+                module_source,
+                &imported_sources,
+                &import_names,
+            ),
+            enum_cases: Self::build_module_map(
+                &self.all_enum_cases,
+                module_source,
+                &imported_sources,
+                &import_names,
+            ),
+            type_aliases: Self::build_module_map(
+                &self.all_type_aliases,
+                module_source,
+                &imported_sources,
+                &import_names,
+            ),
+            resource_types: Self::build_module_map(
+                &self.all_resource_types,
+                module_source,
+                &imported_sources,
+                &import_names,
+            ),
+        };
+        self.module_type_maps_cache
+            .insert(module_source.clone(), maps);
     }
 
     /// Topologically sort modules based on struct field type dependencies.
@@ -6502,72 +6569,124 @@ impl<'a> Resolver<'a> {
 
         // Try looking up in loaded modules (for imported structs)
         // Only check inherent impls (not trait impls) - trait impls are handled separately
-        if let Some(ref module_source) = struct_module_source
-            && let Some(module) = self.loaded_modules.get(module_source)
-        {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item {
-                    // Skip trait impls - only look at inherent impls
-                    if impl_block.trait_type.is_some() {
-                        continue;
-                    }
-                    let impl_struct_name = self.get_type_name(&impl_block.ty);
-                    if impl_struct_name == struct_name {
-                        for method in &impl_block.methods {
-                            if method.name == method_name {
-                                // Set up type params for generic impls (e.g., impl Array<T>)
-                                let old_type_params = std::mem::take(&mut self.current_type_params);
-                                let mut impl_offset = 0u32;
-                                if let Some(ref type_args) = receiver_type_args
-                                    && let Type::Generic(generic) = &impl_block.ty
-                                {
-                                    impl_offset = type_args.len() as u32;
-                                    for (i, arg) in generic.args.iter().enumerate() {
-                                        if let Type::Named(named) = arg
-                                            && i < type_args.len()
-                                        {
-                                            self.current_type_params.insert(
-                                                named.name.clone(),
-                                                (i as u32, type_args[i]),
-                                            );
+        if let Some(ref module_source) = struct_module_source {
+            // Pre-populate module type maps cache before borrowing loaded_modules
+            self.ensure_module_maps_cached(module_source);
+            if let Some(module) = self.loaded_modules.get(module_source) {
+                for item in &module.items {
+                    if let Item::Impl(impl_block) = item {
+                        // Skip trait impls - only look at inherent impls
+                        if impl_block.trait_type.is_some() {
+                            continue;
+                        }
+                        let impl_struct_name = self.get_type_name(&impl_block.ty);
+                        if impl_struct_name == struct_name {
+                            for method in &impl_block.methods {
+                                if method.name == method_name {
+                                    // Set up type params for generic impls (e.g., impl Array<T>)
+                                    let old_type_params =
+                                        std::mem::take(&mut self.current_type_params);
+                                    let mut impl_offset = 0u32;
+                                    if let Some(ref type_args) = receiver_type_args
+                                        && let Type::Generic(generic) = &impl_block.ty
+                                    {
+                                        impl_offset = type_args.len() as u32;
+                                        for (i, arg) in generic.args.iter().enumerate() {
+                                            if let Type::Named(named) = arg
+                                                && i < type_args.len()
+                                            {
+                                                self.current_type_params.insert(
+                                                    named.name.clone(),
+                                                    (i as u32, type_args[i]),
+                                                );
+                                            }
                                         }
                                     }
-                                }
 
-                                // Set up method-level type params (e.g., Acc in fold<Acc>)
-                                // These get TypeParam types that will be substituted at call sites
-                                for (i, type_param) in method.type_params.iter().enumerate() {
-                                    let index = impl_offset + i as u32;
-                                    let type_param_id = self.type_table.borrow_mut().intern(
-                                        ResolvedType::TypeParam {
-                                            name: type_param.name.clone(),
-                                            index,
-                                        },
+                                    // Set up method-level type params (e.g., Acc in fold<Acc>)
+                                    // These get TypeParam types that will be substituted at call sites
+                                    for (i, type_param) in method.type_params.iter().enumerate() {
+                                        let index = impl_offset + i as u32;
+                                        let type_param_id = self.type_table.borrow_mut().intern(
+                                            ResolvedType::TypeParam {
+                                                name: type_param.name.clone(),
+                                                index,
+                                            },
+                                        );
+                                        self.current_type_params.insert(
+                                            type_param.name.clone(),
+                                            (index, type_param_id),
+                                        );
+                                    }
+
+                                    // Resolve return type and param types in the source module's
+                                    // type context, not the caller's. This prevents same-named types
+                                    // from different modules being confused (e.g., both modules
+                                    // define "Config" with different fields).
+                                    // Use cached module type maps (O(1) swap) instead of
+                                    // rebuilding maps from scratch on every call.
+                                    let mut cached = self
+                                        .module_type_maps_cache
+                                        .remove(module_source)
+                                        .expect("cache populated by ensure_module_maps_cached");
+                                    std::mem::swap(
+                                        &mut self.struct_fields,
+                                        &mut cached.struct_fields,
                                     );
-                                    self.current_type_params
-                                        .insert(type_param.name.clone(), (index, type_param_id));
+                                    std::mem::swap(
+                                        &mut self.variant_cases,
+                                        &mut cached.variant_cases,
+                                    );
+                                    std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+                                    std::mem::swap(
+                                        &mut self.type_aliases,
+                                        &mut cached.type_aliases,
+                                    );
+                                    std::mem::swap(
+                                        &mut self.resource_types,
+                                        &mut cached.resource_types,
+                                    );
+
+                                    let return_type = method
+                                        .return_type
+                                        .as_ref()
+                                        .map(|t| self.resolve_type(t))
+                                        .unwrap_or(TypeTable::UNIT);
+                                    let self_kind = method
+                                        .params
+                                        .first()
+                                        .map(|p| p.self_kind)
+                                        .unwrap_or(ast::SelfKind::None);
+                                    let param_types = self.extract_param_types(&method.params);
+
+                                    std::mem::swap(
+                                        &mut self.struct_fields,
+                                        &mut cached.struct_fields,
+                                    );
+                                    std::mem::swap(
+                                        &mut self.variant_cases,
+                                        &mut cached.variant_cases,
+                                    );
+                                    std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+                                    std::mem::swap(
+                                        &mut self.type_aliases,
+                                        &mut cached.type_aliases,
+                                    );
+                                    std::mem::swap(
+                                        &mut self.resource_types,
+                                        &mut cached.resource_types,
+                                    );
+                                    self.module_type_maps_cache
+                                        .insert(module_source.clone(), cached);
+                                    self.current_type_params = old_type_params;
+
+                                    return Some(MethodInfo {
+                                        return_type,
+                                        self_kind,
+                                        param_types,
+                                        inherited_from_base: None,
+                                    });
                                 }
-
-                                let return_type = method
-                                    .return_type
-                                    .as_ref()
-                                    .map(|t| self.resolve_type(t))
-                                    .unwrap_or(TypeTable::UNIT);
-                                let self_kind = method
-                                    .params
-                                    .first()
-                                    .map(|p| p.self_kind)
-                                    .unwrap_or(ast::SelfKind::None);
-                                let param_types = self.extract_param_types(&method.params);
-
-                                self.current_type_params = old_type_params;
-
-                                return Some(MethodInfo {
-                                    return_type,
-                                    self_kind,
-                                    param_types,
-                                    inherited_from_base: None,
-                                });
                             }
                         }
                     }
@@ -8187,11 +8306,27 @@ impl<'a> Resolver<'a> {
         let resolved = self.type_table.borrow().get(struct_type).clone();
         match resolved {
             // Struct field access
-            ResolvedType::Struct { name, .. } => {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => {
+                // Use the flat struct_fields map first. When there's a name collision
+                // (the entry is from a different module), re-resolve fields from the
+                // source module to get the correct struct definition.
                 if let Some(struct_info) = self.struct_fields.get(&name) {
-                    for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
-                        if fname == field_name {
-                            return (index as u32, *ftype);
+                    if struct_info.module_source == module_source {
+                        for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
+                            if fname == field_name {
+                                return (index as u32, *ftype);
+                            }
+                        }
+                    } else {
+                        // Name collision: re-resolve field type from the loaded module
+                        if let Some(ftype) =
+                            self.resolve_field_in_source_module(&name, field_name, &module_source)
+                        {
+                            return ftype;
                         }
                     }
                 }
@@ -8232,6 +8367,62 @@ impl<'a> Resolver<'a> {
             _ => {}
         }
         (0, TypeTable::UNKNOWN)
+    }
+
+    /// Resolve a struct field type from the source module where the struct is defined.
+    /// Used when the flat `struct_fields` map has a name collision (two modules define
+    /// a struct with the same name). This re-resolves the field type in the source
+    /// module's type context to get the correct result.
+    fn resolve_field_in_source_module(
+        &mut self,
+        struct_name: &str,
+        field_name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<(u32, TypeId)> {
+        // Pre-populate module type maps cache before borrowing loaded_modules
+        self.ensure_module_maps_cached(module_source);
+
+        let loaded_module = self.loaded_modules.get(module_source)?;
+        // Find the struct declaration in the loaded module
+        let struct_decl = loaded_module.items.iter().find_map(|item| {
+            if let Item::Struct(s) = item
+                && s.name == struct_name
+            {
+                Some(s)
+            } else {
+                None
+            }
+        })?;
+
+        // Swap to source module's type context using cached maps (O(1))
+        let mut cached = self
+            .module_type_maps_cache
+            .remove(module_source)
+            .expect("cache populated by ensure_module_maps_cached");
+        std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
+        std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
+        std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+        std::mem::swap(&mut self.type_aliases, &mut cached.type_aliases);
+        std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
+
+        // Find and resolve the field type
+        let result = struct_decl
+            .fields
+            .iter()
+            .enumerate()
+            .find(|(_, f)| f.name == field_name)
+            .map(|(index, f)| (index as u32, self.resolve_type(&f.ty)));
+
+        // Restore type maps and re-cache
+        std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
+        std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
+        std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+        std::mem::swap(&mut self.type_aliases, &mut cached.type_aliases);
+        std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
+        self.module_type_maps_cache
+            .insert(module_source.clone(), cached);
+
+        result
     }
 
     /// Substitute type parameters in a type with concrete type arguments
