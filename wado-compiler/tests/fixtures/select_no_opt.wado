@@ -1,0 +1,27 @@
+use { println, Stdout } from "core:cli";
+
+fn side_effect(x: i32) -> i32 with Stdout {
+    println(`called with {x}`);
+    return x;
+}
+
+export fn run() with Stdout {
+    // Should NOT be optimized to select: branches have side effects (function calls)
+    let a = 10;
+    let result = if a > 5 {
+        side_effect(1)
+    } else {
+        side_effect(2)
+    };
+    println(`{result}`);
+
+    // Should NOT be optimized: no else branch
+    let mut val = 0;
+    if a > 5 {
+        val = 42;
+    }
+    println(`{val}`);
+}
+
+__DATA__
+{"stdout": "called with 1\n1\n42\n"}

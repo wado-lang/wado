@@ -1,0 +1,26 @@
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Basic select: local variables
+    let a = 10;
+    let b = 20;
+    let max = if a > b { a } else { b };
+    println(`{max}`);
+
+    // Select with literals
+    let x = if true { 42 } else { 0 };
+    println(`{x}`);
+
+    // Select with false condition
+    let y = if false { 100 } else { 200 };
+    println(`{y}`);
+
+    // Select with comparison
+    let c = 5;
+    let d = 3;
+    let min = if c < d { c } else { d };
+    println(`{min}`);
+}
+
+__DATA__
+{"stdout": "20\n42\n200\n3\n"}
