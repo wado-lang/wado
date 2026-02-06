@@ -87,6 +87,7 @@ pub mod lower;
 pub mod monomorphize;
 pub mod name;
 pub mod optimize;
+pub mod optimize_const_fold;
 pub mod optimize_copy_prop;
 pub mod optimize_dce;
 pub mod optimize_inline;
