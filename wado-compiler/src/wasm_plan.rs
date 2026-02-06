@@ -1,8 +1,8 @@
-//! Wasm Adapt Phase - Prepares TIR for WebAssembly Component Model code generation
+//! Wasm Plan Phase - Prepares TIR for WebAssembly code generation
 //!
 //! This phase runs between optimize and codegen:
 //! ```text
-//! lower -> optimize -> wasm_adapt -> codegen
+//! lower -> optimize -> wasm_plan -> codegen
 //! ```
 //!
 //! Responsibilities:
@@ -16,8 +16,8 @@
 //!   don't map cleanly to TIR, so we use metadata to tell codegen what to generate
 //! - Keep codegen simple: codegen should just convert TIR to Wasm without
 //!   needing to analyze world definitions or export signatures
-//! - Centralize CM analysis: All CM-related type analysis should be in this module
-//!   to avoid duplication between optimize and codegen phases
+//! - Centralize Wasm-related analysis: All pre-codegen analysis should be in this
+//!   module to avoid duplication between optimize and codegen phases
 
 use crate::ast::Type;
 use crate::project::Project;
@@ -231,13 +231,13 @@ impl CmConverterRequirements {
     }
 }
 
-/// Run the `wasm_adapt` phase on a Project
+/// Run the `wasm_plan` phase on a Project
 ///
 /// This analyzes world exports and attaches `CmExportInfo` to the corresponding
 /// `TirFunctions`. The Project is modified in place.
 ///
 /// Returns an error if a required world export function is missing or not marked with `export`.
-pub fn wasm_adapt(mut project: Project) -> Result<Project, String> {
+pub fn wasm_plan(mut project: Project) -> Result<Project, String> {
     // Look up the target world from the registry in Project
     let world_info = project.world_registry.get(&project.target_world).cloned();
 

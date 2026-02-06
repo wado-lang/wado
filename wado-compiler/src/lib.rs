@@ -102,8 +102,8 @@ pub mod syntax;
 pub mod tir;
 pub mod token;
 pub mod unparse;
-pub mod wasm_adapt;
 pub mod wasm_builder;
+pub mod wasm_plan;
 pub mod wasm_postprocess;
 pub mod world_registry;
 
@@ -128,7 +128,7 @@ pub use parser::{ParseError, Parser};
 pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
-pub use wasm_adapt::wasm_adapt;
+pub use wasm_plan::wasm_plan;
 
 use indexmap::IndexMap;
 
@@ -376,8 +376,8 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 10: Optimize (Project -> Project) ===
     let project = optimize(project, options.opt_level);
 
-    // === Phase 11: Wasm Adapt (Project -> Project) ===
-    let project = wasm_adapt(project).map_err(|message| CompileError::Analyzer {
+    // === Phase 11: Wasm Plan (Project -> Project) ===
+    let project = wasm_plan(project).map_err(|message| CompileError::Analyzer {
         message,
         filename: filename.clone(),
     })?;
@@ -551,7 +551,7 @@ pub async fn dump_with_host<H: CompilerHost>(
                 builtin_registry,
             );
             let project = optimize(project, opt_level);
-            wasm_adapt(project).ok()
+            wasm_plan(project).ok()
         })
         .flatten();
 

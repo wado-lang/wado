@@ -7,7 +7,7 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Monomorphize → Lower → Optimize → Wasm Adapt → Codegen
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Monomorphize → Lower → Optimize → Wasm Plan → Codegen
 ```
 
 ### Compilation Pipeline
@@ -24,7 +24,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
 | Optimize     | Project       | Project         | DCE, usage analysis, feature flags                        |
-| Wasm Adapt   | Project       | Project         | CM boundary analysis, attach `CmExportInfo` to exports    |
+| Wasm Plan    | Project       | Project         | Wasm pre-codegen planning, CM boundary analysis           |
 | Codegen      | Project       | Wasm bytes      | Generate Component Model Wasm                             |
 
 **Note:** The Desugar phase is integrated into the Load phase. Each module goes through the same frontend pipeline: `lexer → parser → bind → desugar`.
@@ -59,7 +59,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | OptimizeCopyProp | `optimize_copy_prop.rs` | Copy propagation for trivial bindings                 |
 | OptimizeLICM     | `optimize_licm.rs`      | Loop-invariant code motion                            |
 | OptimizeMove     | `optimize_move.rs`      | Move insertion for fresh values, copy type collection |
-| WasmAdapt        | `wasm_adapt.rs`         | CM boundary analysis, `CmExportInfo` attachment       |
+| WasmPlan         | `wasm_plan.rs`          | Wasm pre-codegen planning, CM boundary analysis       |
 | Stdlib           | `stdlib.rs`             | Embedded core library sources                         |
 | WasiRegistry     | `wasi_registry.rs`      | WASI import registry, WASI type resolution            |
 | BuiltinRegistry  | `builtin_registry.rs`   | Builtin function registry from `core:builtin`         |

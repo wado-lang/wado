@@ -24,8 +24,8 @@ use crate::tir::{
     TirImport, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use crate::wasm_adapt::CmValType;
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
+use crate::wasm_plan::CmValType;
 use crate::wasm_postprocess;
 use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
@@ -10984,11 +10984,11 @@ impl Codegen<'_> {
         // Create function context
         let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
 
-        // Set async export flags from CmExportInfo (computed by wasm_adapt phase)
+        // Set async export flags from CmExportInfo (computed by wasm_plan phase)
         let cm_info = tir_func
             .cm_export_info
             .as_ref()
-            .expect("world export should have CmExportInfo from wasm_adapt phase");
+            .expect("world export should have CmExportInfo from wasm_plan phase");
         func_ctx.is_async_export = cm_info.is_async;
         func_ctx.has_http_handler_export = cm_info.is_http_handler;
 
@@ -11038,7 +11038,7 @@ impl Codegen<'_> {
 
         self.allocate_precomputed_scratch_locals(tir_func, type_table, &mut func_ctx);
 
-        // Pre-allocate CM scratch locals from wasm_adapt phase
+        // Pre-allocate CM scratch locals from wasm_plan phase
         for scratch_local in &cm_info.scratch_locals {
             let val_type = cm_valtype_to_valtype(scratch_local.val_type);
             func_ctx.alloc_local(&scratch_local.name, val_type);
@@ -12260,7 +12260,7 @@ fn primitive_to_valtype(prim: &PrimitiveType) -> ValType {
     }
 }
 
-/// Convert a `CmValType` (from `wasm_adapt` phase) to Wasm `ValType`.
+/// Convert a `CmValType` (from `wasm_plan` phase) to Wasm `ValType`.
 fn cm_valtype_to_valtype(cm_type: CmValType) -> ValType {
     match cm_type {
         CmValType::I32 => ValType::I32,

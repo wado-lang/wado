@@ -19,7 +19,7 @@ use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule,
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::wasm_adapt::{CmConverterKind, CmConverterRequirements};
+use crate::wasm_plan::{CmConverterKind, CmConverterRequirements};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
@@ -115,7 +115,7 @@ pub fn analyze_project(project: &mut Project) {
     // Add CM converter functions based on WASI function return types
     // These conversion functions are called from codegen, not Wado code
     // We need to compute transitive closure to include all functions they call
-    // Analysis is centralized in wasm_adapt::CmConverterRequirements
+    // Analysis is centralized in wasm_plan::CmConverterRequirements
     let mut cm_requirements = CmConverterRequirements::default();
 
     for func_name in &used_wasi_functions {

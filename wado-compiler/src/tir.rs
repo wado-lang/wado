@@ -18,7 +18,7 @@ use indexmap::IndexMap;
 use crate::component_model::CmCallConvention;
 use crate::name::{LocalMethodName, ModuleSource, TypeNameInfo, format_type_name};
 use crate::token::Span;
-use crate::wasm_adapt::CmExportInfo;
+use crate::wasm_plan::CmExportInfo;
 
 // ============================================================================
 // Type Parameter Substitution System
@@ -1667,9 +1667,9 @@ pub struct TirFunction {
     pub let_pattern_types: Vec<TypeId>,
 
     // ========================================================================
-    // CM export metadata (computed by wasm_adapt phase)
+    // CM export metadata (computed by wasm_plan phase)
     // ========================================================================
-    /// Component Model export info (set by `wasm_adapt` phase for world exports).
+    /// Component Model export info (set by `wasm_plan` phase for world exports).
     /// Contains async flag, HTTP handler flag, and required CM imports.
     pub cm_export_info: Option<CmExportInfo>,
 }
