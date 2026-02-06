@@ -11,167 +11,100 @@ The compiler's principle states: "codegen.rs emits the Project as is, which does
 
 ## Decision
 
-Move analysis out of codegen into `wasm_plan`. The `wasm_plan` phase analyzes the Project and produces a `WasmPlan` — everything codegen needs to know about Wasm-specific concerns. Codegen consumes the `WasmPlan` and mechanically translates to Wasm bytes.
+Incrementally move analysis out of codegen into `wasm_plan`. The `wasm_plan` phase analyzes the Project and attaches metadata and plans that codegen consumes.
 
 ```
 lower → optimize → wasm_plan → codegen
                        ↓
-                   WasmPlan {
-                       types: TypePlan,
-                       component: ComponentPlan,
-                       exports: Vec<CmExportInfo>,
+                   Project {
+                       component_plan: ComponentPlan,
+                       // CmExportInfo attached to TirFunctions
                    }
 ```
 
-### What Moves to wasm_plan
-
-#### TypePlan
-
-Currently in codegen's `build_main_module()`: 6+ phases of type registration with interleaved scanning and encoding. The scanning part moves to wasm_plan.
-
-```rust
-/// Plan for all Wasm GC type definitions in the core module.
-pub struct TypePlan {
-    /// Type declarations in topological order (ready for sequential registration).
-    pub type_order: Vec<TypeDeclPlan>,
-    /// Primitive box types needed (e.g., box_i32 for &i32).
-    pub box_primitives: HashSet<PrimitiveType>,
-    /// Array element types needed.
-    pub array_element_types: Vec<ArrayElementPlan>,
-    /// Canonical closure signatures needed.
-    pub closure_signatures: Vec<ClosureSignaturePlan>,
-    /// Tuple signatures needed (element TypeId lists).
-    pub tuple_signatures: Vec<Vec<TypeId>>,
-}
-
-/// A single type declaration to register, in dependency order.
-pub enum TypeDeclPlan {
-    /// Normal struct — register fields in order.
-    Struct {
-        name: StructName,
-        source: ModuleSource,
-        is_monomorphized: bool,
-    },
-    /// Self-referential struct — requires a rec group.
-    RecStruct {
-        name: StructName,
-        source: ModuleSource,
-        self_ref_field_types: Vec<TypeId>,
-    },
-    /// Variant — register base type + case subtypes.
-    Variant {
-        name: String,
-        source: ModuleSource,
-    },
-    /// Monomorphized variant (Option<T>, Result<T,E>, custom).
-    MonoVariant {
-        mangled_name: String,
-        base_variant: String,
-        type_args: Vec<TypeId>,
-    },
-    /// Alias — point to an already-registered type under a different name.
-    StructAlias {
-        alias_name: StructName,
-        target_name: StructName,
-    },
-    VariantAlias {
-        alias_name: String,
-        target_name: String,
-    },
-}
-```
-
-Analysis that moves:
-
-- Topological sort (`sort_types_topologically`)
-- Dependency analysis (`get_type_dependencies`)
-- Self-referential detection (`get_self_referential_field_types`)
-- Type table scanning (each phase's "which types are needed" logic)
-- Monomorphized variant collection
-- Array/tuple/closure signature collection
+### What Lives in wasm_plan
 
 #### ComponentPlan
 
-Currently in codegen's `generate_component()`: analysis of WASI registry, world exports, and canonical intrinsics is interleaved with component encoding. The analysis part moves to wasm_plan.
+`ComponentPlan` captures the structural decisions for the Component Model component:
 
-```rust
-/// Plan for the Component Model structure.
-pub struct ComponentPlan {
-    /// WASI interfaces to import, with their supported functions.
-    pub wasi_imports: Vec<WasiImportPlan>,
-    /// Canonical intrinsics needed (stream-new, task-return, etc.).
-    pub canonical_intrinsics: Vec<CanonicalIntrinsicPlan>,
-    /// Bundled module functions to wire through (fts, libm).
-    pub bundled_functions: Vec<String>,
-    /// Whether to include HTTP types and handler export.
-    pub http_handler: Option<HttpHandlerPlan>,
-    /// World exports to create at the component boundary.
-    pub world_exports: Vec<WorldExportPlan>,
-}
+- Canonical intrinsics needed (stream-new, task-return, etc.)
+- Whether future intrinsics are needed
+- Bundled module functions to wire through (fts, libm)
+- World exports to create at the component boundary
+- Test exports to create
 
-pub struct WasiImportPlan {
-    pub interface_path: String,
-    pub functions: Vec<String>,
-}
+Codegen reads `ComponentPlan` instead of scanning TIR imports and querying the world registry directly.
 
-pub struct WorldExportPlan {
-    pub export_name: String,
-    pub core_function_name: String,
-    pub is_async: bool,
-}
-```
+#### CmExportInfo
 
-Analysis that moves:
+Already computed by `wasm_plan` and attached to `TirFunction`. Tells codegen how to generate CM glue code for world exports (scratch locals, required imports, async flag).
 
-- WASI import filtering (DCE + `has_effect()` checks)
-- Canonical intrinsic discovery (scanning TIR imports)
-- Bundled module requirements
-- World export mapping
+#### CM Converter Analysis
 
-#### CmExportInfo (existing)
+`CmConverterRequirements` centralizes analysis of which CM converters are needed for WASI function return types. Used by both optimize (DCE) and codegen.
 
-Already computed by `wasm_plan` and attached to `TirFunction`. No changes needed.
+#### Type Ordering Analysis
+
+Pure analysis functions for type registration ordering:
+
+- `sort_types_topologically` — Kahn's algorithm topological sort of structs and variants
+- `get_type_dependencies` — Extract type dependencies for a given TypeId
+- `get_self_referential_field_types` — Detect self-referential struct cycles
+- `type_references_struct` — Check if a type transitively references a struct
+
+These are pure functions that don't depend on codegen state. Codegen delegates to them for ordering decisions.
 
 ### What Stays in Codegen
 
-- Type encoding: iterating `TypePlan` and calling `CoreModuleBuilder` (`define_gc_struct_type`, `define_rec_group`, etc.)
-- Component encoding: iterating `ComponentPlan` and calling `ComponentBuilder`
-- Instruction emission: `generate_expr()`, `generate_function()`, etc.
-- Index management: `CoreModuleBuilder` and `ComponentModelContext` state
+#### Type Registration
+
+The type registration logic (15+ phases in `build_main_module`) stays in codegen because it is tightly coupled to codegen's index management state (`struct_types`, `array_types`, `tuple_types`, etc.). The "skip if not yet registered" checks depend on knowing what Wasm types have been allocated so far, which is encoding state.
+
+Moving this to wasm_plan would require duplicating codegen's state tracking (shadow `HashSet<StructName>` etc.), creating a maintenance burden without improving separation of concerns.
+
+Codegen calls the pure analysis functions from wasm_plan for ordering decisions (topo sort, self-ref detection) but manages the registration phases itself.
+
+#### Component Encoding
+
+Codegen reads `ComponentPlan` and mechanically encodes the component structure using `ComponentBuilder`. WASI import generation, function lowering, and type definitions remain in codegen as they are pure encoding.
+
+#### Instruction Emission
+
+`generate_expr()`, `generate_function()`, etc. remain in codegen.
 
 ### Design Principles
 
 #### wasm_plan answers "what", codegen answers "how"
 
-- wasm_plan: "We need struct `Point` with fields `[i32, i32]`, before `Line` which depends on it"
-- codegen: Allocates type index 5, emits `define_gc_struct_type("Point", [I32, I32])`, records in `struct_types`
+- wasm_plan: "The component needs these canonical intrinsics and world exports"
+- codegen: Allocates indices, calls `ComponentBuilder` APIs, emits the binary
 
-#### wasm_plan reads Project, codegen reads WasmPlan + TIR
+#### Pure analysis functions live in wasm_plan
 
-- wasm_plan queries: `TypeTable`, `WasiRegistry`, `WorldRegistry`, `Project.has_effect()`, `Project.used_box_primitives`
-- codegen queries: `WasmPlan` (for structure decisions) + `TirModule` (for function bodies)
+- Functions that don't need codegen state (topo sort, dependency analysis) live in wasm_plan
+- Functions that need codegen state (type registration, index allocation) stay in codegen
 
 ### Migration Path
 
 - [x] Move scratch local analysis to wasm_plan (`CmExportInfo`)
 - [x] Centralize CM converter analysis (`CmConverterRequirements`)
-- [ ] Extract type ordering into `TypePlan`
-- [ ] Extract component structure analysis into `ComponentPlan`
-- [ ] Remove analysis code from codegen (codegen reads WasmPlan only)
+- [x] Extract component structure analysis into `ComponentPlan`
+- [x] Move pure type ordering functions to wasm_plan (`sort_types_topologically`, `get_type_dependencies`, `get_self_referential_field_types`)
 
 ## Consequences
 
 ### Benefits
 
-- codegen becomes a pure encoder — easier to understand and modify
-- wasm_plan captures all Wasm-specific decisions — testable independently
+- Component structure decisions are centralized in `ComponentPlan` — codegen reads the plan
+- Type ordering analysis is testable independently as pure functions
 - New Wasm features (threads, SIMD, stack switching) fit naturally into planning
 
 ### Trade-offs
 
-- Two-pass approach (plan then encode) for type registration, vs current single-pass
-  - Acceptable: planning pass is lightweight analysis; encoding is the expensive part
-- `WasmPlan` structs add data structures
-  - Acceptable: they replace implicit knowledge scattered across codegen methods
+- Type registration phases stay in codegen due to tight coupling with index management
+  - This is acceptable: the ordering logic is delegated to wasm_plan; only the registration mechanics stay
+- `ComponentPlan` adds data structures
+  - Acceptable: they replace implicit knowledge scattered across `generate_component` methods
 - Index allocation stays in codegen (cannot be pre-planned without duplicating `wasm_encoder` state)
   - This is fine: indices are an encoding detail, not a planning concern

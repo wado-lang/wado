@@ -59,7 +59,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | OptimizeCopyProp | `optimize_copy_prop.rs` | Copy propagation for trivial bindings                 |
 | OptimizeLICM     | `optimize_licm.rs`      | Loop-invariant code motion                            |
 | OptimizeMove     | `optimize_move.rs`      | Move insertion for fresh values, copy type collection |
-| WasmPlan         | `wasm_plan.rs`          | Wasm pre-codegen planning, CM boundary analysis       |
+| WasmPlan         | `wasm_plan.rs`          | CM boundary analysis, ComponentPlan, type ordering    |
 | Stdlib           | `stdlib.rs`             | Embedded core library sources                         |
 | WasiRegistry     | `wasi_registry.rs`      | WASI import registry, WASI type resolution            |
 | BuiltinRegistry  | `builtin_registry.rs`   | Builtin function registry from `core:builtin`         |
