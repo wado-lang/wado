@@ -32,11 +32,10 @@ lower → optimize → wasm_plan → codegen
 ### File Organization
 
 ```
-codegen/
-  mod.rs          Codegen struct, generate_wasm(), build_main_module() orchestration
-  types.rs        Type registration methods, type_id_to_valtype()
-  component.rs    generate_component(), WASI imports, canonical intrinsics, module wiring
-  expr.rs         generate_expr(), generate_stmt(), expression-level code generation
+codegen.rs            Codegen struct, generate_wasm(), build_main_module() orchestration
+codegen_types.rs      Type registration methods, type_id_to_valtype()
+codegen_component.rs  generate_component(), WASI imports, canonical intrinsics, module wiring
+codegen_expr.rs       generate_expr(), generate_stmt(), expression-level code generation
 ```
 
 ### WasmPlan
@@ -170,7 +169,7 @@ Not everything needs to move at once. Each piece can be migrated independently:
 
 - [x] Move scratch local analysis to wasm_plan (`CmExportInfo`)
 - [x] Centralize CM converter analysis (`CmConverterRequirements`)
-- [ ] Split `codegen.rs` into `codegen/` submodules (file organization only, no logic changes)
+- [ ] Split `codegen.rs` into `codegen_*.rs` files (file organization only, no logic changes)
 - [ ] Extract type ordering into `TypePlan` (topological sort, dependency analysis, rec group detection)
 - [ ] Extract WASI import analysis into `ComponentPlan`
 - [ ] Extract world export analysis into `ComponentPlan`
