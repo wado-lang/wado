@@ -7,58 +7,147 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    let max: i32 = core::builtin::select::<i32>((10 > 20), 10, 20);
-    core::cli::println(move max."i32::to_string"());
-    let x: i32 = core::builtin::select::<i32>(true, 42, 0);
-    core::cli::println(move x."i32::to_string"());
-    let y: i32 = core::builtin::select::<i32>(false, 100, 200);
-    core::cli::println(move y."i32::to_string"());
+    __assert_0: {
+        let __cond: bool = (core::builtin::select::<i32>((10 > 20), 10, 20) == 20);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 7."i32::to_string"()), move "\ncondition: <expr> == 20\n"));
+        }
+    }
+    __assert_1: {
+        let __cond: bool = (core::builtin::select::<i32>((10 < 20), 10, 20) == 10);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 12."i32::to_string"()), move "\ncondition: <expr> == 10\n"));
+        }
+    }
+    __assert_2: {
+        let __cond: bool = (core::builtin::select::<i32>(true, 42, 0) == 42);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 19."i32::to_string"()), move "\ncondition: <expr> == 42\n"));
+        }
+    }
+    __assert_3: {
+        let __cond: bool = (core::builtin::select::<i32>(false, 100, 200) == 200);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 24."i32::to_string"()), move "\ncondition: <expr> == 200\n"));
+        }
+    }
     let a64: i64 = 10 as i64;
     let b64: i64 = 20 as i64;
-    let max64: i64 = core::builtin::select::<i64>((a64 > b64), a64, b64);
-    core::cli::println(move max64."i64::to_string"());
+    __assert_4: {
+        let __cond: bool = (core::builtin::select::<i64>((a64 > b64), a64, b64) == 20 as i64);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 33."i32::to_string"()), move "\ncondition: <expr> == 20 as i64\n"));
+        }
+    }
     let a8: i8 = 10 as i8;
     let b8: i8 = 20 as i8;
-    let min8: i8 = core::builtin::select::<i8>((a8 < b8), a8, b8);
-    core::cli::println(__inline_i8__to_string_0: {
-        break __inline_i8__to_string_0: min8 as i32."i32::to_string"();
-    });
+    __assert_5: {
+        let __cond: bool = (core::builtin::select::<i8>((a8 < b8), a8, b8) == 10 as i8);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 42."i32::to_string"()), move "\ncondition: <expr> == 10 as i8\n"));
+        }
+    }
     let a16: i16 = 10 as i16;
     let b16: i16 = 20 as i16;
-    let min16: i16 = core::builtin::select::<i16>((a16 < b16), a16, b16);
-    core::cli::println(__inline_i16__to_string_1: {
-        break __inline_i16__to_string_1: min16 as i32."i32::to_string"();
-    });
-    let ua: u8 = 10 as u8;
-    let ub: u8 = 20 as u8;
-    let umax: u8 = core::builtin::select::<u8>((ua > ub), ua, ub);
-    core::cli::println(__inline_u8__to_string_2: {
-        break __inline_u8__to_string_2: umax as i32."i32::to_string"();
-    });
+    __assert_6: {
+        let __cond: bool = (core::builtin::select::<i16>((a16 < b16), a16, b16) == 10 as i16);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 51."i32::to_string"()), move "\ncondition: <expr> == 10 as i16\n"));
+        }
+    }
+    let ua8: u8 = 10 as u8;
+    let ub8: u8 = 20 as u8;
+    __assert_7: {
+        let __cond: bool = (core::builtin::select::<u8>((ua8 > ub8), ua8, ub8) == 20 as u8);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 60."i32::to_string"()), move "\ncondition: <expr> == 20 as u8\n"));
+        }
+    }
     let ua16: u16 = 10 as u16;
     let ub16: u16 = 20 as u16;
-    let umax16: u16 = core::builtin::select::<u16>((ua16 > ub16), ua16, ub16);
-    core::cli::println(__inline_u16__to_string_3: {
-        break __inline_u16__to_string_3: umax16 as i32."i32::to_string"();
-    });
+    __assert_8: {
+        let __cond: bool = (core::builtin::select::<u16>((ua16 > ub16), ua16, ub16) == 20 as u16);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 69."i32::to_string"()), move "\ncondition: <expr> == 20 as u16\n"));
+        }
+    }
     let ua32: u32 = 10 as u32;
     let ub32: u32 = 20 as u32;
-    let umax32: u32 = core::builtin::select::<u32>((ua32 > ub32), ua32, ub32);
-    core::cli::println(move umax32."u32::to_string"());
+    __assert_9: {
+        let __cond: bool = (core::builtin::select::<u32>((ua32 > ub32), ua32, ub32) == 20 as u32);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 78."i32::to_string"()), move "\ncondition: <expr> == 20 as u32\n"));
+        }
+    }
     let ua64: u64 = 10 as u64;
     let ub64: u64 = 20 as u64;
-    let umax64: u64 = core::builtin::select::<u64>((ua64 > ub64), ua64, ub64);
-    core::cli::println(move umax64."u64::to_string"());
-    let bsel: bool = core::builtin::select::<bool>(true, true, false);
-    core::cli::println(__inline_bool__to_string_4: {
-        break __inline_bool__to_string_4: if bsel {
-            "true";
+    __assert_10: {
+        let __cond: bool = (core::builtin::select::<u64>((ua64 > ub64), ua64, ub64) == 20 as u64);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 87."i32::to_string"()), move "\ncondition: <expr> == 20 as u64\n"));
+        }
+    }
+    __assert_11: {
+        let __cond: bool = (core::builtin::select::<f64>((3.14 > 2.71), 3.14, 2.71) == 3.14);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 96."i32::to_string"()), move "\ncondition: <expr> == 3.14\n"));
+        }
+    }
+    __assert_12: {
+        let __cond: bool = (core::builtin::select::<f64>(true, 1.5, 2.5) == 1.5);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 101."i32::to_string"()), move "\ncondition: <expr> == 1.5\n"));
+        }
+    }
+    let fa32: f32 = 3.0 as f32;
+    let fb32: f32 = 2.0 as f32;
+    __assert_13: {
+        let __cond: bool = (core::builtin::select::<f32>((fa32 > fb32), fa32, fb32) == 3.0 as f32);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 110."i32::to_string"()), move "\ncondition: <expr> == 3.0 as f32\n"));
+        }
+    }
+    __assert_14: {
+        let __cond: bool = (if false {
+            1.0 as f32;
         } else {
-            "false";
-        };
-    });
+            2.0 as f32;
+        } == 2.0 as f32);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 115."i32::to_string"()), move "\ncondition: <expr> == 2.0 as f32\n"));
+        }
+    }
+    __assert_15: {
+        let __cond: bool = (core::builtin::select::<bool>(true, true, false) == true);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 124."i32::to_string"()), move "\ncondition: <expr> == true\n"));
+        }
+    }
+    __assert_16: {
+        let __cond: bool = (core::builtin::select::<bool>(false, true, false) == false);
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 129."i32::to_string"()), move "\ncondition: <expr> == false\n"));
+        }
+    }
+    __assert_17: {
+        let __cond: bool = (core::builtin::select::<char>(true, 'a', 'z') == 'a');
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 138."i32::to_string"()), move "\ncondition: <expr> == 'a'\n"));
+        }
+    }
+    __assert_18: {
+        let __cond: bool = (core::builtin::select::<char>(false, 'a', 'z') == 'z');
+        if !__cond {
+            core::prelude::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/select_basic.wado"), move ":"), move 143."i32::to_string"()), move "\ncondition: <expr> == 'z'\n"));
+        }
+    }
+    core::cli::println(move "ok");
 }
 

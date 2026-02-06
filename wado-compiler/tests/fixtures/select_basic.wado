@@ -1,68 +1,153 @@
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    // i32 (default integer type)
+    // i32 (default)
     let a = 10;
     let b = 20;
-    let max = if a > b { a } else { b };
-    println(`{max}`);
+    assert if a > b {
+        a;
+    } else {
+        b;
+    } == 20;
+    assert if a < b {
+        a;
+    } else {
+        b;
+    } == 10;
 
     // i32 literals
-    let x = if true { 42 } else { 0 };
-    println(`{x}`);
-
-    // i32 false condition
-    let y = if false { 100 } else { 200 };
-    println(`{y}`);
+    assert if true {
+        42;
+    } else {
+        0;
+    } == 42;
+    assert if false {
+        100;
+    } else {
+        200;
+    } == 200;
 
     // i64
     let a64 = 10 as i64;
     let b64 = 20 as i64;
-    let max64 = if a64 > b64 { a64 } else { b64 };
-    println(`{max64}`);
+    assert if a64 > b64 {
+        a64;
+    } else {
+        b64;
+    } == 20 as i64;
 
     // i8
     let a8 = 10 as i8;
     let b8 = 20 as i8;
-    let min8 = if a8 < b8 { a8 } else { b8 };
-    println(`{min8}`);
+    assert if a8 < b8 {
+        a8;
+    } else {
+        b8;
+    } == 10 as i8;
 
     // i16
     let a16 = 10 as i16;
     let b16 = 20 as i16;
-    let min16 = if a16 < b16 { a16 } else { b16 };
-    println(`{min16}`);
+    assert if a16 < b16 {
+        a16;
+    } else {
+        b16;
+    } == 10 as i16;
 
     // u8
-    let ua = 10 as u8;
-    let ub = 20 as u8;
-    let umax = if ua > ub { ua } else { ub };
-    println(`{umax}`);
+    let ua8 = 10 as u8;
+    let ub8 = 20 as u8;
+    assert if ua8 > ub8 {
+        ua8;
+    } else {
+        ub8;
+    } == 20 as u8;
 
     // u16
     let ua16 = 10 as u16;
     let ub16 = 20 as u16;
-    let umax16 = if ua16 > ub16 { ua16 } else { ub16 };
-    println(`{umax16}`);
+    assert if ua16 > ub16 {
+        ua16;
+    } else {
+        ub16;
+    } == 20 as u16;
 
     // u32
     let ua32 = 10 as u32;
     let ub32 = 20 as u32;
-    let umax32 = if ua32 > ub32 { ua32 } else { ub32 };
-    println(`{umax32}`);
+    assert if ua32 > ub32 {
+        ua32;
+    } else {
+        ub32;
+    } == 20 as u32;
 
     // u64
     let ua64 = 10 as u64;
     let ub64 = 20 as u64;
-    let umax64 = if ua64 > ub64 { ua64 } else { ub64 };
-    println(`{umax64}`);
+    assert if ua64 > ub64 {
+        ua64;
+    } else {
+        ub64;
+    } == 20 as u64;
+
+    // f64
+    let fa = 3.14;
+    let fb = 2.71;
+    assert if fa > fb {
+        fa;
+    } else {
+        fb;
+    } == 3.14;
+    assert if true {
+        1.5;
+    } else {
+        2.5;
+    } == 1.5;
+
+    // f32
+    let fa32 = 3.0 as f32;
+    let fb32 = 2.0 as f32;
+    assert if fa32 > fb32 {
+        fa32;
+    } else {
+        fb32;
+    } == 3.0 as f32;
+    assert if false {
+        1.0 as f32;
+    } else {
+        2.0 as f32;
+    } == 2.0 as f32;
 
     // bool
     let bt = true;
     let bf = false;
-    let bsel = if bt { bt } else { bf };
-    println(`{bsel}`);
+    assert if bt {
+        bt;
+    } else {
+        bf;
+    } == true;
+    assert if bf {
+        bt;
+    } else {
+        bf;
+    } == false;
+
+    // char
+    let ca = 'a';
+    let cb = 'z';
+    assert if true {
+        ca;
+    } else {
+        cb;
+    } == 'a';
+    assert if false {
+        ca;
+    } else {
+        cb;
+    } == 'z';
+
+    println("ok");
 }
 
 __DATA__
-{"stdout": "20\n42\n200\n20\n10\n10\n20\n20\n20\n20\ntrue\n"}
+{"stdout": "ok\n"}
