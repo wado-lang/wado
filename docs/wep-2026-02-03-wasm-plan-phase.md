@@ -2,22 +2,16 @@
 
 ## Context
 
-The `codegen.rs` module (12,000+ lines) currently handles three distinct responsibilities:
+`codegen.rs` (12,000+ lines) mixes two concerns:
 
-1. **Type layout** (~2,000 lines): Deciding what Wasm GC types to define and in what order (topological sort, rec groups, 6+ registration phases)
-2. **Component assembly** (~1,400 lines): Building the Component Model wrapper (WASI imports, canonical intrinsics, module wiring, HTTP types)
-3. **Code generation** (~5,700 lines): Translating TIR expressions and statements to Wasm instructions
+1. **Analysis**: Scanning type tables, querying WASI registries, topological sorting, dependency resolution — deciding _what_ to generate
+2. **Encoding**: Allocating Wasm indices, calling `wasm_encoder` APIs, emitting instructions — _how_ to generate it
 
-The compiler's principle states: "codegen.rs emits the Project as is, which does not have the knowledge of the previous phases." But in practice, codegen performs significant analysis work — scanning type tables, querying WASI registries, resolving dependencies — before it can emit anything.
+The compiler's principle states: "codegen.rs emits the Project as is, which does not have the knowledge of the previous phases." But in practice, codegen performs significant analysis before it can emit anything.
 
 ## Decision
 
-### Goal
-
-Split responsibilities so that:
-
-- `wasm_plan` analyzes the Project and produces a `WasmPlan` — everything codegen needs to know about Wasm-specific concerns
-- `codegen` consumes the `WasmPlan` and mechanically translates to Wasm bytes — no analysis, just encoding
+Move analysis out of codegen into `wasm_plan`. The `wasm_plan` phase analyzes the Project and produces a `WasmPlan` — everything codegen needs to know about Wasm-specific concerns. Codegen consumes the `WasmPlan` and mechanically translates to Wasm bytes.
 
 ```
 lower → optimize → wasm_plan → codegen
@@ -29,24 +23,11 @@ lower → optimize → wasm_plan → codegen
                    }
 ```
 
-### File Organization
-
-```
-wasm_plan.rs          WasmPlan production (TypePlan, ComponentPlan, CmExportInfo)
-codegen.rs            Orchestration, type encoding (execute TypePlan → CoreModuleBuilder)
-codegen_component.rs  Component encoding (execute ComponentPlan → ComponentBuilder)
-codegen_expr.rs       generate_expr(), generate_stmt(), expression-level code generation
-```
-
-Analysis (scanning TypeTable, querying WasiRegistry, topological sort, dependency resolution) lives in `wasm_plan.rs`. Encoding (allocating indices, calling `wasm_encoder` APIs) lives in `codegen*.rs`.
-
-### WasmPlan
-
-The `wasm_plan` phase produces a `WasmPlan` that captures all analysis results. Codegen consumes it without re-analyzing the Project.
+### What Moves to wasm_plan
 
 #### TypePlan
 
-What Wasm GC types need to be defined in the core module.
+Currently in codegen's `build_main_module()`: 6+ phases of type registration with interleaved scanning and encoding. The scanning part moves to wasm_plan.
 
 ```rust
 /// Plan for all Wasm GC type definitions in the core module.
@@ -100,11 +81,18 @@ pub enum TypeDeclPlan {
 }
 ```
 
-The key insight: `build_main_module()` currently has 6+ phases with interleaved planning and encoding. `TypePlan` pre-computes the ordering so codegen just iterates and registers.
+Analysis that moves:
+
+- Topological sort (`sort_types_topologically`)
+- Dependency analysis (`get_type_dependencies`)
+- Self-referential detection (`get_self_referential_field_types`)
+- Type table scanning (each phase's "which types are needed" logic)
+- Monomorphized variant collection
+- Array/tuple/closure signature collection
 
 #### ComponentPlan
 
-What the Component Model wrapper looks like.
+Currently in codegen's `generate_component()`: analysis of WASI registry, world exports, and canonical intrinsics is interleaved with component encoding. The analysis part moves to wasm_plan.
 
 ```rust
 /// Plan for the Component Model structure.
@@ -133,18 +121,23 @@ pub struct WorldExportPlan {
 }
 ```
 
+Analysis that moves:
+
+- WASI import filtering (DCE + `has_effect()` checks)
+- Canonical intrinsic discovery (scanning TIR imports)
+- Bundled module requirements
+- World export mapping
+
 #### CmExportInfo (existing)
 
 Already computed by `wasm_plan` and attached to `TirFunction`. No changes needed.
 
 ### What Stays in Codegen
 
-Codegen retains the mechanical encoding work:
-
-- **Type encoding**: Converting `TypeDeclPlan` items to `CoreModuleBuilder` calls (`define_gc_struct_type`, `define_gc_struct_subtype`, `define_rec_group`)
-- **Component encoding**: Building `ComponentBuilder` with types, imports, instances, exports using index allocation
-- **Instruction emission**: `generate_expr()`, `generate_function()`, `generate_match_expr()` — the bulk of codegen
-- **Index management**: `CoreModuleBuilder` and `ComponentModelContext` state — inherently coupled to encoding order
+- Type encoding: iterating `TypePlan` and calling `CoreModuleBuilder` (`define_gc_struct_type`, `define_rec_group`, etc.)
+- Component encoding: iterating `ComponentPlan` and calling `ComponentBuilder`
+- Instruction emission: `generate_expr()`, `generate_function()`, etc.
+- Index management: `CoreModuleBuilder` and `ComponentModelContext` state
 
 ### Design Principles
 
@@ -158,23 +151,12 @@ Codegen retains the mechanical encoding work:
 - wasm_plan queries: `TypeTable`, `WasiRegistry`, `WorldRegistry`, `Project.has_effect()`, `Project.used_box_primitives`
 - codegen queries: `WasmPlan` (for structure decisions) + `TirModule` (for function bodies)
 
-#### Incremental migration
-
-Not everything needs to move at once. Each piece can be migrated independently:
-
-1. Type ordering analysis → `TypePlan`
-2. WASI import analysis → `ComponentPlan.wasi_imports`
-3. Canonical intrinsic analysis → `ComponentPlan.canonical_intrinsics`
-4. World export analysis → `ComponentPlan.world_exports`
-
 ### Migration Path
 
 - [x] Move scratch local analysis to wasm_plan (`CmExportInfo`)
 - [x] Centralize CM converter analysis (`CmConverterRequirements`)
-- [ ] Split `codegen.rs` into `codegen_*.rs` files (file organization only, no logic changes)
-- [ ] Extract type ordering into `TypePlan` (topological sort, dependency analysis, rec group detection)
-- [ ] Extract WASI import analysis into `ComponentPlan`
-- [ ] Extract world export analysis into `ComponentPlan`
+- [ ] Extract type ordering into `TypePlan`
+- [ ] Extract component structure analysis into `ComponentPlan`
 - [ ] Remove analysis code from codegen (codegen reads WasmPlan only)
 
 ## Consequences
@@ -183,7 +165,6 @@ Not everything needs to move at once. Each piece can be migrated independently:
 
 - codegen becomes a pure encoder — easier to understand and modify
 - wasm_plan captures all Wasm-specific decisions — testable independently
-- File organization reflects responsibility boundaries
 - New Wasm features (threads, SIMD, stack switching) fit naturally into planning
 
 ### Trade-offs
