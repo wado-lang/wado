@@ -243,7 +243,7 @@ fn try_fold_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         TirExprKind::Cast { expr: inner, .. } => {
             if let TirExprKind::IntLiteral { value, .. } = &inner.kind {
                 get_int_primitive(expr.type_id, type_table)
-                    .map(|prim| (mask_to_width(*value, prim), prim))
+                    .map(|prim| (truncate_int(*value, prim), prim))
             } else {
                 None
             }
@@ -314,12 +314,12 @@ fn get_int_primitive(type_id: crate::tir::TypeId, type_table: &TypeTable) -> Opt
     }
 }
 
-/// Truncate and sign/zero-extend a u64 value to the width of the given integer type.
+/// Truncate a u64 value to the width of the given integer type.
 ///
-/// For unsigned types, this masks to the appropriate width.
-/// For signed types, this masks then sign-extends back to 64 bits,
+/// For unsigned types, zero-extends (masks to width).
+/// For signed types, sign-extends back to 64 bits,
 /// so that codegen's `*value as i32` / `*value as i64` produces the correct signed value.
-fn mask_to_width(value: u64, prim: PrimitiveType) -> u64 {
+fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
     match prim {
         PrimitiveType::U8 => value & 0xFF,
         PrimitiveType::U16 => value & 0xFFFF,
@@ -335,38 +335,46 @@ fn mask_to_width(value: u64, prim: PrimitiveType) -> u64 {
 }
 
 fn eval_int_add(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    Some(mask_to_width(lval.wrapping_add(rval), prim))
+    Some(truncate_int(lval.wrapping_add(rval), prim))
 }
 
 fn eval_int_sub(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    Some(mask_to_width(lval.wrapping_sub(rval), prim))
+    Some(truncate_int(lval.wrapping_sub(rval), prim))
 }
 
 fn eval_int_mul(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
-    Some(mask_to_width(lval.wrapping_mul(rval), prim))
+    Some(truncate_int(lval.wrapping_mul(rval), prim))
 }
 
 fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     if rval == 0 {
-        return None; // avoid division by zero at compile time
+        return None; // division by zero traps at runtime
     }
     match prim {
         PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-            Some(mask_to_width(lval / rval, prim))
+            Some(truncate_int(lval / rval, prim))
         }
+        // i8/i16: executed as i32 instructions in Wasm, so MIN / -1 doesn't trap
         PrimitiveType::I8 => {
             let result = (lval as i8).wrapping_div(rval as i8);
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
         PrimitiveType::I16 => {
             let result = (lval as i16).wrapping_div(rval as i16);
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
+        // i32/i64: Wasm's div_s traps on MIN / -1, so don't fold that case
         PrimitiveType::I32 => {
+            if lval as i32 == i32::MIN && rval as i32 == -1 {
+                return None;
+            }
             let result = (lval as i32).wrapping_div(rval as i32);
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
         PrimitiveType::I64 => {
+            if lval as i64 == i64::MIN && rval as i64 == -1 {
+                return None;
+            }
             let result = (lval as i64).wrapping_div(rval as i64);
             Some(result as u64)
         }
@@ -376,25 +384,32 @@ fn eval_int_div(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
 
 fn eval_int_mod(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     if rval == 0 {
-        return None; // avoid division by zero at compile time
+        return None; // division by zero traps at runtime
     }
     match prim {
         PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-            Some(mask_to_width(lval % rval, prim))
+            Some(truncate_int(lval % rval, prim))
         }
         PrimitiveType::I8 => {
             let result = (lval as i8).wrapping_rem(rval as i8);
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
         PrimitiveType::I16 => {
             let result = (lval as i16).wrapping_rem(rval as i16);
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
+        // i32/i64: Wasm's rem_s traps on MIN % -1, so don't fold that case
         PrimitiveType::I32 => {
+            if lval as i32 == i32::MIN && rval as i32 == -1 {
+                return None;
+            }
             let result = (lval as i32).wrapping_rem(rval as i32);
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
         PrimitiveType::I64 => {
+            if lval as i64 == i64::MIN && rval as i64 == -1 {
+                return None;
+            }
             let result = (lval as i64).wrapping_rem(rval as i64);
             Some(result as u64)
         }
@@ -406,15 +421,15 @@ fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
     match prim {
         PrimitiveType::I8 => {
             let result = (value as i8).wrapping_neg();
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
         PrimitiveType::I16 => {
             let result = (value as i16).wrapping_neg();
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
         PrimitiveType::I32 => {
             let result = (value as i32).wrapping_neg();
-            Some(mask_to_width(result as u64, prim))
+            Some(truncate_int(result as u64, prim))
         }
         PrimitiveType::I64 => {
             let result = (value as i64).wrapping_neg();
@@ -430,25 +445,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mask_to_width_unsigned() {
-        assert_eq!(mask_to_width(256, PrimitiveType::U8), 0);
-        assert_eq!(mask_to_width(255, PrimitiveType::U8), 255);
-        assert_eq!(mask_to_width(0x1_0000, PrimitiveType::U16), 0);
-        assert_eq!(mask_to_width(0x1_0000_0000, PrimitiveType::U32), 0);
-        assert_eq!(mask_to_width(u64::MAX, PrimitiveType::U64), u64::MAX);
+    fn test_truncate_int_unsigned() {
+        assert_eq!(truncate_int(256, PrimitiveType::U8), 0);
+        assert_eq!(truncate_int(255, PrimitiveType::U8), 255);
+        assert_eq!(truncate_int(0x1_0000, PrimitiveType::U16), 0);
+        assert_eq!(truncate_int(0x1_0000_0000, PrimitiveType::U32), 0);
+        assert_eq!(truncate_int(u64::MAX, PrimitiveType::U64), u64::MAX);
     }
 
     #[test]
-    fn test_mask_to_width_signed() {
+    fn test_truncate_int_signed() {
         // i8: 128 (0x80) sign-extends to -128
-        assert_eq!(mask_to_width(128, PrimitiveType::I8) as i64, -128);
+        assert_eq!(truncate_int(128, PrimitiveType::I8) as i64, -128);
         // i8: 127 stays 127
-        assert_eq!(mask_to_width(127, PrimitiveType::I8), 127);
+        assert_eq!(truncate_int(127, PrimitiveType::I8), 127);
         // i16: 0x8000 sign-extends to -32768
-        assert_eq!(mask_to_width(0x8000, PrimitiveType::I16) as i64, -32768);
+        assert_eq!(truncate_int(0x8000, PrimitiveType::I16) as i64, -32768);
         // i32: 0x8000_0000 sign-extends to -2147483648
         assert_eq!(
-            mask_to_width(0x8000_0000, PrimitiveType::I32) as i64,
+            truncate_int(0x8000_0000, PrimitiveType::I32) as i64,
             -2_147_483_648
         );
     }
@@ -482,12 +497,32 @@ mod tests {
         let neg7 = (-7_i32) as u64;
         let result = eval_int_div(neg7, 2, PrimitiveType::I32);
         assert_eq!(result.map(|v| v as i32), Some(-3));
+        // i32::MIN / -1 traps in Wasm — must not fold
+        let i32_min = i32::MIN as u64;
+        let neg1_i32 = (-1_i32) as u64;
+        assert_eq!(eval_int_div(i32_min, neg1_i32, PrimitiveType::I32), None);
+        // i64::MIN / -1 traps in Wasm — must not fold
+        let i64_min = i64::MIN as u64;
+        let neg1_i64 = (-1_i64) as u64;
+        assert_eq!(eval_int_div(i64_min, neg1_i64, PrimitiveType::I64), None);
+        // i8::MIN / -1 is fine (executed as i32 in Wasm, no trap)
+        let i8_min = (-128_i8) as u64;
+        let neg1_i8 = (-1_i8) as u64;
+        assert!(eval_int_div(i8_min, neg1_i8, PrimitiveType::I8).is_some());
     }
 
     #[test]
     fn test_mod() {
         assert_eq!(eval_int_mod(10, 3, PrimitiveType::I32), Some(1));
         assert_eq!(eval_int_mod(10, 0, PrimitiveType::I32), None);
+        // i32::MIN % -1 traps in Wasm — must not fold
+        let i32_min = i32::MIN as u64;
+        let neg1 = (-1_i32) as u64;
+        assert_eq!(eval_int_mod(i32_min, neg1, PrimitiveType::I32), None);
+        // i64::MIN % -1 traps in Wasm — must not fold
+        let i64_min = i64::MIN as u64;
+        let neg1_i64 = (-1_i64) as u64;
+        assert_eq!(eval_int_mod(i64_min, neg1_i64, PrimitiveType::I64), None);
     }
 
     #[test]
@@ -503,13 +538,13 @@ mod tests {
     #[test]
     fn test_cast_mask() {
         // i32 value cast to i64 preserves value
-        assert_eq!(mask_to_width(1_000_000, PrimitiveType::I64), 1_000_000);
+        assert_eq!(truncate_int(1_000_000, PrimitiveType::I64), 1_000_000);
         // i64 large value cast to i32 truncates + sign-extends
-        assert_eq!(mask_to_width(0x1_0000_0001, PrimitiveType::I32), 1);
+        assert_eq!(truncate_int(0x1_0000_0001, PrimitiveType::I32), 1);
         // u8 cast truncates
-        assert_eq!(mask_to_width(300, PrimitiveType::U8), 44);
+        assert_eq!(truncate_int(300, PrimitiveType::U8), 44);
         // Signed cast: -128 as i8
         let neg128 = (-128_i64) as u64;
-        assert_eq!(mask_to_width(neg128, PrimitiveType::I8) as i64, -128);
+        assert_eq!(truncate_int(neg128, PrimitiveType::I8) as i64, -128);
     }
 }
