@@ -219,43 +219,38 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
     }
 
     // Now try to fold this expression
-    try_fold_expr(expr, type_table);
-}
-
-/// Try to fold a single expression node into a constant.
-/// Returns the folded result value if folding is possible.
-fn try_fold_expr(expr: &mut TirExpr, type_table: &TypeTable) {
-    let folded: Option<(u64, PrimitiveType)> = match &expr.kind {
-        TirExprKind::Binary { left, op, right } => get_int_primitive(expr.type_id, type_table)
-            .and_then(|prim| try_fold_int_binary(left, *op, right, prim).map(|v| (v, prim))),
-        TirExprKind::Unary {
-            op: TirUnaryOp::Neg,
-            expr: inner,
-        } => {
-            if let TirExprKind::IntLiteral { value, .. } = &inner.kind {
-                get_int_primitive(expr.type_id, type_table)
-                    .and_then(|prim| eval_int_neg(*value, prim).map(|v| (v, prim)))
-            } else {
-                None
-            }
-        }
-        // Cast of integer literal → fold to literal with target type width
-        TirExprKind::Cast { expr: inner, .. } => {
-            if let TirExprKind::IntLiteral { value, .. } = &inner.kind {
-                get_int_primitive(expr.type_id, type_table)
-                    .map(|prim| (truncate_int(*value, prim), prim))
-            } else {
-                None
-            }
-        }
-        _ => None,
-    };
-
-    if let Some((value, prim)) = folded {
+    if let Some((value, prim)) = try_fold_expr(expr, type_table) {
         expr.kind = TirExprKind::IntLiteral {
             value,
             repr: format_int_value(value, prim),
         };
+    }
+}
+
+/// Try to fold a single expression node into a constant.
+/// Returns the folded value and its primitive type, or `None` if not foldable.
+fn try_fold_expr(expr: &TirExpr, type_table: &TypeTable) -> Option<(u64, PrimitiveType)> {
+    let prim = get_int_primitive(expr.type_id, type_table)?;
+    match &expr.kind {
+        TirExprKind::Binary { left, op, right } => {
+            try_fold_int_binary(left, *op, right, prim).map(|v| (v, prim))
+        }
+        TirExprKind::Unary {
+            op: TirUnaryOp::Neg,
+            expr: inner,
+        } => {
+            let TirExprKind::IntLiteral { value, .. } = &inner.kind else {
+                return None;
+            };
+            eval_int_neg(*value, prim).map(|v| (v, prim))
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            let TirExprKind::IntLiteral { value, .. } = &inner.kind else {
+                return None;
+            };
+            Some((truncate_int(*value, prim), prim))
+        }
+        _ => None,
     }
 }
 
