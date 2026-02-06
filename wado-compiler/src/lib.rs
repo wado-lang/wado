@@ -102,8 +102,8 @@ pub mod syntax;
 pub mod tir;
 pub mod token;
 pub mod unparse;
-pub mod wasm_plan;
 pub mod wasm_builder;
+pub mod wasm_plan;
 pub mod wasm_postprocess;
 pub mod world_registry;
 

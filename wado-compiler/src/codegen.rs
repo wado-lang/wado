@@ -24,8 +24,8 @@ use crate::tir::{
     TirImport, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use crate::wasm_plan::CmValType;
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
+use crate::wasm_plan::CmValType;
 use crate::wasm_postprocess;
 use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
