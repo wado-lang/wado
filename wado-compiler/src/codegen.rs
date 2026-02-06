@@ -21,11 +21,14 @@ use crate::project::Project;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirImport, TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
-use crate::wasm_plan::CmValType;
+use crate::wasm_plan::{
+    CmValType, TypeDecl, get_self_referential_field_types, get_type_dependencies,
+    sort_types_topologically,
+};
 use crate::wasm_postprocess;
 use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
@@ -393,13 +396,6 @@ fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
     }
 }
 
-/// A type declaration that can be either a struct or a variant.
-/// Used for unified topological sorting of type declarations.
-enum TypeDecl<'a> {
-    Struct(&'a crate::tir::TirStruct),
-    Variant(&'a crate::tir::TirVariantDecl),
-}
-
 // =========================================================================
 // br_table optimization constants and types
 // =========================================================================
@@ -512,200 +508,6 @@ impl Codegen<'_> {
         self.struct_types.get(&qualified)
     }
 
-    /// Extract struct names that a type depends on (for field types)
-    /// Returns mangled names for `GenericInstance` types (e.g., "`BTreeNode`<String,i32>")
-    /// Get type dependencies (struct and variant names) for a given type.
-    /// Used for topological sorting of type declarations.
-    fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
-        match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. } => vec![name.clone()],
-            ResolvedType::Variant { name, .. } => vec![name.clone()],
-            ResolvedType::GenericInstance { type_args, .. } => {
-                // Get dependencies from type arguments
-                // Use mangled name for the generic instance (e.g., "BTreeNode<String,i32>")
-                let mangled_name = type_table.mangle_type_name(type_id);
-                let mut deps = vec![mangled_name];
-                for arg in type_args {
-                    deps.extend(Self::get_type_dependencies(type_table, *arg));
-                }
-                deps
-            }
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Option(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Stream(inner)
-            | ResolvedType::Future(inner)
-            | ResolvedType::Reactive(inner) => Self::get_type_dependencies(type_table, *inner),
-            ResolvedType::Result { ok, err } => {
-                let mut deps = Self::get_type_dependencies(type_table, *ok);
-                deps.extend(Self::get_type_dependencies(type_table, *err));
-                deps
-            }
-            ResolvedType::Tuple(elems) => elems
-                .iter()
-                .flat_map(|e| Self::get_type_dependencies(type_table, *e))
-                .collect(),
-            _ => vec![],
-        }
-    }
-
-    /// Check if a struct has self-referential fields (directly or through Array/Ref/MutRef).
-    /// Returns the list of field type IDs that create the self-reference cycle.
-    fn get_self_referential_field_types(
-        struct_name: &str,
-        tir_struct: &crate::tir::TirStruct,
-        type_table: &TypeTable,
-    ) -> Vec<TypeId> {
-        let mut self_ref_fields = Vec::new();
-        for field in &tir_struct.fields {
-            if Self::type_references_struct(field.type_id, struct_name, type_table) {
-                self_ref_fields.push(field.type_id);
-            }
-        }
-        self_ref_fields
-    }
-
-    /// Check if a type references a struct by name (transitively through Array/Ref/MutRef).
-    /// The `struct_name` should be the full mangled name (e.g., "`AANode`<String,i32>").
-    fn type_references_struct(type_id: TypeId, struct_name: &str, type_table: &TypeTable) -> bool {
-        match type_table.get(type_id) {
-            ResolvedType::Struct { name, .. } => {
-                // Exact name match only
-                name == struct_name
-            }
-            ResolvedType::GenericInstance { type_args, .. } => {
-                // Check if this GenericInstance IS the struct we're looking for.
-                // E.g., Node<String> is represented as GenericInstance { name: "Node", type_args: [String] }
-                // and we need to check if "Node<String>" matches struct_name.
-                let mangled_name = type_table.mangle_type_name(type_id);
-                if mangled_name == struct_name {
-                    return true;
-                }
-                // Also recurse into type args for Array<&mut Node<String>> patterns
-                type_args
-                    .iter()
-                    .any(|arg| Self::type_references_struct(*arg, struct_name, type_table))
-            }
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                Self::type_references_struct(*inner, struct_name, type_table)
-            }
-            ResolvedType::BuiltinArray(inner) => {
-                Self::type_references_struct(*inner, struct_name, type_table)
-            }
-            ResolvedType::Option(inner) => {
-                Self::type_references_struct(*inner, struct_name, type_table)
-            }
-            _ => false,
-        }
-    }
-
-    /// Sort structs and variants together topologically so dependencies are registered before dependents.
-    /// This handles mutual dependencies between structs and variants (e.g., struct with variant field,
-    /// variant with struct payload).
-    fn sort_types_topologically<'b>(
-        structs: &'b [crate::tir::TirStruct],
-        variants: &'b [crate::tir::TirVariantDecl],
-        type_table: &TypeTable,
-    ) -> Vec<TypeDecl<'b>> {
-        // Collect all type names
-        let struct_names: HashSet<String> = structs.iter().map(|s| s.name.clone()).collect();
-        let variant_names: HashSet<String> = variants.iter().map(|v| v.name.clone()).collect();
-        let all_names: HashSet<String> = struct_names.union(&variant_names).cloned().collect();
-
-        // Build dependency graph: deps[A] = [B] means A depends on B (B must come before A)
-        let mut deps: HashMap<String, Vec<String>> = HashMap::new();
-
-        // Add struct dependencies
-        for s in structs {
-            let mut type_deps = Vec::new();
-            for field in &s.fields {
-                let field_deps = Self::get_type_dependencies(type_table, field.type_id);
-                for dep in field_deps {
-                    // Only count dependencies on types in our set
-                    if all_names.contains(&dep) && dep != s.name {
-                        type_deps.push(dep);
-                    }
-                }
-            }
-            deps.insert(s.name.clone(), type_deps);
-        }
-
-        // Add variant dependencies (from payload types)
-        for v in variants {
-            let mut type_deps = Vec::new();
-            for case in &v.cases {
-                // Each variant case has exactly one payload type
-                let payload_deps = Self::get_type_dependencies(type_table, case.payload);
-                for dep in payload_deps {
-                    if all_names.contains(&dep) && dep != v.name {
-                        type_deps.push(dep);
-                    }
-                }
-            }
-            deps.insert(v.name.clone(), type_deps);
-        }
-
-        // Topological sort using Kahn's algorithm
-        let mut in_degree: HashMap<String, usize> = HashMap::new();
-        for name in &all_names {
-            let type_deps = deps.get(name).map(std::vec::Vec::len).unwrap_or(0);
-            in_degree.insert(name.clone(), type_deps);
-        }
-
-        // Build reverse mapping: dependents[B] = list of types that depend on B
-        let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
-        for (name, type_deps) in &deps {
-            for dep in type_deps {
-                dependents
-                    .entry(dep.clone())
-                    .or_default()
-                    .push(name.clone());
-            }
-        }
-
-        // Start with types that have no dependencies
-        let mut queue: Vec<String> = in_degree
-            .iter()
-            .filter(|&(_, deg)| *deg == 0)
-            .map(|(name, _)| name.clone())
-            .collect();
-
-        let mut sorted_names = Vec::new();
-        while let Some(name) = queue.pop() {
-            sorted_names.push(name.clone());
-            if let Some(deps_on_name) = dependents.get(&name) {
-                for dependent in deps_on_name {
-                    let deg = in_degree.get_mut(dependent).unwrap();
-                    *deg -= 1;
-                    if *deg == 0 {
-                        queue.push(dependent.clone());
-                    }
-                }
-            }
-        }
-
-        // Map names back to TypeDecl
-        let name_to_struct: HashMap<&str, &crate::tir::TirStruct> =
-            structs.iter().map(|s| (s.name.as_str(), s)).collect();
-        let name_to_variant: HashMap<&str, &crate::tir::TirVariantDecl> =
-            variants.iter().map(|v| (v.name.as_str(), v)).collect();
-
-        sorted_names
-            .iter()
-            .filter_map(|name| {
-                if let Some(s) = name_to_struct.get(name.as_str()) {
-                    Some(TypeDecl::Struct(s))
-                } else {
-                    name_to_variant
-                        .get(name.as_str())
-                        .map(|v| TypeDecl::Variant(v))
-                }
-            })
-            .collect()
-    }
-
-    /// Build main core module from TIR
     /// Build the main core Wasm module containing user-defined functions.
     fn build_main_module(&mut self, params: BuildMainModuleParams<'_>) -> Vec<u8> {
         let BuildMainModuleParams {
@@ -1011,11 +813,8 @@ impl Codegen<'_> {
                 .cloned()
                 .collect();
             // Sort structs and variants together topologically
-            let sorted_types = Self::sort_types_topologically(
-                &lib_structs,
-                &lib_variants,
-                &tir_mod.type_table.borrow(),
-            );
+            let sorted_types =
+                sort_types_topologically(&lib_structs, &lib_variants, &tir_mod.type_table.borrow());
             for type_decl in sorted_types {
                 match type_decl {
                     TypeDecl::Struct(tir_struct) => {
@@ -1072,7 +871,7 @@ impl Codegen<'_> {
             .cloned()
             .collect();
         let sorted_types =
-            Self::sort_types_topologically(&non_mono_structs, &non_mono_variants, type_table);
+            sort_types_topologically(&non_mono_structs, &non_mono_variants, type_table);
         // Track which non-mono structs depend on mono structs (to be deferred to PHASE 4)
         let mono_struct_names: HashSet<String> = entry_tir
             .structs
@@ -1088,7 +887,7 @@ impl Codegen<'_> {
                     let deps = tir_struct
                         .fields
                         .iter()
-                        .flat_map(|f| Self::get_type_dependencies(type_table, f.type_id))
+                        .flat_map(|f| get_type_dependencies(type_table, f.type_id))
                         .collect::<HashSet<_>>();
                     if deps.iter().any(|d| mono_struct_names.contains(d)) {
                         // Defer to PHASE 4
@@ -1194,7 +993,7 @@ impl Codegen<'_> {
             // Sort topologically to ensure dependencies come before dependents
             let lib_type_table = tir_mod.type_table.borrow();
             let sorted_lib_types =
-                Self::sort_types_topologically(&mono_lib_structs, &[], &lib_type_table);
+                sort_types_topologically(&mono_lib_structs, &[], &lib_type_table);
 
             for type_decl in sorted_lib_types {
                 let TypeDecl::Struct(tir_struct) = type_decl else {
@@ -1203,11 +1002,8 @@ impl Codegen<'_> {
                 let struct_name =
                     StructName::new(entry_module_source.clone(), tir_struct.name.clone());
                 // Check for self-referential structs using full struct name
-                let self_ref_fields = Self::get_self_referential_field_types(
-                    &tir_struct.name,
-                    tir_struct,
-                    &lib_type_table,
-                );
+                let self_ref_fields =
+                    get_self_referential_field_types(&tir_struct.name, tir_struct, &lib_type_table);
                 if self_ref_fields.is_empty() {
                     self.register_struct_type(
                         struct_name,
@@ -1257,7 +1053,7 @@ impl Codegen<'_> {
             .chain(deferred_non_mono_structs.iter())
             .cloned()
             .collect();
-        let sorted_phase4 = Self::sort_types_topologically(&all_phase4_structs, &[], type_table);
+        let sorted_phase4 = sort_types_topologically(&all_phase4_structs, &[], type_table);
         for type_decl in sorted_phase4 {
             let TypeDecl::Struct(tir_struct) = type_decl else {
                 continue;
@@ -1265,7 +1061,7 @@ impl Codegen<'_> {
             let struct_name = StructName::new(entry_module_source.clone(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
             let self_ref_fields =
-                Self::get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
+                get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
             if self_ref_fields.is_empty() {
                 self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
             } else {
@@ -2016,14 +1812,13 @@ impl Codegen<'_> {
         // ========================================
         // Wado-bundled module (float-to-string and libm, conditionally included)
         // ========================================
-        // Check if we need bundled module (float-to-string or libm)
-        // Bundled imports have namespace "bundled"
-        let bundled_imports: Vec<&TirImport> = entry_tir
-            .imports
-            .iter()
-            .filter(|i| i.namespace == "bundled")
-            .collect();
-        if !bundled_imports.is_empty() {
+        // Bundled functions are determined by ComponentPlan
+        let component_plan = project
+            .component_plan
+            .as_ref()
+            .expect("component_plan should be set by wasm_plan phase");
+        let bundled_functions = &component_plan.bundled_functions;
+        if !bundled_functions.is_empty() {
             // Convert memory to import
             let bundled_module =
                 wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
@@ -2031,11 +1826,9 @@ impl Codegen<'_> {
 
             // Apply Wasm-level DCE if enabled (disabled for -O0)
             let final_module = if project.wasm_dce_enabled {
-                // Build set of exports to keep based on used bundled imports
-                let keep_exports: std::collections::HashSet<_> = bundled_imports
-                    .iter()
-                    .map(|i| i.canonical_name.clone())
-                    .collect();
+                // Build set of exports to keep based on used bundled functions
+                let keep_exports: std::collections::HashSet<_> =
+                    bundled_functions.iter().cloned().collect();
                 wasm_postprocess::eliminate_dead_code(&bundled_module, &keep_exports)
             } else {
                 bundled_module
@@ -2059,12 +1852,12 @@ impl Codegen<'_> {
             );
 
             // Alias bundled exports (float-to-string and libm)
-            for import in &bundled_imports {
-                ctx.register_core_func(&import.canonical_name);
+            for func_name in bundled_functions {
+                ctx.register_core_func(func_name);
                 builder.core_alias_export(
-                    Some(&import.canonical_name),
+                    Some(func_name),
                     ctx.core_instance_idx("fts"),
-                    &import.canonical_name,
+                    func_name,
                     ExportKind::Func,
                 );
             }
@@ -2075,13 +1868,7 @@ impl Codegen<'_> {
         // Only defined if any future-* canonical intrinsics are used
         // (DCE determines this from reachability analysis starting from world exports)
         // ========================================
-        let needs_future_intrinsics = entry_tir.imports.iter().any(|i| {
-            i.namespace == "wasi"
-                && matches!(
-                    i.canonical_name.as_str(),
-                    "future-new" | "future-write" | "future-drop-writable" | "future-drop-readable"
-                )
-        });
+        let needs_future_intrinsics = component_plan.needs_future_intrinsics;
 
         let trailers_future_type = if needs_future_intrinsics {
             // Define own<fields> type for use in option<fields> (trailers)
@@ -2156,11 +1943,11 @@ impl Codegen<'_> {
         };
 
         // ========================================
-        // Canonical intrinsics - emit based on TIR imports with "wasi" namespace
-        // Each import is emitted exactly once, driven by DCE reachability
+        // Canonical intrinsics - emit from ComponentPlan
+        // Each intrinsic is emitted exactly once, driven by DCE reachability
         // ========================================
-        for import in entry_tir.imports.iter().filter(|i| i.namespace == "wasi") {
-            let name = import.canonical_name.as_str();
+        for name in &component_plan.canonical_intrinsics {
+            let name = name.as_str();
             ctx.register_core_func(name);
 
             match name {
@@ -2313,15 +2100,13 @@ impl Codegen<'_> {
         // (env intrinsics are handled separately in env-instance)
         let mut wasi_exports: Vec<(String, ExportKind, u32)> = Vec::new();
 
-        // Add canonical builtins with namespace "wasi" (from TIR imports)
-        for import in &entry_tir.imports {
-            if import.namespace == "wasi" {
-                wasi_exports.push((
-                    import.canonical_name.clone(),
-                    ExportKind::Func,
-                    ctx.core_func_idx(&import.canonical_name),
-                ));
-            }
+        // Add canonical intrinsics from ComponentPlan
+        for intrinsic_name in &component_plan.canonical_intrinsics {
+            wasi_exports.push((
+                intrinsic_name.clone(),
+                ExportKind::Func,
+                ctx.core_func_idx(intrinsic_name),
+            ));
         }
 
         // Add lowered WASI functions (Stdout::write_via_stream, etc.)
@@ -2364,15 +2149,13 @@ impl Codegen<'_> {
         ctx.register_core_instance("mem");
 
         // Build "bundled" instance with bundled exports (if any)
-        let bundled_exports: Vec<(String, ExportKind, u32)> = entry_tir
-            .imports
+        let bundled_exports: Vec<(String, ExportKind, u32)> = bundled_functions
             .iter()
-            .filter(|i| i.namespace == "bundled")
-            .map(|import| {
+            .map(|func_name| {
                 (
-                    import.canonical_name.clone(),
+                    func_name.clone(),
                     ExportKind::Func,
-                    ctx.core_func_idx(&import.canonical_name),
+                    ctx.core_func_idx(func_name),
                 )
             })
             .collect();
@@ -2401,22 +2184,8 @@ impl Codegen<'_> {
         }
         builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
-        // Export world functions based on target world
-        let world_exports: Vec<_> = project
-            .world_registry
-            .get(&project.target_world)
-            .map(|w| w.exports.clone())
-            .unwrap_or_else(|| {
-                // Fallback to a default run export for unknown worlds
-                vec![crate::world_registry::WorldExportInfo {
-                    name: "run".to_string(),
-                    is_async: true,
-                    params: vec![],
-                    return_type: None,
-                }]
-            });
-
-        for export in &world_exports {
+        // Export world functions from ComponentPlan
+        for export in &component_plan.world_exports {
             let core_name = format!("{}-core", export.name);
             let func_type_name = format!("{}-func-type", export.name);
 
@@ -2435,12 +2204,7 @@ impl Codegen<'_> {
             {
                 let (_, enc) = builder.ty(Some(&func_type_name));
 
-                // Check if this is the Service world's handle function with Request param
-                let is_service_handle = self.project.has_http_handler_export
-                    && export.name == "handle"
-                    && !export.params.is_empty();
-
-                if is_service_handle {
+                if export.is_http_handler {
                     // Use the imported http-request type for Service world handle function
                     // The param is own<request> which is lowered to i32 by canon lift
                     let request_type_idx = ctx.type_idx("http-request");
@@ -2482,10 +2246,9 @@ impl Codegen<'_> {
             ctx.skip_comp_func_idx();
         }
 
-        // Export test functions
-        for test in &entry_tir.tests {
-            // Convert __test_0_simple to test-0-simple for component export (kebab-case)
-            let export_name = test.function_name.trim_start_matches('_').replace('_', "-");
+        // Export test functions from ComponentPlan
+        for test in &component_plan.test_exports {
+            let export_name = &test.export_name;
             let core_name = format!("{export_name}-core");
             let test_func_type_name = format!("{export_name}-func-type");
 
@@ -2509,9 +2272,9 @@ impl Codegen<'_> {
             }
 
             // Lift test function with Async option
-            ctx.register_comp_func(&export_name);
+            ctx.register_comp_func(export_name);
             builder.lift_func(
-                Some(&export_name),
+                Some(export_name),
                 ctx.core_func_idx(&core_name),
                 test_func_type,
                 [
@@ -2522,9 +2285,9 @@ impl Codegen<'_> {
 
             // Export test function
             builder.export(
-                &export_name,
+                export_name,
                 ComponentExportKind::Func,
-                ctx.comp_func_idx(&export_name),
+                ctx.comp_func_idx(export_name),
                 None,
             );
             // Export consumes a component function index

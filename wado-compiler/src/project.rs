@@ -13,6 +13,7 @@ use crate::component_model::WasiRegistry;
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{PrimitiveType, TirModule};
+use crate::wasm_plan::ComponentPlan;
 use crate::world_registry::WorldRegistry;
 use indexmap::IndexMap;
 use std::collections::HashSet;
@@ -77,6 +78,12 @@ pub struct Project {
     /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
     /// This determines whether HTTP-related glue code is needed.
     pub has_http_handler_export: bool,
+
+    // ========================================
+    // Wasm plan (populated by wasm_plan phase, consumed by codegen)
+    // ========================================
+    /// Component Model structure plan. Populated by the `wasm_plan` phase.
+    pub component_plan: Option<ComponentPlan>,
 }
 
 impl Project {
@@ -111,6 +118,8 @@ impl Project {
             wasm_dce_enabled: true, // Enabled by default, disabled for -O0
             // CM export characteristics
             has_http_handler_export: false,
+            // Wasm plan
+            component_plan: None,
         }
     }
 
