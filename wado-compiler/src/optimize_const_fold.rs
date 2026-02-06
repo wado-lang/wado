@@ -225,17 +225,25 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
 /// Try to fold a single expression node into a constant.
 /// Returns the folded result value if folding is possible.
 fn try_fold_expr(expr: &mut TirExpr, type_table: &TypeTable) {
-    let folded = match &expr.kind {
-        TirExprKind::Binary { left, op, right } => {
-            try_fold_int_binary(left, *op, right, expr.type_id, type_table)
-        }
+    let folded: Option<(u64, PrimitiveType)> = match &expr.kind {
+        TirExprKind::Binary { left, op, right } => get_int_primitive(expr.type_id, type_table)
+            .and_then(|prim| try_fold_int_binary(left, *op, right, prim).map(|v| (v, prim))),
         TirExprKind::Unary {
             op: TirUnaryOp::Neg,
             expr: inner,
         } => {
             if let TirExprKind::IntLiteral { value, .. } = &inner.kind {
                 get_int_primitive(expr.type_id, type_table)
-                    .and_then(|prim| eval_int_neg(*value, prim))
+                    .and_then(|prim| eval_int_neg(*value, prim).map(|v| (v, prim)))
+            } else {
+                None
+            }
+        }
+        // Cast of integer literal → fold to literal with target type width
+        TirExprKind::Cast { expr: inner, .. } => {
+            if let TirExprKind::IntLiteral { value, .. } = &inner.kind {
+                get_int_primitive(expr.type_id, type_table)
+                    .map(|prim| (mask_to_width(*value, prim), prim))
             } else {
                 None
             }
@@ -243,11 +251,22 @@ fn try_fold_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         _ => None,
     };
 
-    if let Some(value) = folded {
+    if let Some((value, prim)) = folded {
         expr.kind = TirExprKind::IntLiteral {
             value,
-            repr: value.to_string(),
+            repr: format_int_value(value, prim),
         };
+    }
+}
+
+/// Format an integer value as a string appropriate for its type.
+/// Signed types display as signed (e.g., -128), unsigned as unsigned.
+fn format_int_value(value: u64, prim: PrimitiveType) -> String {
+    match prim {
+        PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64 => {
+            (value as i64).to_string()
+        }
+        _ => value.to_string(),
     }
 }
 
@@ -257,8 +276,7 @@ fn try_fold_int_binary(
     left: &TirExpr,
     op: TirBinaryOp,
     right: &TirExpr,
-    result_type: crate::tir::TypeId,
-    type_table: &TypeTable,
+    prim: PrimitiveType,
 ) -> Option<u64> {
     let TirExprKind::IntLiteral { value: lval, .. } = &left.kind else {
         return None;
@@ -266,8 +284,6 @@ fn try_fold_int_binary(
     let TirExprKind::IntLiteral { value: rval, .. } = &right.kind else {
         return None;
     };
-
-    let prim = get_int_primitive(result_type, type_table)?;
 
     match op {
         TirBinaryOp::Add => eval_int_add(*lval, *rval, prim),
@@ -298,13 +314,22 @@ fn get_int_primitive(type_id: crate::tir::TypeId, type_table: &TypeTable) -> Opt
     }
 }
 
-/// Mask a u64 value to the width of the given integer type.
+/// Truncate and sign/zero-extend a u64 value to the width of the given integer type.
+///
+/// For unsigned types, this masks to the appropriate width.
+/// For signed types, this masks then sign-extends back to 64 bits,
+/// so that codegen's `*value as i32` / `*value as i64` produces the correct signed value.
 fn mask_to_width(value: u64, prim: PrimitiveType) -> u64 {
     match prim {
-        PrimitiveType::I8 | PrimitiveType::U8 => value & 0xFF,
-        PrimitiveType::I16 | PrimitiveType::U16 => value & 0xFFFF,
-        PrimitiveType::I32 | PrimitiveType::U32 => value & 0xFFFF_FFFF,
-        PrimitiveType::I64 | PrimitiveType::U64 => value,
+        PrimitiveType::U8 => value & 0xFF,
+        PrimitiveType::U16 => value & 0xFFFF,
+        PrimitiveType::U32 => value & 0xFFFF_FFFF,
+        PrimitiveType::U64 => value,
+        // Signed: truncate then sign-extend
+        PrimitiveType::I8 => i64::from(value as i8) as u64,
+        PrimitiveType::I16 => i64::from(value as i16) as u64,
+        PrimitiveType::I32 => i64::from(value as i32) as u64,
+        PrimitiveType::I64 => value,
         _ => value,
     }
 }
@@ -405,12 +430,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_mask_to_width() {
+    fn test_mask_to_width_unsigned() {
         assert_eq!(mask_to_width(256, PrimitiveType::U8), 0);
         assert_eq!(mask_to_width(255, PrimitiveType::U8), 255);
         assert_eq!(mask_to_width(0x1_0000, PrimitiveType::U16), 0);
         assert_eq!(mask_to_width(0x1_0000_0000, PrimitiveType::U32), 0);
         assert_eq!(mask_to_width(u64::MAX, PrimitiveType::U64), u64::MAX);
+    }
+
+    #[test]
+    fn test_mask_to_width_signed() {
+        // i8: 128 (0x80) sign-extends to -128
+        assert_eq!(mask_to_width(128, PrimitiveType::I8) as i64, -128);
+        // i8: 127 stays 127
+        assert_eq!(mask_to_width(127, PrimitiveType::I8), 127);
+        // i16: 0x8000 sign-extends to -32768
+        assert_eq!(mask_to_width(0x8000, PrimitiveType::I16) as i64, -32768);
+        // i32: 0x8000_0000 sign-extends to -2147483648
+        assert_eq!(
+            mask_to_width(0x8000_0000, PrimitiveType::I32) as i64,
+            -2_147_483_648
+        );
     }
 
     #[test]
@@ -458,5 +498,18 @@ mod tests {
         );
         // Unsigned negation returns None
         assert_eq!(eval_int_neg(42, PrimitiveType::U32), None);
+    }
+
+    #[test]
+    fn test_cast_mask() {
+        // i32 value cast to i64 preserves value
+        assert_eq!(mask_to_width(1_000_000, PrimitiveType::I64), 1_000_000);
+        // i64 large value cast to i32 truncates + sign-extends
+        assert_eq!(mask_to_width(0x1_0000_0001, PrimitiveType::I32), 1);
+        // u8 cast truncates
+        assert_eq!(mask_to_width(300, PrimitiveType::U8), 44);
+        // Signed cast: -128 as i8
+        let neg128 = (-128_i64) as u64;
+        assert_eq!(mask_to_width(neg128, PrimitiveType::I8) as i64, -128);
     }
 }
