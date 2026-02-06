@@ -1,8 +1,8 @@
 // Test: method return types resolved in callee context.
 // Both modules define a struct Config with different fields.
 // Instance methods return their own module's Config type.
-// lookup_method_info resolves return types in caller context,
-// which can confuse same-named types from different modules.
+// The resolver resolves return types in the source module's context
+// to avoid confusing same-named types from different modules.
 
 use { println } from "core:cli";
 use { ContainerA } from "./sub/wasm_name_conflict_method_mod_a.wado";
@@ -18,4 +18,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "a: 42\nb: hello 7\n"}
+{"stdout": "a: 42\nb: hello 7\n"}

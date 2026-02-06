@@ -6548,6 +6548,53 @@ impl<'a> Resolver<'a> {
                                         .insert(type_param.name.clone(), (index, type_param_id));
                                 }
 
+                                // Resolve return type and param types in the source module's
+                                // type context, not the caller's. This prevents same-named types
+                                // from different modules being confused (e.g., both modules
+                                // define "Config" with different fields).
+                                let (imported_sources, import_names) =
+                                    Self::build_imported_type_sources(module, module_source);
+                                let src_struct_fields = Self::build_module_map(
+                                    &self.all_struct_fields,
+                                    module_source,
+                                    &imported_sources,
+                                    &import_names,
+                                );
+                                let src_variant_cases = Self::build_module_map(
+                                    &self.all_variant_cases,
+                                    module_source,
+                                    &imported_sources,
+                                    &import_names,
+                                );
+                                let src_enum_cases = Self::build_module_map(
+                                    &self.all_enum_cases,
+                                    module_source,
+                                    &imported_sources,
+                                    &import_names,
+                                );
+                                let src_type_aliases = Self::build_module_map(
+                                    &self.all_type_aliases,
+                                    module_source,
+                                    &imported_sources,
+                                    &import_names,
+                                );
+                                let src_resource_types = Self::build_module_map(
+                                    &self.all_resource_types,
+                                    module_source,
+                                    &imported_sources,
+                                    &import_names,
+                                );
+                                let saved_struct_fields =
+                                    std::mem::replace(&mut self.struct_fields, src_struct_fields);
+                                let saved_variant_cases =
+                                    std::mem::replace(&mut self.variant_cases, src_variant_cases);
+                                let saved_enum_cases =
+                                    std::mem::replace(&mut self.enum_cases, src_enum_cases);
+                                let saved_type_aliases =
+                                    std::mem::replace(&mut self.type_aliases, src_type_aliases);
+                                let saved_resource_types =
+                                    std::mem::replace(&mut self.resource_types, src_resource_types);
+
                                 let return_type = method
                                     .return_type
                                     .as_ref()
@@ -6560,6 +6607,11 @@ impl<'a> Resolver<'a> {
                                     .unwrap_or(ast::SelfKind::None);
                                 let param_types = self.extract_param_types(&method.params);
 
+                                self.struct_fields = saved_struct_fields;
+                                self.variant_cases = saved_variant_cases;
+                                self.enum_cases = saved_enum_cases;
+                                self.type_aliases = saved_type_aliases;
+                                self.resource_types = saved_resource_types;
                                 self.current_type_params = old_type_params;
 
                                 return Some(MethodInfo {
@@ -8187,11 +8239,27 @@ impl<'a> Resolver<'a> {
         let resolved = self.type_table.borrow().get(struct_type).clone();
         match resolved {
             // Struct field access
-            ResolvedType::Struct { name, .. } => {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => {
+                // Use the flat struct_fields map first. When there's a name collision
+                // (the entry is from a different module), re-resolve fields from the
+                // source module to get the correct struct definition.
                 if let Some(struct_info) = self.struct_fields.get(&name) {
-                    for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
-                        if fname == field_name {
-                            return (index as u32, *ftype);
+                    if struct_info.module_source == module_source {
+                        for (index, (fname, ftype)) in struct_info.fields.iter().enumerate() {
+                            if fname == field_name {
+                                return (index as u32, *ftype);
+                            }
+                        }
+                    } else {
+                        // Name collision: re-resolve field type from the loaded module
+                        if let Some(ftype) =
+                            self.resolve_field_in_source_module(&name, field_name, &module_source)
+                        {
+                            return ftype;
                         }
                     }
                 }
@@ -8232,6 +8300,87 @@ impl<'a> Resolver<'a> {
             _ => {}
         }
         (0, TypeTable::UNKNOWN)
+    }
+
+    /// Resolve a struct field type from the source module where the struct is defined.
+    /// Used when the flat `struct_fields` map has a name collision (two modules define
+    /// a struct with the same name). This re-resolves the field type in the source
+    /// module's type context to get the correct result.
+    fn resolve_field_in_source_module(
+        &mut self,
+        struct_name: &str,
+        field_name: &str,
+        module_source: &ModuleSource,
+    ) -> Option<(u32, TypeId)> {
+        let loaded_module = self.loaded_modules.get(module_source)?;
+        // Find the struct declaration in the loaded module
+        let struct_decl = loaded_module.items.iter().find_map(|item| {
+            if let Item::Struct(s) = item
+                && s.name == struct_name
+            {
+                Some(s)
+            } else {
+                None
+            }
+        })?;
+
+        // Build source module's type resolution context
+        let (imported_sources, import_names) =
+            Self::build_imported_type_sources(loaded_module, module_source);
+        let src_struct_fields = Self::build_module_map(
+            &self.all_struct_fields,
+            module_source,
+            &imported_sources,
+            &import_names,
+        );
+        let src_variant_cases = Self::build_module_map(
+            &self.all_variant_cases,
+            module_source,
+            &imported_sources,
+            &import_names,
+        );
+        let src_enum_cases = Self::build_module_map(
+            &self.all_enum_cases,
+            module_source,
+            &imported_sources,
+            &import_names,
+        );
+        let src_type_aliases = Self::build_module_map(
+            &self.all_type_aliases,
+            module_source,
+            &imported_sources,
+            &import_names,
+        );
+        let src_resource_types = Self::build_module_map(
+            &self.all_resource_types,
+            module_source,
+            &imported_sources,
+            &import_names,
+        );
+
+        // Temporarily swap type maps to source module's context
+        let saved_struct_fields = std::mem::replace(&mut self.struct_fields, src_struct_fields);
+        let saved_variant_cases = std::mem::replace(&mut self.variant_cases, src_variant_cases);
+        let saved_enum_cases = std::mem::replace(&mut self.enum_cases, src_enum_cases);
+        let saved_type_aliases = std::mem::replace(&mut self.type_aliases, src_type_aliases);
+        let saved_resource_types = std::mem::replace(&mut self.resource_types, src_resource_types);
+
+        // Find and resolve the field type
+        let result = struct_decl
+            .fields
+            .iter()
+            .enumerate()
+            .find(|(_, f)| f.name == field_name)
+            .map(|(index, f)| (index as u32, self.resolve_type(&f.ty)));
+
+        // Restore type maps
+        self.struct_fields = saved_struct_fields;
+        self.variant_cases = saved_variant_cases;
+        self.enum_cases = saved_enum_cases;
+        self.type_aliases = saved_type_aliases;
+        self.resource_types = saved_resource_types;
+
+        result
     }
 
     /// Substitute type parameters in a type with concrete type arguments
