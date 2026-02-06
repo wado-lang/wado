@@ -25,7 +25,10 @@ use crate::tir::{
     TypeId, TypeTable,
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
-use crate::wasm_plan::CmValType;
+use crate::wasm_plan::{
+    CmValType, TypeDecl, get_self_referential_field_types, get_type_dependencies,
+    sort_types_topologically,
+};
 use crate::wasm_postprocess;
 use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
@@ -393,9 +396,6 @@ fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
     }
 }
 
-/// Re-export from `wasm_plan` for type ordering.
-use crate::wasm_plan::TypeDecl;
-
 // =========================================================================
 // br_table optimization constants and types
 // =========================================================================
@@ -508,30 +508,6 @@ impl Codegen<'_> {
         self.struct_types.get(&qualified)
     }
 
-    /// Delegate to `wasm_plan::get_type_dependencies`.
-    fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
-        crate::wasm_plan::get_type_dependencies(type_table, type_id)
-    }
-
-    /// Delegate to `wasm_plan::get_self_referential_field_types`.
-    fn get_self_referential_field_types(
-        struct_name: &str,
-        tir_struct: &crate::tir::TirStruct,
-        type_table: &TypeTable,
-    ) -> Vec<TypeId> {
-        crate::wasm_plan::get_self_referential_field_types(struct_name, tir_struct, type_table)
-    }
-
-    /// Delegate to `wasm_plan::sort_types_topologically`.
-    fn sort_types_topologically<'b>(
-        structs: &'b [crate::tir::TirStruct],
-        variants: &'b [crate::tir::TirVariantDecl],
-        type_table: &TypeTable,
-    ) -> Vec<TypeDecl<'b>> {
-        crate::wasm_plan::sort_types_topologically(structs, variants, type_table)
-    }
-
-    /// Build main core module from TIR
     /// Build the main core Wasm module containing user-defined functions.
     fn build_main_module(&mut self, params: BuildMainModuleParams<'_>) -> Vec<u8> {
         let BuildMainModuleParams {
@@ -837,11 +813,8 @@ impl Codegen<'_> {
                 .cloned()
                 .collect();
             // Sort structs and variants together topologically
-            let sorted_types = Self::sort_types_topologically(
-                &lib_structs,
-                &lib_variants,
-                &tir_mod.type_table.borrow(),
-            );
+            let sorted_types =
+                sort_types_topologically(&lib_structs, &lib_variants, &tir_mod.type_table.borrow());
             for type_decl in sorted_types {
                 match type_decl {
                     TypeDecl::Struct(tir_struct) => {
@@ -898,7 +871,7 @@ impl Codegen<'_> {
             .cloned()
             .collect();
         let sorted_types =
-            Self::sort_types_topologically(&non_mono_structs, &non_mono_variants, type_table);
+            sort_types_topologically(&non_mono_structs, &non_mono_variants, type_table);
         // Track which non-mono structs depend on mono structs (to be deferred to PHASE 4)
         let mono_struct_names: HashSet<String> = entry_tir
             .structs
@@ -914,7 +887,7 @@ impl Codegen<'_> {
                     let deps = tir_struct
                         .fields
                         .iter()
-                        .flat_map(|f| Self::get_type_dependencies(type_table, f.type_id))
+                        .flat_map(|f| get_type_dependencies(type_table, f.type_id))
                         .collect::<HashSet<_>>();
                     if deps.iter().any(|d| mono_struct_names.contains(d)) {
                         // Defer to PHASE 4
@@ -1020,7 +993,7 @@ impl Codegen<'_> {
             // Sort topologically to ensure dependencies come before dependents
             let lib_type_table = tir_mod.type_table.borrow();
             let sorted_lib_types =
-                Self::sort_types_topologically(&mono_lib_structs, &[], &lib_type_table);
+                sort_types_topologically(&mono_lib_structs, &[], &lib_type_table);
 
             for type_decl in sorted_lib_types {
                 let TypeDecl::Struct(tir_struct) = type_decl else {
@@ -1029,11 +1002,8 @@ impl Codegen<'_> {
                 let struct_name =
                     StructName::new(entry_module_source.clone(), tir_struct.name.clone());
                 // Check for self-referential structs using full struct name
-                let self_ref_fields = Self::get_self_referential_field_types(
-                    &tir_struct.name,
-                    tir_struct,
-                    &lib_type_table,
-                );
+                let self_ref_fields =
+                    get_self_referential_field_types(&tir_struct.name, tir_struct, &lib_type_table);
                 if self_ref_fields.is_empty() {
                     self.register_struct_type(
                         struct_name,
@@ -1083,7 +1053,7 @@ impl Codegen<'_> {
             .chain(deferred_non_mono_structs.iter())
             .cloned()
             .collect();
-        let sorted_phase4 = Self::sort_types_topologically(&all_phase4_structs, &[], type_table);
+        let sorted_phase4 = sort_types_topologically(&all_phase4_structs, &[], type_table);
         for type_decl in sorted_phase4 {
             let TypeDecl::Struct(tir_struct) = type_decl else {
                 continue;
@@ -1091,7 +1061,7 @@ impl Codegen<'_> {
             let struct_name = StructName::new(entry_module_source.clone(), tir_struct.name.clone());
             // Check for self-referential structs (e.g., BTreeNode with Array<&mut BTreeNode>)
             let self_ref_fields =
-                Self::get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
+                get_self_referential_field_types(&tir_struct.name, tir_struct, type_table);
             if self_ref_fields.is_empty() {
                 self.register_struct_type(struct_name, tir_struct, type_table, &mut builder);
             } else {
