@@ -11186,6 +11186,15 @@ impl Codegen<'_> {
             "builtin::unreachable" => {
                 func.instruction(&Instruction::Unreachable);
             }
+            "builtin::select" => {
+                // Wasm select: [if_true, if_false, cond] → [result]
+                // Args: [cond, if_true, if_false]
+                self.generate_expr(func, &args[1], type_table, ctx, builder);
+                self.generate_expr(func, &args[2], type_table, ctx, builder);
+                self.generate_expr(func, &args[0], type_table, ctx, builder);
+                let result_type = self.type_id_to_valtype(type_table, expr.type_id);
+                func.instruction(&Instruction::TypedSelect(result_type));
+            }
             "builtin::effect_wait" => {
                 self.generate_effect_wait(func, ctx, builder);
             }

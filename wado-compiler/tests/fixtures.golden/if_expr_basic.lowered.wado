@@ -10,17 +10,9 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let x: i32 = if true {
-        42;
-    } else {
-        0;
-    };
+    let x: i32 = core::builtin::select::<i32>(true, 42, 0);
     core::cli::println(move x."i32::to_string"());
-    let y: i32 = if false {
-        100;
-    } else {
-        200;
-    };
+    let y: i32 = core::builtin::select::<i32>(false, 100, 200);
     core::cli::println(move y."i32::to_string"());
 }
 

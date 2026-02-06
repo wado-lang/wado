@@ -7,7 +7,7 @@
 //! - Copy propagation via `optimize_copy_prop` module
 //! - Constant folding via `optimize_const_fold` module
 //! - Loop-Invariant Code Motion (LICM) via `optimize_licm` module
-//! - Move insertion via `optimize_move` module
+//! - Post-optimization rewrites (select lowering, move insertion) via `optimize_rewrite` module
 
 use crate::optimize_const_fold::fold_constants;
 use crate::optimize_copy_prop::propagate_copies;
@@ -24,8 +24,8 @@ struct OptConfig {
     inline_threshold: usize,
 }
 use crate::optimize_licm::apply_licm;
-use crate::optimize_move::{collect_value_copy_types, insert_moves};
 use crate::optimize_ref_elim::eliminate_unnecessary_refs;
+use crate::optimize_rewrite::{collect_value_copy_types, insert_moves};
 use crate::project::Project;
 
 /// Optimization level for the compiler.

@@ -16,22 +16,14 @@ fn run() with Stdout {
         if (25 < 20) {
             2;
         } else {
-            if (25 < 30) {
-                3;
-            } else {
-                4;
-            };
+            core::builtin::select::<i32>((25 < 30), 3, 4);
         };
     };
     core::cli::println(move x."i32::to_string"());
     let y: i32 = if (25 == 25) {
         100;
     } else {
-        if (25 == 24) {
-            200;
-        } else {
-            300;
-        };
+        core::builtin::select::<i32>((25 == 24), 200, 300);
     };
     core::cli::println(move y."i32::to_string"());
 }

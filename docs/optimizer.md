@@ -766,21 +766,21 @@ This section details WebAssembly 3.0 instructions that Wado should expose and us
 
 #### 2. Branchless Conditional - `select`
 
-**Status:** ❌ Not exposed
+**Status:** ✅ Implemented
 
 **Instruction:** `select` - Choose between two values based on condition without branching
 
 **Example:**
 
 ```wado
-// Current: generates branch
 let max = if a > b { a } else { b };
-
-// With select instruction:
-// (select (local.get $a) (local.get $b) (i32.gt_s (local.get $a) (local.get $b)))
+// Lowered to: builtin::select(a > b, a, b)
+// Emits: (select (result i32) (local.get $a) (local.get $b) (i32.gt_s ...))
 ```
 
-**Implementation:** Detect ternary-like if expressions, emit `select` for simple value choices
+**Implementation:** The `insert_moves` pass in `optimize_rewrite.rs` detects simple `if` expressions where both branches are single pure expressions (locals or literals) and transforms them to `builtin::select(cond, true_val, false_val)` calls. Codegen emits `TypedSelect` for these calls. No extra TIR scan is needed — the transformation piggybacks on the existing `insert_moves` walk.
+
+**Eligibility:** Both branches must be side-effect-free (locals, int/float/bool/char literals). Function calls, assignments, and other effectful expressions are not eligible.
 
 **Benefits:**
 
@@ -788,7 +788,7 @@ let max = if a > b { a } else { b };
 - More compact code
 - Better for simple conditionals
 
-**Expose as:** Could be implicit optimization for `if` expressions, or explicit `builtin::select<T>(cond: bool, if_true: T, if_false: T) -> T`
+**Exposed as:** `builtin::select<T>(cond: bool, if_true: T, if_false: T) -> T` in `lib/core/builtin.wado`
 
 #### 3. Bit Manipulation Instructions
 

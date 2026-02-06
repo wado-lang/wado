@@ -58,7 +58,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | OptimizeRefElim  | `optimize_ref_elim.rs`  | Reference elimination after inlining                  |
 | OptimizeCopyProp | `optimize_copy_prop.rs` | Copy propagation for trivial bindings                 |
 | OptimizeLICM     | `optimize_licm.rs`      | Loop-invariant code motion                            |
-| OptimizeMove     | `optimize_move.rs`      | Move insertion for fresh values, copy type collection |
+| OptimizeRewrite  | `optimize_rewrite.rs`   | Select lowering, move insertion, copy type collection |
 | WasmPlan         | `wasm_plan.rs`          | CM boundary analysis, ComponentPlan, type ordering    |
 | Stdlib           | `stdlib.rs`             | Embedded core library sources                         |
 | WasiRegistry     | `wasi_registry.rs`      | WASI import registry, WASI type resolution            |
@@ -195,14 +195,14 @@ The `optimize.rs` module coordinates multiple optimization passes on TIR. The op
 
 **Optimization Passes:**
 
-| Module                | File                    | Description                                            |
-| --------------------- | ----------------------- | ------------------------------------------------------ |
-| DCE                   | `optimize_dce.rs`       | Dead code elimination via reachability analysis        |
-| Function Inlining     | `optimize_inline.rs`    | Inline small, pure functions                           |
-| Reference Elimination | `optimize_ref_elim.rs`  | Eliminate unnecessary `&local` bindings after inline   |
-| Copy Propagation      | `optimize_copy_prop.rs` | Propagate trivial copies like `let x = y`              |
-| LICM                  | `optimize_licm.rs`      | Hoist loop-invariant field accesses                    |
-| Move Insertion        | `optimize_move.rs`      | Avoid copies for fresh values (literals, call results) |
+| Module                | File                    | Description                                           |
+| --------------------- | ----------------------- | ----------------------------------------------------- |
+| DCE                   | `optimize_dce.rs`       | Dead code elimination via reachability analysis       |
+| Function Inlining     | `optimize_inline.rs`    | Inline small, pure functions                          |
+| Reference Elimination | `optimize_ref_elim.rs`  | Eliminate unnecessary `&local` bindings after inline  |
+| Copy Propagation      | `optimize_copy_prop.rs` | Propagate trivial copies like `let x = y`             |
+| LICM                  | `optimize_licm.rs`      | Hoist loop-invariant field accesses                   |
+| Post-opt Rewrite      | `optimize_rewrite.rs`   | Select lowering, move insertion, copy type collection |
 
 **Optimization Order:**
 
@@ -214,7 +214,7 @@ For `-O2` and `-Os`:
 4. **LICM** → hoist loop-invariant code
 5. **DCE Analysis** → determine reachable functions
 6. **DCE Removal** → remove unreachable functions
-7. **Move Insertion** → mark fresh values as movable (all optimization levels)
+7. **Post-opt Rewrite** → select lowering, move insertion (all optimization levels)
 8. **Value Copy Collection** → collect types needing copy support for codegen
 
 **Usage Analysis Fields (populated in Project):**
