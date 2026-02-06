@@ -92,7 +92,7 @@ pub mod optimize_copy_prop;
 pub mod optimize_dce;
 pub mod optimize_inline;
 pub mod optimize_licm;
-pub mod optimize_move;
+pub mod optimize_rewrite;
 pub mod optimize_ref_elim;
 pub mod parser;
 pub mod project;
