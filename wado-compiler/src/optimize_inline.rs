@@ -2227,7 +2227,7 @@ fn remap_expr(
             arms: arms
                 .iter()
                 .map(|arm| crate::tir::TirMatchArm {
-                    pattern: arm.pattern.clone(), // Patterns don't contain locals in the same sense
+                    pattern: remap_pattern(&arm.pattern, param_to_local, local_offset, param_count),
                     body: remap_expr(
                         &arm.body,
                         param_to_local,
