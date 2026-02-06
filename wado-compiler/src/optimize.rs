@@ -5,9 +5,11 @@
 //! - Function inlining via `optimize_inline` module
 //! - Reference elimination via `optimize_ref_elim` module
 //! - Copy propagation via `optimize_copy_prop` module
+//! - Constant folding via `optimize_const_fold` module
 //! - Loop-Invariant Code Motion (LICM) via `optimize_licm` module
 //! - Move insertion via `optimize_move` module
 
+use crate::optimize_const_fold::fold_constants;
 use crate::optimize_copy_prop::propagate_copies;
 use crate::optimize_dce::{
     analyze_project, populate_all_features, remove_unreachable_functions, remove_unreachable_types,
@@ -150,6 +152,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
 /// - Function inlining
 /// - Reference elimination
 /// - Copy propagation
+/// - Constant folding
 /// - Loop-invariant code motion (LICM)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
@@ -159,6 +162,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         inline_functions(project, config.inline_threshold);
         eliminate_unnecessary_refs(project);
         propagate_copies(project);
+        fold_constants(project);
         apply_licm(project);
     }
 }
