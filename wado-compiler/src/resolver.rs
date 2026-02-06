@@ -6637,10 +6637,7 @@ impl<'a> Resolver<'a> {
                                         &mut self.variant_cases,
                                         &mut cached.variant_cases,
                                     );
-                                    std::mem::swap(
-                                        &mut self.enum_cases,
-                                        &mut cached.enum_cases,
-                                    );
+                                    std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
                                     std::mem::swap(
                                         &mut self.type_aliases,
                                         &mut cached.type_aliases,
@@ -6670,10 +6667,7 @@ impl<'a> Resolver<'a> {
                                         &mut self.variant_cases,
                                         &mut cached.variant_cases,
                                     );
-                                    std::mem::swap(
-                                        &mut self.enum_cases,
-                                        &mut cached.enum_cases,
-                                    );
+                                    std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
                                     std::mem::swap(
                                         &mut self.type_aliases,
                                         &mut cached.type_aliases,
