@@ -1,4 +1,4 @@
-# WEP: Wasm Adapt Phase
+# WEP: Wasm Plan Phase
 
 ## Context
 
@@ -13,15 +13,15 @@ This mixing of concerns makes codegen complex and harder to maintain. Additional
 
 ## Decision
 
-Introduce a new `wasm_adapt` phase between optimize and codegen:
+Introduce a new `wasm_plan` phase between optimize and codegen:
 
 ```
-lower → optimize → wasm_adapt → codegen
+lower → optimize → wasm_plan → codegen
 ```
 
 ### Responsibilities
 
-The `wasm_adapt` phase handles all Wasm-specific preparation:
+The `wasm_plan` phase handles all Wasm-specific preparation:
 
 1. **CM boundary analysis**
    - Analyze export signatures to determine required glue code
@@ -99,7 +99,7 @@ pub struct CmConverterRequirements {
 
 ### Generated Helper Functions
 
-The `wasm_adapt` phase generates TIR functions for CM type conversion:
+The `wasm_plan` phase generates TIR functions for CM type conversion:
 
 ```
 // Example: Converting CM list<option<string>> to Array<Option<String>>
@@ -117,18 +117,18 @@ Function naming convention: `__cm_{operation}_{type_signature}`
 
 ### Migration Path
 
-1. ✓ Move scratch local analysis for CM operations from codegen to wasm_adapt
+1. ✓ Move scratch local analysis for CM operations from codegen to wasm_plan
 2. ✓ Add CmExportInfo metadata to TirFunction
-3. ✓ Centralize CM converter analysis in wasm_adapt (shared by optimize_dce)
+3. ✓ Centralize CM converter analysis in wasm_plan (shared by optimize_dce)
 4. (Future) Generate CM helper functions dynamically instead of hardcoding
-5. ✓ Simplify codegen to use metadata from wasm_adapt
+5. ✓ Simplify codegen to use metadata from wasm_plan
 
 ### Current Status
 
-The wasm_adapt phase is implemented with:
+The wasm_plan phase is implemented with:
 
 1. **CmExportInfo metadata** - Attached to TirFunctions that are world exports
-2. **Scratch local computation** - Pre-computed in wasm_adapt, used by codegen
+2. **Scratch local computation** - Pre-computed in wasm_plan, used by codegen
 3. **CM converter analysis** - Centralized functions for determining required converters
 
 **CM Helper Functions**: Currently implemented in `lib/core/internal.wado` as Wado source code.
@@ -152,7 +152,7 @@ Dynamic TIR generation is deferred until we need complex type combinations like
 
 ### Trade-offs
 
-1. **No optimization for generated helpers** - wasm_adapt runs after optimize
+1. **No optimization for generated helpers** - wasm_plan runs after optimize
    - Acceptable: helpers are small and unlikely to benefit from optimization
 2. **Additional phase** - Slightly longer compilation
    - Acceptable: phase is lightweight analysis + targeted TIR generation
