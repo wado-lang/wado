@@ -778,7 +778,7 @@ let max = if a > b { a } else { b };
 // Emits: (select (result i32) (local.get $a) (local.get $b) (i32.gt_s ...))
 ```
 
-**Implementation:** The `insert_moves` pass in `optimize_move.rs` detects simple `if` expressions where both branches are single pure expressions (locals or literals) and transforms them to `builtin::select(cond, true_val, false_val)` calls. Codegen emits `TypedSelect` for these calls. No extra TIR scan is needed — the transformation piggybacks on the existing `insert_moves` walk.
+**Implementation:** The `insert_moves` pass in `optimize_rewrite.rs` detects simple `if` expressions where both branches are single pure expressions (locals or literals) and transforms them to `builtin::select(cond, true_val, false_val)` calls. Codegen emits `TypedSelect` for these calls. No extra TIR scan is needed — the transformation piggybacks on the existing `insert_moves` walk.
 
 **Eligibility:** Both branches must be side-effect-free (locals, int/float/bool/char literals). Function calls, assignments, and other effectful expressions are not eligible.
 

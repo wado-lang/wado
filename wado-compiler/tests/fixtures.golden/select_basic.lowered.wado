@@ -16,7 +16,49 @@ fn run() with Stdout {
     core::cli::println(move x."i32::to_string"());
     let y: i32 = core::builtin::select::<i32>(false, 100, 200);
     core::cli::println(move y."i32::to_string"());
-    let min: i32 = core::builtin::select::<i32>((5 < 3), 5, 3);
-    core::cli::println(move min."i32::to_string"());
+    let a64: i64 = 10 as i64;
+    let b64: i64 = 20 as i64;
+    let max64: i64 = core::builtin::select::<i64>((a64 > b64), a64, b64);
+    core::cli::println(move max64."i64::to_string"());
+    let a8: i8 = 10 as i8;
+    let b8: i8 = 20 as i8;
+    let min8: i8 = core::builtin::select::<i8>((a8 < b8), a8, b8);
+    core::cli::println(__inline_i8__to_string_0: {
+        break __inline_i8__to_string_0: min8 as i32."i32::to_string"();
+    });
+    let a16: i16 = 10 as i16;
+    let b16: i16 = 20 as i16;
+    let min16: i16 = core::builtin::select::<i16>((a16 < b16), a16, b16);
+    core::cli::println(__inline_i16__to_string_1: {
+        break __inline_i16__to_string_1: min16 as i32."i32::to_string"();
+    });
+    let ua: u8 = 10 as u8;
+    let ub: u8 = 20 as u8;
+    let umax: u8 = core::builtin::select::<u8>((ua > ub), ua, ub);
+    core::cli::println(__inline_u8__to_string_2: {
+        break __inline_u8__to_string_2: umax as i32."i32::to_string"();
+    });
+    let ua16: u16 = 10 as u16;
+    let ub16: u16 = 20 as u16;
+    let umax16: u16 = core::builtin::select::<u16>((ua16 > ub16), ua16, ub16);
+    core::cli::println(__inline_u16__to_string_3: {
+        break __inline_u16__to_string_3: umax16 as i32."i32::to_string"();
+    });
+    let ua32: u32 = 10 as u32;
+    let ub32: u32 = 20 as u32;
+    let umax32: u32 = core::builtin::select::<u32>((ua32 > ub32), ua32, ub32);
+    core::cli::println(move umax32."u32::to_string"());
+    let ua64: u64 = 10 as u64;
+    let ub64: u64 = 20 as u64;
+    let umax64: u64 = core::builtin::select::<u64>((ua64 > ub64), ua64, ub64);
+    core::cli::println(move umax64."u64::to_string"());
+    let bsel: bool = core::builtin::select::<bool>(true, true, false);
+    core::cli::println(__inline_bool__to_string_4: {
+        break __inline_bool__to_string_4: if bsel {
+            "true";
+        } else {
+            "false";
+        };
+    });
 }
 
