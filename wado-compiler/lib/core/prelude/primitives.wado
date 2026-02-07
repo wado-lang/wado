@@ -345,3 +345,106 @@ impl f64 {
         return String::internal_from_utf8_raw(arr, len);
     }
 }
+
+// ============================================================================
+// Ord implementations for primitive types
+// ============================================================================
+// These enable calling Ord::cmp on primitives when T: Ord bounds are used.
+
+impl Ord for i8 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for u8 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for i16 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for u16 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for i32 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for u32 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for i64 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for u64 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for f32 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for f64 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for char {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        if *self < *other { return Ordering::Less; }
+        if *self > *other { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}
+
+impl Ord for bool {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        let a = (*self) as i32;
+        let b = (*other) as i32;
+        if a < b { return Ordering::Less; }
+        if a > b { return Ordering::Greater; }
+        return Ordering::Equal;
+    }
+}

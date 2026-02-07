@@ -2268,28 +2268,51 @@ impl Monomorphizer {
                         sorted_entries.iter().map(|(_, tid)| **tid).collect();
 
                     // Apply type args to get monomorphized method info
-                    let new_info = info.with_struct_type_args(&type_names);
+                    // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
+                    // name directly instead of adding type args.
+                    let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
+                        info.with_substituted_struct_name(&type_names[0])
+                    } else {
+                        info.with_struct_type_args(&type_names)
+                    };
                     let new_func_name = new_info.to_mangled_name();
 
                     if new_func_name != old_func_name {
-                        // Preserve the existing generic_name if we already have monomorph_info
-                        let existing_generic_name = match method_func {
-                            FunctionRef::External {
-                                monomorph_info: Some(mi),
-                                ..
-                            } => Some(mi.generic_name.clone()),
-                            _ => None,
-                        };
-                        let monomorph_info = Some(MonomorphInfo {
-                            generic_name: existing_generic_name.unwrap_or(old_func_name),
-                            type_args,
-                        });
-                        *method_func = FunctionRef::External {
-                            module_source,
-                            name: new_func_name,
-                            monomorph_info,
-                            method_info: Some(new_info),
-                        };
+                        if info.is_type_param_receiver {
+                            // Type param receiver substitution redirects to a concrete method
+                            // (e.g., T^Ord::cmp -> i32^Ord::cmp). The target is not a
+                            // monomorphized function - it's a concrete method defined in the
+                            // module where the impl block lives. Derive the correct module_source
+                            // from the concrete type and don't set monomorph_info.
+                            let concrete_type_id = sorted_entries[0].1;
+                            let concrete_module =
+                                module_source_for_trait_impl(type_table, *concrete_type_id);
+                            *method_func = FunctionRef::External {
+                                module_source: concrete_module.unwrap_or(module_source),
+                                name: new_func_name,
+                                monomorph_info: None,
+                                method_info: Some(new_info),
+                            };
+                        } else {
+                            // Normal monomorphization (e.g., Array<T>::len -> Array<i32>::len)
+                            let existing_generic_name = match method_func {
+                                FunctionRef::External {
+                                    monomorph_info: Some(mi),
+                                    ..
+                                } => Some(mi.generic_name.clone()),
+                                _ => None,
+                            };
+                            let monomorph_info = Some(MonomorphInfo {
+                                generic_name: existing_generic_name.unwrap_or(old_func_name),
+                                type_args,
+                            });
+                            *method_func = FunctionRef::External {
+                                module_source,
+                                name: new_func_name,
+                                monomorph_info,
+                                method_info: Some(new_info),
+                            };
+                        }
                     }
                 }
             }
@@ -2322,20 +2345,36 @@ impl Monomorphizer {
                         sorted_entries.iter().map(|(_, tid)| **tid).collect();
 
                     // Apply type args to get monomorphized method info
-                    let new_info = info.with_struct_type_args(&type_names);
+                    let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
+                        info.with_substituted_struct_name(&type_names[0])
+                    } else {
+                        info.with_struct_type_args(&type_names)
+                    };
                     let new_func_name = new_info.to_mangled_name();
 
                     if new_func_name != old_func_name {
-                        let monomorph_info = Some(MonomorphInfo {
-                            generic_name: old_func_name,
-                            type_args,
-                        });
-                        *static_func = FunctionRef::External {
-                            module_source,
-                            name: new_func_name,
-                            monomorph_info,
-                            method_info: Some(new_info),
-                        };
+                        if info.is_type_param_receiver {
+                            let concrete_type_id = sorted_entries[0].1;
+                            let concrete_module =
+                                module_source_for_trait_impl(type_table, *concrete_type_id);
+                            *static_func = FunctionRef::External {
+                                module_source: concrete_module.unwrap_or(module_source),
+                                name: new_func_name,
+                                monomorph_info: None,
+                                method_info: Some(new_info),
+                            };
+                        } else {
+                            let monomorph_info = Some(MonomorphInfo {
+                                generic_name: old_func_name,
+                                type_args,
+                            });
+                            *static_func = FunctionRef::External {
+                                module_source,
+                                name: new_func_name,
+                                monomorph_info,
+                                method_info: Some(new_info),
+                            };
+                        }
                     }
                 }
                 for arg in args {
@@ -3278,5 +3317,20 @@ impl Monomorphizer {
         }
 
         None
+    }
+}
+
+/// Determine the module where trait implementations for a concrete type are defined.
+/// Used when substituting a type parameter receiver (e.g., `T^Ord::cmp` → `i32^Ord::cmp`)
+/// to set the correct `module_source` so DCE can find the target function.
+fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
+    match type_table.get(type_id) {
+        ResolvedType::Primitive(_) => Some(ModuleSource::core("prelude/primitives")),
+        ResolvedType::BuiltinArray(_) => Some(ModuleSource::core("prelude")),
+        ResolvedType::Struct { module_source, .. }
+        | ResolvedType::GenericInstance { module_source, .. }
+        | ResolvedType::Enum { module_source, .. }
+        | ResolvedType::Variant { module_source, .. } => Some(module_source.clone()),
+        _ => None,
     }
 }

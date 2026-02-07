@@ -214,13 +214,11 @@ impl Array<T> {
     }
 }
 
-// sort/sorted require T: Ord (elements must be comparable with < operator)
+// sort/sorted require T: Ord (elements must be comparable via Ord::cmp)
 impl Array<T: Ord> {
     pub fn sort(&mut self) {
         self.sort_by(|a: &T, b: &T| {
-            if *a < *b { return Ordering::Less; }
-            if *b < *a { return Ordering::Greater; }
-            return Ordering::Equal;
+            return a.cmp(b);
         });
     }
 

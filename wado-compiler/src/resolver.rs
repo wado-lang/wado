@@ -474,6 +474,9 @@ pub struct Resolver<'a> {
     /// Type parameters currently in scope (name -> (index, `TypeId`))
     /// Set when resolving generic structs or functions
     current_type_params: HashMap<String, (u32, TypeId)>,
+    /// Trait bounds on type parameters in scope (name -> trait names)
+    /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord)
+    current_type_param_bounds: HashMap<String, Vec<String>>,
     /// Generic struct definitions (name -> type param count)
     /// Used to determine if a struct is generic
     generic_struct_names: HashSet<String>,
@@ -599,6 +602,7 @@ impl<'a> Resolver<'a> {
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),
             current_type_params: HashMap::new(),
+            current_type_param_bounds: HashMap::new(),
             generic_struct_names: HashSet::new(),
             generic_function_params: HashMap::new(),
             generic_method_params: HashMap::new(),
@@ -705,6 +709,16 @@ impl<'a> Resolver<'a> {
                     // Register type parameters from impl block's generic type FIRST
                     // e.g., impl IndexValue<i32> for Triple<T> needs T registered
                     let old_type_params = std::mem::take(&mut self.current_type_params);
+                    let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
+
+                    // First, collect explicit type params from impl<T: Bound>
+                    for param in &impl_block.type_params {
+                        if !param.bounds.is_empty() {
+                            self.current_type_param_bounds
+                                .insert(param.name.clone(), param.bounds.clone());
+                        }
+                    }
+
                     if let ast::Type::Generic(generic) = &impl_block.ty {
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
@@ -717,6 +731,16 @@ impl<'a> Resolver<'a> {
                                     self.current_type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
+                            }
+                        }
+                        // Also collect bounds from generic type args
+                        // e.g., impl Array<T: Ord> has bounds on the type arg
+                        for param in &impl_block.type_params {
+                            if !param.bounds.is_empty()
+                                && !self.current_type_param_bounds.contains_key(&param.name)
+                            {
+                                self.current_type_param_bounds
+                                    .insert(param.name.clone(), param.bounds.clone());
                             }
                         }
                     }
@@ -753,9 +777,10 @@ impl<'a> Resolver<'a> {
                         }
                     }
 
-                    // Restore old associated type bindings and type params
+                    // Restore old associated type bindings, type params, and bounds
                     self.current_associated_type_bindings = old_associated_type_bindings;
                     self.current_type_params = old_type_params;
+                    self.current_type_param_bounds = old_type_param_bounds;
                 }
                 Item::Trait(_trait_decl) => {
                     // Trait declarations are handled in the first pass (signature registration)
@@ -1171,6 +1196,7 @@ impl<'a> Resolver<'a> {
                 current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"), // Set in resolve_module
                 current_module_items: Vec::new(), // Set in resolve_module
                 current_type_params: HashMap::new(),
+                current_type_param_bounds: HashMap::new(),
                 generic_struct_names: HashSet::new(),
                 generic_function_params: HashMap::new(),
                 generic_method_params: HashMap::new(),
@@ -1820,6 +1846,7 @@ impl<'a> Resolver<'a> {
                 Item::Impl(impl_block) => {
                     // Set up type parameters from impl block before resolving method signatures
                     let old_type_params = std::mem::take(&mut self.current_type_params);
+                    let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
 
                     // First, collect explicit type params from impl<T>
                     for (index, param) in impl_block.type_params.iter().enumerate() {
@@ -1829,6 +1856,10 @@ impl<'a> Resolver<'a> {
                             .make_type_param(param.name.clone(), index as u32);
                         self.current_type_params
                             .insert(param.name.clone(), (index as u32, type_id));
+                        if !param.bounds.is_empty() {
+                            self.current_type_param_bounds
+                                .insert(param.name.clone(), param.bounds.clone());
+                        }
                     }
 
                     // Also collect type params from generic type: impl Array<T> {...}
@@ -1890,8 +1921,9 @@ impl<'a> Resolver<'a> {
                         self.function_return_types.insert(mangled_name, return_type);
                     }
 
-                    // Restore type parameters and associated type bindings
+                    // Restore type parameters, bounds, and associated type bindings
                     self.current_type_params = old_type_params;
+                    self.current_type_param_bounds = old_type_param_bounds;
                     self.current_associated_type_bindings = old_associated_type_bindings;
                 }
                 _ => {}
@@ -2046,6 +2078,7 @@ impl<'a> Resolver<'a> {
     fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types
         let old_type_params = std::mem::take(&mut self.current_type_params);
+        let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
         let mut type_param_list = Vec::new();
         for (index, param) in func.type_params.iter().enumerate() {
             let type_id = self
@@ -2054,6 +2087,10 @@ impl<'a> Resolver<'a> {
                 .make_type_param(param.name.clone(), index as u32);
             self.current_type_params
                 .insert(param.name.clone(), (index as u32, type_id));
+            if !param.bounds.is_empty() {
+                self.current_type_param_bounds
+                    .insert(param.name.clone(), param.bounds.clone());
+            }
             type_param_list.push((param.name.clone(), type_id));
         }
 
@@ -2108,6 +2145,7 @@ impl<'a> Resolver<'a> {
 
         // Restore previous type params scope
         self.current_type_params = old_type_params;
+        self.current_type_param_bounds = old_type_param_bounds;
 
         Some(TirFunction {
             name: func.name.clone(),
@@ -2208,6 +2246,7 @@ impl<'a> Resolver<'a> {
     ) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types
         let old_type_params = std::mem::take(&mut self.current_type_params);
+        let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
         let mut type_param_list = Vec::new();
 
         // First, collect type params from impl block's generic type (e.g., impl Box<T>)
@@ -2236,6 +2275,15 @@ impl<'a> Resolver<'a> {
             }
         }
 
+        // Populate bounds from the impl block's type_params
+        // (inherited from outer scope - second-pass sets these up)
+        // Re-read from current_type_param_bounds which was set by the caller
+        // Actually, the caller (second-pass) already set up bounds, but we took them.
+        // We need to restore them from old_type_param_bounds temporarily... NO.
+        // The caller sets up bounds BEFORE calling resolve_method, so old_type_param_bounds
+        // contains the caller's bounds. We should use those as base and add method-level bounds.
+        self.current_type_param_bounds = old_type_param_bounds.clone();
+
         // Then, collect method-level type params
         let offset = self.current_type_params.len();
         for (index, param) in func.type_params.iter().enumerate() {
@@ -2247,6 +2295,10 @@ impl<'a> Resolver<'a> {
             self.current_type_params
                 .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
+            if !param.bounds.is_empty() {
+                self.current_type_param_bounds
+                    .insert(param.name.clone(), param.bounds.clone());
+            }
         }
 
         // Set up Self type for the impl block
@@ -2323,8 +2375,9 @@ impl<'a> Resolver<'a> {
             })
             .collect();
 
-        // Restore previous type params scope
+        // Restore previous type params scope and bounds
         self.current_type_params = old_type_params;
+        self.current_type_param_bounds = old_type_param_bounds;
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
@@ -2348,6 +2401,7 @@ impl<'a> Resolver<'a> {
                 trait_name: trait_name.map(String::from),
                 method_name: func.name.clone(),
                 method_type_args: vec![],
+                is_type_param_receiver: false,
             }),
             params,
             return_type,
@@ -5476,6 +5530,27 @@ impl<'a> Resolver<'a> {
             trait_impl_module_source = Some(impl_source);
         }
 
+        // If still not found and receiver is a TypeParam, try trait bounds
+        // e.g., T: Ord -> look up cmp() in Ord trait declaration
+        if method_info.is_none() {
+            let type_param_name = {
+                let resolved = self.type_table.borrow().get(base_type_id).clone();
+                if let ResolvedType::TypeParam { name, .. } = resolved {
+                    Some(name)
+                } else {
+                    None
+                }
+            };
+            if let Some(name) = type_param_name
+                && let Some(bounds) = self.current_type_param_bounds.get(&name).cloned()
+                && let Some((found_trait, info)) =
+                    self.find_method_in_trait_bounds(&bounds, &method_call.method, base_type_id)
+            {
+                trait_name = Some(found_trait);
+                method_info = Some(info);
+            }
+        }
+
         // Get method info (error if method not found)
         let MethodInfo {
             mut return_type,
@@ -5664,12 +5739,17 @@ impl<'a> Resolver<'a> {
             .collect();
 
         // Build method_info with base struct name, then apply impl and method type args
-        let method_info = LocalMethodName::new(
+        let is_type_param_receiver = matches!(
+            self.type_table.borrow().get(base_type_id),
+            ResolvedType::TypeParam { .. }
+        );
+        let mut method_info = LocalMethodName::new(
             base_struct_name, // Use base struct name without type params
             trait_name,
             method_call.method.clone(),
         )
         .with_type_args(&impl_type_arg_names, &method_type_arg_names);
+        method_info.is_type_param_receiver = is_type_param_receiver;
 
         // Use trait impl module source if this is a trait method,
         // otherwise use the struct's module (where inherent methods are defined)
@@ -7774,6 +7854,90 @@ impl<'a> Resolver<'a> {
         }
 
         false
+    }
+
+    /// Find a method in the trait declarations given by the bound names.
+    /// For example, if T: Ord, look up the "cmp" method in the Ord trait declaration.
+    /// Returns (`trait_name`, `MethodInfo`) with the method's return type, `self_kind`, and `param_types`,
+    /// where Self is substituted with the `TypeParam`'s type.
+    fn find_method_in_trait_bounds(
+        &mut self,
+        bounds: &[String],
+        method_name: &str,
+        self_type_id: TypeId,
+    ) -> Option<(String, MethodInfo)> {
+        // Collect trait declarations from all modules
+        for trait_name in bounds {
+            // Search all loaded modules for the trait declaration
+            let mut found_trait_method: Option<(ast::Function, ModuleSource)> = None;
+
+            for (module_src, module) in self.loaded_modules {
+                for item in &module.items {
+                    if let Item::Trait(trait_decl) = item
+                        && trait_decl.name == *trait_name
+                    {
+                        for method in &trait_decl.methods {
+                            if method.name == method_name {
+                                found_trait_method = Some((method.clone(), module_src.clone()));
+                                break;
+                            }
+                        }
+                    }
+                }
+                if found_trait_method.is_some() {
+                    break;
+                }
+            }
+
+            // Also check current module items
+            if found_trait_method.is_none() {
+                for item in &self.current_module_items {
+                    if let Item::Trait(trait_decl) = item
+                        && trait_decl.name == *trait_name
+                    {
+                        for method in &trait_decl.methods {
+                            if method.name == method_name {
+                                found_trait_method =
+                                    Some((method.clone(), self.current_module_source.clone()));
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some((method, _module_source)) = found_trait_method {
+                // Resolve the method signature with Self = self_type_id (the TypeParam)
+                let old_self_type = self.current_self_type;
+                self.current_self_type = Some(self_type_id);
+
+                let return_type = method
+                    .return_type
+                    .as_ref()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or(TypeTable::UNIT);
+                let self_kind = method
+                    .params
+                    .first()
+                    .map(|p| p.self_kind)
+                    .unwrap_or(ast::SelfKind::None);
+                let param_types = self.extract_param_types(&method.params);
+
+                self.current_self_type = old_self_type;
+
+                return Some((
+                    trait_name.clone(),
+                    MethodInfo {
+                        return_type,
+                        self_kind,
+                        param_types,
+                        inherited_from_base: None,
+                    },
+                ));
+            }
+        }
+
+        None
     }
 
     /// Check if an impl block's type parameter bounds are satisfied by the given type args.
