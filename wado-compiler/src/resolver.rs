@@ -489,9 +489,9 @@ pub struct Resolver<'a> {
     /// Current `Self` type in scope (the type being implemented in an impl block)
     current_self_type: Option<TypeId>,
     /// WASI registry for looking up effect return types
-    wasi_registry: WasiRegistry,
+    wasi_registry: &'static WasiRegistry,
     /// Builtin registry for looking up builtin function return types
-    builtin_registry: BuiltinRegistry,
+    builtin_registry: &'a BuiltinRegistry,
     /// Global variables in the current module (name -> (type, `is_mutable`))
     current_module_globals: HashMap<String, (TypeId, bool)>,
     /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
@@ -575,10 +575,10 @@ impl<'a> Resolver<'a> {
     pub fn new(
         symbols: &'a SymbolTable,
         loaded_modules: &'a HashMap<ModuleSource, Module>,
+        builtin_registry: &'a BuiltinRegistry,
     ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
         Self {
             type_table,
             symbols,
@@ -1065,6 +1065,9 @@ impl<'a> Resolver<'a> {
         let sorted_sources =
             Self::topological_sort_modules(modules, &all_struct_fields, &type_table.borrow());
 
+        let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
+        let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
+
         // Second pass: resolve each module with per-module function_return_types and imports
         for module_source in &sorted_sources {
             let module = modules.get(module_source).expect("module should exist");
@@ -1149,8 +1152,6 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
-            let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
             let mut resolver = Resolver {
                 type_table: Rc::clone(&type_table),
                 symbols,
@@ -1177,7 +1178,7 @@ impl<'a> Resolver<'a> {
                 current_associated_type_bindings: HashMap::new(),
                 current_self_type: None,
                 wasi_registry,
-                builtin_registry,
+                builtin_registry: &builtin_registry,
                 current_module_globals: HashMap::new(),
                 imported_globals: HashMap::new(),
                 module_type_maps_cache: HashMap::new(),
@@ -10021,7 +10022,9 @@ pub fn resolve_module(
     symbols: &SymbolTable,
     loaded_modules: &HashMap<ModuleSource, Module>,
 ) -> Result<TirModule, Vec<TypeError>> {
-    let mut resolver = Resolver::new(symbols, loaded_modules);
+    let type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
+    let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
+    let mut resolver = Resolver::new(symbols, loaded_modules, &builtin_registry);
     resolver.resolve_module(module, module_source)
 }
 
@@ -10039,7 +10042,6 @@ pub fn resolve_to_project(
     let tir_modules =
         Resolver::resolve_all_modules(&symbols, modules, entry_module_source.clone())?;
 
-    // Build registries once here, shared across all subsequent phases
     let (wasi_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
 
     // Build builtin registry (uses a temporary type table for type resolution)

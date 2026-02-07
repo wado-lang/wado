@@ -43,9 +43,9 @@ pub struct Project {
     // Registries (built once, shared across phases)
     // ========================================
     /// Registry of WASI imports from lib/wasi/*.wado
-    pub wasi_registry: WasiRegistry,
+    pub wasi_registry: &'static WasiRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
-    pub world_registry: WorldRegistry,
+    pub world_registry: &'static WorldRegistry,
     /// Registry of builtin function signatures from lib/core/builtin.wado
     pub builtin_registry: BuiltinRegistry,
 
@@ -94,8 +94,8 @@ impl Project {
         symbols: SymbolTable,
         implicit_modules: HashSet<ModuleSource>,
         module_name: String,
-        wasi_registry: WasiRegistry,
-        world_registry: WorldRegistry,
+        wasi_registry: &'static WasiRegistry,
+        world_registry: &'static WorldRegistry,
         builtin_registry: BuiltinRegistry,
     ) -> Self {
         Self {

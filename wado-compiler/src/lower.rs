@@ -6311,9 +6311,8 @@ impl StringCollector {
 /// Analyze scratch local requirements for all functions in the project.
 /// Must be called AFTER optimization/inlining since the function body may change.
 pub fn analyze_scratch_locals_project(project: &mut Project) {
-    let (wasi_registry, _) = crate::component_model::WasiRegistry::build_from_stdlib();
     for module in project.tir_modules.values() {
-        analyze_scratch_locals_module(module, &wasi_registry);
+        analyze_scratch_locals_module(module, project.wasi_registry);
     }
 }
 
