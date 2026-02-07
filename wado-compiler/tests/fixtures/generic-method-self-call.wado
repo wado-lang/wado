@@ -1,11 +1,12 @@
 // Test: generic method calling another method on the same struct via self
-// Note: This works in user code, but fails in stdlib (core:prelude) modules
-// with "unknown method X on generic struct Y". The stdlib-specific bug
-// prevents method delegation patterns like Array::sort() calling sort_by().
+// This works in user code thanks to transitive monomorphization.
 //
-// Related bug: `if let` / `matches` on variants from imported modules
-// (e.g., `if let Greater = ord`) panics with "Unknown case X for variant Y"
-// because variant_case_map only includes the current module's variants.
+// Remaining limitation: closures defined inside delegating methods in stdlib
+// generic structs fail at codegen (functor __call not found). For example,
+// sort() cannot delegate to sort_by() with a closure argument in the prelude.
+//
+// Related bug (now fixed): `if let` / `matches` on variants from imported
+// modules now works thanks to global variant_case_map in pattern lowering.
 
 use { println, Stdout } from "core:cli";
 
@@ -22,7 +23,7 @@ impl Wrapper<T> {
         return self.value;
     }
 
-    // This method calls another method on self
+    // This method calls another method on self - works with transitive monomorphization
     fn get_twice(&self) -> [T, T] {
         let a = self.get();
         let b = self.get();

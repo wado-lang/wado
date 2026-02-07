@@ -44,16 +44,14 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = "array_get<i32>"(self.repr, self.index);
+    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
 
-fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
-
 pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
     let remaining: i32 = (self.used - self.index);
-    let mut repr: builtin::array<i32> = "array_new<i32>"(remaining);
+    let mut repr: builtin::array<i32> = core::builtin::array_new::<i32>(remaining);
     let mut result_used: i32 = 0;
     __for_14: {
         let mut i: i32 = self.index;
@@ -64,8 +62,8 @@ pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
                 break __for_14;
             }
             __for_14_body: {
-                let item: i32 = "array_get<i32>"(_licm_repr, i);
-                "array_set<i32>"(repr, result_used, item);
+                let item: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
+                core::builtin::array_set::<i32>(repr, result_used, item);
                 result_used = (result_used + 1);
             }
             i = (i + 1);
@@ -74,8 +72,4 @@ pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
     self.index = self.used;
     return Array<i32> { repr: repr, used: result_used };
 }
-
-fn "array_set<i32>"(arr: builtin::array<i32>, idx: i32, value: i32);
-
-fn "array_new<i32>"(len: i32) -> builtin::array<i32>;
 

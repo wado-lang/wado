@@ -32,7 +32,19 @@ use crate::token::Span;
 /// 3. String literal collection for the data section
 ///
 /// Note: All loop constructs are desugared at the AST level in desugar.rs.
-pub fn lower(mut module: TirModule) -> TirModule {
+pub fn lower(module: TirModule) -> TirModule {
+    lower_with_global_variants(module, &HashMap::new())
+}
+
+/// Lower a TIR module with access to variants from all modules in the project.
+///
+/// `global_variant_map` provides variant case info from other modules,
+/// enabling pattern matching on imported variants (e.g., `if let Greater = ord`
+/// where `Ordering` is defined in a different module).
+fn lower_with_global_variants(
+    mut module: TirModule,
+    global_variant_map: &HashMap<String, Vec<(String, u32)>>,
+) -> TirModule {
     // Phase 1: Lower i128/u128 match patterns to if-else chains
     // WebAssembly doesn't have i128/u128 comparison instructions, so we convert
     // match expressions with i128/u128 literal patterns to if-else chains with
@@ -42,7 +54,7 @@ pub fn lower(mut module: TirModule) -> TirModule {
     // Phase 1.5: Lower patterns (LetPattern, IfPattern) to explicit Let statements
     // This allocates temp locals and transforms pattern matching constructs so
     // codegen doesn't need preallocate passes.
-    lower_patterns(&mut module);
+    lower_patterns(&mut module, global_variant_map);
 
     // Phase 2: Lower global variable initializers
     // For non-constant initializers, this generates a __initialize_globals function
@@ -87,13 +99,28 @@ pub fn lower_project(mut project: Project) -> Project {
 
 /// Lower multiple modules
 ///
-/// Applies lowering (closure lowering, string collection) to each module.
+/// Builds a global variant map from all modules so that pattern matching works
+/// on imported variants, then applies lowering to each module.
 pub fn lower_modules_indexed(
     modules: IndexMap<ModuleSource, TirModule>,
 ) -> IndexMap<ModuleSource, TirModule> {
+    // Build a global variant map from ALL modules so that cross-module pattern
+    // matching works (e.g., `if let Greater = ord` where Ordering is from another module)
+    let mut global_variant_map: HashMap<String, Vec<(String, u32)>> = HashMap::new();
+    for module in modules.values() {
+        for variant in &module.variants {
+            let cases: Vec<(String, u32)> = variant
+                .cases
+                .iter()
+                .map(|c| (c.name.clone(), c.index))
+                .collect();
+            global_variant_map.insert(variant.name.clone(), cases);
+        }
+    }
+
     modules
         .into_iter()
-        .map(|(module_source, module)| (module_source, lower(module)))
+        .map(|(module_source, module)| (module_source, lower_with_global_variants(module, &global_variant_map)))
         .collect()
 }
 
@@ -757,9 +784,13 @@ fn match_to_switch(
 /// - `IfPattern` -> Let + If statements (allocates scrutinee temp locals)
 ///
 /// By lowering these patterns here, codegen doesn't need preallocate passes.
-fn lower_patterns(module: &mut TirModule) {
+fn lower_patterns(
+    module: &mut TirModule,
+    global_variant_map: &HashMap<String, Vec<(String, u32)>>,
+) {
     // Build a map from variant name to case info for quick lookup
-    let mut variant_case_map: HashMap<String, Vec<(String, u32)>> = HashMap::new();
+    // Start with global variants from all modules (for cross-module pattern matching)
+    let mut variant_case_map: HashMap<String, Vec<(String, u32)>> = global_variant_map.clone();
 
     // Add builtin variant types (Result, etc.)
     // Result<T, E> has cases: Ok (index 0), Err (index 1)
@@ -768,7 +799,7 @@ fn lower_patterns(module: &mut TirModule) {
         vec![("Ok".to_string(), 0), ("Err".to_string(), 1)],
     );
 
-    // Add module-defined variants
+    // Add module-defined variants (overrides globals for same-module variants)
     for variant in &module.variants {
         let cases: Vec<(String, u32)> = variant
             .cases

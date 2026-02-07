@@ -40,12 +40,10 @@ fn "ArrayIter<u32>^Iterator::next"(self: &mut ArrayIter<u32>) -> Option<u32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: u32 = "array_get<u32>"(self.repr, self.index);
+    let item: u32 = core::builtin::array_get::<u32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<u32>"(arr: builtin::array<u32>, idx: i32) -> u32;
 
 pub fn "Array<u32>::append"(self: &mut Array<u32>, value: u32) {
     let used: i32 = self.used;

@@ -238,7 +238,7 @@ impl Array<T> {
                                 let a = builtin::array_get::<T>(src, i);
                                 let b = builtin::array_get::<T>(src, j);
                                 // Take right only if Greater; Less/Equal prefer left (stability)
-                                if cmp(&a, &b) == Ordering::Greater {
+                                if let Greater = cmp(&a, &b) {
                                     builtin::array_set::<T>(buf, k, b);
                                     j += 1;
                                 } else {
@@ -330,7 +330,7 @@ impl Array<T> {
                                 let a = builtin::array_get::<T>(src, i);
                                 let b = builtin::array_get::<T>(src, j);
                                 // Take right only if Greater; Less/Equal prefer left (stability)
-                                if cmp(&a, &b) == Ordering::Greater {
+                                if let Greater = cmp(&a, &b) {
                                     builtin::array_set::<T>(buf, k, b);
                                     j += 1;
                                 } else {

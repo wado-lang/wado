@@ -44,12 +44,10 @@ fn "ArrayIter<char>^Iterator::next"(self: &mut ArrayIter<char>) -> Option<char> 
     if (self.index >= self.used) {
         return null;
     }
-    let item: char = "array_get<char>"(self.repr, self.index);
+    let item: char = core::builtin::array_get::<char>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<char>"(arr: builtin::array<char>, idx: i32) -> char;
 
 pub fn "Array<char>::append"(self: &mut Array<char>, value: char) {
     let used: i32 = self.used;

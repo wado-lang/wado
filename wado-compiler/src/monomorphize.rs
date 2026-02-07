@@ -328,7 +328,18 @@ impl Monomorphizer {
 
         // Phase 9: Process function instantiations and generate concrete functions
         // Use iterative approach: each newly instantiated function may have method calls
-        // that need to be instantiated too (e.g., Container<i32>::add calls Array<i32>::append)
+        // that need to be instantiated too (e.g., a generic method calling another generic
+        // method on self, like sort() -> sort_by())
+        //
+        // For transitive scanning, exclude bodyless functions (builtins like array_new,
+        // array_set, etc.) which are codegen intrinsics and must not be re-monomorphized.
+        let scannable_generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> =
+            generic_functions
+                .iter()
+                .filter(|(_, f)| f.borrow().body.is_some())
+                .map(|(k, v)| (k.clone(), Rc::clone(v)))
+                .collect();
+
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         while let Some(key) = self.function_pending.pop() {
             // Instantiate the function (needs mutable borrow)
@@ -348,16 +359,12 @@ impl Monomorphizer {
 
             if let Some(concrete) = concrete {
                 // Collect instantiation sites from the newly created function body
-                // This handles transitive monomorphization (e.g., Container method -> Array method)
-                // Skip Array<T> methods that don't need transitive collection, but allow
-                // ArrayIter methods (like fold) which may call other generic methods
-                if let Some(body) = &concrete.body
-                    && !(concrete.name.starts_with("Array<")
-                        || concrete.name.starts_with("Array::"))
-                {
+                // This handles transitive monomorphization (e.g., a generic method calling
+                // another generic method on self, like sort() -> sort_by())
+                if let Some(body) = &concrete.body {
                     self.collect_func_instantiation_sites_in_block(
                         body,
-                        &generic_functions,
+                        &scannable_generic_functions,
                         &module.type_table.borrow(),
                     );
                 }
@@ -504,7 +511,18 @@ impl Monomorphizer {
 
         // Phase 9: Process function instantiations and generate concrete functions
         // Use iterative approach: each newly instantiated function may have method calls
-        // that need to be instantiated too (e.g., Container<i32>::add calls Array<i32>::append)
+        // that need to be instantiated too (e.g., a generic method calling another generic
+        // method on self, like sort() -> sort_by())
+        //
+        // For transitive scanning, exclude bodyless functions (builtins like array_new,
+        // array_set, etc.) which are codegen intrinsics and must not be re-monomorphized.
+        let scannable_generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> =
+            generic_functions
+                .iter()
+                .filter(|(_, f)| f.borrow().body.is_some())
+                .map(|(k, v)| (k.clone(), Rc::clone(v)))
+                .collect();
+
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         while let Some(key) = self.function_pending.pop() {
             // Instantiate the function (needs mutable borrow)
@@ -524,16 +542,12 @@ impl Monomorphizer {
 
             if let Some(concrete) = concrete {
                 // Collect instantiation sites from the newly created function body
-                // This handles transitive monomorphization (e.g., Container method -> Array method)
-                // Skip Array<T> methods that don't need transitive collection, but allow
-                // ArrayIter methods (like fold) which may call other generic methods
-                if let Some(body) = &concrete.body
-                    && !(concrete.name.starts_with("Array<")
-                        || concrete.name.starts_with("Array::"))
-                {
+                // This handles transitive monomorphization (e.g., a generic method calling
+                // another generic method on self, like sort() -> sort_by())
+                if let Some(body) = &concrete.body {
                     self.collect_func_instantiation_sites_in_block(
                         body,
-                        &generic_functions,
+                        &scannable_generic_functions,
                         &module.type_table.borrow(),
                     );
                 }
