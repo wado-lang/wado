@@ -619,24 +619,24 @@ fn can_propagate_copy(
 }
 
 /// Substitute local references in a block.
-/// Replaces uses of `from_local` with the expression from `source`.
-fn substitute_in_block(block: &mut TirBlock, from_local: u32, source: &CopySource) {
+/// Replaces uses of locals in `substitutions` with the corresponding source expression.
+fn substitute_in_block(block: &mut TirBlock, substitutions: &HashMap<u32, CopySource>) {
     for stmt in &mut block.stmts {
-        substitute_in_stmt(stmt, from_local, source);
+        substitute_in_stmt(stmt, substitutions);
     }
 }
 
-fn substitute_in_stmt(stmt: &mut TirStmt, from_local: u32, source: &CopySource) {
+fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &HashMap<u32, CopySource>) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            substitute_in_expr(value, from_local, source);
+            substitute_in_expr(value, substitutions);
         }
         TirStmtKind::Expr(expr) => {
-            substitute_in_expr(expr, from_local, source);
+            substitute_in_expr(expr, substitutions);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                substitute_in_expr(v, from_local, source);
+                substitute_in_expr(v, substitutions);
             }
         }
         TirStmtKind::If {
@@ -644,17 +644,17 @@ fn substitute_in_stmt(stmt: &mut TirStmt, from_local: u32, source: &CopySource) 
             then_block,
             else_block,
         } => {
-            substitute_in_expr(condition, from_local, source);
-            substitute_in_block(then_block, from_local, source);
+            substitute_in_expr(condition, substitutions);
+            substitute_in_block(then_block, substitutions);
             if let Some(eb) = else_block {
-                substitute_in_block(eb, from_local, source);
+                substitute_in_block(eb, substitutions);
             }
         }
         TirStmtKind::Loop { body } => {
-            substitute_in_block(body, from_local, source);
+            substitute_in_block(body, substitutions);
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            substitute_in_block(block, from_local, source);
+            substitute_in_block(block, substitutions);
         }
         TirStmtKind::IfPattern {
             scrutinee,
@@ -662,28 +662,28 @@ fn substitute_in_stmt(stmt: &mut TirStmt, from_local: u32, source: &CopySource) 
             else_block,
             ..
         } => {
-            substitute_in_expr(scrutinee, from_local, source);
-            substitute_in_block(then_block, from_local, source);
+            substitute_in_expr(scrutinee, substitutions);
+            substitute_in_block(then_block, substitutions);
             if let Some(eb) = else_block {
-                substitute_in_block(eb, from_local, source);
+                substitute_in_block(eb, substitutions);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                substitute_in_expr(v, from_local, source);
+                substitute_in_expr(v, substitutions);
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetPattern { value, .. } => {
-            substitute_in_expr(value, from_local, source);
+            substitute_in_expr(value, substitutions);
         }
     }
 }
 
-fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) {
+fn substitute_in_expr(expr: &mut TirExpr, substitutions: &HashMap<u32, CopySource>) {
     // Check if this is a local that needs substitution
     if let TirExprKind::Local { index, .. } = &expr.kind
-        && *index == from_local
+        && let Some(source) = substitutions.get(index)
     {
         // Replace with the source expression
         expr.kind = match source {
@@ -714,113 +714,113 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
             // Already handled above
         }
         TirExprKind::Binary { left, right, .. } => {
-            substitute_in_expr(left, from_local, source);
-            substitute_in_expr(right, from_local, source);
+            substitute_in_expr(left, substitutions);
+            substitute_in_expr(right, substitutions);
         }
         TirExprKind::Unary { expr: inner, .. } => {
-            substitute_in_expr(inner, from_local, source);
+            substitute_in_expr(inner, substitutions);
         }
         TirExprKind::Assign { target, value } => {
-            substitute_in_expr(target, from_local, source);
-            substitute_in_expr(value, from_local, source);
+            substitute_in_expr(target, substitutions);
+            substitute_in_expr(value, substitutions);
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
         | TirExprKind::EffectCall { args, .. } => {
             for arg in args {
-                substitute_in_expr(arg, from_local, source);
+                substitute_in_expr(arg, substitutions);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            substitute_in_expr(receiver, from_local, source);
+            substitute_in_expr(receiver, substitutions);
             for arg in args {
-                substitute_in_expr(arg, from_local, source);
+                substitute_in_expr(arg, substitutions);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            substitute_in_expr(callee, from_local, source);
+            substitute_in_expr(callee, substitutions);
             for arg in args {
-                substitute_in_expr(arg, from_local, source);
+                substitute_in_expr(arg, substitutions);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            substitute_in_expr(functor, from_local, source);
+            substitute_in_expr(functor, substitutions);
         }
         TirExprKind::FieldAccess { expr: inner, .. } => {
-            substitute_in_expr(inner, from_local, source);
+            substitute_in_expr(inner, substitutions);
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            substitute_in_expr(inner, from_local, source);
-            substitute_in_expr(index, from_local, source);
+            substitute_in_expr(inner, substitutions);
+            substitute_in_expr(index, substitutions);
         }
         TirExprKind::Cast { expr: inner, .. } => {
-            substitute_in_expr(inner, from_local, source);
+            substitute_in_expr(inner, substitutions);
         }
         TirExprKind::Block(block) => {
-            substitute_in_block(block, from_local, source);
+            substitute_in_block(block, substitutions);
         }
         TirExprKind::LabeledBlock { block, .. } => {
-            substitute_in_block(block, from_local, source);
+            substitute_in_block(block, substitutions);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            substitute_in_expr(condition, from_local, source);
-            substitute_in_block(then_branch, from_local, source);
+            substitute_in_expr(condition, substitutions);
+            substitute_in_block(then_branch, substitutions);
             if let Some(eb) = else_branch {
-                substitute_in_block(eb, from_local, source);
+                substitute_in_block(eb, substitutions);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                substitute_in_expr(&mut field.value, from_local, source);
+                substitute_in_expr(&mut field.value, substitutions);
             }
         }
         TirExprKind::ArrayLiteral { elements, .. } => {
             for elem in elements {
-                substitute_in_expr(elem, from_local, source);
+                substitute_in_expr(elem, substitutions);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                substitute_in_expr(elem, from_local, source);
+                substitute_in_expr(elem, substitutions);
             }
         }
         TirExprKind::OptionSome { value } => {
-            substitute_in_expr(value, from_local, source);
+            substitute_in_expr(value, substitutions);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                substitute_in_expr(payload_expr, from_local, source);
+                substitute_in_expr(payload_expr, substitutions);
             }
         }
         TirExprKind::Move { expr } => {
-            substitute_in_expr(expr, from_local, source);
+            substitute_in_expr(expr, substitutions);
         }
         TirExprKind::Closure { body, .. } => {
-            substitute_in_expr(body, from_local, source);
+            substitute_in_expr(body, substitutions);
         }
         TirExprKind::Match { expr: inner, arms } => {
-            substitute_in_expr(inner, from_local, source);
+            substitute_in_expr(inner, substitutions);
             for arm in arms {
-                substitute_in_expr(&mut arm.body, from_local, source);
+                substitute_in_expr(&mut arm.body, substitutions);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            substitute_in_expr(value, from_local, source);
+            substitute_in_expr(value, substitutions);
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. } => {
-            substitute_in_expr(expr, from_local, source);
+            substitute_in_expr(expr, substitutions);
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            substitute_in_expr(expr, from_local, source);
+            substitute_in_expr(expr, substitutions);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -828,11 +828,11 @@ fn substitute_in_expr(expr: &mut TirExpr, from_local: u32, source: &CopySource) 
             default,
             ..
         } => {
-            substitute_in_expr(scrutinee, from_local, source);
+            substitute_in_expr(scrutinee, substitutions);
             for arm in arms {
-                substitute_in_block(arm, from_local, source);
+                substitute_in_block(arm, substitutions);
             }
-            substitute_in_block(default, from_local, source);
+            substitute_in_block(default, substitutions);
         }
         // Leaf nodes
         TirExprKind::IntLiteral { .. }
@@ -1255,56 +1255,88 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
 }
 
 /// Eliminate trivial copy bindings in a function.
-fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) {
+/// Batches non-conflicting substitutions to reduce TIR walk count from O(4K) to O(4) per iteration.
+fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     let Some(body) = &mut func.body else {
-        return;
+        return false;
     };
 
-    // Iterate until no more changes
-    // We process ONE binding per iteration to avoid interference between substitutions
-    // (e.g., if `let a = 5; let x = a;`, substituting both at once would break references)
+    let mut ever_changed = false;
+
     loop {
-        // Collect all copy bindings
+        // Step 1: Collect all copy bindings (single walk)
         let mut copy_bindings: Vec<CopyBinding> = Vec::new();
-        // Start with empty set - bindings inside labeled blocks will get their own set
         collect_copy_bindings(&body.stmts, &mut copy_bindings, &HashSet::new());
 
         if copy_bindings.is_empty() {
             break;
         }
 
-        // Collect usage information
+        // Step 2: Collect usage information (single walk)
         let usage = collect_local_usage(body);
 
-        // Find FIRST binding that can be eliminated (one at a time for safety)
-        let mut to_eliminate: Option<CopyBinding> = None;
-        for binding in copy_bindings {
-            if can_propagate_copy(&binding, &usage, type_table) {
-                to_eliminate = Some(binding);
-                break;
+        // Step 3: Find all eliminable bindings
+        let eliminable: Vec<CopyBinding> = copy_bindings
+            .into_iter()
+            .filter(|b| can_propagate_copy(b, &usage, type_table))
+            .collect();
+
+        if eliminable.is_empty() {
+            break;
+        }
+
+        // Step 4: Build non-conflicting batch.
+        // A binding can be batched if its source local is not a target of another eliminable
+        // binding. This prevents interference when two bindings form a chain
+        // (e.g., `let a = 5; let x = a`).
+        let target_set: HashSet<u32> = eliminable.iter().map(|b| b.target_local).collect();
+
+        let mut substitutions: HashMap<u32, CopySource> = HashMap::new();
+        let mut has_deferred = false;
+
+        for binding in eliminable {
+            let source_conflicts = match &binding.source {
+                CopySource::Local { index, .. } => target_set.contains(index),
+                _ => false,
+            };
+            if source_conflicts {
+                has_deferred = true;
+            } else {
+                substitutions.insert(binding.target_local, binding.source);
             }
         }
 
-        let Some(binding) = to_eliminate else {
+        if substitutions.is_empty() {
+            // All bindings conflict with each other -- cannot make progress
             break;
-        };
+        }
 
-        // Apply substitution for this one binding
-        substitute_in_block(body, binding.target_local, &binding.source);
+        // Step 5: Apply all substitutions in a single walk
+        let dead_locals: HashSet<u32> = substitutions.keys().copied().collect();
+        substitute_in_block(body, &substitutions);
 
-        // Remove the dead binding
-        let dead_locals: HashSet<u32> = [binding.target_local].into_iter().collect();
+        // Step 6: Remove all dead bindings in a single walk
         remove_copy_bindings(&mut body.stmts, &dead_locals);
+        ever_changed = true;
+
+        // If no bindings were deferred, we're done
+        if !has_deferred {
+            break;
+        }
     }
+
+    ever_changed
 }
 
 /// Apply copy propagation to all functions in the project.
-pub fn propagate_copies(project: &mut Project) {
+pub fn propagate_copies(project: &mut Project) -> bool {
+    let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            propagate_copies_in_function(&mut func, &type_table);
+            changed |= propagate_copies_in_function(&mut func, &type_table);
         }
     }
+    changed
 }

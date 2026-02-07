@@ -15,181 +15,175 @@ use crate::tir::{
 };
 
 /// Apply constant folding to all functions in the project.
-pub fn fold_constants(project: &mut Project) {
+pub fn fold_constants(project: &mut Project) -> bool {
+    let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            fold_constants_in_function(&mut func, &type_table);
+            changed |= fold_constants_in_function(&mut func, &type_table);
         }
     }
+    changed
 }
 
-fn fold_constants_in_function(func: &mut TirFunction, type_table: &TypeTable) {
+fn fold_constants_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     let Some(body) = &mut func.body else {
-        return;
+        return false;
     };
-    fold_constants_in_block(body, type_table);
+    fold_constants_in_block(body, type_table)
 }
 
-fn fold_constants_in_block(block: &mut TirBlock, type_table: &TypeTable) {
+fn fold_constants_in_block(block: &mut TirBlock, type_table: &TypeTable) -> bool {
+    let mut changed = false;
     for stmt in &mut block.stmts {
-        fold_constants_in_stmt(stmt, type_table);
+        changed |= fold_constants_in_stmt(stmt, type_table);
     }
+    changed
 }
 
-fn fold_constants_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) {
+fn fold_constants_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) -> bool {
     match &mut stmt.kind {
-        TirStmtKind::Let { value, .. } => {
-            fold_constants_in_expr(value, type_table);
-        }
-        TirStmtKind::Expr(expr) => {
-            fold_constants_in_expr(expr, type_table);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                fold_constants_in_expr(v, type_table);
-            }
-        }
+        TirStmtKind::Let { value, .. } => fold_constants_in_expr(value, type_table),
+        TirStmtKind::Expr(expr) => fold_constants_in_expr(expr, type_table),
+        TirStmtKind::Return { value } => value
+            .as_mut()
+            .is_some_and(|v| fold_constants_in_expr(v, type_table)),
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            fold_constants_in_expr(condition, type_table);
-            fold_constants_in_block(then_block, type_table);
+            let mut changed = fold_constants_in_expr(condition, type_table);
+            changed |= fold_constants_in_block(then_block, type_table);
             if let Some(eb) = else_block {
-                fold_constants_in_block(eb, type_table);
+                changed |= fold_constants_in_block(eb, type_table);
             }
+            changed
         }
-        TirStmtKind::Loop { body } => {
-            fold_constants_in_block(body, type_table);
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            fold_constants_in_block(block, type_table);
-        }
+        TirStmtKind::Loop { body } => fold_constants_in_block(body, type_table),
+        TirStmtKind::LabeledBlock { block, .. } => fold_constants_in_block(block, type_table),
         TirStmtKind::IfPattern {
             scrutinee,
             then_block,
             else_block,
             ..
         } => {
-            fold_constants_in_expr(scrutinee, type_table);
-            fold_constants_in_block(then_block, type_table);
+            let mut changed = fold_constants_in_expr(scrutinee, type_table);
+            changed |= fold_constants_in_block(then_block, type_table);
             if let Some(eb) = else_block {
-                fold_constants_in_block(eb, type_table);
+                changed |= fold_constants_in_block(eb, type_table);
             }
+            changed
         }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                fold_constants_in_expr(v, type_table);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
-            fold_constants_in_expr(value, type_table);
-        }
+        TirStmtKind::Break { value, .. } => value
+            .as_mut()
+            .is_some_and(|v| fold_constants_in_expr(v, type_table)),
+        TirStmtKind::Continue => false,
+        TirStmtKind::LetPattern { value, .. } => fold_constants_in_expr(value, type_table),
     }
 }
 
-fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
+fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
+    let mut changed = false;
+
     // First, recurse into sub-expressions (bottom-up folding)
     match &mut expr.kind {
         TirExprKind::Binary { left, right, .. } => {
-            fold_constants_in_expr(left, type_table);
-            fold_constants_in_expr(right, type_table);
+            changed |= fold_constants_in_expr(left, type_table);
+            changed |= fold_constants_in_expr(right, type_table);
         }
         TirExprKind::Unary { expr: inner, .. } => {
-            fold_constants_in_expr(inner, type_table);
+            changed |= fold_constants_in_expr(inner, type_table);
         }
         TirExprKind::Assign { target, value } => {
-            fold_constants_in_expr(target, type_table);
-            fold_constants_in_expr(value, type_table);
+            changed |= fold_constants_in_expr(target, type_table);
+            changed |= fold_constants_in_expr(value, type_table);
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
         | TirExprKind::EffectCall { args, .. } => {
             for arg in args {
-                fold_constants_in_expr(arg, type_table);
+                changed |= fold_constants_in_expr(arg, type_table);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            fold_constants_in_expr(receiver, type_table);
+            changed |= fold_constants_in_expr(receiver, type_table);
             for arg in args {
-                fold_constants_in_expr(arg, type_table);
+                changed |= fold_constants_in_expr(arg, type_table);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            fold_constants_in_expr(callee, type_table);
+            changed |= fold_constants_in_expr(callee, type_table);
             for arg in args {
-                fold_constants_in_expr(arg, type_table);
+                changed |= fold_constants_in_expr(arg, type_table);
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            fold_constants_in_expr(functor, type_table);
+            changed |= fold_constants_in_expr(functor, type_table);
         }
         TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Cast { expr: inner, .. } => {
-            fold_constants_in_expr(inner, type_table);
+            changed |= fold_constants_in_expr(inner, type_table);
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            fold_constants_in_expr(inner, type_table);
-            fold_constants_in_expr(index, type_table);
+            changed |= fold_constants_in_expr(inner, type_table);
+            changed |= fold_constants_in_expr(index, type_table);
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            fold_constants_in_block(block, type_table);
+            changed |= fold_constants_in_block(block, type_table);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            fold_constants_in_expr(condition, type_table);
-            fold_constants_in_block(then_branch, type_table);
+            changed |= fold_constants_in_expr(condition, type_table);
+            changed |= fold_constants_in_block(then_branch, type_table);
             if let Some(eb) = else_branch {
-                fold_constants_in_block(eb, type_table);
+                changed |= fold_constants_in_block(eb, type_table);
             }
         }
         TirExprKind::Match { expr: inner, arms } => {
-            fold_constants_in_expr(inner, type_table);
+            changed |= fold_constants_in_expr(inner, type_table);
             for arm in arms {
-                fold_constants_in_expr(&mut arm.body, type_table);
+                changed |= fold_constants_in_expr(&mut arm.body, type_table);
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                fold_constants_in_expr(&mut field.value, type_table);
+                changed |= fold_constants_in_expr(&mut field.value, type_table);
             }
         }
         TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                fold_constants_in_expr(elem, type_table);
+                changed |= fold_constants_in_expr(elem, type_table);
             }
         }
         TirExprKind::OptionSome { value } => {
-            fold_constants_in_expr(value, type_table);
+            changed |= fold_constants_in_expr(value, type_table);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
-                fold_constants_in_expr(payload_expr, type_table);
+                changed |= fold_constants_in_expr(payload_expr, type_table);
             }
         }
         TirExprKind::Move { expr } => {
-            fold_constants_in_expr(expr, type_table);
+            changed |= fold_constants_in_expr(expr, type_table);
         }
         TirExprKind::Closure { body, .. } => {
-            fold_constants_in_expr(body, type_table);
+            changed |= fold_constants_in_expr(body, type_table);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            fold_constants_in_expr(value, type_table);
+            changed |= fold_constants_in_expr(value, type_table);
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
-            fold_constants_in_expr(expr, type_table);
+            changed |= fold_constants_in_expr(expr, type_table);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -197,11 +191,11 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
             default,
             ..
         } => {
-            fold_constants_in_expr(scrutinee, type_table);
+            changed |= fold_constants_in_expr(scrutinee, type_table);
             for arm in arms {
-                fold_constants_in_block(arm, type_table);
+                changed |= fold_constants_in_block(arm, type_table);
             }
-            fold_constants_in_block(default, type_table);
+            changed |= fold_constants_in_block(default, type_table);
         }
         // Leaf nodes - nothing to recurse into
         TirExprKind::Local { .. }
@@ -224,7 +218,10 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
             value,
             repr: format_int_value(value, prim),
         };
+        changed = true;
     }
+
+    changed
 }
 
 /// Try to fold a single expression node into a constant.

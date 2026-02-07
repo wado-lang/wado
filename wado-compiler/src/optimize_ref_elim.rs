@@ -545,9 +545,9 @@ fn replace_ref_field_access_in_stmt(
 ///   ... self.repr ...
 /// This can be optimized to:
 ///   ... arr.repr ...
-fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) {
+fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) -> bool {
     let Some(body) = &mut func.body else {
-        return;
+        return false;
     };
 
     // First pass: find all ref bindings
@@ -555,7 +555,7 @@ fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) {
     collect_ref_bindings(&body.stmts, &mut ref_bindings);
 
     if ref_bindings.is_empty() {
-        return;
+        return false;
     }
 
     // Second pass: for each ref binding, check if all uses are field accesses
@@ -565,6 +565,10 @@ fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) {
         if all_field_access {
             eliminable_bindings.push(binding);
         }
+    }
+
+    if eliminable_bindings.is_empty() {
+        return false;
     }
 
     // Third pass: replace field accesses and remove dead bindings
@@ -581,6 +585,7 @@ fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) {
     // We need to handle nested blocks, so we do this recursively
     let dead_locals: HashSet<u32> = eliminable_bindings.iter().map(|b| b.ref_local).collect();
     remove_dead_ref_bindings(&mut body.stmts, &dead_locals);
+    true
 }
 
 /// Collect ref bindings from statements (only at the top level of each block).
@@ -987,12 +992,14 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
 /// This is the main entry point for reference elimination optimization.
 /// It iterates through all modules and functions, eliminating reference
 /// bindings that are only used for field access.
-pub fn eliminate_unnecessary_refs(project: &mut Project) {
+pub fn eliminate_unnecessary_refs(project: &mut Project) -> bool {
+    let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            eliminate_refs_in_function(&mut func, &type_table);
+            changed |= eliminate_refs_in_function(&mut func, &type_table);
         }
     }
+    changed
 }
