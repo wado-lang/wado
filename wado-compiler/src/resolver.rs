@@ -3624,10 +3624,11 @@ impl<'a> Resolver<'a> {
         }
 
         // Check if it's a prelude function (panic, unreachable)
+        // These are defined in core:internal and re-exported by core:prelude
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             return TirExpr::new(
                 TirExprKind::Global {
-                    module_source: ModuleSource::core("prelude"),
+                    module_source: ModuleSource::core("internal"),
                     name: ident.name.clone(),
                 },
                 TypeTable::UNKNOWN,
@@ -4684,10 +4685,10 @@ impl<'a> Resolver<'a> {
                     (None, ident.name.clone(), true)
                 }
                 // Check for prelude functions (panic, unreachable)
-                // These are actual functions in core::prelude
+                // These are defined in core:internal and re-exported by core:prelude
                 else if matches!(ident.name.as_str(), "panic" | "unreachable") {
                     (
-                        Some(ModuleSource::core("prelude")),
+                        Some(ModuleSource::core("internal")),
                         ident.name.clone(),
                         true,
                     )
@@ -5520,12 +5521,12 @@ impl<'a> Resolver<'a> {
                     prim_module,
                 )
             }
-            // BuiltinArray is Array - impl blocks are in core:prelude
+            // BuiltinArray is Array - impl blocks are in core:prelude/array.wado
             ResolvedType::BuiltinArray(_) => {
-                let prelude_module = ModuleSource::Core {
-                    name: "prelude".to_string(),
+                let array_module = ModuleSource::Core {
+                    name: "prelude/array.wado".to_string(),
                 };
-                ("Array".to_string(), prelude_module)
+                ("Array".to_string(), array_module)
             }
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),

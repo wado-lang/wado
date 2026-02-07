@@ -749,7 +749,7 @@ fn match_to_switch(
                 TirStmtKind::Expr(TirExpr::new(
                     TirExprKind::Call {
                         func: FunctionRef::External {
-                            module_source: ModuleSource::core("prelude/panic.wado"),
+                            module_source: ModuleSource::core("internal"),
                             name: "unreachable".to_string(),
                             monomorph_info: None,
                             method_info: None,

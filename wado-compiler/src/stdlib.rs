@@ -58,6 +58,10 @@ pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wad
 /// Located in prelude/ subdirectory and imported by prelude.wado
 pub const CORE_PRELUDE_PRIMITIVES: &str = include_str!("../lib/core/prelude/primitives.wado");
 
+/// Embedded source for core:prelude/array (Array type and iterators)
+/// Located in prelude/ subdirectory and re-exported by prelude.wado
+pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
+
 /// Embedded source for core:collections (`TreeMap`)
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 
@@ -99,6 +103,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:prelude/types.wado" => Some(CORE_PRELUDE_TYPES),
         "core:prelude/primitives.wado" => Some(CORE_PRELUDE_PRIMITIVES),
         "core:prelude/string.wado" => Some(CORE_PRELUDE_STRING),
+        "core:prelude/array.wado" => Some(CORE_PRELUDE_ARRAY),
         "core:collections" => Some(CORE_COLLECTIONS),
         "core:cli" => Some(CORE_CLI),
         "core:stream" => Some(CORE_STREAM),
@@ -137,7 +142,7 @@ mod tests {
     fn test_get_core_prelude() {
         let source = get_stdlib_module("core:prelude");
         assert!(source.is_some());
-        assert!(source.unwrap().contains("panic"));
+        assert!(source.unwrap().contains("pub use"));
     }
 
     #[test]

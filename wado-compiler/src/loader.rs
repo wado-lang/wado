@@ -131,6 +131,7 @@ fn cached_core_stdlib() -> &'static HashMap<ModuleSource, Module> {
             ("collections", stdlib::CORE_COLLECTIONS),
             ("internal", stdlib::CORE_INTERNAL),
             ("prelude", stdlib::CORE_PRELUDE),
+            ("prelude/array.wado", stdlib::CORE_PRELUDE_ARRAY),
             ("prelude/int128.wado", stdlib::CORE_PRELUDE_INT128),
             ("prelude/primitives.wado", stdlib::CORE_PRELUDE_PRIMITIVES),
             ("prelude/string.wado", stdlib::CORE_PRELUDE_STRING),
