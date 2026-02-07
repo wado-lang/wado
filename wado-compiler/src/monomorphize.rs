@@ -2403,7 +2403,18 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(&mut arm.body, substitution, type_table);
                 }
             }
-            TirExprKind::Closure { body, .. } => {
+            TirExprKind::Closure {
+                params,
+                body,
+                captures,
+                ..
+            } => {
+                for (_, type_id) in params {
+                    *type_id = self.substitute_type(*type_id, substitution, type_table);
+                }
+                for cap in captures {
+                    cap.type_id = self.substitute_type(cap.type_id, substitution, type_table);
+                }
                 self.substitute_types_in_expr(body, substitution, type_table);
             }
             TirExprKind::StructLiteral {

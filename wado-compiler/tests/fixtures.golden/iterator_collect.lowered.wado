@@ -18,12 +18,14 @@ pub struct "ArrayIter<i32>" {
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5];
     let mut iter: ArrayIter<i32> = __inline_Array_i32___iter_0: {
-        break __inline_Array_i32___iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+        break __inline_Array_i32___iter_0: __inline_Array_i32__IntoIterator__into_iter_1: {
+            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+        };
     };
     let collected: Array<i32> = move iter."ArrayIter<i32>::collect"();
     __for_of_0: {
-        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_1: {
-            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: collected.repr, used: collected.used, index: 0 };
+        let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_2: {
+            break __inline_Array_i32__IntoIterator__into_iter_2: ArrayIter<i32> { repr: collected.repr, used: collected.used, index: 0 };
         };
         loop {
             let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
@@ -35,8 +37,8 @@ fn run() with Stdout {
             }
         }
     }
-    core::cli::println(move "String::concat"(move "len: ", move __inline_Array_i32___len_2: {
-        break __inline_Array_i32___len_2: collected.used;
+    core::cli::println(move "String::concat"(move "len: ", move __inline_Array_i32___len_3: {
+        break __inline_Array_i32___len_3: collected.used;
     }."i32::to_string"()));
 }
 
@@ -53,15 +55,15 @@ pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
     let remaining: i32 = (self.used - self.index);
     let mut repr: builtin::array<i32> = core::builtin::array_new::<i32>(remaining);
     let mut result_used: i32 = 0;
-    __for_14: {
+    __for_5: {
         let mut i: i32 = self.index;
         let _licm_used: i32 = self.used;
         let _licm_repr: builtin::array<i32> = self.repr;
         loop {
             if !(i < _licm_used) {
-                break __for_14;
+                break __for_5;
             }
-            __for_14_body: {
+            __for_5_body: {
                 let item: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
                 core::builtin::array_set::<i32>(repr, result_used, item);
                 result_used = (result_used + 1);

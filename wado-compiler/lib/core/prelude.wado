@@ -1,15 +1,8 @@
 // The Wado Prelude Module.
-// Symbols defined in this module is automatically imported in every module.
-//
-// To disable the prelude in a module, use: #![no_prelude]
+// Auto-imported in every module. Disable with: #![no_prelude]
 
 use {log_stderr} from "core:internal";
 
-// ============================================================================
-// Re-exports from prelude sub-modules
-// ============================================================================
-
-/// Traits and Ordering type (Eq, Ord, Index*, Iterator, Add, Sub, etc.)
 pub use {
     Ordering,
     Eq, Ord,
@@ -20,32 +13,21 @@ pub use {
     Iterator, IntoIterator, FromIterator,
 } from "./prelude/traits.wado";
 
-/// 128-bit integer types (i128 and u128)
 pub use { i128, u128 } from "./prelude/int128.wado";
-
-/// Core variant types (Option, Result, Stream, Future)
 pub use { Option, Result, Stream, Future } from "./prelude/types.wado";
-
-/// Primitive type methods (impl i32 { to_string, ... }, etc.)
-/// Import marker to trigger module loading - impl blocks don't need re-export
 use { __PRIMITIVES_MODULE_LOADED } from "./prelude/primitives.wado";
-
-/// String type and iterators (separated to allow other stdlib modules to depend on it)
 pub use { String, StrUtf8ByteIter, StrCharIter } from "core:string";
 
 // ============================================================================
-// Array Type
+// Array
 // ============================================================================
 
-/// Dynamic array type with O(1) amortized append
 pub struct Array<T> {
     repr: builtin::array<T>,
     used: i32,
 }
 
 impl Array<T> {
-    /// Create a new array with the specified capacity
-    /// The array starts empty but has space for `capacity` elements
     pub fn with_capacity(capacity: i32) -> Array<T> {
         return Array {
             repr: builtin::array_new::<T>(capacity),
@@ -53,60 +35,41 @@ impl Array<T> {
         };
     }
 
-    /// Create a new array with `n` elements, all initialized to `element`
     pub fn filled(n: i32, element: T) -> Array<T> {
         let repr = builtin::array_new::<T>(n);
         builtin::array_fill::<T>(repr, 0, element, n);
-        return Array {
-            repr,
-            used: n,
-        };
+        return Array { repr, used: n };
     }
 
-    /// Get the number of elements in the array
     pub fn len(&self) -> i32 {
         return self.used;
     }
 
-    /// Append an element to the end of the array
-    /// Grows the array if necessary (O(1) amortized)
     pub fn append(&mut self, value: T) {
         let used = self.used;
         let capacity = builtin::array_len(self.repr);
-
-        // Grow if needed
         if builtin::unlikely(used >= capacity) {
-            // Calculate new capacity: 4 if empty, otherwise double
             let mut new_capacity = capacity * 2;
             if capacity == 0 {
                 new_capacity = 4;
             }
-
-            // Create new array and copy elements
             let new_repr = builtin::array_new::<T>(new_capacity);
             builtin::array_copy::<T>(new_repr, 0, self.repr, 0, used);
             self.repr = new_repr;
         }
-
-        // Set the new element
         builtin::array_set::<T>(self.repr, used, value);
         self.used = used + 1;
     }
 
-    /// Get an element by index (returns a copy)
     pub fn get(&self, index: i32) -> T {
         return builtin::array_get::<T>(self.repr, index);
     }
 
-    /// Set an element by index
     pub fn set(&mut self, index: i32, value: T) {
         builtin::array_set::<T>(self.repr, index, value);
     }
-
 }
 
-// IndexValue implementation for Array<T> - value-based read
-// Returns a copy of the element. Works for all element types including primitives.
 impl IndexValue<i32> for Array<T> {
     type Output = T;
 
@@ -115,8 +78,6 @@ impl IndexValue<i32> for Array<T> {
     }
 }
 
-// IndexAssign implementation for Array<T> - value-based write
-// Assigns to the element at the given index.
 impl IndexAssign<i32> for Array<T> {
     type Input = T;
 
@@ -125,7 +86,6 @@ impl IndexAssign<i32> for Array<T> {
     }
 }
 
-// Eq implementation for Array<T>
 impl Eq for Array<T> {
     pub fn eq(&self, other: &Self) -> bool {
         if self.used != other.used {
@@ -140,37 +100,25 @@ impl Eq for Array<T> {
     }
 }
 
-// Ord implementation for Array<T> - lexicographic ordering
 impl Ord for Array<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let min_len = if other.used < self.used { other.used } else { self.used };
         for let mut i = 0; i < min_len; i += 1 {
             let a = builtin::array_get::<T>(self.repr, i);
             let b = builtin::array_get::<T>(other.repr, i);
-            if a < b {
-                return Ordering::Less;
-            }
-            if a > b {
-                return Ordering::Greater;
-            }
+            if a < b { return Ordering::Less; }
+            if a > b { return Ordering::Greater; }
         }
-        if self.used < other.used {
-            return Ordering::Less;
-        }
-        if self.used > other.used {
-            return Ordering::Greater;
-        }
+        if self.used < other.used { return Ordering::Less; }
+        if self.used > other.used { return Ordering::Greater; }
         return Ordering::Equal;
     }
 }
 
-
 // ============================================================================
-// ArrayIter - Iterator over Array<T>
+// ArrayIter
 // ============================================================================
 
-/// Iterator over Array<T> elements.
-/// Yields copies of each element (value semantics).
 pub struct ArrayIter<T> {
     repr: builtin::array<T>,
     used: i32,
@@ -203,19 +151,16 @@ impl IntoIterator for Array<T> {
     }
 }
 
+// ============================================================================
+// Array - sorting and iteration
+// ============================================================================
+
 impl Array<T> {
-    /// Returns an iterator over the array elements.
-    /// Each call to next() returns a copy of the element (value semantics).
     pub fn iter(&self) -> ArrayIter<T> {
-        return ArrayIter {
-            repr: self.repr,
-            used: self.used,
-            index: 0,
-        };
+        return self.into_iter();
     }
 
-    /// Sorts the array in-place using a comparator function (stable merge sort).
-    /// `cmp` returns `Ordering` indicating the relative order of two elements.
+    /// In-place sort with comparator. Stable, O(n log n) worst case.
     pub fn sort_by(&mut self, cmp: fn(&T, &T) -> Ordering) {
         let n = self.used;
         if n <= 1 {
@@ -237,7 +182,6 @@ impl Array<T> {
                             if j < end {
                                 let a = builtin::array_get::<T>(src, i);
                                 let b = builtin::array_get::<T>(src, j);
-                                // Take right only if Greater; Less/Equal prefer left (stability)
                                 if let Greater = cmp(&a, &b) {
                                     builtin::array_set::<T>(buf, k, b);
                                     j += 1;
@@ -260,144 +204,30 @@ impl Array<T> {
         }
     }
 
-    /// Sorts the array in-place in ascending order (stable merge sort).
-    /// Elements are compared using the `<` operator.
     pub fn sort(&mut self) {
-        let n = self.used;
-        if n <= 1 {
-            return;
-        }
-        let src = self.repr;
-        let buf = builtin::array_new::<T>(n);
-        let mut width = 1;
-        for ; width < n; width = width * 2 {
-            for let mut start = 0; start < n; start += width * 2 {
-                let mid = start + width;
-                if mid < n {
-                    let mut end = start + width * 2;
-                    if end > n { end = n; }
-                    let mut i = start;
-                    let mut j = mid;
-                    for let mut k = start; k < end; k += 1 {
-                        if i < mid {
-                            if j < end {
-                                let a = builtin::array_get::<T>(src, i);
-                                let b = builtin::array_get::<T>(src, j);
-                                if !(b < a) {
-                                    builtin::array_set::<T>(buf, k, a);
-                                    i += 1;
-                                } else {
-                                    builtin::array_set::<T>(buf, k, b);
-                                    j += 1;
-                                }
-                            } else {
-                                builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, i));
-                                i += 1;
-                            }
-                        } else {
-                            builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, j));
-                            j += 1;
-                        }
-                    }
-                    builtin::array_copy::<T>(src, start, buf, start, end - start);
-                }
-            }
-        }
+        self.sort_by(|a: &T, b: &T| {
+            if *a < *b { return Ordering::Less; }
+            if *b < *a { return Ordering::Greater; }
+            return Ordering::Equal;
+        });
     }
 
-    /// Returns a new sorted array using a comparator function (stable merge sort).
-    /// `cmp` returns `Ordering` indicating the relative order of two elements.
     pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T> {
         let n = self.used;
-        let src = builtin::array_new::<T>(n);
-        builtin::array_copy::<T>(src, 0, self.repr, 0, n);
-        if n <= 1 {
-            return Array { repr: src, used: n };
-        }
-        let buf = builtin::array_new::<T>(n);
-        let mut width = 1;
-        for ; width < n; width = width * 2 {
-            for let mut start = 0; start < n; start += width * 2 {
-                let mid = start + width;
-                if mid < n {
-                    let mut end = start + width * 2;
-                    if end > n { end = n; }
-                    let mut i = start;
-                    let mut j = mid;
-                    for let mut k = start; k < end; k += 1 {
-                        if i < mid {
-                            if j < end {
-                                let a = builtin::array_get::<T>(src, i);
-                                let b = builtin::array_get::<T>(src, j);
-                                // Take right only if Greater; Less/Equal prefer left (stability)
-                                if let Greater = cmp(&a, &b) {
-                                    builtin::array_set::<T>(buf, k, b);
-                                    j += 1;
-                                } else {
-                                    builtin::array_set::<T>(buf, k, a);
-                                    i += 1;
-                                }
-                            } else {
-                                builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, i));
-                                i += 1;
-                            }
-                        } else {
-                            builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, j));
-                            j += 1;
-                        }
-                    }
-                    builtin::array_copy::<T>(src, start, buf, start, end - start);
-                }
-            }
-        }
-        return Array { repr: src, used: n };
+        let new_repr = builtin::array_new::<T>(n);
+        builtin::array_copy::<T>(new_repr, 0, self.repr, 0, n);
+        let mut copy = Array { repr: new_repr, used: n };
+        copy.sort_by(cmp);
+        return copy;
     }
 
-    /// Returns a new sorted array in ascending order (stable merge sort).
-    /// Elements are compared using the `<` operator.
     pub fn sorted(&self) -> Array<T> {
         let n = self.used;
-        let src = builtin::array_new::<T>(n);
-        builtin::array_copy::<T>(src, 0, self.repr, 0, n);
-        if n <= 1 {
-            return Array { repr: src, used: n };
-        }
-        let buf = builtin::array_new::<T>(n);
-        let mut width = 1;
-        for ; width < n; width = width * 2 {
-            for let mut start = 0; start < n; start += width * 2 {
-                let mid = start + width;
-                if mid < n {
-                    let mut end = start + width * 2;
-                    if end > n { end = n; }
-                    let mut i = start;
-                    let mut j = mid;
-                    for let mut k = start; k < end; k += 1 {
-                        if i < mid {
-                            if j < end {
-                                let a = builtin::array_get::<T>(src, i);
-                                let b = builtin::array_get::<T>(src, j);
-                                if !(b < a) {
-                                    builtin::array_set::<T>(buf, k, a);
-                                    i += 1;
-                                } else {
-                                    builtin::array_set::<T>(buf, k, b);
-                                    j += 1;
-                                }
-                            } else {
-                                builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, i));
-                                i += 1;
-                            }
-                        } else {
-                            builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, j));
-                            j += 1;
-                        }
-                    }
-                    builtin::array_copy::<T>(src, start, buf, start, end - start);
-                }
-            }
-        }
-        return Array { repr: src, used: n };
+        let new_repr = builtin::array_new::<T>(n);
+        builtin::array_copy::<T>(new_repr, 0, self.repr, 0, n);
+        let mut copy = Array { repr: new_repr, used: n };
+        copy.sort();
+        return copy;
     }
 }
 
@@ -419,8 +249,6 @@ impl FromIterator<T> for Array<T> {
 }
 
 impl ArrayIter<T> {
-    /// Collects iterator elements into an Array.
-    /// Consumes the iterator and returns a new Array with all remaining elements.
     pub fn collect(&mut self) -> Array<T> {
         let remaining = self.used - self.index;
         let mut repr = builtin::array_new::<T>(remaining);
@@ -430,13 +258,10 @@ impl ArrayIter<T> {
             builtin::array_set::<T>(repr, result_used, item);
             result_used += 1;
         }
-        // Mark iterator as exhausted
         self.index = self.used;
         return Array { repr, used: result_used };
     }
 
-    /// Reduces the iterator to a single value by applying a function.
-    /// Takes an initial value and a function that combines the accumulator with each element.
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc {
         let mut acc = init;
         loop {
@@ -449,7 +274,6 @@ impl ArrayIter<T> {
         return acc;
     }
 
-    /// Creates an iterator that yields (index, element) tuples.
     pub fn enumerate(&self) -> EnumerateIter<T> {
         return EnumerateIter {
             repr: self.repr,
@@ -459,7 +283,6 @@ impl ArrayIter<T> {
         };
     }
 
-    /// Creates an iterator that transforms each element using a function.
     pub fn map<U>(&self, f: fn(T) -> U) -> MapIter<T, U> {
         return MapIter {
             repr: self.repr,
@@ -469,7 +292,6 @@ impl ArrayIter<T> {
         };
     }
 
-    /// Creates an iterator that only yields elements matching a predicate.
     pub fn filter(&self, pred: fn(T) -> bool) -> FilterIter<T> {
         return FilterIter {
             repr: self.repr,
@@ -481,10 +303,9 @@ impl ArrayIter<T> {
 }
 
 // ============================================================================
-// EnumerateIter - Iterator that yields (index, element) tuples
+// EnumerateIter
 // ============================================================================
 
-/// Iterator that yields (index, element) tuples.
 pub struct EnumerateIter<T> {
     repr: builtin::array<T>,
     used: i32,
@@ -508,7 +329,6 @@ impl Iterator for EnumerateIter<T> {
 }
 
 impl EnumerateIter<T> {
-    /// Collects iterator elements into an Array.
     pub fn collect(&mut self) -> Array<[i32, T]> {
         let mut result: Array<[i32, T]> = [];
         loop {
@@ -523,10 +343,9 @@ impl EnumerateIter<T> {
 }
 
 // ============================================================================
-// MapIter - Iterator that transforms elements
+// MapIter
 // ============================================================================
 
-/// Iterator that transforms elements using a function.
 pub struct MapIter<T, U> {
     repr: builtin::array<T>,
     used: i32,
@@ -548,7 +367,6 @@ impl Iterator for MapIter<T, U> {
 }
 
 impl MapIter<T, U> {
-    /// Collects iterator elements into an Array.
     pub fn collect(&mut self) -> Array<U> {
         let mut result: Array<U> = [];
         loop {
@@ -561,7 +379,6 @@ impl MapIter<T, U> {
         return result;
     }
 
-    /// Reduces the iterator to a single value.
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, U) -> Acc) -> Acc {
         let mut acc = init;
         loop {
@@ -576,10 +393,9 @@ impl MapIter<T, U> {
 }
 
 // ============================================================================
-// FilterIter - Iterator that filters elements
+// FilterIter
 // ============================================================================
 
-/// Iterator that filters elements using a predicate.
 pub struct FilterIter<T> {
     repr: builtin::array<T>,
     used: i32,
@@ -605,7 +421,6 @@ impl Iterator for FilterIter<T> {
 }
 
 impl FilterIter<T> {
-    /// Collects iterator elements into an Array.
     pub fn collect(&mut self) -> Array<T> {
         let mut result: Array<T> = [];
         loop {
@@ -618,7 +433,6 @@ impl FilterIter<T> {
         return result;
     }
 
-    /// Reduces the iterator to a single value.
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc {
         let mut acc = init;
         loop {
@@ -636,15 +450,11 @@ impl FilterIter<T> {
 // Core functions
 // ============================================================================
 
-/// Traps with a message
-/// Logs the message to stderr (ambient, no effect required) and traps.
 pub fn panic(message: String) -> ! {
     log_stderr(message);
     builtin::unreachable();
 }
 
-/// Traps with no message
 pub fn unreachable() -> ! {
     builtin::unreachable();
 }
-
