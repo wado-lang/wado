@@ -120,7 +120,12 @@ pub fn lower_modules_indexed(
 
     modules
         .into_iter()
-        .map(|(module_source, module)| (module_source, lower_with_global_variants(module, &global_variant_map)))
+        .map(|(module_source, module)| {
+            (
+                module_source,
+                lower_with_global_variants(module, &global_variant_map),
+            )
+        })
         .collect()
 }
 
@@ -4788,7 +4793,10 @@ impl ClosureLowerer {
     ) -> TirExpr {
         if let TirExprKind::Local { index, .. } = &specialized_arg.kind
             && let Some(&functor_type) = param_to_functor.get(index)
-            && matches!(type_table.get(original_type_id), crate::tir::ResolvedType::Function { .. })
+            && matches!(
+                type_table.get(original_type_id),
+                crate::tir::ResolvedType::Function { .. }
+            )
         {
             // Find the functor_id by matching struct_type_id
             if let Some(functor) = self
