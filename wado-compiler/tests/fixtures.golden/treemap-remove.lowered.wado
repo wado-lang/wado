@@ -205,7 +205,7 @@ fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option
 }
 
 fn "Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,i32>>, index: i32) -> TreeMapEntry<String,i32> {
-    return "array_get<TreeMapEntry<String,i32>>"(self.repr, index);
+    return core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, index);
 }
 
 fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) -> i32 {
@@ -362,12 +362,10 @@ fn "ArrayIter<TreeMapEntry<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tre
     if (self.index >= self.used) {
         return null;
     }
-    let item: TreeMapEntry<String,i32> = move "array_get<TreeMapEntry<String,i32>>"(self.repr, self.index);
+    let item: TreeMapEntry<String,i32> = move core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<TreeMapEntry<String,i32>>"(arr: builtin::array<TreeMapEntry<String,i32>>, idx: i32) -> TreeMapEntry<String,i32>;
 
 fn "Array<TreeMapEntry<String,i32>>^IntoIterator::into_iter"(self: &Array<TreeMapEntry<String,i32>>) -> ArrayIter<TreeMapEntry<String,i32>> {
     return ArrayIter<TreeMapEntry<String,i32>> { repr: self.repr, used: self.used, index: 0 };

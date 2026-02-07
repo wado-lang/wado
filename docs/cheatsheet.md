@@ -181,6 +181,23 @@ arr.append(2);
 let n = arr.len();                       // get length (2)
 let first = arr[0];                      // index access (read)
 arr[0] = 100;                            // index assignment (write, requires mut)
+
+// Sorting (stable, O(n log n) worst case)
+let mut nums: Array<i32> = [5, 3, 8, 1];
+nums.sort();                             // in-place ascending sort (uses < operator)
+nums.sort_by(|a: &i32, b: &i32| {       // in-place sort with Ordering comparator
+    if *a > *b { return Ordering::Less; }
+    if *a < *b { return Ordering::Greater; }
+    return Ordering::Equal;
+});                                      // now sorted descending
+
+let orig: Array<i32> = [5, 3, 8, 1];
+let asc = orig.sorted();                // returns new sorted array (original unchanged)
+let desc = orig.sorted_by(|a: &i32, b: &i32| {
+    if *a > *b { return Ordering::Less; }
+    if *a < *b { return Ordering::Greater; }
+    return Ordering::Equal;
+});
 ```
 
 ## Strings

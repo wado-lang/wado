@@ -44,10 +44,8 @@ fn "ArrayIter<Point>^Iterator::next"(self: &mut ArrayIter<Point>) -> Option<Poin
     if (self.index >= self.used) {
         return null;
     }
-    let item: Point = move "array_get<Point>"(self.repr, self.index);
+    let item: Point = move core::builtin::array_get::<Point>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<Point>"(arr: builtin::array<Point>, idx: i32) -> Point;
 

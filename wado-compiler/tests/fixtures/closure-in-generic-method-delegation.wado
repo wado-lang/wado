@@ -1,0 +1,29 @@
+// Test: closure inside generic impl method delegating to another method.
+use { println, Stdout } from "core:cli";
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+impl Pair<T> {
+    fn pick_by(&self, cmp: fn(&T, &T) -> bool) -> T {
+        if cmp(&self.a, &self.b) {
+            return self.a;
+        }
+        return self.b;
+    }
+
+    fn pick_smaller(&self) -> T {
+        return self.pick_by(|x: &T, y: &T| *x < *y);
+    }
+}
+
+export fn run() with Stdout {
+    let p = Pair { a: 10, b: 3 };
+    let result = p.pick_smaller();
+    println(`{result}`);
+}
+
+__DATA__
+{"stdout": "3\n"}

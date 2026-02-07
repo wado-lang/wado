@@ -1,0 +1,30 @@
+// Test: pattern matching on Ordering variant (defined in core:prelude/traits)
+// This verifies cross-module variant pattern matching works.
+
+use { println, Stdout } from "core:cli";
+
+fn compare(a: i32, b: i32) -> Ordering {
+    if a < b { return Ordering::Less; }
+    if a > b { return Ordering::Greater; }
+    return Ordering::Equal;
+}
+
+export fn run() with Stdout {
+    let ord = compare(1, 2);
+    if let Less = ord {
+        println("1 < 2");
+    }
+
+    let ord2 = compare(3, 3);
+    if let Equal = ord2 {
+        println("3 == 3");
+    }
+
+    let ord3 = compare(5, 1);
+    if let Greater = ord3 {
+        println("5 > 1");
+    }
+}
+
+__DATA__
+{"stdout": "1 < 2\n3 == 3\n5 > 1\n"}

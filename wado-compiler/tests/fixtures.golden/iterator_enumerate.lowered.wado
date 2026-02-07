@@ -26,7 +26,9 @@ fn run() with Stdout {
     let arr: Array<String> = move ["a", "b", "c"];
     let mut iter: EnumerateIter<String> = __inline_ArrayIter_String___enumerate_0: {
         let self: &ArrayIter<String> = &__inline_Array_String___iter_1: {
-            break __inline_Array_String___iter_1: ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
+            break __inline_Array_String___iter_1: __inline_Array_String__IntoIterator__into_iter_0: {
+                break __inline_Array_String__IntoIterator__into_iter_0: ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
+            };
         };
         break __inline_ArrayIter_String___enumerate_0: EnumerateIter<String> { repr: self.repr, used: self.used, index: self.index, count: 0 };
     };
@@ -47,12 +49,10 @@ fn "EnumerateIter<String>^Iterator::next"(self: &mut EnumerateIter<String>) -> O
     if (self.index >= self.used) {
         return null;
     }
-    let item: String = move "array_get<String>"(self.repr, self.index);
+    let item: String = move core::builtin::array_get::<String>(self.repr, self.index);
     let idx: i32 = self.count;
     self.index = (self.index + 1);
     self.count = (self.count + 1);
     return Option::Some([idx, item]);
 }
-
-fn "array_get<String>"(arr: builtin::array<String>, idx: i32) -> String;
 

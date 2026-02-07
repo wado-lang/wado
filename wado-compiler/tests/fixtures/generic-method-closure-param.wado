@@ -1,6 +1,4 @@
 // Test: generic method calling another method that takes a closure parameter
-// This currently fails due to compiler limitations with method resolution
-// in generic contexts when closures are involved.
 
 use { println, Stdout } from "core:cli";
 
@@ -18,8 +16,7 @@ impl Container<T> {
         return f(&self.value);
     }
 
-    // This generic method tries to call transform with a closure
-    // Currently fails: "unknown method transform on generic struct Container"
+    // This generic method calls another method, forwarding its closure parameter
     fn double_transform(&self, f: fn(&T) -> T) -> T {
         // First transform
         let intermediate = self.transform(f);
@@ -42,4 +39,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "transform: 10\ndouble_transform: 20\n"}
+{"stdout": "transform: 10\ndouble_transform: 20\n"}

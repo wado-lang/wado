@@ -47,12 +47,10 @@ fn "ArrayIter<Tuple<bool,i32,String>>^Iterator::next"(self: &mut ArrayIter<Tuple
     if (self.index >= self.used) {
         return null;
     }
-    let item: [bool, i32, String] = move "array_get<Tuple<bool,i32,String>>"(self.repr, self.index);
+    let item: [bool, i32, String] = move core::builtin::array_get::<[bool, i32, String]>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<Tuple<bool,i32,String>>"(arr: builtin::array<[bool, i32, String]>, idx: i32) -> [bool, i32, String];
 
 pub fn "Array<Tuple<bool,i32,String>>::append"(self: &mut Array<[bool, i32, String]>, value: [bool, i32, String]) {
     let used: i32 = self.used;

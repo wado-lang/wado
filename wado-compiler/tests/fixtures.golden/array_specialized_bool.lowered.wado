@@ -46,12 +46,10 @@ fn "ArrayIter<bool>^Iterator::next"(self: &mut ArrayIter<bool>) -> Option<bool> 
     if (self.index >= self.used) {
         return null;
     }
-    let item: bool = "array_get<bool>"(self.repr, self.index);
+    let item: bool = core::builtin::array_get::<bool>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<bool>"(arr: builtin::array<bool>, idx: i32) -> bool;
 
 pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {
     let used: i32 = self.used;

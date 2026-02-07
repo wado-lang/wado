@@ -1238,25 +1238,20 @@ impl Codegen<'_> {
                             heap_type: HeapType::Concrete(struct_info.type_idx),
                         });
                         param_types.push(struct_ref_type);
-                    } else if struct_name.name.starts_with("Array<") {
-                        // Handle monomorphized Array methods (Array<i32>, Array<String>, etc.)
-                        // Use type_id_to_valtype which looks up Array types via struct_types
+                    } else {
+                        // For Array methods, primitive type methods, etc., resolve via type metadata.
+                        // type_id_to_valtype handles Array types (via lookup_array_struct_type),
+                        // reference types, and primitive types correctly.
                         let self_valtype =
                             self.type_id_to_valtype(method_type_table, param.type_id);
-                        // Convert to non-nullable reference for method call
-                        let struct_ref_type = match self_valtype {
+                        // For reference-type self params (Array, etc.), ensure non-nullable
+                        let self_valtype = match self_valtype {
                             ValType::Ref(rt) => ValType::Ref(RefType {
                                 nullable: false,
                                 ..rt
                             }),
                             other => other,
                         };
-                        param_types.push(struct_ref_type);
-                    } else {
-                        // For primitive type methods (i32, f64, etc.), use the type_id_to_valtype
-                        // which handles reference types correctly (e.g., &i32 -> boxed i32 ref)
-                        let self_valtype =
-                            self.type_id_to_valtype(method_type_table, param.type_id);
                         param_types.push(self_valtype);
                     }
                 } else {

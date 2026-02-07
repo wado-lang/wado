@@ -42,12 +42,10 @@ fn "ArrayIter<u16>^Iterator::next"(self: &mut ArrayIter<u16>) -> Option<u16> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: u16 = "array_get<u16>"(self.repr, self.index);
+    let item: u16 = core::builtin::array_get::<u16>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<u16>"(arr: builtin::array<u16>, idx: i32) -> u16;
 
 pub fn "Array<u16>::append"(self: &mut Array<u16>, value: u16) {
     let used: i32 = self.used;

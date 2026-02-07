@@ -18,7 +18,9 @@ pub struct "ArrayIter<String>" {
 fn run() with Stdout {
     let arr: Array<String> = move ["hello", "world", "!"];
     let mut iter: ArrayIter<String> = __inline_Array_String___iter_0: {
-        break __inline_Array_String___iter_0: ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
+        break __inline_Array_String___iter_0: __inline_Array_String__IntoIterator__into_iter_1: {
+            break __inline_Array_String__IntoIterator__into_iter_1: ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
+        };
     };
     loop {
         let __pattern_temp_0: Option<String> = move iter."ArrayIter<String>^Iterator::next"();
@@ -35,10 +37,8 @@ fn "ArrayIter<String>^Iterator::next"(self: &mut ArrayIter<String>) -> Option<St
     if (self.index >= self.used) {
         return null;
     }
-    let item: String = move "array_get<String>"(self.repr, self.index);
+    let item: String = move core::builtin::array_get::<String>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<String>"(arr: builtin::array<String>, idx: i32) -> String;
 

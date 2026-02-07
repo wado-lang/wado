@@ -32,7 +32,9 @@ fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5];
     let doubled: Array<i32> = move __inline_ArrayIter_i32___map_i32__1: {
         let self: &ArrayIter<i32> = &__inline_Array_i32___iter_0: {
-            break __inline_Array_i32___iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            break __inline_Array_i32___iter_0: __inline_Array_i32__IntoIterator__into_iter_0: {
+                break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            };
         };
         let f: fn(i32) -> i32 = &__Closure_0 {  };
         break __inline_ArrayIter_i32___map_i32__1: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
@@ -53,7 +55,9 @@ fn run() with Stdout {
     }
     let squared: Array<i32> = move __inline_ArrayIter_i32___map_i32__4: {
         let self: &ArrayIter<i32> = &__inline_Array_i32___iter_3: {
-            break __inline_Array_i32___iter_3: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            break __inline_Array_i32___iter_3: __inline_Array_i32__IntoIterator__into_iter_1: {
+                break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            };
         };
         let f: fn(i32) -> i32 = &__Closure_1 {  };
         break __inline_ArrayIter_i32___map_i32__4: MapIter<i32,i32> { repr: self.repr, used: self.used, index: self.index, f: f };
@@ -79,12 +83,10 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = "array_get<i32>"(self.repr, self.index);
+    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
 
 pub fn "MapIter<i32,i32>::collect"(self: &mut MapIter<i32,i32>) -> Array<i32> {
     let mut result: Array<i32> = move [];
@@ -120,7 +122,7 @@ fn "MapIter<i32,i32>^Iterator::next"(self: &mut MapIter<i32,i32>) -> Option<i32>
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = "array_get<i32>"(self.repr, self.index);
+    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(self.f(item));
 }

@@ -32,7 +32,9 @@ fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let evens: Array<i32> = move __inline_ArrayIter_i32___filter_1: {
         let self: &ArrayIter<i32> = &__inline_Array_i32___iter_0: {
-            break __inline_Array_i32___iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            break __inline_Array_i32___iter_0: __inline_Array_i32__IntoIterator__into_iter_0: {
+                break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            };
         };
         let pred: fn(i32) -> bool = &__Closure_0 {  };
         break __inline_ArrayIter_i32___filter_1: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
@@ -54,7 +56,9 @@ fn run() with Stdout {
     }
     let large: Array<i32> = move __inline_ArrayIter_i32___filter_4: {
         let self: &ArrayIter<i32> = &__inline_Array_i32___iter_3: {
-            break __inline_Array_i32___iter_3: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            break __inline_Array_i32___iter_3: __inline_Array_i32__IntoIterator__into_iter_1: {
+                break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+            };
         };
         let pred: fn(i32) -> bool = &__Closure_1 {  };
         break __inline_ArrayIter_i32___filter_4: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
@@ -80,12 +84,10 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = "array_get<i32>"(self.repr, self.index);
+    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
-
-fn "array_get<i32>"(arr: builtin::array<i32>, idx: i32) -> i32;
 
 pub fn "FilterIter<i32>::collect"(self: &mut FilterIter<i32>) -> Array<i32> {
     let mut result: Array<i32> = move [];
@@ -122,7 +124,7 @@ fn "FilterIter<i32>^Iterator::next"(self: &mut FilterIter<i32>) -> Option<i32> {
         if (self.index >= self.used) {
             return null;
         }
-        let item: i32 = "array_get<i32>"(self.repr, self.index);
+        let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
         self.index = (self.index + 1);
         if self.pred(item) {
             return Option::Some(item);
