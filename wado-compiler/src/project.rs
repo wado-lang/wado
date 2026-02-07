@@ -69,8 +69,6 @@ pub struct Project {
     /// Target world for Component Model export (e.g., "Command", "Service")
     /// Defaults to "Command" (wasi:cli/command)
     pub target_world: String,
-    /// When true, apply DCE to bundled Wasm module (enabled for -O1+, disabled for -O0)
-    pub wasm_dce_enabled: bool,
 
     // ========================================
     // CM export characteristics (derived from target_world)
@@ -115,7 +113,6 @@ impl Project {
             // Codegen options
             strip_names: false,
             target_world: "Command".to_string(),
-            wasm_dce_enabled: true, // Enabled by default, disabled for -O0
             // CM export characteristics
             has_http_handler_export: false,
             // Wasm plan
