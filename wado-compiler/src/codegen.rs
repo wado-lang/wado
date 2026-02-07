@@ -44,9 +44,9 @@ use wasm_encoder::{
 };
 use wasmparser::{Validator, WasmFeatures};
 
-/// Helper to get the `ModuleSource` for String type (core:string)
+/// Helper to get the `ModuleSource` for String type (core:prelude/string.wado)
 fn string_module_source() -> ModuleSource {
-    ModuleSource::core("string")
+    ModuleSource::core("prelude/string.wado")
 }
 
 /// Information about a user-defined struct type
@@ -7363,7 +7363,7 @@ impl Codegen<'_> {
                                             let base_type_name = prim.as_str();
 
                                             let prim_module =
-                                                ModuleSource::core("prelude/primitives");
+                                                ModuleSource::core("prelude/primitives.wado");
                                             let base_mangled = MethodName::new(
                                                 prim_module.clone(),
                                                 base_type_name.to_string(),
@@ -7411,7 +7411,7 @@ impl Codegen<'_> {
                                     let base_type_name = prim.as_str();
 
                                     // Primitive methods are defined in core/prelude/primitives.wado
-                                    let prim_module = ModuleSource::core("prelude/primitives");
+                                    let prim_module = ModuleSource::core("prelude/primitives.wado");
                                     let base_mangled = MethodName::new(
                                         prim_module.clone(),
                                         base_type_name.to_string(),
@@ -7460,7 +7460,7 @@ impl Codegen<'_> {
                         let type_name = prim.as_str();
 
                         // Primitive methods are defined in core/prelude/primitives.wado
-                        let prim_module = ModuleSource::core("prelude/primitives");
+                        let prim_module = ModuleSource::core("prelude/primitives.wado");
                         let mangled_name = MethodName::new(
                             prim_module.clone(),
                             type_name.to_string(),

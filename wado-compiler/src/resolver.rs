@@ -33,9 +33,9 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Helper to get the `ModuleSource` for String type (core:string)
+/// Helper to get the `ModuleSource` for String type (core:prelude/string.wado)
 fn string_module_source() -> ModuleSource {
-    ModuleSource::core("string")
+    ModuleSource::core("prelude/string.wado")
 }
 
 /// Struct field info: module source and field definitions
@@ -4985,11 +4985,11 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Get the String struct type (from core:string)
+    /// Get the String struct type (from core:prelude/string.wado)
     fn get_string_struct_type(&mut self) -> TypeId {
         self.type_table
             .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::core("string"))
+            .make_struct("String".to_string(), ModuleSource::core("prelude/string.wado"))
     }
 
     /// Build a `from_pair` call for i128/u128 large literal construction
@@ -5029,7 +5029,7 @@ impl<'a> Resolver<'a> {
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source: ModuleSource::core("prelude/int128"),
+                    module_source: ModuleSource::core("prelude/int128.wado"),
                     name: mangled_func_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
@@ -5342,7 +5342,7 @@ impl<'a> Resolver<'a> {
                             return TirExpr::new(
                                 TirExprKind::StaticCall {
                                     func: FunctionRef::External {
-                                        module_source: ModuleSource::core("prelude/int128"),
+                                        module_source: ModuleSource::core("prelude/int128.wado"),
                                         name: mangled_func_name,
                                         monomorph_info: None,
                                         method_info: Some(method_info),
@@ -5513,7 +5513,7 @@ impl<'a> Resolver<'a> {
             // Primitive types have impl blocks in core:prelude/primitives
             ResolvedType::Primitive(_) => {
                 let prim_module = ModuleSource::Core {
-                    name: "prelude/primitives".to_string(),
+                    name: "prelude/primitives.wado".to_string(),
                 };
                 (
                     self.type_table.borrow().mangle_type_name(base_type_id),
@@ -9414,7 +9414,7 @@ impl<'a> Resolver<'a> {
                                 ResolvedType::Primitive(_) => {
                                     // Primitive to_string methods are in core:prelude/primitives
                                     let prim_module = ModuleSource::Core {
-                                        name: "prelude/primitives".to_string(),
+                                        name: "prelude/primitives.wado".to_string(),
                                     };
                                     (
                                         self.type_table.borrow().mangle_type_name(base_type_id),
@@ -9578,7 +9578,7 @@ impl<'a> Resolver<'a> {
                         return TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("prelude/int128"),
+                                    module_source: ModuleSource::core("prelude/int128.wado"),
                                     name: mangled_func_name,
                                     monomorph_info: None,
                                     method_info: Some(method_info),
@@ -9673,7 +9673,7 @@ impl<'a> Resolver<'a> {
                 return TirExpr::new(
                     TirExprKind::StaticCall {
                         func: FunctionRef::External {
-                            module_source: ModuleSource::core("prelude/int128"),
+                            module_source: ModuleSource::core("prelude/int128.wado"),
                             name: mangled_func_name,
                             monomorph_info: None,
                             method_info: Some(method_info),

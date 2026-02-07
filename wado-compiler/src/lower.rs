@@ -158,7 +158,7 @@ fn create_i128_literal(value: i128, type_id: TypeId, span: Span) -> TirExpr {
     TirExpr::new(
         TirExprKind::StaticCall {
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/int128"),
+                module_source: ModuleSource::core("prelude/int128.wado"),
                 name: "i128::from_i64".to_string(),
                 monomorph_info: None,
                 method_info: Some(method_info),
@@ -187,7 +187,7 @@ fn create_u128_literal(value: u128, type_id: TypeId, span: Span) -> TirExpr {
     TirExpr::new(
         TirExprKind::StaticCall {
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/int128"),
+                module_source: ModuleSource::core("prelude/int128.wado"),
                 name: "u128::from_u64".to_string(),
                 monomorph_info: None,
                 method_info: Some(method_info),
@@ -239,7 +239,7 @@ fn create_i128_eq_call(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/int128"),
+                module_source: ModuleSource::core("prelude/int128.wado"),
                 name: mangled_method_name,
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
@@ -296,7 +296,7 @@ fn create_u128_eq_call(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/int128"),
+                module_source: ModuleSource::core("prelude/int128.wado"),
                 name: mangled_method_name,
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
@@ -749,7 +749,7 @@ fn match_to_switch(
                 TirStmtKind::Expr(TirExpr::new(
                     TirExprKind::Call {
                         func: FunctionRef::External {
-                            module_source: ModuleSource::core("prelude/panic"),
+                            module_source: ModuleSource::core("prelude/panic.wado"),
                             name: "unreachable".to_string(),
                             monomorph_info: None,
                             method_info: None,

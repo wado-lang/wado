@@ -368,7 +368,7 @@ impl TypeTable {
     pub const CHAR: TypeId = TypeId(13);
     pub const UNIT: TypeId = TypeId(14);
     pub const NEVER: TypeId = TypeId(15);
-    // STRING removed - String is now a user-defined struct in core:string
+    // STRING removed - String is now a user-defined struct in core:prelude/string.wado
     pub const UNKNOWN: TypeId = TypeId(16);
     pub const ERROR: TypeId = TypeId(17);
 
