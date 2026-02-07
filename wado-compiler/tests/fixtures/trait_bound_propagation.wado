@@ -1,0 +1,33 @@
+// Test trait bound propagation through bounded trait impls
+use { println, Stdout } from "core:cli";
+
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+// Pair<T> implements Eq only when T: Eq
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+
+// Container requires T: Eq
+struct EqContainer<T: Eq> {
+    item: T,
+}
+
+export fn run() with Stdout {
+    // Pair<i32> implements Eq because i32 implements Eq, so this should work
+    let c = EqContainer { item: Pair { first: 1, second: 2 } };
+    let other = Pair { first: 1, second: 2 };
+    if c.item == other {
+        println("equal");
+    } else {
+        println("not equal");
+    }
+}
+
+__DATA__
+{"stdout": "equal\n"}
