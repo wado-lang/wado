@@ -1621,6 +1621,38 @@ let r = Robot { id: 1 };
 r.greet();  // Returns "Beep boop" (inherent method wins)
 ```
 
+**Default Method Implementations:**
+
+Trait methods can have default implementations. Implementors can override them or use the defaults:
+
+```wado
+trait Summary {
+    fn title(&self) -> String;  // required - must be provided
+
+    // Default method - uses self.title()
+    fn summary(&self) -> String {
+        return `Title: {self.title()}`;
+    }
+}
+
+struct Article { headline: String }
+
+// Only provides the required method; summary() uses the default
+impl Summary for Article {
+    fn title(&self) -> String { return self.headline; }
+}
+
+struct Report { headline: String, body: String }
+
+// Overrides the default summary()
+impl Summary for Report {
+    fn title(&self) -> String { return self.headline; }
+    fn summary(&self) -> String { return `{self.headline}: {self.body}`; }
+}
+```
+
+Default methods can call other trait methods (both required and default), and the calls are resolved against the implementing type.
+
 **Associated Types:**
 
 Traits can declare associated types - placeholder types that are specified by implementors:
@@ -1672,8 +1704,6 @@ Note: `IndexAssign` takes a value parameter rather than returning `&mut T` (like
 
 **Not Yet Implemented:**
 
-- Trait bounds (`fn foo<T: Display>(x: T)`)
-- Default method implementations
 - Trait objects (`dyn Trait`)
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
 

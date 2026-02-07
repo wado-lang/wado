@@ -1,0 +1,45 @@
+// Test: basic default trait method
+use { println, Stdout } from "core:cli";
+
+trait Greet {
+    fn name(&self) -> String;
+    fn greet(&self) -> String {
+        return `Hello, {self.name()}!`;
+    }
+}
+
+struct Person {
+    name: String,
+}
+
+impl Greet for Person {
+    fn greet(&self) -> String {
+        return `Hi, {self.name()}!`;
+    }
+
+    fn name(&self) -> String {
+        return self.name;
+    }
+}
+
+struct Robot {
+    id: i32,
+}
+
+// Robot uses the default greet() method
+impl Greet for Robot {
+    fn name(&self) -> String {
+        return `Robot-{self.id}`;
+    }
+}
+
+export fn run() with Stdout {
+    let p = Person { name: "Alice" };
+    println(p.greet());
+
+    let r = Robot { id: 42 };
+    println(r.greet());
+}
+
+__DATA__
+{"stdout": "Hi, Alice!\nHello, Robot-42!\n"}

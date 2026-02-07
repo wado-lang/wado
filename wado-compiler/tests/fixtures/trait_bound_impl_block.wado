@@ -6,14 +6,14 @@ struct Wrapper<T> {
 }
 
 // Available for all Wrapper<T>
-impl Wrapper<T> {
+impl<T> Wrapper<T> {
     fn get(&self) -> T {
         return self.value;
     }
 }
 
 // Only available when T: Ord
-impl Wrapper<T: Ord> {
+impl<T: Ord> Wrapper<T> {
     fn is_greater_than(&self, other: &Wrapper<T>) -> bool {
         return self.value > other.value;
     }
