@@ -226,11 +226,20 @@ pub fn compile_file_with_opts(
         message: e.to_string(),
     })?;
 
+    compile_source_with_opts(path, &source, opt_level)
+}
+
+/// Compile source code with a file path for module resolution
+pub fn compile_source_with_opts(
+    path: &std::path::Path,
+    source: &str,
+    opt_level: OptLevel,
+) -> Result<wado_compiler::CompileResult, CompileError> {
     let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
 
     runtime().block_on(wado_compiler::compile_with_host(
-        &source,
+        source,
         &host,
         Some(&path.to_string_lossy()),
         opt_level,

@@ -112,7 +112,7 @@ fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: 
 // ============================================================================
 
 /// Run a single fixture test at a specific optimization level
-fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
+fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLevel) {
     let fixture_name = fixture_path
         .file_name()
         .unwrap()
@@ -120,11 +120,6 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
         .to_string();
     let opt_name = common::opt_level_name(opt_level);
     let test_id = format!("{fixture_name} ({opt_name})");
-
-    // Read the source file to extract __DATA__ section before compilation
-    let source = std::fs::read_to_string(fixture_path).unwrap_or_else(|e| {
-        panic!("[{test_id}] failed to read file: {e}");
-    });
 
     // Get the __DATA__ section - required for all fixtures
     let data_section = common::extract_data_section(&source).unwrap_or_else(|| {
@@ -146,7 +141,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
 
         // Use catch_unwind to recover from panics
         let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            run_normal_test(fixture_path, opt_level, &spec, &test_id)
+            run_normal_test(fixture_path, source, opt_level, &spec, &test_id)
         }));
 
         match test_result {
@@ -173,13 +168,19 @@ fn run_fixture_test_with_opt(fixture_path: &Path, opt_level: OptLevel) {
     }
 
     // Normal test - run without panic recovery
-    run_normal_test(fixture_path, opt_level, &spec, &test_id);
+    run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
 }
 
 /// Run a normal (non-TODO) test
-fn run_normal_test(fixture_path: &Path, opt_level: OptLevel, spec: &TestSpec, test_id: &str) {
+fn run_normal_test(
+    fixture_path: &Path,
+    source: &str,
+    opt_level: OptLevel,
+    spec: &TestSpec,
+    test_id: &str,
+) {
     // Try to compile the fixture
-    let compile_result = common::compile_file_with_opts(fixture_path, opt_level);
+    let compile_result = common::compile_source_with_opts(fixture_path, source, opt_level);
 
     // Handle expected compile errors
     if let Some(expected_error) = &spec.compile_error {
@@ -219,34 +220,34 @@ fn run_normal_test(fixture_path: &Path, opt_level: OptLevel, spec: &TestSpec, te
 // ============================================================================
 
 /// Test function for O0 (no optimization)
-fn fixture_test_o0(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    run_fixture_test_with_opt(path, OptLevel::O0);
+fn fixture_test_o0(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
+    run_fixture_test_with_opt(path, content, OptLevel::O0);
     Ok(())
 }
 
 /// Test function for O2 (full optimization)
-fn fixture_test_o2(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    run_fixture_test_with_opt(path, OptLevel::O2);
+fn fixture_test_o2(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
+    run_fixture_test_with_opt(path, content, OptLevel::O2);
     Ok(())
 }
 
 /// Test function for O3 (aggressive optimization)
 /// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
-fn fixture_test_o3(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
         return Ok(()); // Skip locally by default
     }
-    run_fixture_test_with_opt(path, OptLevel::O3);
+    run_fixture_test_with_opt(path, content, OptLevel::O3);
     Ok(())
 }
 
 /// Test function for Os (size optimization)
 /// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
-fn fixture_test_os(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
         return Ok(()); // Skip locally by default
     }
-    run_fixture_test_with_opt(path, OptLevel::Os);
+    run_fixture_test_with_opt(path, content, OptLevel::Os);
     Ok(())
 }
 
