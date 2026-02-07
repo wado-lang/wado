@@ -4394,7 +4394,7 @@ impl Codegen<'_> {
                     });
 
                     // 3. Copy the raw array
-                    // Check if element type is packed (i8/u8/i16/u16)
+                    // Check if element type is packed (i8/u8/i16/u16/bool)
                     let elem_resolved = type_table.get(elem_type);
                     let is_packed = matches!(
                         elem_resolved,
@@ -4403,6 +4403,7 @@ impl Codegen<'_> {
                                 | PrimitiveType::U8
                                 | PrimitiveType::I16
                                 | PrimitiveType::U16
+                                | PrimitiveType::Bool
                         )
                     );
                     self.generate_array_copy(func, raw_array_type_idx, is_packed, ctx);
@@ -4981,13 +4982,13 @@ impl Codegen<'_> {
         }
 
         // Create new array type
-        // Use packed storage types for i8/i16/u8/u16, otherwise use ValType
+        // Use packed storage types for i8/i16/u8/u16/bool, otherwise use ValType
         // Use matches! on the actual type, not TypeId comparison,
         // because TypeIds may differ across modules
         let elem_resolved = type_table.get(element_type_id);
         let storage_type = if matches!(
             elem_resolved,
-            ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::U8)
+            ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::U8 | PrimitiveType::Bool)
         ) {
             StorageType::I8
         } else if matches!(
@@ -6905,11 +6906,13 @@ impl Codegen<'_> {
                             field_index: 0,
                         });
                         self.generate_expr(func, index_expr, type_table, ctx, builder);
-                        // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU
+                        // For packed types (i8/u8/i16/u16/bool), use ArrayGetS/ArrayGetU
                         let elem_resolved = type_table.get(element_type);
                         if matches!(
                             elem_resolved,
-                            ResolvedType::Primitive(PrimitiveType::U8 | PrimitiveType::U16)
+                            ResolvedType::Primitive(
+                                PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::Bool
+                            )
                         ) {
                             func.instruction(&Instruction::ArrayGetU(raw_array_type_idx));
                         } else if matches!(
@@ -7896,12 +7899,14 @@ impl Codegen<'_> {
 
                 // Now generate index and do array access
                 self.generate_expr(func, index, type_table, ctx, builder);
-                // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU
+                // For packed types (i8/u8/i16/u16/bool), use ArrayGetS/ArrayGetU
                 if let Some(elem_id) = element_type_id {
                     let elem_resolved = type_table.get(elem_id);
                     if matches!(
                         elem_resolved,
-                        ResolvedType::Primitive(PrimitiveType::U8 | PrimitiveType::U16)
+                        ResolvedType::Primitive(
+                            PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::Bool
+                        )
                     ) {
                         func.instruction(&Instruction::ArrayGetU(raw_array_type_idx));
                     } else if matches!(
@@ -11252,13 +11257,17 @@ impl Codegen<'_> {
                         func.instruction(&Instruction::RefAsNonNull);
                         // Generate remaining arguments (index)
                         self.generate_args(func, &args[1..], type_table, ctx, builder);
-                        // For packed types (i8/u8/i16/u16), use ArrayGetS/ArrayGetU
+                        // For packed types (i8/u8/i16/u16/bool), use ArrayGetS/ArrayGetU
                         // Use matches! on the actual type, not TypeId comparison,
                         // because TypeIds may differ across modules
                         let elem_resolved = type_table.get(*element_type);
                         if matches!(
                             elem_resolved,
-                            ResolvedType::Primitive(PrimitiveType::U8 | PrimitiveType::U16)
+                            ResolvedType::Primitive(
+                                PrimitiveType::U8
+                                    | PrimitiveType::U16
+                                    | PrimitiveType::Bool
+                            )
                         ) {
                             func.instruction(&Instruction::ArrayGetU(array_type_idx));
                         } else if matches!(
