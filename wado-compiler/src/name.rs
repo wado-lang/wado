@@ -575,6 +575,9 @@ pub struct LocalMethodName {
     pub method_name: String,
     /// Method-level type args (e.g., ["i64"] for transform<i64>)
     pub method_type_args: Vec<String>,
+    /// Whether the struct name is a type parameter that should be substituted directly
+    /// during monomorphization (e.g., `T^Ord::cmp` where T should become i32).
+    pub is_type_param_receiver: bool,
 }
 
 impl LocalMethodName {
@@ -594,6 +597,7 @@ impl LocalMethodName {
             trait_name,
             method_name,
             method_type_args: vec![],
+            is_type_param_receiver: false,
         }
     }
 
@@ -618,6 +622,7 @@ impl LocalMethodName {
             trait_name,
             method_name,
             method_type_args,
+            is_type_param_receiver: false,
         }
     }
 
@@ -639,6 +644,7 @@ impl LocalMethodName {
             trait_name: self.trait_name.clone(),
             method_name: self.method_name.clone(),
             method_type_args: method_type_args.to_vec(),
+            is_type_param_receiver: self.is_type_param_receiver,
         }
     }
 
@@ -647,6 +653,20 @@ impl LocalMethodName {
     #[must_use]
     pub fn with_struct_type_args(&self, type_args: &[String]) -> Self {
         self.with_type_args(type_args, &[])
+    }
+
+    /// Create a version with the struct name directly substituted (not wrapped with type args).
+    /// Used when the struct name is a type parameter (e.g., `T^Ord::cmp` → `i32^Ord::cmp`).
+    #[must_use]
+    pub fn with_substituted_struct_name(&self, new_name: &str) -> Self {
+        Self {
+            struct_name: new_name.to_string(),
+            base_struct_name: new_name.to_string(),
+            trait_name: self.trait_name.clone(),
+            method_name: self.method_name.clone(),
+            method_type_args: self.method_type_args.clone(),
+            is_type_param_receiver: false, // After substitution, it's a concrete type
+        }
     }
 
     /// Get the full method name including type args (e.g., "transform<i64>")

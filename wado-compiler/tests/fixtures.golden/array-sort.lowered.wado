@@ -228,16 +228,6 @@ fn "__Closure_3::__call"(self: &__Closure_3, a: &i32, b: &i32) -> Ordering {
     return Ordering::Equal;
 }
 
-fn "__Closure_4::__call"(self: &__Closure_4, a: &i32, b: &i32) -> Ordering {
-    if (*a < *b) {
-        return Ordering::Less;
-    }
-    if (*b < *a) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
 fn "Array<i32>::sort_by$__Closure_0"(self: &mut Array<i32>, cmp: &__Closure_0) {
     let n: i32 = self.used;
     if (n <= 1) {
@@ -503,7 +493,11 @@ fn "Array<i32>::sort_by$__Closure_4"(self: &mut Array<i32>, cmp: &__Closure_4) {
                                                 if (j < end) {
                                                     let a: i32 = core::builtin::array_get::<i32>(src, i);
                                                     let b: i32 = core::builtin::array_get::<i32>(src, j);
-                                                    let __pattern_temp_0: Ordering = move cmp."__Closure_4::__call"(&a, &b);
+                                                    let __pattern_temp_0: Ordering = __inline___Closure_4____call_0: {
+                                                        let a: &i32 = &a;
+                                                        let b: &i32 = &b;
+                                                        break __inline___Closure_4____call_0: a."i32^Ord::cmp"(b);
+                                                    };
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
                                                         core::builtin::array_set::<i32>(buf, k, b);
                                                         j = (j + 1);

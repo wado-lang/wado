@@ -745,12 +745,22 @@ fn analyze_expr(
                         ));
                         analysis.callees.insert(method_id);
                     }
-                    ResolvedType::Primitive(_) => {
+                    ResolvedType::Primitive(prim) => {
                         // Primitive method call (e.g., i32.to_string())
                         if method_name == "to_string" {
                             add_to_string_callee(receiver.type_id, type_table, analysis);
                         }
-                        // Other primitive methods are inline (no function call)
+                        // Trait methods on primitives (e.g., i32^Ord::cmp)
+                        if trait_name.is_some() {
+                            let prim_name = prim.as_str().to_string();
+                            let method_id = FunctionId::Method(MethodName::new(
+                                ModuleSource::core("prelude/primitives"),
+                                prim_name,
+                                trait_name.clone(),
+                                method_name.clone(),
+                            ));
+                            analysis.callees.insert(method_id);
+                        }
                     }
                     ResolvedType::GenericInstance {
                         name,

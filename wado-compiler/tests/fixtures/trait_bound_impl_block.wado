@@ -1,0 +1,34 @@
+// Test bounded impl blocks - conditional methods
+use { println, Stdout } from "core:cli";
+
+struct Wrapper<T> {
+    value: T,
+}
+
+// Available for all Wrapper<T>
+impl Wrapper<T> {
+    fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+// Only available when T: Ord
+impl Wrapper<T: Ord> {
+    fn is_greater_than(&self, other: &Wrapper<T>) -> bool {
+        return self.value > other.value;
+    }
+}
+
+export fn run() with Stdout {
+    let a = Wrapper { value: 10 };
+    let b = Wrapper { value: 20 };
+    // get() works for all T
+    println(`{a.get()}`);
+    // is_greater_than works because i32: Ord
+    if b.is_greater_than(&a) {
+        println("b is greater");
+    }
+}
+
+__DATA__
+{"stdout": "10\nb is greater\n"}

@@ -3081,16 +3081,17 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Impl)?;
 
-        // Parse generic parameters like <T>
-        let type_params = self.parse_generic_params()?;
+        // Parse generic parameters like <T> (Rust-style: impl<T: Ord> Array<T>)
+        let mut type_params = self.parse_generic_params()?;
 
         // Parse first type (could be trait name or target type)
-        let first_type = self.parse_type()?;
+        // Supports bounds on type args: impl Array<T: Ord> { ... }
+        let first_type = self.parse_impl_target_type(&mut type_params)?;
 
         // Check if this is `impl Trait for Type` or just `impl Type`
         let (trait_type, ty) = if self.check(&TokenKind::For) {
             self.advance(); // consume 'for'
-            let target_type = self.parse_type()?;
+            let target_type = self.parse_impl_target_type(&mut type_params)?;
             (Some(first_type), target_type)
         } else {
             (None, first_type)
@@ -3139,6 +3140,56 @@ impl Parser {
             methods,
             span: start_span.merge(&end_span),
         })
+    }
+
+    /// Parse a type in impl block context, supporting bounds on generic type args.
+    /// `impl Array<T: Ord>` extracts T: Ord into `type_params` and returns Generic("Array", [Named("T")]).
+    /// Falls back to normal `parse_type()` for non-identifier starts (e.g., reference types).
+    fn parse_impl_target_type(
+        &mut self,
+        type_params: &mut Vec<crate::ast::GenericParam>,
+    ) -> ParseResult<Type> {
+        // If not starting with an identifier, fall back to normal type parsing
+        if !matches!(self.peek_kind(), TokenKind::Ident(_)) {
+            return self.parse_type();
+        }
+
+        // Check if this is Ident < ... pattern where <...> may contain bounds
+        // If there's no <, or the explicit type_params already cover these params,
+        // use normal parse_type.
+        if self.peek_nth(1).kind != TokenKind::Lt {
+            return self.parse_type();
+        }
+
+        // We have Ident < ... - parse the name and use parse_generic_params for <...>
+        let start_span = self.peek().span;
+        let name = self.consume_ident()?;
+        let params = self.parse_generic_params()?;
+
+        // Add params to type_params if not already present (avoid duplicates from impl<T>)
+        for param in &params {
+            if !type_params.iter().any(|p| p.name == param.name) {
+                type_params.push(param.clone());
+            }
+        }
+
+        // Construct generic type from param names
+        let end_span = self.tokens[self.pos - 1].span; // span of >
+        let args: Vec<Type> = params
+            .iter()
+            .map(|p| {
+                Type::Named(crate::ast::NamedType {
+                    name: p.name.clone(),
+                    span: p.span,
+                })
+            })
+            .collect();
+
+        Ok(Type::Generic(crate::ast::GenericType {
+            name,
+            args,
+            span: start_span.merge(&end_span),
+        }))
     }
 
     /// Parse a trait declaration

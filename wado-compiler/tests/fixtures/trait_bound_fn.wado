@@ -1,0 +1,15 @@
+// Test trait bound on function type parameters
+use { println, Stdout } from "core:cli";
+
+fn max<T: Ord>(a: T, b: T) -> T {
+    if a > b { return a; }
+    return b;
+}
+
+export fn run() with Stdout {
+    let result = max::<i32>(3, 7);
+    println(`{result}`);
+}
+
+__DATA__
+{"stdout": "7\n"}

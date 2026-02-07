@@ -1,0 +1,27 @@
+// Test bounded impl block violation - method not available when bounds unsatisfied
+
+struct Wrapper<T> {
+    value: T,
+}
+
+// Only available when T: Ord
+impl Wrapper<T: Ord> {
+    fn max_with(&self, other: &Wrapper<T>) -> T {
+        if self.value > other.value {
+            return self.value;
+        }
+        return other.value;
+    }
+}
+
+struct Foo {}
+
+export fn run() {
+    let w1 = Wrapper { value: Foo {} };
+    let w2 = Wrapper { value: Foo {} };
+    // Foo does not implement Ord, so max_with() should not be available
+    let m = w1.max_with(&w2);
+}
+
+__DATA__
+{"compile_error": "no method 'max_with' found"}

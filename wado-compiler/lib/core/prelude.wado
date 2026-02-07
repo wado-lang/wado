@@ -204,14 +204,6 @@ impl Array<T> {
         }
     }
 
-    pub fn sort(&mut self) {
-        self.sort_by(|a: &T, b: &T| {
-            if *a < *b { return Ordering::Less; }
-            if *b < *a { return Ordering::Greater; }
-            return Ordering::Equal;
-        });
-    }
-
     pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T> {
         let n = self.used;
         let new_repr = builtin::array_new::<T>(n);
@@ -219,6 +211,15 @@ impl Array<T> {
         let mut copy = Array { repr: new_repr, used: n };
         copy.sort_by(cmp);
         return copy;
+    }
+}
+
+// sort/sorted require T: Ord (elements must be comparable via Ord::cmp)
+impl Array<T: Ord> {
+    pub fn sort(&mut self) {
+        self.sort_by(|a: &T, b: &T| {
+            return a.cmp(b);
+        });
     }
 
     pub fn sorted(&self) -> Array<T> {

@@ -597,12 +597,51 @@ let pair = SortedPair { first: 1, second: 2 };
 // let bad = SortedPair { first: MyStruct {}, second: MyStruct {} };
 ```
 
+#### Function Trait Bounds
+
+```wado
+// Bounds on function type parameters - enforced at call sites
+fn max<T: Ord>(a: T, b: T) -> T {
+    if a > b { return a; }
+    return b;
+}
+
+max::<i32>(1, 2);        // OK: i32 implements Ord
+// max::<MyStruct>(...);  // Compile error: MyStruct doesn't implement Ord
+```
+
+#### Bounded impl Blocks
+
+```wado
+// Methods only available when T: Ord
+impl Array<T: Ord> {
+    pub fn sort(&mut self) { ... }
+    pub fn sorted(&self) -> Array<T> { ... }
+}
+
+let mut nums: Array<i32> = [3, 1, 2];
+nums.sort();  // OK: i32 implements Ord
+
+struct Foo {}
+let mut foos: Array<Foo> = [];
+// foos.sort();  // Compile error: Foo doesn't implement Ord
+```
+
+#### Bounded Trait Implementations
+
+```wado
+// Pair<T> implements Eq only when T: Eq
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+```
+
 Built-in trait implementations:
 
 - All primitive types (`i32`, `f64`, `bool`, etc.) implement `Eq` and `Ord`
 - Custom types must explicitly implement traits
-
-Note: Function type parameter bounds (`fn foo<T: Trait>(x: T)`) are parsed but not yet enforced.
 
 ## Control Flow
 
@@ -1209,7 +1248,7 @@ Wado intentionally does not support macros.
 - `enum` pattern matching
 - `flags` (parsed but no codegen)
 - `resource` (Wasm CM resource handles)
-- Trait bounds (`T: Display`)
+- Trait bounds: using bounds for method resolution on type params (e.g., calling `T.method()` where `T: Trait`)
 - Default trait method implementations
 - Effect handlers
 - `reactive` values and `observe()`

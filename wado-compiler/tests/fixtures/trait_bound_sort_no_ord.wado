@@ -1,0 +1,16 @@
+// Test that Array::sort is unavailable when T doesn't implement Ord
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() {
+    let mut points: Array<Point> = [];
+    points.append(Point { x: 1, y: 2 });
+    // Point does not implement Ord, so sort() should not be available
+    points.sort();
+}
+
+__DATA__
+{"compile_error": "no method 'sort' found"}

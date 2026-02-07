@@ -295,6 +295,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [SIMD v128 Types](./docs/wep-2026-01-31-simd-v128.md)
 - [Format Traits](./docs/wep-2026-02-01-format-traits.md)
 - [Wasm Plan Phase](./docs/wep-2026-02-03-wasm-plan-phase.md)
+- [Trait Bounds Enforcement](./docs/wep-2026-02-07-trait-bounds.md)
 
 ### Structure
 
