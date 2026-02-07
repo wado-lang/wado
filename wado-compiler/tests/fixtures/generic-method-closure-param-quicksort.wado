@@ -1,0 +1,54 @@
+// Test: quicksort with comparator closure forwarded between functions
+// Exercises the fix for closure forwarding in specialized functions:
+// - quicksort forwards cmp to partition (cross-function forwarding)
+// - quicksort forwards cmp to itself (recursive forwarding)
+
+use { println, print, Stdout } from "core:cli";
+
+fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) -> i32 {
+    let pivot = arr[high];
+    let mut i = low - 1;
+    for let mut j = low; j < high; j += 1 {
+        if cmp(&arr[j], &pivot) {
+            i += 1;
+            let tmp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = tmp;
+        }
+    }
+    let tmp = arr[i + 1];
+    arr[i + 1] = arr[high];
+    arr[high] = tmp;
+    return i + 1;
+}
+
+fn quicksort(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) {
+    if low < high {
+        let pi = partition(arr, low, high, cmp);
+        quicksort(arr, low, pi - 1, cmp);
+        quicksort(arr, pi + 1, high, cmp);
+    }
+}
+
+fn print_array(arr: &Array<i32>) with Stdout {
+    for let mut i = 0; i < arr.len(); i += 1 {
+        if i > 0 {
+            print(" ");
+        }
+        print(`{arr[i]}`);
+    }
+    println("");
+}
+
+export fn run() with Stdout {
+    let mut arr: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    quicksort(&mut arr, 0, arr.len() - 1, |a: &i32, b: &i32| *a < *b);
+    print_array(&arr);
+
+    // Sort descending
+    quicksort(&mut arr, 0, arr.len() - 1, |a: &i32, b: &i32| *a > *b);
+    print_array(&arr);
+}
+
+__DATA__
+{"stdout": "1 2 3 4 5 6 7 8 9\n9 8 7 6 5 4 3 2 1\n"}
