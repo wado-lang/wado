@@ -605,6 +605,23 @@ println("Person^Greet::greet"(p));
 - **Inlining possible**: Optimizer can inline trait methods
 - **Dead code elimination**: Unused trait implementations are removed
 
+### Default Trait Methods
+
+Trait methods can have default implementations (a body in the trait declaration). When a type implements the trait but omits a method with a default body, the compiler synthesizes the method in the impl block using the default body.
+
+**Resolution:**
+
+1. During impl block processing, the resolver collects explicitly provided method names
+2. For each default method in the trait not provided by the impl, the resolver calls `resolve_method` with the default method's AST, treating it as if it were written in the impl block
+3. `Self` resolves to the implementing type, so `self.method()` calls in default bodies dispatch to the concrete type's methods
+
+**Method Call Lookup:**
+
+When `find_trait_method_for_type` searches for a method:
+
+1. First checks methods explicitly in the impl block
+2. If not found, checks the trait declaration for a default method with that name
+
 ### Associated Types
 
 Traits can declare associated types using `type Name;` syntax. Implementors bind these types using `type Name = ConcreteType;`.
@@ -1402,7 +1419,7 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 - `effect` declarations
 - `struct` declarations
 - `impl` blocks
-- `trait` declarations (static dispatch)
+- `trait` declarations (static dispatch, default method implementations)
 - `impl Trait for Type` (trait implementations)
 - Associated types in traits (`type Output;` and `type Output = T;`)
 - `enum` declarations (payload-free, CM semantics)

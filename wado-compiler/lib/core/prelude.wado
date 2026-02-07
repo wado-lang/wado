@@ -329,19 +329,7 @@ impl Iterator for EnumerateIter<T> {
     }
 }
 
-impl EnumerateIter<T> {
-    pub fn collect(&mut self) -> Array<[i32, T]> {
-        let mut result: Array<[i32, T]> = [];
-        loop {
-            if let Some(item) = self.next() {
-                result.append(item);
-            } else {
-                break;
-            }
-        }
-        return result;
-    }
-}
+// EnumerateIter uses Iterator::collect() default method
 
 // ============================================================================
 // MapIter
@@ -368,17 +356,7 @@ impl Iterator for MapIter<T, U> {
 }
 
 impl MapIter<T, U> {
-    pub fn collect(&mut self) -> Array<U> {
-        let mut result: Array<U> = [];
-        loop {
-            if let Some(item) = self.next() {
-                result.append(item);
-            } else {
-                break;
-            }
-        }
-        return result;
-    }
+    // collect() uses Iterator::collect() default method
 
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, U) -> Acc) -> Acc {
         let mut acc = init;
@@ -422,17 +400,7 @@ impl Iterator for FilterIter<T> {
 }
 
 impl FilterIter<T> {
-    pub fn collect(&mut self) -> Array<T> {
-        let mut result: Array<T> = [];
-        loop {
-            if let Some(item) = self.next() {
-                result.append(item);
-            } else {
-                break;
-            }
-        }
-        return result;
-    }
+    // collect() uses Iterator::collect() default method
 
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc {
         let mut acc = init;

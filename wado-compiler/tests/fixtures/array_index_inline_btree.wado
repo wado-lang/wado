@@ -8,7 +8,7 @@ struct Node<K> {
     deleted: Array<bool>,
 }
 
-impl Node<K> {
+impl<K> Node<K> {
     fn count_active(&self) -> i32 {
         let mut count = 0;
         for let mut i = 0; i < self.keys.len(); i += 1 {
@@ -43,7 +43,7 @@ struct Tree<K> {
     max_keys: i32,
 }
 
-impl Tree<K> {
+impl<K> Tree<K> {
     fn check(&self) -> i32 {
         // Multiple calls to methods that should be inlined
         let active = self.root.count_active();

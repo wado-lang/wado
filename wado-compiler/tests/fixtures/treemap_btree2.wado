@@ -12,7 +12,7 @@ struct BTreeNode<K, V> {
     is_leaf: bool,
 }
 
-impl BTreeNode<K, V> {
+impl<K, V> BTreeNode<K, V> {
     fn new_leaf() -> BTreeNode<K, V> {
         return BTreeNode {
             keys: [],
@@ -84,7 +84,7 @@ struct TreeMap<K, V> {
     deleted_count: i32,
 }
 
-impl TreeMap<K, V> {
+impl<K, V> TreeMap<K, V> {
     fn new(t: i32) -> TreeMap<K, V> {
         return TreeMap {
             root: null,
@@ -332,7 +332,7 @@ impl TreeMap<K, V> {
 }
 
 // Index trait implementation for TreeMap - read access with map[key]
-impl Index<K> for TreeMap<K, V> {
+impl<K, V> Index<K> for TreeMap<K, V> {
     type Output = V;
 
     fn index(&self, key: K) -> &Self::Output {
@@ -344,7 +344,7 @@ impl Index<K> for TreeMap<K, V> {
 }
 
 // IndexAssign trait implementation for TreeMap - write access with map[key] = value
-impl IndexAssign<K> for TreeMap<K, V> {
+impl<K, V> IndexAssign<K> for TreeMap<K, V> {
     type Input = V;
 
     fn index_assign(&mut self, key: K, value: Self::Input) {

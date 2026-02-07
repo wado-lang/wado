@@ -757,6 +757,10 @@ impl<'a> Resolver<'a> {
                         }
                     }
 
+                    // Collect explicitly provided method names
+                    let provided_method_names: Vec<String> =
+                        impl_block.methods.iter().map(|m| m.name.clone()).collect();
+
                     for method in &impl_block.methods {
                         if let Some(mut tir_func) = self.resolve_method(
                             method,
@@ -774,6 +778,36 @@ impl<'a> Resolver<'a> {
                                 None => format!("{}::{}", struct_name, method.name),
                             };
                             tir_module.add_function(tir_func);
+                        }
+                    }
+
+                    // For trait impls, synthesize TIR functions for default methods
+                    // not explicitly provided in the impl block
+                    if let Some(ref trait_n) = trait_name {
+                        let default_methods: Vec<ast::Function> = self
+                            .find_trait_decl_methods(trait_n)
+                            .unwrap_or_default()
+                            .into_iter()
+                            .filter(|m| {
+                                m.body.is_some() && !provided_method_names.contains(&m.name)
+                            })
+                            .collect();
+
+                        for default_method in &default_methods {
+                            if let Some(mut tir_func) = self.resolve_method(
+                                default_method,
+                                &struct_name,
+                                &impl_block.ty,
+                                Some(trait_n),
+                            ) {
+                                tir_func.name =
+                                    format!("{}^{}::{}", struct_name, trait_n, default_method.name);
+                                // Default methods from trait declarations are not marked pub
+                                // in the AST, but they should be treated as pub since they are
+                                // part of a trait implementation
+                                tir_func.is_pub = true;
+                                tir_module.add_function(tir_func);
+                            }
                         }
                     }
 
@@ -7519,6 +7553,7 @@ impl<'a> Resolver<'a> {
                         .insert(binding.name.clone(), type_id);
                 }
 
+                let mut method_found = false;
                 for method in &methods {
                     if method.name == method_name {
                         let trait_name = self.get_type_name(&trait_type);
@@ -7543,6 +7578,40 @@ impl<'a> Resolver<'a> {
                             },
                             impl_module_source.clone(),
                         ));
+                        method_found = true;
+                    }
+                }
+
+                // If the method wasn't found in the impl block, check the trait
+                // declaration for a default method with that name
+                if !method_found {
+                    let trait_name_str = self.get_type_name(&trait_type);
+                    if let Some(trait_methods) = self.find_trait_decl_methods(&trait_name_str) {
+                        for default_method in &trait_methods {
+                            if default_method.name == method_name && default_method.body.is_some() {
+                                let return_type = default_method
+                                    .return_type
+                                    .as_ref()
+                                    .map(|t| self.resolve_type(t))
+                                    .unwrap_or(TypeTable::UNIT);
+                                let self_kind = default_method
+                                    .params
+                                    .first()
+                                    .map(|p| p.self_kind)
+                                    .unwrap_or(ast::SelfKind::None);
+                                let param_types = self.extract_param_types(&default_method.params);
+                                found_traits.push((
+                                    trait_name_str.clone(),
+                                    MethodInfo {
+                                        return_type,
+                                        self_kind,
+                                        param_types,
+                                        inherited_from_base: None,
+                                    },
+                                    impl_module_source.clone(),
+                                ));
+                            }
+                        }
                     }
                 }
 
@@ -7558,6 +7627,28 @@ impl<'a> Resolver<'a> {
         // Return the first one found (if there are multiple, it would be ambiguous,
         // but we'll handle that later with explicit disambiguation syntax)
         found_traits.into_iter().next()
+    }
+
+    /// Find a trait declaration by name across all modules.
+    /// Returns the trait's methods (cloned) if found.
+    fn find_trait_decl_methods(&self, trait_name: &str) -> Option<Vec<ast::Function>> {
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Trait(trait_decl) = item
+                    && trait_decl.name == trait_name
+                {
+                    return Some(trait_decl.methods.clone());
+                }
+            }
+        }
+        for item in &self.current_module_items {
+            if let Item::Trait(trait_decl) = item
+                && trait_decl.name == trait_name
+            {
+                return Some(trait_decl.methods.clone());
+            }
+        }
+        None
     }
 
     /// Find Index trait implementation for a type

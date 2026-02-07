@@ -231,6 +231,24 @@ pub trait Iterator {
     /// Advances the iterator and returns the next value.
     /// Returns None when iteration is complete.
     fn next(&mut self) -> Option<Self::Item>;
+
+    /// Collects remaining elements into an Array.
+    fn collect(&mut self) -> Array<Self::Item> {
+        let mut result: Array<Self::Item> = [];
+        while let Some(item) = self.next() {
+            result.append(item);
+        }
+        return result;
+    }
+
+    /// Counts the number of remaining elements in the iterator.
+    fn count(&mut self) -> i32 {
+        let mut n = 0;
+        while let Some(_) = self.next() {
+            n += 1;
+        }
+        return n;
+    }
 }
 
 /// Conversion into an Iterator.

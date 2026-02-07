@@ -463,6 +463,27 @@ let p = Person { name: "Alice", age: 30 };
 println(p.greet());  // Calls Person's Greet::greet
 println(p.name());   // Calls Person's Named::name
 
+// Trait with default method implementation
+trait Summary {
+    fn title(&self) -> String;
+
+    // Default method - implementors can override or use as-is
+    fn summary(&self) -> String {
+        return `Title: {self.title()}`;
+    }
+}
+
+impl Summary for Article {
+    fn title(&self) -> String { return self.headline; }
+    // summary() uses the default implementation
+}
+
+impl Summary for DetailedArticle {
+    fn title(&self) -> String { return self.headline; }
+    // Override the default
+    fn summary(&self) -> String { return `{self.headline}: {self.body}`; }
+}
+
 // Trait with associated type
 trait Container {
     type Item;
@@ -1249,7 +1270,6 @@ Wado intentionally does not support macros.
 - `flags` (parsed but no codegen)
 - `resource` (Wasm CM resource handles)
 - Trait bounds: using bounds for method resolution on type params (e.g., calling `T.method()` where `T: Trait`)
-- Default trait method implementations
 - Effect handlers
 - `reactive` values and `observe()`
 - `stores[...]` syntax for reference storage
