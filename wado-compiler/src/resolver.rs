@@ -4988,9 +4988,10 @@ impl<'a> Resolver<'a> {
 
     /// Get the String struct type (from core:prelude/string.wado)
     fn get_string_struct_type(&mut self) -> TypeId {
-        self.type_table
-            .borrow_mut()
-            .make_struct("String".to_string(), ModuleSource::core("prelude/string.wado"))
+        self.type_table.borrow_mut().make_struct(
+            "String".to_string(),
+            ModuleSource::core("prelude/string.wado"),
+        )
     }
 
     /// Build a `from_pair` call for i128/u128 large literal construction
