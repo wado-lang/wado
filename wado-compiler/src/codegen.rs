@@ -1819,15 +1819,11 @@ impl Codegen<'_> {
                 wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
                     .expect("Failed to process wado-bundled module");
 
-            // Apply Wasm-level DCE if enabled (disabled for -O0)
-            let final_module = if project.wasm_dce_enabled {
-                // Build set of exports to keep based on used bundled functions
-                let keep_exports: std::collections::HashSet<_> =
-                    bundled_functions.iter().cloned().collect();
-                wasm_postprocess::eliminate_dead_code(&bundled_module, &keep_exports)
-            } else {
-                bundled_module
-            };
+            // Apply Wasm-level DCE to keep only used bundled functions
+            let keep_exports: std::collections::HashSet<_> =
+                bundled_functions.iter().cloned().collect();
+            let final_module =
+                wasm_postprocess::eliminate_dead_code(&bundled_module, &keep_exports);
 
             ctx.register_core_module("fts-mod");
             builder.core_module_raw(Some("fts-mod"), &final_module);

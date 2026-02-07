@@ -82,8 +82,6 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             populate_all_features(&mut project);
             // Note: O0 mode only enables standard WASI functions from the stdlib.
             // Non-standard functions like sockets require O2+ to be detected via DCE analysis.
-            // Disable Wasm-level DCE for bundled module (for faster compilation)
-            project.wasm_dce_enabled = false;
         }
         OptLevel::O1 => {
             // Development mode: all optimizations except DCE
