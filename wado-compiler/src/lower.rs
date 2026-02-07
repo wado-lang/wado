@@ -4742,6 +4742,44 @@ impl ClosureLowerer {
         TirStmt::new(kind, stmt.span)
     }
 
+    /// When a fn-param local has been specialized to a functor type and is forwarded
+    /// as an argument to another function expecting a function type, wrap it in
+    /// `ClosureToCanonical` to convert the functor back to a type-erased canonical closure.
+    ///
+    /// `original_type_id` is the `type_id` of the argument BEFORE specialization
+    /// (from the unmodified body), which retains the original function type.
+    fn maybe_wrap_functor_as_canonical(
+        &self,
+        specialized_arg: TirExpr,
+        original_type_id: TypeId,
+        param_to_functor: &HashMap<u32, TypeId>,
+        type_table: &TypeTable,
+    ) -> TirExpr {
+        if let TirExprKind::Local { index, .. } = &specialized_arg.kind
+            && let Some(&functor_type) = param_to_functor.get(index)
+            && matches!(type_table.get(original_type_id), crate::tir::ResolvedType::Function { .. })
+        {
+            // Find the functor_id by matching struct_type_id
+            if let Some(functor) = self
+                .functor_infos
+                .iter()
+                .find(|f| f.struct_type_id == functor_type)
+            {
+                let span = specialized_arg.span;
+                return TirExpr::new(
+                    TirExprKind::ClosureToCanonical {
+                        functor: Box::new(specialized_arg),
+                        functor_id: functor.id,
+                        target_fn_type: original_type_id,
+                    },
+                    original_type_id,
+                    span,
+                );
+            }
+        }
+        specialized_arg
+    }
+
     fn specialize_expr(
         &self,
         expr: &TirExpr,
@@ -4852,7 +4890,16 @@ impl ClosureLowerer {
                     func: func.clone(),
                     args: args
                         .iter()
-                        .map(|a| self.specialize_expr(a, param_to_functor, type_table))
+                        .map(|a| {
+                            let original_type_id = a.type_id;
+                            let specialized = self.specialize_expr(a, param_to_functor, type_table);
+                            self.maybe_wrap_functor_as_canonical(
+                                specialized,
+                                original_type_id,
+                                param_to_functor,
+                                type_table,
+                            )
+                        })
                         .collect(),
                     type_args: type_args.clone(),
                 },
@@ -4874,7 +4921,16 @@ impl ClosureLowerer {
                     func: func.clone(),
                     args: args
                         .iter()
-                        .map(|a| self.specialize_expr(a, param_to_functor, type_table))
+                        .map(|a| {
+                            let original_type_id = a.type_id;
+                            let specialized = self.specialize_expr(a, param_to_functor, type_table);
+                            self.maybe_wrap_functor_as_canonical(
+                                specialized,
+                                original_type_id,
+                                param_to_functor,
+                                type_table,
+                            )
+                        })
                         .collect(),
                     type_args: type_args.clone(),
                 },
@@ -4886,7 +4942,16 @@ impl ClosureLowerer {
                     func: func.clone(),
                     args: args
                         .iter()
-                        .map(|a| self.specialize_expr(a, param_to_functor, type_table))
+                        .map(|a| {
+                            let original_type_id = a.type_id;
+                            let specialized = self.specialize_expr(a, param_to_functor, type_table);
+                            self.maybe_wrap_functor_as_canonical(
+                                specialized,
+                                original_type_id,
+                                param_to_functor,
+                                type_table,
+                            )
+                        })
                         .collect(),
                 },
                 expr.type_id,
