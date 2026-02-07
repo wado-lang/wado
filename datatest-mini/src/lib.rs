@@ -231,7 +231,7 @@ fn collect_matching_files(
 }
 
 fn generate_test_functions(tests: &[TestEntry]) -> TokenStream {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     // Group tests by module name
     let mut modules: BTreeMap<String, Vec<&TestEntry>> = BTreeMap::new();
@@ -243,6 +243,37 @@ fn generate_test_functions(tests: &[TestEntry]) -> TokenStream {
     }
 
     let mut tokens = Vec::new();
+
+    // Emit include_bytes! for each unique fixture file to register them as
+    // dependencies in rustc's dep-info. This ensures that when fixture file
+    // content changes, Cargo knows to recompile the test crate.
+    let mut tracked_paths = BTreeSet::new();
+    for test in tests {
+        if tracked_paths.insert(&test.path) {
+            // const _: &[u8] = include_bytes!("path");
+            tokens.extend([
+                TokenTree::Ident(Ident::new("const", Span::call_site())),
+                TokenTree::Ident(Ident::new("_", Span::call_site())),
+                TokenTree::Punct(Punct::new(':', Spacing::Alone)),
+                TokenTree::Punct(Punct::new('&', Spacing::Alone)),
+                TokenTree::Group(Group::new(
+                    Delimiter::Bracket,
+                    TokenStream::from_iter([TokenTree::Ident(Ident::new(
+                        "u8",
+                        Span::call_site(),
+                    ))]),
+                )),
+                TokenTree::Punct(Punct::new('=', Spacing::Alone)),
+                TokenTree::Ident(Ident::new("include_bytes", Span::call_site())),
+                TokenTree::Punct(Punct::new('!', Spacing::Alone)),
+                TokenTree::Group(Group::new(
+                    Delimiter::Parenthesis,
+                    TokenStream::from_iter([TokenTree::Literal(Literal::string(&test.path))]),
+                )),
+                TokenTree::Punct(Punct::new(';', Spacing::Alone)),
+            ]);
+        }
+    }
 
     for (module_name, module_tests) in modules {
         let mut module_tokens = Vec::new();
