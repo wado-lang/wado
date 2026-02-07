@@ -1,0 +1,81 @@
+// Test: Array sort methods (stable merge sort)
+
+use { println, print, Stdout } from "core:cli";
+
+fn print_array(arr: &Array<i32>) with Stdout {
+    for let mut i = 0; i < arr.len(); i += 1 {
+        if i > 0 {
+            print(" ");
+        }
+        print(`{arr[i]}`);
+    }
+    println("");
+}
+
+export fn run() with Stdout {
+    // sort_by: in-place sort with comparator (ascending)
+    let mut a: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+    a.sort_by(|x: &i32, y: &i32| {
+        if *x < *y { return Ordering::Less; }
+        if *x > *y { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    print_array(&a);
+
+    // sort_by: descending
+    a.sort_by(|x: &i32, y: &i32| {
+        if *x > *y { return Ordering::Less; }
+        if *x < *y { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    print_array(&a);
+
+    // sort: in-place ascending (default)
+    let mut b: Array<i32> = [42, 17, 99, 3, 55, 1];
+    b.sort();
+    print_array(&b);
+
+    // sorted_by: returns new sorted array (original unchanged)
+    let c: Array<i32> = [10, 30, 20, 50, 40];
+    let d = c.sorted_by(|x: &i32, y: &i32| {
+        if *x < *y { return Ordering::Less; }
+        if *x > *y { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    print_array(&c);
+    print_array(&d);
+
+    // sorted: returns new sorted array ascending
+    let e: Array<i32> = [7, 2, 5, 1, 8, 3];
+    let f = e.sorted();
+    print_array(&e);
+    print_array(&f);
+
+    // Edge cases
+    let mut empty: Array<i32> = [];
+    empty.sort();
+    println(`empty len: {empty.len()}`);
+
+    let mut single: Array<i32> = [42];
+    single.sort();
+    print_array(&single);
+
+    let mut two: Array<i32> = [2, 1];
+    two.sort();
+    print_array(&two);
+
+    // Stability: equal elements keep original order
+    // Sort by absolute value; -1 and 1 should keep relative order
+    let mut g: Array<i32> = [3, -1, -3, 2, -2, 1];
+    g.sort_by(|a: &i32, b: &i32| {
+        let va = if *a < 0 { 0 - *a } else { *a };
+        let vb = if *b < 0 { 0 - *b } else { *b };
+        if va < vb { return Ordering::Less; }
+        if va > vb { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    print_array(&g);
+}
+
+__DATA__
+{"stdout": "1 2 3 4 5 6 7 8 9\n9 8 7 6 5 4 3 2 1\n1 3 17 42 55 99\n10 30 20 50 40\n10 20 30 40 50\n7 2 5 1 8 3\n1 2 3 5 7 8\nempty len: 0\n42\n1 2\n-1 1 2 -2 3 -3\n"}

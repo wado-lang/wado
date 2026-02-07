@@ -213,6 +213,192 @@ impl Array<T> {
             index: 0,
         };
     }
+
+    /// Sorts the array in-place using a comparator function (stable merge sort).
+    /// `cmp` returns `Ordering` indicating the relative order of two elements.
+    pub fn sort_by(&mut self, cmp: fn(&T, &T) -> Ordering) {
+        let n = self.used;
+        if n <= 1 {
+            return;
+        }
+        let src = self.repr;
+        let buf = builtin::array_new::<T>(n);
+        let mut width = 1;
+        for ; width < n; width = width * 2 {
+            for let mut start = 0; start < n; start += width * 2 {
+                let mid = start + width;
+                if mid < n {
+                    let mut end = start + width * 2;
+                    if end > n { end = n; }
+                    let mut i = start;
+                    let mut j = mid;
+                    for let mut k = start; k < end; k += 1 {
+                        if i < mid {
+                            if j < end {
+                                let a = builtin::array_get::<T>(src, i);
+                                let b = builtin::array_get::<T>(src, j);
+                                // Take right only if Greater; Less/Equal prefer left (stability)
+                                if cmp(&a, &b) == Ordering::Greater {
+                                    builtin::array_set::<T>(buf, k, b);
+                                    j += 1;
+                                } else {
+                                    builtin::array_set::<T>(buf, k, a);
+                                    i += 1;
+                                }
+                            } else {
+                                builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, i));
+                                i += 1;
+                            }
+                        } else {
+                            builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, j));
+                            j += 1;
+                        }
+                    }
+                    builtin::array_copy::<T>(src, start, buf, start, end - start);
+                }
+            }
+        }
+    }
+
+    /// Sorts the array in-place in ascending order (stable merge sort).
+    /// Elements are compared using the `<` operator.
+    pub fn sort(&mut self) {
+        let n = self.used;
+        if n <= 1 {
+            return;
+        }
+        let src = self.repr;
+        let buf = builtin::array_new::<T>(n);
+        let mut width = 1;
+        for ; width < n; width = width * 2 {
+            for let mut start = 0; start < n; start += width * 2 {
+                let mid = start + width;
+                if mid < n {
+                    let mut end = start + width * 2;
+                    if end > n { end = n; }
+                    let mut i = start;
+                    let mut j = mid;
+                    for let mut k = start; k < end; k += 1 {
+                        if i < mid {
+                            if j < end {
+                                let a = builtin::array_get::<T>(src, i);
+                                let b = builtin::array_get::<T>(src, j);
+                                if !(b < a) {
+                                    builtin::array_set::<T>(buf, k, a);
+                                    i += 1;
+                                } else {
+                                    builtin::array_set::<T>(buf, k, b);
+                                    j += 1;
+                                }
+                            } else {
+                                builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, i));
+                                i += 1;
+                            }
+                        } else {
+                            builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, j));
+                            j += 1;
+                        }
+                    }
+                    builtin::array_copy::<T>(src, start, buf, start, end - start);
+                }
+            }
+        }
+    }
+
+    /// Returns a new sorted array using a comparator function (stable merge sort).
+    /// `cmp` returns `Ordering` indicating the relative order of two elements.
+    pub fn sorted_by(&self, cmp: fn(&T, &T) -> Ordering) -> Array<T> {
+        let n = self.used;
+        let src = builtin::array_new::<T>(n);
+        builtin::array_copy::<T>(src, 0, self.repr, 0, n);
+        if n <= 1 {
+            return Array { repr: src, used: n };
+        }
+        let buf = builtin::array_new::<T>(n);
+        let mut width = 1;
+        for ; width < n; width = width * 2 {
+            for let mut start = 0; start < n; start += width * 2 {
+                let mid = start + width;
+                if mid < n {
+                    let mut end = start + width * 2;
+                    if end > n { end = n; }
+                    let mut i = start;
+                    let mut j = mid;
+                    for let mut k = start; k < end; k += 1 {
+                        if i < mid {
+                            if j < end {
+                                let a = builtin::array_get::<T>(src, i);
+                                let b = builtin::array_get::<T>(src, j);
+                                // Take right only if Greater; Less/Equal prefer left (stability)
+                                if cmp(&a, &b) == Ordering::Greater {
+                                    builtin::array_set::<T>(buf, k, b);
+                                    j += 1;
+                                } else {
+                                    builtin::array_set::<T>(buf, k, a);
+                                    i += 1;
+                                }
+                            } else {
+                                builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, i));
+                                i += 1;
+                            }
+                        } else {
+                            builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, j));
+                            j += 1;
+                        }
+                    }
+                    builtin::array_copy::<T>(src, start, buf, start, end - start);
+                }
+            }
+        }
+        return Array { repr: src, used: n };
+    }
+
+    /// Returns a new sorted array in ascending order (stable merge sort).
+    /// Elements are compared using the `<` operator.
+    pub fn sorted(&self) -> Array<T> {
+        let n = self.used;
+        let src = builtin::array_new::<T>(n);
+        builtin::array_copy::<T>(src, 0, self.repr, 0, n);
+        if n <= 1 {
+            return Array { repr: src, used: n };
+        }
+        let buf = builtin::array_new::<T>(n);
+        let mut width = 1;
+        for ; width < n; width = width * 2 {
+            for let mut start = 0; start < n; start += width * 2 {
+                let mid = start + width;
+                if mid < n {
+                    let mut end = start + width * 2;
+                    if end > n { end = n; }
+                    let mut i = start;
+                    let mut j = mid;
+                    for let mut k = start; k < end; k += 1 {
+                        if i < mid {
+                            if j < end {
+                                let a = builtin::array_get::<T>(src, i);
+                                let b = builtin::array_get::<T>(src, j);
+                                if !(b < a) {
+                                    builtin::array_set::<T>(buf, k, a);
+                                    i += 1;
+                                } else {
+                                    builtin::array_set::<T>(buf, k, b);
+                                    j += 1;
+                                }
+                            } else {
+                                builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, i));
+                                i += 1;
+                            }
+                        } else {
+                            builtin::array_set::<T>(buf, k, builtin::array_get::<T>(src, j));
+                            j += 1;
+                        }
+                    }
+                    builtin::array_copy::<T>(src, start, buf, start, end - start);
+                }
+            }
+        }
+        return Array { repr: src, used: n };
+    }
 }
 
 impl FromIterator<T> for Array<T> {

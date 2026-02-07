@@ -1,0 +1,43 @@
+// Test: generic method calling another method on the same struct via self
+// Note: This works in user code, but fails in stdlib (core:prelude) modules
+// with "unknown method X on generic struct Y". The stdlib-specific bug
+// prevents method delegation patterns like Array::sort() calling sort_by().
+//
+// Related bug: `if let` / `matches` on variants from imported modules
+// (e.g., `if let Greater = ord`) panics with "Unknown case X for variant Y"
+// because variant_case_map only includes the current module's variants.
+
+use { println, Stdout } from "core:cli";
+
+struct Wrapper<T> {
+    value: T,
+}
+
+impl Wrapper<T> {
+    fn new(value: T) -> Wrapper<T> {
+        return Wrapper { value };
+    }
+
+    fn get(&self) -> T {
+        return self.value;
+    }
+
+    // This method calls another method on self
+    fn get_twice(&self) -> [T, T] {
+        let a = self.get();
+        let b = self.get();
+        return [a, b];
+    }
+}
+
+export fn run() with Stdout {
+    let w = Wrapper::<i32>::new(42);
+    let v = w.get();
+    println(`get: {v}`);
+
+    let pair = w.get_twice();
+    println(`get_twice: {pair.0}, {pair.1}`);
+}
+
+__DATA__
+{"stdout": "get: 42\nget_twice: 42, 42\n"}
