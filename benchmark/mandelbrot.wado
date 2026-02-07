@@ -68,9 +68,9 @@ export fn run() with Stdout, MonotonicClock {
     }
 
     let end = now();
-    let elapsed_ns = end - start;
+    let elapsed_ns = (end - start) as u64;
     // Convert nanoseconds to milliseconds (integer division)
-    let elapsed_ms = elapsed_ns / (1000000 as i64);
+    let elapsed_ms = elapsed_ns / 1000000;
 
     println(`Mandelbrot {width}x{height}, max_iter={max_iter}`);
     println(`Total iterations: {total_iterations}`);
