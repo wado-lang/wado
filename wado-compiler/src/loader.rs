@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{Item, Module};
 use crate::bind::{self, BindError};
-use crate::compiler_host::{Code, CompilerHost, SourceError};
+use crate::compiler_host::{CompilerHost, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
 use crate::logger::Logger;
@@ -116,6 +116,53 @@ use crate::compiler_host::LogLevel;
 ///
 /// Loads all modules upfront before analysis and codegen.
 /// Uses a `CompilerHost` for I/O operations.
+/// Cached desugared AST modules for all core stdlib modules.
+///
+/// Each module is parsed, bound, and desugared exactly once per process.
+fn cached_core_stdlib() -> &'static HashMap<ModuleSource, Module> {
+    use std::sync::OnceLock;
+
+    static CACHE: OnceLock<HashMap<ModuleSource, Module>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        let core_modules: &[(&str, &str)] = &[
+            ("builtin", stdlib::CORE_BUILTIN),
+            ("cli", stdlib::CORE_CLI),
+            ("clocks", stdlib::CORE_CLOCKS),
+            ("collections", stdlib::CORE_COLLECTIONS),
+            ("internal", stdlib::CORE_INTERNAL),
+            ("prelude", stdlib::CORE_PRELUDE),
+            ("prelude/int128", stdlib::CORE_PRELUDE_INT128),
+            ("prelude/primitives", stdlib::CORE_PRELUDE_PRIMITIVES),
+            ("prelude/traits", stdlib::CORE_PRELUDE_TRAITS),
+            ("prelude/types", stdlib::CORE_PRELUDE_TYPES),
+            ("stream", stdlib::CORE_STREAM),
+            ("string", stdlib::CORE_STRING),
+        ];
+        let mut cache = HashMap::with_capacity(core_modules.len());
+        for &(name, source) in core_modules {
+            let module_source = ModuleSource::Core {
+                name: name.to_string(),
+            };
+            let mut lexer = Lexer::new(source);
+            let tokens = lexer
+                .tokenize()
+                .unwrap_or_else(|e| panic!("lexer error in core:{name}: {e:?}"));
+            let (data_section, _comments, shebang) = lexer.into_parts();
+            let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+            let ast = parser
+                .parse()
+                .unwrap_or_else(|e| panic!("parser error in core:{name}: {e:?}"));
+            bind::bind_module(&ast).unwrap_or_else(|errors| {
+                let msgs: Vec<String> = errors.iter().map(ToString::to_string).collect();
+                panic!("bind error in core:{name}: {}", msgs.join("; "));
+            });
+            let desugared = desugar_module(&ast);
+            cache.insert(module_source, desugared);
+        }
+        cache
+    })
+}
+
 pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Host for I/O operations
     host: &'a H,
@@ -179,6 +226,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             .insert(entry_module_source.clone(), desugared_entry);
 
         // Load all dependencies iteratively
+        let core_cache = cached_core_stdlib();
         while let Some((from_module_source, module_source)) = pending.pop_front() {
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
@@ -187,6 +235,13 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             // Skip if currently loading (cycle)
             if self.loading.contains(&module_source) {
+                continue;
+            }
+
+            // Use cached desugared module for core stdlib
+            if let Some(cached) = core_cache.get(&module_source) {
+                self.collect_imports(cached, &module_source, &mut pending)?;
+                self.loaded.insert(module_source, cached.clone());
                 continue;
             }
 
@@ -208,7 +263,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         // Load implicit modules (for compiler-generated code)
-        self.load_implicit_modules(&entry_module_source).await?;
+        self.load_implicit_modules()?;
 
         self.logger().span_end("load");
 
@@ -236,15 +291,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     }
 
     /// Load implicit modules required by the compiler
-    async fn load_implicit_modules(
-        &mut self,
-        entry_module_source: &ModuleSource,
-    ) -> Result<(), LoadError> {
-        // Order matters: dependencies must be listed before dependents
-        // - builtin: no dependencies
-        // - string: depends on prelude/traits
-        // - prelude: depends on string, prelude/*, internal
-        // - internal: depends on String from prelude
+    fn load_implicit_modules(&mut self) -> Result<(), LoadError> {
+        let cache = cached_core_stdlib();
+
         let implicit_module_sources = [
             ModuleSource::Core {
                 name: "builtin".to_string(),
@@ -265,72 +314,28 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 continue;
             }
 
-            // Try to load - errors are warnings for implicit modules
-            match self.get_source(&module_source, entry_module_source).await {
-                Ok(source) => {
-                    match self.parse_source(&source, &module_source) {
-                        Ok(ast) => {
-                            // Collect imports from implicit module
-                            let mut pending = VecDeque::new();
-                            // Implicit modules should only use valid import paths
-                            if let Err(e) = self.collect_imports(&ast, &module_source, &mut pending)
-                            {
-                                self.logger().warn(
-                                    Code::ModuleParseError,
-                                    format!("failed to collect imports from implicit module: {e}"),
-                                );
-                                continue;
-                            }
+            if let Some(cached) = cache.get(&module_source) {
+                // Load transitive dependencies from cache
+                let mut pending = VecDeque::new();
+                if self
+                    .collect_imports(cached, &module_source, &mut pending)
+                    .is_err()
+                {
+                    continue;
+                }
 
-                            // Bind the implicit module
-                            if let Err(e) = self.bind_module(&ast, &module_source) {
-                                self.logger().warn(
-                                    Code::ModuleParseError,
-                                    format!("failed to bind implicit module: {e}"),
-                                );
-                                continue;
-                            }
-
-                            // Load any dependencies of implicit modules
-                            while let Some((from_module_source, dep_module_source)) =
-                                pending.pop_front()
-                            {
-                                if self.loaded.contains_key(&dep_module_source) {
-                                    continue;
-                                }
-                                if let Ok(dep_source) = self
-                                    .get_source(&dep_module_source, &from_module_source)
-                                    .await
-                                    && let Ok(dep_ast) =
-                                        self.parse_source(&dep_source, &dep_module_source)
-                                    && self
-                                        .collect_imports(&dep_ast, &dep_module_source, &mut pending)
-                                        .is_ok()
-                                    && self.bind_module(&dep_ast, &dep_module_source).is_ok()
-                                {
-                                    let desugared = desugar_module(&dep_ast);
-                                    self.loaded.insert(dep_module_source, desugared);
-                                }
-                            }
-
-                            let desugared = desugar_module(&ast);
-                            self.loaded.insert(module_source.clone(), desugared);
-                            self.implicit_modules.insert(module_source);
-                        }
-                        Err(e) => {
-                            self.logger().warn(
-                                Code::ModuleParseError,
-                                format!("failed to parse implicit module: {e}"),
-                            );
-                        }
+                while let Some((_from_ms, dep_ms)) = pending.pop_front() {
+                    if self.loaded.contains_key(&dep_ms) {
+                        continue;
+                    }
+                    if let Some(dep_cached) = cache.get(&dep_ms) {
+                        let _ = self.collect_imports(dep_cached, &dep_ms, &mut pending);
+                        self.loaded.insert(dep_ms, dep_cached.clone());
                     }
                 }
-                Err(e) => {
-                    self.logger().warn(
-                        Code::ModuleNotFound,
-                        format!("failed to load implicit module: {e}"),
-                    );
-                }
+
+                self.loaded.insert(module_source.clone(), cached.clone());
+                self.implicit_modules.insert(module_source);
             }
         }
 

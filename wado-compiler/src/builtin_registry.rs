@@ -52,15 +52,22 @@ impl BuiltinRegistry {
     /// Parses lib/core/builtin.wado and registers all function signatures.
     /// Types are resolved to `TypeId`s using the provided `TypeTable`.
     pub fn build_from_stdlib(type_table: &RefCell<TypeTable>) -> Self {
+        use std::sync::OnceLock;
+
+        use crate::ast::Module;
         use crate::lexer::Lexer;
         use crate::parser::Parser;
         use crate::stdlib;
 
-        let source = stdlib::CORE_BUILTIN;
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().expect("lexer error in core:builtin");
-        let mut parser = Parser::new(tokens);
-        let module = parser.parse().expect("parser error in core:builtin");
+        static PARSED_MODULE: OnceLock<Module> = OnceLock::new();
+
+        let module = PARSED_MODULE.get_or_init(|| {
+            let source = stdlib::CORE_BUILTIN;
+            let mut lexer = Lexer::new(source);
+            let tokens = lexer.tokenize().expect("lexer error in core:builtin");
+            let mut parser = Parser::new(tokens);
+            parser.parse().expect("parser error in core:builtin")
+        });
 
         let mut registry = Self::new();
         for item in &module.items {

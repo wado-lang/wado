@@ -532,7 +532,6 @@ pub async fn dump_with_host<H: CompilerHost>(
 
             let implicit_modules_by_source = load_result.implicit_modules.clone();
 
-            // Build registries once here
             let (wasi_registry, world_registry) =
                 component_model::WasiRegistry::build_from_stdlib();
 

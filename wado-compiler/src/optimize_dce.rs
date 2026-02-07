@@ -3,13 +3,8 @@
 //! This module provides function-level dead code elimination through reachability analysis.
 //! It starts from the entry point and traces all reachable functions via the call graph.
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
-use indexmap::IndexMap;
-
-use crate::builtin_registry::BuiltinRegistry;
-use crate::component_model::WasiRegistry;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
@@ -20,6 +15,7 @@ use crate::tir::{
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wasm_plan::{CmConverterKind, CmConverterRequirements};
+use indexmap::IndexMap;
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
@@ -50,11 +46,9 @@ pub fn analyze_project(project: &mut Project) {
     // Build call graph, effect usage, and box primitives from all modules
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
-    // Get world registry to determine entry functions and HTTP handler status
-    let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
-
     // Determine entry functions from world exports
-    let entry_func_names: Vec<String> = world_registry
+    let entry_func_names: Vec<String> = project
+        .world_registry
         .get(&project.target_world)
         .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
         .unwrap_or_else(|| vec!["run".to_string()]);
@@ -119,7 +113,7 @@ pub fn analyze_project(project: &mut Project) {
     let mut cm_requirements = CmConverterRequirements::default();
 
     for func_name in &used_wasi_functions {
-        if let Some(func_info) = wasi_registry.get_function(func_name)
+        if let Some(func_info) = project.wasi_registry.get_function(func_name)
             && let Some(return_type) = &func_info.return_type
         {
             cm_requirements.analyze_type(return_type);
@@ -208,16 +202,12 @@ pub fn analyze_project(project: &mut Project) {
         used_wasi_functions.insert("Stderr::write_via_stream".to_string());
     }
 
-    // Build the builtin registry to look up canonical names
-    let type_table = RefCell::new(TypeTable::new());
-    let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-
     // Collect imports using registry lookup instead of hard-coded match
     let mut imports: HashSet<TirImport> = HashSet::new();
 
     // Helper to add an import from builtin registry by function name
     let add_import_by_name = |imports: &mut HashSet<TirImport>, name: &str| {
-        if let Some(info) = builtin_registry.get(name)
+        if let Some(info) = project.builtin_registry.get(name)
             && let Some(canonical_name) = &info.canonical_name
         {
             imports.insert(TirImport {
@@ -263,7 +253,8 @@ pub fn analyze_project(project: &mut Project) {
 
     // Effect usage requires TaskReturn for async entry point
     // But waitable-set builtins are only needed when effect_wait is actually called
-    let has_http_handler_export = world_registry
+    let has_http_handler_export = project
+        .world_registry
         .get(&project.target_world)
         .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
     if !used_wasi_functions.is_empty() || uses_stream_builtins || has_http_handler_export {
@@ -363,21 +354,20 @@ pub fn populate_all_features(project: &mut Project) {
     project.reachable_functions = HashSet::new();
     project.all_reachable = true;
     // Standard WASI functions from the stdlib registry
-    let (wasi_registry, world_registry) = WasiRegistry::build_from_stdlib();
-    project.used_wasi_functions = wasi_registry
+    project.used_wasi_functions = project
+        .wasi_registry
         .standard_function_names()
         .map(std::string::ToString::to_string)
         .collect();
 
     // Build all imports from the builtin registry
-    let type_table = RefCell::new(TypeTable::new());
-    let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-    let has_http_handler_export = world_registry
+    let has_http_handler_export = project
+        .world_registry
         .get(&project.target_world)
         .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
 
     let mut imports: Vec<TirImport> = Vec::new();
-    for info in builtin_registry.imported_builtins() {
+    for info in project.builtin_registry.imported_builtins() {
         if let Some(canonical_name) = &info.canonical_name {
             // Skip future intrinsics unless HTTP handler export needs them
             if canonical_name.starts_with("future-") && !has_http_handler_export {

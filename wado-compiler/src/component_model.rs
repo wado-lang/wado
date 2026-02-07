@@ -129,7 +129,16 @@ impl WasiRegistry {
     ///
     /// Parses the embedded wasi:* modules and registers their effect methods.
     /// Also collects type aliases and world definitions.
-    pub fn build_from_stdlib() -> (Self, crate::world_registry::WorldRegistry) {
+    pub fn build_from_stdlib() -> &'static (Self, crate::world_registry::WorldRegistry) {
+        use std::sync::OnceLock;
+
+        static INSTANCE: OnceLock<(WasiRegistry, crate::world_registry::WorldRegistry)> =
+            OnceLock::new();
+
+        INSTANCE.get_or_init(Self::build_from_stdlib_inner)
+    }
+
+    fn build_from_stdlib_inner() -> (Self, crate::world_registry::WorldRegistry) {
         use crate::ast::Module as AstModule;
         use crate::lexer::Lexer;
         use crate::parser::Parser;
