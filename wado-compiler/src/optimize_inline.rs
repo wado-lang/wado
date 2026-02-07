@@ -734,7 +734,7 @@ fn can_reach(
 ///
 /// The `inline_threshold` parameter controls the maximum number of statements
 /// a function can have to be considered for inlining.
-pub fn inline_functions(project: &mut Project, inline_threshold: usize) {
+pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool {
     let recursive_functions = find_recursive_functions(&project.tir_modules);
 
     // Collect inline candidates from all modules
@@ -766,8 +766,10 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) {
     }
 
     if inline_candidates.is_empty() {
-        return;
+        return false;
     }
+
+    let mut changed = false;
 
     // Inline at call sites in each module
     for module in project.tir_modules.values_mut() {
@@ -797,6 +799,10 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) {
                 func.local_types = local_types;
                 func.body = Some(body);
 
+                if !inlined_funcs.is_empty() {
+                    changed = true;
+                }
+
                 // Update function_strings: add strings from inlined functions to the caller
                 for inlined_key in inlined_funcs {
                     if let Some(inlined_strings) = candidate_strings.get(&inlined_key) {
@@ -818,6 +824,7 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) {
             }
         }
     }
+    changed
 }
 
 /// Inline function calls in a block

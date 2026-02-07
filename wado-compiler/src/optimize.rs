@@ -159,11 +159,15 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
 /// More iterations can find more optimization opportunities but take longer.
 fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
     for _ in 0..config.iterations {
-        inline_functions(project, config.inline_threshold);
-        eliminate_unnecessary_refs(project);
-        propagate_copies(project);
-        fold_constants(project);
-        apply_licm(project);
+        let mut changed = false;
+        changed |= inline_functions(project, config.inline_threshold);
+        changed |= eliminate_unnecessary_refs(project);
+        changed |= propagate_copies(project);
+        changed |= fold_constants(project);
+        changed |= apply_licm(project);
+        if !changed {
+            break;
+        }
     }
 }
 

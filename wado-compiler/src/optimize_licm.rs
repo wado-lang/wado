@@ -12,27 +12,29 @@ use crate::tir::{
 use std::collections::{HashMap, HashSet};
 
 /// Apply Loop-Invariant Code Motion to all functions in the project.
-pub fn apply_licm(project: &mut Project) {
+pub fn apply_licm(project: &mut Project) -> bool {
+    let mut changed = false;
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            licm_function(&mut func, &type_table);
+            changed |= licm_function(&mut func, &type_table);
         }
     }
+    changed
 }
 
 /// Apply LICM to a function
-fn licm_function(func: &mut TirFunction, type_table: &TypeTable) {
-    if let Some(ref mut body) = func.body {
-        let mut local_count = func.local_count;
-        let mut local_types = func.local_types.clone();
-
-        licm_block(body, &mut local_count, &mut local_types, type_table);
-
-        func.local_count = local_count;
-        func.local_types = local_types;
-    }
+fn licm_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
+    let Some(ref mut body) = func.body else {
+        return false;
+    };
+    let mut local_count = func.local_count;
+    let mut local_types = func.local_types.clone();
+    let changed = licm_block(body, &mut local_count, &mut local_types, type_table);
+    func.local_count = local_count;
+    func.local_types = local_types;
+    changed
 }
 
 /// Apply LICM to all loops in a block
@@ -41,7 +43,8 @@ fn licm_block(
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     type_table: &TypeTable,
-) {
+) -> bool {
+    let mut changed = false;
     let mut new_stmts = Vec::new();
 
     for mut stmt in std::mem::take(&mut block.stmts) {
@@ -50,6 +53,10 @@ fn licm_block(
                 // Apply LICM to the loop body
                 let empty_set = HashSet::new();
                 let hoist_stmts = licm_loop(body, local_count, local_types, type_table, &empty_set);
+
+                if !hoist_stmts.is_empty() {
+                    changed = true;
+                }
 
                 // Prepend hoisting statements
                 new_stmts.extend(hoist_stmts);
@@ -61,14 +68,14 @@ fn licm_block(
                 ..
             } => {
                 // Recurse into if branches
-                licm_block(then_block, local_count, local_types, type_table);
+                changed |= licm_block(then_block, local_count, local_types, type_table);
                 if let Some(eb) = else_block {
-                    licm_block(eb, local_count, local_types, type_table);
+                    changed |= licm_block(eb, local_count, local_types, type_table);
                 }
                 new_stmts.push(stmt);
             }
             TirStmtKind::LabeledBlock { block: inner, .. } => {
-                licm_block(inner, local_count, local_types, type_table);
+                changed |= licm_block(inner, local_count, local_types, type_table);
                 new_stmts.push(stmt);
             }
             TirStmtKind::IfPattern {
@@ -76,9 +83,9 @@ fn licm_block(
                 else_block,
                 ..
             } => {
-                licm_block(then_block, local_count, local_types, type_table);
+                changed |= licm_block(then_block, local_count, local_types, type_table);
                 if let Some(eb) = else_block {
-                    licm_block(eb, local_count, local_types, type_table);
+                    changed |= licm_block(eb, local_count, local_types, type_table);
                 }
                 new_stmts.push(stmt);
             }
@@ -90,6 +97,7 @@ fn licm_block(
     }
 
     block.stmts = new_stmts;
+    changed
 }
 
 /// Apply LICM to a single loop, returning hoisting statements to prepend
