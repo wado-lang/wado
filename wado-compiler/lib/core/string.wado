@@ -224,25 +224,7 @@ impl Iterator for StrUtf8ByteIter {
     }
 }
 
-impl StrUtf8ByteIter {
-    /// Collects iterator elements into an Array.
-    pub fn collect(&mut self) -> Array<u8> {
-        let mut result: Array<u8> = [];
-        while let Some(item) = self.next() {
-            result.append(item);
-        }
-        return result;
-    }
-
-    /// Counts the number of remaining elements in the iterator.
-    pub fn count(&mut self) -> i32 {
-        let mut n = 0;
-        while let Some(_) = self.next() {
-            n += 1;
-        }
-        return n;
-    }
-}
+// StrUtf8ByteIter uses Iterator::collect() and Iterator::count() default methods
 
 /// Iterator over Unicode scalar values (chars) of a String.
 /// Decodes UTF-8 and yields each character.
@@ -295,25 +277,7 @@ impl Iterator for StrCharIter {
     }
 }
 
-impl StrCharIter {
-    /// Collects iterator elements into an Array.
-    pub fn collect(&mut self) -> Array<char> {
-        let mut result: Array<char> = [];
-        while let Some(item) = self.next() {
-            result.append(item);
-        }
-        return result;
-    }
-
-    /// Counts the number of remaining elements (Unicode scalar values) in the iterator.
-    pub fn count(&mut self) -> i32 {
-        let mut n = 0;
-        while let Some(_) = self.next() {
-            n += 1;
-        }
-        return n;
-    }
-}
+// StrCharIter uses Iterator::collect() and Iterator::count() default methods
 
 impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.

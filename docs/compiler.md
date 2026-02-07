@@ -618,6 +618,7 @@ Trait methods can have default implementations (a body in the trait declaration)
 **Method Call Lookup:**
 
 When `find_trait_method_for_type` searches for a method:
+
 1. First checks methods explicitly in the impl block
 2. If not found, checks the trait declaration for a default method with that name
 

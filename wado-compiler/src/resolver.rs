@@ -802,6 +802,10 @@ impl<'a> Resolver<'a> {
                             ) {
                                 tir_func.name =
                                     format!("{}^{}::{}", struct_name, trait_n, default_method.name);
+                                // Default methods from trait declarations are not marked pub
+                                // in the AST, but they should be treated as pub since they are
+                                // part of a trait implementation
+                                tir_func.is_pub = true;
                                 tir_module.add_function(tir_func);
                             }
                         }

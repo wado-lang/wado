@@ -1,0 +1,36 @@
+// Test: default trait method using associated type
+use { println, Stdout } from "core:cli";
+
+trait Container {
+    type Item;
+    fn get_first(&self) -> Option<Self::Item>;
+
+    fn has_items(&self) -> bool {
+        if let Some(_) = self.get_first() {
+            return true;
+        }
+        return false;
+    }
+}
+
+struct IntBox {
+    value: i32,
+}
+
+impl Container for IntBox {
+    type Item = i32;
+
+    fn get_first(&self) -> Option<Self::Item> {
+        return Option::<i32>::Some(self.value);
+    }
+}
+
+export fn run() with Stdout {
+    let b = IntBox { value: 42 };
+    if b.has_items() {
+        println("has items");
+    }
+}
+
+__DATA__
+{"stdout": "has items\n"}
