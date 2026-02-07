@@ -5,7 +5,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use indexmap::IndexMap;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
@@ -16,6 +15,7 @@ use crate::tir::{
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::wasm_plan::{CmConverterKind, CmConverterRequirements};
+use indexmap::IndexMap;
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
@@ -47,7 +47,8 @@ pub fn analyze_project(project: &mut Project) {
     let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
 
     // Determine entry functions from world exports
-    let entry_func_names: Vec<String> = project.world_registry
+    let entry_func_names: Vec<String> = project
+        .world_registry
         .get(&project.target_world)
         .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
         .unwrap_or_else(|| vec!["run".to_string()]);
@@ -252,7 +253,8 @@ pub fn analyze_project(project: &mut Project) {
 
     // Effect usage requires TaskReturn for async entry point
     // But waitable-set builtins are only needed when effect_wait is actually called
-    let has_http_handler_export = project.world_registry
+    let has_http_handler_export = project
+        .world_registry
         .get(&project.target_world)
         .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
     if !used_wasi_functions.is_empty() || uses_stream_builtins || has_http_handler_export {
@@ -352,13 +354,15 @@ pub fn populate_all_features(project: &mut Project) {
     project.reachable_functions = HashSet::new();
     project.all_reachable = true;
     // Standard WASI functions from the stdlib registry
-    project.used_wasi_functions = project.wasi_registry
+    project.used_wasi_functions = project
+        .wasi_registry
         .standard_function_names()
         .map(std::string::ToString::to_string)
         .collect();
 
     // Build all imports from the builtin registry
-    let has_http_handler_export = project.world_registry
+    let has_http_handler_export = project
+        .world_registry
         .get(&project.target_world)
         .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
 
