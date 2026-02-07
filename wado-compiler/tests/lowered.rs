@@ -29,7 +29,10 @@ fn extract_entry_module(project: &wado_compiler::Project) -> String {
 }
 
 /// Run a golden file test
-fn run_golden_test(golden_path: &Path, golden_content: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn run_golden_test(
+    golden_path: &Path,
+    golden_content: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     common::runtime().block_on(async {
 
         // Extract the source filename from the header
