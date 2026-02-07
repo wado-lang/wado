@@ -10,7 +10,7 @@ use std::path::Path;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn run_fixture(path: &Path) -> TestResult {
+fn run_fixture(path: &Path, content: &str) -> TestResult {
     // Verify the path exists
     assert!(path.exists(), "path should exist: {}", path.display());
 
@@ -36,8 +36,7 @@ fn run_fixture(path: &Path) -> TestResult {
         file_name
     );
 
-    // Read and verify content
-    let content = std::fs::read_to_string(path)?;
+    // Verify content is provided and non-empty
     assert!(!content.is_empty(), "file should have content");
 
     Ok(())

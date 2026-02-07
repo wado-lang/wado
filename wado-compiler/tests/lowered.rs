@@ -29,11 +29,8 @@ fn extract_entry_module(project: &wado_compiler::Project) -> String {
 }
 
 /// Run a golden file test
-fn run_golden_test(golden_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn run_golden_test(golden_path: &Path, golden_content: &str) -> Result<(), Box<dyn std::error::Error>> {
     common::runtime().block_on(async {
-        // Read the golden file
-        let golden_content = std::fs::read_to_string(golden_path)
-            .unwrap_or_else(|e| panic!("Failed to read golden file {:?}: {}", golden_path, e));
 
         // Extract the source filename from the header
         // Format: "// Source: wado-compiler/tests/fixtures/opt_inline_simple.wado"

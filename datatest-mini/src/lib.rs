@@ -7,8 +7,9 @@
 //! ```ignore
 //! use std::path::Path;
 //!
-//! fn run_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-//!     // Your test logic here
+//! fn run_test(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
+//!     // path: absolute path to the fixture file
+//!     // content: file content embedded at compile time via include_str!
 //!     Ok(())
 //! }
 //!
@@ -20,6 +21,11 @@
 use proc_macro::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
 use regex::Regex;
 use std::path::Path;
+
+// TODO: Use `proc_macro::tracked_path` to track fixture directories when it
+// stabilizes. This would allow detecting new/removed fixture files without
+// build.rs. Currently only content changes to existing files are tracked
+// (via include_str! in generated code).
 
 /// Generate a test harness for fixture files.
 ///
@@ -231,7 +237,7 @@ fn collect_matching_files(
 }
 
 fn generate_test_functions(tests: &[TestEntry]) -> TokenStream {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeMap;
 
     // Group tests by module name
     let mut modules: BTreeMap<String, Vec<&TestEntry>> = BTreeMap::new();
@@ -243,37 +249,6 @@ fn generate_test_functions(tests: &[TestEntry]) -> TokenStream {
     }
 
     let mut tokens = Vec::new();
-
-    // Emit include_bytes! for each unique fixture file to register them as
-    // dependencies in rustc's dep-info. This ensures that when fixture file
-    // content changes, Cargo knows to recompile the test crate.
-    let mut tracked_paths = BTreeSet::new();
-    for test in tests {
-        if tracked_paths.insert(&test.path) {
-            // const _: &[u8] = include_bytes!("path");
-            tokens.extend([
-                TokenTree::Ident(Ident::new("const", Span::call_site())),
-                TokenTree::Ident(Ident::new("_", Span::call_site())),
-                TokenTree::Punct(Punct::new(':', Spacing::Alone)),
-                TokenTree::Punct(Punct::new('&', Spacing::Alone)),
-                TokenTree::Group(Group::new(
-                    Delimiter::Bracket,
-                    TokenStream::from_iter([TokenTree::Ident(Ident::new(
-                        "u8",
-                        Span::call_site(),
-                    ))]),
-                )),
-                TokenTree::Punct(Punct::new('=', Spacing::Alone)),
-                TokenTree::Ident(Ident::new("include_bytes", Span::call_site())),
-                TokenTree::Punct(Punct::new('!', Spacing::Alone)),
-                TokenTree::Group(Group::new(
-                    Delimiter::Parenthesis,
-                    TokenStream::from_iter([TokenTree::Literal(Literal::string(&test.path))]),
-                )),
-                TokenTree::Punct(Punct::new(';', Spacing::Alone)),
-            ]);
-        }
-    }
 
     for (module_name, module_tests) in modules {
         let mut module_tokens = Vec::new();
@@ -297,7 +272,11 @@ fn generate_test_functions(tests: &[TestEntry]) -> TokenStream {
                 TokenStream::new(),
             )));
 
-            // { super::test_fn(std::path::Path::new("PATH")).unwrap(); }
+            // { super::test_fn(std::path::Path::new("PATH"), include_str!("PATH")).unwrap(); }
+            //
+            // include_str! serves two purposes:
+            // 1. Registers the file in rustc's dep-info for dependency tracking
+            // 2. Embeds content at compile time, avoiding redundant runtime file reads
             let body = TokenStream::from_iter([
                 TokenTree::Ident(Ident::new("super", Span::call_site())),
                 TokenTree::Punct(Punct::new(':', Spacing::Joint)),
@@ -306,6 +285,7 @@ fn generate_test_functions(tests: &[TestEntry]) -> TokenStream {
                 TokenTree::Group(Group::new(
                     Delimiter::Parenthesis,
                     TokenStream::from_iter([
+                        // First arg: std::path::Path::new("PATH")
                         TokenTree::Ident(Ident::new("std", Span::call_site())),
                         TokenTree::Punct(Punct::new(':', Spacing::Joint)),
                         TokenTree::Punct(Punct::new(':', Spacing::Alone)),
@@ -316,6 +296,17 @@ fn generate_test_functions(tests: &[TestEntry]) -> TokenStream {
                         TokenTree::Punct(Punct::new(':', Spacing::Joint)),
                         TokenTree::Punct(Punct::new(':', Spacing::Alone)),
                         TokenTree::Ident(Ident::new("new", Span::call_site())),
+                        TokenTree::Group(Group::new(
+                            Delimiter::Parenthesis,
+                            TokenStream::from_iter([TokenTree::Literal(Literal::string(
+                                &test.path,
+                            ))]),
+                        )),
+                        // Comma separator
+                        TokenTree::Punct(Punct::new(',', Spacing::Alone)),
+                        // Second arg: include_str!("PATH")
+                        TokenTree::Ident(Ident::new("include_str", Span::call_site())),
+                        TokenTree::Punct(Punct::new('!', Spacing::Alone)),
                         TokenTree::Group(Group::new(
                             Delimiter::Parenthesis,
                             TokenStream::from_iter([TokenTree::Literal(Literal::string(
