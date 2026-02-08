@@ -555,7 +555,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
                 wado_compiler::symbol::SymbolKind::Variant(v) => {
                     format!("variant{{ {} }}", v.cases.join(", "))
                 }
-                wado_compiler::symbol::SymbolKind::TypeAlias(t) => {
+                wado_compiler::symbol::SymbolKind::Newtype(t) => {
                     format!("type = {}", t.aliased_type)
                 }
                 wado_compiler::symbol::SymbolKind::Variable(v) => {

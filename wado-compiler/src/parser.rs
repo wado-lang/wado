@@ -9,11 +9,11 @@ use crate::ast::{
     ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
     IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, Item, LabeledBlockStmt,
     LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr,
-    Module, NamedType, NamespacedGenericType, NumberLiteral, Param, Pattern, ResourceDecl,
+    Module, NamedType, NamespacedGenericType, Newtype, NumberLiteral, Param, Pattern, ResourceDecl,
     ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr, Type, TypeAlias,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport,
-    WhileStmt, WorldDecl, WorldExport, WorldImport,
+    StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr,
+    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt,
+    WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -268,7 +268,7 @@ impl Parser {
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub).map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
-            TokenKind::Type => self.parse_type_alias(is_pub).map(Item::Type),
+            TokenKind::Type => self.parse_newtype(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(attrs).map(Item::Resource),
@@ -3061,7 +3061,7 @@ impl Parser {
         })
     }
 
-    fn parse_type_alias(&mut self, is_pub: bool) -> ParseResult<TypeAlias> {
+    fn parse_newtype(&mut self, is_pub: bool) -> ParseResult<Newtype> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Type)?;
         let name = self.consume_ident()?;
@@ -3069,7 +3069,7 @@ impl Parser {
         let ty = self.parse_type()?;
         self.expect(&TokenKind::Semicolon)?;
 
-        Ok(TypeAlias {
+        Ok(Newtype {
             name,
             is_pub,
             ty,

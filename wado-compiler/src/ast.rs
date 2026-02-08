@@ -77,7 +77,7 @@ pub enum Item {
     Enum(EnumDecl),
     Variant(VariantDecl),
     Flags(FlagsDecl),
-    Type(TypeAlias),
+    Type(Newtype),
     Impl(ImplBlock),
     Trait(TraitDecl),
     Resource(ResourceDecl),
@@ -1121,7 +1121,7 @@ pub struct VariantCase {
 }
 
 #[derive(Debug, Clone)]
-pub struct TypeAlias {
+pub struct Newtype {
     pub name: String,
     pub is_pub: bool,
     pub ty: Type,

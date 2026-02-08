@@ -107,8 +107,8 @@ pub struct WasiRegistry {
     /// Track which WASI function names are used to detect collisions
     used_names: BTreeSet<String>,
 
-    /// Type aliases collected from WASI modules (e.g., Instant -> u64)
-    type_aliases: HashMap<String, Type>,
+    /// Newtypes collected from WASI modules (e.g., Instant -> u64)
+    newtypes: HashMap<String, Type>,
 
     /// Resource types collected from WASI modules (e.g., `TerminalInput`, `TerminalOutput`)
     /// Maps resource name -> CM resource name (kebab-case)
@@ -128,7 +128,7 @@ impl WasiRegistry {
     /// Build the registry from the embedded stdlib
     ///
     /// Parses the embedded wasi:* modules and registers their effect methods.
-    /// Also collects type aliases and world definitions.
+    /// Also collects newtypes and world definitions.
     pub fn build_from_stdlib() -> &'static (Self, crate::world_registry::WorldRegistry) {
         use std::sync::OnceLock;
 
@@ -194,11 +194,10 @@ impl WasiRegistry {
     ) {
         use crate::ast::Item;
 
-        // First, collect type aliases from this module
+        // First, collect newtypes from this module
         for item in &module.items {
             if let Item::Type(alias) = item {
-                self.type_aliases
-                    .insert(alias.name.clone(), alias.ty.clone());
+                self.newtypes.insert(alias.name.clone(), alias.ty.clone());
             }
         }
 
@@ -272,7 +271,7 @@ impl WasiRegistry {
                         let params: Vec<(String, Type)> = method
                             .params
                             .iter()
-                            .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.type_aliases)))
+                            .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.newtypes)))
                             .collect();
 
                         // Keep original return type for newtype semantics
@@ -300,7 +299,7 @@ impl WasiRegistry {
                         let params: Vec<(String, Type)> = method
                             .params
                             .iter()
-                            .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.type_aliases)))
+                            .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.newtypes)))
                             .collect();
 
                         // Keep original return type for newtype semantics
@@ -356,14 +355,14 @@ impl WasiRegistry {
         }
     }
 
-    /// Get a type alias by name
-    pub fn get_type_alias(&self, name: &str) -> Option<&Type> {
-        self.type_aliases.get(name)
+    /// Get a newtype by name
+    pub fn get_newtype(&self, name: &str) -> Option<&Type> {
+        self.newtypes.get(name)
     }
 
-    /// Get all type aliases
-    pub fn type_aliases(&self) -> &HashMap<String, Type> {
-        &self.type_aliases
+    /// Get all newtypes
+    pub fn newtypes(&self) -> &HashMap<String, Type> {
+        &self.newtypes
     }
 
     /// Check if a type name is a registered resource
@@ -453,8 +452,8 @@ impl WasiRegistry {
                 return false;
             }
         }
-        // Check return type if present - resolve type aliases first
-        // Return types may contain type aliases like Mark, Duration, Instant
+        // Check return type if present - resolve newtypes first
+        // Return types may contain newtypes like Mark, Duration, Instant
         // that need to be resolved to their underlying types for the support check
         if let Some(ret_ty) = &func.return_type {
             let resolved_ret = self.resolve_type(ret_ty);
@@ -491,14 +490,14 @@ impl WasiRegistry {
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
 
-        // Resolve type aliases in params upfront
+        // Resolve newtypes in params upfront
         // This ensures codegen doesn't need any type resolution logic
         let resolved_params: Vec<(String, Type)> = params
             .into_iter()
             .map(|(name, ty)| (name, self.resolve_type(&ty)))
             .collect();
         // Don't resolve return type upfront - keep original for newtype semantics
-        // The resolver will handle type alias -> newtype mapping
+        // The resolver will handle newtype mapping
         let resolved_return_for_convention = return_type.as_ref().map(|ty| self.resolve_type(ty));
 
         // Derive CM call convention from resolved return type, params, and async flag
@@ -701,14 +700,14 @@ impl WasiRegistry {
     // Type Conversion (AST types to Wasm types)
     // ============================================================================
 
-    /// Resolve type aliases in a Type recursively
+    /// Resolve newtypes in a Type recursively
     ///
-    /// This resolves type aliases like `Instant` -> `u64` throughout the type tree,
+    /// This resolves newtypes like `Instant` -> `u64` throughout the type tree,
     /// including within generic type arguments.
     pub fn resolve_type(&self, ty: &Type) -> Type {
         match ty {
             Type::Named(named) => {
-                if let Some(aliased_ty) = self.get_type_alias(&named.name) {
+                if let Some(aliased_ty) = self.get_newtype(&named.name) {
                     // Recursively resolve the aliased type
                     self.resolve_type(aliased_ty)
                 } else {
@@ -769,7 +768,7 @@ impl WasiRegistry {
 
 /// Convert a pre-resolved AST type to Wasm `ValType`
 ///
-/// This is a pure conversion function - type aliases must already be resolved
+/// This is a pure conversion function - newtypes must already be resolved
 /// before calling this function. Use `WasiRegistry::resolve_type()` during
 /// registration to ensure types are pre-resolved.
 pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
