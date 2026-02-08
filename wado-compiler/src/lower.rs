@@ -11,6 +11,7 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::Write as _;
 use std::rc::Rc;
 
 use indexmap::IndexMap;
@@ -191,7 +192,7 @@ fn create_i128_literal(value: i128, type_id: TypeId, span: Span) -> TirExpr {
     let i64_value = value as i64;
     let inner_literal = TirExpr::new(
         TirExprKind::IntLiteral {
-            value: i64_value as u64,
+            value: i64_value.cast_unsigned(),
             repr: value.to_string(),
         },
         TypeTable::I64,
@@ -724,6 +725,7 @@ fn analyze_match_for_switch(
     }
 
     // Check density threshold
+    #[allow(clippy::cast_precision_loss)]
     let density = value_to_arm.len() as f64 / range as f64;
     if density < SWITCH_DENSITY_THRESHOLD {
         return None;
@@ -738,6 +740,7 @@ fn analyze_match_for_switch(
 }
 
 /// Convert a Match to a Switch expression using the analysis
+#[allow(clippy::cast_sign_loss)]
 fn match_to_switch(
     scrutinee: Box<TirExpr>,
     arms: &[crate::tir::TirMatchArm],
@@ -2215,13 +2218,7 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
     // For now, put the entry module last (it typically imports from other modules).
     // Non-entry modules are sorted by their appearance order in the IndexMap
     // (which the loader already sorts by dependency).
-    modules_with_init.sort_by_key(|ms| {
-        if ms == &entry_source {
-            1 // Entry module last
-        } else {
-            0 // Other modules first
-        }
-    });
+    modules_with_init.sort_by_key(|ms| i32::from(ms == &entry_source));
 
     let span = Span::new(0, 0, 1, 1);
 
@@ -5662,14 +5659,14 @@ impl ClosureLowerer {
         let callee = callee_rc.borrow();
 
         // Build specialized name: callee$__Closure_0$__Closure_1...
-        let functor_suffix: String = key
-            .functor_types
-            .iter()
-            .map(|(_, tid)| {
-                let name = type_table.type_name(*tid);
-                format!("${name}")
-            })
-            .collect();
+        let functor_suffix: String =
+            key.functor_types
+                .iter()
+                .fold(String::new(), |mut acc, (_, tid)| {
+                    let name = type_table.type_name(*tid);
+                    let _ = write!(acc, "${name}");
+                    acc
+                });
         let specialized_name = format!("{}{}", callee.name, functor_suffix);
 
         // Build map from argument index to functor type
@@ -6849,13 +6846,14 @@ impl ClosureLowerer {
         }
 
         // Build the functor suffix for the specialized method name
-        let functor_suffix: String = functor_types
-            .iter()
-            .map(|(_, tid)| {
-                let name = type_table.type_name(*tid);
-                format!("${name}")
-            })
-            .collect();
+        let functor_suffix: String =
+            functor_types
+                .iter()
+                .fold(String::new(), |mut acc, (_, tid)| {
+                    let name = type_table.type_name(*tid);
+                    let _ = write!(acc, "${name}");
+                    acc
+                });
 
         // Build specialized method_info with the specialized method name
         // The functor suffix goes AFTER type args, so we use full_method_name()

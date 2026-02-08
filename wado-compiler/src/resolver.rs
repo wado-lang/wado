@@ -3239,6 +3239,7 @@ impl<'a> Resolver<'a> {
 
     /// Parse an integer literal string into a u64 value
     /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10")
+    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
     fn parse_int_literal(repr: &str) -> Result<u64, String> {
         // Remove underscores for parsing
         let clean: String = repr.chars().filter(|&c| c != '_').collect();
@@ -3293,6 +3294,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Parse a float literal string into an f64 value
+    #[allow(clippy::cast_precision_loss)]
     fn parse_float_literal(repr: &str) -> Result<f64, String> {
         // Remove underscores for parsing
         let clean: String = repr.chars().filter(|&c| c != '_').collect();
@@ -3389,6 +3391,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Unpack i128 into (low, high) pair for codegen
+    #[allow(clippy::cast_sign_loss)]
     fn unpack_i128(value: i128) -> (u64, i64) {
         (value as u64, (value >> 64) as i64)
     }
@@ -4230,7 +4233,7 @@ impl<'a> Resolver<'a> {
                     // Fold -N into a negative literal
                     // Use wrapping negation to handle edge cases like -i64::MIN
                     // Store as u64 (two's complement representation)
-                    let neg_value = (*value as i64).wrapping_neg() as u64;
+                    let neg_value = (*value as i64).wrapping_neg().cast_unsigned();
                     return TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: neg_value,
@@ -4257,7 +4260,7 @@ impl<'a> Resolver<'a> {
                     target_type,
                 } => {
                     if let TirExprKind::IntLiteral { value, repr } = &inner.kind {
-                        let neg_value = (*value as i64).wrapping_neg() as u64;
+                        let neg_value = (*value as i64).wrapping_neg().cast_unsigned();
                         let neg_literal = TirExpr::new(
                             TirExprKind::IntLiteral {
                                 value: neg_value,
@@ -5069,7 +5072,7 @@ impl<'a> Resolver<'a> {
         );
         let high_literal = TirExpr::new(
             TirExprKind::IntLiteral {
-                value: high as u64,
+                value: high.cast_unsigned(),
                 repr: high.to_string(),
             },
             if type_name == "u128" {
@@ -5256,7 +5259,7 @@ impl<'a> Resolver<'a> {
                 match Self::parse_int_literal(&num_lit.repr) {
                     Ok(value) => {
                         // Negate as i64 then store as u64 (two's complement)
-                        let neg_value = (value as i64).wrapping_neg() as u64;
+                        let neg_value = (value as i64).wrapping_neg().cast_unsigned();
                         return TirExpr::new(
                             TirExprKind::IntLiteral {
                                 value: neg_value,
@@ -7564,15 +7567,12 @@ impl<'a> Resolver<'a> {
             // If struct_name is a newtype, also check base type names
             if let Some(&newtype_id) = self.type_aliases.get(struct_name) {
                 let mut current = newtype_id;
-                loop {
-                    match self.type_table.borrow().get(current).clone() {
-                        ResolvedType::Newtype { base_type, .. } => {
-                            let base_name = self.type_table.borrow().type_name(base_type);
-                            names.push(base_name);
-                            current = base_type;
-                        }
-                        _ => break,
-                    }
+                while let ResolvedType::Newtype { base_type, .. } =
+                    self.type_table.borrow().get(current).clone()
+                {
+                    let base_name = self.type_table.borrow().type_name(base_type);
+                    names.push(base_name);
+                    current = base_type;
                 }
             }
             names

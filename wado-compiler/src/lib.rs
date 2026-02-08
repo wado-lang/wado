@@ -508,7 +508,7 @@ pub async fn dump_with_host<H: CompilerHost>(
     // Build a Project from lowered modules if available
     let optimized_project = lowered_tir_modules_by_source
         .clone()
-        .map(|modules_by_source| {
+        .and_then(|modules_by_source| {
             let module_name = filename
                 .as_ref()
                 .and_then(|f| std::path::Path::new(f).file_stem())
@@ -538,8 +538,7 @@ pub async fn dump_with_host<H: CompilerHost>(
             );
             let project = optimize(project, opt_level);
             wasm_plan(project).ok()
-        })
-        .flatten();
+        });
 
     Ok(DumpResult {
         source: source.to_string(),
