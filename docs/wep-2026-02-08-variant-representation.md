@@ -35,13 +35,13 @@ The variant is represented as a single nullable reference. One case maps to null
 
 Operations:
 
-| Operation | Wasm Instructions |
-| --- | --- |
-| Construct payload case | value (box if primitive) |
-| Construct unit case | `ref.null` |
-| Test payload case | `ref.is_null` + `i32.eqz` |
-| Test unit case | `ref.is_null` |
-| Extract payload | `ref.as_non_null` (+ unbox if primitive) |
+| Operation              | Wasm Instructions                        |
+| ---------------------- | ---------------------------------------- |
+| Construct payload case | value (box if primitive)                 |
+| Construct unit case    | `ref.null`                               |
+| Test payload case      | `ref.is_null` + `i32.eqz`                |
+| Test unit case         | `ref.is_null`                            |
+| Extract payload        | `ref.as_non_null` (+ unbox if primitive) |
 
 #### SubtypeHierarchy
 
@@ -56,13 +56,13 @@ The variant is represented as a base struct with a tag field, extended by per-ca
 
 Operations:
 
-| Operation | Wasm Instructions |
-| --- | --- |
-| Construct case | `i32.const <tag>`, push payload, `struct.new $Case` |
-| Test case (with payload) | `ref.test $Case` |
-| Test case (unit) | `struct.get $tag` + `i32.eq` |
-| Extract payload | `ref.cast $Case` + `struct.get $payload` |
-| Get tag | `struct.get $tag` |
+| Operation                | Wasm Instructions                                   |
+| ------------------------ | --------------------------------------------------- |
+| Construct case           | `i32.const <tag>`, push payload, `struct.new $Case` |
+| Test case (with payload) | `ref.test $Case`                                    |
+| Test case (unit)         | `struct.get $tag` + `i32.eq`                        |
+| Extract payload          | `ref.cast $Case` + `struct.get $payload`            |
+| Get tag                  | `struct.get $tag`                                   |
 
 ### Selection Rules
 
@@ -80,17 +80,17 @@ The representation is determined by the variant's structure, not its name. The r
 
 #### Examples
 
-| Variant | Representation | Reason |
-| --- | --- | --- |
-| `Option<String>` | NullableRef | 2 cases, 1 unit, payload is ref |
-| `Option<i32>` | NullableRef | 2 cases, 1 unit, payload is boxed primitive |
-| `Option<MyStruct>` | NullableRef | 2 cases, 1 unit, payload is ref |
-| `Option<Option<i32>>` | SubtypeHierarchy | payload is itself nullable |
-| `Result<i32, String>` | SubtypeHierarchy | 2 payload cases, no unit case |
-| `variant Shape { Circle(f64), Point }` | NullableRef | 2 cases, 1 unit, payload is boxed f64 |
-| `variant Shape { Circle(f64), Rect(f64), Point }` | SubtypeHierarchy | 3 cases |
-| `variant Token { Eof }` | SubtypeHierarchy | 1 case (not exactly 2) |
-| `variant Maybe<T> { Just(T), Nothing }` | NullableRef | same shape as Option |
+| Variant                                           | Representation   | Reason                                      |
+| ------------------------------------------------- | ---------------- | ------------------------------------------- |
+| `Option<String>`                                  | NullableRef      | 2 cases, 1 unit, payload is ref             |
+| `Option<i32>`                                     | NullableRef      | 2 cases, 1 unit, payload is boxed primitive |
+| `Option<MyStruct>`                                | NullableRef      | 2 cases, 1 unit, payload is ref             |
+| `Option<Option<i32>>`                             | SubtypeHierarchy | payload is itself nullable                  |
+| `Result<i32, String>`                             | SubtypeHierarchy | 2 payload cases, no unit case               |
+| `variant Shape { Circle(f64), Point }`            | NullableRef      | 2 cases, 1 unit, payload is boxed f64       |
+| `variant Shape { Circle(f64), Rect(f64), Point }` | SubtypeHierarchy | 3 cases                                     |
+| `variant Token { Eof }`                           | SubtypeHierarchy | 1 case (not exactly 2)                      |
+| `variant Maybe<T> { Just(T), Nothing }`           | NullableRef      | same shape as Option                        |
 
 The last example is important: a user-defined `Maybe<T>` gets the same optimized representation as `Option<T>` because the rules are structural, not name-based.
 

@@ -797,13 +797,6 @@ fn lower_patterns(
     // Start with global variants from all modules (for cross-module pattern matching)
     let mut variant_case_map: HashMap<String, Vec<(String, u32)>> = global_variant_map.clone();
 
-    // Add builtin variant types (Result, etc.)
-    // Result<T, E> has cases: Ok (index 0), Err (index 1)
-    variant_case_map.insert(
-        "Result".to_string(),
-        vec![("Ok".to_string(), 0), ("Err".to_string(), 1)],
-    );
-
     // Add module-defined variants (overrides globals for same-module variants)
     for variant in &module.variants {
         let cases: Vec<(String, u32)> = variant

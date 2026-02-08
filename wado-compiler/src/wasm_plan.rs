@@ -405,11 +405,6 @@ pub fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<Str
         | ResolvedType::Stream(inner)
         | ResolvedType::Future(inner)
         | ResolvedType::Reactive(inner) => get_type_dependencies(type_table, *inner),
-        ResolvedType::Result { ok, err } => {
-            let mut deps = get_type_dependencies(type_table, *ok);
-            deps.extend(get_type_dependencies(type_table, *err));
-            deps
-        }
         ResolvedType::Tuple(elems) => elems
             .iter()
             .flat_map(|e| get_type_dependencies(type_table, *e))

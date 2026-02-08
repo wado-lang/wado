@@ -8448,29 +8448,26 @@ impl<'a> Resolver<'a> {
                     .map(|arg| self.resolve_type_with_param_mapping(arg, type_param_mapping))
                     .collect();
 
-                // Special-case Option and Result to use their dedicated types
-                // (required for pattern matching to work correctly)
+                // Special-case Option to use its dedicated type
                 let base_name = &g.name;
-                match base_name.as_str() {
-                    "Option" => {
-                        let inner = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
-                        self.type_table.borrow_mut().make_option(inner)
-                    }
-                    "Result" => {
-                        let ok = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
-                        let err = resolved_args.get(1).copied().unwrap_or(TypeTable::UNKNOWN);
-                        self.type_table.borrow_mut().make_result(ok, err)
-                    }
-                    _ => {
-                        // For other generic types, create a generic instance
-                        self.type_table
-                            .borrow_mut()
-                            .intern(ResolvedType::GenericInstance {
-                                name: base_name.clone(),
-                                module_source: self.current_module_source.clone(),
-                                type_args: resolved_args,
-                            })
-                    }
+                if base_name == "Option" {
+                    let inner = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
+                    self.type_table.borrow_mut().make_option(inner)
+                } else {
+                    // For generic types, create a generic instance
+                    // Use the variant's defining module source if available
+                    let module_source = self
+                        .variant_cases
+                        .get(base_name.as_str())
+                        .map(|info| info.module_source.clone())
+                        .unwrap_or_else(|| self.current_module_source.clone());
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::GenericInstance {
+                            name: base_name.clone(),
+                            module_source,
+                            type_args: resolved_args,
+                        })
                 }
             }
             Type::Reference(inner) => {
