@@ -1,0 +1,60 @@
+// Test: user-defined Box<T> struct with trait method calls at O2.
+// Ensures DCE does not incorrectly remove methods when a user-defined
+// Box<T> (not the internal boxing type) calls trait methods.
+
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+impl<T> Box<T> {
+    fn get(&self) -> T {
+        return self.value;
+    }
+
+    fn set(&mut self, v: T) {
+        self.value = v;
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Eq for Point {
+    fn eq(&self, other: &Self) -> bool {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+export fn run() with Stdout {
+    // User-defined Box<Point> - should use value copy semantics
+    let mut b = Box { value: Point { x: 10, y: 20 } };
+    let p = b.get();
+    println(`point: ({p.x}, {p.y})`);
+
+    // Mutation should not affect the copy
+    b.set(Point { x: 99, y: 99 });
+    println(`original: ({p.x}, {p.y})`);
+    println(`updated: ({b.value.x}, {b.value.y})`);
+
+    // User-defined Box<i32> - should use value copy semantics (NOT internal boxing)
+    let b1 = Box { value: 42 };
+    let b2 = b1;  // should deep-copy
+    println(`b1: {b1.get()}`);
+    println(`b2: {b2.get()}`);
+
+    // Eq trait on contained struct
+    let pa = Box { value: Point { x: 1, y: 2 } };
+    let pb = Box { value: Point { x: 1, y: 2 } };
+    if pa.get() == pb.get() {
+        println("equal");
+    } else {
+        println("not equal");
+    }
+}
+
+__DATA__
+{"stdout": "point: (10, 20)\noriginal: (10, 20)\nupdated: (99, 99)\nb1: 42\nb2: 42\nequal\n"}

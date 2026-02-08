@@ -1,0 +1,37 @@
+// Test: Option pattern matching with newtypes of primitives
+// Ensures that Option<Newtype> correctly unboxes when pattern matching,
+// where Newtype is a newtype of a primitive (e.g., type Radians = f64).
+
+use { println, Stdout } from "core:cli";
+
+type Radians = f64;
+
+export fn run() with Stdout {
+    // Option<Radians> where Radians is a newtype of f64
+    let angle: Option<Radians> = Option::<Radians>::Some(3.14159);
+
+    // Pattern matching should correctly unbox the Box<f64> inside Option
+    if let Some(r) = angle {
+        println(`angle: {r}`);
+    } else {
+        println("no angle");
+    }
+
+    // None case
+    let empty: Option<Radians> = null;
+    if let Some(r) = empty {
+        println(`unexpected: {r}`);
+    } else {
+        println("empty: none");
+    }
+
+    // Match expression with Option<Radians>
+    let result = match angle {
+        Some(v) => v * 2.0,
+        None => 0.0,
+    };
+    println(`doubled: {result}`);
+}
+
+__DATA__
+{"stdout": "angle: 3.14159\nempty: none\ndoubled: 6.28318\n"}

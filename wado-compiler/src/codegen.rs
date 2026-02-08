@@ -10154,7 +10154,10 @@ impl Codegen<'_> {
 
                     // For primitive Option types, the inner value is a Box<T>.
                     // Unbox by extracting .value to get the primitive.
-                    if let ResolvedType::Primitive(prim) = type_table.get(inner_type)
+                    // Use get_ultimate_base_type to handle newtypes (e.g., Option<Radians>
+                    // where type Radians = f64).
+                    let ultimate_inner = type_table.get_ultimate_base_type(inner_type);
+                    if let ResolvedType::Primitive(prim) = type_table.get(ultimate_inner)
                         && let Some(box_type_idx) = self.get_box_struct_type_idx(prim, type_table)
                     {
                         func.instruction(&Instruction::StructGet {
