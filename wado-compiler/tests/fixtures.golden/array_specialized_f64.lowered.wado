@@ -28,7 +28,7 @@ fn run() with Stdout {
         loop {
             let __pattern_temp_0: Option<f64> = __iter_0."ArrayIter<f64>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
-                let x: f64 = __unwrap_option(__pattern_temp_0);
+                let x: f64 = __unwrap_option(__pattern_temp_0).value;
                 core::cli::println(move x."f64::to_string"());
             } else {
                 break;
@@ -43,7 +43,7 @@ fn "ArrayIter<f64>^Iterator::next"(self: &mut ArrayIter<f64>) -> Option<f64> {
     }
     let item: f64 = core::builtin::array_get::<f64>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option::Some(Box<f64> { value: item });
 }
 
 pub fn "Array<f64>::append"(self: &mut Array<f64>, value: f64) {

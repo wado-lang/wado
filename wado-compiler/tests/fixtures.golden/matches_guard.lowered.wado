@@ -10,8 +10,8 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let opt1: Option<i32> = Option::Some(10);
-    let opt2: Option<i32> = Option::Some(3);
+    let opt1: Option<i32> = Option::Some(Box<i32> { value: 10 });
+    let opt2: Option<i32> = Option::Some(Box<i32> { value: 3 });
     let none: Option<i32> = null;
     let is_large: bool = match opt1 {
         Some(x) => (x > 5),

@@ -10,15 +10,15 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let mut a: i32 = 10;
+    let mut a: Box<i32> = move Box<i32> { value: 10 };
     core::cli::println(move __inline_read_value_0: {
-        let x: &i32 = &a;
-        break __inline_read_value_0: *x;
+        let x: Box<i32> = a;
+        break __inline_read_value_0: x.value;
     }."i32::to_string"());
     __inline_increment_1: {
-        let x: &mut i32 = &mut a;
-        *x = (*x + 1);
+        let x: Box<i32> = a;
+        x.value = (x.value + 1);
     };
-    core::cli::println(move a."i32::to_string"());
+    core::cli::println(move a.value."i32::to_string"());
 }
 

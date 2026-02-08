@@ -32,7 +32,7 @@ pub fn "ArrayIter<i32>^Iterator::count"(self: &mut ArrayIter<i32>) -> i32 {
     loop {
         let __pattern_temp_0: Option<i32> = self."ArrayIter<i32>^Iterator::next"();
         if __is_not_null(__pattern_temp_0) {
-            __unwrap_option(__pattern_temp_0);
+            __unwrap_option(__pattern_temp_0).value;
             n = (n + 1);
         } else {
             break;
@@ -47,6 +47,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option::Some(Box<i32> { value: item });
 }
 

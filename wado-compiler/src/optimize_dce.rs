@@ -11,8 +11,8 @@ use crate::name::{
 };
 use crate::project::Project;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule, TirStmtKind,
+    TypeId, TypeTable,
 };
 use crate::wasm_plan::{CmConverterKind, CmConverterRequirements};
 use indexmap::IndexMap;
@@ -23,9 +23,6 @@ type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
 /// Effect usage: function ID -> set of (`effect_name`, `operation_name`) pairs
 type EffectUsageMap = HashMap<FunctionId, HashSet<(String, String)>>;
 
-/// Per-function box primitives usage
-type BoxPrimitivesMap = HashMap<FunctionId, HashSet<PrimitiveType>>;
-
 /// Analysis results for a single function
 #[derive(Debug, Clone, Default)]
 struct FunctionAnalysis {
@@ -33,18 +30,16 @@ struct FunctionAnalysis {
     callees: HashSet<FunctionId>,
     /// Effect calls: (`effect_name`, `op_name`)
     effect_calls: HashSet<(String, String)>,
-    /// Primitive types that need box types (for references like &i32, &mut f64)
-    used_box_primitives: HashSet<PrimitiveType>,
 }
 
 /// Analyze the project and populate its usage fields with DCE analysis results.
 ///
 /// This performs dead code elimination analysis starting from the entry point
-/// and populates the project's `reachable_functions`, `used_wasi_functions`,
-/// `used_box_primitives` fields, and the entry module's `imports` list.
+/// and populates the project's `reachable_functions`, `used_wasi_functions`
+/// fields, and the entry module's `imports` list.
 pub fn analyze_project(project: &mut Project) {
-    // Build call graph, effect usage, and box primitives from all modules
-    let (call_graph, effect_usage, box_primitives_map) = build_analysis_graph(&project.tir_modules);
+    // Build call graph and effect usage from all modules
+    let (call_graph, effect_usage) = build_analysis_graph(&project.tir_modules);
 
     // Determine entry functions from world exports
     let entry_func_names: Vec<String> = project
@@ -77,17 +72,13 @@ pub fn analyze_project(project: &mut Project) {
         }
     }
 
-    // Collect used WASI functions and box primitives from reachable functions
+    // Collect used WASI functions from reachable functions
     let mut used_wasi_functions: HashSet<String> = HashSet::new();
-    let mut used_box_primitives: HashSet<PrimitiveType> = HashSet::new();
     for func_id in &reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
                 used_wasi_functions.insert(format!("{effect_name}::{op_name}"));
             }
-        }
-        if let Some(prims) = box_primitives_map.get(func_id) {
-            used_box_primitives.extend(prims.iter().copied());
         }
     }
 
@@ -293,7 +284,6 @@ pub fn analyze_project(project: &mut Project) {
     project.reachable_functions = reachable.clone();
     project.all_reachable = false;
     project.used_wasi_functions = used_wasi_functions;
-    project.used_box_primitives = used_box_primitives;
 
     // Filter string literals in each module to only include strings from reachable functions
     for module in project.tir_modules.values_mut() {
@@ -349,8 +339,6 @@ pub fn analyze_project(project: &mut Project) {
 
 /// Populate project with all features enabled (no DCE, for O0 mode).
 pub fn populate_all_features(project: &mut Project) {
-    use PrimitiveType::{F32, F64, I32, I64};
-
     project.reachable_functions = HashSet::new();
     project.all_reachable = true;
     // Standard WASI functions from the stdlib registry
@@ -390,19 +378,15 @@ pub fn populate_all_features(project: &mut Project) {
     if let Some(entry_module) = project.tir_modules.get_mut(&project.entry_module_source) {
         entry_module.imports = imports;
     }
-
-    // All primitives that map to box types when DCE is disabled
-    project.used_box_primitives = HashSet::from([I32, I64, F32, F64]);
 }
 
 /// Build call graph and effect usage from all TIR modules
-/// Returns (`call_graph`, `effect_usage`, `box_primitives_map`)
+/// Returns (`call_graph`, `effect_usage`)
 fn build_analysis_graph(
     modules: &IndexMap<ModuleSource, TirModule>,
-) -> (CallGraph, EffectUsageMap, BoxPrimitivesMap) {
+) -> (CallGraph, EffectUsageMap) {
     let mut call_graph: CallGraph = HashMap::new();
     let mut effect_usage: EffectUsageMap = HashMap::new();
-    let mut box_primitives_map: BoxPrimitivesMap = HashMap::new();
 
     for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
@@ -447,10 +431,7 @@ fn build_analysis_graph(
             let analysis = analyze_function(&func, module_source, type_table);
             call_graph.insert(func_id.clone(), analysis.callees);
             if !analysis.effect_calls.is_empty() {
-                effect_usage.insert(func_id.clone(), analysis.effect_calls);
-            }
-            if !analysis.used_box_primitives.is_empty() {
-                box_primitives_map.insert(func_id, analysis.used_box_primitives);
+                effect_usage.insert(func_id, analysis.effect_calls);
             }
         }
 
@@ -472,16 +453,13 @@ fn build_analysis_graph(
                 let analysis = analyze_function(method, module_source, type_table);
                 call_graph.insert(method_id.clone(), analysis.callees);
                 if !analysis.effect_calls.is_empty() {
-                    effect_usage.insert(method_id.clone(), analysis.effect_calls);
-                }
-                if !analysis.used_box_primitives.is_empty() {
-                    box_primitives_map.insert(method_id, analysis.used_box_primitives);
+                    effect_usage.insert(method_id, analysis.effect_calls);
                 }
             }
         }
     }
 
-    (call_graph, effect_usage, box_primitives_map)
+    (call_graph, effect_usage)
 }
 
 /// Analyze a TIR function for callees and effect usage
@@ -491,16 +469,6 @@ fn analyze_function(
     type_table: &TypeTable,
 ) -> FunctionAnalysis {
     let mut analysis = FunctionAnalysis::default();
-
-    // Check parameters for references to primitives (e.g., &i32, &mut f64)
-    for param in &func.params {
-        if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-            type_table.get(param.type_id)
-            && let ResolvedType::Primitive(prim) = type_table.get(*inner)
-        {
-            analysis.used_box_primitives.insert(*prim);
-        }
-    }
 
     if let Some(body) = &func.body {
         analyze_block(body, current_module, type_table, &mut analysis);
@@ -516,15 +484,8 @@ fn analyze_block(
 ) {
     for stmt in &block.stmts {
         match &stmt.kind {
-            TirStmtKind::Let { value, type_id, .. } => {
+            TirStmtKind::Let { value, .. } => {
                 analyze_expr(value, current_module, type_table, analysis);
-                // Check locals for references to primitives (e.g., let r: &i32 = ...)
-                if let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-                    type_table.get(*type_id)
-                    && let ResolvedType::Primitive(prim) = type_table.get(*inner)
-                {
-                    analysis.used_box_primitives.insert(*prim);
-                }
             }
             TirStmtKind::Expr(expr) => {
                 analyze_expr(expr, current_module, type_table, analysis);
@@ -626,17 +587,7 @@ fn analyze_expr(
                         .effect_calls
                         .insert((potential_effect.clone(), func_name.clone()));
 
-                    // Terminal effects return Option<i32> which needs box_i32 for Some case
-                    if (potential_effect == "TerminalStdin"
-                        || potential_effect == "TerminalStdout"
-                        || potential_effect == "TerminalStderr")
-                        && matches!(
-                            func_name.as_str(),
-                            "get_terminal_stdin" | "get_terminal_stdout" | "get_terminal_stderr"
-                        )
-                    {
-                        analysis.used_box_primitives.insert(PrimitiveType::I32);
-                    }
+                    // Terminal effects return Option<i32> - boxing is now handled by the lower phase
                 }
             }
 
@@ -703,9 +654,9 @@ fn analyze_expr(
 
                 match base_receiver_type {
                     ResolvedType::Struct {
-                        name,
+                        ref name,
                         is_monomorphized: true,
-                        base_name: Some(base_struct),
+                        base_name: Some(ref base_struct),
                         ..
                     } => {
                         // Monomorphized struct method call - use FunctionId::Free
@@ -729,6 +680,22 @@ fn analyze_expr(
                             base_method_name,
                         ));
                         analysis.callees.insert(callee_id);
+
+                        // For internal Box<T> types (primitive boxing), the method is
+                        // actually defined on the inner type (e.g., i32^Ord::cmp, not
+                        // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
+                        // method target as reachable.
+                        if base_struct == "Box"
+                            && let Some(info) = func.method_info()
+                        {
+                            let original_method_id = FunctionId::Method(MethodName::new(
+                                func.module_source(),
+                                info.struct_name.clone(),
+                                info.trait_name.clone(),
+                                info.method_name.clone(),
+                            ));
+                            analysis.callees.insert(original_method_id);
+                        }
                     }
                     ResolvedType::Struct {
                         name,
@@ -828,14 +795,8 @@ fn analyze_expr(
             analyze_expr(left, current_module, type_table, analysis);
             analyze_expr(right, current_module, type_table, analysis);
         }
-        TirExprKind::Unary { op, expr } => {
+        TirExprKind::Unary { expr, .. } => {
             analyze_expr(expr, current_module, type_table, analysis);
-            // Track box types needed for references to primitives
-            if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-                && let ResolvedType::Primitive(prim) = type_table.get(expr.type_id)
-            {
-                analysis.used_box_primitives.insert(*prim);
-            }
         }
         TirExprKind::Assign { target, value } => {
             analyze_expr(target, current_module, type_table, analysis);
@@ -1001,35 +962,10 @@ fn analyze_expr(
         }
         TirExprKind::OptionSome { value } => {
             analyze_expr(value, current_module, type_table, analysis);
-            // Option<primitive> now uses box types for Some variant
-            if let ResolvedType::Primitive(prim) = type_table.get(value.type_id) {
-                analysis.used_box_primitives.insert(*prim);
-            }
         }
-        TirExprKind::VariantConstruct {
-            variant_type,
-            case_name,
-            payload,
-            ..
-        } => {
+        TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 analyze_expr(payload_expr, current_module, type_table, analysis);
-            }
-            // Option::Some with primitive value needs box type
-            if case_name == "Some"
-                && let Some(payload_expr) = payload
-                && let ResolvedType::Primitive(prim) = type_table.get(payload_expr.type_id)
-            {
-                analysis.used_box_primitives.insert(*prim);
-            }
-            // Generic variants (like Result<i32, String>) may need boxing for primitives
-            // if the variant has heterogeneous field types (uses eqref).
-            // To be safe, mark all primitive fields in generic variants as needing boxing.
-            if let ResolvedType::GenericInstance { .. } = type_table.get(*variant_type)
-                && let Some(payload_expr) = payload
-                && let ResolvedType::Primitive(prim) = type_table.get(payload_expr.type_id)
-            {
-                analysis.used_box_primitives.insert(*prim);
             }
         }
         TirExprKind::Move { expr } => {

@@ -24,22 +24,22 @@ fn run() with Stdout {
     };
     let __pattern_temp_0: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
     if __is_not_null(__pattern_temp_0) {
-        let a: i32 = __unwrap_option(__pattern_temp_0);
+        let a: i32 = __unwrap_option(__pattern_temp_0).value;
         core::cli::println(move "String::concat"(move "first: ", move a."i32::to_string"()));
     }
     let __pattern_temp_1: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
     if __is_not_null(__pattern_temp_1) {
-        let b: i32 = __unwrap_option(__pattern_temp_1);
+        let b: i32 = __unwrap_option(__pattern_temp_1).value;
         core::cli::println(move "String::concat"(move "second: ", move b."i32::to_string"()));
     }
     let __pattern_temp_2: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
     if __is_not_null(__pattern_temp_2) {
-        let c: i32 = __unwrap_option(__pattern_temp_2);
+        let c: i32 = __unwrap_option(__pattern_temp_2).value;
         core::cli::println(move "String::concat"(move "third: ", move c."i32::to_string"()));
     }
     let __pattern_temp_3: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
     if __is_not_null(__pattern_temp_3) {
-        let d: i32 = __unwrap_option(__pattern_temp_3);
+        let d: i32 = __unwrap_option(__pattern_temp_3).value;
         core::cli::println(move "String::concat"(move "unexpected: ", move d."i32::to_string"()));
     } else {
         core::cli::println(move "done");
@@ -52,6 +52,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option::Some(Box<i32> { value: item });
 }
 

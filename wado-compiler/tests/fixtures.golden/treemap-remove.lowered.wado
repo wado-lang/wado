@@ -176,7 +176,7 @@ fn run() with Stdout {
         break __inline_TreeMap_String_i32__IndexValue__index_value_16: self."TreeMap<String,i32>::get"(key);
     };
     if __is_not_null(__pattern_temp_0) {
-        let val: i32 = __unwrap_option(__pattern_temp_0);
+        let val: i32 = __unwrap_option(__pattern_temp_0).value;
         __assert_8: {
             let __cond: bool = (val == 999);
             if !__cond {
@@ -199,7 +199,7 @@ fn run() with Stdout {
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (index >= 0) {
-        return Option::Some(self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value);
+        return Option::Some(Box<i32> { value: self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value });
     }
     return null;
 }

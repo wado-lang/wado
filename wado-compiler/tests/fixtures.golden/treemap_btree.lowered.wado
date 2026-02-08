@@ -47,18 +47,18 @@ fn run() with Stdout {
     }."i32::to_string"()));
     let __pattern_temp_0: Option<i32> = map."TreeMap<String,i32>::get"(&"banana");
     if __is_not_null(__pattern_temp_0) {
-        let val: i32 = __unwrap_option(__pattern_temp_0);
+        let val: i32 = __unwrap_option(__pattern_temp_0).value;
         core::cli::println(move "String::concat"(move "banana = ", move val."i32::to_string"()));
     }
     let __pattern_temp_1: Option<i32> = map."TreeMap<String,i32>::get"(&"date");
     if __is_not_null(__pattern_temp_1) {
-        let val2: i32 = __unwrap_option(__pattern_temp_1);
+        let val2: i32 = __unwrap_option(__pattern_temp_1).value;
         core::cli::println(move "String::concat"(move "date = ", move val2."i32::to_string"()));
     }
     map."TreeMap<String,i32>::insert"(move "banana", 20);
     let __pattern_temp_2: Option<i32> = map."TreeMap<String,i32>::get"(&"banana");
     if __is_not_null(__pattern_temp_2) {
-        let val3: i32 = __unwrap_option(__pattern_temp_2);
+        let val3: i32 = __unwrap_option(__pattern_temp_2).value;
         core::cli::println(move "String::concat"(move "banana (updated) = ", move val3."i32::to_string"()));
     }
     core::cli::println(move "\n=== After deleting cherry ===");
@@ -398,10 +398,10 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
             let self: &Array<bool> = &node.deleted;
             break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(self.repr, i);
         } {
-            return Option::Some(__inline_Array_i32__IndexValue__index_value_5: {
+            return Option::Some(Box<i32> { value: __inline_Array_i32__IndexValue__index_value_5: {
                 let self: &Array<i32> = &node.values;
                 break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(self.repr, i);
-            });
+            } });
         }
         return null;
     }

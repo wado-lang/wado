@@ -565,6 +565,25 @@ impl TypeTable {
         })
     }
 
+    /// Replace the type at an existing `TypeId` with a new type.
+    /// Used by the boxing lowering pass to rewrite `Ref(primitive)` → `Struct(Box<T>)`.
+    /// Removes the old type from the intern map so it won't be found by future `intern()` calls.
+    pub fn replace_type(&mut self, id: TypeId, new_ty: ResolvedType) {
+        if let Some(old_ty) = self.types.get(&id).cloned() {
+            // Only remove from intern_map if this TypeId was the canonical one
+            if self.intern_map.get(&old_ty) == Some(&id) {
+                self.intern_map.remove(&old_ty);
+            }
+        }
+        self.types.insert(id, new_ty);
+    }
+
+    /// Check if a type is a primitive (including following newtypes).
+    pub fn is_primitive_like(&self, id: TypeId) -> bool {
+        let base = self.get_ultimate_base_type(id);
+        matches!(self.get(base), ResolvedType::Primitive(_))
+    }
+
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
         self.intern(ResolvedType::Ref(inner))
     }

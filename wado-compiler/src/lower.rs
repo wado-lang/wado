@@ -1,6 +1,7 @@
 //! Lowering pass for Wado TIR
 //!
 //! The lower phase performs type-driven transformations on TIR:
+//! - Boxing lowering (transform `&primitive` / `&mut primitive` to `Box<T>` struct operations)
 //! - String literal collection (for data section)
 //! - Closure lowering (transform closures to functor structs with `__call` methods)
 //! - i128/u128 match pattern lowering (convert to if-else chains)
@@ -14,13 +15,13 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
-use crate::name::{LocalMethodName, ModuleSource};
+use crate::name::{LocalMethodName, ModuleSource, mangle_generic_name};
 use crate::project::Project;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    ClosureFunctor, ResolvedType, ScratchLocal, TirBlock, TirCapture, TirExpr, TirExprKind,
-    TirField, TirFunction, TirGlobal, TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    ClosureFunctor, MonomorphInfo, PrimitiveType, ResolvedType, ScratchLocal, TirBlock, TirCapture,
+    TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLiteralPattern, TirModule, TirParam,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -33,7 +34,10 @@ use crate::token::Span;
 ///
 /// Note: All loop constructs are desugared at the AST level in desugar.rs.
 pub fn lower(module: TirModule) -> TirModule {
-    lower_with_global_variants(module, &HashMap::new())
+    let entry_source = module.module_source.clone();
+    let modules = IndexMap::from([(module.module_source.clone(), module)]);
+    let mut modules = lower_modules_indexed(modules, &entry_source);
+    modules.pop().unwrap().1
 }
 
 /// Lower a TIR module with access to variants from all modules in the project.
@@ -41,47 +45,34 @@ pub fn lower(module: TirModule) -> TirModule {
 /// `global_variant_map` provides variant case info from other modules,
 /// enabling pattern matching on imported variants (e.g., `if let Greater = ord`
 /// where `Ordering` is defined in a different module).
-fn lower_with_global_variants(
-    mut module: TirModule,
+/// Run pre-boxing per-module lowering passes.
+fn lower_pre_boxing(
+    module: &mut TirModule,
     global_variant_map: &HashMap<String, Vec<(String, u32)>>,
-) -> TirModule {
+) {
     // Phase 1: Lower i128/u128 match patterns to if-else chains
-    // WebAssembly doesn't have i128/u128 comparison instructions, so we convert
-    // match expressions with i128/u128 literal patterns to if-else chains with
-    // explicit equality comparisons that use the wide arithmetic extension.
-    lower_wide_int_match_patterns(&mut module);
+    lower_wide_int_match_patterns(module);
 
     // Phase 1.5: Lower patterns (LetPattern, IfPattern) to explicit Let statements
-    // This allocates temp locals and transforms pattern matching constructs so
-    // codegen doesn't need preallocate passes.
-    lower_patterns(&mut module, global_variant_map);
+    lower_patterns(module, global_variant_map);
 
     // Phase 2: Lower global variable initializers
-    // For non-constant initializers, this generates a __initialize_globals function
-    // and injects calls to it at entry points.
-    lower_global_initializers(&mut module);
+    lower_global_initializers(module);
+}
 
-    // Phase 2: Lower closures to functor structs
-    // This generates synthetic structs and __call methods, and transforms:
-    // - Closure expressions -> StructLiteral
-    // - IndirectCall (known closure) -> MethodCall
-    // Note: IndirectCall for unknown callees (function parameters) is kept as-is
-    // for codegen to handle with call_ref.
+/// Run post-boxing per-module lowering passes.
+fn lower_post_boxing(module: &mut TirModule) {
+    // Phase 3: Lower closures to functor structs
     let mut closure_lowerer = ClosureLowerer::new(&module.module_source);
-    closure_lowerer.lower_module(&mut module);
+    closure_lowerer.lower_module(module);
 
-    // Phase 3: Collect string literals and their function mappings
+    // Phase 3b: Collect string literals and their function mappings
     let mut collector = StringCollector::new();
-    collector.collect_module(&module);
+    collector.collect_module(module);
     let (strings, function_strings, function_method_info) = collector.into_results();
     module.string_literals = strings;
     module.function_strings = function_strings;
     module.function_method_info = function_method_info;
-
-    // Note: Scratch local analysis is done in optimize phase (after inlining)
-    // since the function body may change due to inlining.
-
-    module
 }
 
 /// Lower a Project (Project -> Project)
@@ -89,7 +80,8 @@ fn lower_with_global_variants(
 /// This is the main entry point for the lower phase. It lowers all TIR modules
 /// in the project.
 pub fn lower_project(mut project: Project) -> Project {
-    project.tir_modules = lower_modules_indexed(project.tir_modules);
+    let entry_module_source = project.entry_module_source.clone();
+    project.tir_modules = lower_modules_indexed(project.tir_modules, &entry_module_source);
 
     // Post-processing: generate __initialize_modules in entry module
     generate_initialize_modules(&mut project.tir_modules);
@@ -103,6 +95,7 @@ pub fn lower_project(mut project: Project) -> Project {
 /// on imported variants, then applies lowering to each module.
 pub fn lower_modules_indexed(
     modules: IndexMap<ModuleSource, TirModule>,
+    entry_module_source: &ModuleSource,
 ) -> IndexMap<ModuleSource, TirModule> {
     // Build a global variant map from ALL modules so that cross-module pattern
     // matching works (e.g., `if let Greater = ord` where Ordering is from another module)
@@ -118,15 +111,55 @@ pub fn lower_modules_indexed(
         }
     }
 
-    modules
+    let mut modules: IndexMap<ModuleSource, TirModule> = modules
         .into_iter()
-        .map(|(module_source, module)| {
-            (
-                module_source,
-                lower_with_global_variants(module, &global_variant_map),
-            )
+        .map(|(source, mut module)| {
+            lower_pre_boxing(&mut module, &global_variant_map);
+            (source, module)
         })
-        .collect()
+        .collect();
+
+    // Phase 2.5: Lower boxing across ALL modules with a single BoxLowerer.
+    // All modules share the same TypeTable, so box type creation and type
+    // rewriting must happen once. The BoxLowerer scans the shared type table,
+    // creates Box<T> struct types, rewrites Ref/MutRef types, then transforms
+    // expressions in each module's functions.
+    {
+        let mut box_lowerer = BoxLowerer::new(entry_module_source.clone());
+
+        // Use any module's type_table (they all share the same Rc<RefCell<TypeTable>>)
+        if let Some(first_module) = modules.values().next() {
+            let mut type_table = first_module.type_table.borrow_mut();
+            box_lowerer.create_needed_box_types(&mut type_table);
+            box_lowerer.rewrite_types(&mut type_table);
+        }
+
+        // Transform expressions per module
+        for module in modules.values_mut() {
+            box_lowerer.lower_module_exprs(module);
+        }
+
+        // Inject generated Box structs into core:internal module (where they logically live).
+        // Falls back to entry module if core:internal doesn't exist (e.g., single-module tests).
+        if !box_lowerer.generated_structs.is_empty() {
+            let internal_source = ModuleSource::core("internal");
+            let has_internal = modules.contains_key(&internal_source);
+            let target_module = if has_internal {
+                modules.get_mut(&internal_source).unwrap()
+            } else {
+                modules.values_mut().next().unwrap()
+            };
+            target_module
+                .structs
+                .append(&mut box_lowerer.generated_structs);
+        }
+    }
+
+    for module in modules.values_mut() {
+        lower_post_boxing(module);
+    }
+
+    modules
 }
 
 // ============================================================================
@@ -2317,6 +2350,793 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
 
         if is_entry && let Some(ref mut body) = func.body {
             body.stmts.insert(0, init_call_stmt.clone());
+        }
+    }
+}
+
+// ============================================================================
+// Boxing Lowering
+// ============================================================================
+
+/// Lowers primitive boxing to explicit `Box<T>` struct operations.
+///
+/// Before this pass, codegen was responsible for:
+/// - Detecting address-taken primitive locals and allocating box structs
+/// - Boxing/unboxing `&primitive` and `*ref_to_primitive`
+/// - Boxing primitives in `Option<primitive>` and `Option::Some(primitive)`
+///
+/// After this pass, all boxing is expressed as normal struct operations on
+/// `Box<T>` types (defined in `core/internal.wado`), and codegen needs no
+/// special boxing knowledge.
+struct BoxLowerer {
+    /// Mapping from inner `TypeId` to Box<T> struct type ID.
+    /// e.g., `TypeTable::I32` → `TypeId` for Struct("Box<i32>")
+    box_struct_types: HashMap<TypeId, TypeId>,
+    /// Set of all Box<T> struct type IDs (for fast lookup).
+    box_type_ids: HashSet<TypeId>,
+    /// Generated Box<T> struct definitions to add to the module.
+    generated_structs: Vec<TirStruct>,
+    /// Module source for registering Box types in the type table.
+    /// Must match the entry module source so codegen can find them.
+    entry_module_source: ModuleSource,
+}
+
+impl BoxLowerer {
+    fn new(entry_module_source: ModuleSource) -> Self {
+        Self {
+            box_struct_types: HashMap::new(),
+            box_type_ids: HashSet::new(),
+            generated_structs: Vec::new(),
+            entry_module_source,
+        }
+    }
+
+    /// Get or create a Box<T> struct type for the given inner type.
+    fn get_or_create_box_type(
+        &mut self,
+        inner_type_id: TypeId,
+        type_table: &mut TypeTable,
+    ) -> TypeId {
+        if let Some(&box_type) = self.box_struct_types.get(&inner_type_id) {
+            return box_type;
+        }
+
+        // Create the Box struct type name: e.g., "Box<i32>"
+        let inner_name = type_table.mangle_type_name(inner_type_id);
+        let struct_name = mangle_generic_name("Box", &[inner_name]);
+
+        // Register under entry_module_source (matching monomorphizer convention).
+        // Codegen registers all monomorphized structs under entry_module_source,
+        // so the ResolvedType's module_source must match.
+        let struct_type_id = type_table.make_monomorphized_struct(
+            struct_name.clone(),
+            self.entry_module_source.clone(),
+            "Box".to_string(),
+        );
+
+        // Create the TirStruct definition with a single `value` field
+        let tir_struct = TirStruct {
+            name: struct_name,
+            is_pub: true,
+            type_params: Vec::new(),
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: "Box".to_string(),
+                type_args: vec![inner_type_id],
+            }),
+            fields: vec![TirField {
+                name: "value".to_string(),
+                type_id: inner_type_id,
+                index: 0,
+                span: Span::new(0, 0, 0, 0),
+            }],
+            span: Span::new(0, 0, 0, 0),
+        };
+
+        self.generated_structs.push(tir_struct);
+        self.box_struct_types.insert(inner_type_id, struct_type_id);
+        self.box_type_ids.insert(struct_type_id);
+
+        struct_type_id
+    }
+
+    /// Get the inner (value) `TypeId` for a Box struct type, if it is one.
+    fn get_box_inner_type(&self, type_id: TypeId) -> Option<TypeId> {
+        for (&inner, &box_type) in &self.box_struct_types {
+            if box_type == type_id {
+                return Some(inner);
+            }
+        }
+        None
+    }
+
+    /// Transform expressions in a module (called after type table setup).
+    ///
+    /// This is the per-module phase: transforms function bodies, impl methods,
+    /// and global initializers. Also injects generated Box structs into the module.
+    fn lower_module_exprs(&mut self, module: &mut TirModule) {
+        // Transform expressions in all functions.
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            self.transform_function(&mut func, &module.type_table);
+        }
+
+        // Transform impl method bodies
+        for impl_block in &mut module.impls {
+            for method in &mut impl_block.methods {
+                self.transform_function(method, &module.type_table);
+            }
+        }
+
+        // Transform global initializers
+        {
+            let type_table = module.type_table.borrow();
+            for global in &mut module.globals {
+                self.transform_expr(&mut global.initializer, &HashSet::new(), &type_table);
+            }
+        }
+
+        // Box structs are injected into the core:internal module separately
+        // (see lower_modules_indexed)
+    }
+
+    /// Scan the type table to find which primitives need Box types.
+    fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
+        // Collect base primitive TypeIds that need boxing, plus newtype aliases.
+        let mut needs_box_base: HashSet<TypeId> = HashSet::new();
+        let mut newtype_aliases: Vec<(TypeId, TypeId)> = Vec::new(); // (alias, base)
+
+        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
+            match type_table.get(type_id).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    let base = type_table.get_ultimate_base_type(inner);
+                    if matches!(type_table.get(base), ResolvedType::Primitive(p)
+                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128))
+                    {
+                        needs_box_base.insert(base);
+                        if inner != base {
+                            newtype_aliases.push((inner, base));
+                        }
+                    }
+                }
+                ResolvedType::Option(inner) => {
+                    let base = type_table.get_ultimate_base_type(inner);
+                    if matches!(type_table.get(base), ResolvedType::Primitive(p)
+                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128))
+                    {
+                        needs_box_base.insert(base);
+                        if inner != base {
+                            newtype_aliases.push((inner, base));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Create Box<T> struct types for each base primitive
+        for base_type_id in needs_box_base {
+            self.get_or_create_box_type(base_type_id, type_table);
+        }
+
+        // Map newtype aliases to their base primitive's Box type
+        // e.g., Radians (newtype of f64) → Box<f64>
+        for (alias_id, base_id) in newtype_aliases {
+            if let Some(&box_type_id) = self.box_struct_types.get(&base_id) {
+                self.box_struct_types.insert(alias_id, box_type_id);
+            }
+        }
+    }
+
+    /// Rewrite type table entries: Ref(primitive) → Box struct, MutRef(primitive) → Box struct.
+    ///
+    /// Note: Option(primitive) is NOT rewritten here. The type table keeps `Option(primitive)`
+    /// so that codegen and pattern matching can still see the original inner type. The lower
+    /// pass transforms Option expressions (`OptionSome`, `UnwrapOption`, `VariantConstruct`) to
+    /// wrap/unwrap Box structs, while codegen handles the type mapping from `Option(primitive)`
+    /// to a nullable Box reference.
+    fn rewrite_types(&mut self, type_table: &mut TypeTable) {
+        // Collect entries to rewrite (can't mutate while iterating)
+        let mut replacements: Vec<(TypeId, ResolvedType)> = Vec::new();
+
+        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
+            match type_table.get(type_id).clone() {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    // Use get_ultimate_base_type to handle newtypes of primitives
+                    let base_inner = type_table.get_ultimate_base_type(inner);
+                    if let Some(&box_type_id) = self.box_struct_types.get(&base_inner) {
+                        // Replace Ref(primitive) with the Box struct type
+                        replacements.push((type_id, type_table.get(box_type_id).clone()));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        for (type_id, new_type) in &replacements {
+            type_table.replace_type(*type_id, new_type.clone());
+        }
+
+        // Add all rewritten TypeIds to box_type_ids so that Deref/Assign
+        // handlers can recognize them as Box types.
+        for (type_id, _) in replacements {
+            self.box_type_ids.insert(type_id);
+        }
+    }
+
+    /// Transform a function's body to use Box<T> struct operations.
+    fn transform_function(&self, func: &mut TirFunction, type_table_rc: &Rc<RefCell<TypeTable>>) {
+        let type_table = type_table_rc.borrow();
+
+        // Update local_types for address-taken primitive locals
+        let address_taken = func.address_taken_locals.clone();
+        for &local_idx in &address_taken {
+            let local_type_id = func.local_types[local_idx as usize];
+            if let Some(&box_type_id) = self.box_struct_types.get(&local_type_id) {
+                func.local_types[local_idx as usize] = box_type_id;
+            }
+        }
+
+        // Transform the function body
+        if let Some(body) = &mut func.body {
+            self.transform_block(body, &address_taken, &type_table);
+        }
+
+        // Clear address_taken_locals since boxing is now handled in TIR
+        func.address_taken_locals.clear();
+    }
+
+    /// Transform a block of statements.
+    fn transform_block(
+        &self,
+        block: &mut TirBlock,
+        address_taken: &HashSet<u32>,
+        type_table: &TypeTable,
+    ) {
+        for stmt in &mut block.stmts {
+            self.transform_stmt(stmt, address_taken, type_table);
+        }
+    }
+
+    /// Transform a single statement.
+    fn transform_stmt(
+        &self,
+        stmt: &mut TirStmt,
+        address_taken: &HashSet<u32>,
+        type_table: &TypeTable,
+    ) {
+        match &mut stmt.kind {
+            TirStmtKind::Let {
+                local_index,
+                value,
+                type_id,
+                ..
+            } => {
+                // First transform the value expression
+                self.transform_expr(value, address_taken, type_table);
+
+                // For address-taken primitive locals, wrap the initial value in Box<T>
+                if address_taken.contains(local_index)
+                    && let Some(&box_type_id) = self.box_struct_types.get(type_id)
+                {
+                    let original_value = std::mem::replace(
+                        value,
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, stmt.span),
+                    );
+                    let box_struct_name =
+                        if let ResolvedType::Struct { name, .. } = type_table.get(box_type_id) {
+                            name.clone()
+                        } else {
+                            panic!("Box type should be a struct");
+                        };
+                    *value = TirExpr::new(
+                        TirExprKind::StructLiteral {
+                            struct_type: box_type_id,
+                            struct_name: box_struct_name,
+                            fields: vec![TirStructField {
+                                name: "value".to_string(),
+                                value: original_value,
+                                field_index: 0,
+                            }],
+                        },
+                        box_type_id,
+                        stmt.span,
+                    );
+                    // Update the Let's type_id to Box<T>
+                    *type_id = box_type_id;
+                }
+            }
+            TirStmtKind::Expr(expr) => {
+                self.transform_expr(expr, address_taken, type_table);
+            }
+            TirStmtKind::Return { value: Some(expr) } => {
+                self.transform_expr(expr, address_taken, type_table);
+            }
+            TirStmtKind::Return { value: None } => {}
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.transform_expr(condition, address_taken, type_table);
+                self.transform_block(then_block, address_taken, type_table);
+                if let Some(else_block) = else_block {
+                    self.transform_block(else_block, address_taken, type_table);
+                }
+            }
+            TirStmtKind::Loop { body } => {
+                self.transform_block(body, address_taken, type_table);
+            }
+            TirStmtKind::Break {
+                value: Some(expr), ..
+            } => {
+                self.transform_expr(expr, address_taken, type_table);
+            }
+            TirStmtKind::Break { value: None, .. } | TirStmtKind::Continue => {}
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.transform_block(block, address_taken, type_table);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.transform_expr(scrutinee, address_taken, type_table);
+                self.transform_block(then_block, address_taken, type_table);
+                if let Some(else_block) = else_block {
+                    self.transform_block(else_block, address_taken, type_table);
+                }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.transform_expr(value, address_taken, type_table);
+            }
+        }
+    }
+
+    /// Transform a single expression.
+    ///
+    /// This is the core of the boxing lowering. It handles:
+    /// 1. `Unary(Ref/MutRef, expr)` for primitives → `StructLiteral(Box<T>)`
+    /// 2. `Unary(Ref/MutRef, Local)` for address-taken → just `Local` (Box IS the ref)
+    /// 3. `Unary(Deref, expr)` on Box types → `FieldAccess(.value)`
+    /// 4. `Local { index }` for address-taken → `FieldAccess(Local, .value)`
+    /// 5. `Assign { target: Local, value }` for address-taken → assign to `.value`
+    /// 6. `Assign { target: Deref(..), value }` for primitives → assign to `.value`
+    /// 7. `OptionSome { value: primitive }` → wrap in Box
+    /// 8. `UnwrapOption { inner_type: primitive }` → add `.value` access
+    /// 9. `VariantConstruct { Option, Some, primitive }` → wrap payload in Box
+    fn transform_expr(
+        &self,
+        expr: &mut TirExpr,
+        address_taken: &HashSet<u32>,
+        type_table: &TypeTable,
+    ) {
+        // Recursively transform sub-expressions first (bottom-up)
+        match &mut expr.kind {
+            TirExprKind::Binary { left, right, .. } => {
+                self.transform_expr(left, address_taken, type_table);
+                self.transform_expr(right, address_taken, type_table);
+            }
+            TirExprKind::Call { args, .. } => {
+                for arg in args {
+                    self.transform_expr(arg, address_taken, type_table);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.transform_expr(receiver, address_taken, type_table);
+                for arg in args {
+                    self.transform_expr(arg, address_taken, type_table);
+                }
+            }
+            TirExprKind::StaticCall { args, .. } => {
+                for arg in args {
+                    self.transform_expr(arg, address_taken, type_table);
+                }
+            }
+            TirExprKind::FieldAccess { expr: inner, .. } => {
+                self.transform_expr(inner, address_taken, type_table);
+            }
+            TirExprKind::Index { expr: e, index, .. } => {
+                self.transform_expr(e, address_taken, type_table);
+                self.transform_expr(index, address_taken, type_table);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.transform_expr(condition, address_taken, type_table);
+                self.transform_block(&mut *then_branch, address_taken, type_table);
+                if let Some(else_branch) = else_branch {
+                    self.transform_block(else_branch, address_taken, type_table);
+                }
+            }
+            TirExprKind::Match { expr: e, arms } => {
+                self.transform_expr(e, address_taken, type_table);
+                for arm in arms {
+                    self.transform_expr(&mut arm.body, address_taken, type_table);
+                }
+            }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.transform_expr(&mut field.value, address_taken, type_table);
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } => {
+                for elem in elements {
+                    self.transform_expr(elem, address_taken, type_table);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.transform_expr(elem, address_taken, type_table);
+                }
+            }
+            TirExprKind::Closure { body, .. } => {
+                self.transform_expr(body, address_taken, type_table);
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.transform_expr(callee, address_taken, type_table);
+                for arg in args {
+                    self.transform_expr(arg, address_taken, type_table);
+                }
+            }
+            TirExprKind::ClosureToCanonical { functor, .. } => {
+                self.transform_expr(functor, address_taken, type_table);
+            }
+            TirExprKind::OptionSome { value } => {
+                self.transform_expr(value, address_taken, type_table);
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload) = payload {
+                    self.transform_expr(payload, address_taken, type_table);
+                }
+            }
+            TirExprKind::IsNotNull { expr: inner } => {
+                self.transform_expr(inner, address_taken, type_table);
+            }
+            TirExprKind::UnwrapOption { expr: inner, .. } => {
+                self.transform_expr(inner, address_taken, type_table);
+            }
+            TirExprKind::VariantTag { expr: inner } => {
+                self.transform_expr(inner, address_taken, type_table);
+            }
+            TirExprKind::VariantPayload { expr: inner, .. } => {
+                self.transform_expr(inner, address_taken, type_table);
+            }
+            TirExprKind::VariantTest { expr: inner, .. } => {
+                self.transform_expr(inner, address_taken, type_table);
+            }
+            TirExprKind::Cast { expr: inner, .. } => {
+                self.transform_expr(inner, address_taken, type_table);
+            }
+            TirExprKind::Move { expr: inner } => {
+                self.transform_expr(inner, address_taken, type_table);
+            }
+            TirExprKind::GlobalVarSet { value, .. } => {
+                self.transform_expr(value, address_taken, type_table);
+            }
+            TirExprKind::EffectCall { args, .. } => {
+                for arg in args {
+                    self.transform_expr(arg, address_taken, type_table);
+                }
+            }
+            TirExprKind::Block(block) => {
+                self.transform_block(block, address_taken, type_table);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.transform_block(block, address_taken, type_table);
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.transform_expr(scrutinee, address_taken, type_table);
+                for arm in arms {
+                    self.transform_block(arm, address_taken, type_table);
+                }
+                self.transform_block(default, address_taken, type_table);
+            }
+            // Leaf nodes: no sub-expressions to transform
+            TirExprKind::IntLiteral { .. }
+            | TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_)
+            | TirExprKind::StringLiteral(_)
+            | TirExprKind::Null
+            | TirExprKind::Local { .. }
+            | TirExprKind::Global { .. }
+            | TirExprKind::GlobalVarGet { .. }
+            | TirExprKind::Unit
+            | TirExprKind::Capture { .. }
+            | TirExprKind::EnumConstruct { .. } => {}
+            // Assign and Unary are handled specially below (before recursion for some cases)
+            TirExprKind::Assign { .. } | TirExprKind::Unary { .. } => {
+                // Handled below
+            }
+        }
+
+        // Now handle the boxing-specific transformations (top-down after sub-expressions)
+        let span = expr.span;
+
+        match &mut expr.kind {
+            // ================================================================
+            // Handle Unary(Ref/MutRef, ...) and Unary(Deref, ...)
+            // ================================================================
+            TirExprKind::Unary { op, expr: inner } => {
+                // First recursively transform the inner expression
+                // (need to handle address-taken locals BEFORE general Ref/Deref)
+                self.transform_expr(inner, address_taken, type_table);
+
+                match op {
+                    TirUnaryOp::Ref | TirUnaryOp::MutRef => {
+                        // Case 1: &local / &mut local where local is address-taken
+                        // → just the local (the Box IS the reference)
+                        if let TirExprKind::FieldAccess {
+                            expr: box_local,
+                            field_name,
+                            ..
+                        } = &inner.kind
+                        {
+                            // After address-taken local transformation, reads become
+                            // FieldAccess(Local, .value). Taking a ref to that should
+                            // just return the Box (the Local).
+                            if field_name == "value"
+                                && let TirExprKind::Local { index, .. } = &box_local.kind
+                                && address_taken.contains(index)
+                            {
+                                let local_expr = (**box_local).clone();
+                                *expr = local_expr;
+                                return;
+                            }
+                        }
+
+                        // Case 2: &primitive_expr / &mut primitive_expr
+                        // → Box<T> { value: expr }
+                        let inner_type_id = inner.type_id;
+                        if let Some(&box_type_id) = self.box_struct_types.get(&inner_type_id) {
+                            let box_struct_name = if let ResolvedType::Struct { name, .. } =
+                                type_table.get(box_type_id)
+                            {
+                                name.clone()
+                            } else {
+                                panic!("Box type should be a struct");
+                            };
+
+                            let inner_owned = std::mem::replace(
+                                inner.as_mut(),
+                                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                            );
+
+                            expr.kind = TirExprKind::StructLiteral {
+                                struct_type: box_type_id,
+                                struct_name: box_struct_name,
+                                fields: vec![TirStructField {
+                                    name: "value".to_string(),
+                                    value: inner_owned,
+                                    field_index: 0,
+                                }],
+                            };
+                            expr.type_id = box_type_id;
+                        }
+                        // For non-primitive refs (structs, arrays, etc.), no change needed
+                    }
+                    TirUnaryOp::Deref => {
+                        // Case 3: *ref_to_primitive → FieldAccess(.value)
+                        // After type rewriting, ref types are Box<T> struct types
+                        let inner_type_id = inner.type_id;
+                        if self.box_type_ids.contains(&inner_type_id) {
+                            let inner_type = self.get_box_inner_type(inner_type_id);
+                            let result_type = inner_type.unwrap_or(expr.type_id);
+
+                            let inner_owned = std::mem::replace(
+                                inner.as_mut(),
+                                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                            );
+
+                            expr.kind = TirExprKind::FieldAccess {
+                                expr: Box::new(inner_owned),
+                                field_index: 0,
+                                field_name: "value".to_string(),
+                            };
+                            expr.type_id = result_type;
+                        }
+                        // For non-primitive refs, Deref is a no-op in Wasm (transparent)
+                    }
+                    _ => {}
+                } // Already handled sub-expression recursion
+            }
+
+            // ================================================================
+            // Handle Assign
+            // ================================================================
+            TirExprKind::Assign { target, value } => {
+                self.transform_expr(value, address_taken, type_table);
+
+                match &mut target.kind {
+                    // Assign to address-taken local: x = val → x.value = val
+                    TirExprKind::Local { index, name } => {
+                        if address_taken.contains(index)
+                            && self.box_struct_types.contains_key(&target.type_id)
+                        {
+                            let local_idx = *index;
+                            let local_name = name.clone();
+                            let box_type_id = *self
+                                .box_struct_types
+                                .get(&target.type_id)
+                                .expect("address-taken local should have box type");
+                            let local_expr = TirExpr::new(
+                                TirExprKind::Local {
+                                    index: local_idx,
+                                    name: local_name,
+                                },
+                                box_type_id,
+                                span,
+                            );
+                            target.kind = TirExprKind::FieldAccess {
+                                expr: Box::new(local_expr),
+                                field_index: 0,
+                                field_name: "value".to_string(),
+                            };
+                            // target.type_id stays as the primitive type (the value's type)
+                        } else {
+                            self.transform_expr(target, address_taken, type_table);
+                        }
+                    }
+                    // Assign through deref: *ref = val → ref.value = val
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: ref_expr,
+                    } => {
+                        self.transform_expr(ref_expr, address_taken, type_table);
+                        let ref_type = ref_expr.type_id;
+                        if self.box_type_ids.contains(&ref_type) {
+                            let ref_owned = std::mem::replace(
+                                ref_expr.as_mut(),
+                                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                            );
+                            let result_type =
+                                self.get_box_inner_type(ref_type).unwrap_or(target.type_id);
+                            target.kind = TirExprKind::FieldAccess {
+                                expr: Box::new(ref_owned),
+                                field_index: 0,
+                                field_name: "value".to_string(),
+                            };
+                            target.type_id = result_type;
+                        }
+                    }
+                    _ => {
+                        self.transform_expr(target, address_taken, type_table);
+                    }
+                } // Already handled sub-expression recursion
+            }
+
+            // ================================================================
+            // Handle Local reads for address-taken locals
+            // ================================================================
+            TirExprKind::Local { index, name } => {
+                if address_taken.contains(index) {
+                    let original_type = expr.type_id;
+                    if let Some(&box_type_id) = self.box_struct_types.get(&original_type) {
+                        // Transform: Local { index } → FieldAccess(Local { index }, .value)
+                        let local_expr = TirExpr::new(
+                            TirExprKind::Local {
+                                index: *index,
+                                name: name.clone(),
+                            },
+                            box_type_id,
+                            span,
+                        );
+                        expr.kind = TirExprKind::FieldAccess {
+                            expr: Box::new(local_expr),
+                            field_index: 0,
+                            field_name: "value".to_string(),
+                        };
+                        // expr.type_id stays as the primitive type
+                    }
+                }
+            }
+
+            // ================================================================
+            // Handle OptionSome with primitive value
+            // ================================================================
+            TirExprKind::OptionSome { value } => {
+                let value_type = value.type_id;
+                if let Some(&box_type_id) = self.box_struct_types.get(&value_type) {
+                    // Wrap the value in Box<T>
+                    let box_struct_name =
+                        if let ResolvedType::Struct { name, .. } = type_table.get(box_type_id) {
+                            name.clone()
+                        } else {
+                            panic!("Box type should be a struct");
+                        };
+
+                    let original_value = std::mem::replace(
+                        value.as_mut(),
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                    );
+                    **value = TirExpr::new(
+                        TirExprKind::StructLiteral {
+                            struct_type: box_type_id,
+                            struct_name: box_struct_name,
+                            fields: vec![TirStructField {
+                                name: "value".to_string(),
+                                value: original_value,
+                                field_index: 0,
+                            }],
+                        },
+                        box_type_id,
+                        span,
+                    );
+                }
+            }
+
+            // ================================================================
+            // Handle VariantConstruct for Option::Some with primitive payload
+            // ================================================================
+            TirExprKind::VariantConstruct {
+                payload: Some(payload),
+                case_name,
+                ..
+            } if case_name == "Some" => {
+                let payload_type = payload.type_id;
+                if let Some(&box_type_id) = self.box_struct_types.get(&payload_type) {
+                    let box_struct_name =
+                        if let ResolvedType::Struct { name, .. } = type_table.get(box_type_id) {
+                            name.clone()
+                        } else {
+                            panic!("Box type should be a struct");
+                        };
+
+                    let original_payload = std::mem::replace(
+                        payload.as_mut(),
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+                    );
+                    **payload = TirExpr::new(
+                        TirExprKind::StructLiteral {
+                            struct_type: box_type_id,
+                            struct_name: box_struct_name,
+                            fields: vec![TirStructField {
+                                name: "value".to_string(),
+                                value: original_payload,
+                                field_index: 0,
+                            }],
+                        },
+                        box_type_id,
+                        span,
+                    );
+                }
+            }
+
+            // ================================================================
+            // Handle UnwrapOption for boxed primitives
+            // ================================================================
+            TirExprKind::UnwrapOption { inner_type, .. } => {
+                // inner_type is the primitive TypeId (e.g., u8).
+                // Check if this primitive has a corresponding Box<T> struct type.
+                if let Some(&box_type_id) = self.box_struct_types.get(inner_type) {
+                    // The unwrap gives us a Box<T>. We need to extract .value.
+                    let unwrap_result_type = box_type_id;
+                    let value_type = *inner_type;
+
+                    // Replace: UnwrapOption → FieldAccess(UnwrapOption, .value)
+                    let unwrap_expr = TirExpr::new(
+                        std::mem::replace(&mut expr.kind, TirExprKind::Unit),
+                        unwrap_result_type,
+                        span,
+                    );
+                    expr.kind = TirExprKind::FieldAccess {
+                        expr: Box::new(unwrap_expr),
+                        field_index: 0,
+                        field_name: "value".to_string(),
+                    };
+                    expr.type_id = value_type;
+                }
+            }
+
+            _ => {}
         }
     }
 }

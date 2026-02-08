@@ -43,7 +43,7 @@ fn run() with Stdout {
         break __inline_TreeMap_String_i32__IndexValue__index_value_1: self."TreeMap<String,i32>::get"(key);
     };
     if __is_not_null(__pattern_temp_0) {
-        let val: i32 = __unwrap_option(__pattern_temp_0);
+        let val: i32 = __unwrap_option(__pattern_temp_0).value;
         core::cli::println(move "String::concat"(move "value: ", move val."i32::to_string"()));
     }
 }
@@ -51,7 +51,7 @@ fn run() with Stdout {
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (index >= 0) {
-        return Option::Some(self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value);
+        return Option::Some(Box<i32> { value: self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value });
     }
     return null;
 }
