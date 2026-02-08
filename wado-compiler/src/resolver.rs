@@ -4388,11 +4388,23 @@ impl<'a> Resolver<'a> {
             TirExprKind::Local { .. } => true,
             TirExprKind::FieldAccess { .. } => true,
             TirExprKind::Index { .. } => true,
-            // Dereference is a valid l-value: *ref = value
+            // Dereference is a valid l-value only through mutable reference
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
+                expr,
                 ..
-            } => true,
+            } => {
+                let inner_type = self.type_table.borrow().get(expr.type_id).clone();
+                if matches!(inner_type, ResolvedType::Ref(_)) {
+                    self.errors.push(TypeError::CannotAssign {
+                        message: "cannot assign through immutable reference".to_string(),
+                        span: assign.target.span(),
+                    });
+                    false
+                } else {
+                    true
+                }
+            }
             _ => false,
         };
 
