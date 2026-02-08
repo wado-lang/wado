@@ -6751,9 +6751,7 @@ impl Codegen<'_> {
                     } => {
                         // After the lower phase, deref assignments are transformed
                         // to field-by-field assignments. This should not be reached.
-                        panic!(
-                            "deref assignment should have been lowered to field assignments"
-                        );
+                        panic!("deref assignment should have been lowered to field assignments");
                     }
                     _ => panic!("invalid assignment target in TIR"),
                 }

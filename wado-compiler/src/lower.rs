@@ -2389,7 +2389,7 @@ struct BoxLowerer {
     /// Module source for registering Box types in the type table.
     /// Must match the entry module source so codegen can find them.
     entry_module_source: ModuleSource,
-    /// Struct fields indexed by (name, module_source) for deref assign expansion.
+    /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
     struct_fields_map: HashMap<(String, ModuleSource), Vec<TirField>>,
 }
 
@@ -2462,7 +2462,7 @@ impl BoxLowerer {
         None
     }
 
-    /// Look up struct fields for a given TypeId via the type table.
+    /// Look up struct fields for a given `TypeId` via the type table.
     fn get_struct_fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TirField>> {
         match type_table.get(type_id) {
             ResolvedType::Struct {
@@ -2481,10 +2481,10 @@ impl BoxLowerer {
     ///
     /// After `transform_block`, any remaining `Assign { target: Deref(..) }` nodes
     /// are for non-primitive types (structs, String). This pass expands them into:
-    ///   let __deref_ref_N = ref_expr;
-    ///   let __deref_val_N = value_expr;
-    ///   __deref_ref_N.field0 = __deref_val_N.field0;
-    ///   __deref_ref_N.field1 = __deref_val_N.field1;
+    ///   let __`deref_ref_N` = `ref_expr`;
+    ///   let __`deref_val_N` = `value_expr`;
+    ///   __`deref_ref_N.field0` = __`deref_val_N.field0`;
+    ///   __`deref_ref_N.field1` = __`deref_val_N.field1`;
     ///   ...
     fn expand_deref_assigns_in_block(
         &self,

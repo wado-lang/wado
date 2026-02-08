@@ -4106,14 +4106,16 @@ impl<'a> Resolver<'a> {
         // creates a disconnected Box — mutations don't propagate back to the struct.
         // For GC reference types (struct, String, Array, etc.), struct.get returns
         // the shared reference, so &mut field works correctly.
-        if unary.op == UnaryOp::MutRef
-            && matches!(&expr.kind, TirExprKind::FieldAccess { .. })
-        {
+        if unary.op == UnaryOp::MutRef && matches!(&expr.kind, TirExprKind::FieldAccess { .. }) {
             let field_type = self.type_table.borrow().get(expr.type_id).clone();
             let base_type = self
                 .type_table
                 .borrow()
-                .get(self.type_table.borrow().get_ultimate_base_type(expr.type_id))
+                .get(
+                    self.type_table
+                        .borrow()
+                        .get_ultimate_base_type(expr.type_id),
+                )
                 .clone();
             if matches!(field_type, ResolvedType::Primitive(_))
                 || matches!(base_type, ResolvedType::Primitive(_))
