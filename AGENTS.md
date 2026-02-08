@@ -296,6 +296,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Format Traits](./docs/wep-2026-02-01-format-traits.md)
 - [Wasm Plan Phase](./docs/wep-2026-02-03-wasm-plan-phase.md)
 - [Trait Bounds Enforcement](./docs/wep-2026-02-07-trait-bounds.md)
+- [Variant Wasm GC Representation](./docs/wep-2026-02-08-variant-representation.md)
 
 ### Structure
 

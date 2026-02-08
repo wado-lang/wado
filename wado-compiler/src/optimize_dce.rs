@@ -1751,10 +1751,6 @@ fn collect_type_dependencies(
         | ResolvedType::Reactive(inner) => {
             collect_type_transitive(*inner, type_table, reachable);
         }
-        ResolvedType::Result { ok, err } => {
-            collect_type_transitive(*ok, type_table, reachable);
-            collect_type_transitive(*err, type_table, reachable);
-        }
         ResolvedType::Tuple(elements) => {
             for elem in elements {
                 collect_type_transitive(*elem, type_table, reachable);

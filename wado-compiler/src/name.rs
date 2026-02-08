@@ -1091,8 +1091,6 @@ pub enum TypeNameInfo {
     Generic { name: String, args: Vec<String> },
     /// Option<T> with inner type name
     Option(String),
-    /// Result<T, E> with ok and err type names
-    Result { ok: String, err: String },
     /// A tuple type with element type names
     Tuple(Vec<String>),
     /// A function type with param count and return type name
@@ -1126,7 +1124,6 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
         TypeNameInfo::Named(name) => name,
         TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
         TypeNameInfo::Option(inner) => mangle_option_type(&inner),
-        TypeNameInfo::Result { ok, err } => mangle_result_type(&ok, &err),
         TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
         TypeNameInfo::Function {
             param_count,
@@ -1200,14 +1197,6 @@ pub fn mangle_option_type(inner_type: &str) -> String {
 /// - `mangle_array_type("i32")` → `"Array<i32>"`
 pub fn mangle_array_type(elem_type: &str) -> String {
     format!("Array<{elem_type}>")
-}
-
-/// Build a Result type name from ok and error type names.
-///
-/// Examples:
-/// - `mangle_result_type("i32", "String")` → `"Result<i32,String>"`
-pub fn mangle_result_type(ok_type: &str, err_type: &str) -> String {
-    format!("Result<{ok_type},{err_type}>")
 }
 
 /// Build a local method name from struct name and method name.

@@ -936,15 +936,6 @@ impl Monomorphizer {
                     type_table.make_tuple(new_elem_ids)
                 }
             }
-            ResolvedType::Result { ok, err } => {
-                let new_ok = self.rewrite_type_id(ok, type_table);
-                let new_err = self.rewrite_type_id(err, type_table);
-                if new_ok != ok || new_err != err {
-                    type_table.make_result(new_ok, new_err)
-                } else {
-                    type_id
-                }
-            }
             // Handle GenericInstance types that weren't in the direct substitution map
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
@@ -1151,11 +1142,6 @@ impl Monomorphizer {
                     .map(|&e| self.substitute_type(e, substitution, type_table))
                     .collect();
                 type_table.make_tuple(new_elems)
-            }
-            ResolvedType::Result { ok, err } => {
-                let new_ok = self.substitute_type(ok, substitution, type_table);
-                let new_err = self.substitute_type(err, substitution, type_table);
-                type_table.make_result(new_ok, new_err)
             }
             ResolvedType::Function {
                 params,

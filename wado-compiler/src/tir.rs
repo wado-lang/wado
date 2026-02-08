@@ -138,11 +138,6 @@ impl SubstitutionContext {
                     .collect();
                 type_table.make_tuple(new_elems)
             }
-            ResolvedType::Result { ok, err } => {
-                let new_ok = self.substitute(ok, type_table);
-                let new_err = self.substitute(err, type_table);
-                type_table.make_result(new_ok, new_err)
-            }
             ResolvedType::GenericInstance {
                 name,
                 module_source,
@@ -275,10 +270,6 @@ pub enum ResolvedType {
         module_source: ModuleSource,
     },
     Option(TypeId),
-    Result {
-        ok: TypeId,
-        err: TypeId,
-    },
     Stream(TypeId),
     Future(TypeId),
     Ref(TypeId),
@@ -497,10 +488,6 @@ impl TypeTable {
         self.intern(ResolvedType::Option(inner))
     }
 
-    pub fn make_result(&mut self, ok: TypeId, err: TypeId) -> TypeId {
-        self.intern(ResolvedType::Result { ok, err })
-    }
-
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
         self.intern(ResolvedType::Tuple(elements))
     }
@@ -680,9 +667,6 @@ impl TypeTable {
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::Reactive(inner) => self.contains_type_param(*inner),
-            ResolvedType::Result { ok, err } => {
-                self.contains_type_param(*ok) || self.contains_type_param(*err)
-            }
             ResolvedType::Tuple(elems) => elems.iter().any(|e| self.contains_type_param(*e)),
             ResolvedType::Function {
                 params,
@@ -720,10 +704,6 @@ impl TypeTable {
             | ResolvedType::Future(inner)
             | ResolvedType::Reactive(inner)
             | ResolvedType::BuiltinArray(inner) => self.is_generic_type(*inner),
-            // For Result, check both type args
-            ResolvedType::Result { ok, err } => {
-                self.is_generic_type(*ok) || self.is_generic_type(*err)
-            }
             // For Tuple, check all elements
             ResolvedType::Tuple(elems) => elems.iter().any(|e| self.is_generic_type(*e)),
             // For GenericInstance, check if any type argument is itself generic
@@ -751,7 +731,6 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::GenericInstance { .. }
             | ResolvedType::Option(_)
-            | ResolvedType::Result { .. }
             | ResolvedType::Stream(_)
             | ResolvedType::Future(_)
             | ResolvedType::BuiltinArray(_) => true,
@@ -784,9 +763,6 @@ impl TypeTable {
                 format!("[{}]", elem_names.join(", "))
             }
             ResolvedType::Option(inner) => format!("Option<{}>", self.type_name(*inner)),
-            ResolvedType::Result { ok, err } => {
-                format!("Result<{}, {}>", self.type_name(*ok), self.type_name(*err))
-            }
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
@@ -869,10 +845,6 @@ impl TypeTable {
                 }
             }
             ResolvedType::Option(inner) => TypeNameInfo::Option(self.mangle_type_name(*inner)),
-            ResolvedType::Result { ok, err } => TypeNameInfo::Result {
-                ok: self.mangle_type_name(*ok),
-                err: self.mangle_type_name(*err),
-            },
             ResolvedType::Tuple(elems) => {
                 let elem_names: Vec<String> =
                     elems.iter().map(|t| self.mangle_type_name(*t)).collect();
@@ -2117,16 +2089,10 @@ mod tests {
     fn test_composite_types() {
         let mut table = TypeTable::new();
         let option_i32 = table.make_option(TypeTable::I32);
-        // Use I64 as error type since String is now a user-defined struct
-        let result_i32_i64 = table.make_result(TypeTable::I32, TypeTable::I64);
 
         assert!(matches!(
             table.get(option_i32),
             ResolvedType::Option(id) if *id == TypeTable::I32
-        ));
-        assert!(matches!(
-            table.get(result_i32_i64),
-            ResolvedType::Result { ok, err } if *ok == TypeTable::I32 && *err == TypeTable::I64
         ));
     }
 }
