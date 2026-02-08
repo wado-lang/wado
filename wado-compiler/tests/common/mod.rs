@@ -7,6 +7,9 @@
 //! - Test fixture parsing (__DATA__ sections)
 //! - Tokio runtime management
 
+// Each test file includes this module but only uses a subset of functions.
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use wasmtime::component::{Linker, ResourceTable};
@@ -33,7 +36,6 @@ impl FilesystemHost {
         }
     }
 
-    #[allow(dead_code)]
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.lock().unwrap().clone()
     }
@@ -328,7 +330,7 @@ pub fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
     rt.block_on(async {
         let component = Component::new(engine, &wasm)?;
 
-        let mut linker = cli_linker(engine)?;
+        let linker = cli_linker(engine)?;
 
         let stdout_pipe = MemoryOutputPipe::new(4096);
         let stdout_clone = stdout_pipe.clone();
