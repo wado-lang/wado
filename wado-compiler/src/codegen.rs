@@ -4525,7 +4525,7 @@ impl Codegen<'_> {
             // Copy this case: cast to case type, read all fields, create new struct
             let case_type_idx = case_info.type_idx;
             // tag + optional payload field
-            let field_count = if case_info.payload_type.is_some() {
+            let field_count: u32 = if case_info.payload_type.is_some() {
                 2
             } else {
                 1
@@ -4534,7 +4534,7 @@ impl Codegen<'_> {
             // Read all fields and push onto stack
             // For each field: get source, cast to case type, read field
             // This duplicates the cast but avoids needing temp locals
-            for field_index in 0..field_count as u32 {
+            for field_index in 0..field_count {
                 func.instruction(&Instruction::LocalGet(source_local));
                 func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
                     case_type_idx,
@@ -5007,7 +5007,7 @@ impl Codegen<'_> {
             },
         ];
 
-        let type_name = mangle_generic_name("Array", &[element_name.clone()]);
+        let type_name = mangle_generic_name("Array", std::slice::from_ref(&element_name));
         let type_idx = builder.define_gc_struct_type(&type_name, &fields);
 
         // Register in struct_types for consistency with other generic structs
@@ -9552,6 +9552,7 @@ impl Codegen<'_> {
         }
 
         // Check density threshold
+        #[allow(clippy::cast_precision_loss)]
         let density = value_to_arm.len() as f64 / range as f64;
         if density < BR_TABLE_DENSITY_THRESHOLD {
             return None;
@@ -9590,7 +9591,7 @@ impl Codegen<'_> {
     ///   ;; falls through to $done
     /// end ;; $done
     /// ```
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::cast_sign_loss)]
     fn generate_match_br_table(
         &self,
         func: &mut Function,
