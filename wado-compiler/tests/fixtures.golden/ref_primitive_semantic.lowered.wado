@@ -10,14 +10,14 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let mut a: i32 = 42;
+    let mut a: Box<i32> = move Box<i32> { value: 42 };
     let result: i32 = __inline_get_and_modify_0: {
-        let x: &mut i32 = &mut a;
-        let original: i32 = *x;
-        *x = 999;
+        let x: Box<i32> = a;
+        let original: i32 = x.value;
+        x.value = 999;
         break __inline_get_and_modify_0: original;
     };
     core::cli::println(move "String::concat"(move "original=", move result."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "modified=", move a."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "modified=", move a.value."i32::to_string"()));
 }
 

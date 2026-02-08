@@ -10,10 +10,10 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let mut a: i32 = 42;
-    let mut r: &mut i32 = &mut a;
-    let rr: &mut &mut i32 = &mut r;
-    **rr = 99;
-    core::cli::println(move a."i32::to_string"());
+    let mut a: Box<i32> = move Box<i32> { value: 42 };
+    let mut r: Box<i32> = a;
+    let rr: &mut Box<i32> = &mut r;
+    *rr.value = 99;
+    core::cli::println(move a.value."i32::to_string"());
 }
 

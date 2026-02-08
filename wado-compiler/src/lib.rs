@@ -513,10 +513,11 @@ pub async fn dump_with_host<H: CompilerHost>(
 
     // === Phase 9: Lower all modules ===
     // Apply string literal collection to monomorphized modules
+    let entry_source = &load_result.entry_module_source;
     let lowered_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
         monomorphized_tir_modules_by_source
             .clone()
-            .map(lower_modules_indexed);
+            .map(|m| lower_modules_indexed(m, entry_source));
 
     // === Phase 10: Optimize ===
     // Build a Project from lowered modules if available

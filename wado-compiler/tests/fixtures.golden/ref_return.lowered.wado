@@ -11,11 +11,11 @@
 
 fn run() with Stdout {
     let nums: Array<i32> = move [42, 99, 7];
-    let first: &i32 = __inline_get_first_0: {
-        break __inline_get_first_0: &__inline_Array_i32__IndexValue__index_value_1: {
+    let first: Box<i32> = __inline_get_first_0: {
+        break __inline_get_first_0: Box<i32> { value: __inline_Array_i32__IndexValue__index_value_1: {
             break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(nums.repr, 0);
-        };
+        } };
     };
-    core::cli::println(move *first."i32::to_string"());
+    core::cli::println(move first.value."i32::to_string"());
 }
 

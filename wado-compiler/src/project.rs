@@ -12,7 +12,7 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
-use crate::tir::{PrimitiveType, TirModule};
+use crate::tir::TirModule;
 use crate::wasm_plan::ComponentPlan;
 use crate::world_registry::WorldRegistry;
 use indexmap::IndexMap;
@@ -58,9 +58,6 @@ pub struct Project {
     pub all_reachable: bool,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: HashSet<String>,
-    /// Primitive types that need box types (for references like &i32, &mut f64)
-    pub used_box_primitives: HashSet<PrimitiveType>,
-
     // ========================================
     // Codegen options
     // ========================================
@@ -109,7 +106,6 @@ impl Project {
             reachable_functions: HashSet::new(),
             all_reachable: false,
             used_wasi_functions: HashSet::new(),
-            used_box_primitives: HashSet::new(),
             // Codegen options
             strip_names: false,
             target_world: "Command".to_string(),

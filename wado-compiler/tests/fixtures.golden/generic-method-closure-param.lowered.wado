@@ -26,29 +26,28 @@ fn run() with Stdout {
     let result1: i32 = __inline_Container_i32___transform___Closure_0_1: {
         let f: &__Closure_0 = &__Closure_0 {  };
         break __inline_Container_i32___transform___Closure_0_1: __inline___Closure_0____call_2: {
-            let x: &i32 = &c.value;
-            break __inline___Closure_0____call_2: (*x * 2);
+            let x: Box<i32> = move Box<i32> { value: c.value };
+            break __inline___Closure_0____call_2: (x.value * 2);
         };
     };
     core::cli::println(move "String::concat"(move "transform: ", move result1."i32::to_string"()));
-    let result2: i32 = __inline_Container_i32___double_transform___Closure_1_0: {
-        let f: &__Closure_1 = &__Closure_1 {  };
-        let intermediate: i32 = __inline_Container_i32___transform_0: {
-            let f: fn(&i32) -> i32 = f;
-            break __inline_Container_i32___transform_0: f(&c.value);
-        };
-        let c2: Container<i32> = __inline_Container_i32___new_1: {
-            break __inline_Container_i32___new_1: Container<i32> { value: intermediate };
-        };
-        break __inline_Container_i32___double_transform___Closure_1_0: __inline_Container_i32___transform_2: {
-            let f: fn(&i32) -> i32 = f;
-            break __inline_Container_i32___transform_2: f(&c2.value);
-        };
-    };
+    let result2: i32 = c."Container<i32>::double_transform$__Closure_1"(&__Closure_1 {  });
     core::cli::println(move "String::concat"(move "double_transform: ", move result2."i32::to_string"()));
 }
 
-fn "__Closure_1::__call"(self: &__Closure_1, x: &i32) -> i32 {
-    return (*x * 2);
+fn "Container<i32>::transform"(self: &Container<i32>, f: fn(Box<i32>) -> i32) -> i32 {
+    return f(move Box<i32> { value: self.value });
+}
+
+fn "__Closure_1::__call"(self: &__Closure_1, x: Box<i32>) -> i32 {
+    return (x.value * 2);
+}
+
+fn "Container<i32>::double_transform$__Closure_1"(self: &Container<i32>, f: &__Closure_1) -> i32 {
+    let intermediate: i32 = self."Container<i32>::transform"(f);
+    let c2: Container<i32> = __inline_Container_i32___new_0: {
+        break __inline_Container_i32___new_0: Container<i32> { value: intermediate };
+    };
+    return c2."Container<i32>::transform"(f);
 }
 

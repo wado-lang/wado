@@ -114,7 +114,7 @@ fn run() with Stdout {
         break __inline_TreeMap_String_i32__IndexValue__index_value_10: self."TreeMap<String,i32>::get"(key);
     };
     if __is_not_null(__pattern_temp_0) {
-        let v1: i32 = __unwrap_option(__pattern_temp_0);
+        let v1: i32 = __unwrap_option(__pattern_temp_0).value;
         __assert_4: {
             let __cond: bool = (v1 == 1);
             if !__cond {
@@ -128,7 +128,7 @@ fn run() with Stdout {
         break __inline_TreeMap_String_i32__IndexValue__index_value_11: self."TreeMap<String,i32>::get"(key);
     };
     if __is_not_null(__pattern_temp_1) {
-        let v2: i32 = __unwrap_option(__pattern_temp_1);
+        let v2: i32 = __unwrap_option(__pattern_temp_1).value;
         __assert_5: {
             let __cond: bool = (v2 == 2);
             if !__cond {
@@ -147,7 +147,7 @@ fn run() with Stdout {
         break __inline_TreeMap_String_i32__IndexValue__index_value_13: self."TreeMap<String,i32>::get"(key);
     };
     if __is_not_null(__pattern_temp_2) {
-        let v3: i32 = __unwrap_option(__pattern_temp_2);
+        let v3: i32 = __unwrap_option(__pattern_temp_2).value;
         __assert_6: {
             let __cond: bool = (v3 == 100);
             if !__cond {
@@ -161,7 +161,7 @@ fn run() with Stdout {
         break __inline_TreeMap_String_i32__IndexValue__index_value_14: self."TreeMap<String,i32>::get"(key);
     };
     if __is_not_null(__pattern_temp_3) {
-        __unwrap_option(__pattern_temp_3);
+        __unwrap_option(__pattern_temp_3).value;
         __assert_7: {
             if !false {
                 core::internal::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/treemap-index.wado"), move ":"), move 35."i32::to_string"()), move ": "), move "should not reach here"), move "\ncondition: false\n"));
@@ -174,7 +174,7 @@ fn run() with Stdout {
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (index >= 0) {
-        return Option::Some(self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value);
+        return Option::Some(Box<i32> { value: self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value });
     }
     return null;
 }

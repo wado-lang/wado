@@ -27,7 +27,7 @@ fn run() with Stdout {
         loop {
             let __pattern_temp_0: Option<bool> = __iter_0."ArrayIter<bool>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
-                let x: bool = __unwrap_option(__pattern_temp_0);
+                let x: bool = __unwrap_option(__pattern_temp_0).value;
                 core::cli::println(__inline_bool__to_string_1: {
                     break __inline_bool__to_string_1: if x {
                         "true";
@@ -48,7 +48,7 @@ fn "ArrayIter<bool>^Iterator::next"(self: &mut ArrayIter<bool>) -> Option<bool> 
     }
     let item: bool = core::builtin::array_get::<bool>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option::Some(Box<bool> { value: item });
 }
 
 pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {

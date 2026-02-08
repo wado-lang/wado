@@ -15,10 +15,10 @@ struct __Closure_0 {
 struct __Closure_1 {
 }
 
-fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) -> i32 {
-    let pivot: i32 = __inline_Array_i32__IndexValue__index_value_0: {
+fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(Box<i32>, Box<i32>) -> bool) -> i32 {
+    let pivot: Box<i32> = move Box<i32> { value: __inline_Array_i32__IndexValue__index_value_0: {
         break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(arr.repr, high);
-    };
+    } };
     let mut i: i32 = (low - 1);
     __for_0: {
         let mut j: i32 = low;
@@ -28,9 +28,9 @@ fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> b
                 break __for_0;
             }
             __for_0_body: {
-                if cmp(&__inline_Array_i32__IndexValue__index_value_1: {
+                if cmp(move Box<i32> { value: __inline_Array_i32__IndexValue__index_value_1: {
                     break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(_licm_repr, j);
-                }, &pivot) {
+                } }, pivot) {
                     i = (i + 1);
                     let tmp: i32 = __inline_Array_i32__IndexValue__index_value_2: {
                         break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(_licm_repr, i);
@@ -66,7 +66,7 @@ fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> b
     return (i + 1);
 }
 
-fn quicksort(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(&i32, &i32) -> bool) {
+fn quicksort(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(Box<i32>, Box<i32>) -> bool) {
     if (low < high) {
         let pi: i32 = partition(arr, low, high, cmp);
         quicksort(arr, low, (pi - 1), cmp);
@@ -111,12 +111,12 @@ fn run() with Stdout {
     print_array(&arr);
 }
 
-fn "__Closure_0::__call"(self: &__Closure_0, a: &i32, b: &i32) -> bool {
-    return (*a < *b);
+fn "__Closure_0::__call"(self: &__Closure_0, a: Box<i32>, b: Box<i32>) -> bool {
+    return (a.value < b.value);
 }
 
-fn "__Closure_1::__call"(self: &__Closure_1, a: &i32, b: &i32) -> bool {
-    return (*a > *b);
+fn "__Closure_1::__call"(self: &__Closure_1, a: Box<i32>, b: Box<i32>) -> bool {
+    return (a.value > b.value);
 }
 
 fn "quicksort$__Closure_0"(arr: &mut Array<i32>, low: i32, high: i32, cmp: &__Closure_0) {

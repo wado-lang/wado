@@ -69,14 +69,14 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_6: {
         break __inline_TreeMap_String_i32___len_6: map.size;
     }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "banana = ", move *map."TreeMap<String,i32>^Index::index"(move "banana")."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "date = ", move *map."TreeMap<String,i32>^Index::index"(move "date")."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "banana = ", move map."TreeMap<String,i32>^Index::index"(move "banana").value."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "date = ", move map."TreeMap<String,i32>^Index::index"(move "date").value."i32::to_string"()));
     __inline_TreeMap_String_i32__IndexAssign__index_assign_7: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "banana";
         self."TreeMap<String,i32>::insert"(key, 20);
     };
-    core::cli::println(move "String::concat"(move "banana (updated) = ", move *map."TreeMap<String,i32>^Index::index"(move "banana")."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "banana (updated) = ", move map."TreeMap<String,i32>^Index::index"(move "banana").value."i32::to_string"()));
     core::cli::println(move "\n=== After deleting cherry ===");
     map."TreeMap<String,i32>::delete"(&"cherry");
     core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_8: {
@@ -375,11 +375,11 @@ fn "TreeMap<String,i32>::delete_in_node"(self: &mut TreeMap<String,i32>, node: &
     return self."TreeMap<String,i32>::delete_in_node"(node.children."Array<BTreeNode<String,i32>>^IndexValue::index_value"(i), key);
 }
 
-fn "TreeMap<String,i32>^Index::index"(self: &TreeMap<String,i32>, key: String) -> &i32 {
+fn "TreeMap<String,i32>^Index::index"(self: &TreeMap<String,i32>, key: String) -> Box<i32> {
     let __pattern_temp_0: Option<i32> = self."TreeMap<String,i32>::get"(&key);
     if __is_not_null(__pattern_temp_0) {
-        let val: i32 = __unwrap_option(__pattern_temp_0);
-        return &val;
+        let val: Box<i32> = move Box<i32> { value: __unwrap_option(__pattern_temp_0).value };
+        return val;
     }
     core::internal::panic(move "key not found");
 }
@@ -419,10 +419,10 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
             let self: &Array<bool> = &node.deleted;
             break __inline_Array_bool__IndexValue__index_value_4: core::builtin::array_get::<bool>(self.repr, i);
         } {
-            return Option::Some(__inline_Array_i32__IndexValue__index_value_5: {
+            return Option::Some(Box<i32> { value: __inline_Array_i32__IndexValue__index_value_5: {
                 let self: &Array<i32> = &node.values;
                 break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(self.repr, i);
-            });
+            } });
         }
         return null;
     }

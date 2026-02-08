@@ -27,7 +27,7 @@ fn run() with Stdout {
         loop {
             let __pattern_temp_0: Option<u32> = __iter_0."ArrayIter<u32>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
-                let x: u32 = __unwrap_option(__pattern_temp_0);
+                let x: u32 = __unwrap_option(__pattern_temp_0).value;
                 core::cli::println(move x."u32::to_string"());
             } else {
                 break;
@@ -42,7 +42,7 @@ fn "ArrayIter<u32>^Iterator::next"(self: &mut ArrayIter<u32>) -> Option<u32> {
     }
     let item: u32 = core::builtin::array_get::<u32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option::Some(Box<u32> { value: item });
 }
 
 pub fn "Array<u32>::append"(self: &mut Array<u32>, value: u32) {

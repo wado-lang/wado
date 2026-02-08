@@ -27,7 +27,7 @@ fn run() with Stdout {
         loop {
             let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
-                let i: i32 = __unwrap_option(__pattern_temp_0);
+                let i: i32 = __unwrap_option(__pattern_temp_0).value;
                 __for_of_1: {
                     let mut __iter_1: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_1: {
                         break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: _licm_repr, used: _licm_used, index: 0 };
@@ -35,7 +35,7 @@ fn run() with Stdout {
                     loop {
                         let __pattern_temp_1: Option<i32> = __iter_1."ArrayIter<i32>^Iterator::next"();
                         if __is_not_null(__pattern_temp_1) {
-                            let j: i32 = __unwrap_option(__pattern_temp_1);
+                            let j: i32 = __unwrap_option(__pattern_temp_1).value;
                             core::cli::println(move "String::concat"(move "String::concat"(move i."i32::to_string"(), move ","), move j."i32::to_string"()));
                         } else {
                             break;
@@ -55,6 +55,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option::Some(Box<i32> { value: item });
 }
 

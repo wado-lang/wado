@@ -15,9 +15,9 @@ struct ReadOnlyBox {
 
 fn run() with Stdout {
     let box: ReadOnlyBox = move ReadOnlyBox { value: 42 };
-    let x: i32 = *__inline_ReadOnlyBox_Index__index_0: {
-        break __inline_ReadOnlyBox_Index__index_0: &box.value;
-    };
+    let x: i32 = __inline_ReadOnlyBox_Index__index_0: {
+        break __inline_ReadOnlyBox_Index__index_0: Box<i32> { value: box.value };
+    }.value;
     core::cli::println(move "String::concat"(move "Value: ", move x."i32::to_string"()));
 }
 

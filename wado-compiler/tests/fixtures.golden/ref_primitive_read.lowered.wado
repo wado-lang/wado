@@ -10,10 +10,9 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let a: i32 = 42;
+    let a: Box<i32> = move Box<i32> { value: 42 };
     core::cli::println(move __inline_read_value_0: {
-        let x: &i32 = &a;
-        break __inline_read_value_0: *x;
+        break __inline_read_value_0: a.value;
     }."i32::to_string"());
 }
 

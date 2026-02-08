@@ -106,7 +106,7 @@ pub fn "Array<i32>::sorted"(self: &Array<i32>) -> Array<i32> {
     return copy;
 }
 
-pub fn "Array<i32>::sort_by"(self: &mut Array<i32>, cmp: fn(&i32, &i32) -> Ordering) {
+pub fn "Array<i32>::sort_by"(self: &mut Array<i32>, cmp: fn(Box<i32>, Box<i32>) -> Ordering) {
     let n: i32 = self.used;
     if (n <= 1) {
         return;
@@ -144,14 +144,14 @@ pub fn "Array<i32>::sort_by"(self: &mut Array<i32>, cmp: fn(&i32, &i32) -> Order
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: i32 = core::builtin::array_get::<i32>(src, i);
-                                                    let b: i32 = core::builtin::array_get::<i32>(src, j);
-                                                    let __pattern_temp_0: Ordering = move cmp(&a, &b);
+                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let __pattern_temp_0: Ordering = move cmp(a, b);
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b);
+                                                        core::builtin::array_set::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a);
+                                                        core::builtin::array_set::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
@@ -178,51 +178,51 @@ pub fn "Array<i32>::sort_by"(self: &mut Array<i32>, cmp: fn(&i32, &i32) -> Order
     }
 }
 
-fn "__Closure_0::__call"(self: &__Closure_0, x: &i32, y: &i32) -> Ordering {
-    if (*x < *y) {
+fn "__Closure_0::__call"(self: &__Closure_0, x: Box<i32>, y: Box<i32>) -> Ordering {
+    if (x.value < y.value) {
         return Ordering::Less;
     }
-    if (*x > *y) {
+    if (x.value > y.value) {
         return Ordering::Greater;
     }
     return Ordering::Equal;
 }
 
-fn "__Closure_1::__call"(self: &__Closure_1, x: &i32, y: &i32) -> Ordering {
-    if (*x > *y) {
+fn "__Closure_1::__call"(self: &__Closure_1, x: Box<i32>, y: Box<i32>) -> Ordering {
+    if (x.value > y.value) {
         return Ordering::Less;
     }
-    if (*x < *y) {
+    if (x.value < y.value) {
         return Ordering::Greater;
     }
     return Ordering::Equal;
 }
 
-fn "__Closure_2::__call"(self: &__Closure_2, x: &i32, y: &i32) -> Ordering {
-    if (*x < *y) {
+fn "__Closure_2::__call"(self: &__Closure_2, x: Box<i32>, y: Box<i32>) -> Ordering {
+    if (x.value < y.value) {
         return Ordering::Less;
     }
-    if (*x > *y) {
+    if (x.value > y.value) {
         return Ordering::Greater;
     }
     return Ordering::Equal;
 }
 
-fn "__Closure_3::__call"(self: &__Closure_3, a: &i32, b: &i32) -> Ordering {
-    let va: i32 = if (*a < 0) {
-        (0 - *a);
+fn "__Closure_3::__call"(self: &__Closure_3, a: Box<i32>, b: Box<i32>) -> Ordering {
+    let va: Box<i32> = move Box<i32> { value: if (a.value < 0) {
+        (0 - a.value);
     } else {
-        *a;
-    };
-    let vb: i32 = if (*b < 0) {
-        (0 - *b);
+        a.value;
+    } };
+    let vb: Box<i32> = move Box<i32> { value: if (b.value < 0) {
+        (0 - b.value);
     } else {
-        *b;
-    };
-    if (va < vb) {
+        b.value;
+    } };
+    if (va.value < vb.value) {
         return Ordering::Less;
     }
-    if (va > vb) {
+    if (va.value > vb.value) {
         return Ordering::Greater;
     }
     return Ordering::Equal;
@@ -266,14 +266,14 @@ fn "Array<i32>::sort_by$__Closure_0"(self: &mut Array<i32>, cmp: &__Closure_0) {
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: i32 = core::builtin::array_get::<i32>(src, i);
-                                                    let b: i32 = core::builtin::array_get::<i32>(src, j);
-                                                    let __pattern_temp_0: Ordering = move cmp."__Closure_0::__call"(&a, &b);
+                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let __pattern_temp_0: Ordering = move cmp."__Closure_0::__call"(a, b);
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b);
+                                                        core::builtin::array_set::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a);
+                                                        core::builtin::array_set::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
@@ -338,14 +338,14 @@ fn "Array<i32>::sort_by$__Closure_1"(self: &mut Array<i32>, cmp: &__Closure_1) {
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: i32 = core::builtin::array_get::<i32>(src, i);
-                                                    let b: i32 = core::builtin::array_get::<i32>(src, j);
-                                                    let __pattern_temp_0: Ordering = move cmp."__Closure_1::__call"(&a, &b);
+                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let __pattern_temp_0: Ordering = move cmp."__Closure_1::__call"(a, b);
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b);
+                                                        core::builtin::array_set::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a);
+                                                        core::builtin::array_set::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
@@ -419,14 +419,14 @@ fn "Array<i32>::sort_by$__Closure_3"(self: &mut Array<i32>, cmp: &__Closure_3) {
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: i32 = core::builtin::array_get::<i32>(src, i);
-                                                    let b: i32 = core::builtin::array_get::<i32>(src, j);
-                                                    let __pattern_temp_0: Ordering = move cmp."__Closure_3::__call"(&a, &b);
+                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let __pattern_temp_0: Ordering = move cmp."__Closure_3::__call"(a, b);
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b);
+                                                        core::builtin::array_set::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a);
+                                                        core::builtin::array_set::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
@@ -491,18 +491,18 @@ fn "Array<i32>::sort_by$__Closure_4"(self: &mut Array<i32>, cmp: &__Closure_4) {
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: i32 = core::builtin::array_get::<i32>(src, i);
-                                                    let b: i32 = core::builtin::array_get::<i32>(src, j);
+                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
                                                     let __pattern_temp_0: Ordering = __inline___Closure_4____call_0: {
-                                                        let a: &i32 = &a;
-                                                        let b: &i32 = &b;
+                                                        let a: Box<i32> = a;
+                                                        let b: Box<i32> = b;
                                                         break __inline___Closure_4____call_0: a."i32^Ord::cmp"(b);
                                                     };
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b);
+                                                        core::builtin::array_set::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a);
+                                                        core::builtin::array_set::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {

@@ -15,10 +15,10 @@ struct MyContainer {
 
 fn run() with Stdout {
     let container: MyContainer = move MyContainer { data: 42 };
-    let val_ref: &i32 = __inline_MyContainer_Index__index_0: {
-        break __inline_MyContainer_Index__index_0: &container.data;
+    let val_ref: Box<i32> = __inline_MyContainer_Index__index_0: {
+        break __inline_MyContainer_Index__index_0: Box<i32> { value: container.data };
     };
-    let val: i32 = *val_ref;
+    let val: i32 = val_ref.value;
     core::cli::println(move "String::concat"(move "Value: ", move val."i32::to_string"()));
 }
 
