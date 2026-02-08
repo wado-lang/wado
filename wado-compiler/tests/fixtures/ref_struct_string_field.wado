@@ -1,0 +1,28 @@
+// Modifying String field of struct through &mut reference
+
+use { println, Stdout } from "core:cli";
+
+struct User {
+    name: String,
+    age: i32,
+}
+
+fn rename(user: &mut User, new_name: String) {
+    user.name = new_name;
+}
+
+fn birthday(user: &mut User) {
+    user.age = user.age + 1;
+}
+
+export fn run() with Stdout {
+    let mut u = User { name: "Alice", age: 30 };
+    println(`{u.name}, {u.age}`);
+
+    rename(&mut u, "Bob");
+    birthday(&mut u);
+    println(`{u.name}, {u.age}`);
+}
+
+__DATA__
+{"stdout": "Alice, 30\nBob, 31\n"}

@@ -1,0 +1,13 @@
+// Error: attempting to assign through immutable reference
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut a = 42;
+    let r = &a;  // immutable reference
+    *r = 99;     // Error: cannot assign through immutable reference
+    println(`{a}`);
+}
+
+__DATA__
+{"compile_error": "immutable"}

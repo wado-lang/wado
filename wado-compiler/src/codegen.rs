@@ -6749,13 +6749,9 @@ impl Codegen<'_> {
                         op: TirUnaryOp::Deref,
                         ..
                     } => {
-                        // After the lower phase, deref assignments to primitives are
-                        // transformed to FieldAccess(.value) assignments on Box<T>.
-                        // This path should only be reached for non-primitive deref
-                        // assignments (which are not yet supported).
-                        panic!(
-                            "deref assignment not yet supported (should be lowered to FieldAccess)"
-                        );
+                        // After the lower phase, deref assignments are transformed
+                        // to field-by-field assignments. This should not be reached.
+                        panic!("deref assignment should have been lowered to field assignments");
                     }
                     _ => panic!("invalid assignment target in TIR"),
                 }
@@ -8263,9 +8259,9 @@ impl Codegen<'_> {
                 op: TirUnaryOp::Deref,
                 ..
             } => {
-                // After the lower phase, deref assignments to primitives are
-                // transformed to FieldAccess(.value) assignments on Box<T>.
-                panic!("deref assignment not yet supported (should be lowered to FieldAccess)");
+                // After the lower phase, deref assignments are transformed
+                // to field-by-field assignments. This should not be reached.
+                panic!("deref assignment should have been lowered to field assignments");
             }
             _ => panic!("invalid assignment target in TIR"),
         }

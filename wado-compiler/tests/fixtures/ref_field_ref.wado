@@ -1,0 +1,23 @@
+// Taking &mut to a struct field is prohibited.
+// In Wasm GC, struct.get returns a copy for primitives, so &mut field
+// creates a disconnected Box — mutations don't propagate back.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn set_field(r: &mut i32, v: i32) {
+    *r = v;
+}
+
+export fn run() with Stdout {
+    let mut p = Point { x: 10, y: 20 };
+    set_field(&mut p.x, 99);
+    println(`{p.x}`);
+}
+
+__DATA__
+{"compile_error": "cannot take mutable reference to primitive struct field"}

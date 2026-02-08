@@ -1,0 +1,21 @@
+// Closure with mutable reference parameter
+// Requires: fn(&mut T) closure codegen
+
+use { println, Stdout } from "core:cli";
+
+fn modify_via_closure(r: &mut i32, f: fn(&mut i32) -> ()) {
+    f(r);
+}
+
+export fn run() with Stdout {
+    let mut y = 10;
+    modify_via_closure(&mut y, |r: &mut i32| {
+        *r = *r + 5;
+    });
+
+
+    println(`modified: {y}`);
+}
+
+__DATA__
+{"stdout": "modified: 15\n"}

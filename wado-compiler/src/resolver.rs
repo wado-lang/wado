@@ -4101,6 +4101,32 @@ impl<'a> Resolver<'a> {
             });
         }
 
+        // Reject &mut on struct field access when the field is a primitive type.
+        // In Wasm GC, struct.get returns a value copy for primitives, so &mut field
+        // creates a disconnected Box — mutations don't propagate back to the struct.
+        // For GC reference types (struct, String, Array, etc.), struct.get returns
+        // the shared reference, so &mut field works correctly.
+        if unary.op == UnaryOp::MutRef && matches!(&expr.kind, TirExprKind::FieldAccess { .. }) {
+            let field_type = self.type_table.borrow().get(expr.type_id).clone();
+            let base_type = self
+                .type_table
+                .borrow()
+                .get(
+                    self.type_table
+                        .borrow()
+                        .get_ultimate_base_type(expr.type_id),
+                )
+                .clone();
+            if matches!(field_type, ResolvedType::Primitive(_))
+                || matches!(base_type, ResolvedType::Primitive(_))
+            {
+                self.errors.push(TypeError::CannotAssign {
+                    message: "cannot take mutable reference to primitive struct field; use the struct reference directly".to_string(),
+                    span: unary.span,
+                });
+            }
+        }
+
         // Check for negation on non-primitive types that implement Neg trait
         if unary.op == UnaryOp::Neg {
             let expr_type = self.type_table.borrow().get(expr.type_id).clone();
@@ -4395,7 +4421,7 @@ impl<'a> Resolver<'a> {
                         name: name.clone(),
                         value: Box::new(value.clone()),
                     },
-                    value.type_id,
+                    TypeTable::UNIT,
                     assign.span,
                 );
             }
@@ -4406,11 +4432,23 @@ impl<'a> Resolver<'a> {
             TirExprKind::Local { .. } => true,
             TirExprKind::FieldAccess { .. } => true,
             TirExprKind::Index { .. } => true,
-            // Dereference is a valid l-value: *ref = value
+            // Dereference is a valid l-value only through mutable reference
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
+                expr,
                 ..
-            } => true,
+            } => {
+                let inner_type = self.type_table.borrow().get(expr.type_id).clone();
+                if matches!(inner_type, ResolvedType::Ref(_)) {
+                    self.errors.push(TypeError::CannotAssign {
+                        message: "cannot assign through immutable reference".to_string(),
+                        span: assign.target.span(),
+                    });
+                    false
+                } else {
+                    true
+                }
+            }
             _ => false,
         };
 
@@ -4428,7 +4466,7 @@ impl<'a> Resolver<'a> {
                 target: Box::new(target),
                 value: Box::new(value.clone()),
             },
-            value.type_id,
+            TypeTable::UNIT,
             assign.span,
         )
     }

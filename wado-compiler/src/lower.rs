@@ -127,6 +127,16 @@ pub fn lower_modules_indexed(
     {
         let mut box_lowerer = BoxLowerer::new(entry_module_source.clone());
 
+        // Build struct fields map from all modules for deref assign expansion
+        for module in modules.values() {
+            for s in &module.structs {
+                box_lowerer.struct_fields_map.insert(
+                    (s.name.clone(), module.module_source.clone()),
+                    s.fields.clone(),
+                );
+            }
+        }
+
         // Use any module's type_table (they all share the same Rc<RefCell<TypeTable>>)
         if let Some(first_module) = modules.values().next() {
             let mut type_table = first_module.type_table.borrow_mut();
@@ -2379,6 +2389,8 @@ struct BoxLowerer {
     /// Module source for registering Box types in the type table.
     /// Must match the entry module source so codegen can find them.
     entry_module_source: ModuleSource,
+    /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
+    struct_fields_map: HashMap<(String, ModuleSource), Vec<TirField>>,
 }
 
 impl BoxLowerer {
@@ -2388,6 +2400,7 @@ impl BoxLowerer {
             box_type_ids: HashSet::new(),
             generated_structs: Vec::new(),
             entry_module_source,
+            struct_fields_map: HashMap::new(),
         }
     }
 
@@ -2447,6 +2460,253 @@ impl BoxLowerer {
             }
         }
         None
+    }
+
+    /// Look up struct fields for a given `TypeId` via the type table.
+    fn get_struct_fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TirField>> {
+        match type_table.get(type_id) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => self
+                .struct_fields_map
+                .get(&(name.clone(), module_source.clone()))
+                .cloned(),
+            _ => None,
+        }
+    }
+
+    /// Expand `*ref = value` for non-box struct types into field-by-field assignments.
+    ///
+    /// After `transform_block`, any remaining `Assign { target: Deref(..) }` nodes
+    /// are for non-primitive types (structs, String). This pass expands them into:
+    ///   let __`deref_ref_N` = `ref_expr`;
+    ///   let __`deref_val_N` = `value_expr`;
+    ///   __`deref_ref_N.field0` = __`deref_val_N.field0`;
+    ///   __`deref_ref_N.field1` = __`deref_val_N.field1`;
+    ///   ...
+    fn expand_deref_assigns_in_block(
+        &self,
+        block: &mut TirBlock,
+        local_count: &mut u32,
+        local_types: &mut Vec<TypeId>,
+        type_table: &TypeTable,
+    ) {
+        let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(block.stmts.len());
+
+        for stmt in std::mem::take(&mut block.stmts) {
+            // Recurse into nested blocks first
+            new_stmts.push(stmt);
+            let stmt = new_stmts.last_mut().unwrap();
+            self.expand_deref_assigns_in_stmt(stmt, local_count, local_types, type_table);
+
+            // Check if this stmt is Expr(Assign { target: Deref(..), value })
+            let should_expand = matches!(
+                &stmt.kind,
+                TirStmtKind::Expr(expr) if matches!(
+                    &expr.kind,
+                    TirExprKind::Assign { target, .. }
+                    if matches!(&target.kind, TirExprKind::Unary { op: TirUnaryOp::Deref, .. })
+                )
+            );
+
+            if !should_expand {
+                continue;
+            }
+
+            // Extract the assign components and save type info before moves
+            let TirStmtKind::Expr(expr) = &mut stmt.kind else {
+                continue;
+            };
+            let TirExprKind::Assign { target, value } = &mut expr.kind else {
+                continue;
+            };
+            let TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: ref_expr,
+            } = &mut target.kind
+            else {
+                continue;
+            };
+
+            // Determine the inner struct type from the ref type
+            let inner_type_id = match type_table.get(ref_expr.type_id) {
+                ResolvedType::MutRef(inner) => *inner,
+                // Ref should have been caught by the immutable check
+                _ => continue,
+            };
+
+            // Look up struct fields
+            let Some(fields) = self.get_struct_fields(inner_type_id, type_table) else {
+                continue;
+            };
+
+            if fields.is_empty() {
+                continue;
+            }
+
+            // Save type IDs before destructive moves
+            let ref_type_id = ref_expr.type_id;
+            let span = expr.span;
+
+            // Allocate temp locals
+            let ref_local_idx = *local_count;
+            *local_count += 1;
+            local_types.push(ref_type_id);
+
+            let val_local_idx = *local_count;
+            *local_count += 1;
+            local_types.push(inner_type_id);
+
+            // Take ownership of ref_expr and value
+            let ref_owned = std::mem::replace(
+                ref_expr.as_mut(),
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+            );
+            let val_owned = std::mem::replace(
+                value.as_mut(),
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+            );
+
+            // Remove the original stmt (we just pushed it) and replace with expansion
+            new_stmts.pop();
+
+            // let __deref_ref = ref_expr
+            new_stmts.push(TirStmt {
+                kind: TirStmtKind::Let {
+                    local_index: ref_local_idx,
+                    name: format!("__deref_ref_{ref_local_idx}"),
+                    type_id: ref_type_id,
+                    is_mut: false,
+                    is_reactive: false,
+                    value: ref_owned,
+                },
+                span,
+            });
+
+            // let __deref_val = value_expr
+            new_stmts.push(TirStmt {
+                kind: TirStmtKind::Let {
+                    local_index: val_local_idx,
+                    name: format!("__deref_val_{val_local_idx}"),
+                    type_id: inner_type_id,
+                    is_mut: false,
+                    is_reactive: false,
+                    value: val_owned,
+                },
+                span,
+            });
+
+            // For each field: __deref_ref.field_i = __deref_val.field_i
+            for field in &fields {
+                let ref_local = TirExpr::new(
+                    TirExprKind::Local {
+                        index: ref_local_idx,
+                        name: format!("__deref_ref_{ref_local_idx}"),
+                    },
+                    ref_type_id,
+                    span,
+                );
+                let val_local = TirExpr::new(
+                    TirExprKind::Local {
+                        index: val_local_idx,
+                        name: format!("__deref_val_{val_local_idx}"),
+                    },
+                    inner_type_id,
+                    span,
+                );
+
+                let assign_target = TirExpr::new(
+                    TirExprKind::FieldAccess {
+                        expr: Box::new(ref_local),
+                        field_index: field.index,
+                        field_name: field.name.clone(),
+                    },
+                    field.type_id,
+                    span,
+                );
+                let assign_value = TirExpr::new(
+                    TirExprKind::FieldAccess {
+                        expr: Box::new(val_local),
+                        field_index: field.index,
+                        field_name: field.name.clone(),
+                    },
+                    field.type_id,
+                    span,
+                );
+
+                new_stmts.push(TirStmt {
+                    kind: TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Assign {
+                            target: Box::new(assign_target),
+                            value: Box::new(assign_value),
+                        },
+                        field.type_id,
+                        span,
+                    )),
+                    span,
+                });
+            }
+        }
+
+        block.stmts = new_stmts;
+    }
+
+    /// Recurse into nested blocks within a statement for deref assign expansion.
+    fn expand_deref_assigns_in_stmt(
+        &self,
+        stmt: &mut TirStmt,
+        local_count: &mut u32,
+        local_types: &mut Vec<TypeId>,
+        type_table: &TypeTable,
+    ) {
+        match &mut stmt.kind {
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.expand_deref_assigns_in_block(
+                    then_block,
+                    local_count,
+                    local_types,
+                    type_table,
+                );
+                if let Some(else_block) = else_block {
+                    self.expand_deref_assigns_in_block(
+                        else_block,
+                        local_count,
+                        local_types,
+                        type_table,
+                    );
+                }
+            }
+            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+                self.expand_deref_assigns_in_block(body, local_count, local_types, type_table);
+            }
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.expand_deref_assigns_in_block(
+                    then_block,
+                    local_count,
+                    local_types,
+                    type_table,
+                );
+                if let Some(else_block) = else_block {
+                    self.expand_deref_assigns_in_block(
+                        else_block,
+                        local_count,
+                        local_types,
+                        type_table,
+                    );
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Transform expressions in a module (called after type table setup).
@@ -2579,6 +2839,18 @@ impl BoxLowerer {
         // Transform the function body
         if let Some(body) = &mut func.body {
             self.transform_block(body, &address_taken, &type_table);
+        }
+
+        // Expand non-box deref assignments (*ref = value) to field-by-field assignments.
+        // After transform_block, any remaining Assign { target: Deref(..) } are for
+        // non-primitive struct types. Expand them using the struct fields map.
+        if let Some(body) = &mut func.body {
+            self.expand_deref_assigns_in_block(
+                body,
+                &mut func.local_count,
+                &mut func.local_types,
+                &type_table,
+            );
         }
 
         // Clear address_taken_locals since boxing is now handled in TIR

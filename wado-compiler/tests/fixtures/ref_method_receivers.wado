@@ -1,0 +1,48 @@
+// All three method receiver types: &self, &mut self, self
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn get(&self) -> i32 {
+        return self.value;
+    }
+
+    fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+
+    fn into_value(self) -> i32 {
+        return self.value;
+    }
+
+    fn new(v: i32) -> Counter {
+        return Counter { value: v };
+    }
+}
+
+export fn run() with Stdout {
+    let mut c = Counter::new(0);
+
+    // &self: read
+    println(`get: {c.get()}`);
+
+    // &mut self: mutate
+    c.increment();
+    c.increment();
+    c.increment();
+    println(`after increment: {c.get()}`);
+
+    // self by value: consume (copy)
+    let v = c.into_value();
+    println(`into_value: {v}`);
+
+    // c is still usable because of value semantics (copy)
+    println(`still usable: {c.get()}`);
+}
+
+__DATA__
+{"stdout": "get: 0\nafter increment: 3\ninto_value: 3\nstill usable: 3\n"}

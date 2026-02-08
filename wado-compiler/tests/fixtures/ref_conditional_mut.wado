@@ -1,0 +1,28 @@
+// Conditional modification through mutable reference
+
+use { println, Stdout } from "core:cli";
+
+fn clamp(r: &mut i32, min: i32, max: i32) {
+    if *r < min {
+        *r = min;
+    } else if *r > max {
+        *r = max;
+    }
+}
+
+export fn run() with Stdout {
+    let mut a = 50;
+    clamp(&mut a, 0, 100);
+    println(`clamped 50: {a}`);
+
+    let mut b = -10;
+    clamp(&mut b, 0, 100);
+    println(`clamped -10: {b}`);
+
+    let mut c = 200;
+    clamp(&mut c, 0, 100);
+    println(`clamped 200: {c}`);
+}
+
+__DATA__
+{"stdout": "clamped 50: 50\nclamped -10: 0\nclamped 200: 100\n"}

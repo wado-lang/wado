@@ -1,0 +1,35 @@
+// Reference passed through a chain of function calls
+
+use { println, Stdout } from "core:cli";
+
+fn add_one(r: &mut i32) {
+    *r = *r + 1;
+}
+
+fn add_two(r: &mut i32) {
+    add_one(r);
+    add_one(r);
+}
+
+fn add_four(r: &mut i32) {
+    add_two(r);
+    add_two(r);
+}
+
+fn read_and_format(r: &i32) -> String {
+    return `value={*r}`;
+}
+
+fn print_via(r: &i32) with Stdout {
+    let s = read_and_format(r);
+    println(s);
+}
+
+export fn run() with Stdout {
+    let mut n = 0;
+    add_four(&mut n);
+    print_via(&n);
+}
+
+__DATA__
+{"stdout": "value=4\n"}

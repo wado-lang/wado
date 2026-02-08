@@ -1,0 +1,19 @@
+// Overwrite String value through dereference assignment
+// Requires: deref assignment (*ref = value) for object types
+
+use { println, Stdout } from "core:cli";
+
+fn replace(s: &mut String) {
+    *s = "goodbye";
+}
+
+export fn run() with Stdout {
+    let mut greeting = "hello";
+    println(greeting);
+
+    replace(&mut greeting);
+    println(greeting);
+}
+
+__DATA__
+{"stdout": "hello\ngoodbye\n"}
