@@ -36,7 +36,7 @@ pub enum WadoTypeDef {
     Flags(WadoFlags),
     Struct(WadoStruct),
     Variant(WadoVariant),
-    TypeAlias(WadoTypeAlias),
+    Newtype(WadoNewtype),
 }
 
 #[derive(Debug, Clone)]
@@ -98,7 +98,7 @@ pub struct WadoVariantCase {
 }
 
 #[derive(Debug, Clone)]
-pub struct WadoTypeAlias {
+pub struct WadoNewtype {
     pub name: String,
     pub wasi_attr: Option<String>,
     pub target: WadoType,

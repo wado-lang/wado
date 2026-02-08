@@ -8,7 +8,7 @@ use wit_parser::{
 
 use crate::ir::{
     WadoEffect, WadoEnum, WadoEnumVariant, WadoField, WadoFlagMember, WadoFlags, WadoFunction,
-    WadoModule, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeAlias, WadoTypeDef,
+    WadoModule, WadoNewtype, WadoParam, WadoResource, WadoStruct, WadoType, WadoTypeDef,
     WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldImport,
 };
 use crate::naming::{to_snake_case, to_upper_camel_case};
@@ -412,22 +412,22 @@ impl<'a> Transformer<'a> {
             }
             // Resources handled separately by transform_resource
             TypeDefKind::Type(inner) => {
-                // Type alias (e.g., `type instant = u64;` in WIT)
+                // Newtype (e.g., `type instant = u64;` in WIT)
                 let target = self.transform_type(*inner)?;
-                Ok(Some(WadoTypeDef::TypeAlias(WadoTypeAlias {
+                Ok(Some(WadoTypeDef::Newtype(WadoNewtype {
                     name,
                     wasi_attr: Some(wasi_attr),
                     target,
                 })))
             }
             TypeDefKind::Tuple(t) => {
-                // Tuple type alias (e.g., `type ipv4-address = tuple<u8, u8, u8, u8>;`)
+                // Tuple newtype (e.g., `type ipv4-address = tuple<u8, u8, u8, u8>;`)
                 let types = t
                     .types
                     .iter()
                     .map(|ty| self.transform_type(*ty))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Some(WadoTypeDef::TypeAlias(WadoTypeAlias {
+                Ok(Some(WadoTypeDef::Newtype(WadoNewtype {
                     name,
                     wasi_attr: Some(wasi_attr),
                     target: WadoType::Tuple(types),

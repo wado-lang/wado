@@ -902,7 +902,7 @@ impl Codegen<'_> {
             }
         }
 
-        // Register struct type aliases (e.g., `Point as OtherPoint`)
+        // Register struct newtypes (e.g., `Point as OtherPoint`)
         for (alias_name, alias_module_source, original_name) in symbols.get_struct_aliases() {
             let alias_struct_name =
                 StructName::new(entry_module_source.clone(), alias_name.clone());
@@ -913,7 +913,7 @@ impl Codegen<'_> {
             }
         }
 
-        // Register type aliases for re-exported types.
+        // Register newtypes for re-exported types.
         // This handles cases like core:prelude re-exporting types from sub-modules:
         // - Ordering variant from core:prelude/traits
         // - Option/Result variants from core:prelude/types
@@ -2818,7 +2818,7 @@ impl Codegen<'_> {
                         .map(|(name, val_type)| (name.as_str(), *val_type))
                         .collect();
 
-                    // Build result - resolve type aliases first (e.g., Mark -> u64)
+                    // Build result - resolve newtypes first (e.g., Mark -> u64)
                     let result_type = func.return_type.as_ref().map(|ty| {
                         let resolved_ty = self.project.wasi_registry.resolve_type(ty);
                         self.wado_type_to_cm_result_type(
@@ -3940,7 +3940,7 @@ impl Codegen<'_> {
         base_type_idx
     }
 
-    /// Register variant type aliases for re-exported types.
+    /// Register variant newtypes for re-exported types.
     ///
     /// When a sub-module defines a variant (e.g., `Ordering` in `core:prelude/traits`)
     /// and the parent module re-exports it (via `pub use`), the resolver assigns the
@@ -3977,7 +3977,7 @@ impl Codegen<'_> {
         }
     }
 
-    /// Register struct type aliases for re-exported types.
+    /// Register struct newtypes for re-exported types.
     ///
     /// Same as `register_variant_aliases_from_table` but for struct types.
     /// Handles cases like `core:prelude` re-exporting `i128` from `core:prelude/int128`.
@@ -11475,7 +11475,7 @@ impl Codegen<'_> {
             .params
             .iter()
             .map(|(_, ty)| {
-                // Resolve type aliases (e.g., Mark -> u64) before converting to ValType
+                // Resolve newtypes (e.g., Mark -> u64) before converting to ValType
                 let resolved_ty = self.project.wasi_registry.resolve_type(ty);
                 wasi_type_to_valtype(&resolved_ty)
             })
@@ -11486,7 +11486,7 @@ impl Codegen<'_> {
             params.push(ValType::I32); // outptr
         }
         // Sync functions with complex return types also need an outptr
-        // Resolve type aliases first to correctly detect complex types
+        // Resolve newtypes first to correctly detect complex types
         else if let Some(ret_ty) = &func.return_type {
             let resolved_ret_ty = self.project.wasi_registry.resolve_type(ret_ty);
             if return_type_requires_outptr(&resolved_ret_ty) {
@@ -11507,7 +11507,7 @@ impl Codegen<'_> {
             // Async functions return a subtask handle (i32)
             vec![ValType::I32]
         } else if let Some(ret_ty) = &func.return_type {
-            // Resolve type aliases (e.g., Mark -> u64) before checking/converting
+            // Resolve newtypes (e.g., Mark -> u64) before checking/converting
             let resolved_ty = self.project.wasi_registry.resolve_type(ret_ty);
             // Complex types are returned via outptr, so no direct return value
             if return_type_requires_outptr(&resolved_ty) {
@@ -11560,7 +11560,7 @@ impl Codegen<'_> {
             // Async exports have no return in core (use task_return)
             vec![]
         } else if let Some(ret_ty) = &export.return_type {
-            // Resolve type aliases (e.g., newtypes) before converting to ValType
+            // Resolve newtypes (e.g., newtypes) before converting to ValType
             let resolved_ty = self.project.wasi_registry.resolve_type(ret_ty);
             vec![wasi_type_to_valtype(&resolved_ty)]
         } else {

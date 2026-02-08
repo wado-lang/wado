@@ -8,10 +8,10 @@ use crate::ast::{
     EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
     Function, FunctionType, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
     Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr,
-    Module, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
-    StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl,
-    TupleLiteralExpr, Type, TypeAlias, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, WhileStmt, WorldDecl,
+    Module, Newtype, Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    Stmt, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl, TraitDecl,
+    TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, WhileStmt, WorldDecl,
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
@@ -94,7 +94,7 @@ impl<'a> Unparser<'a> {
             Item::Enum(e) => self.unparse_enum(e),
             Item::Variant(v) => self.unparse_variant(v),
             Item::Flags(f) => self.unparse_flags(f),
-            Item::Type(t) => self.unparse_type_alias(t),
+            Item::Type(t) => self.unparse_newtype(t),
             Item::Impl(i) => self.unparse_impl(i),
             Item::Trait(t) => self.unparse_trait(t),
             Item::Effect(e) => self.unparse_effect(e),
@@ -454,7 +454,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("}\n");
     }
 
-    fn unparse_type_alias(&mut self, t: &TypeAlias) {
+    fn unparse_newtype(&mut self, t: &Newtype) {
         self.write_indent();
 
         if t.is_pub {

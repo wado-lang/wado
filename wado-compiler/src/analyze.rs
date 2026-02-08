@@ -8,8 +8,8 @@
 use crate::ast::{Item, Module, UseItem};
 use crate::name::{ModuleSource, resolve_import, validate_module_path};
 use crate::symbol::{
-    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, ResourceSymbol,
-    StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, TypeAliasSymbol, VariantSymbol,
+    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
+    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
     WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
 use crate::token::Span;
@@ -231,17 +231,13 @@ impl Analyzer {
                     );
                 }
 
-                Item::Type(type_alias) => {
-                    let kind = SymbolKind::TypeAlias(TypeAliasSymbol {
+                Item::Type(newtype) => {
+                    let kind = SymbolKind::Newtype(NewtypeSymbol {
                         aliased_type: "unknown".to_string(), // TODO: store actual type
                     });
 
-                    self.symbols.define(
-                        &type_alias.name,
-                        kind,
-                        module_source,
-                        Some(type_alias.span),
-                    );
+                    self.symbols
+                        .define(&newtype.name, kind, module_source, Some(newtype.span));
                 }
 
                 Item::Resource(resource) => {

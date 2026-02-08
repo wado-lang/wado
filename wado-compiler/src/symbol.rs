@@ -62,8 +62,8 @@ pub enum SymbolKind {
     Variant(VariantSymbol),
     /// A trait definition
     Trait(TraitSymbol),
-    /// A type alias
-    TypeAlias(TypeAliasSymbol),
+    /// A newtype
+    Newtype(NewtypeSymbol),
     /// A local variable
     Variable(VariableSymbol),
     /// A resource definition
@@ -135,9 +135,9 @@ pub struct TraitSymbol {
     pub type_params: Vec<String>,
 }
 
-/// Type alias symbol data
+/// Newtype symbol data
 #[derive(Debug, Clone)]
-pub struct TypeAliasSymbol {
+pub struct NewtypeSymbol {
     /// The aliased type name
     pub aliased_type: String,
 }

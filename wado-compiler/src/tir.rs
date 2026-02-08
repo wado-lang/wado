@@ -1761,7 +1761,7 @@ pub struct TirVariantCase {
 }
 
 #[derive(Debug, Clone)]
-pub struct TirTypeAlias {
+pub struct TirNewtype {
     pub name: String,
     pub is_pub: bool,
     pub type_id: TypeId,
@@ -1915,7 +1915,7 @@ pub struct TirModule {
     pub enums: Vec<TirEnum>,
     /// Custom variant declarations (tagged unions with payloads)
     pub variants: Vec<TirVariantDecl>,
-    pub type_aliases: Vec<TirTypeAlias>,
+    pub newtypes: Vec<TirNewtype>,
     pub effects: Vec<TirEffect>,
     pub traits: Vec<TirTrait>,
     pub impls: Vec<TirImpl>,
@@ -1952,7 +1952,7 @@ impl TirModule {
             structs: Vec::new(),
             enums: Vec::new(),
             variants: Vec::new(),
-            type_aliases: Vec::new(),
+            newtypes: Vec::new(),
             effects: Vec::new(),
             traits: Vec::new(),
             impls: Vec::new(),
@@ -1981,7 +1981,7 @@ impl TirModule {
             structs: Vec::new(),
             enums: Vec::new(),
             variants: Vec::new(),
-            type_aliases: Vec::new(),
+            newtypes: Vec::new(),
             effects: Vec::new(),
             traits: Vec::new(),
             impls: Vec::new(),
@@ -2021,8 +2021,8 @@ impl TirModule {
         self.enums.push(e);
     }
 
-    pub fn add_type_alias(&mut self, alias: TirTypeAlias) {
-        self.type_aliases.push(alias);
+    pub fn add_newtype(&mut self, newtype: TirNewtype) {
+        self.newtypes.push(newtype);
     }
 
     pub fn add_effect(&mut self, effect: TirEffect) {

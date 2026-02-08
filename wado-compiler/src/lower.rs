@@ -2738,9 +2738,9 @@ impl BoxLowerer {
 
     /// Scan the type table to find which primitives need Box types.
     fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
-        // Collect base primitive TypeIds that need boxing, plus newtype aliases.
+        // Collect base primitive TypeIds that need boxing, plus newtypes.
         let mut needs_box_base: HashSet<TypeId> = HashSet::new();
-        let mut newtype_aliases: Vec<(TypeId, TypeId)> = Vec::new(); // (alias, base)
+        let mut newtype_pairs: Vec<(TypeId, TypeId)> = Vec::new(); // (alias, base)
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
             match type_table.get(type_id).clone() {
@@ -2751,7 +2751,7 @@ impl BoxLowerer {
                     {
                         needs_box_base.insert(base);
                         if inner != base {
-                            newtype_aliases.push((inner, base));
+                            newtype_pairs.push((inner, base));
                         }
                     }
                 }
@@ -2762,7 +2762,7 @@ impl BoxLowerer {
                     {
                         needs_box_base.insert(base);
                         if inner != base {
-                            newtype_aliases.push((inner, base));
+                            newtype_pairs.push((inner, base));
                         }
                     }
                 }
@@ -2775,9 +2775,9 @@ impl BoxLowerer {
             self.get_or_create_box_type(base_type_id, type_table);
         }
 
-        // Map newtype aliases to their base primitive's Box type
+        // Map newtypes to their base primitive's Box type
         // e.g., Radians (newtype of f64) → Box<f64>
-        for (alias_id, base_id) in newtype_aliases {
+        for (alias_id, base_id) in newtype_pairs {
             if let Some(&box_type_id) = self.box_struct_types.get(&base_id) {
                 self.box_struct_types.insert(alias_id, box_type_id);
             }

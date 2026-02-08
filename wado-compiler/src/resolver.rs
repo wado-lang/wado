@@ -449,8 +449,8 @@ pub struct Resolver<'a> {
     /// Loaded modules from analyzer
     #[allow(dead_code)]
     loaded_modules: &'a HashMap<ModuleSource, Module>,
-    /// Type aliases (name -> resolved type) - flat map for current module
-    type_aliases: HashMap<String, TypeId>,
+    /// Newtypes (name -> resolved type) - flat map for current module
+    newtypes: HashMap<String, TypeId>,
     /// Struct field info (struct name -> (`module_source`, fields)) - flat map for current module
     struct_fields: HashMap<String, StructFieldInfo>,
     /// Variant case info (variant name -> (`module_source`, `type_params`, cases)) - flat map for current module
@@ -460,7 +460,7 @@ pub struct Resolver<'a> {
     /// Resource info (resource name -> module source and methods) - flat map for current module
     resource_types: HashMap<String, ResourceInfo>,
     /// Per-module nested maps for cross-module type resolution
-    all_type_aliases: HashMap<ModuleSource, HashMap<String, TypeId>>,
+    all_newtypes: HashMap<ModuleSource, HashMap<String, TypeId>>,
     all_struct_fields: HashMap<ModuleSource, HashMap<String, StructFieldInfo>>,
     all_variant_cases: HashMap<ModuleSource, HashMap<String, VariantInfo>>,
     all_enum_cases: HashMap<ModuleSource, HashMap<String, EnumInfo>>,
@@ -515,7 +515,7 @@ struct ModuleTypeMaps {
     struct_fields: HashMap<String, StructFieldInfo>,
     variant_cases: HashMap<String, VariantInfo>,
     enum_cases: HashMap<String, EnumInfo>,
-    type_aliases: HashMap<String, TypeId>,
+    newtypes: HashMap<String, TypeId>,
     resource_types: HashMap<String, ResourceInfo>,
 }
 
@@ -590,12 +590,12 @@ impl<'a> Resolver<'a> {
             type_table,
             symbols,
             loaded_modules,
-            type_aliases: HashMap::new(),
+            newtypes: HashMap::new(),
             struct_fields: HashMap::new(),
             variant_cases: HashMap::new(),
             enum_cases: HashMap::new(),
             resource_types: HashMap::new(),
-            all_type_aliases: HashMap::new(),
+            all_newtypes: HashMap::new(),
             all_struct_fields: HashMap::new(),
             all_variant_cases: HashMap::new(),
             all_enum_cases: HashMap::new(),
@@ -877,7 +877,7 @@ impl<'a> Resolver<'a> {
 
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let mut all_type_aliases: HashMap<ModuleSource, HashMap<String, TypeId>> = HashMap::new();
+        let mut all_newtypes: HashMap<ModuleSource, HashMap<String, TypeId>> = HashMap::new();
         let mut all_struct_fields: HashMap<ModuleSource, HashMap<String, StructFieldInfo>> =
             HashMap::new();
         let mut all_variant_cases: HashMap<ModuleSource, HashMap<String, VariantInfo>> =
@@ -963,15 +963,15 @@ impl<'a> Resolver<'a> {
             }
         }
 
-        // Second sub-pass: resolve struct fields and type aliases
+        // Second sub-pass: resolve struct fields and newtypes
         for (module_source, module) in modules {
             // Build imported type sources for this module
             let (imported_type_sources, import_original_names) =
                 Self::build_imported_type_sources(module, module_source);
 
             // Build module-specific flat maps for resolving types in this module
-            let mut flat_type_aliases = Self::build_module_map(
-                &all_type_aliases,
+            let mut flat_newtypes = Self::build_module_map(
+                &all_newtypes,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
@@ -1000,14 +1000,14 @@ impl<'a> Resolver<'a> {
                                 Self::resolve_type_static(
                                     &field.ty,
                                     &mut type_table.borrow_mut(),
-                                    &flat_type_aliases,
+                                    &flat_newtypes,
                                     &flat_struct_fields,
                                 )
                             } else {
                                 Self::resolve_type_static_with_params(
                                     &field.ty,
                                     &mut type_table.borrow_mut(),
-                                    &flat_type_aliases,
+                                    &flat_newtypes,
                                     &flat_struct_fields,
                                     &type_params,
                                 )
@@ -1033,26 +1033,26 @@ impl<'a> Resolver<'a> {
                         // Also update flat map for subsequent items in this module
                         flat_struct_fields.insert(struct_decl.name.clone(), info);
                     }
-                    Item::Type(type_alias) => {
+                    Item::Type(newtype_decl) => {
                         // Resolve the base type
                         let base_type_id = Self::resolve_type_static(
-                            &type_alias.ty,
+                            &newtype_decl.ty,
                             &mut type_table.borrow_mut(),
-                            &flat_type_aliases,
+                            &flat_newtypes,
                             &flat_struct_fields,
                         );
                         // Create a newtype wrapping the base type
                         let newtype_id = type_table.borrow_mut().make_newtype(
-                            type_alias.name.clone(),
+                            newtype_decl.name.clone(),
                             module_source.clone(),
                             base_type_id,
                         );
-                        all_type_aliases
+                        all_newtypes
                             .entry(module_source.clone())
                             .or_default()
-                            .insert(type_alias.name.clone(), newtype_id);
+                            .insert(newtype_decl.name.clone(), newtype_id);
                         // Also update flat map for subsequent items in this module
-                        flat_type_aliases.insert(type_alias.name.clone(), newtype_id);
+                        flat_newtypes.insert(newtype_decl.name.clone(), newtype_id);
                     }
                     Item::Variant(variant_decl) => {
                         // Resolve variant case field types
@@ -1071,7 +1071,7 @@ impl<'a> Resolver<'a> {
                                 Self::resolve_type_static_with_params(
                                     payload_ty,
                                     &mut type_table.borrow_mut(),
-                                    &flat_type_aliases,
+                                    &flat_newtypes,
                                     &flat_struct_fields,
                                     &type_params,
                                 )
@@ -1138,8 +1138,8 @@ impl<'a> Resolver<'a> {
             // Build imported type sources and module-specific flat maps for this module
             let (imported_type_sources, import_original_names) =
                 Self::build_imported_type_sources(module, module_source);
-            let type_aliases = Self::build_module_map(
-                &all_type_aliases,
+            let newtypes = Self::build_module_map(
+                &all_newtypes,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
@@ -1178,7 +1178,7 @@ impl<'a> Resolver<'a> {
                         Self::resolve_type_static(
                             ret_ty,
                             &mut type_table.borrow_mut(),
-                            &type_aliases,
+                            &newtypes,
                             &struct_fields,
                         )
                     } else {
@@ -1219,12 +1219,12 @@ impl<'a> Resolver<'a> {
                 type_table: Rc::clone(&type_table),
                 symbols,
                 loaded_modules: modules,
-                type_aliases,
+                newtypes,
                 struct_fields,
                 variant_cases,
                 enum_cases,
                 resource_types,
-                all_type_aliases: all_type_aliases.clone(),
+                all_newtypes: all_newtypes.clone(),
                 all_struct_fields: all_struct_fields.clone(),
                 all_variant_cases: all_variant_cases.clone(),
                 all_enum_cases: all_enum_cases.clone(),
@@ -1368,8 +1368,8 @@ impl<'a> Resolver<'a> {
                 &imported_sources,
                 &import_names,
             ),
-            type_aliases: Self::build_module_map(
-                &self.all_type_aliases,
+            newtypes: Self::build_module_map(
+                &self.all_newtypes,
                 module_source,
                 &imported_sources,
                 &import_names,
@@ -1480,13 +1480,13 @@ impl<'a> Resolver<'a> {
     fn resolve_type_static(
         ty: &Type,
         type_table: &mut TypeTable,
-        type_aliases: &HashMap<String, TypeId>,
+        newtypes: &HashMap<String, TypeId>,
         struct_fields: &HashMap<String, StructFieldInfo>,
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
-                // Check type aliases first
-                if let Some(&alias_type_id) = type_aliases.get(&named.name) {
+                // Check newtypes first
+                if let Some(&alias_type_id) = newtypes.get(&named.name) {
                     return alias_type_id;
                 }
 
@@ -1521,7 +1521,7 @@ impl<'a> Resolver<'a> {
                     let inner = Self::resolve_type_static(
                         &generic.args[0],
                         type_table,
-                        type_aliases,
+                        newtypes,
                         struct_fields,
                     );
                     type_table.intern(ResolvedType::Option(inner))
@@ -1534,12 +1534,7 @@ impl<'a> Resolver<'a> {
                             .args
                             .iter()
                             .map(|arg| {
-                                Self::resolve_type_static(
-                                    arg,
-                                    type_table,
-                                    type_aliases,
-                                    struct_fields,
-                                )
+                                Self::resolve_type_static(arg, type_table, newtypes, struct_fields)
                             })
                             .collect();
                         type_table.make_generic_instance(
@@ -1554,12 +1549,12 @@ impl<'a> Resolver<'a> {
             },
             Type::Reference(inner) => {
                 let inner_type =
-                    Self::resolve_type_static(inner, type_table, type_aliases, struct_fields);
+                    Self::resolve_type_static(inner, type_table, newtypes, struct_fields);
                 type_table.make_ref(inner_type)
             }
             Type::MutReference(inner) => {
                 let inner_type =
-                    Self::resolve_type_static(inner, type_table, type_aliases, struct_fields);
+                    Self::resolve_type_static(inner, type_table, newtypes, struct_fields);
                 type_table.make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => {
@@ -1569,7 +1564,7 @@ impl<'a> Resolver<'a> {
                     && let Some(elem_ty) = namespaced.args.first()
                 {
                     let elem =
-                        Self::resolve_type_static(elem_ty, type_table, type_aliases, struct_fields);
+                        Self::resolve_type_static(elem_ty, type_table, newtypes, struct_fields);
                     return type_table.make_builtin_array(elem);
                 }
                 TypeTable::UNKNOWN
@@ -1584,14 +1579,14 @@ impl<'a> Resolver<'a> {
     fn resolve_type_static_with_params(
         ty: &Type,
         type_table: &mut TypeTable,
-        type_aliases: &HashMap<String, TypeId>,
+        newtypes: &HashMap<String, TypeId>,
         struct_fields: &HashMap<String, StructFieldInfo>,
         type_params: &[String],
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
-                // Check type aliases first
-                if let Some(&alias_type_id) = type_aliases.get(&named.name) {
+                // Check newtypes first
+                if let Some(&alias_type_id) = newtypes.get(&named.name) {
                     return alias_type_id;
                 }
 
@@ -1631,7 +1626,7 @@ impl<'a> Resolver<'a> {
                     let inner = Self::resolve_type_static_with_params(
                         &generic.args[0],
                         type_table,
-                        type_aliases,
+                        newtypes,
                         struct_fields,
                         type_params,
                     );
@@ -1648,7 +1643,7 @@ impl<'a> Resolver<'a> {
                                 Self::resolve_type_static_with_params(
                                     arg,
                                     type_table,
-                                    type_aliases,
+                                    newtypes,
                                     struct_fields,
                                     type_params,
                                 )
@@ -1668,7 +1663,7 @@ impl<'a> Resolver<'a> {
                 let inner_type = Self::resolve_type_static_with_params(
                     inner,
                     type_table,
-                    type_aliases,
+                    newtypes,
                     struct_fields,
                     type_params,
                 );
@@ -1678,7 +1673,7 @@ impl<'a> Resolver<'a> {
                 let inner_type = Self::resolve_type_static_with_params(
                     inner,
                     type_table,
-                    type_aliases,
+                    newtypes,
                     struct_fields,
                     type_params,
                 );
@@ -1693,7 +1688,7 @@ impl<'a> Resolver<'a> {
                     let elem = Self::resolve_type_static_with_params(
                         elem_ty,
                         type_table,
-                        type_aliases,
+                        newtypes,
                         struct_fields,
                         type_params,
                     );
@@ -1710,19 +1705,18 @@ impl<'a> Resolver<'a> {
         // First, collect types from loaded modules (so aliases like Instant = u64 are available)
         for (module_source, loaded_module) in self.loaded_modules {
             for item in &loaded_module.items {
-                if let Item::Type(type_alias) = item {
+                if let Item::Type(newtype_decl) = item {
                     // Only add if not already present (main module takes priority)
-                    if !self.type_aliases.contains_key(&type_alias.name) {
+                    if !self.newtypes.contains_key(&newtype_decl.name) {
                         // Resolve the base type
-                        let base_type_id = self.resolve_type(&type_alias.ty);
+                        let base_type_id = self.resolve_type(&newtype_decl.ty);
                         // Create a newtype wrapping the base type
                         let newtype_id = self.type_table.borrow_mut().make_newtype(
-                            type_alias.name.clone(),
+                            newtype_decl.name.clone(),
                             module_source.clone(),
                             base_type_id,
                         );
-                        self.type_aliases
-                            .insert(type_alias.name.clone(), newtype_id);
+                        self.newtypes.insert(newtype_decl.name.clone(), newtype_id);
                     }
                 }
             }
@@ -1786,17 +1780,16 @@ impl<'a> Resolver<'a> {
                     // Restore type params scope
                     self.current_type_params = old_type_params;
                 }
-                Item::Type(type_alias) => {
+                Item::Type(newtype_decl) => {
                     // Resolve the base type
-                    let base_type_id = self.resolve_type(&type_alias.ty);
+                    let base_type_id = self.resolve_type(&newtype_decl.ty);
                     // Create a newtype wrapping the base type
                     let newtype_id = self.type_table.borrow_mut().make_newtype(
-                        type_alias.name.clone(),
+                        newtype_decl.name.clone(),
                         self.current_module_source.clone(),
                         base_type_id,
                     );
-                    self.type_aliases
-                        .insert(type_alias.name.clone(), newtype_id);
+                    self.newtypes.insert(newtype_decl.name.clone(), newtype_id);
                 }
                 Item::Variant(variant_decl) => {
                     // Set up type parameters in scope for resolving field types
@@ -4905,8 +4898,8 @@ impl<'a> Resolver<'a> {
                     || (HashMap::new(), HashMap::new()),
                     |m| Self::build_imported_type_sources(m, callee_module),
                 );
-                let callee_type_aliases = Self::build_module_map(
-                    &self.all_type_aliases,
+                let callee_newtypes = Self::build_module_map(
+                    &self.all_newtypes,
                     callee_module,
                     &callee_imported,
                     &callee_original_names,
@@ -4937,8 +4930,7 @@ impl<'a> Resolver<'a> {
                 );
 
                 // Temporarily swap in callee's flat maps
-                let old_type_aliases =
-                    std::mem::replace(&mut self.type_aliases, callee_type_aliases);
+                let old_newtypes = std::mem::replace(&mut self.newtypes, callee_newtypes);
                 let old_struct_fields =
                     std::mem::replace(&mut self.struct_fields, callee_struct_fields);
                 let old_variant_cases =
@@ -4950,7 +4942,7 @@ impl<'a> Resolver<'a> {
                 let resolved = self.resolve_type(&return_type_ast);
 
                 // Restore caller's flat maps and type params
-                self.type_aliases = old_type_aliases;
+                self.newtypes = old_newtypes;
                 self.struct_fields = old_struct_fields;
                 self.variant_cases = old_variant_cases;
                 self.enum_cases = old_enum_cases;
@@ -4998,14 +4990,14 @@ impl<'a> Resolver<'a> {
                 "bool" => TypeTable::BOOL,
                 // Type aliases from WASI (e.g., Mark, Instant, Duration)
                 _ => {
-                    // First check if it's a registered newtype in type_aliases
-                    if let Some(&newtype_id) = self.type_aliases.get(&named.name) {
+                    // First check if it's a registered newtype in newtypes
+                    if let Some(&newtype_id) = self.newtypes.get(&named.name) {
                         return newtype_id;
                     }
-                    // Otherwise, try to resolve via WASI registry's type aliases
-                    let aliased = self.wasi_registry.get_type_alias(&named.name).cloned();
+                    // Otherwise, try to resolve via WASI registry's newtypes
+                    let aliased = self.wasi_registry.get_newtype(&named.name).cloned();
                     if let Some(aliased) = aliased {
-                        // Create a newtype for this WASI type alias
+                        // Create a newtype for this WASI newtype
                         let base_type = self.resolve_wasi_type(&aliased);
                         let newtype_id = self.type_table.borrow_mut().make_newtype(
                             named.name.clone(),
@@ -5013,7 +5005,7 @@ impl<'a> Resolver<'a> {
                             base_type,
                         );
                         // Cache the newtype for future lookups
-                        self.type_aliases.insert(named.name.clone(), newtype_id);
+                        self.newtypes.insert(named.name.clone(), newtype_id);
                         newtype_id
                     } else {
                         // Resource types are represented as i32 handles
@@ -5524,7 +5516,7 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a type without registering new types
     /// This is used for lookups where we need immutable access. It only handles
-    /// primitive types and type aliases. For generic types, use `resolve_type` instead.
+    /// primitive types and newtypes. For generic types, use `resolve_type` instead.
     /// Resolve a method call
     fn resolve_method_call(
         &mut self,
@@ -6546,7 +6538,7 @@ impl<'a> Resolver<'a> {
         }
 
         // For newtypes, check if the base type has the static method
-        if let Some(&newtype_id) = self.type_aliases.get(struct_name)
+        if let Some(&newtype_id) = self.newtypes.get(struct_name)
             && let ResolvedType::Newtype { base_type, .. } =
                 self.type_table.borrow().get(newtype_id).clone()
         {
@@ -6572,7 +6564,7 @@ impl<'a> Resolver<'a> {
     ) -> TirExpr {
         // For newtypes, resolve to the base type's static method
         let (actual_struct_name, actual_mangled_name) =
-            if let Some(&newtype_id) = self.type_aliases.get(struct_name) {
+            if let Some(&newtype_id) = self.newtypes.get(struct_name) {
                 if let ResolvedType::Newtype { base_type, .. } =
                     self.type_table.borrow().get(newtype_id).clone()
                 {
@@ -6821,10 +6813,7 @@ impl<'a> Resolver<'a> {
                                         &mut cached.variant_cases,
                                     );
                                     std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-                                    std::mem::swap(
-                                        &mut self.type_aliases,
-                                        &mut cached.type_aliases,
-                                    );
+                                    std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
                                     std::mem::swap(
                                         &mut self.resource_types,
                                         &mut cached.resource_types,
@@ -6851,10 +6840,7 @@ impl<'a> Resolver<'a> {
                                         &mut cached.variant_cases,
                                     );
                                     std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-                                    std::mem::swap(
-                                        &mut self.type_aliases,
-                                        &mut cached.type_aliases,
-                                    );
+                                    std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
                                     std::mem::swap(
                                         &mut self.resource_types,
                                         &mut cached.resource_types,
@@ -7565,7 +7551,7 @@ impl<'a> Resolver<'a> {
         let names_to_check: Vec<String> = {
             let mut names = vec![struct_name.to_string()];
             // If struct_name is a newtype, also check base type names
-            if let Some(&newtype_id) = self.type_aliases.get(struct_name) {
+            if let Some(&newtype_id) = self.newtypes.get(struct_name) {
                 let mut current = newtype_id;
                 while let ResolvedType::Newtype { base_type, .. } =
                     self.type_table.borrow().get(current).clone()
@@ -8874,7 +8860,7 @@ impl<'a> Resolver<'a> {
         std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
         std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
         std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-        std::mem::swap(&mut self.type_aliases, &mut cached.type_aliases);
+        std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
         std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
 
         // Find and resolve the field type
@@ -8889,7 +8875,7 @@ impl<'a> Resolver<'a> {
         std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
         std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
         std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
-        std::mem::swap(&mut self.type_aliases, &mut cached.type_aliases);
+        std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
         std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
         self.module_type_maps_cache
             .insert(module_source.clone(), cached);
@@ -10306,9 +10292,9 @@ impl<'a> Resolver<'a> {
             "()" => TypeTable::UNIT,
             "!" => TypeTable::NEVER,
 
-            // Check type aliases, struct definitions, and variants
+            // Check newtypes, struct definitions, and variants
             _ => {
-                if let Some(&type_id) = self.type_aliases.get(name) {
+                if let Some(&type_id) = self.newtypes.get(name) {
                     type_id
                 } else if let Some(struct_info) = self.struct_fields.get(name) {
                     // It's a struct - use the module source where it was defined

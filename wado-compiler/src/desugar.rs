@@ -10,10 +10,10 @@ use crate::ast::{
     ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
     ContinueStmt, EffectDecl, EnumDecl, Expr, ExprStmt, FieldAccessExpr, ForOfStmt, ForStmt,
     Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt,
-    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Pattern,
-    ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr, StructLiteralField,
-    TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TypeAlias, UnaryExpr,
-    UnaryOp, WhileStmt,
+    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype,
+    Pattern, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr,
+    StructLiteralField, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr,
+    UnaryExpr, UnaryOp, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -58,7 +58,7 @@ fn desugar_item(item: &Item, ctx: &mut DesugarContext) -> Item {
         Item::Enum(e) => Item::Enum(desugar_enum(e)),
         Item::Variant(v) => Item::Variant(v.clone()),
         Item::Flags(f) => Item::Flags(f.clone()),
-        Item::Type(t) => Item::Type(desugar_type_alias(t)),
+        Item::Type(t) => Item::Type(desugar_newtype(t)),
         Item::Effect(e) => Item::Effect(desugar_effect(e)),
         Item::Use(u) => Item::Use(u.clone()),
         Item::Resource(r) => Item::Resource(r.clone()),
@@ -141,7 +141,7 @@ fn desugar_enum(e: &EnumDecl) -> EnumDecl {
     e.clone()
 }
 
-fn desugar_type_alias(t: &TypeAlias) -> TypeAlias {
+fn desugar_newtype(t: &Newtype) -> Newtype {
     t.clone()
 }
 
