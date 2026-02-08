@@ -179,15 +179,24 @@ jobs:
 
       - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_os
 
+  check-wasm32:
+    name: Check (wasm32)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
+
   test:
     name: Test
     if: always()
-    needs: [test-core, test-e2e-o0, test-e2e-o3, test-e2e-os]
+    needs: [test-core, test-e2e-o0, test-e2e-o3, test-e2e-os, check-wasm32]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs passed
         run: |
-          results="${{ needs.test-core.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }}"
+          results="${{ needs.test-core.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }}"
           for result in $results; do
             if [ "$result" != "success" ]; then
               echo "One or more jobs failed"

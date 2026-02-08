@@ -21,6 +21,7 @@ on-task-started:
 .PHONY: build
 build: wado-compiler/lib/builtins/wado-bundled.wat
 	cargo build
+	cargo check -p wado-compiler --target wasm32-unknown-unknown
 
 .PHONY: hello
 hello:

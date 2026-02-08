@@ -384,22 +384,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     })?;
 
     // === Phase 12: Codegen ===
-    let wasm = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Codegen::generate_wasm(&project)
-    }))
-    .map_err(|e| {
-        let message = if let Some(s) = e.downcast_ref::<&str>() {
-            s.to_string()
-        } else if let Some(s) = e.downcast_ref::<String>() {
-            s.clone()
-        } else {
-            "unknown codegen error".to_string()
-        };
-        CompileError::Codegen {
-            message,
-            filename: filename.clone(),
-        }
-    })?;
+    let wasm = Codegen::generate_wasm(&project);
 
     // Return the original (non-desugared) AST for tooling
     Ok(CompileResult { wasm, module: ast })
@@ -643,11 +628,6 @@ pub enum CompileError {
         message: String,
         filename: Option<String>,
     },
-    /// Code generation error
-    Codegen {
-        message: String,
-        filename: Option<String>,
-    },
 }
 
 impl std::fmt::Display for CompileError {
@@ -692,13 +672,6 @@ impl std::fmt::Display for CompileError {
                     write!(f, "{file}: analysis error: {message}")
                 } else {
                     write!(f, "analysis error: {message}")
-                }
-            }
-            CompileError::Codegen { message, filename } => {
-                if let Some(file) = filename {
-                    write!(f, "{file}: codegen error: {message}")
-                } else {
-                    write!(f, "codegen error: {message}")
                 }
             }
         }
