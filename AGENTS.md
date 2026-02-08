@@ -22,6 +22,10 @@ Builtin functions that are directly mapped to wasm instructions or external func
 
 Internal functions that are used to provide language features are implemented in `wado-compiler/lib/core/internal.wado`.
 
+### wasm32 Compatibility
+
+`wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules (`std::fs`, `std::net`, `std::process`, `std::thread`, etc.) in production code. CI enforces this via `cargo check -p wado-compiler --target wasm32-unknown-unknown`.
+
 ### E2E Test Specification
 
 E2E tests are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__` section containing JSON test expectations.
