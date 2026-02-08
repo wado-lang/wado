@@ -5659,14 +5659,14 @@ impl ClosureLowerer {
         let callee = callee_rc.borrow();
 
         // Build specialized name: callee$__Closure_0$__Closure_1...
-        let functor_suffix: String = key.functor_types.iter().fold(
-            String::new(),
-            |mut acc, (_, tid)| {
-                let name = type_table.type_name(*tid);
-                let _ = write!(acc, "${name}");
-                acc
-            },
-        );
+        let functor_suffix: String =
+            key.functor_types
+                .iter()
+                .fold(String::new(), |mut acc, (_, tid)| {
+                    let name = type_table.type_name(*tid);
+                    let _ = write!(acc, "${name}");
+                    acc
+                });
         let specialized_name = format!("{}{}", callee.name, functor_suffix);
 
         // Build map from argument index to functor type
