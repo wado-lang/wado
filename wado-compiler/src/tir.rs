@@ -368,7 +368,7 @@ impl TypeTable {
     pub const CHAR: TypeId = TypeId(13);
     pub const UNIT: TypeId = TypeId(14);
     pub const NEVER: TypeId = TypeId(15);
-    // STRING removed - String is now a user-defined struct in core:string
+    // STRING removed - String is now a user-defined struct in core:prelude/string.wado
     pub const UNKNOWN: TypeId = TypeId(16);
     pub const ERROR: TypeId = TypeId(17);
 
@@ -609,7 +609,7 @@ impl TypeTable {
     pub fn make_array(&mut self, element: TypeId) -> TypeId {
         self.make_generic_instance(
             "Array".to_string(),
-            ModuleSource::core("prelude"),
+            ModuleSource::core("prelude/array.wado"),
             vec![element],
         )
     }

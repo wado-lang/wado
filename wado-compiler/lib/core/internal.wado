@@ -112,6 +112,19 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
     return String::internal_from_utf8_raw(arr, str_len);
 }
 
+// ============================================================================
+// Core functions (re-exported by prelude)
+// ============================================================================
+
+pub fn panic(message: String) -> ! {
+    log_stderr(message);
+    builtin::unreachable();
+}
+
+pub fn unreachable() -> ! {
+    builtin::unreachable();
+}
+
 /// Convert a Component Model list<tuple<string, string>> to a GC Array<[String, String]>
 /// The outptr points to the CM list representation in linear memory:
 ///   outptr[0..4]: base_ptr - pointer to array of tuples

@@ -261,16 +261,21 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 
 **Core Library (`core/`):**
 
-| Module                | File                  | Description                                        |
-| --------------------- | --------------------- | -------------------------------------------------- |
-| `core:prelude`        | `prelude.wado`        | Auto-imported types and functions                  |
-| `core:cli`            | `cli.wado`            | CLI output (println, eprintln, etc.)               |
-| `core:clocks`         | `clocks.wado`         | MonotonicClock, now()                              |
-| `core:stream`         | `stream.wado`         | Stream utilities                                   |
-| `core:collections`    | `collections.wado`    | TreeMap and other collections                      |
-| `core:prelude/int128` | `prelude/int128.wado` | u128/i128 types (re-exported from prelude)         |
-| `core:internal`       | `internal.wado`       | Compiler-generated code support                    |
-| `core:builtin`        | `builtin.wado`        | Compiler intrinsics with `#[canonical(...)]` attrs |
+| Module                         | File                      | Description                                        |
+| ------------------------------ | ------------------------- | -------------------------------------------------- |
+| `core:prelude`                 | `prelude.wado`            | Auto-imported re-exports from prelude sub-modules  |
+| `core:prelude/traits.wado`     | `prelude/traits.wado`     | Trait definitions (Eq, Ord, Iterator, etc.)        |
+| `core:prelude/types.wado`      | `prelude/types.wado`      | Core types (Option, Result, Stream, Future)        |
+| `core:prelude/string.wado`     | `prelude/string.wado`     | String type and string iterators                   |
+| `core:prelude/array.wado`      | `prelude/array.wado`      | Array type and array iterators                     |
+| `core:prelude/int128.wado`     | `prelude/int128.wado`     | u128/i128 types (re-exported from prelude)         |
+| `core:prelude/primitives.wado` | `prelude/primitives.wado` | Primitive type trait implementations               |
+| `core:cli`                     | `cli.wado`                | CLI output (println, eprintln, etc.)               |
+| `core:clocks`                  | `clocks.wado`             | MonotonicClock, now()                              |
+| `core:stream`                  | `stream.wado`             | Stream utilities                                   |
+| `core:collections`             | `collections.wado`        | TreeMap and other collections                      |
+| `core:internal`                | `internal.wado`           | Compiler-generated code support, panic/unreachable |
+| `core:builtin`                 | `builtin.wado`            | Compiler intrinsics with `#[canonical(...)]` attrs |
 
 **WASI Library (`wasi/`):**
 

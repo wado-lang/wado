@@ -948,32 +948,6 @@ pub fn resolve_import(from_module: &ModuleSource, import_source: &str) -> Module
         };
     }
 
-    // Handle relative imports from core: modules
-    // e.g., from Core { name: "prelude" } importing "./prelude/int128.wado" -> Core { name: "prelude/int128" }
-    if let ModuleSource::Core { name: from_name } = from_module
-        && (import_source.starts_with("./") || import_source.starts_with("../"))
-    {
-        let relative = import_source
-            .strip_prefix("./")
-            .unwrap_or(import_source)
-            .strip_suffix(".wado")
-            .unwrap_or(import_source.strip_prefix("./").unwrap_or(import_source));
-        // Resolve relative to the core module's "directory"
-        let resolved = if from_name.contains('/') {
-            // from_name is like "prelude/submod", get parent
-            let parent = from_name.rsplit_once('/').map_or("", |(p, _)| p);
-            if parent.is_empty() {
-                relative.to_string()
-            } else {
-                format!("{parent}/{relative}")
-            }
-        } else {
-            // from_name is like "prelude", relative path is the new name
-            relative.to_string()
-        };
-        return ModuleSource::Core { name: resolved };
-    }
-
     // Handle relative imports from local modules
     // For entry points, we don't resolve against the filename - just use the import directly
     if let ModuleSource::Local { path: from_path } = from_module

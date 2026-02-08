@@ -32,8 +32,9 @@ pub const CORE_STREAM: &str = include_str!("../lib/core/stream.wado");
 /// Embedded source for core:internal
 pub const CORE_INTERNAL: &str = include_str!("../lib/core/internal.wado");
 
-/// Embedded source for core:string (String type, separated from prelude)
-pub const CORE_STRING: &str = include_str!("../lib/core/string.wado");
+/// Embedded source for core:prelude/string (String type, separated from prelude)
+/// Located in prelude/ subdirectory and re-exported by prelude.wado
+pub const CORE_PRELUDE_STRING: &str = include_str!("../lib/core/prelude/string.wado");
 
 /// Embedded source for core:builtin (compiler intrinsic declarations)
 pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
@@ -56,6 +57,10 @@ pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wad
 /// Embedded source for core:prelude/primitives (methods for primitive types)
 /// Located in prelude/ subdirectory and imported by prelude.wado
 pub const CORE_PRELUDE_PRIMITIVES: &str = include_str!("../lib/core/prelude/primitives.wado");
+
+/// Embedded source for core:prelude/array (Array type and iterators)
+/// Located in prelude/ subdirectory and re-exported by prelude.wado
+pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
 
 /// Embedded source for core:collections (`TreeMap`)
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
@@ -93,15 +98,16 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
     match import_path {
         // Core library
         "core:prelude" => Some(CORE_PRELUDE),
-        "core:prelude/traits" => Some(CORE_PRELUDE_TRAITS),
-        "core:prelude/int128" => Some(CORE_PRELUDE_INT128),
-        "core:prelude/types" => Some(CORE_PRELUDE_TYPES),
-        "core:prelude/primitives" => Some(CORE_PRELUDE_PRIMITIVES),
+        "core:prelude/traits.wado" => Some(CORE_PRELUDE_TRAITS),
+        "core:prelude/int128.wado" => Some(CORE_PRELUDE_INT128),
+        "core:prelude/types.wado" => Some(CORE_PRELUDE_TYPES),
+        "core:prelude/primitives.wado" => Some(CORE_PRELUDE_PRIMITIVES),
+        "core:prelude/string.wado" => Some(CORE_PRELUDE_STRING),
+        "core:prelude/array.wado" => Some(CORE_PRELUDE_ARRAY),
         "core:collections" => Some(CORE_COLLECTIONS),
         "core:cli" => Some(CORE_CLI),
         "core:stream" => Some(CORE_STREAM),
         "core:internal" => Some(CORE_INTERNAL),
-        "core:string" => Some(CORE_STRING),
         "core:builtin" => Some(CORE_BUILTIN),
         "core:clocks" => Some(CORE_CLOCKS),
 
@@ -136,7 +142,7 @@ mod tests {
     fn test_get_core_prelude() {
         let source = get_stdlib_module("core:prelude");
         assert!(source.is_some());
-        assert!(source.unwrap().contains("panic"));
+        assert!(source.unwrap().contains("pub use"));
     }
 
     #[test]
@@ -189,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_get_prelude_primitives() {
-        let source = get_stdlib_module("core:prelude/primitives");
+        let source = get_stdlib_module("core:prelude/primitives.wado");
         assert!(source.is_some(), "primitives module should exist");
         assert!(
             source.unwrap().contains("impl i32"),

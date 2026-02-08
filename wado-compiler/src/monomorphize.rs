@@ -3325,7 +3325,7 @@ impl Monomorphizer {
 /// to set the correct `module_source` so DCE can find the target function.
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
     match type_table.get(type_id) {
-        ResolvedType::Primitive(_) => Some(ModuleSource::core("prelude/primitives")),
+        ResolvedType::Primitive(_) => Some(ModuleSource::core("prelude/primitives.wado")),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::core("prelude")),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::GenericInstance { module_source, .. }

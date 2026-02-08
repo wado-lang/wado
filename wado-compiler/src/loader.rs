@@ -131,12 +131,13 @@ fn cached_core_stdlib() -> &'static HashMap<ModuleSource, Module> {
             ("collections", stdlib::CORE_COLLECTIONS),
             ("internal", stdlib::CORE_INTERNAL),
             ("prelude", stdlib::CORE_PRELUDE),
-            ("prelude/int128", stdlib::CORE_PRELUDE_INT128),
-            ("prelude/primitives", stdlib::CORE_PRELUDE_PRIMITIVES),
-            ("prelude/traits", stdlib::CORE_PRELUDE_TRAITS),
-            ("prelude/types", stdlib::CORE_PRELUDE_TYPES),
+            ("prelude/array.wado", stdlib::CORE_PRELUDE_ARRAY),
+            ("prelude/int128.wado", stdlib::CORE_PRELUDE_INT128),
+            ("prelude/primitives.wado", stdlib::CORE_PRELUDE_PRIMITIVES),
+            ("prelude/string.wado", stdlib::CORE_PRELUDE_STRING),
+            ("prelude/traits.wado", stdlib::CORE_PRELUDE_TRAITS),
+            ("prelude/types.wado", stdlib::CORE_PRELUDE_TYPES),
             ("stream", stdlib::CORE_STREAM),
-            ("string", stdlib::CORE_STRING),
         ];
         let mut cache = HashMap::with_capacity(core_modules.len());
         for &(name, source) in core_modules {
@@ -299,7 +300,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 name: "builtin".to_string(),
             },
             ModuleSource::Core {
-                name: "string".to_string(),
+                name: "prelude/string.wado".to_string(),
             },
             ModuleSource::Core {
                 name: "prelude".to_string(),
@@ -349,6 +350,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         import_source: &str,
     ) -> Result<ModuleSource, LoadError> {
         // Handle known namespaces
+        // Top-level: "core:cli" → Core { name: "cli" }
+        // Sub-module: "core:prelude/traits.wado" → Core { name: "prelude/traits.wado" }
         if let Some(name) = import_source.strip_prefix("core:") {
             return Ok(ModuleSource::Core {
                 name: name.to_string(),
@@ -377,30 +380,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if let ModuleSource::Remote { url: from_url } = from_module_source {
                 let resolved = resolve_module_path(from_url, import_source);
                 return Ok(ModuleSource::Remote { url: resolved });
-            }
-            // Handle relative imports from core: modules
-            // e.g., from "core:prelude" importing "./prelude/int128.wado" -> "core:prelude/int128"
-            if let ModuleSource::Core { name: from_name } = from_module_source {
-                let relative = import_source
-                    .strip_prefix("./")
-                    .unwrap_or(import_source)
-                    .strip_suffix(".wado")
-                    .unwrap_or(import_source.strip_prefix("./").unwrap_or(import_source));
-                // Resolve relative to the core module's "directory"
-                // e.g., "prelude" + "./prelude/int128.wado" -> "prelude/int128"
-                let resolved = if from_name.contains('/') {
-                    // from_name is like "prelude/submod", get parent
-                    let parent = from_name.rsplit_once('/').map_or("", |(p, _)| p);
-                    if parent.is_empty() {
-                        relative.to_string()
-                    } else {
-                        format!("{parent}/{relative}")
-                    }
-                } else {
-                    // from_name is like "prelude", relative path is the new name
-                    relative.to_string()
-                };
-                return Ok(ModuleSource::Core { name: resolved });
             }
             // Entry point or stdlib: treat as relative to project root
             let canonical = normalize_module_path(import_source);
