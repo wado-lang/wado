@@ -200,67 +200,118 @@ pub async fn run(opts: DumpOptions) {
     }
 }
 
-/// Bulk file output mode - writes each input to a file based on template
+/// Bulk file output mode - writes each input to a file based on template (parallel)
 async fn run_bulk(opts: &DumpOptions, template: &str) {
-    let mut success_count = 0;
-    let mut skip_count = 0;
+    let start = std::time::Instant::now();
+    let mut set = tokio::task::JoinSet::new();
 
+    let mut skip_count_early = 0u32;
     for input in &opts.inputs {
-        let path = Path::new(input);
-        let name = path.file_stem().map_or_else(
-            || "unknown".to_string(),
-            |s| s.to_string_lossy().into_owned(),
-        );
-
-        let output_path = template.replace("{name}", &name);
-
-        // Ensure parent directory exists
-        if let Some(parent) = Path::new(&output_path).parent()
-            && !parent.as_os_str().is_empty()
-            && let Err(e) = fs::create_dir_all(parent)
+        // Skip files with TODO or compile_error in __DATA__ section
+        if let Ok(source) = fs::read_to_string(input)
+            && let Some(data_start) = source.find("\n__DATA__\n")
         {
-            eprintln!(
-                "  WARNING: Failed to create directory {}: {e}",
-                parent.display()
-            );
-            skip_count += 1;
-            continue;
+            let data = &source[data_start..];
+            if data.contains("\"TODO\"") || data.contains("\"compile_error\"") {
+                // Remove stale golden file if it exists
+                let name = Path::new(input)
+                    .file_stem()
+                    .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
+                let output_path = template.replace("{name}", name);
+                let _ = fs::remove_file(&output_path);
+                skip_count_early += 1;
+                continue;
+            }
         }
 
-        match generate_output(opts, input).await {
-            Ok(content) => {
-                if content.is_empty() {
-                    eprintln!("  WARNING: Empty output for {output_path} (skipping)");
-                    // Remove stale file if it exists
-                    let _ = fs::remove_file(&output_path);
-                    skip_count += 1;
-                } else {
-                    match fs::write(&output_path, content) {
-                        Ok(()) => {
-                            eprintln!("  Generated {output_path}");
-                            success_count += 1;
-                        }
-                        Err(e) => {
-                            eprintln!("  WARNING: Failed to write {output_path}: {e}");
-                            skip_count += 1;
+        let input = input.clone();
+        let template = template.to_owned();
+        let show_optimize = opts.show_optimize;
+        let unparse = opts.unparse;
+        let opt_level = opts.opt_level;
+
+        let handle = tokio::runtime::Handle::current();
+        set.spawn_blocking(move || {
+            let path = Path::new(&input);
+            let name = path.file_stem().map_or_else(
+                || "unknown".to_string(),
+                |s| s.to_string_lossy().into_owned(),
+            );
+
+            let output_path = template.replace("{name}", &name);
+
+            // Ensure parent directory exists
+            if let Some(parent) = Path::new(&output_path).parent()
+                && !parent.as_os_str().is_empty()
+                && let Err(e) = fs::create_dir_all(parent)
+            {
+                return Err(format!(
+                    "Failed to create directory {}: {e}",
+                    parent.display()
+                ));
+            }
+
+            // Use block_on to run async dump_with_host on the blocking thread
+            match handle.block_on(generate_output_params(
+                show_optimize,
+                unparse,
+                opt_level,
+                &input,
+            )) {
+                Ok(content) => {
+                    if content.is_empty() {
+                        let _ = fs::remove_file(&output_path);
+                        Err(format!("Empty output for {output_path} (skipping)"))
+                    } else {
+                        match fs::write(&output_path, content) {
+                            Ok(()) => Ok(output_path),
+                            Err(e) => Err(format!("Failed to write {output_path}: {e}")),
                         }
                     }
                 }
+                Err(e) => {
+                    let _ = fs::remove_file(&output_path);
+                    Err(format!("Failed to generate {output_path}: {e}"))
+                }
+            }
+        });
+    }
+
+    let mut success_count = 0;
+    let mut skip_count = 0;
+
+    while let Some(result) = set.join_next().await {
+        match result {
+            Ok(Ok(output_path)) => {
+                eprintln!("  Generated {output_path}");
+                success_count += 1;
+            }
+            Ok(Err(warning)) => {
+                eprintln!("  WARNING: {warning}");
+                skip_count += 1;
             }
             Err(e) => {
-                eprintln!("  WARNING: Failed to generate {output_path}: {e}");
-                // Remove stale file if it exists
-                let _ = fs::remove_file(&output_path);
+                eprintln!("  WARNING: Task panicked: {e}");
                 skip_count += 1;
             }
         }
     }
 
-    eprintln!("Generated {success_count} files ({skip_count} skipped)");
+    let skip_count = skip_count + skip_count_early;
+    let elapsed = start.elapsed().as_secs_f64();
+    eprintln!("Generated {success_count} files ({skip_count} skipped) in {elapsed:.2}s");
 }
 
-/// Generate output content for a single file, returning the content string
-async fn generate_output(opts: &DumpOptions, input: &str) -> Result<String, String> {
+/// Generate output content for a single file, returning the content string.
+///
+/// Takes individual parameters instead of `&DumpOptions` so it can be called
+/// from `tokio::spawn` (which requires `'static` futures).
+async fn generate_output_params(
+    show_optimize: bool,
+    unparse: bool,
+    opt_level: OptLevel,
+    input: &str,
+) -> Result<String, String> {
     let path = Path::new(input);
 
     // Read source file
@@ -275,14 +326,14 @@ async fn generate_output(opts: &DumpOptions, input: &str) -> Result<String, Stri
     let host = FilesystemCompilerHost::new(base_path);
 
     // Dump using async API
-    let result = wado_compiler::dump_with_host(&source, &host, Some(input), opts.opt_level)
+    let result = wado_compiler::dump_with_host(&source, &host, Some(input), opt_level)
         .await
         .map_err(|e| e.to_string())?;
 
     let mut output = Vec::new();
 
     // For golden fixtures (--optimize --unparse), extract only the entry module
-    if opts.show_optimize && opts.unparse {
+    if show_optimize && unparse {
         if let Some(ref project) = result.optimized_project {
             // Find the entry module (ModuleSource::EntryPoint)
             for (module_source, module) in &project.tir_modules {
