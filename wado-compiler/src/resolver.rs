@@ -4401,7 +4401,7 @@ impl<'a> Resolver<'a> {
                         name: name.clone(),
                         value: Box::new(value.clone()),
                     },
-                    value.type_id,
+                    TypeTable::UNIT,
                     assign.span,
                 );
             }
@@ -4446,7 +4446,7 @@ impl<'a> Resolver<'a> {
                 target: Box::new(target),
                 value: Box::new(value.clone()),
             },
-            value.type_id,
+            TypeTable::UNIT,
             assign.span,
         )
     }
