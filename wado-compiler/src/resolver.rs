@@ -292,6 +292,8 @@ struct FunctionContext {
     captured_vars: HashMap<String, u32>,
     /// Stack of labeled block expression targets for tracking break types
     labeled_block_targets: Vec<LabeledBlockTarget>,
+    /// Stack of all active labels (from labeled blocks and labeled block expressions)
+    active_labels: Vec<String>,
     /// Current function name for `#function` compile-time literal
     function_name: String,
 }
@@ -307,6 +309,7 @@ impl FunctionContext {
             outer_locals: HashMap::new(),
             captured_vars: HashMap::new(),
             labeled_block_targets: Vec::new(),
+            active_labels: Vec::new(),
             function_name,
         }
     }
@@ -333,6 +336,7 @@ impl FunctionContext {
             outer_locals,
             captured_vars: HashMap::new(),
             labeled_block_targets: Vec::new(),
+            active_labels: Vec::new(),
             function_name,
         }
     }
@@ -2519,8 +2523,10 @@ impl<'a> Resolver<'a> {
         labeled_block: &ast::LabeledBlockStmt,
         ctx: &mut FunctionContext,
     ) -> TirStmt {
+        ctx.active_labels.push(labeled_block.label.clone());
         // resolve_block already handles scope entry/exit
         let block = self.resolve_block(&labeled_block.block, ctx);
+        ctx.active_labels.pop();
 
         TirStmt::new(
             TirStmtKind::LabeledBlock {
@@ -3115,6 +3121,16 @@ impl<'a> Resolver<'a> {
     fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) -> TirStmt {
         let value = break_stmt.value.as_ref().map(|v| self.resolve_expr(v, ctx));
 
+        // Validate that the target label exists
+        if let Some(label) = &break_stmt.label
+            && !ctx.active_labels.iter().any(|l| l == label)
+        {
+            self.errors.push(TypeError::UnknownIdentifier {
+                name: format!("labeled break target not found: {label}"),
+                span: break_stmt.span,
+            });
+        }
+
         // If breaking with a value to a labeled block expression, record the type
         if let (Some(label), Some(val)) = (&break_stmt.label, &value) {
             // Find the labeled block target with this label
@@ -3184,12 +3200,14 @@ impl<'a> Resolver<'a> {
                     label: lb.label.clone(),
                     break_types: Vec::new(),
                 });
+                ctx.active_labels.push(lb.label.clone());
 
                 ctx.enter_scope();
                 let tir_block = self.resolve_block(&lb.block, ctx);
                 ctx.exit_scope();
 
                 // Pop the target and determine the result type from break statements
+                ctx.active_labels.pop();
                 let target = ctx.labeled_block_targets.pop().unwrap();
 
                 // The result type is determined by the break expressions
@@ -8707,7 +8725,7 @@ impl<'a> Resolver<'a> {
         &mut self,
         struct_type: TypeId,
         field_name: &str,
-        _span: Span,
+        span: Span,
     ) -> (u32, TypeId) {
         // Clone the type to avoid borrow issues
         let resolved = self.type_table.borrow().get(struct_type).clone();
@@ -8740,19 +8758,28 @@ impl<'a> Resolver<'a> {
             }
             // Tuple field access (numeric field names: 0, 1, 2, ...)
             ResolvedType::Tuple(elements) => {
-                if let Ok(index) = field_name.parse::<usize>()
-                    && index < elements.len()
-                {
-                    return (index as u32, elements[index]);
+                if let Ok(index) = field_name.parse::<usize>() {
+                    if index < elements.len() {
+                        return (index as u32, elements[index]);
+                    }
+                    self.errors.push(TypeError::InvalidLiteral {
+                        message: format!(
+                            "tuple index {} out of bounds, tuple has {} elements",
+                            index,
+                            elements.len()
+                        ),
+                        span,
+                    });
+                    return (0, TypeTable::UNKNOWN);
                 }
             }
             // Reference types - look through to inner type
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                return self.lookup_field_type(inner, field_name, _span);
+                return self.lookup_field_type(inner, field_name, span);
             }
             // Newtype - look through to base type for field access
             ResolvedType::Newtype { base_type, .. } => {
-                return self.lookup_field_type(base_type, field_name, _span);
+                return self.lookup_field_type(base_type, field_name, span);
             }
             // Generic instance - look up field from generic struct definition
             // and substitute type parameters with concrete type args
