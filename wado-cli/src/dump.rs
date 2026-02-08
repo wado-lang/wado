@@ -200,12 +200,43 @@ pub async fn run(opts: DumpOptions) {
     }
 }
 
+/// Stack size for compiler worker threads (16 MB).
+///
+/// The default tokio blocking thread stack (2 MB) is too small for the
+/// recursive optimizer passes; processing many fixtures causes
+/// stack overflow (SIGSEGV).
+const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
+
+/// Spawn a closure on a dedicated thread with a large stack, returning a
+/// oneshot receiver for the result.
+fn spawn_with_large_stack<F, T>(f: F) -> tokio::sync::oneshot::Receiver<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .stack_size(COMPILER_STACK_SIZE)
+        .spawn(move || {
+            let _ = tx.send(f());
+        })
+        .expect("failed to spawn compiler thread");
+    rx
+}
+
 /// Bulk file output mode - writes each input to a file based on template (parallel)
 async fn run_bulk(opts: &DumpOptions, template: &str) {
     let start = std::time::Instant::now();
-    let mut set = tokio::task::JoinSet::new();
+
+    // Limit concurrency to avoid exhausting memory with many large-stack threads.
+    let parallelism = std::thread::available_parallelism()
+        .map(std::num::NonZero::get)
+        .unwrap_or(4);
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(parallelism));
 
     let mut skip_count_early = 0u32;
+    let mut tasks: Vec<tokio::task::JoinHandle<Result<String, String>>> = Vec::new();
+
     for input in &opts.inputs {
         // Skip files with TODO or compile_error in __DATA__ section
         if let Ok(source) = fs::read_to_string(input)
@@ -229,59 +260,69 @@ async fn run_bulk(opts: &DumpOptions, template: &str) {
         let show_optimize = opts.show_optimize;
         let unparse = opts.unparse;
         let opt_level = opts.opt_level;
+        let sem = semaphore.clone();
 
         let handle = tokio::runtime::Handle::current();
-        set.spawn_blocking(move || {
-            let path = Path::new(&input);
-            let name = path.file_stem().map_or_else(
-                || "unknown".to_string(),
-                |s| s.to_string_lossy().into_owned(),
-            );
 
-            let output_path = template.replace("{name}", &name);
+        tasks.push(tokio::spawn(async move {
+            // Acquire a permit to limit the number of concurrent compiler threads.
+            let _permit = sem.acquire().await.expect("semaphore closed");
 
-            // Ensure parent directory exists
-            if let Some(parent) = Path::new(&output_path).parent()
-                && !parent.as_os_str().is_empty()
-                && let Err(e) = fs::create_dir_all(parent)
-            {
-                return Err(format!(
-                    "Failed to create directory {}: {e}",
-                    parent.display()
-                ));
-            }
+            let rx = spawn_with_large_stack(move || {
+                let path = Path::new(&input);
+                let name = path.file_stem().map_or_else(
+                    || "unknown".to_string(),
+                    |s| s.to_string_lossy().into_owned(),
+                );
 
-            // Use block_on to run async dump_with_host on the blocking thread
-            match handle.block_on(generate_output_params(
-                show_optimize,
-                unparse,
-                opt_level,
-                &input,
-            )) {
-                Ok(content) => {
-                    if content.is_empty() {
-                        let _ = fs::remove_file(&output_path);
-                        Err(format!("Empty output for {output_path} (skipping)"))
-                    } else {
-                        match fs::write(&output_path, content) {
-                            Ok(()) => Ok(output_path),
-                            Err(e) => Err(format!("Failed to write {output_path}: {e}")),
+                let output_path = template.replace("{name}", &name);
+
+                // Ensure parent directory exists
+                if let Some(parent) = Path::new(&output_path).parent()
+                    && !parent.as_os_str().is_empty()
+                    && let Err(e) = fs::create_dir_all(parent)
+                {
+                    return Err(format!(
+                        "Failed to create directory {}: {e}",
+                        parent.display()
+                    ));
+                }
+
+                // Use block_on to run async dump_with_host on this thread
+                match handle.block_on(generate_output_params(
+                    show_optimize,
+                    unparse,
+                    opt_level,
+                    &input,
+                )) {
+                    Ok(content) => {
+                        if content.is_empty() {
+                            let _ = fs::remove_file(&output_path);
+                            Err(format!("Empty output for {output_path} (skipping)"))
+                        } else {
+                            match fs::write(&output_path, content) {
+                                Ok(()) => Ok(output_path),
+                                Err(e) => Err(format!("Failed to write {output_path}: {e}")),
+                            }
                         }
                     }
+                    Err(e) => {
+                        let _ = fs::remove_file(&output_path);
+                        Err(format!("Failed to generate {output_path}: {e}"))
+                    }
                 }
-                Err(e) => {
-                    let _ = fs::remove_file(&output_path);
-                    Err(format!("Failed to generate {output_path}: {e}"))
-                }
-            }
-        });
+            });
+
+            rx.await
+                .unwrap_or_else(|_| Err("compiler thread panicked".to_string()))
+        }));
     }
 
     let mut success_count = 0;
     let mut skip_count = 0;
 
-    while let Some(result) = set.join_next().await {
-        match result {
+    for task in tasks {
+        match task.await {
             Ok(Ok(output_path)) => {
                 eprintln!("  Generated {output_path}");
                 success_count += 1;
