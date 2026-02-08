@@ -520,3 +520,7 @@ if let Shape::Rectangle([w, _]) = shape {
 - [x] Tuple payload patterns (`if let Rectangle([w, h]) = shape`) (Phase 1)
 - [x] Unit payload patterns (`if let Point = shape`) (Phase 1)
 - [x] `while let` / `for let` with custom variants (Phase 1)
+
+## See Also
+
+- [Variant Wasm GC Representation](./wep-2026-02-08-variant-representation.md) — how variants are laid out in Wasm GC (NullableRef vs SubtypeHierarchy)
