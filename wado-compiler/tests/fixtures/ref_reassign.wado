@@ -1,0 +1,26 @@
+// Reassigning a reference variable to point to a different value
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut a = 10;
+    let mut b = 20;
+
+    let mut r = &a;
+    println(`{*r}`);
+
+    r = &b;
+    println(`{*r}`);
+
+    // Mutable reference reassignment
+    let mut mr = &mut a;
+    *mr = 100;
+    mr = &mut b;
+    *mr = 200;
+
+    println(`{a}`);
+    println(`{b}`);
+}
+
+__DATA__
+{"stdout": "10\n20\n100\n200\n"}

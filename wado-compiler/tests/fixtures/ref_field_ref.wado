@@ -1,0 +1,35 @@
+// Take reference to individual struct field
+// Requires: &mut struct.field to create an alias to the field slot
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn read_field(r: &i32) -> i32 {
+    return *r;
+}
+
+fn set_field(r: &mut i32, v: i32) {
+    *r = v;
+}
+
+export fn run() with Stdout {
+    let mut p = Point { x: 10, y: 20 };
+
+    // Read reference to field
+    let rx = &p.x;
+    println(`x: {*rx}`);
+
+    // Mutable reference to field
+    set_field(&mut p.x, 99);
+    println(`x: {p.x}`);
+
+    set_field(&mut p.y, 88);
+    println(`y: {p.y}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "x: 10\nx: 99\ny: 88\n"}

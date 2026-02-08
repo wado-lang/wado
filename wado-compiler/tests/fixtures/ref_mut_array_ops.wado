@@ -1,0 +1,30 @@
+// Array operations through &mut reference
+
+use { println, Stdout } from "core:cli";
+
+fn append_elements(arr: &mut Array<i32>) {
+    arr.append(4);
+    arr.append(5);
+}
+
+fn double_all(arr: &mut Array<i32>) {
+    for let mut i = 0; i < arr.len(); i += 1 {
+        arr[i] = arr[i] * 2;
+    }
+}
+
+export fn run() with Stdout {
+    let mut nums: Array<i32> = [1, 2, 3];
+    println(`len: {nums.len()}`);
+
+    append_elements(&mut nums);
+    println(`len: {nums.len()}`);
+
+    double_all(&mut nums);
+    for let mut i = 0; i < nums.len(); i += 1 {
+        println(`{nums[i]}`);
+    }
+}
+
+__DATA__
+{"stdout": "len: 3\nlen: 5\n2\n4\n6\n8\n10\n"}
