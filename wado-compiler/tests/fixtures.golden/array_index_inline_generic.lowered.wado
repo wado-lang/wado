@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct "Container<i32>" {
     items: Array<i32>,
@@ -15,18 +19,16 @@ struct "Container<i32>" {
 
 fn run() with Stdout {
     let c: Container<i32> = move Container<i32> { items: [10, 20, 30] };
-    let first: i32 = __inline_Array_i32__IndexValue__index_value_0: {
-        let self: &Array<i32> = &c.items;
-        break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(self.repr, 0);
-    };
-    let second: i32 = __inline_Array_i32__IndexValue__index_value_1: {
-        let self: &Array<i32> = &c.items;
-        break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(self.repr, 1);
-    };
-    let third: i32 = __inline_Array_i32__IndexValue__index_value_2: {
-        let self: &Array<i32> = &c.items;
-        break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(self.repr, 2);
-    };
+    let first: i32 = c.items."Array<i32>^IndexValue::index_value"(0);
+    let second: i32 = c.items."Array<i32>^IndexValue::index_value"(1);
+    let third: i32 = c.items."Array<i32>^IndexValue::index_value"(2);
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move first."i32::to_string"(), move ", "), move second."i32::to_string"()), move ", "), move third."i32::to_string"()));
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 

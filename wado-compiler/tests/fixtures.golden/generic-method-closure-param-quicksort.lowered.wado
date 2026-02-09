@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct __Closure_0 {
 }
@@ -16,53 +20,28 @@ struct __Closure_1 {
 }
 
 fn partition(arr: &mut Array<i32>, low: i32, high: i32, cmp: fn(Box<i32>, Box<i32>) -> bool) -> i32 {
-    let pivot: Box<i32> = move Box<i32> { value: __inline_Array_i32__IndexValue__index_value_0: {
-        break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(arr.repr, high);
-    } };
+    let pivot: Box<i32> = move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(high) };
     let mut i: i32 = (low - 1);
     __for_0: {
         let mut j: i32 = low;
-        let _licm_repr: builtin::array<i32> = arr.repr;
         loop {
             if !(j < high) {
                 break __for_0;
             }
             __for_0_body: {
-                if cmp(move Box<i32> { value: __inline_Array_i32__IndexValue__index_value_1: {
-                    break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(_licm_repr, j);
-                } }, pivot) {
+                if cmp(move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(j) }, pivot) {
                     i = (i + 1);
-                    let tmp: i32 = __inline_Array_i32__IndexValue__index_value_2: {
-                        break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(_licm_repr, i);
-                    };
-                    __inline_Array_i32__IndexAssign__index_assign_3: {
-                        let value: i32 = __inline_Array_i32__IndexValue__index_value_4: {
-                            break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(_licm_repr, j);
-                        };
-                        core::builtin::array_set::<i32>(_licm_repr, i, value);
-                    };
-                    __inline_Array_i32__IndexAssign__index_assign_5: {
-                        core::builtin::array_set::<i32>(_licm_repr, j, tmp);
-                    };
+                    let tmp: i32 = arr."Array<i32>^IndexValue::index_value"(i);
+                    arr."Array<i32>^IndexAssign::index_assign"(i, arr."Array<i32>^IndexValue::index_value"(j));
+                    arr."Array<i32>^IndexAssign::index_assign"(j, tmp);
                 }
             }
             j = (j + 1);
         }
     }
-    let tmp: i32 = __inline_Array_i32__IndexValue__index_value_6: {
-        let index: i32 = (i + 1);
-        break __inline_Array_i32__IndexValue__index_value_6: core::builtin::array_get::<i32>(arr.repr, index);
-    };
-    __inline_Array_i32__IndexAssign__index_assign_7: {
-        let index: i32 = (i + 1);
-        let value: i32 = __inline_Array_i32__IndexValue__index_value_8: {
-            break __inline_Array_i32__IndexValue__index_value_8: core::builtin::array_get::<i32>(arr.repr, high);
-        };
-        core::builtin::array_set::<i32>(arr.repr, index, value);
-    };
-    __inline_Array_i32__IndexAssign__index_assign_9: {
-        core::builtin::array_set::<i32>(arr.repr, high, tmp);
-    };
+    let tmp: i32 = arr."Array<i32>^IndexValue::index_value"((i + 1));
+    arr."Array<i32>^IndexAssign::index_assign"((i + 1), arr."Array<i32>^IndexValue::index_value"(high));
+    arr."Array<i32>^IndexAssign::index_assign"(high, tmp);
     return (i + 1);
 }
 
@@ -78,7 +57,6 @@ fn print_array(arr: &Array<i32>) with Stdout {
     __for_1: {
         let mut i: i32 = 0;
         let _licm_used: i32 = arr.used;
-        let _licm_repr: builtin::array<i32> = arr.repr;
         loop {
             if !(i < __inline_Array_i32___len_0: {
                 break __inline_Array_i32___len_0: _licm_used;
@@ -89,9 +67,7 @@ fn print_array(arr: &Array<i32>) with Stdout {
                 if (i > 0) {
                     core::cli::print(move " ");
                 }
-                core::cli::print(move __inline_Array_i32__IndexValue__index_value_1: {
-                    break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(_licm_repr, i);
-                }."i32::to_string"());
+                core::cli::print(move arr."Array<i32>^IndexValue::index_value"(i)."i32::to_string"());
             }
             i = (i + 1);
         }
@@ -109,6 +85,20 @@ fn run() with Stdout {
         break __inline_Array_i32___len_1: arr.used;
     } - 1), &__Closure_1 {  });
     print_array(&arr);
+}
+
+fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    core::builtin::array_set::<i32>(self.repr, index, value);
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 fn "__Closure_0::__call"(self: &__Closure_0, a: Box<i32>, b: Box<i32>) -> bool {

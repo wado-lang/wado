@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct "Node<String>" {
     keys: Array<String>,
@@ -39,18 +43,22 @@ fn "Node<String>::find_index"(self: &Node<String>, key: &String) -> i32 {
     let mut i: i32 = 0;
     let _licm_keys: Array<String> = self.keys;
     let _licm_used: i32 = _licm_keys.used;
-    let _licm_repr: builtin::array<String> = _licm_keys.repr;
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && (__inline_Array_String__IndexValue__index_value_1: {
-            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
-        }."String^Ord::cmp"(&*key) == Ordering::Less)) {
+        }) && (_licm_keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
             break;
         }
         i = (i + 1);
     }
     return i;
+}
+
+fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<String>(self.repr, index);
 }
 
 fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
@@ -60,7 +68,6 @@ fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
         let _licm_keys: Array<String> = self.keys;
         let _licm_deleted: Array<bool> = self.deleted;
         let _licm_used: i32 = _licm_keys.used;
-        let _licm_repr: builtin::array<bool> = _licm_deleted.repr;
         loop {
             if !(i < __inline_Array_String___len_0: {
                 break __inline_Array_String___len_0: _licm_used;
@@ -68,9 +75,7 @@ fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
                 break __for_1;
             }
             __for_1_body: {
-                if !__inline_Array_bool__IndexValue__index_value_1: {
-                    break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr, i);
-                } {
+                if !_licm_deleted."Array<bool>^IndexValue::index_value"(i) {
                     count = (count + 1);
                 }
             }
@@ -80,6 +85,13 @@ fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
     return (count >= max_keys);
 }
 
+fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<bool>(self.repr, index);
+}
+
 fn "Node<String>::count_active"(self: &Node<String>) -> i32 {
     let mut count: i32 = 0;
     __for_0: {
@@ -87,7 +99,6 @@ fn "Node<String>::count_active"(self: &Node<String>) -> i32 {
         let _licm_keys: Array<String> = self.keys;
         let _licm_deleted: Array<bool> = self.deleted;
         let _licm_used: i32 = _licm_keys.used;
-        let _licm_repr: builtin::array<bool> = _licm_deleted.repr;
         loop {
             if !(i < __inline_Array_String___len_0: {
                 break __inline_Array_String___len_0: _licm_used;
@@ -95,9 +106,7 @@ fn "Node<String>::count_active"(self: &Node<String>) -> i32 {
                 break __for_0;
             }
             __for_0_body: {
-                if !__inline_Array_bool__IndexValue__index_value_1: {
-                    break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr, i);
-                } {
+                if !_licm_deleted."Array<bool>^IndexValue::index_value"(i) {
                     count = (count + 1);
                 }
             }

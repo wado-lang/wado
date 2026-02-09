@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let mut arr1: Array<i32> = move [];
@@ -15,13 +19,16 @@ fn run() with Stdout {
     arr1."Array<i32>::append"(1);
     arr1."Array<i32>::append"(2);
     arr2."Array<i32>::append"(3);
-    let a: i32 = __inline_Array_i32__IndexValue__index_value_0: {
-        break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(arr1.repr, 0);
-    };
-    let b: i32 = __inline_Array_i32__IndexValue__index_value_1: {
-        break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(arr2.repr, 0);
-    };
+    let a: i32 = arr1."Array<i32>^IndexValue::index_value"(0);
+    let b: i32 = arr2."Array<i32>^IndexValue::index_value"(0);
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "Result: ", move a."i32::to_string"()), move ", "), move b."i32::to_string"()));
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

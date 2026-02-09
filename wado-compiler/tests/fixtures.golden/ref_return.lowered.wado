@@ -7,15 +7,25 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let nums: Array<i32> = move [42, 99, 7];
     let first: Box<i32> = __inline_get_first_0: {
-        break __inline_get_first_0: Box<i32> { value: __inline_Array_i32__IndexValue__index_value_1: {
-            break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(nums.repr, 0);
-        } };
+        let arr: &Array<i32> = &nums;
+        break __inline_get_first_0: Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(0) };
     };
     core::cli::println(move first.value."i32::to_string"());
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 

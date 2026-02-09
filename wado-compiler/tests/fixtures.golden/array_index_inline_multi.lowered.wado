@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct "Container<String>" {
     items: Array<String>,
@@ -17,45 +21,30 @@ struct "Container<String>" {
 fn run() with Stdout {
     let c: Container<String> = move Container<String> { items: ["apple", "banana", "cherry"], markers: [true, false, true] };
     let item0: String = __inline_Container_String___get_item_0: {
-        break __inline_Container_String___get_item_0: __inline_Array_String__IndexValue__index_value_1: {
-            let self: &Array<String> = &c.items;
-            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(self.repr, 0);
-        };
+        break __inline_Container_String___get_item_0: c.items."Array<String>^IndexValue::index_value"(0);
     };
-    let item1: String = __inline_Container_String___get_item_2: {
-        break __inline_Container_String___get_item_2: __inline_Array_String__IndexValue__index_value_3: {
-            let self: &Array<String> = &c.items;
-            break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, 1);
-        };
+    let item1: String = __inline_Container_String___get_item_1: {
+        break __inline_Container_String___get_item_1: c.items."Array<String>^IndexValue::index_value"(1);
     };
-    let item2: String = __inline_Container_String___get_item_4: {
-        break __inline_Container_String___get_item_4: __inline_Array_String__IndexValue__index_value_5: {
-            let self: &Array<String> = &c.items;
-            break __inline_Array_String__IndexValue__index_value_5: core::builtin::array_get::<String>(self.repr, 2);
-        };
+    let item2: String = __inline_Container_String___get_item_2: {
+        break __inline_Container_String___get_item_2: c.items."Array<String>^IndexValue::index_value"(2);
     };
-    let flag0: bool = __inline_Container_String___is_flagged_6: {
-        break __inline_Container_String___is_flagged_6: __inline_Array_bool__IndexValue__index_value_7: {
-            let self: &Array<bool> = &c.markers;
-            break __inline_Array_bool__IndexValue__index_value_7: core::builtin::array_get::<bool>(self.repr, 0);
-        };
+    let flag0: bool = __inline_Container_String___is_flagged_3: {
+        break __inline_Container_String___is_flagged_3: c.markers."Array<bool>^IndexValue::index_value"(0);
     };
-    let flag1: bool = __inline_Container_String___is_flagged_8: {
-        break __inline_Container_String___is_flagged_8: __inline_Array_bool__IndexValue__index_value_9: {
-            let self: &Array<bool> = &c.markers;
-            break __inline_Array_bool__IndexValue__index_value_9: core::builtin::array_get::<bool>(self.repr, 1);
-        };
+    let flag1: bool = __inline_Container_String___is_flagged_4: {
+        break __inline_Container_String___is_flagged_4: c.markers."Array<bool>^IndexValue::index_value"(1);
     };
     let count: i32 = c."Container<String>::count_flagged"();
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "items: ", item0), move ", "), item1), move ", "), item2));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "flags: ", __inline_bool__to_string_10: {
-        break __inline_bool__to_string_10: if flag0 {
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "flags: ", __inline_bool__to_string_5: {
+        break __inline_bool__to_string_5: if flag0 {
             "true";
         } else {
             "false";
         };
-    }), move ", "), __inline_bool__to_string_11: {
-        break __inline_bool__to_string_11: if flag1 {
+    }), move ", "), __inline_bool__to_string_6: {
+        break __inline_bool__to_string_6: if flag1 {
             "true";
         } else {
             "false";
@@ -70,7 +59,6 @@ fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
         let mut i: i32 = 0;
         let _licm_markers: Array<bool> = self.markers;
         let _licm_used: i32 = _licm_markers.used;
-        let _licm_repr: builtin::array<bool> = _licm_markers.repr;
         loop {
             if !(i < __inline_Array_bool___len_0: {
                 break __inline_Array_bool___len_0: _licm_used;
@@ -78,9 +66,7 @@ fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
                 break __for_0;
             }
             __for_0_body: {
-                if __inline_Array_bool__IndexValue__index_value_1: {
-                    break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr, i);
-                } {
+                if _licm_markers."Array<bool>^IndexValue::index_value"(i) {
                     count = (count + 1);
                 }
             }
@@ -88,5 +74,19 @@ fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
         }
     }
     return count;
+}
+
+fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<bool>(self.repr, index);
+}
+
+fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<String>(self.repr, index);
 }
 

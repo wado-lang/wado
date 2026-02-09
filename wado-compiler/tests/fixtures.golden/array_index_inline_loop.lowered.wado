@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let arr: Array<i32> = move [10, 20, 30, 40, 50];
@@ -15,7 +19,6 @@ fn run() with Stdout {
     __for_0: {
         let mut i: i32 = 0;
         let _licm_used: i32 = arr.used;
-        let _licm_repr: builtin::array<i32> = arr.repr;
         loop {
             if !(i < __inline_Array_i32___len_0: {
                 break __inline_Array_i32___len_0: _licm_used;
@@ -23,9 +26,7 @@ fn run() with Stdout {
                 break __for_0;
             }
             __for_0_body: {
-                sum = (sum + __inline_Array_i32__IndexValue__index_value_1: {
-                    break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(_licm_repr, i);
-                });
+                sum = (sum + arr."Array<i32>^IndexValue::index_value"(i));
             }
             i = (i + 1);
         }
@@ -34,26 +35,30 @@ fn run() with Stdout {
     let mut arr2: Array<i32> = move [0, 0, 0];
     __for_1: {
         let mut i: i32 = 0;
-        let _licm_repr: builtin::array<i32> = arr2.repr;
         loop {
             if !(i < 3) {
                 break __for_1;
             }
             __for_1_body: {
-                __inline_Array_i32__IndexAssign__index_assign_2: {
-                    let value: i32 = (i * 10);
-                    core::builtin::array_set::<i32>(_licm_repr, i, value);
-                };
+                arr2."Array<i32>^IndexAssign::index_assign"(i, (i * 10));
             }
             i = (i + 1);
         }
     }
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move __inline_Array_i32__IndexValue__index_value_3: {
-        break __inline_Array_i32__IndexValue__index_value_3: core::builtin::array_get::<i32>(arr2.repr, 0);
-    }."i32::to_string"(), move ", "), move __inline_Array_i32__IndexValue__index_value_4: {
-        break __inline_Array_i32__IndexValue__index_value_4: core::builtin::array_get::<i32>(arr2.repr, 1);
-    }."i32::to_string"()), move ", "), move __inline_Array_i32__IndexValue__index_value_5: {
-        break __inline_Array_i32__IndexValue__index_value_5: core::builtin::array_get::<i32>(arr2.repr, 2);
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move arr2."Array<i32>^IndexValue::index_value"(0)."i32::to_string"(), move ", "), move arr2."Array<i32>^IndexValue::index_value"(1)."i32::to_string"()), move ", "), move arr2."Array<i32>^IndexValue::index_value"(2)."i32::to_string"()));
+}
+
+fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    core::builtin::array_set::<i32>(self.repr, index, value);
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 

@@ -99,6 +99,9 @@ pub fn "Array<Box<i32>>::append"(self: &mut Array<Box<i32>>, value: Box<i32>) {
 }
 
 fn "Array<Box<i32>>^IndexValue::index_value"(self: &Array<Box<i32>>, index: i32) -> Box<i32> {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
     return core::builtin::array_get::<Box<i32>>(self.repr, index);
 }
 

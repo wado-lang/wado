@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct "Node<String,i32>" {
     keys: Array<String>,
@@ -24,8 +28,6 @@ fn run() with Stdout {
         let _licm_deleted: Array<bool> = node.deleted;
         let _licm_values: Array<i32> = node.values;
         let _licm_used: i32 = _licm_keys.used;
-        let _licm_repr: builtin::array<bool> = _licm_deleted.repr;
-        let _licm_repr: builtin::array<i32> = _licm_values.repr;
         loop {
             if !(i < __inline_Array_String___len_0: {
                 break __inline_Array_String___len_0: _licm_used;
@@ -33,21 +35,35 @@ fn run() with Stdout {
                 break __for_0;
             }
             __for_0_body: {
-                if !__inline_Array_bool__IndexValue__index_value_1: {
-                    break __inline_Array_bool__IndexValue__index_value_1: core::builtin::array_get::<bool>(_licm_repr, i);
-                } {
-                    sum = (sum + __inline_Array_i32__IndexValue__index_value_2: {
-                        break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(_licm_repr, i);
-                    });
+                if !_licm_deleted."Array<bool>^IndexValue::index_value"(i) {
+                    sum = (sum + _licm_values."Array<i32>^IndexValue::index_value"(i));
                 }
             }
             i = (i + 1);
         }
     }
     core::cli::println(move "String::concat"(move "sum (excluding deleted): ", move sum."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "first key: ", __inline_Array_String__IndexValue__index_value_3: {
-        let self: &Array<String> = &node.keys;
-        break __inline_Array_String__IndexValue__index_value_3: core::builtin::array_get::<String>(self.repr, 0);
-    }));
+    core::cli::println(move "String::concat"(move "first key: ", move node.keys."Array<String>^IndexValue::index_value"(0)));
+}
+
+fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<String>(self.repr, index);
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
+}
+
+fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<bool>(self.repr, index);
 }
 

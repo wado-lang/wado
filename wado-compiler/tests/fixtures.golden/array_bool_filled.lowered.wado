@@ -7,15 +7,24 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let arr: Array<bool> = move "Array<bool>::filled"(3, true);
-    if __inline_Array_bool__IndexValue__index_value_0: {
-        break __inline_Array_bool__IndexValue__index_value_0: core::builtin::array_get::<bool>(arr.repr, 0);
-    } {
+    if arr."Array<bool>^IndexValue::index_value"(0) {
         core::cli::println(move "true");
     }
+}
+
+fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
+    if (index >= self.used) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 pub fn "Array<bool>::filled"(n: i32, element: bool) -> Array<bool> {
