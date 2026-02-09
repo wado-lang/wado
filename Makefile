@@ -68,26 +68,11 @@ format-wado:
 
 .PHONY: update-golden-fixtures
 update-golden-fixtures:
-	@echo "Updating golden fixtures..."
 	@mkdir -p wado-compiler/tests/fixtures.golden
-	@# Remove golden files for TODO tests (they should not have golden fixtures)
-	@for f in wado-compiler/tests/fixtures/*.wado; do \
-		if grep -q '"TODO": true' "$$f"; then \
-			name=$$(basename "$$f" .wado); \
-			rm -f "wado-compiler/tests/fixtures.golden/$$name.lowered.wado"; \
-		fi; \
-	done
+	@rm -rf wado-compiler/tests/fixtures.golden/*.*
 	@cargo run --bin wado --quiet -- dump --optimize --unparse -O2 \
 		-o 'wado-compiler/tests/fixtures.golden/{name}.lowered.wado' \
 		wado-compiler/tests/fixtures/*.wado
-	@# Clean up golden files generated for TODO tests
-	@for f in wado-compiler/tests/fixtures/*.wado; do \
-		if grep -q '"TODO": true' "$$f"; then \
-			name=$$(basename "$$f" .wado); \
-			rm -f "wado-compiler/tests/fixtures.golden/$$name.lowered.wado"; \
-		fi; \
-	done
-	@echo "Golden fixtures updated."
 
 .PHONY: clippy
 clippy:

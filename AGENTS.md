@@ -24,7 +24,7 @@ Internal functions that are used to provide language features are implemented in
 
 ### wasm32 Compatibility
 
-`wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules (`std::fs`, `std::net`, `std::process`, `std::thread`, etc.) in production code. CI enforces this via `cargo check -p wado-compiler --target wasm32-unknown-unknown`.
+`wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this via `cargo check -p wado-compiler --target wasm32-unknown-unknown`.
 
 ### E2E Test Specification
 
@@ -117,7 +117,7 @@ wado serve --addr 127.0.0.1:3000 file.wado  # serve on custom address
 The source file must export an HTTP handler function:
 
 ```wado
-use {Request, Response, ErrorCode} from "wasi:http";
+use { Request, Response, ErrorCode } from "wasi:http";
 
 export fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Handle HTTP request and return response
@@ -155,7 +155,7 @@ Available phases (in compilation order):
 7. `--lower` - Lowered TIR (supports `--unparse`)
 8. `--optimize` - Optimized TIR (supports `--unparse`)
 
-Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (development: all except DCE, 2 iterations), `-O2` (production: 10 iterations, default), `-O3` (aggressive: 100 iterations), `-Os` (`-O2` + strip names).
+Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip names).
 
 ### Golden Fixtures (Lowered TIR Tests)
 
@@ -321,6 +321,9 @@ Run `make on-task-started` to install mise and all required development tools au
 
 ```sh
 make test
+make build
+make format # format Rust files and markdown files
+make format-wado # format Wado source files
 
 make hello     # generates example/hello.wat and example/hello.wasm
 make hello-run # simple smoke test
@@ -356,4 +359,4 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - spec.md if the language specification is updated.
   - docs/compiler.md if the new features are implemented.
   - docs/cheatsheet.md if the syntax/stdlib is updated.
-- Run `make on-task-done` to format, clippy-fix, update-bundled, and test.
+- Run `make on-task-done` to format, clippy-fix, update-bundled, update-golden-fixtures, and test.
