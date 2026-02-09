@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn side_effect(msg: String, result: bool) -> bool with Stdout {
     core::cli::println(move "String::concat"(move "side_effect called: ", msg));
@@ -35,18 +39,13 @@ fn run() with Stdout {
     let arr: Array<i32> = move [10, 20, 30];
     let mut i: i32 = 0;
     let _licm_used: i32 = arr.used;
-    let _licm_repr: builtin::array<i32> = arr.repr;
     loop {
         if !((i < __inline_Array_i32___len_0: {
             break __inline_Array_i32___len_0: _licm_used;
-        }) && (__inline_Array_i32__IndexValue__index_value_1: {
-            break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(_licm_repr, i);
-        } < 100)) {
+        }) && (arr."Array<i32>^IndexValue::index_value"(i) < 100)) {
             break;
         }
-        core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "arr[", move i."i32::to_string"()), move "] = "), move __inline_Array_i32__IndexValue__index_value_2: {
-            break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(_licm_repr, i);
-        }."i32::to_string"()));
+        core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "arr[", move i."i32::to_string"()), move "] = "), move arr."Array<i32>^IndexValue::index_value"(i)."i32::to_string"()));
         i = (i + 1);
     }
     core::cli::println(move "String::concat"(move "Loop ended at i = ", move i."i32::to_string"()));
@@ -59,5 +58,12 @@ fn run() with Stdout {
     } else {
         core::cli::println(move "nested && short-circuited (correct)");
     }
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if ((index < 0) || (index >= self.used)) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 

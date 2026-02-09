@@ -1,0 +1,26 @@
+// Test Array::get returns Option<T>: Some for in-bounds, None for out-of-bounds
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let arr: Array<i32> = [10, 20, 30];
+
+    // In-bounds: returns Some
+    if let Some(v) = arr.get(0) {
+        println(`get(0) = {v}`);
+    }
+    if let Some(v) = arr.get(2) {
+        println(`get(2) = {v}`);
+    }
+
+    // Out-of-bounds: returns None
+    if let None = arr.get(3) {
+        println("get(3) = None");
+    }
+    if let None = arr.get(-1) {
+        println("get(-1) = None");
+    }
+}
+
+__DATA__
+{"stdout": "get(0) = 10\nget(2) = 30\nget(3) = None\nget(-1) = None\n"}

@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct "Node<String>" {
     keys: Array<String>,
@@ -46,6 +50,9 @@ fn "Node<String>::traverse"(self: &Node<String>, depth: i32) with Stdout {
 }
 
 fn "Array<Node<String>>^IndexValue::index_value"(self: &Array<&mut Node<String>>, index: i32) -> &mut Node<String> {
+    if ((index < 0) || (index >= self.used)) {
+        core::internal::panic(move "index out of bounds");
+    }
     return core::builtin::array_get::<&mut Node<String>>(self.repr, index);
 }
 

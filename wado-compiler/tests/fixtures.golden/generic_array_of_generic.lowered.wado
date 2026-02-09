@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct "Pair<i32,String>" {
     first: i32,
@@ -21,6 +25,9 @@ fn run() with Stdout {
 }
 
 fn "Array<Pair<i32,String>>^IndexValue::index_value"(self: &Array<Pair<i32, String>>, index: i32) -> Pair<i32,String> {
+    if ((index < 0) || (index >= self.used)) {
+        core::internal::panic(move "index out of bounds");
+    }
     return core::builtin::array_get::<Pair<i32, String>>(self.repr, index);
 }
 

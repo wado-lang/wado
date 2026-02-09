@@ -9,6 +9,7 @@ use {
     Iterator, IntoIterator, FromIterator,
 } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
+use { panic } from "core:internal";
 
 // ============================================================================
 // Array
@@ -53,12 +54,11 @@ impl Array<T> {
         self.used = used + 1;
     }
 
-    pub fn get(&self, index: i32) -> T {
-        return builtin::array_get::<T>(self.repr, index);
-    }
-
-    pub fn set(&mut self, index: i32, value: T) {
-        builtin::array_set::<T>(self.repr, index, value);
+    pub fn get(&self, index: i32) -> Option<T> {
+        if index < 0 || index >= self.used {
+            return null;
+        }
+        return Option::<T>::Some(builtin::array_get::<T>(self.repr, index));
     }
 }
 
@@ -66,6 +66,9 @@ impl IndexValue<i32> for Array<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
+        if index < 0 || index >= self.used {
+            panic("index out of bounds");
+        }
         return builtin::array_get::<T>(self.repr, index);
     }
 }
@@ -74,6 +77,9 @@ impl IndexAssign<i32> for Array<T> {
     type Input = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Input) {
+        if index < 0 || index >= self.used {
+            panic("index out of bounds");
+        }
         builtin::array_set::<T>(self.repr, index, value);
     }
 }

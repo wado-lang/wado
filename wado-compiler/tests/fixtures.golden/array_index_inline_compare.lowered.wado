@@ -7,18 +7,19 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
     let mut i: i32 = 0;
     let _licm_used: i32 = keys.used;
-    let _licm_repr: builtin::array<String> = keys.repr;
     loop {
         if !((i < __inline_Array_String___len_0: {
             break __inline_Array_String___len_0: _licm_used;
-        }) && (__inline_Array_String__IndexValue__index_value_1: {
-            break __inline_Array_String__IndexValue__index_value_1: core::builtin::array_get::<String>(_licm_repr, i);
-        }."String^Ord::cmp"(&*key) == Ordering::Less)) {
+        }) && (keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
             break;
         }
         i = (i + 1);
@@ -30,5 +31,12 @@ fn run() with Stdout {
     let keys: Array<String> = move ["apple", "banana", "cherry", "date"];
     let result: i32 = find_key_index(&keys, &"cherry");
     core::cli::println(move "String::concat"(move "index: ", move result."i32::to_string"()));
+}
+
+fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
+    if ((index < 0) || (index >= self.used)) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<String>(self.repr, index);
 }
 

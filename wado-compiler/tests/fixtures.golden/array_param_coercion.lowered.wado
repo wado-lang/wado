@@ -7,19 +7,25 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
+
+fn sum_array(arr: Array<i32>) -> i32 {
+    return ((arr."Array<i32>^IndexValue::index_value"(0) + arr."Array<i32>^IndexValue::index_value"(1)) + arr."Array<i32>^IndexValue::index_value"(2));
+}
 
 fn run() with Stdout {
-    let result: i32 = __inline_sum_array_0: {
-        let arr: Array<i32> = move [10, 20, 30];
-        break __inline_sum_array_0: ((__inline_Array_i32__IndexValue__index_value_0: {
-            break __inline_Array_i32__IndexValue__index_value_0: core::builtin::array_get::<i32>(arr.repr, 0);
-        } + __inline_Array_i32__IndexValue__index_value_1: {
-            break __inline_Array_i32__IndexValue__index_value_1: core::builtin::array_get::<i32>(arr.repr, 1);
-        }) + __inline_Array_i32__IndexValue__index_value_2: {
-            break __inline_Array_i32__IndexValue__index_value_2: core::builtin::array_get::<i32>(arr.repr, 2);
-        });
-    };
+    let result: i32 = sum_array(move [10, 20, 30]);
     core::cli::println(move result."i32::to_string"());
+}
+
+fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
+    if ((index < 0) || (index >= self.used)) {
+        core::internal::panic(move "index out of bounds");
+    }
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
