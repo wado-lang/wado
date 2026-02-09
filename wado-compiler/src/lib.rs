@@ -323,8 +323,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Derive module name from filename
     let module_name = filename
         .as_ref()
-        .and_then(|f| std::path::Path::new(f).file_stem())
-        .and_then(|s| s.to_str())
+        .map(|f| name::file_stem(f))
         .unwrap_or("module")
         .to_string();
 
@@ -511,8 +510,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         .and_then(|modules_by_source| {
             let module_name = filename
                 .as_ref()
-                .and_then(|f| std::path::Path::new(f).file_stem())
-                .and_then(|s| s.to_str())
+                .map(|f| name::file_stem(f))
                 .unwrap_or("module")
                 .to_string();
 

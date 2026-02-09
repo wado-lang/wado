@@ -1018,6 +1018,27 @@ pub fn filesystem_to_module_path(project_root: &str, file_path: &str) -> Option<
 
 /// Get the parent directory of a path.
 ///
+/// Extract the file stem (filename without extension) from a path.
+///
+/// Uses `/` as path separator (not OS-dependent `std::path`).
+///
+/// Given `./sub/file.wado`, returns `file`.
+/// Given `file.wado`, returns `file`.
+/// Given `file`, returns `file`.
+/// Given `file.tar.gz`, returns `file.tar`.
+pub fn file_stem(path: &str) -> &str {
+    // Get the filename part (after the last `/`)
+    let filename = match path.rfind('/') {
+        Some(pos) => &path[pos + 1..],
+        None => path,
+    };
+    // Remove the extension (after the last `.`)
+    match filename.rfind('.') {
+        Some(0) | None => filename,
+        Some(pos) => &filename[..pos],
+    }
+}
+
 /// Given `./sub/file.wado`, returns `./sub`.
 /// Given `./file.wado`, returns `.`.
 /// Given `file.wado`, returns empty string.
