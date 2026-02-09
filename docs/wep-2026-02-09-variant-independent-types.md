@@ -290,10 +290,10 @@ fn process(c: Shape::Circle) {
 
 For variants using the NullableRef representation (e.g., `Option<T>`):
 
-| Case Type | Wasm Representation | Values |
-|-----------|-------------------|--------|
-| `Option::<T>::Some` | `(ref $T)` or `(ref $box_T)` | non-null reference |
-| `Option::<T>::None` | unit type | single value (null) |
+| Case Type           | Wasm Representation          | Values              |
+| ------------------- | ---------------------------- | ------------------- |
+| `Option::<T>::Some` | `(ref $T)` or `(ref $box_T)` | non-null reference  |
+| `Option::<T>::None` | unit type                    | single value (null) |
 
 The `None` case type is effectively a unit type with one value. Implementing traits on it is allowed but rarely useful.
 
@@ -331,21 +331,21 @@ let ok: Result<i32, String> = Result::Ok(42);  // Full type known
 
 ### 10. Comparison with Related Features
 
-| Aspect | Newtype (`type T = U`) | Variant Case (`V::Case`) |
-|--------|----------------------|--------------------------|
-| Direction | `T` derived from `U` | `V::Case <: V` |
-| Conversion | Explicit `as` both directions | Implicit upcast, pattern match downcast |
-| Method inheritance | Inherits all from base | Inherits from parent variant |
-| Own methods | `impl T { }` | `impl V::Case { }` |
-| Trait inheritance | All base traits inherited | Parent variant traits as fallback |
-| Runtime cost | Zero (same representation) | Zero (Wasm GC subtyping) |
+| Aspect             | Newtype (`type T = U`)        | Variant Case (`V::Case`)                |
+| ------------------ | ----------------------------- | --------------------------------------- |
+| Direction          | `T` derived from `U`          | `V::Case <: V`                          |
+| Conversion         | Explicit `as` both directions | Implicit upcast, pattern match downcast |
+| Method inheritance | Inherits all from base        | Inherits from parent variant            |
+| Own methods        | `impl T { }`                  | `impl V::Case { }`                      |
+| Trait inheritance  | All base traits inherited     | Parent variant traits as fallback       |
+| Runtime cost       | Zero (same representation)    | Zero (Wasm GC subtyping)                |
 
-| Aspect | Trait objects (`&dyn Trait`) | Variant case types |
-|--------|---------------------------|-------------------|
-| Dispatch | Dynamic (vtable) | Static |
-| Type erasure | Yes | No |
-| Open/closed | Open (any implementor) | Closed (fixed set of cases) |
-| Use case | Heterogeneous collections | Type-safe variant handling |
+| Aspect       | Trait objects (`&dyn Trait`) | Variant case types          |
+| ------------ | ---------------------------- | --------------------------- |
+| Dispatch     | Dynamic (vtable)             | Static                      |
+| Type erasure | Yes                          | No                          |
+| Open/closed  | Open (any implementor)       | Closed (fixed set of cases) |
+| Use case     | Heterogeneous collections    | Type-safe variant handling  |
 
 ## Implementation Strategy
 
