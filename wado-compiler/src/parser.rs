@@ -2222,6 +2222,22 @@ impl Parser {
                 self.parse_tuple_literal(start_span)
             }
             TokenKind::Pipe => self.parse_closure(),
+            TokenKind::Or => {
+                // `||` in primary expression position is a zero-parameter closure,
+                // not logical OR (which requires a left operand).
+                self.advance(); // consume `||`
+                let body = if self.check(&TokenKind::LBrace) {
+                    let block = self.parse_block()?;
+                    Expr::Block(Box::new(block))
+                } else {
+                    self.parse_expr()?
+                };
+                Ok(Expr::Closure(Box::new(ClosureExpr {
+                    params: vec![],
+                    body,
+                    span: start_span,
+                })))
+            }
             TokenKind::LBrace => {
                 // Implicit struct literal: `{ field: value, ... }`
                 // Look ahead to check if this is a struct literal (ident followed by : or ,)
