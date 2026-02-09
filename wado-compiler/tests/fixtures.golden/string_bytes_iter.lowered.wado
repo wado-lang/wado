@@ -126,7 +126,7 @@ fn run() with Stdout {
 }
 
 fn "Array<u8>^IndexValue::index_value"(self: &Array<u8>, index: i32) -> u8 {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<u8>(self.repr, index);

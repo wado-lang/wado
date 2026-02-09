@@ -29,14 +29,14 @@ fn run() with Stdout {
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     core::builtin::array_set::<i32>(self.repr, index, value);

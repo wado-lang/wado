@@ -296,7 +296,7 @@ fn "Array<TreeMapEntry<String,i32>>^IntoIterator::into_iter"(self: &Array<TreeMa
 }
 
 fn "Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,i32>>, index: i32) -> TreeMapEntry<String,i32> {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, index);
@@ -328,7 +328,7 @@ fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) ->
 }
 
 fn "Array<Tuple<String,i32>>^IndexValue::index_value"(self: &Array<[String, i32]>, index: i32) -> [String, i32] {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<[String, i32]>(self.repr, index);

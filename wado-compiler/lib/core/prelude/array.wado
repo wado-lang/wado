@@ -66,7 +66,7 @@ impl IndexValue<i32> for Array<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
-        if index < 0 || index >= self.used {
+        if index >= self.used {
             panic("index out of bounds");
         }
         return builtin::array_get::<T>(self.repr, index);
@@ -77,7 +77,7 @@ impl IndexAssign<i32> for Array<T> {
     type Input = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Input) {
-        if index < 0 || index >= self.used {
+        if index >= self.used {
             panic("index out of bounds");
         }
         builtin::array_set::<T>(self.repr, index, value);

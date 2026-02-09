@@ -77,14 +77,14 @@ fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
 }
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);

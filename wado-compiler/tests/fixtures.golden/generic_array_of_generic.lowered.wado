@@ -25,7 +25,7 @@ fn run() with Stdout {
 }
 
 fn "Array<Pair<i32,String>>^IndexValue::index_value"(self: &Array<Pair<i32, String>>, index: i32) -> Pair<i32,String> {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<Pair<i32, String>>(self.repr, index);

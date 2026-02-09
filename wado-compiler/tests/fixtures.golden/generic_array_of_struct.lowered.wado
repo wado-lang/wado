@@ -25,7 +25,7 @@ fn run() with Stdout {
 }
 
 fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<Point>(self.repr, index);

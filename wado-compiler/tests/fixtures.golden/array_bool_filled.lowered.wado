@@ -21,7 +21,7 @@ fn run() with Stdout {
 }
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<bool>(self.repr, index);

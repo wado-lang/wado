@@ -20,7 +20,7 @@ fn run() with Stdout {
 }
 
 fn "Array<f64>^IndexValue::index_value"(self: &Array<f64>, index: i32) -> f64 {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<f64>(self.repr, index);

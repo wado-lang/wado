@@ -91,7 +91,7 @@ fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -
 }
 
 fn "Array<Tuple<String,String>>^IndexValue::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<[String, String]>(self.repr, index);
@@ -158,7 +158,7 @@ pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>,
 }
 
 fn "Array<Tuple<String,String>>^IndexAssign::index_assign"(self: &mut Array<[String, String]>, index: i32, value: [String, String]) {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     core::builtin::array_set::<[String, String]>(self.repr, index, value);

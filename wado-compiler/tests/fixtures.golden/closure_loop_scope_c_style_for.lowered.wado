@@ -56,7 +56,7 @@ fn run() with Stdout {
 }
 
 fn "Array<Fn<1,i32>>^IndexValue::index_value"(self: &Array<fn(i32) -> i32>, index: i32) -> fn(i32) -> i32 {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<fn(i32) -> i32>(self.repr, index);

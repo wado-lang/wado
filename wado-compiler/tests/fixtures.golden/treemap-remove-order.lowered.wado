@@ -200,7 +200,7 @@ fn run() with Stdout {
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);
@@ -380,7 +380,7 @@ pub fn "Array<TreeMapEntry<String,i32>>::append"(self: &mut Array<TreeMapEntry<S
 }
 
 fn "Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,i32>>, index: i32) -> TreeMapEntry<String,i32> {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, index);

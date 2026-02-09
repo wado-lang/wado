@@ -23,7 +23,7 @@ fn run() with Stdout {
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);

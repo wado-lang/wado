@@ -25,14 +25,14 @@ fn run() with Stdout {
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);
 }
 
 fn "Array<String>^IndexAssign::index_assign"(self: &mut Array<String>, index: i32, value: String) {
-    if ((index < 0) || (index >= self.used)) {
+    if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
     }
     core::builtin::array_set::<String>(self.repr, index, value);
