@@ -26,15 +26,15 @@ See [WebAssembly-Native Instruction Opportunities](#webassembly-native-instructi
 
 ## Optimization Levels
 
-| Flag            | DCE | Iterations | Inline Threshold | Target Use Case                         |
-| --------------- | --- | ---------- | ---------------- | --------------------------------------- |
-| `-O0`           | No  | 0          | N/A              | Debugging                               |
-| `-O1`           | No  | 2          | 10               | Development builds                      |
-| `-O2` (default) | Yes | 10         | 10               | Server-side production                  |
-| `-O3`           | Yes | 100        | 20               | Aggressive production (more iterations) |
-| `-Os`           | Yes | 10         | 10               | Client-side/frontend (+ strip names)    |
+| Flag            | DCE | Iterations | Inline Threshold |
+| --------------- | --- | ---------- | ---------------- |
+| `-O0`           | No  | 0          | N/A              |
+| `-O1`           | No  | 2          | 10               |
+| `-O2` (default) | Yes | 10         | 10               |
+| `-O3`           | Yes | 100        | 20               |
+| `-Os`           | Yes | 10         | 10               |
 
-All passes (except DCE) run in a fixed-point loop. The loop exits early when no pass makes changes, so typical O2 compilations converge in 2-4 iterations.
+`-Os` additionally strips the Wasm name section. All passes (except DCE) run in a fixed-point loop with early exit on convergence.
 
 ## Optimization Pipeline
 
@@ -55,7 +55,6 @@ The optimizer runs after lowering and before Wasm plan/codegen. For `-O2` and `-
 ### Function Inlining
 
 **Module:** `optimize_inline.rs`
-**Levels:** `-O1`, `-O2`, `-O3`, `-Os`
 
 Eliminates function call overhead by replacing small pure function calls with their body. Uses expression-count-based threshold for accurate size estimation.
 
@@ -64,56 +63,48 @@ Eligibility: pure (no effects), non-recursive, no early returns, no reference pa
 ### Reference Elimination
 
 **Module:** `optimize_ref_elim.rs`
-**Levels:** `-O1`, `-O2`, `-O3`, `-Os`
 
 Eliminates unnecessary reference bindings introduced during inlining. When `let self: &T = &local_var` is followed by field accesses only, replaces them with direct field access on the original variable.
 
 ### Copy Propagation
 
 **Module:** `optimize_copy_prop.rs`
-**Levels:** `-O1`, `-O2`, `-O3`, `-Os`
 
 Eliminates trivial copy bindings (`let x = y`, `let x = 42`, `let x = true`) by propagating the source value to all uses, then removing the dead binding. Checks safety conditions: target not reassigned, not address-taken, not captured by closures.
 
 ### Constant Folding
 
 **Module:** `optimize_const_fold.rs`
-**Levels:** `-O1`, `-O2`, `-O3`, `-Os`
 
 Evaluates compile-time-known integer arithmetic at compile time. Supports binary operations (add, sub, mul, div, mod), unary negation, and cast operations on i8–i64 and u8–u64. Guards against division by zero and `MIN / -1` traps.
 
 ### Loop-Invariant Code Motion (LICM)
 
 **Module:** `optimize_licm.rs`
-**Levels:** `-O1`, `-O2`, `-O3`, `-Os`
 
 Hoists loop-invariant field accesses out of loops. When a field access targets a variable that does not change within the loop body, it is moved before the loop entry.
 
 ### Dead Code Elimination (DCE)
 
 **Module:** `optimize_dce.rs`
-**Levels:** `-O2`, `-O3`, `-Os`
 
 Removes unreachable functions from the compiled output via call graph reachability analysis from the entry point. Also eliminates unreachable types, unused string literals, and unused WASI effect/function imports.
 
 ### Feature Analysis and Conditional Feature Inclusion
 
 **Module:** `optimize_dce.rs`
-**Levels:** All
 
 Includes only WASI functions, effects, and builtins that are actually used by reachable code. Tracks effect usage (Stdout, Stderr, etc.), WASI function usage, canonical builtins (stream operations, float-to-string, etc.), and box primitive requirements.
 
 ### Select Lowering (Branchless Conditional)
 
 **Module:** `optimize_rewrite.rs`
-**Levels:** All
 
 Converts simple `if cond { a } else { b }` expressions where both branches are pure (locals or literals) into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction. This eliminates branch misprediction penalty.
 
 ### Move Insertion
 
 **Module:** `optimize_rewrite.rs`
-**Levels:** All
 
 Wraps fresh values (literals, call results) in `Move` nodes to avoid unnecessary value copies. Fresh values are owned by the current expression and can be moved directly.
 
