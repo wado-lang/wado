@@ -43,7 +43,6 @@ Each test fixture group has the same prefix in their filenames.
 | `trapped`         | `bool`     | Whether the program should trap                            |
 | `compile_error`   | `string`   | Expected compile error (substring match)                   |
 | `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented |
-| `skip_o0`         | `bool`     | Skip test in O0 mode (for tests requiring DCE features)    |
 
 #### Examples
 
