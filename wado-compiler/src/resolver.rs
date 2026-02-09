@@ -9277,11 +9277,14 @@ impl<'a> Resolver<'a> {
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> TirMatchArm {
-        // Enter scope for pattern bindings (they're only visible in the arm body)
+        // Enter scope for pattern bindings (they're only visible in the arm body and guard)
         ctx.enter_scope();
 
         // Resolve pattern with scrutinee type information (same as if let)
         let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
+
+        // Resolve optional guard expression
+        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx));
 
         // Resolve arm body
         let body = self.resolve_expr(&arm.body, ctx);
@@ -9290,6 +9293,7 @@ impl<'a> Resolver<'a> {
 
         TirMatchArm {
             pattern,
+            guard,
             body,
             span: arm.span,
         }
@@ -9335,6 +9339,9 @@ impl<'a> Resolver<'a> {
 
         let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
 
+        // Resolve optional guard expression
+        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx));
+
         // Resolve arm body with expected type for coercion
         let body = self.resolve_expr_with_expected_type(&arm.body, ctx, Some(expected_type));
 
@@ -9342,6 +9349,7 @@ impl<'a> Resolver<'a> {
 
         TirMatchArm {
             pattern,
+            guard,
             body,
             span: arm.span,
         }

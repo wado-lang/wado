@@ -388,6 +388,7 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 .iter()
                 .map(|arm| MatchArm {
                     pattern: arm.pattern.clone(),
+                    guard: arm.guard.as_ref().map(desugar_expr),
                     body: desugar_expr(&arm.body),
                     span: arm.span,
                 })
@@ -480,11 +481,13 @@ fn desugar_matches_expr(m: &crate::ast::MatchesExpr) -> Expr {
         arms: vec![
             MatchArm {
                 pattern: m.pattern.clone(),
+                guard: None,
                 body: match_body,
                 span: m.span,
             },
             MatchArm {
                 pattern: Pattern::Wildcard,
+                guard: None,
                 body: wildcard_body,
                 span: m.span,
             },

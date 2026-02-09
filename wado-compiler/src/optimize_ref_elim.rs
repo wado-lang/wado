@@ -204,6 +204,11 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
             let mut total = i_count;
             let mut all_ok = i_ok;
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    let (ok, count) = track_local_uses_in_expr(guard, local_index);
+                    all_ok = all_ok && ok;
+                    total += count;
+                }
                 let (ok, count) = track_local_uses_in_expr(&arm.body, local_index);
                 all_ok = all_ok && ok;
                 total += count;
@@ -421,6 +426,9 @@ fn replace_ref_field_access_in_expr(
         TirExprKind::Match { expr: inner, arms } => {
             replace_ref_field_access_in_expr(inner, ref_local, target_local, target_name);
             for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    replace_ref_field_access_in_expr(guard, ref_local, target_local, target_name);
+                }
                 replace_ref_field_access_in_expr(
                     &mut arm.body,
                     ref_local,
@@ -744,6 +752,9 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
         TirExprKind::Match { expr: inner, arms } => {
             collect_ref_bindings_in_expr(inner, bindings);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_ref_bindings_in_expr(guard, bindings);
+                }
                 collect_ref_bindings_in_expr(&arm.body, bindings);
             }
         }
@@ -946,6 +957,9 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u3
         TirExprKind::Match { expr: inner, arms } => {
             remove_dead_ref_bindings_in_expr(inner, dead_locals);
             for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    remove_dead_ref_bindings_in_expr(guard, dead_locals);
+                }
                 remove_dead_ref_bindings_in_expr(&mut arm.body, dead_locals);
             }
         }

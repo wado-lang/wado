@@ -148,6 +148,9 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
         TirExprKind::Match { expr: inner, arms } => {
             changed |= fold_constants_in_expr(inner, type_table);
             for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    changed |= fold_constants_in_expr(guard, type_table);
+                }
                 changed |= fold_constants_in_expr(&mut arm.body, type_table);
             }
         }

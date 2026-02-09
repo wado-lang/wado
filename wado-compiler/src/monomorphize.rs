@@ -808,6 +808,9 @@ impl Monomorphizer {
             } => {
                 self.rewrite_types_in_expr(scrutinee, type_table);
                 for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        self.rewrite_types_in_expr(guard, type_table);
+                    }
                     self.rewrite_types_in_expr(&mut arm.body, type_table);
                 }
             }
@@ -1757,6 +1760,13 @@ impl Monomorphizer {
                     type_table,
                 );
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.collect_func_instantiation_sites_in_expr(
+                            guard,
+                            generic_functions,
+                            type_table,
+                        );
+                    }
                     self.collect_func_instantiation_sites_in_expr(
                         &arm.body,
                         generic_functions,
@@ -2425,6 +2435,9 @@ impl Monomorphizer {
             } => {
                 self.substitute_types_in_expr(scrutinee, substitution, type_table);
                 for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        self.substitute_types_in_expr(guard, substitution, type_table);
+                    }
                     self.substitute_types_in_expr(&mut arm.body, substitution, type_table);
                 }
             }
@@ -2719,6 +2732,9 @@ impl Monomorphizer {
             TirExprKind::Match { expr, arms } => {
                 Self::update_local_expr_types_in_expr(expr, local_types);
                 for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        Self::update_local_expr_types_in_expr(guard, local_types);
+                    }
                     Self::update_local_expr_types_in_expr(&mut arm.body, local_types);
                 }
             }
@@ -3047,6 +3063,9 @@ impl Monomorphizer {
             } => {
                 self.rewrite_function_calls_in_expr(scrutinee, type_table);
                 for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        self.rewrite_function_calls_in_expr(guard, type_table);
+                    }
                     self.rewrite_function_calls_in_expr(&mut arm.body, type_table);
                 }
             }

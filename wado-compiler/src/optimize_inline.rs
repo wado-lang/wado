@@ -51,7 +51,11 @@ fn count_expr(expr: &TirExpr) -> usize {
                 + else_branch.as_ref().map_or(0, count_block_exprs)
         }
         TirExprKind::Match { expr, arms } => {
-            count_expr(expr) + arms.iter().map(|arm| count_expr(&arm.body)).sum::<usize>()
+            count_expr(expr)
+                + arms
+                    .iter()
+                    .map(|arm| arm.guard.as_ref().map_or(0, count_expr) + count_expr(&arm.body))
+                    .sum::<usize>()
         }
         TirExprKind::Block(block) => count_block_exprs(block),
         TirExprKind::Cast { expr, .. } => count_expr(expr),
@@ -424,9 +428,12 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         }
         TirExprKind::Match { expr: inner, arms } => {
             expr_has_complex_generic_types(inner, type_table)
-                || arms
-                    .iter()
-                    .any(|arm| expr_has_complex_generic_types(&arm.body, type_table))
+                || arms.iter().any(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .is_some_and(|g| expr_has_complex_generic_types(g, type_table))
+                        || expr_has_complex_generic_types(&arm.body, type_table)
+                })
         }
         TirExprKind::Closure { body, .. } => expr_has_complex_generic_types(body, type_table),
         TirExprKind::VariantConstruct { payload, .. } => payload
@@ -650,6 +657,9 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
         TirExprKind::Match { expr, arms } => {
             collect_callees_from_expr(expr, callees);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_callees_from_expr(guard, callees);
+                }
                 collect_callees_from_expr(&arm.body, callees);
             }
         }
@@ -2235,6 +2245,9 @@ fn remap_expr(
                 .iter()
                 .map(|arm| crate::tir::TirMatchArm {
                     pattern: remap_pattern(&arm.pattern, param_to_local, local_offset, param_count),
+                    guard: arm.guard.as_ref().map(|g| {
+                        remap_expr(g, param_to_local, local_offset, param_count, source_module)
+                    }),
                     body: remap_expr(
                         &arm.body,
                         param_to_local,
@@ -3107,6 +3120,19 @@ fn inline_calls_in_expr(
                 inline_counter,
             );
             for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    inline_calls_in_expr(
+                        guard,
+                        candidates,
+                        current_module,
+                        local_count,
+                        local_types,
+                        type_table,
+                        pre_stmts,
+                        inlined_funcs,
+                        inline_counter,
+                    );
+                }
                 inline_calls_in_expr(
                     &mut arm.body,
                     candidates,

@@ -1397,6 +1397,8 @@ pub enum TirUnaryOp {
 #[derive(Debug, Clone)]
 pub struct TirMatchArm {
     pub pattern: TirPattern,
+    /// Optional guard expression (the condition after `&&`)
+    pub guard: Option<TirExpr>,
     pub body: TirExpr,
     pub span: Span,
 }

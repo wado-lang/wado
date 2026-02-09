@@ -386,6 +386,9 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         TirExprKind::Match { expr, arms } => {
             insert_moves_in_expr(expr, type_table);
             for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    insert_moves_in_expr(guard, type_table);
+                }
                 insert_moves_in_expr(&mut arm.body, type_table);
             }
         }
@@ -639,6 +642,9 @@ fn collect_value_copy_types_in_expr(
         TirExprKind::Match { expr, arms } => {
             collect_value_copy_types_in_expr(expr, type_table, copy_types);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_value_copy_types_in_expr(guard, type_table, copy_types);
+                }
                 collect_value_copy_types_in_expr(&arm.body, type_table, copy_types);
             }
         }

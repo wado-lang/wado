@@ -429,6 +429,9 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
             // First, recursively process sub-expressions
             lower_wide_int_in_expr(scrutinee, type_table);
             for arm in arms.iter_mut() {
+                if let Some(guard) = &mut arm.guard {
+                    lower_wide_int_in_expr(guard, type_table);
+                }
                 lower_wide_int_in_expr(&mut arm.body, type_table);
             }
 
@@ -687,6 +690,10 @@ fn analyze_match_for_switch(
     let mut default_arm: Option<usize> = None;
 
     for (arm_idx, arm) in arms.iter().enumerate() {
+        // Arms with guards can't use br_table optimization
+        if arm.guard.is_some() {
+            return None;
+        }
         match &arm.pattern {
             TirPattern::Literal(TirLiteralPattern::I128(v)) => {
                 value_to_arm.push((*v as i64, arm_idx));
@@ -1683,6 +1690,9 @@ impl<'a> PatternLowerer<'a> {
                 // First, recursively lower sub-expressions
                 self.lower_expr(scrutinee, type_table);
                 for arm in arms.iter_mut() {
+                    if let Some(guard) = &mut arm.guard {
+                        self.lower_expr(guard, type_table);
+                    }
                     self.lower_expr(&mut arm.body, type_table);
                 }
 
@@ -3023,6 +3033,9 @@ impl BoxLowerer {
             TirExprKind::Match { expr: e, arms } => {
                 self.transform_expr(e, address_taken, type_table);
                 for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        self.transform_expr(guard, address_taken, type_table);
+                    }
                     self.transform_expr(&mut arm.body, address_taken, type_table);
                 }
             }
@@ -3760,6 +3773,9 @@ impl ClosureLowerer {
             } => {
                 self.collect_closures_in_expr(scrutinee);
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.collect_closures_in_expr(guard);
+                    }
                     self.collect_closures_in_expr(&arm.body);
                 }
             }
@@ -3985,6 +4001,9 @@ impl ClosureLowerer {
             } => {
                 self.analyze_closure_safety_expr(scrutinee, false);
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.analyze_closure_safety_expr(guard, false);
+                    }
                     self.analyze_closure_safety_expr(&arm.body, false);
                 }
             }
@@ -4344,6 +4363,9 @@ impl ClosureLowerer {
             } => {
                 Self::collect_locals_from_expr(scrutinee, locals);
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        Self::collect_locals_from_expr(guard, locals);
+                    }
                     Self::collect_locals_from_expr(&arm.body, locals);
                 }
             }
@@ -5138,9 +5160,11 @@ impl ClosureLowerer {
                 arms,
             } => {
                 self.fn_param_in_struct_field_expr(scrutinee, fn_param_indices)
-                    || arms
-                        .iter()
-                        .any(|arm| self.fn_param_in_struct_field_expr(&arm.body, fn_param_indices))
+                    || arms.iter().any(|arm| {
+                        arm.guard.as_ref().is_some_and(|g| {
+                            self.fn_param_in_struct_field_expr(g, fn_param_indices)
+                        }) || self.fn_param_in_struct_field_expr(&arm.body, fn_param_indices)
+                    })
             }
             TirExprKind::VariantConstruct { payload, .. } => payload
                 .as_ref()
@@ -5405,6 +5429,9 @@ impl ClosureLowerer {
             } => {
                 self.collect_fn_param_specs_expr(scrutinee, func_by_name, type_table, requests);
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.collect_fn_param_specs_expr(guard, func_by_name, type_table, requests);
+                    }
                     self.collect_fn_param_specs_expr(&arm.body, func_by_name, type_table, requests);
                 }
             }
@@ -5584,6 +5611,9 @@ impl ClosureLowerer {
             } => {
                 self.count_closures_in_expr(scrutinee, counter);
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.count_closures_in_expr(guard, counter);
+                    }
                     self.count_closures_in_expr(&arm.body, counter);
                 }
             }
@@ -6181,6 +6211,10 @@ impl ClosureLowerer {
                         .iter()
                         .map(|arm| crate::tir::TirMatchArm {
                             pattern: arm.pattern.clone(),
+                            guard: arm
+                                .guard
+                                .as_ref()
+                                .map(|g| self.specialize_expr(g, param_to_functor, type_table)),
                             body: self.specialize_expr(&arm.body, param_to_functor, type_table),
                             span: arm.span,
                         })
@@ -6716,6 +6750,9 @@ impl ClosureLowerer {
             } => {
                 self.transform_expr(scrutinee, type_table);
                 for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        self.transform_expr(guard, type_table);
+                    }
                     self.transform_expr(&mut arm.body, type_table);
                 }
             }
@@ -7056,6 +7093,9 @@ impl ClosureLowerer {
             } => {
                 self.transform_remaining_closures_expr(scrutinee);
                 for arm in arms {
+                    if let Some(guard) = &mut arm.guard {
+                        self.transform_remaining_closures_expr(guard);
+                    }
                     self.transform_remaining_closures_expr(&mut arm.body);
                 }
             }
@@ -7323,6 +7363,9 @@ impl StringCollector {
             } => {
                 self.collect_expr(scrutinee);
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.collect_expr(guard);
+                    }
                     self.collect_expr(&arm.body);
                 }
             }
@@ -7527,6 +7570,9 @@ impl<'a> ScratchLocalAnalyzer<'a> {
                 for arm in arms {
                     // Collect types for tuple destructuring in variant payloads
                     self.collect_variant_pattern_types(&arm.pattern);
+                    if let Some(guard) = &arm.guard {
+                        self.analyze_expr(guard);
+                    }
                     self.analyze_expr(&arm.body);
                 }
             }
@@ -7962,6 +8008,9 @@ impl<'a> EffectScratchAnalyzer<'a> {
             } => {
                 self.analyze_expr(scrutinee);
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.analyze_expr(guard);
+                    }
                     self.analyze_expr(&arm.body);
                 }
             }

@@ -1500,6 +1500,10 @@ impl<'a> Unparser<'a> {
     fn unparse_match_arm(&mut self, arm: &MatchArm) {
         self.write_indent();
         self.unparse_pattern(&arm.pattern);
+        if let Some(guard) = &arm.guard {
+            self.output.push_str(" && ");
+            self.unparse_expr(guard);
+        }
         self.output.push_str(" => ");
         self.unparse_expr(&arm.body);
         self.output.push_str(",\n");
@@ -2834,6 +2838,10 @@ impl<'a> TirUnparser<'a> {
                 for arm in arms {
                     self.write_indent();
                     self.unparse_pattern(&arm.pattern);
+                    if let Some(guard) = &arm.guard {
+                        self.output.push_str(" && ");
+                        self.unparse_expr(guard);
+                    }
                     self.output.push_str(" => ");
                     self.unparse_expr(&arm.body);
                     self.output.push_str(",\n");

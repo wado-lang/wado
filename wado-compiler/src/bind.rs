@@ -595,6 +595,10 @@ impl Binder {
             self.enter_scope();
             // Bind pattern (introduces variables)
             self.bind_pattern(&arm.pattern, arm.span);
+            // Bind optional guard
+            if let Some(guard) = &arm.guard {
+                self.bind_expr(guard);
+            }
             // Bind arm body
             self.bind_expr(&arm.body);
             self.exit_scope();
