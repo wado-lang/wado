@@ -320,13 +320,7 @@ pub async fn compile_with_options<H: CompilerHost>(
 
     let symbols = analyzer.into_symbols();
 
-    // Derive module name from filename
-    let module_name = filename
-        .as_ref()
-        .and_then(|f| std::path::Path::new(f).file_stem())
-        .and_then(|s| s.to_str())
-        .unwrap_or("module")
-        .to_string();
+    let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
     // === Phase 6: Resolve all modules to Project ===
     let project = resolve_to_project(
@@ -509,12 +503,7 @@ pub async fn dump_with_host<H: CompilerHost>(
     let optimized_project = lowered_tir_modules_by_source
         .clone()
         .and_then(|modules_by_source| {
-            let module_name = filename
-                .as_ref()
-                .and_then(|f| std::path::Path::new(f).file_stem())
-                .and_then(|s| s.to_str())
-                .unwrap_or("module")
-                .to_string();
+            let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
             let implicit_modules_by_source = load_result.implicit_modules.clone();
 
