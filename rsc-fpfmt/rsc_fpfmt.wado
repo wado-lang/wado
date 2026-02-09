@@ -292,7 +292,7 @@ pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
 
     let mut idx = nd - 1;
     while idx >= 0 {
-        digit_chars.set(idx, ('0' as i32) + ((val % 10) as i32));
+        digit_chars[idx] = ('0' as i32) + ((val % 10) as i32);
         val = val / 10;
         idx = idx - 1;
     }
@@ -308,12 +308,12 @@ pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
             buf.append_char('0');
         }
         for let mut i = 0; i < nd; i += 1 {
-            buf.append_char(digit_chars.get(i) as char);
+            buf.append_char(digit_chars[i] as char);
         }
     } else if decimal_pos >= nd {
         // Integer with trailing zeros: digits000...
         for let mut i = 0; i < nd; i += 1 {
-            buf.append_char(digit_chars.get(i) as char);
+            buf.append_char(digit_chars[i] as char);
         }
         for let mut i = 0; i < decimal_pos - nd; i += 1 {
             buf.append_char('0');
@@ -321,11 +321,11 @@ pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
     } else {
         // Decimal point in the middle: dig.its
         for let mut i = 0; i < decimal_pos; i += 1 {
-            buf.append_char(digit_chars.get(i) as char);
+            buf.append_char(digit_chars[i] as char);
         }
         buf.append_char('.');
         for let mut i = decimal_pos; i < nd; i += 1 {
-            buf.append_char(digit_chars.get(i) as char);
+            buf.append_char(digit_chars[i] as char);
         }
     }
 
@@ -345,19 +345,19 @@ pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
 
     let mut idx = nd - 1;
     while idx >= 0 {
-        digit_chars.set(idx, ('0' as i32) + ((val % 10) as i32));
+        digit_chars[idx] = ('0' as i32) + ((val % 10) as i32);
         val = val / 10;
         idx = idx - 1;
     }
 
     // First digit
-    buf.append_char(digit_chars.get(0) as char);
+    buf.append_char(digit_chars[0] as char);
 
     // Decimal point and remaining digits
     if nd > 1 {
         buf.append_char('.');
         for let mut i = 1; i < nd; i += 1 {
-            buf.append_char(digit_chars.get(i) as char);
+            buf.append_char(digit_chars[i] as char);
         }
     }
 
@@ -514,7 +514,7 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
 
     let mut idx = nd - 1;
     while idx >= 0 {
-        digit_chars.set(idx, ('0' as i32) + ((val % 10 as i64) as i32));
+        digit_chars[idx] = ('0' as i32) + ((val % 10 as i64) as i32);
         val = val / 10 as i64;
         idx = idx - 1;
     }
@@ -550,7 +550,7 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
             let remaining_prec = precision - leading_zeros;
             let digits_to_output = if remaining_prec < nd { remaining_prec } else { nd };
             for let mut i = 0; i < digits_to_output; i += 1 {
-                buf.append_char(digit_chars.get(i) as char);
+                buf.append_char(digit_chars[i] as char);
             }
             // Trailing zeros if needed
             let trailing = precision - leading_zeros - digits_to_output;
@@ -561,7 +561,7 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
     } else if decimal_pos >= nd {
         // Integer part only: digits000...
         for let mut i = 0; i < nd; i += 1 {
-            buf.append_char(digit_chars.get(i) as char);
+            buf.append_char(digit_chars[i] as char);
         }
         for let mut i = 0; i < decimal_pos - nd; i += 1 {
             buf.append_char('0');
@@ -575,7 +575,7 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
     } else {
         // Decimal point in the middle: dig.its
         for let mut i = 0; i < decimal_pos; i += 1 {
-            buf.append_char(digit_chars.get(i) as char);
+            buf.append_char(digit_chars[i] as char);
         }
         buf.append_char('.');
         // How many digits after decimal
@@ -583,12 +583,12 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
         if precision <= after_decimal {
             // Only output precision digits
             for let mut i = decimal_pos; i < decimal_pos + precision; i += 1 {
-                buf.append_char(digit_chars.get(i) as char);
+                buf.append_char(digit_chars[i] as char);
             }
         } else {
             // Output all digits then trailing zeros
             for let mut i = decimal_pos; i < nd; i += 1 {
-                buf.append_char(digit_chars.get(i) as char);
+                buf.append_char(digit_chars[i] as char);
             }
             let trailing = precision - after_decimal;
             for let mut i = 0; i < trailing; i += 1 {
@@ -619,13 +619,13 @@ pub fn format_exp_prec(d: i64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 
     let mut idx = nd - 1;
     while idx >= 0 {
-        digit_chars.set(idx, ('0' as i32) + ((val % 10 as i64) as i32));
+        digit_chars[idx] = ('0' as i32) + ((val % 10 as i64) as i32);
         val = val / 10 as i64;
         idx = idx - 1;
     }
 
     // First digit
-    buf.append_char(digit_chars.get(0) as char);
+    buf.append_char(digit_chars[0] as char);
 
     // Decimal point and remaining digits based on precision
     if precision > 0 {
@@ -634,7 +634,7 @@ pub fn format_exp_prec(d: i64, p: i32, nd: i32, precision: i32, upper: bool) -> 
         let available = nd - 1;
         let to_output = if precision < available { precision } else { available };
         for let mut i = 1; i <= to_output; i += 1 {
-            buf.append_char(digit_chars.get(i) as char);
+            buf.append_char(digit_chars[i] as char);
         }
         // Trailing zeros if needed
         let trailing = precision - to_output;

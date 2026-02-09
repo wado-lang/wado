@@ -22,7 +22,6 @@ use {
     f64_to_string_center, f64_to_string_fill
 } from "./rsc_fpfmt.wado";
 
-use {char_to_string, f64_to_string as ryu_f64_to_string} from "core:internal";
 use {println, Stdout} from "core:cli";
 use {now, MonotonicClock} from "core:clocks";
 
@@ -1458,7 +1457,7 @@ fn truncate_str(s: String, max_len: i32) -> String {
     }
     let mut result = String::with_capacity(max_len + 3);
     for let mut i = 0; i < max_len - 3; i += 1 {
-        result.append(char_to_string(s.get_byte(i) as char));
+        result.append((s.get_byte(i) as char).to_string());
     }
     result.append("...");
     return result;
@@ -1488,7 +1487,7 @@ fn i32_to_str(n: i32) -> String {
     if is_neg { result.append("-"); }
     let mut i = digits.len() - 1;
     while i >= 0 {
-        result.append(char_to_string((('0' as i32) + digits.get(i)) as char));
+        result.append(((('0' as i32) + digits[i]) as char).to_string());
         i = i - 1;
     }
     return result;
@@ -1507,20 +1506,20 @@ fn u64_to_str(n: u64) -> String {
 
     let mut i = digits.len() - 1;
     while i >= 0 {
-        result.append(char_to_string((('0' as i32) + digits.get(i)) as char));
+        result.append(((('0' as i32) + digits[i]) as char).to_string());
         i = i - 1;
     }
     return result;
 }
 
 // Entry point for running benchmark
-fn run() with Stdout, MonotonicClock {
+export fn run() with Stdout, MonotonicClock {
     println("======================================================================");
-    println("Float-to-String Benchmark: fpfmt vs ryu (internal::f64_to_string)");
+    println("Float-to-String Benchmark: fpfmt vs ryu (f64.to_string)");
     println("======================================================================");
     println("");
     println("fpfmt: Russ Cox's unrounded scaling algorithm (rsc_fpfmt.wado)");
-    println("ryu:   Bundled ryu-based f64_to_buffer (wado-bundled)");
+    println("ryu:   Bundled ryu-based f64_to_buffer (f64.to_string)");
     println("");
 
     // Number of iterations per test
@@ -1560,10 +1559,10 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
     let end_fpfmt = now();
     let fpfmt_time = ((end_fpfmt - start_fpfmt) as u64) / (iterations as u64);
 
-    // Benchmark ryu (internal::f64_to_string)
+    // Benchmark ryu (f64.to_string)
     let start_ryu = now();
     for let mut i = 0; i < iterations; i += 1 {
-        let _ = ryu_f64_to_string(val);
+        let _ = val.to_string();
     }
     let end_ryu = now();
     let ryu_time = ((end_ryu - start_ryu) as u64) / (iterations as u64);
