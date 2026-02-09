@@ -419,19 +419,18 @@ let val = m[[0, 0]];    // Desugars to: *m.index([0, 0])
 These traits already exist in Wado (see `wep-2026-01-13-struct-and-trait.md`):
 
 ```wado
-trait PartialEq {
+trait Eq {
     fn eq(&self, other: &Self) -> bool;
-    fn ne(&self, other: &Self) -> bool {
-        return !self.eq(other);
-    }
 }
 
-trait PartialOrd: PartialEq {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering>;
-    fn lt(&self, other: &Self) -> bool { ... }
-    fn le(&self, other: &Self) -> bool { ... }
-    fn gt(&self, other: &Self) -> bool { ... }
-    fn ge(&self, other: &Self) -> bool { ... }
+variant Ordering {
+    Less,
+    Equal,
+    Greater,
+}
+
+trait Ord {
+    fn cmp(&self, other: &Self) -> Ordering;
 }
 ```
 
@@ -507,12 +506,12 @@ Following Rust's convention:
 | `>>`     | `Shr`          | `shr`           | `a >> b`   | `a.shr(b)`           |
 | `[]`     | `Index`        | `index`         | `a[b]`     | `*a.index(b)`        |
 | `[]` (m) | `IndexMut`     | `index_mut`     | `a[b] = c` | `*a.index_mut(b)`    |
-| `==`     | `PartialEq`    | `eq`            | `a == b`   | `a.eq(&b)`           |
-| `!=`     | `PartialEq`    | `ne`            | `a != b`   | `a.ne(&b)`           |
-| `<`      | `PartialOrd`   | `lt`            | `a < b`    | `a.lt(&b)`           |
-| `<=`     | `PartialOrd`   | `le`            | `a <= b`   | `a.le(&b)`           |
-| `>`      | `PartialOrd`   | `gt`            | `a > b`    | `a.gt(&b)`           |
-| `>=`     | `PartialOrd`   | `ge`            | `a >= b`   | `a.ge(&b)`           |
+| `==`     | `Eq`           | `eq`            | `a == b`   | `a.eq(&b)`           |
+| `!=`     | `Eq`           | (negated `eq`)  | `a != b`   | `!a.eq(&b)`          |
+| `<`      | `Ord`          | `cmp`           | `a < b`    | `a.cmp(&b) == Less`  |
+| `<=`     | `Ord`          | `cmp`           | `a <= b`   | `a.cmp(&b) != Greater` |
+| `>`      | `Ord`          | `cmp`           | `a > b`    | `a.cmp(&b) == Greater` |
+| `>=`     | `Ord`          | `cmp`           | `a >= b`   | `a.cmp(&b) != Less`  |
 | `+=`     | `AddAssign`    | `add_assign`    | `a += b`   | `a.add_assign(b)`    |
 | `-=`     | `SubAssign`    | `sub_assign`    | `a -= b`   | `a.sub_assign(b)`    |
 | `*=`     | `MulAssign`    | `mul_assign`    | `a *= b`   | `a.mul_assign(b)`    |

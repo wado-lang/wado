@@ -382,50 +382,35 @@ trait Debug {
 debug_println(value);  // calls value.debug()
 ```
 
-#### PartialEq and Eq
+#### Eq
 
-For equality comparison:
+For equality comparison (`==` and `!=`):
 
 ```wado
-trait PartialEq {
+trait Eq {
     fn eq(&self, other: &Self) -> bool;
-
-    fn ne(&self, other: &Self) -> bool {
-        return !self.eq(other);
-    }
 }
-
-// Eq is a marker trait for types with full equivalence relation
-trait Eq: PartialEq {}
 ```
 
-**Note**: `PartialEq` allows types like `f32`/`f64` where `NaN != NaN`. `Eq` is for types with reflexive equality.
+All primitive types implement `Eq`. Custom types implement `Eq` to enable `==` and `!=` operators.
 
-#### PartialOrd and Ord
+#### Ord
 
-For ordering comparison:
+For ordering comparison (`<`, `<=`, `>`, `>=`):
 
 ```wado
-enum Ordering {
+variant Ordering {
     Less,
     Equal,
     Greater,
 }
 
-trait PartialOrd: PartialEq {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering>;
-
-    fn lt(&self, other: &Self) -> bool { ... }
-    fn le(&self, other: &Self) -> bool { ... }
-    fn gt(&self, other: &Self) -> bool { ... }
-    fn ge(&self, other: &Self) -> bool { ... }
-}
-
-// Ord is for types with total ordering
-trait Ord: Eq + PartialOrd {
+trait Ord {
     fn cmp(&self, other: &Self) -> Ordering;
 }
 ```
+
+All primitive types implement `Ord`. Custom types implement `Ord` to enable comparison operators.
 
 #### Hash
 
@@ -500,9 +485,6 @@ impl Display for String { ... }  // Not allowed
 Some traits have no methods and serve as compile-time markers:
 
 ```wado
-// Eq is a marker (extends PartialEq with no new methods)
-trait Eq: PartialEq {}
-
 // Sized is implicit for most types
 trait Sized {}
 ```
