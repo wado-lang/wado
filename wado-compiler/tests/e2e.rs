@@ -51,12 +51,6 @@ struct TestSpec {
     #[serde(default)]
     #[serde(rename = "TODO")]
     todo: bool,
-
-    /// Skip this test in O0 mode (no optimization).
-    /// Use for tests that require O2+ features like DCE-based function discovery
-    /// (e.g., tests using wasi:sockets which requires DCE to find function references).
-    #[serde(default)]
-    skip_o0: bool,
 }
 
 // ============================================================================
@@ -128,12 +122,6 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
 
     // Parse the test spec from JSON
     let spec: TestSpec = common::parse_data_section(data_section, &test_id);
-
-    // Skip O0 tests if skip_o0 is set (for tests requiring DCE-based features)
-    if spec.skip_o0 && opt_level == OptLevel::O0 {
-        eprintln!("[{test_id}] skipped (requires O2+ optimization)");
-        return;
-    }
 
     // Handle TODO tests - they must fail
     if spec.todo {

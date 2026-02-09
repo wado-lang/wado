@@ -341,12 +341,19 @@ pub fn analyze_project(project: &mut Project) {
 pub fn populate_all_features(project: &mut Project) {
     project.reachable_functions = HashSet::new();
     project.all_reachable = true;
-    // Standard WASI functions from the stdlib registry
+    // Standard WASI functions + any non-standard WASI functions used in entry module
     project.used_wasi_functions = project
         .wasi_registry
         .standard_function_names()
         .map(std::string::ToString::to_string)
         .collect();
+
+    // Scan entry module for non-standard WASI function usage (e.g., TcpSocket, UdpSocket)
+    // This ensures O0 mode discovers WASI resource methods without full DCE analysis.
+    if let Some(entry_module) = project.tir_modules.get(&project.entry_module_source) {
+        let extra = scan_wasi_usage(entry_module);
+        project.used_wasi_functions.extend(extra);
+    }
 
     // Build all imports from the builtin registry
     let has_http_handler_export = project
@@ -377,6 +384,157 @@ pub fn populate_all_features(project: &mut Project) {
     // Store imports in the entry module
     if let Some(entry_module) = project.tir_modules.get_mut(&project.entry_module_source) {
         entry_module.imports = imports;
+    }
+}
+
+/// Scan a module for WASI function usage without full DCE analysis.
+/// Returns WASI function names in "`Effect::method`" format (e.g., "`TcpSocket::static_tcp_socket_create`").
+fn scan_wasi_usage(module: &TirModule) -> HashSet<String> {
+    let mut wasi_funcs = HashSet::new();
+    for func_rc in &module.functions {
+        let func = func_rc.borrow();
+        if let Some(body) = &func.body {
+            scan_wasi_block(body, &mut wasi_funcs);
+        }
+    }
+    wasi_funcs
+}
+
+fn scan_wasi_block(block: &TirBlock, wasi_funcs: &mut HashSet<String>) {
+    for stmt in &block.stmts {
+        scan_wasi_stmt(stmt, wasi_funcs);
+    }
+}
+
+fn scan_wasi_stmt(stmt: &crate::tir::TirStmt, wasi_funcs: &mut HashSet<String>) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+            scan_wasi_expr(value, wasi_funcs);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(expr) = value {
+                scan_wasi_expr(expr, wasi_funcs);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        }
+        | TirStmtKind::IfPattern {
+            scrutinee: condition,
+            then_block,
+            else_block,
+            ..
+        } => {
+            scan_wasi_expr(condition, wasi_funcs);
+            scan_wasi_block(then_block, wasi_funcs);
+            if let Some(else_block) = else_block {
+                scan_wasi_block(else_block, wasi_funcs);
+            }
+        }
+        TirStmtKind::Loop { body } => {
+            scan_wasi_block(body, wasi_funcs);
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            scan_wasi_block(block, wasi_funcs);
+        }
+        TirStmtKind::LetPattern { value, .. } => {
+            scan_wasi_expr(value, wasi_funcs);
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(expr) = value {
+                scan_wasi_expr(expr, wasi_funcs);
+            }
+        }
+        TirStmtKind::Continue => {}
+    }
+}
+
+fn scan_wasi_expr(expr: &TirExpr, wasi_funcs: &mut HashSet<String>) {
+    match &expr.kind {
+        TirExprKind::StaticCall { func, args } => {
+            let module_path = func.module_path();
+            if module_path.len() >= 2 && module_path[0] == "wasi" {
+                let func_name = func.name();
+                if let Some(pos) = func_name.find("::") {
+                    let resource_name = &func_name[..pos];
+                    let method_name = &func_name[pos + 2..];
+                    wasi_funcs.insert(format!("{resource_name}::{method_name}"));
+                }
+            }
+            for arg in args {
+                scan_wasi_expr(arg, wasi_funcs);
+            }
+        }
+        TirExprKind::EffectCall {
+            effect_name,
+            op_name,
+            args,
+            ..
+        } => {
+            wasi_funcs.insert(format!("{effect_name}::{op_name}"));
+            for arg in args {
+                scan_wasi_expr(arg, wasi_funcs);
+            }
+        }
+        TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
+            for arg in args {
+                scan_wasi_expr(arg, wasi_funcs);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            scan_wasi_expr(left, wasi_funcs);
+            scan_wasi_expr(right, wasi_funcs);
+        }
+        TirExprKind::Unary { expr, .. }
+        | TirExprKind::Cast { expr, .. }
+        | TirExprKind::FieldAccess { expr, .. } => {
+            scan_wasi_expr(expr, wasi_funcs);
+        }
+        TirExprKind::Assign { target, value }
+        | TirExprKind::Index {
+            expr: target,
+            index: value,
+        } => {
+            scan_wasi_expr(target, wasi_funcs);
+            scan_wasi_expr(value, wasi_funcs);
+        }
+        TirExprKind::Block(block) => {
+            scan_wasi_block(block, wasi_funcs);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            scan_wasi_expr(condition, wasi_funcs);
+            scan_wasi_block(then_branch, wasi_funcs);
+            if let Some(else_branch) = else_branch {
+                scan_wasi_block(else_branch, wasi_funcs);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                scan_wasi_expr(&field.value, wasi_funcs);
+            }
+        }
+        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                scan_wasi_expr(elem, wasi_funcs);
+            }
+        }
+        TirExprKind::Match { expr, arms } => {
+            scan_wasi_expr(expr, wasi_funcs);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    scan_wasi_expr(guard, wasi_funcs);
+                }
+                scan_wasi_expr(&arm.body, wasi_funcs);
+            }
+        }
+        _ => {}
     }
 }
 
