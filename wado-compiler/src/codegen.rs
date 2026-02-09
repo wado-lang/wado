@@ -9514,6 +9514,10 @@ impl Codegen<'_> {
         let mut default_arm: Option<usize> = None;
 
         for (arm_idx, arm) in arms.iter().enumerate() {
+            // Arms with guards can't use br_table optimization
+            if arm.guard.is_some() {
+                return None;
+            }
             match &arm.pattern {
                 TirPattern::Literal(TirLiteralPattern::I128(v)) => {
                     value_to_arm.push((*v as i64, arm_idx));
@@ -9816,7 +9820,7 @@ impl Codegen<'_> {
         let is_irrefutable = matches!(pattern, TirPattern::Wildcard | TirPattern::Binding { .. });
 
         if is_irrefutable {
-            // Irrefutable pattern - just bind and generate body directly
+            // Irrefutable pattern - bind pattern variables
             self.generate_match_pattern_binding(
                 func,
                 scrutinee_local,
@@ -9826,7 +9830,41 @@ impl Codegen<'_> {
                 ctx,
                 builder,
             );
-            self.generate_expr(func, &arm.body, type_table, ctx, builder);
+
+            if let Some(guard) = &arm.guard {
+                // Guard present: evaluate guard, branch on result
+                self.generate_expr(func, guard, type_table, ctx, builder);
+                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                    result_valtype,
+                )));
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra += 1;
+                }
+
+                self.generate_expr(func, &arm.body, type_table, ctx, builder);
+
+                func.instruction(&Instruction::Else);
+                self.generate_match_arms(
+                    func,
+                    scrutinee_local,
+                    scrutinee_type_id,
+                    arms,
+                    arm_index + 1,
+                    result_valtype,
+                    result_type_id,
+                    type_table,
+                    ctx,
+                    builder,
+                );
+
+                func.instruction(&Instruction::End);
+                if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                    *extra -= 1;
+                }
+            } else {
+                // No guard - just generate body directly
+                self.generate_expr(func, &arm.body, type_table, ctx, builder);
+            }
         } else {
             // Refutable pattern - generate condition check
             // Get scrutinee value on stack
@@ -9845,7 +9883,7 @@ impl Codegen<'_> {
                     *extra += 1;
                 }
 
-                // Then: pattern matches - bind and generate body
+                // Then: pattern matches - bind variables
                 self.generate_match_pattern_binding(
                     func,
                     scrutinee_local,
@@ -9855,7 +9893,41 @@ impl Codegen<'_> {
                     ctx,
                     builder,
                 );
-                self.generate_expr(func, &arm.body, type_table, ctx, builder);
+
+                if let Some(guard) = &arm.guard {
+                    // Guard present: evaluate guard, branch on result
+                    self.generate_expr(func, guard, type_table, ctx, builder);
+                    func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                        result_valtype,
+                    )));
+                    if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                        *extra += 1;
+                    }
+
+                    self.generate_expr(func, &arm.body, type_table, ctx, builder);
+
+                    func.instruction(&Instruction::Else);
+                    self.generate_match_arms(
+                        func,
+                        scrutinee_local,
+                        scrutinee_type_id,
+                        arms,
+                        arm_index + 1,
+                        result_valtype,
+                        result_type_id,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+
+                    func.instruction(&Instruction::End);
+                    if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
+                        *extra -= 1;
+                    }
+                } else {
+                    // No guard - just generate body
+                    self.generate_expr(func, &arm.body, type_table, ctx, builder);
+                }
 
                 // Else: try next arm
                 func.instruction(&Instruction::Else);

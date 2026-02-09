@@ -2414,12 +2414,20 @@ impl Parser {
         })))
     }
 
-    /// Parse a single match arm: `pattern => body`
+    /// Parse a single match arm: `pattern [&& guard] => body`
     fn parse_match_arm(&mut self) -> ParseResult<MatchArm> {
         let start_span = self.peek().span;
 
         // Parse pattern
         let pattern = self.parse_pattern()?;
+
+        // Check for optional guard: `&& guard_expr`
+        let guard = if self.check(&TokenKind::And) {
+            self.advance();
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
 
         // Expect =>
         self.expect(&TokenKind::FatArrow)?;
@@ -2437,6 +2445,7 @@ impl Parser {
         let end_span = body.span();
         Ok(MatchArm {
             pattern,
+            guard,
             body,
             span: start_span.merge(&end_span),
         })

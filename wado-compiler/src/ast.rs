@@ -884,6 +884,8 @@ pub struct MatchExpr {
 #[derive(Debug, Clone)]
 pub struct MatchArm {
     pub pattern: Pattern,
+    /// Optional guard expression (the condition after `&&`)
+    pub guard: Option<Expr>,
     pub body: Expr,
     pub span: Span,
 }

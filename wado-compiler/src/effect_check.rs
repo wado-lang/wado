@@ -255,6 +255,9 @@ impl<'a> EffectChecker<'a> {
             TirExprKind::Match { expr, arms } => {
                 self.check_expr(expr);
                 for arm in arms {
+                    if let Some(guard) = &arm.guard {
+                        self.check_expr(guard);
+                    }
                     self.check_expr(&arm.body);
                 }
             }

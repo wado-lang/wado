@@ -803,6 +803,14 @@ let description = match value {
     None => "no value",
 };
 
+// Match with guard (condition after &&)
+let label = match value {
+    Some(x) && x > 100 => "large",
+    Some(x) && x > 10 => "medium",
+    Some(_) => "small",
+    None => "none",
+};
+
 // Matches operator - returns bool for pattern testing
 let is_some = opt matches { Some(_) };
 let is_large = opt matches { Some(x) && x > 10 };  // with guard

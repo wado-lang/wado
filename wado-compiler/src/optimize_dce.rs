@@ -923,6 +923,9 @@ fn analyze_expr(
         TirExprKind::Match { expr, arms } => {
             analyze_expr(expr, current_module, type_table, analysis);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    analyze_expr(guard, current_module, type_table, analysis);
+                }
                 analyze_expr(&arm.body, current_module, type_table, analysis);
             }
         }
@@ -1514,6 +1517,9 @@ fn collect_types_from_expr(
             collect_types_from_expr(expr, type_table, reachable);
             for arm in arms {
                 collect_types_from_pattern(&arm.pattern, type_table, reachable);
+                if let Some(guard) = &arm.guard {
+                    collect_types_from_expr(guard, type_table, reachable);
+                }
                 collect_types_from_expr(&arm.body, type_table, reachable);
             }
         }

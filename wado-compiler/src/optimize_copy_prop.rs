@@ -248,6 +248,9 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
         TirExprKind::Match { expr, arms } => {
             collect_assigned_in_expr(expr, assigned);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_assigned_in_expr(guard, assigned);
+                }
                 collect_assigned_in_expr(&arm.body, assigned);
             }
         }
@@ -494,6 +497,9 @@ fn collect_usage_in_expr(
         TirExprKind::Match { expr: inner, arms } => {
             collect_usage_in_expr(inner, usage, in_loop, in_condition);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_usage_in_expr(guard, usage, in_loop, in_condition);
+                }
                 collect_usage_in_expr(&arm.body, usage, in_loop, in_condition);
             }
         }
@@ -807,6 +813,9 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &HashMap<u32, CopySourc
         TirExprKind::Match { expr: inner, arms } => {
             substitute_in_expr(inner, substitutions);
             for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    substitute_in_expr(guard, substitutions);
+                }
                 substitute_in_expr(&mut arm.body, substitutions);
             }
         }
@@ -1015,6 +1024,9 @@ fn collect_copy_bindings_in_expr(
         TirExprKind::Match { expr: inner, arms } => {
             collect_copy_bindings_in_expr(inner, bindings, block_local_assigned);
             for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_copy_bindings_in_expr(guard, bindings, block_local_assigned);
+                }
                 collect_copy_bindings_in_expr(&arm.body, bindings, block_local_assigned);
             }
         }
@@ -1211,6 +1223,9 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) 
         TirExprKind::Match { expr: inner, arms } => {
             remove_copy_bindings_in_expr(inner, dead_locals);
             for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    remove_copy_bindings_in_expr(guard, dead_locals);
+                }
                 remove_copy_bindings_in_expr(&mut arm.body, dead_locals);
             }
         }

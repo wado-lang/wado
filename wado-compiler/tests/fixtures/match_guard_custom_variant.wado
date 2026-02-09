@@ -1,0 +1,43 @@
+// Test match arm guards with custom variant patterns
+
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
+
+export fn run() with Stdout {
+    let s1 = Shape::Circle(5.0);
+    let s2 = Shape::Circle(0.5);
+    let s3 = Shape::Point;
+
+    // Guard on custom variant with payload binding
+    let desc1 = match s1 {
+        Circle(r) && r > 1.0 => "big circle",
+        Circle(_) => "small circle",
+        Rectangle(_) => "rectangle",
+        Point => "point",
+    };
+    println(desc1);
+
+    let desc2 = match s2 {
+        Circle(r) && r > 1.0 => "big circle",
+        Circle(_) => "small circle",
+        Rectangle(_) => "rectangle",
+        Point => "point",
+    };
+    println(desc2);
+
+    let desc3 = match s3 {
+        Circle(r) && r > 1.0 => "big circle",
+        Circle(_) => "small circle",
+        Rectangle(_) => "rectangle",
+        Point => "point",
+    };
+    println(desc3);
+}
+
+__DATA__
+{"stdout": "big circle\nsmall circle\npoint\n"}
