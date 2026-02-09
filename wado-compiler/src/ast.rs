@@ -1145,6 +1145,17 @@ pub struct AssociatedTypeBinding {
     pub span: Span,
 }
 
+/// Associated constant in an impl block: `pub const PI: f64 = 3.14159;`
+/// These are compile-time constants that are inlined at every use site.
+#[derive(Debug, Clone)]
+pub struct AssociatedConst {
+    pub name: String,
+    pub is_pub: bool,
+    pub ty: Type,
+    pub value: Expr,
+    pub span: Span,
+}
+
 /// Trait declaration: `trait Foo { type Output; fn method(&self) -> Self::Output; }`
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
@@ -1168,6 +1179,8 @@ pub struct ImplBlock {
     pub ty: Type,
     /// Associated type bindings: `type Output = T;`
     pub associated_types: Vec<AssociatedTypeBinding>,
+    /// Associated constants: `pub const PI: f64 = 3.14159;`
+    pub constants: Vec<AssociatedConst>,
     pub methods: Vec<Function>,
     pub span: Span,
 }

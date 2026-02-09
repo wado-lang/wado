@@ -109,6 +109,7 @@ fn desugar_impl(impl_block: &ImplBlock, ctx: &mut DesugarContext) -> ImplBlock {
         trait_type: impl_block.trait_type.clone(),
         ty: impl_block.ty.clone(),
         associated_types: impl_block.associated_types.clone(),
+        constants: impl_block.constants.clone(),
         methods: impl_block
             .methods
             .iter()

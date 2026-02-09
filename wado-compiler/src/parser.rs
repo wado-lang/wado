@@ -2,18 +2,18 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedTypeBinding, AssociatedTypeDecl, Attribute, BinaryExpr,
-    BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ContinueStmt, EffectDecl,
-    EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl, IdentExpr,
-    IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, Item, LabeledBlockStmt,
-    LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr,
-    Module, NamedType, NamespacedGenericType, Newtype, NumberLiteral, Param, Pattern, ResourceDecl,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr,
-    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt,
-    WorldDecl, WorldExport, WorldImport,
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, Attribute,
+    BinaryExpr, BinaryOp, Block, BreakStmt, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
+    ClosureParam, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ContinueStmt, EffectDecl, EffectMethod, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr,
+    FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType,
+    GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
+    MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, NumberLiteral,
+    Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral,
+    StructDecl, StructField, StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl,
+    TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -3125,6 +3125,7 @@ impl Parser {
         self.expect(&TokenKind::LBrace)?;
 
         let mut associated_types = Vec::new();
+        let mut constants = Vec::new();
         let mut methods = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
@@ -3150,8 +3151,28 @@ impl Parser {
                 } else {
                     false
                 };
-                // Methods cannot be exported at the CM boundary
-                methods.push(self.parse_function(is_pub, false, Vec::new())?);
+
+                // Check if this is an associated constant: `[pub] const NAME: Type = expr;`
+                if self.check(&TokenKind::Const) {
+                    let const_span = self.peek().span;
+                    self.advance();
+                    let const_name = self.consume_ident()?;
+                    self.expect(&TokenKind::Colon)?;
+                    let const_ty = self.parse_type()?;
+                    self.expect(&TokenKind::Eq)?;
+                    let const_value = self.parse_expr()?;
+                    let end = self.expect(&TokenKind::Semicolon)?.span;
+                    constants.push(AssociatedConst {
+                        name: const_name,
+                        is_pub,
+                        ty: const_ty,
+                        value: const_value,
+                        span: const_span.merge(&end),
+                    });
+                } else {
+                    // Methods cannot be exported at the CM boundary
+                    methods.push(self.parse_function(is_pub, false, Vec::new())?);
+                }
             }
         }
 
@@ -3162,6 +3183,7 @@ impl Parser {
             trait_type,
             ty,
             associated_types,
+            constants,
             methods,
             span: start_span.merge(&end_span),
         })

@@ -1,0 +1,103 @@
+// Test all f64 static math methods
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // === Wasm instruction math (direct) ===
+    println(`abs(-3.5) = {f64::abs(-3.5)}`);
+    println(`abs(2.0) = {f64::abs(2.0)}`);
+    println(`ceil(2.3) = {f64::ceil(2.3)}`);
+    println(`ceil(-2.3) = {f64::ceil(-2.3)}`);
+    println(`floor(2.7) = {f64::floor(2.7)}`);
+    println(`floor(-2.7) = {f64::floor(-2.7)}`);
+    println(`trunc(2.9) = {f64::trunc(2.9)}`);
+    println(`trunc(-2.9) = {f64::trunc(-2.9)}`);
+    println(`round(2.5) = {f64::round(2.5)}`);
+    println(`round(3.5) = {f64::round(3.5)}`);
+    println(`sqrt(4.0) = {f64::sqrt(4.0)}`);
+    println(`sqrt(2.0) = {f64::sqrt(2.0)}`);
+    println(`min(3.0, 5.0) = {f64::min(3.0, 5.0)}`);
+    println(`max(3.0, 5.0) = {f64::max(3.0, 5.0)}`);
+    println(`copysign(5.0, -1.0) = {f64::copysign(5.0, -1.0)}`);
+    println(`copysign(-5.0, 1.0) = {f64::copysign(-5.0, 1.0)}`);
+
+    // === Trigonometric ===
+    println(`sin(0.0) = {f64::sin(0.0)}`);
+    println(`sin(PI/2) = {f64::sin(f64::PI / 2.0)}`);
+    println(`cos(0.0) = {f64::cos(0.0)}`);
+    println(`cos(PI) = {f64::cos(f64::PI)}`);
+    println(`tan(0.0) = {f64::tan(0.0)}`);
+    println(`asin(1.0) = {f64::asin(1.0)}`);
+    println(`acos(1.0) = {f64::acos(1.0)}`);
+    println(`atan(0.0) = {f64::atan(0.0)}`);
+    println(`atan2(1.0, 1.0) = {f64::atan2(1.0, 1.0)}`);
+
+    // === Hyperbolic ===
+    println(`sinh(0.0) = {f64::sinh(0.0)}`);
+    println(`cosh(0.0) = {f64::cosh(0.0)}`);
+    println(`tanh(0.0) = {f64::tanh(0.0)}`);
+    println(`asinh(0.0) = {f64::asinh(0.0)}`);
+    println(`acosh(1.0) = {f64::acosh(1.0)}`);
+    println(`atanh(0.0) = {f64::atanh(0.0)}`);
+
+    // === Exponential / Logarithmic ===
+    println(`exp(0.0) = {f64::exp(0.0)}`);
+    println(`exp(1.0) = {f64::exp(1.0)}`);
+    println(`exp2(3.0) = {f64::exp2(3.0)}`);
+    println(`expm1(0.0) = {f64::expm1(0.0)}`);
+    println(`ln(1.0) = {f64::ln(1.0)}`);
+    println(`ln(E) = {f64::ln(f64::E)}`);
+    println(`log2(8.0) = {f64::log2(8.0)}`);
+    println(`log10(1000.0) = {f64::log10(1000.0)}`);
+    println(`ln1p(0.0) = {f64::ln1p(0.0)}`);
+
+    // === Power / Root / Misc ===
+    println(`pow(2.0, 10.0) = {f64::pow(2.0, 10.0)}`);
+    println(`pow(3.0, 3.0) = {f64::pow(3.0, 3.0)}`);
+    println(`cbrt(27.0) = {f64::cbrt(27.0)}`);
+    println(`hypot(3.0, 4.0) = {f64::hypot(3.0, 4.0)}`);
+    println(`fmod(7.0, 3.0) = {f64::fmod(7.0, 3.0)}`);
+}
+
+__DATA__
+{"stdout_contains": [
+    "abs(-3.5) = 3.5",
+    "abs(2.0) = 2.0",
+    "ceil(2.3) = 3.0",
+    "ceil(-2.3) = -2.0",
+    "floor(2.7) = 2.0",
+    "floor(-2.7) = -3.0",
+    "trunc(2.9) = 2.0",
+    "trunc(-2.9) = -2.0",
+    "round(2.5) = 2.0",
+    "round(3.5) = 4.0",
+    "sqrt(4.0) = 2.0",
+    "min(3.0, 5.0) = 3.0",
+    "max(3.0, 5.0) = 5.0",
+    "copysign(5.0, -1.0) = -5.0",
+    "copysign(-5.0, 1.0) = 5.0",
+    "sin(0.0) = 0.0",
+    "sin(PI/2) = 1.0",
+    "cos(0.0) = 1.0",
+    "cos(PI) = -1.0",
+    "tan(0.0) = 0.0",
+    "acos(1.0) = 0.0",
+    "atan(0.0) = 0.0",
+    "sinh(0.0) = 0.0",
+    "cosh(0.0) = 1.0",
+    "tanh(0.0) = 0.0",
+    "asinh(0.0) = 0.0",
+    "acosh(1.0) = 0.0",
+    "atanh(0.0) = 0.0",
+    "exp(0.0) = 1.0",
+    "exp2(3.0) = 8.0",
+    "expm1(0.0) = 0.0",
+    "ln(1.0) = 0.0",
+    "log2(8.0) = 3.0",
+    "log10(1000.0) = 3.0",
+    "ln1p(0.0) = 0.0",
+    "pow(2.0, 10.0) = 1024.0",
+    "pow(3.0, 3.0) = 27.0",
+    "cbrt(27.0) = 3.0",
+    "hypot(3.0, 4.0) = 5.0",
+    "fmod(7.0, 3.0) = 1.0"
+]}

@@ -1,0 +1,101 @@
+// Test all f32 static math methods
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // === Wasm instruction math (direct) ===
+    println(`abs(-3.5) = {f32::abs(-3.5 as f32)}`);
+    println(`abs(2.0) = {f32::abs(2.0 as f32)}`);
+    println(`ceil(2.3) = {f32::ceil(2.3 as f32)}`);
+    println(`ceil(-2.3) = {f32::ceil(-2.3 as f32)}`);
+    println(`floor(2.7) = {f32::floor(2.7 as f32)}`);
+    println(`floor(-2.7) = {f32::floor(-2.7 as f32)}`);
+    println(`trunc(2.9) = {f32::trunc(2.9 as f32)}`);
+    println(`trunc(-2.9) = {f32::trunc(-2.9 as f32)}`);
+    println(`round(2.5) = {f32::round(2.5 as f32)}`);
+    println(`round(3.5) = {f32::round(3.5 as f32)}`);
+    println(`sqrt(4.0) = {f32::sqrt(4.0 as f32)}`);
+    println(`sqrt(2.0) = {f32::sqrt(2.0 as f32)}`);
+    println(`min(3.0, 5.0) = {f32::min(3.0 as f32, 5.0 as f32)}`);
+    println(`max(3.0, 5.0) = {f32::max(3.0 as f32, 5.0 as f32)}`);
+    println(`copysign(5.0, -1.0) = {f32::copysign(5.0 as f32, -1.0 as f32)}`);
+    println(`copysign(-5.0, 1.0) = {f32::copysign(-5.0 as f32, 1.0 as f32)}`);
+
+    // === Trigonometric ===
+    println(`sin(0.0) = {f32::sin(0.0 as f32)}`);
+    println(`sin(PI/2) = {f32::sin(f32::PI / (2.0 as f32))}`);
+    println(`cos(0.0) = {f32::cos(0.0 as f32)}`);
+    println(`cos(PI) = {f32::cos(f32::PI)}`);
+    println(`tan(0.0) = {f32::tan(0.0 as f32)}`);
+    println(`asin(1.0) = {f32::asin(1.0 as f32)}`);
+    println(`acos(1.0) = {f32::acos(1.0 as f32)}`);
+    println(`atan(0.0) = {f32::atan(0.0 as f32)}`);
+    println(`atan2(1.0, 1.0) = {f32::atan2(1.0 as f32, 1.0 as f32)}`);
+
+    // === Hyperbolic ===
+    println(`sinh(0.0) = {f32::sinh(0.0 as f32)}`);
+    println(`cosh(0.0) = {f32::cosh(0.0 as f32)}`);
+    println(`tanh(0.0) = {f32::tanh(0.0 as f32)}`);
+    println(`asinh(0.0) = {f32::asinh(0.0 as f32)}`);
+    println(`acosh(1.0) = {f32::acosh(1.0 as f32)}`);
+    println(`atanh(0.0) = {f32::atanh(0.0 as f32)}`);
+
+    // === Exponential / Logarithmic ===
+    println(`exp(0.0) = {f32::exp(0.0 as f32)}`);
+    println(`exp(1.0) = {f32::exp(1.0 as f32)}`);
+    println(`exp2(3.0) = {f32::exp2(3.0 as f32)}`);
+    println(`expm1(0.0) = {f32::expm1(0.0 as f32)}`);
+    println(`ln(1.0) = {f32::ln(1.0 as f32)}`);
+    println(`ln(E) = {f32::ln(f32::E)}`);
+    println(`log2(8.0) = {f32::log2(8.0 as f32)}`);
+    println(`log10(1000.0) = {f32::log10(1000.0 as f32)}`);
+    println(`ln1p(0.0) = {f32::ln1p(0.0 as f32)}`);
+
+    // === Power / Root / Misc ===
+    println(`pow(2.0, 10.0) = {f32::pow(2.0 as f32, 10.0 as f32)}`);
+    println(`pow(3.0, 3.0) = {f32::pow(3.0 as f32, 3.0 as f32)}`);
+    println(`cbrt(27.0) = {f32::cbrt(27.0 as f32)}`);
+    println(`hypot(3.0, 4.0) = {f32::hypot(3.0 as f32, 4.0 as f32)}`);
+    println(`fmod(7.0, 3.0) = {f32::fmod(7.0 as f32, 3.0 as f32)}`);
+}
+
+__DATA__
+{"stdout_contains": [
+    "abs(-3.5) = 3.5",
+    "abs(2.0) = 2.0",
+    "ceil(2.3) = 3.0",
+    "ceil(-2.3) = -2.0",
+    "floor(2.7) = 2.0",
+    "floor(-2.7) = -3.0",
+    "trunc(2.9) = 2.0",
+    "trunc(-2.9) = -2.0",
+    "round(2.5) = 2.0",
+    "round(3.5) = 4.0",
+    "sqrt(4.0) = 2.0",
+    "min(3.0, 5.0) = 3.0",
+    "max(3.0, 5.0) = 5.0",
+    "copysign(5.0, -1.0) = -5.0",
+    "copysign(-5.0, 1.0) = 5.0",
+    "sin(0.0) = 0.0",
+    "cos(0.0) = 1.0",
+    "tan(0.0) = 0.0",
+    "acos(1.0) = 0.0",
+    "atan(0.0) = 0.0",
+    "sinh(0.0) = 0.0",
+    "cosh(0.0) = 1.0",
+    "tanh(0.0) = 0.0",
+    "asinh(0.0) = 0.0",
+    "acosh(1.0) = 0.0",
+    "atanh(0.0) = 0.0",
+    "exp(0.0) = 1.0",
+    "exp2(3.0) = 8.0",
+    "expm1(0.0) = 0.0",
+    "ln(1.0) = 0.0",
+    "log2(8.0) = 3.0",
+    "log10(1000.0) = 3.0",
+    "ln1p(0.0) = 0.0",
+    "pow(2.0, 10.0) = 1024.0",
+    "pow(3.0, 3.0) = 27.0",
+    "cbrt(27.0) = 3.0",
+    "hypot(3.0, 4.0) = 5.0",
+    "fmod(7.0, 3.0) = 1.0"
+]}
