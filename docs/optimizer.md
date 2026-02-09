@@ -26,13 +26,13 @@ See [WebAssembly-Native Instruction Opportunities](#webassembly-native-instructi
 
 ## Optimization Levels
 
-| Level          | Flag            | DCE | Iterations | Inline Threshold | Target Use Case                         |
-| -------------- | --------------- | --- | ---------- | ---------------- | --------------------------------------- |
-| **None**       | `-O0`           | No  | 0          | N/A              | Debugging                               |
-| **Basic**      | `-O1`           | No  | 2          | 10               | Development builds                      |
-| **Full**       | `-O2` (default) | Yes | 10         | 10               | Server-side production                  |
-| **Aggressive** | `-O3`           | Yes | 100        | 20               | Aggressive production (more iterations) |
-| **Size**       | `-Os`           | Yes | 10         | 10               | Client-side/frontend (+ strip names)    |
+| Flag            | DCE | Iterations | Inline Threshold | Target Use Case                         |
+| --------------- | --- | ---------- | ---------------- | --------------------------------------- |
+| `-O0`           | No  | 0          | N/A              | Debugging                               |
+| `-O1`           | No  | 2          | 10               | Development builds                      |
+| `-O2` (default) | Yes | 10         | 10               | Server-side production                  |
+| `-O3`           | Yes | 100        | 20               | Aggressive production (more iterations) |
+| `-Os`           | Yes | 10         | 10               | Client-side/frontend (+ strip names)    |
 
 All passes (except DCE) run in a fixed-point loop. The loop exits early when no pass makes changes, so typical O2 compilations converge in 2-4 iterations.
 
