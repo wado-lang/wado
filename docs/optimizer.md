@@ -304,14 +304,14 @@ The compiler exposes `i32_clz` and `i64_clz` in `core/builtin.wado`, mapped dire
 
 ### Intrinsics to Expose
 
-| Builtin            | Wasm Instruction | Status      |
-| ------------------ | ---------------- | ----------- |
-| `i32_clz(x)`      | `i32.clz`       | Exposed     |
-| `i64_clz(x)`      | `i64.clz`       | Exposed     |
-| `i32_ctz(x)`      | `i32.ctz`       | Not exposed |
-| `i64_ctz(x)`      | `i64.ctz`       | Not exposed |
-| `i32_popcnt(x)`   | `i32.popcnt`    | Not exposed |
-| `i64_popcnt(x)`   | `i64.popcnt`    | Not exposed |
+| Builtin         | Wasm Instruction | Status      |
+| --------------- | ---------------- | ----------- |
+| `i32_clz(x)`    | `i32.clz`        | Exposed     |
+| `i64_clz(x)`    | `i64.clz`        | Exposed     |
+| `i32_ctz(x)`    | `i32.ctz`        | Not exposed |
+| `i64_ctz(x)`    | `i64.ctz`        | Not exposed |
+| `i32_popcnt(x)` | `i32.popcnt`     | Not exposed |
+| `i64_popcnt(x)` | `i64.popcnt`     | Not exposed |
 
 ### Pattern Recognition Opportunities
 
@@ -453,17 +453,17 @@ Implementation: Detect `return func(...)` pattern in TIR, emit `return_call` ins
 
 ### Summary: Prefer Wasm Instructions Over Compiler Transforms
 
-| Optimization Goal | Do Not | Do This Instead |
-| --- | --- | --- |
-| Tail recursion | Convert to loop | Emit `return_call` |
-| Array initialization | Emit loop | Use `array.fill` |
-| Array copy | Emit loop | Use `array.copy` |
-| Memory copy | Byte-by-byte loop | Use `memory.copy` |
-| Memory zero | Byte-by-byte loop | Use `memory.fill` |
-| Conditional value | Branch + PHI | Use `select` |
-| Count bits | Loop with shifts | Use `popcnt` |
-| Find first bit | Loop with shifts | Use `clz` / `ctz` |
-| Loop unrolling | Replicate code 4x | Don't — increases code size, Wasm runtimes already optimize loops |
+| Optimization Goal    | Do Not            | Do This Instead                                                   |
+| -------------------- | ----------------- | ----------------------------------------------------------------- |
+| Tail recursion       | Convert to loop   | Emit `return_call`                                                |
+| Array initialization | Emit loop         | Use `array.fill`                                                  |
+| Array copy           | Emit loop         | Use `array.copy`                                                  |
+| Memory copy          | Byte-by-byte loop | Use `memory.copy`                                                 |
+| Memory zero          | Byte-by-byte loop | Use `memory.fill`                                                 |
+| Conditional value    | Branch + PHI      | Use `select`                                                      |
+| Count bits           | Loop with shifts  | Use `popcnt`                                                      |
+| Find first bit       | Loop with shifts  | Use `clz` / `ctz`                                                 |
+| Loop unrolling       | Replicate code 4x | Don't — increases code size, Wasm runtimes already optimize loops |
 
 ## Implementation Roadmap
 
