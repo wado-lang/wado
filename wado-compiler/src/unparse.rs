@@ -495,8 +495,24 @@ impl<'a> Unparser<'a> {
             self.output.push_str(";\n");
         }
 
-        // Add blank line between associated types and methods if both present
-        if !i.associated_types.is_empty() && !i.methods.is_empty() {
+        // Unparse associated constants
+        for assoc_const in &i.constants {
+            self.write_indent();
+            if assoc_const.is_pub {
+                self.output.push_str("pub ");
+            }
+            self.output.push_str("const ");
+            self.output.push_str(&assoc_const.name);
+            self.output.push_str(": ");
+            self.unparse_type(&assoc_const.ty);
+            self.output.push_str(" = ");
+            self.unparse_expr(&assoc_const.value);
+            self.output.push_str(";\n");
+        }
+
+        // Add blank line between declarations and methods if both present
+        let has_declarations = !i.associated_types.is_empty() || !i.constants.is_empty();
+        if has_declarations && !i.methods.is_empty() {
             self.output.push('\n');
         }
 

@@ -63,6 +63,9 @@ impl char {
 }
 
 impl i8 {
+    pub const MAX: i8 = 127 as i8;
+    pub const MIN: i8 = -128 as i8;
+
     /// Convert i8 to String
     pub fn to_string(self) -> String {
         // Cast to i32 and use i32's algorithm
@@ -71,6 +74,9 @@ impl i8 {
 }
 
 impl u8 {
+    pub const MAX: u8 = 255 as u8;
+    pub const MIN: u8 = 0 as u8;
+
     /// Convert u8 to String
     pub fn to_string(self) -> String {
         // Cast to i32 and use i32's algorithm (u8 fits in positive i32)
@@ -79,6 +85,9 @@ impl u8 {
 }
 
 impl i16 {
+    pub const MAX: i16 = 32767 as i16;
+    pub const MIN: i16 = -32768 as i16;
+
     /// Convert i16 to String
     pub fn to_string(self) -> String {
         // Cast to i32 and use i32's algorithm
@@ -87,6 +96,9 @@ impl i16 {
 }
 
 impl u16 {
+    pub const MAX: u16 = 65535 as u16;
+    pub const MIN: u16 = 0 as u16;
+
     /// Convert u16 to String
     pub fn to_string(self) -> String {
         // Cast to i32 and use i32's algorithm (u16 fits in positive i32)
@@ -95,6 +107,9 @@ impl u16 {
 }
 
 impl i32 {
+    pub const MAX: i32 = 2147483647;
+    pub const MIN: i32 = -2147483648;
+
     /// Convert i32 to String
     /// Maximum i32 value is 2147483647 (10 digits) + optional minus sign = 11 chars max
     pub fn to_string(self) -> String {
@@ -144,6 +159,9 @@ impl i32 {
 }
 
 impl u32 {
+    pub const MAX: u32 = 4294967295 as u32;
+    pub const MIN: u32 = 0 as u32;
+
     /// Convert u32 to String (unsigned)
     /// Maximum u32 value is 4294967295 (10 digits)
     pub fn to_string(self) -> String {
@@ -188,6 +206,9 @@ impl u32 {
 }
 
 impl i64 {
+    pub const MAX: i64 = 9223372036854775807 as i64;
+    pub const MIN: i64 = -9223372036854775808 as i64;
+
     /// Convert i64 to String
     /// Maximum i64 value is 9223372036854775807 (19 digits) + optional minus sign = 20 chars max
     pub fn to_string(self) -> String {
@@ -241,6 +262,9 @@ impl i64 {
 }
 
 impl u64 {
+    pub const MAX: u64 = 18446744073709551615 as u64;
+    pub const MIN: u64 = 0 as u64;
+
     /// Convert u64 to String (unsigned)
     /// Maximum u64 value is 18446744073709551615 (20 digits)
     pub fn to_string(self) -> String {
@@ -307,6 +331,13 @@ impl u64 {
 }
 
 impl f32 {
+    // Constants
+    pub const PI: f32 = 3.14159265358979323846 as f32;
+    pub const TAU: f32 = 6.28318530717958647692 as f32;
+    pub const E: f32 = 2.71828182845904523536 as f32;
+    pub const INFINITY: f32 = (1.0 as f32) / (0.0 as f32);
+    pub const NEG_INFINITY: f32 = (-1.0 as f32) / (0.0 as f32);
+
     /// Convert f32 to String using the bundled float-to-string algorithm
     pub fn to_string(self) -> String {
         let value = self;
@@ -324,9 +355,127 @@ impl f32 {
 
         return String::internal_from_utf8_raw(arr, len);
     }
+
+    // Wasm instruction math (direct)
+
+    /// Absolute value
+    pub fn abs(x: f32) -> f32 { return builtin::f32_abs(x); }
+
+    /// Ceiling (round toward +infinity)
+    pub fn ceil(x: f32) -> f32 { return builtin::f32_ceil(x); }
+
+    /// Floor (round toward -infinity)
+    pub fn floor(x: f32) -> f32 { return builtin::f32_floor(x); }
+
+    /// Truncate toward zero
+    pub fn trunc(x: f32) -> f32 { return builtin::f32_trunc(x); }
+
+    /// Round to nearest even
+    pub fn round(x: f32) -> f32 { return builtin::f32_nearest(x); }
+
+    /// Square root
+    pub fn sqrt(x: f32) -> f32 { return builtin::f32_sqrt(x); }
+
+    /// Minimum of two values
+    pub fn min(x: f32, y: f32) -> f32 { return builtin::f32_min(x, y); }
+
+    /// Maximum of two values
+    pub fn max(x: f32, y: f32) -> f32 { return builtin::f32_max(x, y); }
+
+    /// Copy sign from y to x
+    pub fn copysign(x: f32, y: f32) -> f32 { return builtin::f32_copysign(x, y); }
+
+    // Transcendental math (bundled libm)
+
+    /// Sine (in radians)
+    pub fn sin(x: f32) -> f32 { return builtin::f32_sin(x); }
+
+    /// Cosine (in radians)
+    pub fn cos(x: f32) -> f32 { return builtin::f32_cos(x); }
+
+    /// Tangent (in radians)
+    pub fn tan(x: f32) -> f32 { return builtin::f32_tan(x); }
+
+    /// Arc sine (returns radians)
+    pub fn asin(x: f32) -> f32 { return builtin::f32_asin(x); }
+
+    /// Arc cosine (returns radians)
+    pub fn acos(x: f32) -> f32 { return builtin::f32_acos(x); }
+
+    /// Arc tangent (returns radians)
+    pub fn atan(x: f32) -> f32 { return builtin::f32_atan(x); }
+
+    /// Arc tangent of y/x (returns radians)
+    pub fn atan2(y: f32, x: f32) -> f32 { return builtin::f32_atan2(y, x); }
+
+    /// Hyperbolic sine
+    pub fn sinh(x: f32) -> f32 { return builtin::f32_sinh(x); }
+
+    /// Hyperbolic cosine
+    pub fn cosh(x: f32) -> f32 { return builtin::f32_cosh(x); }
+
+    /// Hyperbolic tangent
+    pub fn tanh(x: f32) -> f32 { return builtin::f32_tanh(x); }
+
+    /// Inverse hyperbolic sine
+    pub fn asinh(x: f32) -> f32 { return builtin::f32_asinh(x); }
+
+    /// Inverse hyperbolic cosine
+    pub fn acosh(x: f32) -> f32 { return builtin::f32_acosh(x); }
+
+    /// Inverse hyperbolic tangent
+    pub fn atanh(x: f32) -> f32 { return builtin::f32_atanh(x); }
+
+    /// e raised to the power x
+    pub fn exp(x: f32) -> f32 { return builtin::f32_exp(x); }
+
+    /// 2 raised to the power x
+    pub fn exp2(x: f32) -> f32 { return builtin::f32_exp2(x); }
+
+    /// e^x - 1 (more accurate for small x)
+    pub fn expm1(x: f32) -> f32 { return builtin::f32_expm1(x); }
+
+    /// Natural logarithm (base e)
+    pub fn ln(x: f32) -> f32 { return builtin::f32_ln(x); }
+
+    /// Logarithm base 2
+    pub fn log2(x: f32) -> f32 { return builtin::f32_log2(x); }
+
+    /// Logarithm base 10
+    pub fn log10(x: f32) -> f32 { return builtin::f32_log10(x); }
+
+    /// ln(1 + x) (more accurate for small x)
+    pub fn ln1p(x: f32) -> f32 { return builtin::f32_ln1p(x); }
+
+    /// x raised to the power y
+    pub fn pow(x: f32, y: f32) -> f32 { return builtin::f32_pow(x, y); }
+
+    /// Cube root
+    pub fn cbrt(x: f32) -> f32 { return builtin::f32_cbrt(x); }
+
+    /// Euclidean distance: sqrt(x^2 + y^2)
+    pub fn hypot(x: f32, y: f32) -> f32 { return builtin::f32_hypot(x, y); }
+
+    /// Floating-point remainder of x/y
+    pub fn fmod(x: f32, y: f32) -> f32 { return builtin::f32_fmod(x, y); }
 }
 
 impl f64 {
+    // Constants
+    pub const PI: f64 = 3.14159265358979323846;
+    pub const TAU: f64 = 6.28318530717958647692;
+    pub const E: f64 = 2.71828182845904523536;
+    pub const LN2: f64 = 0.69314718055994530942;
+    pub const LN10: f64 = 2.30258509299404568402;
+    pub const LOG2_E: f64 = 1.44269504088896340736;
+    pub const LOG10_E: f64 = 0.43429448190325182765;
+    pub const SQRT2: f64 = 1.41421356237309504880;
+    pub const FRAC_1_SQRT2: f64 = 0.70710678118654752440;
+    pub const FRAC_PI_2: f64 = 1.57079632679489661923;
+    pub const FRAC_PI_4: f64 = 0.78539816339744830962;
+    pub const INFINITY: f64 = 1.0 / 0.0;
+    pub const NEG_INFINITY: f64 = -1.0 / 0.0;
+
     /// Convert f64 to String using the bundled float-to-string algorithm
     pub fn to_string(self) -> String {
         let value = self;
@@ -344,6 +493,109 @@ impl f64 {
 
         return String::internal_from_utf8_raw(arr, len);
     }
+
+    // Wasm instruction math (direct)
+
+    /// Absolute value
+    pub fn abs(x: f64) -> f64 { return builtin::f64_abs(x); }
+
+    /// Ceiling (round toward +infinity)
+    pub fn ceil(x: f64) -> f64 { return builtin::f64_ceil(x); }
+
+    /// Floor (round toward -infinity)
+    pub fn floor(x: f64) -> f64 { return builtin::f64_floor(x); }
+
+    /// Truncate toward zero
+    pub fn trunc(x: f64) -> f64 { return builtin::f64_trunc(x); }
+
+    /// Round to nearest even
+    pub fn round(x: f64) -> f64 { return builtin::f64_nearest(x); }
+
+    /// Square root
+    pub fn sqrt(x: f64) -> f64 { return builtin::f64_sqrt(x); }
+
+    /// Minimum of two values
+    pub fn min(x: f64, y: f64) -> f64 { return builtin::f64_min(x, y); }
+
+    /// Maximum of two values
+    pub fn max(x: f64, y: f64) -> f64 { return builtin::f64_max(x, y); }
+
+    /// Copy sign from y to x
+    pub fn copysign(x: f64, y: f64) -> f64 { return builtin::f64_copysign(x, y); }
+
+    // Transcendental math (bundled libm)
+
+    /// Sine (in radians)
+    pub fn sin(x: f64) -> f64 { return builtin::f64_sin(x); }
+
+    /// Cosine (in radians)
+    pub fn cos(x: f64) -> f64 { return builtin::f64_cos(x); }
+
+    /// Tangent (in radians)
+    pub fn tan(x: f64) -> f64 { return builtin::f64_tan(x); }
+
+    /// Arc sine (returns radians)
+    pub fn asin(x: f64) -> f64 { return builtin::f64_asin(x); }
+
+    /// Arc cosine (returns radians)
+    pub fn acos(x: f64) -> f64 { return builtin::f64_acos(x); }
+
+    /// Arc tangent (returns radians)
+    pub fn atan(x: f64) -> f64 { return builtin::f64_atan(x); }
+
+    /// Arc tangent of y/x (returns radians)
+    pub fn atan2(y: f64, x: f64) -> f64 { return builtin::f64_atan2(y, x); }
+
+    /// Hyperbolic sine
+    pub fn sinh(x: f64) -> f64 { return builtin::f64_sinh(x); }
+
+    /// Hyperbolic cosine
+    pub fn cosh(x: f64) -> f64 { return builtin::f64_cosh(x); }
+
+    /// Hyperbolic tangent
+    pub fn tanh(x: f64) -> f64 { return builtin::f64_tanh(x); }
+
+    /// Inverse hyperbolic sine
+    pub fn asinh(x: f64) -> f64 { return builtin::f64_asinh(x); }
+
+    /// Inverse hyperbolic cosine
+    pub fn acosh(x: f64) -> f64 { return builtin::f64_acosh(x); }
+
+    /// Inverse hyperbolic tangent
+    pub fn atanh(x: f64) -> f64 { return builtin::f64_atanh(x); }
+
+    /// e raised to the power x
+    pub fn exp(x: f64) -> f64 { return builtin::f64_exp(x); }
+
+    /// 2 raised to the power x
+    pub fn exp2(x: f64) -> f64 { return builtin::f64_exp2(x); }
+
+    /// e^x - 1 (more accurate for small x)
+    pub fn expm1(x: f64) -> f64 { return builtin::f64_expm1(x); }
+
+    /// Natural logarithm (base e)
+    pub fn ln(x: f64) -> f64 { return builtin::f64_ln(x); }
+
+    /// Logarithm base 2
+    pub fn log2(x: f64) -> f64 { return builtin::f64_log2(x); }
+
+    /// Logarithm base 10
+    pub fn log10(x: f64) -> f64 { return builtin::f64_log10(x); }
+
+    /// ln(1 + x) (more accurate for small x)
+    pub fn ln1p(x: f64) -> f64 { return builtin::f64_ln1p(x); }
+
+    /// x raised to the power y
+    pub fn pow(x: f64, y: f64) -> f64 { return builtin::f64_pow(x, y); }
+
+    /// Cube root
+    pub fn cbrt(x: f64) -> f64 { return builtin::f64_cbrt(x); }
+
+    /// Euclidean distance: sqrt(x^2 + y^2)
+    pub fn hypot(x: f64, y: f64) -> f64 { return builtin::f64_hypot(x, y); }
+
+    /// Floating-point remainder of x/y
+    pub fn fmod(x: f64, y: f64) -> f64 { return builtin::f64_fmod(x, y); }
 }
 
 // ============================================================================

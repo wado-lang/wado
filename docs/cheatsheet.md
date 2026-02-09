@@ -426,6 +426,28 @@ let origin = Point::origin();
 let arr = Array::<i32>::with_capacity(10);
 ```
 
+## Associated Constants
+
+```wado
+// Associated constants are compile-time constants defined in impl blocks
+// They are inlined at every use site and cannot be mutated
+impl f64 {
+    pub const PI: f64 = 3.14159265358979323846;
+}
+
+// Access with Type::CONST syntax (no parentheses)
+let pi = f64::PI;
+let max = i32::MAX;
+```
+
+Primitive types provide built-in associated constants:
+
+| Type                     | Constants                                                                                                                           |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `f64`                    | `PI`, `TAU`, `E`, `LN2`, `LN10`, `LOG2_E`, `LOG10_E`, `SQRT2`, `FRAC_1_SQRT2`, `FRAC_PI_2`, `FRAC_PI_4`, `INFINITY`, `NEG_INFINITY` |
+| `f32`                    | `PI`, `TAU`, `E`, `INFINITY`, `NEG_INFINITY`                                                                                        |
+| `i8`..`i64`, `u8`..`u64` | `MAX`, `MIN`                                                                                                                        |
+
 ## Traits
 
 ```wado
@@ -1037,6 +1059,34 @@ map["key2"] = 100;
 if let Some(v) = map["key"] { ... }  // index access returns Option<V>
 let keys = map.keys();    // keys in sorted order
 map.remove("key");
+```
+
+### Math Functions
+
+Math functions are provided as static methods on `f64` and `f32`:
+
+```wado
+// Constants
+let pi = f64::PI;
+let e = f64::E;
+
+// Wasm instruction math (single-instruction, fast)
+f64::abs(x)        f64::ceil(x)       f64::floor(x)
+f64::trunc(x)      f64::round(x)      f64::sqrt(x)
+f64::min(x, y)     f64::max(x, y)     f64::copysign(x, y)
+
+// Transcendental math (bundled deterministic libm)
+f64::sin(x)        f64::cos(x)        f64::tan(x)
+f64::asin(x)       f64::acos(x)       f64::atan(x)
+f64::atan2(y, x)   f64::sinh(x)       f64::cosh(x)
+f64::tanh(x)       f64::asinh(x)      f64::acosh(x)
+f64::atanh(x)      f64::exp(x)        f64::exp2(x)
+f64::expm1(x)      f64::ln(x)         f64::log2(x)
+f64::log10(x)      f64::ln1p(x)       f64::pow(x, y)
+f64::cbrt(x)       f64::hypot(x, y)   f64::fmod(x, y)
+
+// f32 has the same set of functions
+f32::sin(x)        f32::sqrt(x)       f32::PI
 ```
 
 ## Generic Functions and Methods

@@ -1,0 +1,28 @@
+// Test trigonometric and 2-argument static methods
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let pi = f64::PI;
+    let half_pi = pi / 2.0;
+
+    // Trigonometric
+    println(`sin(PI/2) = {f64::sin(half_pi)}`);
+    println(`cos(PI) = {f64::cos(pi)}`);
+    println(`atan2(1, 1) = {f64::atan2(1.0, 1.0)}`);
+
+    // Logarithmic
+    println(`log2(8) = {f64::log2(8.0)}`);
+    println(`log10(1000) = {f64::log10(1000.0)}`);
+
+    // Rounding with copysign
+    println(`copysign(5, -1) = {f64::copysign(5.0, -1.0)}`);
+
+    // Cube root
+    println(`cbrt(27) = {f64::cbrt(27.0)}`);
+
+    // fmod
+    println(`fmod(7, 3) = {f64::fmod(7.0, 3.0)}`);
+}
+
+__DATA__
+{"stdout_contains": ["sin(PI/2) = 1.0", "cos(PI) = -1.0", "log2(8) = 3.0", "log10(1000) = 3.0", "copysign(5, -1) = -5.0", "cbrt(27) = 3.0", "fmod(7, 3) = 1.0"]}

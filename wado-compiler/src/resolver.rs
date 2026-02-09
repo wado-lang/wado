@@ -503,6 +503,9 @@ pub struct Resolver<'a> {
     current_module_globals: HashMap<String, (TypeId, bool)>,
     /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
     imported_globals: HashMap<String, (ModuleSource, String, TypeId, bool)>,
+    /// Associated constants from impl blocks ("`TypeName::CONST`" -> (type, expr))
+    /// These are inlined at every use site during resolution.
+    associated_constants: HashMap<String, (ast::Type, ast::Expr)>,
     /// Cache of per-module type maps for cross-module type resolution.
     /// Built lazily on first access per module. Avoids rebuilding `build_module_map`
     /// on every imported method call or field access.
@@ -616,6 +619,7 @@ impl<'a> Resolver<'a> {
             builtin_registry,
             current_module_globals: HashMap::new(),
             imported_globals: HashMap::new(),
+            associated_constants: HashMap::new(),
             module_type_maps_cache: HashMap::new(),
         }
     }
@@ -683,6 +687,26 @@ impl<'a> Resolver<'a> {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Collect associated constants from loaded modules and current module
+        self.associated_constants.clear();
+        for module_items in self
+            .loaded_modules
+            .values()
+            .map(|m| &m.items)
+            .chain(std::iter::once(&module.items))
+        {
+            for item in module_items {
+                if let Item::Impl(impl_block) = item {
+                    let type_name = self.get_type_name(&impl_block.ty);
+                    for assoc_const in &impl_block.constants {
+                        let key = format!("{type_name}::{}", assoc_const.name);
+                        self.associated_constants
+                            .insert(key, (assoc_const.ty.clone(), assoc_const.value.clone()));
                     }
                 }
             }
@@ -1245,6 +1269,7 @@ impl<'a> Resolver<'a> {
                 builtin_registry: &builtin_registry,
                 current_module_globals: HashMap::new(),
                 imported_globals: HashMap::new(),
+                associated_constants: HashMap::new(),
                 module_type_maps_cache: HashMap::new(),
             };
 
@@ -3516,6 +3541,13 @@ impl<'a> Resolver<'a> {
                     );
                 }
             }
+        }
+
+        // Check for associated constants (e.g., f64::PI, i32::MAX)
+        if let Some((const_ty, const_expr)) = self.associated_constants.get(&ident.name).cloned() {
+            let type_id = self.resolve_type(&const_ty);
+            let resolved = self.resolve_expr_with_expected_type(&const_expr, ctx, Some(type_id));
+            return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 
         // Check for qualified variant case names like Color::Red (without parentheses)
@@ -6624,6 +6656,27 @@ impl<'a> Resolver<'a> {
 
     /// Find the module source for a struct by name
     fn find_struct_module_source(&self, struct_name: &str) -> ModuleSource {
+        // Check if it's a primitive type - impl blocks live in core:prelude/primitives.wado
+        // Note: i128/u128 are structs (in prelude/int128.wado), not primitives
+        if matches!(
+            struct_name,
+            "i8" | "i16"
+                | "i32"
+                | "i64"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "f32"
+                | "f64"
+                | "bool"
+                | "char"
+        ) {
+            return ModuleSource::Core {
+                name: "prelude/primitives.wado".to_string(),
+            };
+        }
+
         // Check current module
         for item in &self.current_module_items {
             match item {

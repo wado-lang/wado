@@ -1,0 +1,29 @@
+// Test f64 and f32 static math methods
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Wasm instruction math
+    println(`abs: {f64::abs(-3.5)}`);
+    println(`ceil: {f64::ceil(2.3)}`);
+    println(`floor: {f64::floor(2.7)}`);
+    println(`trunc: {f64::trunc(2.7)}`);
+    println(`round: {f64::round(2.5)}`);
+    println(`sqrt: {f64::sqrt(4.0)}`);
+    println(`min: {f64::min(3.0, 5.0)}`);
+    println(`max: {f64::max(3.0, 5.0)}`);
+
+    // Transcendental math
+    println(`sin: {f64::sin(0.0)}`);
+    println(`cos: {f64::cos(0.0)}`);
+    println(`exp: {f64::exp(0.0)}`);
+    println(`ln: {f64::ln(1.0)}`);
+    println(`pow: {f64::pow(2.0, 10.0)}`);
+    println(`hypot: {f64::hypot(3.0, 4.0)}`);
+
+    // f32 methods
+    println(`f32 sqrt: {f32::sqrt(9.0 as f32)}`);
+    println(`f32 abs: {f32::abs(-2.5 as f32)}`);
+}
+
+__DATA__
+{"stdout": "abs: 3.5\nceil: 3.0\nfloor: 2.0\ntrunc: 2.0\nround: 2.0\nsqrt: 2.0\nmin: 3.0\nmax: 5.0\nsin: 0.0\ncos: 1.0\nexp: 1.0\nln: 0.0\npow: 1024.0\nhypot: 5.0\nf32 sqrt: 3.0\nf32 abs: 2.5\n"}

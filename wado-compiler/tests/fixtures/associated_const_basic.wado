@@ -1,0 +1,27 @@
+// Test associated constants on primitive types
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Float constants
+    println(`f64::PI = {f64::PI}`);
+    println(`f64::E = {f64::E}`);
+    println(`f64::TAU = {f64::TAU}`);
+    println(`f64::LN2 = {f64::LN2}`);
+    println(`f64::SQRT2 = {f64::SQRT2}`);
+    println(`f32::PI = {f32::PI}`);
+
+    // Integer limits
+    println(`i32::MAX = {i32::MAX}`);
+    println(`i32::MIN = {i32::MIN}`);
+    println(`u32::MAX = {u32::MAX}`);
+    println(`i8::MAX = {i8::MAX}`);
+    println(`i8::MIN = {i8::MIN}`);
+    println(`u8::MAX = {u8::MAX}`);
+
+    // Use in expressions
+    let circumference = 2.0 * f64::PI * 5.0;
+    println(`circumference = {circumference}`);
+}
+
+__DATA__
+{"stdout_contains": ["f64::PI = 3.141592653589793", "f64::E = 2.718281828459045", "i32::MAX = 2147483647", "i32::MIN = -2147483648", "u32::MAX = 4294967295", "i8::MAX = 127", "i8::MIN = -128", "u8::MAX = 255", "circumference = 31.41592653589793"]}
