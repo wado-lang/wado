@@ -182,26 +182,112 @@ Apply algebraic laws to simplify expressions. Often implemented as part of peeph
 
 Remove branches that always take the same path. Requires constant propagation to determine branch conditions.
 
-### Escape Analysis
+### Escape Analysis and Scalar Replacement of Aggregates (SROA)
 
-Identify heap allocations (structs, arrays) that do not escape the current function scope. Non-escaping allocations can be replaced with scalar locals (scalar replacement of aggregates / SROA), eliminating GC pressure.
+Identify heap allocations (structs, tuples) that do not escape the current function scope. Non-escaping allocations can be decomposed into individual scalar locals, eliminating GC `struct.new` overhead.
 
-This is particularly impactful for WasmGC-targeting compilers. Binaryen already implements this as "heap2local" — moving WasmGC struct allocations to locals when they don't escape. Wado could perform this analysis at the TIR level before codegen for even better results.
+This is particularly impactful for WasmGC-targeting compilers. Binaryen already implements this as "heap2local" — moving WasmGC struct allocations to locals when they don't escape. Wado could perform this analysis at the TIR level before codegen for even better results, since TIR has richer type information.
 
-Example:
+Example — local struct:
 
 ```wado
 fn distance(ax: i32, ay: i32, bx: i32, by: i32) -> i32 {
     let p = Point { x: ax - bx, y: ay - by };  // does not escape
     return p.x * p.x + p.y * p.y;
 }
-// After escape analysis + SROA:
+// After SROA:
 fn distance(ax: i32, ay: i32, bx: i32, by: i32) -> i32 {
     let p_x = ax - bx;
     let p_y = ay - by;
     return p_x * p_x + p_y * p_y;
 }
 ```
+
+Example — inlined tuple return:
+
+```wado
+fn get_pair() -> [i32, i32] { return [10, 20]; }
+fn caller() {
+    let [x, y] = get_pair();
+    println(`{x + y}`);
+}
+// After inlining + SROA:
+fn caller() {
+    let x = 10;  // struct.new eliminated
+    let y = 20;
+    println(`{x + y}`);
+}
+```
+
+SROA naturally composes with inlining: once a tuple-returning function is inlined, the tuple construction and destructuring are in the same function, and SROA decomposes the intermediate allocation into scalar locals.
+
+A struct/tuple does NOT escape if:
+
+- It is only used for field reads
+- It is not passed to a function call
+- It is not returned from the function
+- Its reference is not taken (`&`)
+- It is not stored into another struct/array
+
+### Return Scalarization via Multi-Value Returns
+
+When a function returns a struct or tuple that is immediately destructured at every call site, the return can be scalarized using Wasm multi-value returns. This eliminates the GC struct allocation at the function boundary without requiring inlining.
+
+The compiler already implements this for builtins (e.g., `i64_add128` returns two `i64` values on the Wasm stack via the `skip_tuple_wrap` mechanism). Extending this to user-defined functions is a natural next step.
+
+Example:
+
+```wado
+fn minmax(a: i32, b: i32) -> [i32, i32] {
+    if a < b { return [a, b]; }
+    return [b, a];
+}
+let [lo, hi] = minmax(x, y);  // immediate destructuring
+```
+
+Current codegen:
+
+```wat
+(func $minmax (param i32 i32) (result (ref $tuple_i32_i32))
+  ;; ... compute ...
+  (struct.new $tuple_i32_i32)  ;; heap allocation
+)
+;; caller:
+(call $minmax)
+(local.tee $tmp)
+(struct.get $tuple_i32_i32 0)  ;; field extraction
+(local.set $lo)
+(local.get $tmp)
+(struct.get $tuple_i32_i32 1)
+(local.set $hi)
+```
+
+Optimized codegen with multi-value return:
+
+```wat
+(func $minmax (param i32 i32) (result i32 i32)
+  ;; ... compute ...
+  ;; no struct.new — two i32 values on stack
+)
+;; caller:
+(call $minmax)
+(local.set $hi)  ;; directly from stack (LIFO order)
+(local.set $lo)
+```
+
+Implementation strategy:
+
+1. **Whole-program analysis**: Identify functions where ALL call sites immediately destructure the return value (let-pattern with bindings/wildcards only)
+2. **Signature rewrite**: Change function return type from `(result (ref $tuple))` to `(result T0 T1 ...)`
+3. **Call site rewrite**: Replace `struct.get` field extractions with direct `local.set` from stack
+4. **Fallback**: If any call site stores the tuple as a whole value, the function keeps the struct return (or a multi-value variant is cloned)
+
+Constraints:
+
+- Requires whole-program analysis (all call sites must be known)
+- Component Model export boundaries always need single-value returns, so this is internal only
+- Nested tuples (e.g., `[i32, [String, bool]]`) require recursive flattening
+- Best limited to small tuples (2-4 fields) to avoid Wasm stack depth issues
 
 ### Function Specialization
 
@@ -410,8 +496,8 @@ Implementation: Detect `return func(...)` pattern in TIR, emit `return_call` ins
 
 ### Phase 4: Allocation Optimizations
 
-- Escape analysis
-- Scalar replacement of aggregates (SROA)
+- Escape analysis + SROA (decompose non-escaping structs/tuples into scalar locals)
+- Return scalarization via multi-value returns (eliminate struct allocation at function boundaries)
 - Function specialization for known constants
 
 ## Testing Strategy
