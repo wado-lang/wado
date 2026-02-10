@@ -1,8 +1,7 @@
-// Test: identifiers followed by `{` in expression context should only be
-// parsed as struct literals when the brace content looks like struct fields
-// (e.g., `{ field: value }` or `{ field, ... }`), regardless of naming
-// convention. `NAME {` where the block contains statements must parse as
-// an expression followed by a block, not as a struct literal.
+// Test: `Name {` in if/while/match/for conditions is parsed as
+// expression + block, NOT as a struct literal.
+// Struct literal syntax is restricted in these contexts because
+// `{` is ambiguous with the block that follows the condition.
 
 use { println, Stdout } from "core:cli";
 
