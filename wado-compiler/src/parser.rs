@@ -2072,7 +2072,8 @@ impl Parser {
             // A name is considered a type name if:
             // 1. It starts with uppercase (UpperCamelCase convention), OR
             // 2. It looks like a primitive type (i32, u64, i128, u128, f32, etc.)
-            let is_type_name = name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            let is_type_name = (name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                && (name.len() == 1 || name.chars().any(|c| c.is_ascii_lowercase())))
                 || Self::looks_like_primitive_type(&name);
 
             // Check for qualified name (Effect::function) or static method call
