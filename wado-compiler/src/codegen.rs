@@ -119,6 +119,9 @@ pub struct Codegen<'a> {
     /// These are GC reference cells for primitive boxing and should NOT use value copy.
     /// Distinguished from user-defined Box<T> which ARE normal value-copy structs.
     internal_box_names: HashSet<String>,
+    /// Map from function index to field `ValTypes` for return-scalarized functions.
+    /// These functions return multiple scalar values on the Wasm stack instead of a single GC struct.
+    scalarized_funcs: HashMap<u32, Vec<ValType>>,
 }
 
 /// Information about a single variant case's Wasm GC representation
@@ -162,6 +165,7 @@ struct ClosureCallWrapperInfo {
 
 /// Context for tracking local variables during function code generation
 /// Local indices in Wasm: parameters come first, then declared locals
+#[allow(clippy::struct_excessive_bools)]
 struct FunctionContext {
     /// Map from variable name to local index
     locals: HashMap<String, u32>,
@@ -212,6 +216,12 @@ struct FunctionContext {
     is_async_export: bool,
     /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>)
     has_http_handler_export: bool,
+    /// When true, Return statements should emit individual field values instead of struct.new
+    is_scalarized_return: bool,
+    /// Scalarized locals: original `local_index` → scratch locals (indexed by `field_index`)
+    scalarized_locals: HashMap<u32, Vec<u32>>,
+    /// When true, Call to scalarized functions should NOT reconstruct the struct
+    skip_scalarized_wrap: bool,
 }
 
 impl FunctionContext {
@@ -235,6 +245,9 @@ impl FunctionContext {
             skip_tuple_wrap: false,
             is_async_export: false,
             has_http_handler_export: false,
+            is_scalarized_return: false,
+            scalarized_locals: HashMap::new(),
+            skip_scalarized_wrap: false,
         }
     }
 
@@ -258,6 +271,9 @@ impl FunctionContext {
             skip_tuple_wrap: false,
             is_async_export: false,
             has_http_handler_export: false,
+            is_scalarized_return: false,
+            scalarized_locals: HashMap::new(),
+            skip_scalarized_wrap: false,
         }
     }
 
@@ -464,6 +480,7 @@ impl Codegen<'_> {
             variant_types: HashMap::new(),
             pending_type_indices: HashMap::new(),
             internal_box_names: HashSet::new(),
+            scalarized_funcs: HashMap::new(),
         };
 
         // Generate binary Wasm from TIR
@@ -1177,6 +1194,10 @@ impl Codegen<'_> {
             }
         }
 
+        // Collect functions eligible for return scalarization (multivalue return)
+        let scalarization_candidates =
+            self.collect_scalarization_candidates(entry_tir, type_table, &loaded_funcs);
+
         // Types for user-defined functions from entry TIR module
         for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
@@ -1196,15 +1217,6 @@ impl Codegen<'_> {
                 .map(|p| self.type_id_to_valtype(type_table, p.type_id))
                 .collect();
 
-            // Never and Unit types have no Wasm return value
-            let return_types: Vec<ValType> = if tir_func.return_type == TypeTable::NEVER
-                || tir_func.return_type == TypeTable::UNIT
-            {
-                vec![]
-            } else {
-                vec![self.type_id_to_valtype(type_table, tir_func.return_type)]
-            };
-
             // For methods, build the type name from method_info metadata
             let type_name = if let Some(ref info) = tir_func.method_info {
                 MethodName::new(
@@ -1217,6 +1229,19 @@ impl Codegen<'_> {
             } else {
                 tir_func.name.clone()
             };
+
+            // Return scalarization: use multivalue return for eligible functions
+            let return_types: Vec<ValType> = if scalarization_candidates.contains(&type_name) {
+                self.get_scalarized_field_types(tir_func.return_type, type_table)
+                    .unwrap_or_default()
+            } else if tir_func.return_type == TypeTable::NEVER
+                || tir_func.return_type == TypeTable::UNIT
+            {
+                vec![]
+            } else {
+                vec![self.type_id_to_valtype(type_table, tir_func.return_type)]
+            };
+
             builder.define_func_type(&type_name, &param_types, &return_types);
         }
 
@@ -1237,7 +1262,10 @@ impl Codegen<'_> {
                 .iter()
                 .map(|p| self.type_id_to_valtype(func_type_table, p.type_id))
                 .collect();
-            let return_types: Vec<ValType> = if tir_func.return_type == TypeTable::NEVER
+            let return_types: Vec<ValType> = if scalarization_candidates.contains(qualified_name) {
+                self.get_scalarized_field_types(tir_func.return_type, func_type_table)
+                    .unwrap_or_default()
+            } else if tir_func.return_type == TypeTable::NEVER
                 || tir_func.return_type == TypeTable::UNIT
             {
                 vec![]
@@ -1438,7 +1466,14 @@ impl Codegen<'_> {
                     }
                 }
             } else {
-                builder.define_func(&tir_func.name, &tir_func.name);
+                let func_idx = builder.define_func(&tir_func.name, &tir_func.name);
+                // Record scalarized function index
+                if scalarization_candidates.contains(&tir_func.name)
+                    && let Some(field_types) =
+                        self.get_scalarized_field_types(tir_func.return_type, type_table)
+                {
+                    self.scalarized_funcs.insert(func_idx, field_types);
+                }
             }
         }
         // Declare loaded module functions with simple name aliases
@@ -1446,10 +1481,20 @@ impl Codegen<'_> {
         let internal_source = ModuleSource::Core {
             name: "internal".to_string(),
         };
-        for (module_source, tir_func_rc, _, qualified_name) in &loaded_funcs {
+        for (module_source, tir_func_rc, func_type_table_rc, qualified_name) in &loaded_funcs {
             let tir_func = tir_func_rc.borrow();
             let func_idx = builder.define_func(qualified_name, qualified_name);
             let is_from_internal = module_source == &internal_source;
+
+            // Record scalarized function index for loaded functions
+            if scalarization_candidates.contains(qualified_name) {
+                let func_type_table = &*func_type_table_rc.borrow();
+                if let Some(field_types) =
+                    self.get_scalarized_field_types(tir_func.return_type, func_type_table)
+                {
+                    self.scalarized_funcs.insert(func_idx, field_types);
+                }
+            }
 
             // Register simple name alias for all functions EXCEPT:
             // - Internal functions (require explicit import to be accessible)
@@ -6349,16 +6394,26 @@ impl Codegen<'_> {
 
             // === Variables ===
             TirExprKind::Local { index, .. } => {
-                // Apply offset for closure functions (env param shifts indices by 1)
-                let adjusted_index = *index + ctx.local_index_offset;
-                func.instruction(&Instruction::LocalGet(adjusted_index));
+                // Check if this is a scalarized local — reconstruct struct from scratch locals
+                if let Some(scratch_locals) = ctx.scalarized_locals.get(index) {
+                    for &scratch in scratch_locals {
+                        func.instruction(&Instruction::LocalGet(scratch));
+                    }
+                    let struct_type_idx =
+                        self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                    func.instruction(&Instruction::StructNew(struct_type_idx));
+                } else {
+                    // Apply offset for closure functions (env param shifts indices by 1)
+                    let adjusted_index = *index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalGet(adjusted_index));
 
-                // For reference types, locals are nullable but we may need non-nullable
-                // (After the lower phase, address-taken locals are Box<T> structs
-                // and reads are wrapped in FieldAccess(.value) - no special handling here)
-                let val_type = self.type_id_to_valtype(type_table, expr.type_id);
-                if matches!(val_type, ValType::Ref(rt) if !rt.nullable) {
-                    func.instruction(&Instruction::RefAsNonNull);
+                    // For reference types, locals are nullable but we may need non-nullable
+                    // (After the lower phase, address-taken locals are Box<T> structs
+                    // and reads are wrapped in FieldAccess(.value) - no special handling here)
+                    let val_type = self.type_id_to_valtype(type_table, expr.type_id);
+                    if matches!(val_type, ValType::Ref(rt) if !rt.nullable) {
+                        func.instruction(&Instruction::RefAsNonNull);
+                    }
                 }
             }
 
@@ -6815,8 +6870,16 @@ impl Codegen<'_> {
                 {
                     // CM effect call handled via convention
                 } else {
+                    // Save and clear skip_scalarized_wrap so it doesn't propagate
+                    // to nested scalarized calls in arguments
+                    let outer_skip = ctx.skip_scalarized_wrap;
+                    ctx.skip_scalarized_wrap = false;
+
                     // Generate arguments first
                     self.generate_args(func, args, type_table, ctx, builder);
+
+                    // Restore the flag for this call's post-processing
+                    ctx.skip_scalarized_wrap = outer_skip;
 
                     // Resolve function index using multiple strategies
                     let func_idx = self.resolve_call_target(
@@ -6826,6 +6889,19 @@ impl Codegen<'_> {
                         builder,
                     );
                     func.instruction(&Instruction::Call(func_idx));
+
+                    // Scalarized call: reconstruct struct from multivalue if needed
+                    if let Some(field_types) = self.scalarized_funcs.get(&func_idx) {
+                        if !ctx.skip_scalarized_wrap {
+                            // Expression context: reconstruct struct from multivalue
+                            let struct_type_idx =
+                                self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
+                            func.instruction(&Instruction::StructNew(struct_type_idx));
+                        }
+                        // When skip_scalarized_wrap is true, leave multivalue on stack
+                        // (caller will pop into scratch locals)
+                        let _ = field_types;
+                    }
                 }
             }
 
@@ -7632,7 +7708,26 @@ impl Codegen<'_> {
                 field_index,
                 ..
             } => {
-                // Get the struct/tuple type from the inner expression
+                // Check if the inner expression is a scalarized local
+                let local_idx = match &inner.kind {
+                    TirExprKind::Local { index, .. } => Some(*index),
+                    TirExprKind::Move { expr } => match &expr.kind {
+                        TirExprKind::Local { index, .. } => Some(*index),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(idx) = local_idx
+                    && let Some(scratch_locals) = ctx.scalarized_locals.get(&idx)
+                {
+                    // Direct access to scalarized scratch local
+                    func.instruction(&Instruction::LocalGet(
+                        scratch_locals[*field_index as usize],
+                    ));
+                    return;
+                }
+
+                // Normal path: get the struct/tuple type from the inner expression
                 // For references, look through to the inner type
                 let struct_type_idx = self.get_struct_or_tuple_type_idx(inner.type_id, type_table);
 
@@ -8881,38 +8976,56 @@ impl Codegen<'_> {
                 value,
                 ..
             } => {
-                // Generate the initializer
-                self.generate_expr(func, value, type_table, ctx, builder);
+                // Return scalarization: if value is a call to a scalarized function,
+                // pop multivalue into scratch locals instead of storing a struct ref
+                if let Some(field_types) = self.try_get_scalarized_call(value, ctx, builder) {
+                    // Generate the call with skip flag to avoid struct reconstruction
+                    ctx.skip_scalarized_wrap = true;
+                    self.generate_expr(func, value, type_table, ctx, builder);
+                    ctx.skip_scalarized_wrap = false;
 
-                // Add implicit type promotion if needed (e.g., i32 literal to i64 local)
-                let value_type = value.type_id;
-                if value_type != *type_id {
-                    // Check for i32 -> i64 promotion (common with integer literals)
-                    let is_i32_to_i64 = matches!(
-                        (type_table.get(value_type), type_table.get(*type_id)),
-                        (
-                            ResolvedType::Primitive(PrimitiveType::I32),
-                            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-                        )
-                    );
-                    if is_i32_to_i64 {
-                        func.instruction(&Instruction::I64ExtendI32S);
+                    // Pop multivalue into scratch locals (reverse order — LIFO)
+                    let mut scratch_locals = vec![0u32; field_types.len()];
+                    for (i, vt) in field_types.iter().enumerate().rev() {
+                        let scratch = ctx.alloc_local(&format!("__scal_{local_index}_{i}"), *vt);
+                        func.instruction(&Instruction::LocalSet(scratch));
+                        scratch_locals[i] = scratch;
                     }
-                }
+                    ctx.scalarized_locals.insert(*local_index, scratch_locals);
+                } else {
+                    // Normal path: generate the initializer
+                    self.generate_expr(func, value, type_table, ctx, builder);
 
-                // Apply value copy for struct/array/tuple types (value semantics)
-                // Skip for Move-wrapped values - the optimizer marks fresh values with Move
-                if self.needs_value_copy(value.type_id, type_table)
-                    && !matches!(value.kind, TirExprKind::Move { .. })
-                {
-                    self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
-                }
+                    // Add implicit type promotion if needed (e.g., i32 literal to i64 local)
+                    let value_type = value.type_id;
+                    if value_type != *type_id {
+                        // Check for i32 -> i64 promotion (common with integer literals)
+                        let is_i32_to_i64 = matches!(
+                            (type_table.get(value_type), type_table.get(*type_id)),
+                            (
+                                ResolvedType::Primitive(PrimitiveType::I32),
+                                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
+                            )
+                        );
+                        if is_i32_to_i64 {
+                            func.instruction(&Instruction::I64ExtendI32S);
+                        }
+                    }
 
-                // Store to local (apply offset for closure functions)
-                // (After the lower phase, address-taken locals are initialized with
-                // Box<T> struct literals, so no special wrapping needed here)
-                let adjusted_index = *local_index + ctx.local_index_offset;
-                func.instruction(&Instruction::LocalSet(adjusted_index));
+                    // Apply value copy for struct/array/tuple types (value semantics)
+                    // Skip for Move-wrapped values - the optimizer marks fresh values with Move
+                    if self.needs_value_copy(value.type_id, type_table)
+                        && !matches!(value.kind, TirExprKind::Move { .. })
+                    {
+                        self.generate_value_copy(func, value.type_id, type_table, ctx, builder);
+                    }
+
+                    // Store to local (apply offset for closure functions)
+                    // (After the lower phase, address-taken locals are initialized with
+                    // Box<T> struct literals, so no special wrapping needed here)
+                    let adjusted_index = *local_index + ctx.local_index_offset;
+                    func.instruction(&Instruction::LocalSet(adjusted_index));
+                }
             }
 
             TirStmtKind::LetPattern {
@@ -9068,6 +9181,36 @@ impl Codegen<'_> {
                         func.instruction(&Instruction::Call(task_return_idx));
                         func.instruction(&Instruction::Return);
                     }
+                } else if ctx.is_scalarized_return {
+                    // Scalarized return: emit individual field values, skip struct.new
+                    if let Some(expr) = value {
+                        let inner = match &expr.kind {
+                            TirExprKind::Move { expr } => expr.as_ref(),
+                            _ => expr,
+                        };
+                        match &inner.kind {
+                            TirExprKind::StructLiteral { fields, .. } => {
+                                for field in fields {
+                                    self.generate_expr(
+                                        func,
+                                        &field.value,
+                                        type_table,
+                                        ctx,
+                                        builder,
+                                    );
+                                }
+                            }
+                            TirExprKind::TupleLiteral { elements } => {
+                                for elem in elements {
+                                    self.generate_expr(func, elem, type_table, ctx, builder);
+                                }
+                            }
+                            _ => unreachable!(
+                                "scalarized function should only have struct/tuple literal returns"
+                            ),
+                        }
+                    }
+                    func.instruction(&Instruction::Return);
                 } else {
                     // Normal function return
                     if let Some(expr) = value {
@@ -10422,6 +10565,21 @@ impl Codegen<'_> {
         func_ctx.reset_let_pattern_counter();
         func_ctx.reset_match_scrutinee_counter();
 
+        // Check if this function uses scalarized return (multivalue)
+        if let Some(func_idx) = builder.try_func_idx(&tir_func.name)
+            && self.scalarized_funcs.contains_key(&func_idx)
+        {
+            func_ctx.is_scalarized_return = true;
+        }
+
+        // Pre-allocate scratch locals for scalarized call sites in the function body.
+        // Must happen before Function::new() which bakes in the local declarations.
+        if !self.scalarized_funcs.is_empty()
+            && let Some(body) = &tir_func.body
+        {
+            self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
+        }
+
         // Generate the function code
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
 
@@ -10501,6 +10659,13 @@ impl Codegen<'_> {
         // Reset match-scrutinee counter so code generation uses the same indices as pre-allocation
         func_ctx.reset_match_scrutinee_counter();
 
+        // Pre-allocate scratch locals for scalarized call sites
+        if !self.scalarized_funcs.is_empty()
+            && let Some(body) = &tir_func.body
+        {
+            self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
+        }
+
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
 
         // Generate body
@@ -10532,6 +10697,506 @@ impl Codegen<'_> {
         wasm_func.instruction(&Instruction::End);
 
         wasm_func
+    }
+
+    // ========================================================================
+    // Return Scalarization
+    // ========================================================================
+
+    /// Check if a `ValType` is a scalar Wasm type (fits in a register, no GC allocation)
+    fn is_scalar_valtype(vt: &ValType) -> bool {
+        matches!(
+            vt,
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64
+        )
+    }
+
+    /// Get the scalar field types for a return type eligible for scalarization.
+    /// Returns `None` if the type is not eligible (not a struct/tuple, too many fields,
+    /// or contains non-scalar fields).
+    fn get_scalarized_field_types(
+        &self,
+        return_type: TypeId,
+        type_table: &TypeTable,
+    ) -> Option<Vec<ValType>> {
+        match type_table.get(return_type) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => {
+                // Find the struct definition from the correct module
+                let tir_struct = if let Some(m) = self.project.tir_modules.get(module_source) {
+                    m.find_struct(name)?
+                } else {
+                    // Fallback: search all modules (entry module structs may use EntryPoint source)
+                    self.project
+                        .tir_modules
+                        .iter()
+                        .find_map(|(_, m)| m.find_struct(name))?
+                };
+                if tir_struct.fields.is_empty() || tir_struct.fields.len() > 4 {
+                    return None;
+                }
+                // Use the module's type table to resolve field types
+                let field_tt = self
+                    .project
+                    .tir_modules
+                    .get(module_source)
+                    .map(|m| m.type_table.borrow())
+                    .unwrap_or_else(|| {
+                        // Fallback: entry module type table (for entry module structs)
+                        self.project
+                            .tir_modules
+                            .values()
+                            .next()
+                            .unwrap()
+                            .type_table
+                            .borrow()
+                    });
+                let mut field_valtypes = Vec::with_capacity(tir_struct.fields.len());
+                for field in &tir_struct.fields {
+                    let vt = self.type_id_to_valtype(&field_tt, field.type_id);
+                    if !Self::is_scalar_valtype(&vt) {
+                        return None;
+                    }
+                    field_valtypes.push(vt);
+                }
+                Some(field_valtypes)
+            }
+            ResolvedType::Tuple(elem_types) => {
+                if elem_types.is_empty() || elem_types.len() > 4 {
+                    return None;
+                }
+                let mut field_valtypes = Vec::with_capacity(elem_types.len());
+                for &tid in elem_types {
+                    let vt = self.type_id_to_valtype(type_table, tid);
+                    if !Self::is_scalar_valtype(&vt) {
+                        return None;
+                    }
+                    field_valtypes.push(vt);
+                }
+                Some(field_valtypes)
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if all Return statements in a block return struct/tuple literals.
+    fn all_returns_are_literals(body: &TirBlock) -> bool {
+        for stmt in &body.stmts {
+            if !Self::check_stmt_returns(stmt) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Recursively check a statement and its sub-blocks for non-literal returns.
+    fn check_stmt_returns(stmt: &TirStmt) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Return { value: Some(expr) } => {
+                // Unwrap Move
+                let inner = match &expr.kind {
+                    TirExprKind::Move { expr } => expr.as_ref(),
+                    _ => expr,
+                };
+                matches!(
+                    inner.kind,
+                    TirExprKind::StructLiteral { .. } | TirExprKind::TupleLiteral { .. }
+                )
+            }
+            TirStmtKind::Return { value: None } => true, // unit return, fine
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::all_returns_are_literals(then_block)
+                    && else_block
+                        .as_ref()
+                        .is_none_or(Self::all_returns_are_literals)
+            }
+            TirStmtKind::Loop { body } => Self::all_returns_are_literals(body),
+            TirStmtKind::LabeledBlock { block, .. } => Self::all_returns_are_literals(block),
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                Self::all_returns_are_literals(then_block)
+                    && else_block
+                        .as_ref()
+                        .is_none_or(Self::all_returns_are_literals)
+            }
+            _ => true, // Non-return statements are fine
+        }
+    }
+
+    /// Collect function names eligible for return scalarization.
+    /// A function is eligible if:
+    /// 1. Not exported, not a method
+    /// 2. Return type is struct/tuple with ≤4 scalar fields
+    /// 3. All Return statements return struct/tuple literals
+    fn collect_scalarization_candidates(
+        &self,
+        entry_tir: &TirModule,
+        type_table: &TypeTable,
+        loaded_funcs: &[(
+            ModuleSource,
+            Rc<RefCell<TirFunction>>,
+            Rc<RefCell<TypeTable>>,
+            String,
+        )],
+    ) -> HashSet<String> {
+        let mut candidates = HashSet::new();
+
+        // Check entry module functions
+        for tir_func_rc in &entry_tir.functions {
+            let tir_func = tir_func_rc.borrow();
+            if let Some(name) = self.check_func_eligibility(&tir_func, type_table) {
+                candidates.insert(name);
+            }
+        }
+
+        // Check loaded module functions (not methods)
+        for (_module_source, tir_func_rc, func_type_table_rc, qualified_name) in loaded_funcs {
+            let tir_func = tir_func_rc.borrow();
+            let func_type_table = &*func_type_table_rc.borrow();
+            // Skip generic templates
+            if (!tir_func.type_params.is_empty() || !tir_func.impl_type_params.is_empty())
+                && tir_func.monomorph_info.is_none()
+            {
+                continue;
+            }
+            if tir_func.is_export || tir_func.method_info.is_some() {
+                continue;
+            }
+            if self
+                .get_scalarized_field_types(tir_func.return_type, func_type_table)
+                .is_some()
+                && let Some(body) = &tir_func.body
+                && Self::all_returns_are_literals(body)
+            {
+                candidates.insert(qualified_name.clone());
+            }
+        }
+
+        candidates
+    }
+
+    /// Check if a single function is eligible for scalarization.
+    /// Returns the function's type registration name if eligible.
+    fn check_func_eligibility(
+        &self,
+        tir_func: &TirFunction,
+        type_table: &TypeTable,
+    ) -> Option<String> {
+        // Skip exported, methods, generic templates
+        if tir_func.is_export || tir_func.method_info.is_some() {
+            return None;
+        }
+        let has_type_params = type_table.contains_type_param(tir_func.return_type)
+            || tir_func
+                .params
+                .iter()
+                .any(|p| type_table.contains_type_param(p.type_id));
+        if has_type_params {
+            return None;
+        }
+        // Check return type
+        self.get_scalarized_field_types(tir_func.return_type, type_table)?;
+        // Check all returns are literals
+        if let Some(body) = &tir_func.body
+            && Self::all_returns_are_literals(body)
+        {
+            return Some(tir_func.name.clone());
+        }
+        None
+    }
+
+    /// Non-panicking variant of `resolve_call_target` — returns `None` if not found.
+    fn try_resolve_call_target(
+        &self,
+        callee_module: &ModuleSource,
+        func_name: &str,
+        current_module: &ModuleSource,
+        builder: &CoreModuleBuilder,
+    ) -> Option<u32> {
+        // Strategy 1: Simple name lookup
+        if callee_module.is_entry_point()
+            && let Some(idx) = builder.try_func_idx(func_name)
+        {
+            return Some(idx);
+        }
+        // Strategy 2: Mangled name
+        let mangled_name = if callee_module.is_entry_point() {
+            func_name.to_string()
+        } else {
+            FreeFunctionName::from_module_source(callee_module, func_name).to_string()
+        };
+        if let Some(idx) = builder.try_func_idx(&mangled_name) {
+            return Some(idx);
+        }
+        // Strategy 3: Current module
+        if callee_module.is_entry_point() && !current_module.is_entry_point() {
+            let current_mangled =
+                FreeFunctionName::from_module_source(current_module, func_name).to_string();
+            if let Some(idx) = builder.try_func_idx(&current_mangled) {
+                return Some(idx);
+            }
+        }
+        // Strategy 4: Core internal
+        if matches!(callee_module, ModuleSource::Core { name } if name == "internal") {
+            let internal_name = build_core_internal_name(func_name).to_string();
+            if let Some(idx) = builder.try_func_idx(&internal_name) {
+                return Some(idx);
+            }
+        }
+        None
+    }
+
+    /// Pre-allocate scratch locals for Let statements that bind scalarized function calls.
+    /// This must run before `Function::new()` so the locals appear in the function declaration.
+    fn preallocate_scalarized_locals(
+        &self,
+        block: &TirBlock,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        for stmt in &block.stmts {
+            self.preallocate_scalarized_locals_in_stmt(stmt, type_table, ctx, builder);
+        }
+    }
+
+    fn preallocate_scalarized_locals_in_stmt(
+        &self,
+        stmt: &TirStmt,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => {
+                if let Some(field_types) = self.try_get_scalarized_call(value, ctx, builder) {
+                    for (i, vt) in field_types.iter().enumerate() {
+                        ctx.alloc_local(&format!("__scal_{local_index}_{i}"), *vt);
+                    }
+                }
+                self.preallocate_scalarized_locals_in_expr(value, type_table, ctx, builder);
+            }
+            TirStmtKind::Expr(expr) => {
+                self.preallocate_scalarized_locals_in_expr(expr, type_table, ctx, builder);
+            }
+            TirStmtKind::Return { value } => {
+                if let Some(value) = value {
+                    self.preallocate_scalarized_locals_in_expr(value, type_table, ctx, builder);
+                }
+            }
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.preallocate_scalarized_locals_in_expr(condition, type_table, ctx, builder);
+                self.preallocate_scalarized_locals(then_block, type_table, ctx, builder);
+                if let Some(else_block) = else_block {
+                    self.preallocate_scalarized_locals(else_block, type_table, ctx, builder);
+                }
+            }
+            TirStmtKind::Loop { body } => {
+                self.preallocate_scalarized_locals(body, type_table, ctx, builder);
+            }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                self.preallocate_scalarized_locals(block, type_table, ctx, builder);
+            }
+            TirStmtKind::IfPattern {
+                scrutinee,
+                then_block,
+                else_block,
+                ..
+            } => {
+                self.preallocate_scalarized_locals_in_expr(scrutinee, type_table, ctx, builder);
+                self.preallocate_scalarized_locals(then_block, type_table, ctx, builder);
+                if let Some(else_block) = else_block {
+                    self.preallocate_scalarized_locals(else_block, type_table, ctx, builder);
+                }
+            }
+            TirStmtKind::Break { value, .. } => {
+                if let Some(value) = value {
+                    self.preallocate_scalarized_locals_in_expr(value, type_table, ctx, builder);
+                }
+            }
+            TirStmtKind::LetPattern { value, .. } => {
+                self.preallocate_scalarized_locals_in_expr(value, type_table, ctx, builder);
+            }
+            TirStmtKind::Continue => {}
+        }
+    }
+
+    /// Walk expression trees to find nested blocks containing scalarized call Let bindings.
+    fn preallocate_scalarized_locals_in_expr(
+        &self,
+        expr: &TirExpr,
+        type_table: &TypeTable,
+        ctx: &mut FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) {
+        match &expr.kind {
+            // Block-containing expressions
+            TirExprKind::Block(block) => {
+                self.preallocate_scalarized_locals(block, type_table, ctx, builder);
+            }
+            TirExprKind::LabeledBlock { block, .. } => {
+                self.preallocate_scalarized_locals(block, type_table, ctx, builder);
+            }
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.preallocate_scalarized_locals_in_expr(condition, type_table, ctx, builder);
+                self.preallocate_scalarized_locals(then_branch, type_table, ctx, builder);
+                if let Some(else_branch) = else_branch {
+                    self.preallocate_scalarized_locals(else_branch, type_table, ctx, builder);
+                }
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                self.preallocate_scalarized_locals_in_expr(scrutinee, type_table, ctx, builder);
+                for arm in arms {
+                    self.preallocate_scalarized_locals_in_expr(&arm.body, type_table, ctx, builder);
+                }
+            }
+            TirExprKind::Switch {
+                scrutinee,
+                arms,
+                default,
+                ..
+            } => {
+                self.preallocate_scalarized_locals_in_expr(scrutinee, type_table, ctx, builder);
+                for arm in arms {
+                    self.preallocate_scalarized_locals(arm, type_table, ctx, builder);
+                }
+                self.preallocate_scalarized_locals(default, type_table, ctx, builder);
+            }
+            // Single sub-expression (field named `expr`)
+            TirExprKind::Move { expr: inner }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::IsNotNull { expr: inner }
+            | TirExprKind::UnwrapOption { expr: inner, .. }
+            | TirExprKind::VariantTag { expr: inner }
+            | TirExprKind::VariantTest { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. } => {
+                self.preallocate_scalarized_locals_in_expr(inner, type_table, ctx, builder);
+            }
+            // Single sub-expression (different field names)
+            TirExprKind::OptionSome { value: inner }
+            | TirExprKind::GlobalVarSet { value: inner, .. }
+            | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+                self.preallocate_scalarized_locals_in_expr(inner, type_table, ctx, builder);
+            }
+            // Two sub-expressions
+            TirExprKind::Binary { left, right, .. } => {
+                self.preallocate_scalarized_locals_in_expr(left, type_table, ctx, builder);
+                self.preallocate_scalarized_locals_in_expr(right, type_table, ctx, builder);
+            }
+            TirExprKind::Assign { target, value } => {
+                self.preallocate_scalarized_locals_in_expr(target, type_table, ctx, builder);
+                self.preallocate_scalarized_locals_in_expr(value, type_table, ctx, builder);
+            }
+            TirExprKind::Index { expr: base, index } => {
+                self.preallocate_scalarized_locals_in_expr(base, type_table, ctx, builder);
+                self.preallocate_scalarized_locals_in_expr(index, type_table, ctx, builder);
+            }
+            // Argument lists
+            TirExprKind::Call { args, .. }
+            | TirExprKind::StaticCall { args, .. }
+            | TirExprKind::EffectCall { args, .. } => {
+                for arg in args {
+                    self.preallocate_scalarized_locals_in_expr(arg, type_table, ctx, builder);
+                }
+            }
+            TirExprKind::MethodCall { receiver, args, .. } => {
+                self.preallocate_scalarized_locals_in_expr(receiver, type_table, ctx, builder);
+                for arg in args {
+                    self.preallocate_scalarized_locals_in_expr(arg, type_table, ctx, builder);
+                }
+            }
+            TirExprKind::IndirectCall { callee, args } => {
+                self.preallocate_scalarized_locals_in_expr(callee, type_table, ctx, builder);
+                for arg in args {
+                    self.preallocate_scalarized_locals_in_expr(arg, type_table, ctx, builder);
+                }
+            }
+            // Composite literals
+            TirExprKind::StructLiteral { fields, .. } => {
+                for field in fields {
+                    self.preallocate_scalarized_locals_in_expr(
+                        &field.value,
+                        type_table,
+                        ctx,
+                        builder,
+                    );
+                }
+            }
+            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+                for elem in elements {
+                    self.preallocate_scalarized_locals_in_expr(elem, type_table, ctx, builder);
+                }
+            }
+            TirExprKind::VariantConstruct { payload, .. } => {
+                if let Some(payload) = payload {
+                    self.preallocate_scalarized_locals_in_expr(payload, type_table, ctx, builder);
+                }
+            }
+            // Terminals and closures (closures are separate function scopes)
+            _ => {}
+        }
+    }
+
+    /// Try to detect if an expression is a call to a scalarized function.
+    /// Returns the field `ValTypes` if so.
+    fn try_get_scalarized_call(
+        &self,
+        value: &TirExpr,
+        ctx: &FunctionContext,
+        builder: &CoreModuleBuilder,
+    ) -> Option<Vec<ValType>> {
+        // Unwrap Move
+        let inner = match &value.kind {
+            TirExprKind::Move { expr } => expr.as_ref(),
+            _ => value,
+        };
+        if let TirExprKind::Call {
+            func: call_func, ..
+        } = &inner.kind
+        {
+            // Skip builtins and variant constructors
+            if call_func.builtin_name().is_some()
+                || call_func.monomorphized_builtin_name().is_some()
+            {
+                return None;
+            }
+            let callee_module = call_func.module_source();
+            let func_name = call_func.name();
+            if let Some(func_idx) = self.try_resolve_call_target(
+                &callee_module,
+                &func_name,
+                &ctx.current_module_source,
+                builder,
+            ) {
+                return self.scalarized_funcs.get(&func_idx).cloned();
+            }
+        }
+        None
     }
 
     /// Resolve a TIR function call target to its function index
