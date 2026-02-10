@@ -56,7 +56,7 @@ for let v of tuple_expr {
 }
 
 // Indexed iteration
-for let [i, v] of tuple_expr.entries() {
+for let [i, v] of tuple_expr.enumerate() {
     // i: i32 (compile-time constant, 0, 1, 2, ...)
     // v has type T_k in the k-th unrolled iteration
 }
@@ -64,23 +64,21 @@ for let [i, v] of tuple_expr.entries() {
 
 For arrays, `for let v of array` uses `IntoIterator` at runtime. For tuples, the same syntax triggers compile-time unrolling. The distinction is determined by the type of the iterable expression.
 
-### `.entries()` Pseudo-Method
+### `.enumerate()` Pseudo-Method
 
-`.entries()` on a tuple type is a compiler-recognized pattern, not a real method. It produces `[index, element]` pairs for compile-time enumeration.
+`.enumerate()` on a tuple type is a compiler-recognized pattern, not a real method. It produces `[index, element]` pairs for compile-time enumeration. This follows Rust's naming convention for indexed iteration (`iter().enumerate()`), but applied directly to the tuple since tuples cannot produce a runtime iterator.
 
-| Receiver type | `.entries()` behavior | Returns |
+| Receiver type | `.enumerate()` behavior | Returns |
 |---|---|---|
-| `Array<T>` | Runtime method | `ArrayEntriesIter<T>` |
+| Iterator | Runtime combinator (Rust-style) | `EnumerateIter<T>` |
 | Tuple | Compile-time pseudo-method | Unrolled `[i32, T_k]` pairs |
-
-This is consistent with `TreeMap.entries()` (runtime) and follows the principle that the same concept (indexed access to elements) has type-appropriate implementations.
 
 ### Expansion Rules
 
 Given a concrete tuple type `[T_0, T_1, ..., T_{n-1}]`:
 
 ```wado
-for let [i, v] of values.entries() {
+for let [i, v] of values.enumerate() {
     body(i, v);
 }
 ```
@@ -119,7 +117,7 @@ Flow:
 1. A generic function `fn tag<Values>(strings: CookedStrings, values: Values)` is defined
 2. At a call site, `Values` is instantiated to a concrete tuple type (e.g., `[i32, String]`)
 3. The resolver monomorphizes the function body with `Values = [i32, String]`
-4. During monomorphization, the resolver encounters `for let [i, v] of values.entries()`
+4. During monomorphization, the resolver encounters `for let [i, v] of values.enumerate()`
 5. `values` has concrete type `[i32, String]` -> the resolver unrolls the loop
 6. Each unrolled body is resolved independently with the appropriate element type
 
@@ -129,7 +127,7 @@ Wado uses the **C++ template model** for tuple enumeration: the loop body is typ
 
 ```wado
 fn process<Values>(values: Values) {
-    for let v of values.entries() {
+    for let v of values.enumerate() {
         v.some_method();  // Not checked until Values is concrete
     }
 }
@@ -157,7 +155,7 @@ impl ToSqlParam for String {
 fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut query = strings[0];
     let mut params: Array<SqlParam> = [];
-    for let [i, v] of values.entries() {
+    for let [i, v] of values.enumerate() {
         params.append(v.to_sql_param());
         query.append("?");
         query.append(strings[i + 1]);
@@ -189,7 +187,7 @@ __unroll_1: {
 
 - **Concrete type required**: Tuple enumeration is only valid when the tuple type is fully concrete. Attempting to enumerate a generic `T` that has not been instantiated is a compile error
 - **`break` and `continue` are not allowed**: Since the loop is unrolled into sequential blocks, `break`/`continue` have no natural target. They are compile errors inside tuple enumeration
-- **Index is a compile-time constant**: The `i` binding from `.entries()` is a compile-time `i32` constant, usable in tuple/array indexing expressions
+- **Index is a compile-time constant**: The `i` binding from `.enumerate()` is a compile-time `i32` constant, usable in tuple/array indexing expressions
 - **Empty tuple**: `for let v of []` produces zero unrolled blocks (no-op)
 - **Nested enumeration**: Enumerating a tuple that contains tuples works; inner tuples are elements, not automatically flattened
 
@@ -207,7 +205,7 @@ Example error:
 error: method `to_sql_param` not found on type `bool`
   --> app.wado:10:5
    |
-10 |     for let [i, v] of values.entries() {
+10 |     for let [i, v] of values.enumerate() {
    |                       ^^^^^^^^^^^^^^^^
    |                       element 2 of tuple [i32, String, bool]
    |
@@ -223,7 +221,7 @@ note: tuple type determined here
 
 ## Implementation Plan
 
-- [ ] Detect `for let v of <tuple>` and `for let [i, v] of <tuple>.entries()` patterns in the resolver
+- [ ] Detect `for let v of <tuple>` and `for let [i, v] of <tuple>.enumerate()` patterns in the resolver
 - [ ] Implement loop unrolling during monomorphization
 - [ ] Type-check each unrolled block independently
 - [ ] Emit compile errors for `break`/`continue` inside tuple enumeration
@@ -245,7 +243,7 @@ note: tuple type determined here
 
 - Adopts C++ template model for type checking (monomorphization-time errors)
 - Adds complexity to the resolver's monomorphization logic
-- `.entries()` as a pseudo-method is a novel concept that may surprise users
+- `.enumerate()` as a pseudo-method is a novel concept that may surprise users
 - Error messages require careful engineering to be useful
 
 ### Risks

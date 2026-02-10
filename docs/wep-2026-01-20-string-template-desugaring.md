@@ -80,7 +80,7 @@ The tag function is a generic function that receives the values as a tuple, pres
 fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut query = strings[0];
     let mut params: Array<SqlParam> = [];
-    for let [i, v] of values.entries() {
+    for let [i, v] of values.enumerate() {
         params.append(v.to_sql_param());
         query.append((i + 1).to_string());
         query.append(strings[i + 1]);
@@ -89,7 +89,7 @@ fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
 }
 ```
 
-The `for let [i, v] of values.entries()` is compile-time tuple enumeration. See [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md) for the full specification.
+The `for let [i, v] of values.enumerate()` is compile-time tuple enumeration. See [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md) for the full specification.
 
 ### `String::raw` Implementation
 
@@ -99,7 +99,7 @@ The `for let [i, v] of values.entries()` is compile-time tuple enumeration. See 
 impl String {
     fn raw<Values>(strings: RawStrings, values: Values) -> String {
         let mut result = strings[0];
-        for let [i, v] of values.entries() {
+        for let [i, v] of values.enumerate() {
             v.fmt(&mut Formatter::new(&mut result, FormatSpec::default()));
             result.append(strings[i + 1]);
         }
