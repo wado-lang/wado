@@ -449,7 +449,7 @@ impl i128 {
     /// Create an i128 from an i64 value (sign-extended)
     pub fn from_i64(value: i64) -> i128 {
         // Sign extend: if value is negative, high bits are all 1s (-1)
-        let high: i64 = if value < 0 { -1 as i64 } else { 0 as i64 };
+        let high: i64 = if value < 0 { -1 } else { 0 };
         return i128 { low: value as u64, high };
     }
 
@@ -841,7 +841,7 @@ impl Shr for i128 {
         if shift >= 64 {
             // All high bits shift into low, high becomes sign extension
             let s = (shift - 64) as i64;
-            let sign_ext: i64 = if self.high < 0 { -1 as i64 } else { 0 as i64 };
+            let sign_ext: i64 = if self.high < 0 { -1 } else { 0 };
             return i128 {
                 low: (self.high >> s) as u64,
                 high: sign_ext,

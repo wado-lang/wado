@@ -2511,6 +2511,33 @@ impl<'a> Resolver<'a> {
         TirBlock::new(stmts, block.span)
     }
 
+    /// Resolve a block with expected type for its result expression.
+    /// The last expression statement (if any) is resolved with the expected type
+    /// for literal coercion, while all other statements are resolved normally.
+    fn resolve_block_with_expected_type(
+        &mut self,
+        block: &Block,
+        ctx: &mut FunctionContext,
+        expected_type: TypeId,
+    ) -> TirBlock {
+        ctx.enter_scope();
+        let len = block.stmts.len();
+        let mut stmts = Vec::new();
+        for (i, s) in block.stmts.iter().enumerate() {
+            if i == len - 1
+                && let Stmt::Expr(expr_stmt) = s
+            {
+                let expr =
+                    self.resolve_expr_with_expected_type(&expr_stmt.expr, ctx, Some(expected_type));
+                stmts.push(TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span));
+                continue;
+            }
+            stmts.extend(self.resolve_stmt(s, ctx));
+        }
+        ctx.exit_scope();
+        TirBlock::new(stmts, block.span)
+    }
+
     /// Resolve a statement (may return multiple statements for desugared constructs)
     fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         match stmt {
@@ -5554,6 +5581,13 @@ impl<'a> Resolver<'a> {
             && let Expr::Match(match_expr) = expr
         {
             return self.resolve_match_expr_with_expected_type(match_expr, ctx, target_type);
+        }
+
+        // Handle if expression coercion - propagate expected type to then/else branches
+        if let Some(target_type) = expected_type
+            && let Expr::If(if_expr) = expr
+        {
+            return self.resolve_if_expr_with_expected_type(if_expr, ctx, target_type);
         }
 
         // Handle binary expression with two numeric literals:
@@ -9316,6 +9350,61 @@ impl<'a> Resolver<'a> {
                 else_branch: else_block,
             },
             type_id,
+            if_expr.span,
+        );
+
+        if if_expr.init.is_some() {
+            ctx.exit_scope();
+        }
+
+        result
+    }
+
+    /// Resolve an if expression with expected type for literal coercion.
+    /// Propagates the expected type into then/else block result expressions.
+    fn resolve_if_expr_with_expected_type(
+        &mut self,
+        if_expr: &IfExpr,
+        ctx: &mut FunctionContext,
+        expected_type: TypeId,
+    ) -> TirExpr {
+        // Handle optional init binding (scoped to this if expression)
+        if if_expr.init.is_some() {
+            ctx.enter_scope();
+        }
+
+        if let Some(init) = &if_expr.init {
+            let _init_stmt = self.resolve_let(init, ctx);
+        }
+
+        // Resolve the condition
+        let condition = match &if_expr.condition {
+            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
+            ast::Condition::Pattern { span, .. } => {
+                self.errors.push(TypeError::NotYetImplemented {
+                    feature: "pattern matching in if expressions (use if statement instead)"
+                        .to_string(),
+                    span: *span,
+                });
+                TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, *span)
+            }
+        };
+
+        // Resolve then/else blocks with expected type for coercion
+        let then_block =
+            self.resolve_block_with_expected_type(&if_expr.then_block, ctx, expected_type);
+        let else_block = if_expr
+            .else_block
+            .as_ref()
+            .map(|b| self.resolve_block_with_expected_type(b, ctx, expected_type));
+
+        let result = TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(condition),
+                then_branch: then_block,
+                else_branch: else_block,
+            },
+            expected_type,
             if_expr.span,
         );
 
