@@ -86,6 +86,23 @@ impl String {
         self.repr = new_repr;
     }
 
+    /// Internal: Append bytes from linear memory to this string (stdlib use only)
+    /// Copies `len` bytes starting at `ptr` in linear memory into the string.
+    /// The bytes must be valid UTF-8. No validation is performed.
+    pub fn internal_append_from_memory(&mut self, ptr: i32, len: i32) {
+        if len == 0 {
+            return;
+        }
+        let new_used = self.used + len;
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+            self.grow(new_used);
+        }
+        for let mut i = 0; i < len; i += 1 {
+            builtin::array_set_u8(self.repr, self.used + i, builtin::memory_load8_u(ptr + i));
+        }
+        self.used = new_used;
+    }
+
     /// Append another string to this string
     /// Grows the string if necessary (O(1) amortized)
     pub fn append(&mut self, other: String) {

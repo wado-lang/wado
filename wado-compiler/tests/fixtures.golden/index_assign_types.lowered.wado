@@ -18,26 +18,63 @@
 fn run() with Stdout {
     let mut arr_i32: Array<i32> = move [0];
     arr_i32."Array<i32>^IndexAssign::index_assign"(0, 42);
-    core::cli::println(move "String::concat"(move "i32: ", move arr_i32."Array<i32>^IndexValue::index_value"(0)."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "i32: ", __inline_i32__to_string_0: {
+        let self: i32 = arr_i32."Array<i32>^IndexValue::index_value"(0);
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
     let mut arr_i64: Array<i64> = move [0];
     arr_i64."Array<i64>^IndexAssign::index_assign"(0, 9999999999);
-    core::cli::println(move "String::concat"(move "i64: ", move arr_i64."Array<i64>^IndexValue::index_value"(0)."i64::to_string"()));
+    core::cli::println(move "String::concat"(move "i64: ", __inline_i64__to_string_1: {
+        let self: i64 = arr_i64."Array<i64>^IndexValue::index_value"(0);
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i64_decimal(self, &mut f);
+        break __inline_i64__to_string_1: buf;
+    }));
     let mut arr_f32: Array<f32> = move [0.0 as f32];
     arr_f32."Array<f32>^IndexAssign::index_assign"(0, 3.14 as f32);
-    core::cli::println(move "String::concat"(move "f32: ", move arr_f32."Array<f32>^IndexValue::index_value"(0)."f32::to_string"()));
+    core::cli::println(move "String::concat"(move "f32: ", __inline_f32__to_string_2: {
+        let self: f32 = arr_f32."Array<f32>^IndexValue::index_value"(0);
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_2: buf;
+    }));
     let mut arr_f64: Array<f64> = move [0.0];
     arr_f64."Array<f64>^IndexAssign::index_assign"(0, 2.718281828);
-    core::cli::println(move "String::concat"(move "f64: ", move arr_f64."Array<f64>^IndexValue::index_value"(0)."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64: ", __inline_f64__to_string_3: {
+        let self: f64 = arr_f64."Array<f64>^IndexValue::index_value"(0);
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(self, &mut f);
+        break __inline_f64__to_string_3: buf;
+    }));
     let mut arr_bool: Array<bool> = move [false];
     arr_bool."Array<bool>^IndexAssign::index_assign"(0, true);
-    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_0: {
-        let self: bool = arr_bool."Array<bool>^IndexValue::index_value"(0);
-        break __inline_bool__to_string_0: if self {
-            "true";
-        } else {
-            "false";
-        };
-    }));
+    core::cli::println(move "String::concat"(move "bool: ", move arr_bool."Array<bool>^IndexValue::index_value"(0)."bool::to_string"()));
 }
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {

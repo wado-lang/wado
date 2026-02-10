@@ -32,195 +32,694 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "abs(-3.5) = ", move __inline_f32__abs_0: {
-        let x: f32 = -3.5 as f32;
-        break __inline_f32__abs_0: core::builtin::f32_abs(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "abs(2.0) = ", move __inline_f32__abs_1: {
-        let x: f32 = 2.0 as f32;
-        break __inline_f32__abs_1: core::builtin::f32_abs(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "ceil(2.3) = ", move __inline_f32__ceil_2: {
-        let x: f32 = 2.3 as f32;
-        break __inline_f32__ceil_2: core::builtin::f32_ceil(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "ceil(-2.3) = ", move __inline_f32__ceil_3: {
-        let x: f32 = -2.3 as f32;
-        break __inline_f32__ceil_3: core::builtin::f32_ceil(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "floor(2.7) = ", move __inline_f32__floor_4: {
-        let x: f32 = 2.7 as f32;
-        break __inline_f32__floor_4: core::builtin::f32_floor(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "floor(-2.7) = ", move __inline_f32__floor_5: {
-        let x: f32 = -2.7 as f32;
-        break __inline_f32__floor_5: core::builtin::f32_floor(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "trunc(2.9) = ", move __inline_f32__trunc_6: {
-        let x: f32 = 2.9 as f32;
-        break __inline_f32__trunc_6: core::builtin::f32_trunc(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "trunc(-2.9) = ", move __inline_f32__trunc_7: {
-        let x: f32 = -2.9 as f32;
-        break __inline_f32__trunc_7: core::builtin::f32_trunc(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "round(2.5) = ", move __inline_f32__round_8: {
-        let x: f32 = 2.5 as f32;
-        break __inline_f32__round_8: core::builtin::f32_nearest(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "round(3.5) = ", move __inline_f32__round_9: {
-        let x: f32 = 3.5 as f32;
-        break __inline_f32__round_9: core::builtin::f32_nearest(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "sqrt(4.0) = ", move __inline_f32__sqrt_10: {
-        let x: f32 = 4.0 as f32;
-        break __inline_f32__sqrt_10: core::builtin::f32_sqrt(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "sqrt(2.0) = ", move __inline_f32__sqrt_11: {
-        let x: f32 = 2.0 as f32;
-        break __inline_f32__sqrt_11: core::builtin::f32_sqrt(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "min(3.0, 5.0) = ", move __inline_f32__min_12: {
-        let x: f32 = 3.0 as f32;
-        let y: f32 = 5.0 as f32;
-        break __inline_f32__min_12: core::builtin::f32_min(x, y);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "max(3.0, 5.0) = ", move __inline_f32__max_13: {
-        let x: f32 = 3.0 as f32;
-        let y: f32 = 5.0 as f32;
-        break __inline_f32__max_13: core::builtin::f32_max(x, y);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "copysign(5.0, -1.0) = ", move __inline_f32__copysign_14: {
-        let x: f32 = 5.0 as f32;
-        let y: f32 = -1.0 as f32;
-        break __inline_f32__copysign_14: core::builtin::f32_copysign(x, y);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "copysign(-5.0, 1.0) = ", move __inline_f32__copysign_15: {
-        let x: f32 = -5.0 as f32;
-        let y: f32 = 1.0 as f32;
-        break __inline_f32__copysign_15: core::builtin::f32_copysign(x, y);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "sin(0.0) = ", move __inline_f32__sin_16: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__sin_16: core::builtin::f32_sin(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "sin(PI/2) = ", move __inline_f32__sin_17: {
-        let x: f32 = (3.14159265358979323846 / 2.0 as f32);
-        break __inline_f32__sin_17: core::builtin::f32_sin(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "cos(0.0) = ", move __inline_f32__cos_18: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__cos_18: core::builtin::f32_cos(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "cos(PI) = ", move __inline_f32__cos_19: {
-        break __inline_f32__cos_19: core::builtin::f32_cos(3.14159265358979323846);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "tan(0.0) = ", move __inline_f32__tan_20: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__tan_20: core::builtin::f32_tan(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "asin(1.0) = ", move __inline_f32__asin_21: {
-        let x: f32 = 1.0 as f32;
-        break __inline_f32__asin_21: core::builtin::f32_asin(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "acos(1.0) = ", move __inline_f32__acos_22: {
-        let x: f32 = 1.0 as f32;
-        break __inline_f32__acos_22: core::builtin::f32_acos(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "atan(0.0) = ", move __inline_f32__atan_23: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__atan_23: core::builtin::f32_atan(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "atan2(1.0, 1.0) = ", move __inline_f32__atan2_24: {
-        let y: f32 = 1.0 as f32;
-        let x: f32 = 1.0 as f32;
-        break __inline_f32__atan2_24: core::builtin::f32_atan2(y, x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "sinh(0.0) = ", move __inline_f32__sinh_25: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__sinh_25: core::builtin::f32_sinh(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "cosh(0.0) = ", move __inline_f32__cosh_26: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__cosh_26: core::builtin::f32_cosh(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "tanh(0.0) = ", move __inline_f32__tanh_27: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__tanh_27: core::builtin::f32_tanh(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "asinh(0.0) = ", move __inline_f32__asinh_28: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__asinh_28: core::builtin::f32_asinh(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "acosh(1.0) = ", move __inline_f32__acosh_29: {
-        let x: f32 = 1.0 as f32;
-        break __inline_f32__acosh_29: core::builtin::f32_acosh(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "atanh(0.0) = ", move __inline_f32__atanh_30: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__atanh_30: core::builtin::f32_atanh(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "exp(0.0) = ", move __inline_f32__exp_31: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__exp_31: core::builtin::f32_exp(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "exp(1.0) = ", move __inline_f32__exp_32: {
-        let x: f32 = 1.0 as f32;
-        break __inline_f32__exp_32: core::builtin::f32_exp(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "exp2(3.0) = ", move __inline_f32__exp2_33: {
-        let x: f32 = 3.0 as f32;
-        break __inline_f32__exp2_33: core::builtin::f32_exp2(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "expm1(0.0) = ", move __inline_f32__expm1_34: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__expm1_34: core::builtin::f32_expm1(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "ln(1.0) = ", move __inline_f32__ln_35: {
-        let x: f32 = 1.0 as f32;
-        break __inline_f32__ln_35: core::builtin::f32_ln(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "ln(E) = ", move __inline_f32__ln_36: {
-        break __inline_f32__ln_36: core::builtin::f32_ln(2.71828182845904523536);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "log2(8.0) = ", move __inline_f32__log2_37: {
-        let x: f32 = 8.0 as f32;
-        break __inline_f32__log2_37: core::builtin::f32_log2(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "log10(1000.0) = ", move __inline_f32__log10_38: {
-        let x: f32 = 1000.0 as f32;
-        break __inline_f32__log10_38: core::builtin::f32_log10(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "ln1p(0.0) = ", move __inline_f32__ln1p_39: {
-        let x: f32 = 0.0 as f32;
-        break __inline_f32__ln1p_39: core::builtin::f32_ln1p(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "pow(2.0, 10.0) = ", move __inline_f32__pow_40: {
-        let x: f32 = 2.0 as f32;
-        let y: f32 = 10.0 as f32;
-        break __inline_f32__pow_40: core::builtin::f32_pow(x, y);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "pow(3.0, 3.0) = ", move __inline_f32__pow_41: {
-        let x: f32 = 3.0 as f32;
-        let y: f32 = 3.0 as f32;
-        break __inline_f32__pow_41: core::builtin::f32_pow(x, y);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "cbrt(27.0) = ", move __inline_f32__cbrt_42: {
-        let x: f32 = 27.0 as f32;
-        break __inline_f32__cbrt_42: core::builtin::f32_cbrt(x);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "hypot(3.0, 4.0) = ", move __inline_f32__hypot_43: {
-        let x: f32 = 3.0 as f32;
-        let y: f32 = 4.0 as f32;
-        break __inline_f32__hypot_43: core::builtin::f32_hypot(x, y);
-    }."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "fmod(7.0, 3.0) = ", move __inline_f32__fmod_44: {
-        let x: f32 = 7.0 as f32;
-        let y: f32 = 3.0 as f32;
-        break __inline_f32__fmod_44: core::builtin::f32_fmod(x, y);
-    }."f32::to_string"()));
+    core::cli::println(move "String::concat"(move "abs(-3.5) = ", __inline_f32__to_string_0: {
+        let self: f32 = __inline_f32__abs_0: {
+            let x: f32 = -3.5 as f32;
+            break __inline_f32__abs_0: core::builtin::f32_abs(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_0: buf;
+    }));
+    core::cli::println(move "String::concat"(move "abs(2.0) = ", __inline_f32__to_string_1: {
+        let self: f32 = __inline_f32__abs_1: {
+            let x: f32 = 2.0 as f32;
+            break __inline_f32__abs_1: core::builtin::f32_abs(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_1: buf;
+    }));
+    core::cli::println(move "String::concat"(move "ceil(2.3) = ", __inline_f32__to_string_2: {
+        let self: f32 = __inline_f32__ceil_2: {
+            let x: f32 = 2.3 as f32;
+            break __inline_f32__ceil_2: core::builtin::f32_ceil(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_2: buf;
+    }));
+    core::cli::println(move "String::concat"(move "ceil(-2.3) = ", __inline_f32__to_string_3: {
+        let self: f32 = __inline_f32__ceil_3: {
+            let x: f32 = -2.3 as f32;
+            break __inline_f32__ceil_3: core::builtin::f32_ceil(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_3: buf;
+    }));
+    core::cli::println(move "String::concat"(move "floor(2.7) = ", __inline_f32__to_string_4: {
+        let self: f32 = __inline_f32__floor_4: {
+            let x: f32 = 2.7 as f32;
+            break __inline_f32__floor_4: core::builtin::f32_floor(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_4: buf;
+    }));
+    core::cli::println(move "String::concat"(move "floor(-2.7) = ", __inline_f32__to_string_5: {
+        let self: f32 = __inline_f32__floor_5: {
+            let x: f32 = -2.7 as f32;
+            break __inline_f32__floor_5: core::builtin::f32_floor(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_5: buf;
+    }));
+    core::cli::println(move "String::concat"(move "trunc(2.9) = ", __inline_f32__to_string_6: {
+        let self: f32 = __inline_f32__trunc_6: {
+            let x: f32 = 2.9 as f32;
+            break __inline_f32__trunc_6: core::builtin::f32_trunc(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_6: buf;
+    }));
+    core::cli::println(move "String::concat"(move "trunc(-2.9) = ", __inline_f32__to_string_7: {
+        let self: f32 = __inline_f32__trunc_7: {
+            let x: f32 = -2.9 as f32;
+            break __inline_f32__trunc_7: core::builtin::f32_trunc(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_7: buf;
+    }));
+    core::cli::println(move "String::concat"(move "round(2.5) = ", __inline_f32__to_string_8: {
+        let self: f32 = __inline_f32__round_8: {
+            let x: f32 = 2.5 as f32;
+            break __inline_f32__round_8: core::builtin::f32_nearest(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_8: buf;
+    }));
+    core::cli::println(move "String::concat"(move "round(3.5) = ", __inline_f32__to_string_9: {
+        let self: f32 = __inline_f32__round_9: {
+            let x: f32 = 3.5 as f32;
+            break __inline_f32__round_9: core::builtin::f32_nearest(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_9: buf;
+    }));
+    core::cli::println(move "String::concat"(move "sqrt(4.0) = ", __inline_f32__to_string_10: {
+        let self: f32 = __inline_f32__sqrt_10: {
+            let x: f32 = 4.0 as f32;
+            break __inline_f32__sqrt_10: core::builtin::f32_sqrt(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_10: buf;
+    }));
+    core::cli::println(move "String::concat"(move "sqrt(2.0) = ", __inline_f32__to_string_11: {
+        let self: f32 = __inline_f32__sqrt_11: {
+            let x: f32 = 2.0 as f32;
+            break __inline_f32__sqrt_11: core::builtin::f32_sqrt(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_11: buf;
+    }));
+    core::cli::println(move "String::concat"(move "min(3.0, 5.0) = ", __inline_f32__to_string_12: {
+        let self: f32 = __inline_f32__min_12: {
+            let x: f32 = 3.0 as f32;
+            let y: f32 = 5.0 as f32;
+            break __inline_f32__min_12: core::builtin::f32_min(x, y);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_12: buf;
+    }));
+    core::cli::println(move "String::concat"(move "max(3.0, 5.0) = ", __inline_f32__to_string_13: {
+        let self: f32 = __inline_f32__max_13: {
+            let x: f32 = 3.0 as f32;
+            let y: f32 = 5.0 as f32;
+            break __inline_f32__max_13: core::builtin::f32_max(x, y);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_13: buf;
+    }));
+    core::cli::println(move "String::concat"(move "copysign(5.0, -1.0) = ", __inline_f32__to_string_14: {
+        let self: f32 = __inline_f32__copysign_14: {
+            let x: f32 = 5.0 as f32;
+            let y: f32 = -1.0 as f32;
+            break __inline_f32__copysign_14: core::builtin::f32_copysign(x, y);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_14: buf;
+    }));
+    core::cli::println(move "String::concat"(move "copysign(-5.0, 1.0) = ", __inline_f32__to_string_15: {
+        let self: f32 = __inline_f32__copysign_15: {
+            let x: f32 = -5.0 as f32;
+            let y: f32 = 1.0 as f32;
+            break __inline_f32__copysign_15: core::builtin::f32_copysign(x, y);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_15: buf;
+    }));
+    core::cli::println(move "String::concat"(move "sin(0.0) = ", __inline_f32__to_string_16: {
+        let self: f32 = __inline_f32__sin_16: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__sin_16: core::builtin::f32_sin(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_16: buf;
+    }));
+    core::cli::println(move "String::concat"(move "sin(PI/2) = ", __inline_f32__to_string_17: {
+        let self: f32 = __inline_f32__sin_17: {
+            let x: f32 = (3.14159265358979323846 / 2.0 as f32);
+            break __inline_f32__sin_17: core::builtin::f32_sin(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_17: buf;
+    }));
+    core::cli::println(move "String::concat"(move "cos(0.0) = ", __inline_f32__to_string_18: {
+        let self: f32 = __inline_f32__cos_18: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__cos_18: core::builtin::f32_cos(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_18: buf;
+    }));
+    core::cli::println(move "String::concat"(move "cos(PI) = ", __inline_f32__to_string_19: {
+        let self: f32 = __inline_f32__cos_19: {
+            break __inline_f32__cos_19: core::builtin::f32_cos(3.14159265358979323846);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_19: buf;
+    }));
+    core::cli::println(move "String::concat"(move "tan(0.0) = ", __inline_f32__to_string_20: {
+        let self: f32 = __inline_f32__tan_20: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__tan_20: core::builtin::f32_tan(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_20: buf;
+    }));
+    core::cli::println(move "String::concat"(move "asin(1.0) = ", __inline_f32__to_string_21: {
+        let self: f32 = __inline_f32__asin_21: {
+            let x: f32 = 1.0 as f32;
+            break __inline_f32__asin_21: core::builtin::f32_asin(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_21: buf;
+    }));
+    core::cli::println(move "String::concat"(move "acos(1.0) = ", __inline_f32__to_string_22: {
+        let self: f32 = __inline_f32__acos_22: {
+            let x: f32 = 1.0 as f32;
+            break __inline_f32__acos_22: core::builtin::f32_acos(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_22: buf;
+    }));
+    core::cli::println(move "String::concat"(move "atan(0.0) = ", __inline_f32__to_string_23: {
+        let self: f32 = __inline_f32__atan_23: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__atan_23: core::builtin::f32_atan(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_23: buf;
+    }));
+    core::cli::println(move "String::concat"(move "atan2(1.0, 1.0) = ", __inline_f32__to_string_24: {
+        let self: f32 = __inline_f32__atan2_24: {
+            let y: f32 = 1.0 as f32;
+            let x: f32 = 1.0 as f32;
+            break __inline_f32__atan2_24: core::builtin::f32_atan2(y, x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_24: buf;
+    }));
+    core::cli::println(move "String::concat"(move "sinh(0.0) = ", __inline_f32__to_string_25: {
+        let self: f32 = __inline_f32__sinh_25: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__sinh_25: core::builtin::f32_sinh(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_25: buf;
+    }));
+    core::cli::println(move "String::concat"(move "cosh(0.0) = ", __inline_f32__to_string_26: {
+        let self: f32 = __inline_f32__cosh_26: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__cosh_26: core::builtin::f32_cosh(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_26: buf;
+    }));
+    core::cli::println(move "String::concat"(move "tanh(0.0) = ", __inline_f32__to_string_27: {
+        let self: f32 = __inline_f32__tanh_27: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__tanh_27: core::builtin::f32_tanh(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_27: buf;
+    }));
+    core::cli::println(move "String::concat"(move "asinh(0.0) = ", __inline_f32__to_string_28: {
+        let self: f32 = __inline_f32__asinh_28: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__asinh_28: core::builtin::f32_asinh(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_28: buf;
+    }));
+    core::cli::println(move "String::concat"(move "acosh(1.0) = ", __inline_f32__to_string_29: {
+        let self: f32 = __inline_f32__acosh_29: {
+            let x: f32 = 1.0 as f32;
+            break __inline_f32__acosh_29: core::builtin::f32_acosh(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_29: buf;
+    }));
+    core::cli::println(move "String::concat"(move "atanh(0.0) = ", __inline_f32__to_string_30: {
+        let self: f32 = __inline_f32__atanh_30: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__atanh_30: core::builtin::f32_atanh(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_30: buf;
+    }));
+    core::cli::println(move "String::concat"(move "exp(0.0) = ", __inline_f32__to_string_31: {
+        let self: f32 = __inline_f32__exp_31: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__exp_31: core::builtin::f32_exp(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_31: buf;
+    }));
+    core::cli::println(move "String::concat"(move "exp(1.0) = ", __inline_f32__to_string_32: {
+        let self: f32 = __inline_f32__exp_32: {
+            let x: f32 = 1.0 as f32;
+            break __inline_f32__exp_32: core::builtin::f32_exp(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_32: buf;
+    }));
+    core::cli::println(move "String::concat"(move "exp2(3.0) = ", __inline_f32__to_string_33: {
+        let self: f32 = __inline_f32__exp2_33: {
+            let x: f32 = 3.0 as f32;
+            break __inline_f32__exp2_33: core::builtin::f32_exp2(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_33: buf;
+    }));
+    core::cli::println(move "String::concat"(move "expm1(0.0) = ", __inline_f32__to_string_34: {
+        let self: f32 = __inline_f32__expm1_34: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__expm1_34: core::builtin::f32_expm1(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_34: buf;
+    }));
+    core::cli::println(move "String::concat"(move "ln(1.0) = ", __inline_f32__to_string_35: {
+        let self: f32 = __inline_f32__ln_35: {
+            let x: f32 = 1.0 as f32;
+            break __inline_f32__ln_35: core::builtin::f32_ln(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_35: buf;
+    }));
+    core::cli::println(move "String::concat"(move "ln(E) = ", __inline_f32__to_string_36: {
+        let self: f32 = __inline_f32__ln_36: {
+            break __inline_f32__ln_36: core::builtin::f32_ln(2.71828182845904523536);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_36: buf;
+    }));
+    core::cli::println(move "String::concat"(move "log2(8.0) = ", __inline_f32__to_string_37: {
+        let self: f32 = __inline_f32__log2_37: {
+            let x: f32 = 8.0 as f32;
+            break __inline_f32__log2_37: core::builtin::f32_log2(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_37: buf;
+    }));
+    core::cli::println(move "String::concat"(move "log10(1000.0) = ", __inline_f32__to_string_38: {
+        let self: f32 = __inline_f32__log10_38: {
+            let x: f32 = 1000.0 as f32;
+            break __inline_f32__log10_38: core::builtin::f32_log10(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_38: buf;
+    }));
+    core::cli::println(move "String::concat"(move "ln1p(0.0) = ", __inline_f32__to_string_39: {
+        let self: f32 = __inline_f32__ln1p_39: {
+            let x: f32 = 0.0 as f32;
+            break __inline_f32__ln1p_39: core::builtin::f32_ln1p(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_39: buf;
+    }));
+    core::cli::println(move "String::concat"(move "pow(2.0, 10.0) = ", __inline_f32__to_string_40: {
+        let self: f32 = __inline_f32__pow_40: {
+            let x: f32 = 2.0 as f32;
+            let y: f32 = 10.0 as f32;
+            break __inline_f32__pow_40: core::builtin::f32_pow(x, y);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_40: buf;
+    }));
+    core::cli::println(move "String::concat"(move "pow(3.0, 3.0) = ", __inline_f32__to_string_41: {
+        let self: f32 = __inline_f32__pow_41: {
+            let x: f32 = 3.0 as f32;
+            let y: f32 = 3.0 as f32;
+            break __inline_f32__pow_41: core::builtin::f32_pow(x, y);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_41: buf;
+    }));
+    core::cli::println(move "String::concat"(move "cbrt(27.0) = ", __inline_f32__to_string_42: {
+        let self: f32 = __inline_f32__cbrt_42: {
+            let x: f32 = 27.0 as f32;
+            break __inline_f32__cbrt_42: core::builtin::f32_cbrt(x);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_42: buf;
+    }));
+    core::cli::println(move "String::concat"(move "hypot(3.0, 4.0) = ", __inline_f32__to_string_43: {
+        let self: f32 = __inline_f32__hypot_43: {
+            let x: f32 = 3.0 as f32;
+            let y: f32 = 4.0 as f32;
+            break __inline_f32__hypot_43: core::builtin::f32_hypot(x, y);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_43: buf;
+    }));
+    core::cli::println(move "String::concat"(move "fmod(7.0, 3.0) = ", __inline_f32__to_string_44: {
+        let self: f32 = __inline_f32__fmod_44: {
+            let x: f32 = 7.0 as f32;
+            let y: f32 = 3.0 as f32;
+            break __inline_f32__fmod_44: core::builtin::f32_fmod(x, y);
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(self, &mut f);
+        break __inline_f32__to_string_44: buf;
+    }));
 }
 

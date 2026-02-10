@@ -33,10 +33,32 @@ fn run() with Stdout {
     let inner: Array<i32> = __inline_Box_Array_i32____get_1: {
         break __inline_Box_Array_i32____get_1: boxed_arr.value;
     };
-    core::cli::println(move "String::concat"(move "inner len: ", move __inline_Array_i32___len_2: {
-        break __inline_Array_i32___len_2: inner.used;
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "inner[0]: ", move inner."Array<i32>^IndexValue::index_value"(0)."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "inner len: ", __inline_i32__to_string_0: {
+        let self: i32 = __inline_Array_i32___len_2: {
+            break __inline_Array_i32___len_2: inner.used;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
+    core::cli::println(move "String::concat"(move "inner[0]: ", __inline_i32__to_string_1: {
+        let self: i32 = inner."Array<i32>^IndexValue::index_value"(0);
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
     let inner_box: Box<i32> = __inline_Box_i32___new_3: {
         break __inline_Box_i32___new_3: Box<i32> { value: 42 };
     };
@@ -46,9 +68,20 @@ fn run() with Stdout {
     let unwrapped: Box<i32> = __inline_Box_Box_i32____get_5: {
         break __inline_Box_Box_i32____get_5: outer_box.value;
     };
-    core::cli::println(move "String::concat"(move "unwrapped value: ", move __inline_Box_i32___get_6: {
-        break __inline_Box_i32___get_6: unwrapped.value;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "unwrapped value: ", __inline_i32__to_string_2: {
+        let self: i32 = __inline_Box_i32___get_6: {
+            break __inline_Box_i32___get_6: unwrapped.value;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_2: buf;
+    }));
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

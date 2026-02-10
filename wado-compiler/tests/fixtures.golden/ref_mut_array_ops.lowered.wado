@@ -33,17 +33,39 @@ fn double_all(arr: &mut Array<i32>) {
 
 fn run() with Stdout {
     let mut nums: Array<i32> = move [1, 2, 3];
-    core::cli::println(move "String::concat"(move "len: ", move __inline_Array_i32___len_0: {
-        break __inline_Array_i32___len_0: nums.used;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "len: ", __inline_i32__to_string_0: {
+        let self: i32 = __inline_Array_i32___len_0: {
+            break __inline_Array_i32___len_0: nums.used;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
     __inline_append_elements_1: {
         let arr: &mut Array<i32> = &mut nums;
         arr."Array<i32>::append"(4);
         arr."Array<i32>::append"(5);
     };
-    core::cli::println(move "String::concat"(move "len: ", move __inline_Array_i32___len_2: {
-        break __inline_Array_i32___len_2: nums.used;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "len: ", __inline_i32__to_string_1: {
+        let self: i32 = __inline_Array_i32___len_2: {
+            break __inline_Array_i32___len_2: nums.used;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
     double_all(&mut nums);
     __for_1: {
         let mut i: i32 = 0;
@@ -55,7 +77,18 @@ fn run() with Stdout {
                 break __for_1;
             }
             __for_1_body: {
-                core::cli::println(move nums."Array<i32>^IndexValue::index_value"(i)."i32::to_string"());
+                core::cli::println(__inline_i32__to_string_2: {
+                    let self: i32 = nums."Array<i32>^IndexValue::index_value"(i);
+                    let mut buf: String = __inline_String__with_capacity_0: {
+                        break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+                    };
+                    let mut f: Formatter = __inline_Formatter__new_1: {
+                        let buf: &mut String = &mut buf;
+                        break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+                    break __inline_i32__to_string_2: buf;
+                });
             }
             i = (i + 1);
         }

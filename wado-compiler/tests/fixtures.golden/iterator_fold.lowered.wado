@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 pub struct "ArrayIter<i32>" {
     repr: builtin::array<i32>,
@@ -34,26 +38,66 @@ fn run() with Stdout {
             break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
         };
     }."ArrayIter<i32>::fold<i32>$__Closure_0"(0, &__Closure_0 {  });
-    core::cli::println(move "String::concat"(move "sum: ", move sum."i32::to_string"()));
-    let product: i32 = __inline_Array_i32___iter_1: {
-        break __inline_Array_i32___iter_1: __inline_Array_i32__IntoIterator__into_iter_1: {
-            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+    core::cli::println(move "String::concat"(move "sum: ", __inline_i32__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
         };
-    }."ArrayIter<i32>::fold<i32>$__Closure_1"(1, &__Closure_1 {  });
-    core::cli::println(move "String::concat"(move "product: ", move product."i32::to_string"()));
-    let count: i32 = __inline_Array_i32___iter_2: {
-        break __inline_Array_i32___iter_2: __inline_Array_i32__IntoIterator__into_iter_2: {
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(sum, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
+    let product: i32 = __inline_Array_i32___iter_1: {
+        break __inline_Array_i32___iter_1: __inline_Array_i32__IntoIterator__into_iter_2: {
             break __inline_Array_i32__IntoIterator__into_iter_2: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
         };
+    }."ArrayIter<i32>::fold<i32>$__Closure_1"(1, &__Closure_1 {  });
+    core::cli::println(move "String::concat"(move "product: ", __inline_i32__to_string_3: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(product, &mut f);
+        break __inline_i32__to_string_3: buf;
+    }));
+    let count: i32 = __inline_Array_i32___iter_2: {
+        break __inline_Array_i32___iter_2: __inline_Array_i32__IntoIterator__into_iter_4: {
+            break __inline_Array_i32__IntoIterator__into_iter_4: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+        };
     }."ArrayIter<i32>::fold<i32>$__Closure_2"(0, &__Closure_2 {  });
-    core::cli::println(move "String::concat"(move "count: ", move count."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "count: ", __inline_i32__to_string_5: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(count, &mut f);
+        break __inline_i32__to_string_5: buf;
+    }));
     let arr2: Array<i32> = move [3, 1, 4, 1, 5, 9, 2, 6];
     let max: i32 = __inline_Array_i32___iter_3: {
-        break __inline_Array_i32___iter_3: __inline_Array_i32__IntoIterator__into_iter_3: {
-            break __inline_Array_i32__IntoIterator__into_iter_3: ArrayIter<i32> { repr: arr2.repr, used: arr2.used, index: 0 };
+        break __inline_Array_i32___iter_3: __inline_Array_i32__IntoIterator__into_iter_6: {
+            break __inline_Array_i32__IntoIterator__into_iter_6: ArrayIter<i32> { repr: arr2.repr, used: arr2.used, index: 0 };
         };
     }."ArrayIter<i32>::fold<i32>$__Closure_3"(0, &__Closure_3 {  });
-    core::cli::println(move "String::concat"(move "max: ", move max."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "max: ", __inline_i32__to_string_7: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(max, &mut f);
+        break __inline_i32__to_string_7: buf;
+    }));
 }
 
 fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {

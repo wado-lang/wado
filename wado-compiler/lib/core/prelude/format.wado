@@ -88,6 +88,98 @@ impl Formatter {
     pub fn sign_plus(&self) -> bool {
         return self.sign_plus;
     }
+
+    /// Write `n` copies of a character to the output buffer.
+    pub fn write_char_n(&mut self, c: char, n: i32) {
+        for let mut i = 0; i < n; i += 1 {
+            self.buf.append_char(c);
+        }
+    }
+
+    /// Pad a pre-formatted content string to the configured width.
+    /// If no width is set or content is already at least as wide, writes content as-is.
+    pub fn pad(&mut self, content: String) {
+        let content_len = content.len();
+        if self.width <= 0 || content_len >= self.width {
+            self.buf.append(content);
+            return;
+        }
+        let padding = self.width - content_len;
+        let align = self.align;
+        if align matches { Left } {
+            self.buf.append(content);
+            self.write_char_n(self.fill, padding);
+        } else if align matches { Center } {
+            let left_pad = padding / 2;
+            let right_pad = padding - left_pad;
+            self.write_char_n(self.fill, left_pad);
+            self.buf.append(content);
+            self.write_char_n(self.fill, right_pad);
+        } else {
+            // Right (default)
+            self.write_char_n(self.fill, padding);
+            self.buf.append(content);
+        }
+    }
+
+    /// Write raw bytes from linear memory, applying width/alignment padding.
+    /// Used for values where sign is already embedded (e.g., floats).
+    pub fn write_from_memory(&mut self, ptr: i32, len: i32) {
+        if self.width <= 0 || len >= self.width {
+            self.buf.internal_append_from_memory(ptr, len);
+            return;
+        }
+        // Padding needed — create temporary string for alignment
+        let arr = builtin::array_new::<u8>(len);
+        for let mut i = 0; i < len; i += 1 {
+            builtin::array_set_u8(arr, i, builtin::memory_load8_u(ptr + i));
+        }
+        let s = String::internal_from_utf8_raw(arr, len);
+        self.pad(s);
+    }
+
+    /// Write an integer value with sign and optional prefix, applying all format options.
+    /// Digits are read from linear memory at `digit_ptr` with length `digit_len`.
+    /// `is_negative` - whether the original number was negative.
+    /// `prefix` - alternate form prefix like "0x", "0b", "0o" (empty if not applicable).
+    pub fn write_int(&mut self, is_negative: bool, prefix: String, digit_ptr: i32, digit_len: i32) {
+        let mut sign = "";
+        if is_negative {
+            sign = "-";
+        } else if self.sign_plus {
+            sign = "+";
+        }
+
+        let sign_len = sign.len();
+        let prefix_len = prefix.len();
+        let content_len = sign_len + prefix_len + digit_len;
+
+        if self.width <= 0 || content_len >= self.width {
+            // No padding needed — write directly (no intermediate GC objects)
+            if sign_len > 0 { self.buf.append(sign); }
+            if prefix_len > 0 { self.buf.append(prefix); }
+            self.buf.internal_append_from_memory(digit_ptr, digit_len);
+            return;
+        }
+
+        // Padding is needed
+        let padding = self.width - content_len;
+
+        if self.zero_pad {
+            // Zero padding: sign + prefix + zeros + digits
+            if sign_len > 0 { self.buf.append(sign); }
+            if prefix_len > 0 { self.buf.append(prefix); }
+            self.write_char_n('0', padding);
+            self.buf.internal_append_from_memory(digit_ptr, digit_len);
+        } else {
+            // Regular fill/align — build content string for alignment
+            let mut content = String::with_capacity(content_len);
+            if sign_len > 0 { content.append(sign); }
+            if prefix_len > 0 { content.append(prefix); }
+            content.internal_append_from_memory(digit_ptr, digit_len);
+            self.pad(content);
+        }
+    }
 }
 // Defined here (not in string.wado) to avoid string.wado depending on format.wado,
 // which would cause codegen struct registration order issues.

@@ -16,13 +16,33 @@
 fn run() with Stdout {
     let mut nums: Array<i32> = move [1, 2, 3];
     let before: i32 = nums."Array<i32>^IndexValue::index_value"(0);
-    core::cli::println(move "String::concat"(move "before: ", move before."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "before: ", __inline_i32__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(before, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
     __inline_modify_array_0: {
         let arr: &mut Array<i32> = &mut nums;
         arr."Array<i32>^IndexAssign::index_assign"(0, 100);
     };
     let after: i32 = nums."Array<i32>^IndexValue::index_value"(0);
-    core::cli::println(move "String::concat"(move "after: ", move after."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "after: ", __inline_i32__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(after, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

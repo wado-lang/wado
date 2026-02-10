@@ -40,28 +40,25 @@ fn run() with Stdout {
         let updated_val: String = __unwrap_option(__pattern_temp_2);
         core::cli::println(move "String::concat"(move "updated name: ", updated_val));
     }
-    core::cli::println(move "String::concat"(move "has 'target': ", __inline_bool__to_string_1: {
-        let self: bool = dict."MiniDict<String,String>::has"(move "target");
-        break __inline_bool__to_string_1: if self {
-            "true";
-        } else {
-            "false";
+    core::cli::println(move "String::concat"(move "has 'target': ", move dict."MiniDict<String,String>::has"(move "target")."bool::to_string"()));
+    core::cli::println(move "String::concat"(move "has 'version': ", move dict."MiniDict<String,String>::has"(move "version")."bool::to_string"()));
+    core::cli::println(move "String::concat"(move "size: ", __inline_i32__to_string_1: {
+        let self: i32 = __inline_MiniDict_String_String___size_1: {
+            break __inline_MiniDict_String_String___size_1: __inline_Array_Tuple_String_String____len_0: {
+                let self: &Array<[String, String]> = &dict.entries;
+                break __inline_Array_Tuple_String_String____len_0: self.used;
+            };
         };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
     }));
-    core::cli::println(move "String::concat"(move "has 'version': ", __inline_bool__to_string_2: {
-        let self: bool = dict."MiniDict<String,String>::has"(move "version");
-        break __inline_bool__to_string_2: if self {
-            "true";
-        } else {
-            "false";
-        };
-    }));
-    core::cli::println(move "String::concat"(move "size: ", move __inline_MiniDict_String_String___size_3: {
-        break __inline_MiniDict_String_String___size_3: __inline_Array_Tuple_String_String____len_0: {
-            let self: &Array<[String, String]> = &dict.entries;
-            break __inline_Array_Tuple_String_String____len_0: self.used;
-        };
-    }."i32::to_string"()));
     let __pattern_temp_3: Option<String> = move dict."MiniDict<String,String>::get"(move "missing");
     if !__is_not_null(__pattern_temp_3) {
         core::cli::println(move "missing key returned None");

@@ -23,13 +23,17 @@ fn run() with Stdout {
     let c: Container<String,i32> = move Container<String,i32> { keys: ["apple", "banana", "cherry"], values: [10, 20, 30], deleted: [false, true, false] };
     let idx: i32 = c."Container<String,i32>::find_key_index"(&"cherry");
     let full: bool = c."Container<String,i32>::is_full"(5);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "index: ", move idx."i32::to_string"()), move ", full: "), __inline_bool__to_string_0: {
-        break __inline_bool__to_string_0: if full {
-            "true";
-        } else {
-            "false";
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "index: ", __inline_i32__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
         };
-    }));
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(idx, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }), move ", full: "), move full."bool::to_string"()));
 }
 
 fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32) -> bool {

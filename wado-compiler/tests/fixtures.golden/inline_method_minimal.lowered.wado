@@ -21,7 +21,27 @@ fn run() with Stdout {
     arr2."Array<i32>::append"(3);
     let a: i32 = arr1."Array<i32>^IndexValue::index_value"(0);
     let b: i32 = arr2."Array<i32>^IndexValue::index_value"(0);
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "Result: ", move a."i32::to_string"()), move ", "), move b."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "Result: ", __inline_i32__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(a, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }), move ", "), __inline_i32__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(b, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

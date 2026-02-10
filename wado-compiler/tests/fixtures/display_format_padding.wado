@@ -1,0 +1,145 @@
+// Test: Formatter width, alignment, fill, zero_pad, sign_plus options
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Right-aligned integer with width
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter {
+        fill: ' ',
+        align: Alignment::Right,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: 10,
+        precision: -1,
+        buf: &mut buf,
+    };
+    let x: i32 = 42;
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Left-aligned integer with width
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: ' ',
+        align: Alignment::Left,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: 10,
+        precision: -1,
+        buf: &mut buf,
+    };
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Center-aligned integer with width
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: ' ',
+        align: Alignment::Center,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: 10,
+        precision: -1,
+        buf: &mut buf,
+    };
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Zero-padded integer
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: '0',
+        align: Alignment::Right,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: true,
+        width: 8,
+        precision: -1,
+        buf: &mut buf,
+    };
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Zero-padded negative integer
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: '0',
+        align: Alignment::Right,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: true,
+        width: 8,
+        precision: -1,
+        buf: &mut buf,
+    };
+    let neg: i32 = -42;
+    neg.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Sign plus
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: ' ',
+        align: Alignment::Right,
+        sign_plus: true,
+        alternate: false,
+        zero_pad: false,
+        width: -1,
+        precision: -1,
+        buf: &mut buf,
+    };
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Custom fill char
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: '*',
+        align: Alignment::Center,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: 10,
+        precision: -1,
+        buf: &mut buf,
+    };
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Bool with width
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: ' ',
+        align: Alignment::Left,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: 8,
+        precision: -1,
+        buf: &mut buf,
+    };
+    true.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // No width (content wider than width)
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: ' ',
+        align: Alignment::Right,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: 2,
+        precision: -1,
+        buf: &mut buf,
+    };
+    let big: i32 = 12345;
+    big.fmt(&mut f);
+    println(`[{buf}]`);
+}
+
+__DATA__
+{"stdout": "[        42]\n[42        ]\n[    42    ]\n[00000042]\n[-0000042]\n[+42]\n[****42****]\n[true    ]\n[12345]\n"}

@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct "Counter<i32>" {
     value: i32,
@@ -17,16 +21,47 @@ fn run() with Stdout {
     let z: i32 = __inline_Counter_i32___zero_0: {
         break __inline_Counter_i32___zero_0: 0;
     };
-    core::cli::println(move "String::concat"(move "zero: ", move z."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "zero: ", __inline_i32__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(z, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
     let d: i32 = __inline_Counter_i32___default_value_1: {
         break __inline_Counter_i32___default_value_1: 100;
     };
-    core::cli::println(move "String::concat"(move "default: ", move d."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "default: ", __inline_i32__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(d, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
     let c: Counter<i32> = __inline_Counter_i32___new_2: {
         break __inline_Counter_i32___new_2: Counter<i32> { value: 42 };
     };
-    core::cli::println(move "String::concat"(move "counter value: ", move __inline_Counter_i32___get_3: {
-        break __inline_Counter_i32___get_3: c.value;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "counter value: ", __inline_i32__to_string_2: {
+        let self: i32 = __inline_Counter_i32___get_3: {
+            break __inline_Counter_i32___get_3: c.value;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_2: buf;
+    }));
 }
 

@@ -32,7 +32,13 @@ fn run() with Stdout {
             let __pattern_temp_0: Option<char> = __iter_0."ArrayIter<char>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
                 let x: char = __unwrap_option(__pattern_temp_0).value;
-                core::cli::println(move x."char::to_string"());
+                core::cli::println(__inline_char__to_string_1: {
+                    let mut buf: String = __inline_String__with_capacity_0: {
+                        break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(4), used: 0 };
+                    };
+                    buf."String::append_char"(x);
+                    break __inline_char__to_string_1: buf;
+                });
             } else {
                 break;
             }

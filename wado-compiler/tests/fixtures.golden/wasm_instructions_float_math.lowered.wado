@@ -9,44 +9,218 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let abs_neg: f64 = core::builtin::f64_abs(-3.5);
     let abs_pos: f64 = core::builtin::f64_abs(3.5);
-    core::cli::println(move "String::concat"(move "f64_abs(-3.5) = ", move abs_neg."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_abs(3.5) = ", move abs_pos."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64_abs(-3.5) = ", __inline_f64__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(abs_neg, &mut f);
+        break __inline_f64__to_string_0: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_abs(3.5) = ", __inline_f64__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(abs_pos, &mut f);
+        break __inline_f64__to_string_1: buf;
+    }));
     let abs_neg32: f32 = core::builtin::f32_abs(-2.5 as f32);
-    core::cli::println(move "String::concat"(move "f32_abs(-2.5) = ", move abs_neg32."f32::to_string"()));
+    core::cli::println(move "String::concat"(move "f32_abs(-2.5) = ", __inline_f32__to_string_2: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(abs_neg32, &mut f);
+        break __inline_f32__to_string_2: buf;
+    }));
     let ceil1: f64 = core::builtin::f64_ceil(2.3);
     let ceil2: f64 = core::builtin::f64_ceil(-2.3);
     let ceil3: f64 = core::builtin::f64_ceil(2.0);
-    core::cli::println(move "String::concat"(move "f64_ceil(2.3) = ", move ceil1."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_ceil(-2.3) = ", move ceil2."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_ceil(2.0) = ", move ceil3."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64_ceil(2.3) = ", __inline_f64__to_string_3: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(ceil1, &mut f);
+        break __inline_f64__to_string_3: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_ceil(-2.3) = ", __inline_f64__to_string_4: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(ceil2, &mut f);
+        break __inline_f64__to_string_4: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_ceil(2.0) = ", __inline_f64__to_string_5: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(ceil3, &mut f);
+        break __inline_f64__to_string_5: buf;
+    }));
     let floor1: f64 = core::builtin::f64_floor(2.7);
     let floor2: f64 = core::builtin::f64_floor(-2.7);
     let floor3: f64 = core::builtin::f64_floor(2.0);
-    core::cli::println(move "String::concat"(move "f64_floor(2.7) = ", move floor1."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_floor(-2.7) = ", move floor2."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_floor(2.0) = ", move floor3."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64_floor(2.7) = ", __inline_f64__to_string_6: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(floor1, &mut f);
+        break __inline_f64__to_string_6: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_floor(-2.7) = ", __inline_f64__to_string_7: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(floor2, &mut f);
+        break __inline_f64__to_string_7: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_floor(2.0) = ", __inline_f64__to_string_8: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(floor3, &mut f);
+        break __inline_f64__to_string_8: buf;
+    }));
     let trunc1: f64 = core::builtin::f64_trunc(2.9);
     let trunc2: f64 = core::builtin::f64_trunc(-2.9);
-    core::cli::println(move "String::concat"(move "f64_trunc(2.9) = ", move trunc1."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_trunc(-2.9) = ", move trunc2."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64_trunc(2.9) = ", __inline_f64__to_string_9: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(trunc1, &mut f);
+        break __inline_f64__to_string_9: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_trunc(-2.9) = ", __inline_f64__to_string_10: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(trunc2, &mut f);
+        break __inline_f64__to_string_10: buf;
+    }));
     let near1: f64 = core::builtin::f64_nearest(2.5);
     let near2: f64 = core::builtin::f64_nearest(3.5);
     let near3: f64 = core::builtin::f64_nearest(2.3);
     let near4: f64 = core::builtin::f64_nearest(2.7);
-    core::cli::println(move "String::concat"(move "f64_nearest(2.5) = ", move near1."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_nearest(3.5) = ", move near2."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_nearest(2.3) = ", move near3."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_nearest(2.7) = ", move near4."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64_nearest(2.5) = ", __inline_f64__to_string_11: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(near1, &mut f);
+        break __inline_f64__to_string_11: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_nearest(3.5) = ", __inline_f64__to_string_12: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(near2, &mut f);
+        break __inline_f64__to_string_12: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_nearest(2.3) = ", __inline_f64__to_string_13: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(near3, &mut f);
+        break __inline_f64__to_string_13: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_nearest(2.7) = ", __inline_f64__to_string_14: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(near4, &mut f);
+        break __inline_f64__to_string_14: buf;
+    }));
     let sqrt1: f64 = core::builtin::f64_sqrt(4.0);
     let sqrt2: f64 = core::builtin::f64_sqrt(9.0);
     let sqrt3: f64 = core::builtin::f64_sqrt(2.0);
-    core::cli::println(move "String::concat"(move "f64_sqrt(4.0) = ", move sqrt1."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_sqrt(9.0) = ", move sqrt2."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64_sqrt(4.0) = ", __inline_f64__to_string_15: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(sqrt1, &mut f);
+        break __inline_f64__to_string_15: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_sqrt(9.0) = ", __inline_f64__to_string_16: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(sqrt2, &mut f);
+        break __inline_f64__to_string_16: buf;
+    }));
     if ((sqrt3 > 1.414) && (sqrt3 < 1.415)) {
         core::cli::println(move "f64_sqrt(2.0) is correct");
     }
@@ -54,25 +228,145 @@ fn run() with Stdout {
     let min2: f64 = core::builtin::f64_min(-1.0, 1.0);
     let max1: f64 = core::builtin::f64_max(3.0, 5.0);
     let max2: f64 = core::builtin::f64_max(-1.0, 1.0);
-    core::cli::println(move "String::concat"(move "f64_min(3.0, 5.0) = ", move min1."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_min(-1.0, 1.0) = ", move min2."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_max(3.0, 5.0) = ", move max1."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_max(-1.0, 1.0) = ", move max2."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64_min(3.0, 5.0) = ", __inline_f64__to_string_17: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(min1, &mut f);
+        break __inline_f64__to_string_17: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_min(-1.0, 1.0) = ", __inline_f64__to_string_18: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(min2, &mut f);
+        break __inline_f64__to_string_18: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_max(3.0, 5.0) = ", __inline_f64__to_string_19: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(max1, &mut f);
+        break __inline_f64__to_string_19: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_max(-1.0, 1.0) = ", __inline_f64__to_string_20: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(max2, &mut f);
+        break __inline_f64__to_string_20: buf;
+    }));
     let copy1: f64 = core::builtin::f64_copysign(3.0, -1.0);
     let copy2: f64 = core::builtin::f64_copysign(-3.0, 1.0);
     let copy3: f64 = core::builtin::f64_copysign(5.0, 5.0);
-    core::cli::println(move "String::concat"(move "f64_copysign(3.0, -1.0) = ", move copy1."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_copysign(-3.0, 1.0) = ", move copy2."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "f64_copysign(5.0, 5.0) = ", move copy3."f64::to_string"()));
+    core::cli::println(move "String::concat"(move "f64_copysign(3.0, -1.0) = ", __inline_f64__to_string_21: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(copy1, &mut f);
+        break __inline_f64__to_string_21: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_copysign(-3.0, 1.0) = ", __inline_f64__to_string_22: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(copy2, &mut f);
+        break __inline_f64__to_string_22: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64_copysign(5.0, 5.0) = ", __inline_f64__to_string_23: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(copy3, &mut f);
+        break __inline_f64__to_string_23: buf;
+    }));
     let f32_ceil: f32 = core::builtin::f32_ceil(2.3 as f32);
     let f32_floor: f32 = core::builtin::f32_floor(2.7 as f32);
     let f32_sqrt: f32 = core::builtin::f32_sqrt(4.0 as f32);
     let f32_min: f32 = core::builtin::f32_min(3.0 as f32, 5.0 as f32);
     let f32_max: f32 = core::builtin::f32_max(3.0 as f32, 5.0 as f32);
-    core::cli::println(move "String::concat"(move "f32_ceil(2.3) = ", move f32_ceil."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "f32_floor(2.7) = ", move f32_floor."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "f32_sqrt(4.0) = ", move f32_sqrt."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "f32_min(3.0, 5.0) = ", move f32_min."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "f32_max(3.0, 5.0) = ", move f32_max."f32::to_string"()));
+    core::cli::println(move "String::concat"(move "f32_ceil(2.3) = ", __inline_f32__to_string_24: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(f32_ceil, &mut f);
+        break __inline_f32__to_string_24: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f32_floor(2.7) = ", __inline_f32__to_string_25: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(f32_floor, &mut f);
+        break __inline_f32__to_string_25: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f32_sqrt(4.0) = ", __inline_f32__to_string_26: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(f32_sqrt, &mut f);
+        break __inline_f32__to_string_26: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f32_min(3.0, 5.0) = ", __inline_f32__to_string_27: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(f32_min, &mut f);
+        break __inline_f32__to_string_27: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f32_max(3.0, 5.0) = ", __inline_f32__to_string_28: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(f32_max, &mut f);
+        break __inline_f32__to_string_28: buf;
+    }));
 }
 

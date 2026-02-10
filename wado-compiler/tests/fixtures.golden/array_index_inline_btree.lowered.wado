@@ -26,7 +26,17 @@ struct "Tree<String>" {
 fn run() with Stdout {
     let tree: Tree<String> = move Tree<String> { root: Node<String> { keys: ["apple", "banana", "cherry", "date"], deleted: [false, true, false, false] }, max_keys: 5 };
     let result: i32 = tree."Tree<String>::check"();
-    core::cli::println(move "String::concat"(move "result: ", move result."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "result: ", __inline_i32__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(result, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
 }
 
 fn "Tree<String>::check"(self: &Tree<String>) -> i32 {

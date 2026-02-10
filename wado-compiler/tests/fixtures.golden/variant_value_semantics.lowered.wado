@@ -8,17 +8,41 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let c1: Shape = move Shape::Circle(5.0);
     if __variant_test(c1, case=0, name=Circle) {
         let r: f64 = __variant_payload(c1, case=0);
-        core::cli::println(move "String::concat"(move "c1 radius: ", move r."f64::to_string"()));
+        core::cli::println(move "String::concat"(move "c1 radius: ", __inline_f64__to_string_0: {
+            let mut buf: String = __inline_String__with_capacity_0: {
+                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+            };
+            let mut f: Formatter = __inline_Formatter__new_1: {
+                let buf: &mut String = &mut buf;
+                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            core::prelude/primitives.wado::fmt_f64_display(r, &mut f);
+            break __inline_f64__to_string_0: buf;
+        }));
     }
     if __variant_test(c1, case=0, name=Circle) {
         let r: f64 = __variant_payload(c1, case=0);
-        core::cli::println(move "String::concat"(move "c2 radius: ", move r."f64::to_string"()));
+        core::cli::println(move "String::concat"(move "c2 radius: ", __inline_f64__to_string_1: {
+            let mut buf: String = __inline_String__with_capacity_0: {
+                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+            };
+            let mut f: Formatter = __inline_Formatter__new_1: {
+                let buf: &mut String = &mut buf;
+                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            core::prelude/primitives.wado::fmt_f64_display(r, &mut f);
+            break __inline_f64__to_string_1: buf;
+        }));
     }
     let p1: Shape = move Shape::Point;
     if __variant_test(p1, case=1, name=Point) {

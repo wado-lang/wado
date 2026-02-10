@@ -37,20 +37,18 @@ fn run() with Stdout {
     };
     let count: i32 = c."Container<String>::count_flagged"();
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "items: ", item0), move ", "), item1), move ", "), item2));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "flags: ", __inline_bool__to_string_5: {
-        break __inline_bool__to_string_5: if flag0 {
-            "true";
-        } else {
-            "false";
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "flags: ", move flag0."bool::to_string"()), move ", "), move flag1."bool::to_string"()));
+    core::cli::println(move "String::concat"(move "count: ", __inline_i32__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
         };
-    }), move ", "), __inline_bool__to_string_6: {
-        break __inline_bool__to_string_6: if flag1 {
-            "true";
-        } else {
-            "false";
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
+        core::prelude/primitives.wado::fmt_i32_decimal(count, &mut f);
+        break __inline_i32__to_string_0: buf;
     }));
-    core::cli::println(move "String::concat"(move "count: ", move count."i32::to_string"()));
 }
 
 fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {

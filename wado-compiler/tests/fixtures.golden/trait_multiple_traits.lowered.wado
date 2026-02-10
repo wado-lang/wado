@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct Person {
     name: String,
@@ -21,9 +25,20 @@ fn run() with Stdout {
     core::cli::println(move "String::concat"(move "Name: ", __inline_Person_Named__name_0: {
         break __inline_Person_Named__name_0: __sroa_p_name;
     }));
-    core::cli::println(move "String::concat"(move "Age: ", move __inline_Person_Aged__age_1: {
-        break __inline_Person_Aged__age_1: 30;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "Age: ", __inline_i32__to_string_0: {
+        let self: i32 = __inline_Person_Aged__age_1: {
+            break __inline_Person_Aged__age_1: 30;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
     core::cli::println(move "String::concat"(move "Location: ", __inline_Person_Located__location_2: {
         break __inline_Person_Located__location_2: __sroa_p_city;
     }));

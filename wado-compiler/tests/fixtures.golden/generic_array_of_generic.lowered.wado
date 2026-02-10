@@ -20,8 +20,30 @@ struct "Pair<i32,String>" {
 
 fn run() with Stdout {
     let pairs: Array<Pair<i32, String>> = move [Pair<i32,String> { first: 1, second: "one" }, Pair<i32,String> { first: 2, second: "two" }];
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "pairs[0]: (", move pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).first."i32::to_string"()), move ", "), pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).second), move ")"));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "pairs[1]: (", move pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).first."i32::to_string"()), move ", "), pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).second), move ")"));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "pairs[0]: (", __inline_i32__to_string_0: {
+        let self: i32 = pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).first;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }), move ", "), pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).second), move ")"));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "pairs[1]: (", __inline_i32__to_string_1: {
+        let self: i32 = pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).first;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }), move ", "), pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).second), move ")"));
 }
 
 fn "Array<Pair<i32,String>>^IndexValue::index_value"(self: &Array<Pair<i32, String>>, index: i32) -> Pair<i32,String> {

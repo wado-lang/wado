@@ -20,8 +20,52 @@ struct Point {
 
 fn run() with Stdout {
     let points: Array<Point> = move [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "points[0]: (", move points."Array<Point>^IndexValue::index_value"(0).x."i32::to_string"()), move ", "), move points."Array<Point>^IndexValue::index_value"(0).y."i32::to_string"()), move ")"));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "points[1]: (", move points."Array<Point>^IndexValue::index_value"(1).x."i32::to_string"()), move ", "), move points."Array<Point>^IndexValue::index_value"(1).y."i32::to_string"()), move ")"));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "points[0]: (", __inline_i32__to_string_0: {
+        let self: i32 = points."Array<Point>^IndexValue::index_value"(0).x;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }), move ", "), __inline_i32__to_string_1: {
+        let self: i32 = points."Array<Point>^IndexValue::index_value"(0).y;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }), move ")"));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "points[1]: (", __inline_i32__to_string_2: {
+        let self: i32 = points."Array<Point>^IndexValue::index_value"(1).x;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_2: buf;
+    }), move ", "), __inline_i32__to_string_3: {
+        let self: i32 = points."Array<Point>^IndexValue::index_value"(1).y;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_3: buf;
+    }), move ")"));
 }
 
 fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {

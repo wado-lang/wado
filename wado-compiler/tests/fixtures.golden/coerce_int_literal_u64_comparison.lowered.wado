@@ -7,28 +7,18 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "0 is zero: ", __inline_bool__to_string_1: {
-        let self: bool = __inline_is_zero_0: {
-            break __inline_is_zero_0: (0 == 0);
-        };
-        break __inline_bool__to_string_1: if self {
-            "true";
-        } else {
-            "false";
-        };
-    }));
-    core::cli::println(move "String::concat"(move "1 is zero: ", __inline_bool__to_string_3: {
-        let self: bool = __inline_is_zero_2: {
-            break __inline_is_zero_2: (1 == 0);
-        };
-        break __inline_bool__to_string_3: if self {
-            "true";
-        } else {
-            "false";
-        };
-    }));
+    core::cli::println(move "String::concat"(move "0 is zero: ", move __inline_is_zero_0: {
+        break __inline_is_zero_0: (0 == 0);
+    }."bool::to_string"()));
+    core::cli::println(move "String::concat"(move "1 is zero: ", move __inline_is_zero_1: {
+        break __inline_is_zero_1: (1 == 0);
+    }."bool::to_string"()));
 }
 

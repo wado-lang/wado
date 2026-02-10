@@ -7,36 +7,84 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 global mut shared: i32 = 100;
 
 global MULTIPLIER: i32 = 2;
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "initial=", move __inline_get_value_0: {
-        break __inline_get_value_0: shared;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "initial=", __inline_i32__to_string_0: {
+        let self: i32 = __inline_get_value_0: {
+            break __inline_get_value_0: shared;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
     __inline_increment_1: {
         shared = (shared + 1);
     };
-    core::cli::println(move "String::concat"(move "after increment=", move __inline_get_value_2: {
-        break __inline_get_value_2: shared;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "after increment=", __inline_i32__to_string_1: {
+        let self: i32 = __inline_get_value_2: {
+            break __inline_get_value_2: shared;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
     __inline_double_3: {
         shared = (shared * MULTIPLIER);
     };
-    core::cli::println(move "String::concat"(move "after double=", move __inline_get_value_4: {
-        break __inline_get_value_4: shared;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "after double=", __inline_i32__to_string_2: {
+        let self: i32 = __inline_get_value_4: {
+            break __inline_get_value_4: shared;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_2: buf;
+    }));
     __inline_increment_5: {
         shared = (shared + 1);
     };
     __inline_increment_6: {
         shared = (shared + 1);
     };
-    core::cli::println(move "String::concat"(move "after two increments=", move __inline_get_value_7: {
-        break __inline_get_value_7: shared;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "after two increments=", __inline_i32__to_string_3: {
+        let self: i32 = __inline_get_value_7: {
+            break __inline_get_value_7: shared;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_3: buf;
+    }));
 }
 

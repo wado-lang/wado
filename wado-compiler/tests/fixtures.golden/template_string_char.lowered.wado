@@ -14,7 +14,19 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "char A: ", move 'A'."char::to_string"()));
-    core::cli::println(move "String::concat"(move "char Z: ", move 'Z'."char::to_string"()));
+    core::cli::println(move "String::concat"(move "char A: ", __inline_char__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(4), used: 0 };
+        };
+        buf."String::append_char"('A');
+        break __inline_char__to_string_0: buf;
+    }));
+    core::cli::println(move "String::concat"(move "char Z: ", __inline_char__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_1: {
+            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(4), used: 0 };
+        };
+        buf."String::append_char"('Z');
+        break __inline_char__to_string_1: buf;
+    }));
 }
 

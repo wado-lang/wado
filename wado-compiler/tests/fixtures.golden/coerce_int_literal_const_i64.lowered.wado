@@ -7,12 +7,56 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "i64 MAX: ", move 9223372036854775807."i64::to_string"()));
-    core::cli::println(move "String::concat"(move "i64 MIN: ", move -9223372036854775808."i64::to_string"()));
-    core::cli::println(move "String::concat"(move "u64 MAX: ", move 18446744073709551615."u64::to_string"()));
-    core::cli::println(move "String::concat"(move "u64 MIN: ", move 0."u64::to_string"()));
+    core::cli::println(move "String::concat"(move "i64 MAX: ", __inline_i64__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i64_decimal(9223372036854775807, &mut f);
+        break __inline_i64__to_string_0: buf;
+    }));
+    core::cli::println(move "String::concat"(move "i64 MIN: ", __inline_i64__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i64_decimal(-9223372036854775808, &mut f);
+        break __inline_i64__to_string_1: buf;
+    }));
+    core::cli::println(move "String::concat"(move "u64 MAX: ", __inline_u64__to_string_2: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_u64_decimal(18446744073709551615, &mut f);
+        break __inline_u64__to_string_2: buf;
+    }));
+    core::cli::println(move "String::concat"(move "u64 MIN: ", __inline_u64__to_string_3: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_u64_decimal(0, &mut f);
+        break __inline_u64__to_string_3: buf;
+    }));
 }
 

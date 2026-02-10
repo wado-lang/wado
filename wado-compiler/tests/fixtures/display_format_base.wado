@@ -1,0 +1,99 @@
+// Test: Formatter sign_plus and zero_pad options with Display
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Test write_int with sign_plus
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter {
+        fill: ' ',
+        align: Alignment::Right,
+        sign_plus: true,
+        alternate: false,
+        zero_pad: false,
+        width: -1,
+        precision: -1,
+        buf: &mut buf,
+    };
+    let x: i32 = 42;
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Test negative with sign_plus (should just show -)
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: ' ',
+        align: Alignment::Right,
+        sign_plus: true,
+        alternate: false,
+        zero_pad: false,
+        width: -1,
+        precision: -1,
+        buf: &mut buf,
+    };
+    let neg: i32 = -42;
+    neg.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Test zero-padded with sign_plus
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: '0',
+        align: Alignment::Right,
+        sign_plus: true,
+        alternate: false,
+        zero_pad: true,
+        width: 8,
+        precision: -1,
+        buf: &mut buf,
+    };
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Test zero-padded negative
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: '0',
+        align: Alignment::Right,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: true,
+        width: 8,
+        precision: -1,
+        buf: &mut buf,
+    };
+    neg.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Test right-aligned with width and sign_plus
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: ' ',
+        align: Alignment::Right,
+        sign_plus: true,
+        alternate: false,
+        zero_pad: false,
+        width: 10,
+        precision: -1,
+        buf: &mut buf,
+    };
+    x.fmt(&mut f);
+    println(`[{buf}]`);
+
+    // Test left-aligned negative with width
+    buf = String::with_capacity(64);
+    f = Formatter {
+        fill: ' ',
+        align: Alignment::Left,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: 10,
+        precision: -1,
+        buf: &mut buf,
+    };
+    neg.fmt(&mut f);
+    println(`[{buf}]`);
+}
+
+__DATA__
+{"stdout": "[+42]\n[-42]\n[+0000042]\n[-0000042]\n[       +42]\n[-42       ]\n"}

@@ -16,16 +16,49 @@
 global mut ITEMS: Array<i32> = null;
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "len=", move __inline_Array_i32___len_0: {
-        let self: &Array<i32> = &ITEMS;
-        break __inline_Array_i32___len_0: self.used;
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "item0=", move ITEMS."Array<i32>^IndexValue::index_value"(0)."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "len=", __inline_i32__to_string_0: {
+        let self: i32 = __inline_Array_i32___len_0: {
+            let self: &Array<i32> = &ITEMS;
+            break __inline_Array_i32___len_0: self.used;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
+    core::cli::println(move "String::concat"(move "item0=", __inline_i32__to_string_1: {
+        let self: i32 = ITEMS."Array<i32>^IndexValue::index_value"(0);
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
     ITEMS."Array<i32>::append"(4);
-    core::cli::println(move "String::concat"(move "after append len=", move __inline_Array_i32___len_1: {
-        let self: &Array<i32> = &ITEMS;
-        break __inline_Array_i32___len_1: self.used;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "after append len=", __inline_i32__to_string_2: {
+        let self: i32 = __inline_Array_i32___len_1: {
+            let self: &Array<i32> = &ITEMS;
+            break __inline_Array_i32___len_1: self.used;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_2: buf;
+    }));
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {

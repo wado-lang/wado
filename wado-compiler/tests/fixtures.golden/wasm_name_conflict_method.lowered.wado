@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let ca: ContainerA = __inline_ContainerA__make_0: {
@@ -16,7 +20,18 @@ fn run() with Stdout {
     let cfg_a: Config = __inline_ContainerA__get_config_1: {
         break __inline_ContainerA__get_config_1: ca.config;
     };
-    core::cli::println(move "String::concat"(move "a: ", move cfg_a.value."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "a: ", __inline_i32__to_string_0: {
+        let self: i32 = cfg_a.value;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
     let cb: ContainerB = __inline_ContainerB__make_2: {
         let n: String = move "hello";
         break __inline_ContainerB__make_2: ContainerB { config: Config { name: n, count: 7 } };
@@ -24,6 +39,17 @@ fn run() with Stdout {
     let cfg_b: Config = __inline_ContainerB__get_config_3: {
         break __inline_ContainerB__get_config_3: cb.config;
     };
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "b: ", cfg_b.name), move " "), move cfg_b.count."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "b: ", cfg_b.name), move " "), __inline_i32__to_string_1: {
+        let self: i32 = cfg_b.count;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
 }
 

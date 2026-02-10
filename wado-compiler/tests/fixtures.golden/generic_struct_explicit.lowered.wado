@@ -46,18 +46,58 @@ struct "Box<i32>" {
 fn run() with Stdout {
     let __sroa_f32_box_value: f32 = 2.5 as f32;
     let __sroa_str_box_value: String = move "world";
-    core::cli::println(move "String::concat"(move "i32: ", move 42."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "i64: ", move 9999999999."i64::to_string"()));
-    core::cli::println(move "String::concat"(move "f32: ", move __sroa_f32_box_value."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "f64: ", move 3.14159."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_0: {
-        break __inline_bool__to_string_0: if false {
-            "true";
-        } else {
-            "false";
+    core::cli::println(move "String::concat"(move "i32: ", __inline_i32__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
         };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(42, &mut f);
+        break __inline_i32__to_string_0: buf;
     }));
-    core::cli::println(move "String::concat"(move "char: ", move 'Z'."char::to_string"()));
+    core::cli::println(move "String::concat"(move "i64: ", __inline_i64__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i64_decimal(9999999999, &mut f);
+        break __inline_i64__to_string_1: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f32: ", __inline_f32__to_string_2: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f32_display(__sroa_f32_box_value, &mut f);
+        break __inline_f32__to_string_2: buf;
+    }));
+    core::cli::println(move "String::concat"(move "f64: ", __inline_f64__to_string_3: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_f64_display(3.14159, &mut f);
+        break __inline_f64__to_string_3: buf;
+    }));
+    core::cli::println(move "String::concat"(move "bool: ", move false."bool::to_string"()));
+    core::cli::println(move "String::concat"(move "char: ", __inline_char__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(4), used: 0 };
+        };
+        buf."String::append_char"('Z');
+        break __inline_char__to_string_0: buf;
+    }));
     core::cli::println(move "String::concat"(move "str: ", __sroa_str_box_value));
 }
 

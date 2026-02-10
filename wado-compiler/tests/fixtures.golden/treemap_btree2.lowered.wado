@@ -64,22 +64,77 @@ fn run() with Stdout {
         self."TreeMap<String,i32>::insert"(key, 5);
     };
     core::cli::println(move "=== After insertion ===");
-    core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_6: {
-        break __inline_TreeMap_String_i32___len_6: map.size;
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "banana = ", move map."TreeMap<String,i32>^Index::index"(move "banana").value."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "date = ", move map."TreeMap<String,i32>^Index::index"(move "date").value."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "Size: ", __inline_i32__to_string_0: {
+        let self: i32 = __inline_TreeMap_String_i32___len_6: {
+            break __inline_TreeMap_String_i32___len_6: map.size;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
+    core::cli::println(move "String::concat"(move "banana = ", __inline_i32__to_string_1: {
+        let self: i32 = map."TreeMap<String,i32>^Index::index"(move "banana").value;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
+    core::cli::println(move "String::concat"(move "date = ", __inline_i32__to_string_2: {
+        let self: i32 = map."TreeMap<String,i32>^Index::index"(move "date").value;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_2: buf;
+    }));
     __inline_TreeMap_String_i32__IndexAssign__index_assign_7: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "banana";
         self."TreeMap<String,i32>::insert"(key, 20);
     };
-    core::cli::println(move "String::concat"(move "banana (updated) = ", move map."TreeMap<String,i32>^Index::index"(move "banana").value."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "banana (updated) = ", __inline_i32__to_string_3: {
+        let self: i32 = map."TreeMap<String,i32>^Index::index"(move "banana").value;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_3: buf;
+    }));
     core::cli::println(move "\n=== After deleting cherry ===");
     map."TreeMap<String,i32>::delete"(&"cherry");
-    core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_8: {
-        break __inline_TreeMap_String_i32___len_8: map.size;
-    }."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "Size: ", __inline_i32__to_string_4: {
+        let self: i32 = __inline_TreeMap_String_i32___len_8: {
+            break __inline_TreeMap_String_i32___len_8: map.size;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_4: buf;
+    }));
     core::cli::println(move "\n=== Iteration (sorted) ===");
     let entries: Array<[String, i32]> = move map."TreeMap<String,i32>::iter"();
     __for_of_7: {
@@ -92,7 +147,17 @@ fn run() with Stdout {
                 let entry: [String, i32] = __unwrap_option(__pattern_temp_0);
                 let key: String = entry.0;
                 let value: i32 = entry.1;
-                core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
+                core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), __inline_i32__to_string_5: {
+                    let mut buf: String = __inline_String__with_capacity_0: {
+                        break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+                    };
+                    let mut f: Formatter = __inline_Formatter__new_1: {
+                        let buf: &mut String = &mut buf;
+                        break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    core::prelude/primitives.wado::fmt_i32_decimal(value, &mut f);
+                    break __inline_i32__to_string_5: buf;
+                }));
             } else {
                 break;
             }
@@ -103,10 +168,32 @@ fn run() with Stdout {
         core::cli::println(move "Compaction needed, running...");
         map."TreeMap<String,i32>::compact"();
     }
-    core::cli::println(move "String::concat"(move "Size: ", move __inline_TreeMap_String_i32___len_10: {
-        break __inline_TreeMap_String_i32___len_10: map.size;
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "Deleted count: ", move map.deleted_count."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "Size: ", __inline_i32__to_string_6: {
+        let self: i32 = __inline_TreeMap_String_i32___len_10: {
+            break __inline_TreeMap_String_i32___len_10: map.size;
+        };
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_6: buf;
+    }));
+    core::cli::println(move "String::concat"(move "Deleted count: ", __inline_i32__to_string_7: {
+        let self: i32 = map.deleted_count;
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
+        break __inline_i32__to_string_7: buf;
+    }));
     core::cli::println(move "\n=== Final iteration ===");
     let final_entries: Array<[String, i32]> = move map."TreeMap<String,i32>::iter"();
     __for_of_8: {
@@ -119,7 +206,17 @@ fn run() with Stdout {
                 let entry: [String, i32] = __unwrap_option(__pattern_temp_1);
                 let key: String = entry.0;
                 let value: i32 = entry.1;
-                core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), move value."i32::to_string"()));
+                core::cli::println(move "String::concat"(move "String::concat"(key, move " = "), __inline_i32__to_string_8: {
+                    let mut buf: String = __inline_String__with_capacity_0: {
+                        break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+                    };
+                    let mut f: Formatter = __inline_Formatter__new_1: {
+                        let buf: &mut String = &mut buf;
+                        break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    core::prelude/primitives.wado::fmt_i32_decimal(value, &mut f);
+                    break __inline_i32__to_string_8: buf;
+                }));
             } else {
                 break;
             }

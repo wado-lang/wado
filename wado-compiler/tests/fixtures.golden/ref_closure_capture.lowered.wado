@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct __Closure_0 {
 }
@@ -24,13 +28,33 @@ fn run() with Stdout {
             break __inline___Closure_0____call_1: (r.value * 2);
         };
     };
-    core::cli::println(move "String::concat"(move "doubled: ", move result."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "doubled: ", __inline_i32__to_string_0: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(result, &mut f);
+        break __inline_i32__to_string_0: buf;
+    }));
     let result2: i32 = __inline_apply_to_ref___Closure_1_2: {
         let r: Box<i32> = x;
         break __inline_apply_to_ref___Closure_1_2: __inline___Closure_1____call_3: {
             break __inline___Closure_1____call_3: (r.value * 3);
         };
     };
-    core::cli::println(move "String::concat"(move "tripled: ", move result2."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "tripled: ", __inline_i32__to_string_1: {
+        let mut buf: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        };
+        let mut f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut buf;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        core::prelude/primitives.wado::fmt_i32_decimal(result2, &mut f);
+        break __inline_i32__to_string_1: buf;
+    }));
 }
 
