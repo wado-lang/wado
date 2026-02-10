@@ -63,8 +63,8 @@ impl char {
 }
 
 impl i8 {
-    pub const MAX: i8 = 127 as i8;
-    pub const MIN: i8 = -128 as i8;
+    pub const MAX: i8 = 127;
+    pub const MIN: i8 = -128;
 
     /// Convert i8 to String
     pub fn to_string(self) -> String {
@@ -74,8 +74,8 @@ impl i8 {
 }
 
 impl u8 {
-    pub const MAX: u8 = 255 as u8;
-    pub const MIN: u8 = 0 as u8;
+    pub const MAX: u8 = 255;
+    pub const MIN: u8 = 0;
 
     /// Convert u8 to String
     pub fn to_string(self) -> String {
@@ -85,8 +85,8 @@ impl u8 {
 }
 
 impl i16 {
-    pub const MAX: i16 = 32767 as i16;
-    pub const MIN: i16 = -32768 as i16;
+    pub const MAX: i16 = 32767;
+    pub const MIN: i16 = -32768;
 
     /// Convert i16 to String
     pub fn to_string(self) -> String {
@@ -96,8 +96,8 @@ impl i16 {
 }
 
 impl u16 {
-    pub const MAX: u16 = 65535 as u16;
-    pub const MIN: u16 = 0 as u16;
+    pub const MAX: u16 = 65535;
+    pub const MIN: u16 = 0;
 
     /// Convert u16 to String
     pub fn to_string(self) -> String {
@@ -159,8 +159,8 @@ impl i32 {
 }
 
 impl u32 {
-    pub const MAX: u32 = 4294967295 as u32;
-    pub const MIN: u32 = 0 as u32;
+    pub const MAX: u32 = 4294967295;
+    pub const MIN: u32 = 0;
 
     /// Convert u32 to String (unsigned)
     /// Maximum u32 value is 4294967295 (10 digits)
@@ -176,7 +176,7 @@ impl u32 {
         // Convert to i64 for unsigned arithmetic
         // If value is negative as i32, it means the u32 value is >= 2^31
         let unsigned_val: i64 = if value < 0 {
-            (value as i64) + 4294967296 as i64
+            (value as i64) + 4294967296
         } else {
             value as i64
         };
@@ -186,8 +186,8 @@ impl u32 {
 
         // Convert digits in reverse order using i64 arithmetic
         let mut pos: i32 = 10;
-        let ten: i64 = 10 as i64;
-        let zero: i64 = 0 as i64;
+        let ten: i64 = 10;
+        let zero: i64 = 0;
         for let mut temp: i64 = unsigned_val; temp > zero; temp = temp / ten {
             pos -= 1;
             let digit: i32 = (temp % ten) as i32;
@@ -206,8 +206,8 @@ impl u32 {
 }
 
 impl i64 {
-    pub const MAX: i64 = 9223372036854775807 as i64;
-    pub const MIN: i64 = -9223372036854775808 as i64;
+    pub const MAX: i64 = 9223372036854775807;
+    pub const MIN: i64 = -9223372036854775808;
 
     /// Convert i64 to String
     /// Maximum i64 value is 9223372036854775807 (19 digits) + optional minus sign = 20 chars max
@@ -215,14 +215,14 @@ impl i64 {
         let value = self;
 
         // Handle zero case
-        let zero_i64: i64 = 0 as i64;
+        let zero_i64: i64 = 0;
         if value == zero_i64 {
             return "0";
         }
 
         // Special case for i64::MIN: In two's complement, negating MIN overflows
-        let i64_max: i64 = 9223372036854775807 as i64;
-        let one_i64: i64 = 1 as i64;
+        let i64_max: i64 = 9223372036854775807;
+        let one_i64: i64 = 1;
         let i64_min: i64 = zero_i64 - i64_max - one_i64;
         if value == i64_min {
             return "-9223372036854775808";
@@ -237,7 +237,7 @@ impl i64 {
 
         // Convert digits in reverse order
         let mut pos: i32 = 20; // Start from end of buffer
-        let ten_i64: i64 = 10 as i64;
+        let ten_i64: i64 = 10;
         for let mut temp: i64 = abs_value; temp > zero_i64; temp = temp / ten_i64 {
             pos -= 1;
             let digit: i32 = (temp % ten_i64) as i32;
@@ -262,8 +262,8 @@ impl i64 {
 }
 
 impl u64 {
-    pub const MAX: u64 = 18446744073709551615 as u64;
-    pub const MIN: u64 = 0 as u64;
+    pub const MAX: u64 = 18446744073709551615;
+    pub const MIN: u64 = 0;
 
     /// Convert u64 to String (unsigned)
     /// Maximum u64 value is 18446744073709551615 (20 digits)
@@ -272,7 +272,7 @@ impl u64 {
         let value = (self) as i64;
 
         // Handle zero case
-        let zero: i64 = 0 as i64;
+        let zero: i64 = 0;
         if value == zero {
             return "0";
         }
@@ -283,8 +283,8 @@ impl u64 {
         // Convert digits in reverse order
         let mut pos: i32 = 20;
         let mut temp: i64 = value;
-        let ten: i64 = 10 as i64;
-        let offset_div: i64 = 1844674407370955161 as i64; // 2^64 / 10
+        let ten: i64 = 10;
+        let offset_div: i64 = 1844674407370955161; // 2^64 / 10
 
         // Loop until temp is zero
         while temp != zero {
@@ -298,7 +298,7 @@ impl u64 {
             } else {
                 // Negative temp: need unsigned semantics
                 let signed_rem: i64 = temp % ten;
-                let rem_adjusted: i64 = signed_rem + 6 as i64;
+                let rem_adjusted: i64 = signed_rem + 6;
 
                 // Get digit in range [0, 9]
                 if rem_adjusted >= zero {
@@ -309,9 +309,9 @@ impl u64 {
 
                 // Calculate unsigned quotient
                 let signed_quot: i64 = temp / ten;
-                let mut carry: i64 = 0 as i64;
+                let mut carry: i64 = 0;
                 if rem_adjusted < zero {
-                    carry = 0 - 1 as i64;
+                    carry = 0 - 1;
                 }
                 temp = signed_quot + offset_div + carry;
             }
@@ -332,19 +332,19 @@ impl u64 {
 
 impl f32 {
     // Constants
-    pub const PI: f32 = 3.14159265358979323846 as f32;
-    pub const TAU: f32 = 6.28318530717958647692 as f32;
-    pub const E: f32 = 2.71828182845904523536 as f32;
-    pub const LN2: f32 = 0.69314718055994530942 as f32;
-    pub const LN10: f32 = 2.30258509299404568402 as f32;
-    pub const LOG2_E: f32 = 1.44269504088896340736 as f32;
-    pub const LOG10_E: f32 = 0.43429448190325182765 as f32;
-    pub const SQRT2: f32 = 1.41421356237309504880 as f32;
-    pub const FRAC_1_SQRT2: f32 = 0.70710678118654752440 as f32;
-    pub const FRAC_PI_2: f32 = 1.57079632679489661923 as f32;
-    pub const FRAC_PI_4: f32 = 0.78539816339744830962 as f32;
-    pub const INFINITY: f32 = (1.0 as f32) / (0.0 as f32);
-    pub const NEG_INFINITY: f32 = (-1.0 as f32) / (0.0 as f32);
+    pub const PI: f32 = 3.14159265358979323846;
+    pub const TAU: f32 = 6.28318530717958647692;
+    pub const E: f32 = 2.71828182845904523536;
+    pub const LN2: f32 = 0.69314718055994530942;
+    pub const LN10: f32 = 2.30258509299404568402;
+    pub const LOG2_E: f32 = 1.44269504088896340736;
+    pub const LOG10_E: f32 = 0.43429448190325182765;
+    pub const SQRT2: f32 = 1.41421356237309504880;
+    pub const FRAC_1_SQRT2: f32 = 0.70710678118654752440;
+    pub const FRAC_PI_2: f32 = 1.57079632679489661923;
+    pub const FRAC_PI_4: f32 = 0.78539816339744830962;
+    pub const INFINITY: f32 = 1.0 / 0.0;
+    pub const NEG_INFINITY: f32 = -1.0 / 0.0;
 
     /// Convert f32 to String using the bundled float-to-string algorithm
     pub fn to_string(self) -> String {

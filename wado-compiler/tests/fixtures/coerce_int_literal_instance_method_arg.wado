@@ -1,0 +1,29 @@
+// Test integer literal coercion in instance method arguments
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    value: u64,
+}
+
+impl Counter {
+    fn new(initial: u64) -> Counter {
+        return Counter { value: initial };
+    }
+
+    fn add(&self, amount: u64) -> Counter {
+        return Counter { value: self.value + amount };
+    }
+
+    fn get(&self) -> u64 {
+        return self.value;
+    }
+}
+
+export fn run() with Stdout {
+    let c = Counter::new(0);
+    let c2 = c.add(10);
+    println(`value: {c2.get()}`);
+}
+
+__DATA__
+{"stdout": "value: 10\n"}

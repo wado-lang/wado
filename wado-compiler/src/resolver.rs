@@ -2511,6 +2511,33 @@ impl<'a> Resolver<'a> {
         TirBlock::new(stmts, block.span)
     }
 
+    /// Resolve a block with expected type for its result expression.
+    /// The last expression statement (if any) is resolved with the expected type
+    /// for literal coercion, while all other statements are resolved normally.
+    fn resolve_block_with_expected_type(
+        &mut self,
+        block: &Block,
+        ctx: &mut FunctionContext,
+        expected_type: TypeId,
+    ) -> TirBlock {
+        ctx.enter_scope();
+        let len = block.stmts.len();
+        let mut stmts = Vec::new();
+        for (i, s) in block.stmts.iter().enumerate() {
+            if i == len - 1
+                && let Stmt::Expr(expr_stmt) = s
+            {
+                let expr =
+                    self.resolve_expr_with_expected_type(&expr_stmt.expr, ctx, Some(expected_type));
+                stmts.push(TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span));
+                continue;
+            }
+            stmts.extend(self.resolve_stmt(s, ctx));
+        }
+        ctx.exit_scope();
+        TirBlock::new(stmts, block.span)
+    }
+
     /// Resolve a statement (may return multiple statements for desugared constructs)
     fn resolve_stmt(&mut self, stmt: &Stmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         match stmt {
@@ -3692,6 +3719,15 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a binary expression
     fn resolve_binary(&mut self, binary: &ast::BinaryExpr, ctx: &mut FunctionContext) -> TirExpr {
+        self.resolve_binary_with_expected_type(binary, ctx, None)
+    }
+
+    fn resolve_binary_with_expected_type(
+        &mut self,
+        binary: &ast::BinaryExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
         // Bidirectional coercion: if one operand is a numeric literal and the other is not,
         // resolve the non-literal first and use its type to coerce the literal
         let left_is_numeric_literal = self.is_numeric_literal(&binary.left);
@@ -3700,25 +3736,30 @@ impl<'a> Resolver<'a> {
         let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left to right's type
             let right = self.resolve_expr(&binary.right, ctx);
-            let expected_type = if self.type_table.borrow().is_numeric(right.type_id) {
+            let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
                 Some(right.type_id)
             } else {
                 None
             };
-            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, expected_type);
+            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, coerce_type);
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right to left's type
             let left = self.resolve_expr(&binary.left, ctx);
-            let expected_type = if self.type_table.borrow().is_numeric(left.type_id) {
+            let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
                 Some(left.type_id)
             } else {
                 None
             };
+            let right = self.resolve_expr_with_expected_type(&binary.right, ctx, coerce_type);
+            (left, right)
+        } else if left_is_numeric_literal && right_is_numeric_literal {
+            // Both literals - use expected type from context (e.g., assignment target)
+            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, expected_type);
             let right = self.resolve_expr_with_expected_type(&binary.right, ctx, expected_type);
             (left, right)
         } else {
-            // Both literals or both non-literals - resolve normally
+            // Both non-literals - resolve normally
             let left = self.resolve_expr(&binary.left, ctx);
             let right = self.resolve_expr(&binary.right, ctx);
             (left, right)
@@ -5542,6 +5583,25 @@ impl<'a> Resolver<'a> {
             return self.resolve_match_expr_with_expected_type(match_expr, ctx, target_type);
         }
 
+        // Handle if expression coercion - propagate expected type to then/else branches
+        if let Some(target_type) = expected_type
+            && let Expr::If(if_expr) = expr
+        {
+            return self.resolve_if_expr_with_expected_type(if_expr, ctx, target_type);
+        }
+
+        // Handle binary expression with two numeric literals:
+        // propagate expected type so both operands coerce correctly
+        // e.g., `carry = 0 - 1` where carry is i64
+        if let Some(target_type) = expected_type
+            && let Expr::Binary(binary) = expr
+            && self.type_table.borrow().is_numeric(target_type)
+            && self.is_numeric_literal(&binary.left)
+            && self.is_numeric_literal(&binary.right)
+        {
+            return self.resolve_binary_with_expected_type(binary, ctx, Some(target_type));
+        }
+
         // Normal expression resolution
         self.resolve_expr(expr, ctx)
     }
@@ -5566,11 +5626,8 @@ impl<'a> Resolver<'a> {
         }
 
         let mut receiver = self.resolve_expr(&method_call.receiver, ctx);
-        let args: Vec<TirExpr> = method_call
-            .args
-            .iter()
-            .map(|a| self.resolve_expr(a, ctx))
-            .collect();
+        // NOTE: args are resolved later (after method lookup) to enable literal coercion
+        // using the method's parameter types as expected types.
 
         // Resolve explicit type arguments (method-level type args)
         let type_args: Vec<TypeId> = method_call
@@ -5711,6 +5768,17 @@ impl<'a> Resolver<'a> {
         } else {
             param_types
         };
+
+        // Resolve arguments with coercion using method parameter types
+        let args: Vec<TirExpr> = method_call
+            .args
+            .iter()
+            .enumerate()
+            .map(|(i, arg)| {
+                let expected_type = expected_param_types.get(i).copied();
+                self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+            })
+            .collect();
 
         // Check each argument against expected parameter type
         for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {
@@ -6493,10 +6561,13 @@ impl<'a> Resolver<'a> {
 
     /// Check if an expression is a numeric literal
     fn is_numeric_literal(&self, expr: &Expr) -> bool {
-        matches!(
-            expr,
-            Expr::Literal(lit) if matches!(lit.value, Literal::Number(_))
-        )
+        match expr {
+            Expr::Literal(lit) => matches!(lit.value, Literal::Number(_)),
+            Expr::Unary(unary) if unary.op == UnaryOp::Neg => {
+                matches!(&unary.expr, Expr::Literal(lit) if matches!(lit.value, Literal::Number(_)))
+            }
+            _ => false,
+        }
     }
 
     /// Check if a qualified name `struct_name::method_name` is a static method
@@ -9282,6 +9353,61 @@ impl<'a> Resolver<'a> {
                 else_branch: else_block,
             },
             type_id,
+            if_expr.span,
+        );
+
+        if if_expr.init.is_some() {
+            ctx.exit_scope();
+        }
+
+        result
+    }
+
+    /// Resolve an if expression with expected type for literal coercion.
+    /// Propagates the expected type into then/else block result expressions.
+    fn resolve_if_expr_with_expected_type(
+        &mut self,
+        if_expr: &IfExpr,
+        ctx: &mut FunctionContext,
+        expected_type: TypeId,
+    ) -> TirExpr {
+        // Handle optional init binding (scoped to this if expression)
+        if if_expr.init.is_some() {
+            ctx.enter_scope();
+        }
+
+        if let Some(init) = &if_expr.init {
+            let _init_stmt = self.resolve_let(init, ctx);
+        }
+
+        // Resolve the condition
+        let condition = match &if_expr.condition {
+            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
+            ast::Condition::Pattern { span, .. } => {
+                self.errors.push(TypeError::NotYetImplemented {
+                    feature: "pattern matching in if expressions (use if statement instead)"
+                        .to_string(),
+                    span: *span,
+                });
+                TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, *span)
+            }
+        };
+
+        // Resolve then/else blocks with expected type for coercion
+        let then_block =
+            self.resolve_block_with_expected_type(&if_expr.then_block, ctx, expected_type);
+        let else_block = if_expr
+            .else_block
+            .as_ref()
+            .map(|b| self.resolve_block_with_expected_type(b, ctx, expected_type));
+
+        let result = TirExpr::new(
+            TirExprKind::If {
+                condition: Box::new(condition),
+                then_branch: then_block,
+                else_branch: else_block,
+            },
+            expected_type,
             if_expr.span,
         );
 
