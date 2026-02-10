@@ -1,6 +1,6 @@
 // Format Infrastructure
 //
-// This module defines the Formatter, FormatSpec, and Alignment types that
+// This module defines the Formatter and Alignment types that
 // back template string format specifiers (`{x:spec}`).
 //
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
@@ -17,11 +17,15 @@ pub variant Alignment {
     /// Right-aligned (default for numbers): `{x:>5}` -> "   42"
     Right,
 }
-/// Format specification parsed from `{expr:spec}`.
-/// Matches Rust's format syntax: `[[fill]align][sign][#][0][width][.precision]type`
+/// Formatter that writes directly into a referenced output buffer.
+/// The Formatter does not own its buffer; it writes into the caller's `&mut String`.
+/// This avoids intermediate allocations.
+///
+/// Format specification fields match Rust's format syntax:
+/// `[[fill]align][sign][#][0][width][.precision]type`
 ///
 /// Width and precision use -1 as sentinel for "not specified".
-pub struct FormatSpec {
+pub struct Formatter {
     /// Fill character for padding (default: ' ')
     fill: char,
     /// Text alignment mode
@@ -36,12 +40,14 @@ pub struct FormatSpec {
     width: i32,
     /// Precision for floats (decimal places) or strings (max width) (-1 = default)
     precision: i32,
+    /// Reference to the output buffer
+    buf: &mut String,
 }
 
-impl FormatSpec {
-    /// Create the default format spec (no special formatting).
-    pub fn default() -> FormatSpec {
-        return FormatSpec {
+impl Formatter {
+    /// Create a new Formatter with default format spec that writes into the given buffer.
+    pub fn new(buf: &mut String) -> Formatter {
+        return Formatter {
             fill: ' ',
             align: Alignment::Right,
             sign_plus: false,
@@ -49,23 +55,8 @@ impl FormatSpec {
             zero_pad: false,
             width: -1,
             precision: -1,
+            buf,
         };
-    }
-}
-/// Formatter that writes directly into a referenced output buffer.
-/// The Formatter does not own its buffer; it writes into the caller's `&mut String`.
-/// This avoids intermediate allocations.
-pub struct Formatter {
-    /// Format specification
-    spec: FormatSpec,
-    /// Reference to the output buffer
-    buf: &mut String,
-}
-
-impl Formatter {
-    /// Create a new Formatter that writes into the given buffer with the given spec.
-    pub fn new(buf: &mut String, spec: FormatSpec) -> Formatter {
-        return Formatter { spec, buf };
     }
 
     /// Write a string to the output buffer.
@@ -80,24 +71,25 @@ impl Formatter {
 
     /// Get the width specification (-1 means not specified).
     pub fn width(&self) -> i32 {
-        return self.spec.width;
+        return self.width;
     }
 
     /// Get the precision specification (-1 means not specified).
     pub fn precision(&self) -> i32 {
-        return self.spec.precision;
+        return self.precision;
     }
 
     /// Check if alternate form (`#`) is requested.
     pub fn alternate(&self) -> bool {
-        return self.spec.alternate;
+        return self.alternate;
     }
 
     /// Check if sign display (`+`) is requested.
     pub fn sign_plus(&self) -> bool {
-        return self.spec.sign_plus;
+        return self.sign_plus;
     }
-}// Defined here (not in string.wado) to avoid string.wado depending on format.wado,
+}
+// Defined here (not in string.wado) to avoid string.wado depending on format.wado,
 // which would cause codegen struct registration order issues.
 
 impl Display for String {

@@ -21,39 +21,35 @@ This WEP defines the trait system and Formatter infrastructure that backs these 
 
 ### Formatter Infrastructure
 
-Format traits write to a `Formatter` object that holds format options and a reference to the output buffer. The `Formatter` does not own its buffer; it writes directly into the caller's `&mut String`. This avoids intermediate allocations and follows Rust's `std::fmt::Formatter` design.
+Format traits write to a `Formatter` object that holds format options and a reference to the output buffer. The `Formatter` does not own its buffer; it writes directly into the caller's `&mut String`. Format specification fields are embedded directly into `Formatter` to avoid an extra GC struct allocation.
 
 ```wado
 /// Text alignment for padding
-enum Alignment {
+variant Alignment {
     Left,
     Center,
     Right,
 }
 
-/// Format specification parsed from `{expr:spec}`
-struct FormatSpec {
-    width: Option<i32>,
-    precision: Option<i32>,
+/// Formatter that writes directly into a referenced output buffer.
+/// Format specification fields are embedded to save one GC struct allocation.
+struct Formatter {
     fill: char,
     align: Alignment,
     sign_plus: bool,
     alternate: bool,
     zero_pad: bool,
-}
-
-/// Formatter that writes directly into a referenced output buffer
-struct Formatter {
-    spec: FormatSpec,
+    width: i32,        // -1 = not specified
+    precision: i32,    // -1 = not specified
     buf: &mut String,
 }
 
 impl Formatter {
-    fn new(buf: &mut String, spec: FormatSpec) -> Formatter;
+    fn new(buf: &mut String) -> Formatter;
     fn write_str(&mut self, s: &String);
     fn write_char(&mut self, c: char);
-    fn width(&self) -> Option<i32>;
-    fn precision(&self) -> Option<i32>;
+    fn width(&self) -> i32;
+    fn precision(&self) -> i32;
     fn alternate(&self) -> bool;
     fn sign_plus(&self) -> bool;
 }
@@ -139,7 +135,7 @@ Zero padding (`{x:08}`) inserts zeros after sign/prefix but before digits:
 
 ### Negative
 
-1. **Infrastructure complexity**: Requires `Formatter`, `FormatSpec`, `Alignment` types
+1. **Infrastructure complexity**: Requires `Formatter` and `Alignment` types
 2. **Implementation effort**: All primitive formatting needs trait implementations
 
 ### Future Extensions
