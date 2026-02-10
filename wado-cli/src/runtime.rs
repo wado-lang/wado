@@ -26,9 +26,7 @@ impl WasiView for WasiState {
 }
 
 /// Create a wasmtime Config with all required Wasm features enabled.
-///
-/// Optimization is disabled by default for faster compilation during development.
-pub fn create_config() -> Config {
+pub fn create_config(opt_level: OptLevel) -> Config {
     let mut config = Config::new();
     config.async_support(true);
     config.wasm_component_model(true);
@@ -43,15 +41,14 @@ pub fn create_config() -> Config {
     config.wasm_gc(true);
     config.wasm_function_references(true);
 
-    // Disable Cranelift optimizations for faster compilation
-    config.cranelift_opt_level(OptLevel::None);
+    config.cranelift_opt_level(opt_level);
 
     config
 }
 
 /// Create a wasmtime Engine with the standard configuration.
-pub fn create_engine() -> Result<Engine> {
-    Engine::new(&create_config())
+pub fn create_engine(opt_level: OptLevel) -> Result<Engine> {
+    Engine::new(&create_config(opt_level))
 }
 
 /// Create a Store with WASI state.
