@@ -6561,10 +6561,13 @@ impl<'a> Resolver<'a> {
 
     /// Check if an expression is a numeric literal
     fn is_numeric_literal(&self, expr: &Expr) -> bool {
-        matches!(
-            expr,
-            Expr::Literal(lit) if matches!(lit.value, Literal::Number(_))
-        )
+        match expr {
+            Expr::Literal(lit) => matches!(lit.value, Literal::Number(_)),
+            Expr::Unary(unary) if unary.op == UnaryOp::Neg => {
+                matches!(&unary.expr, Expr::Literal(lit) if matches!(lit.value, Literal::Number(_)))
+            }
+            _ => false,
+        }
     }
 
     /// Check if a qualified name `struct_name::method_name` is a static method
