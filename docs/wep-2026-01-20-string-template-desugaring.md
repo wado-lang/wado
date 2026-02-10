@@ -139,7 +139,34 @@ Compile error if interpolation is present.
 
 ### Format Specifiers
 
-When a format specifier is present, the value is pre-formatted before being passed to the tag:
+When a format specifier is present, the interpolation uses `Formatter` (see [Format Traits](./wep-2026-02-01-format-traits.md)) instead of `.to_string()`.
+
+For untagged templates:
+
+```wado
+`Pi is {pi:.2}`
+```
+
+Desugars to:
+
+```wado
+__tmpl: {
+    let mut __r = "Pi is ";
+    let mut __f = Formatter::new(FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() });
+    Display::fmt(&pi, &mut __f);
+    __r.append(__f.finish());
+    __r
+}
+```
+
+Contrast with no format specifier, which uses simple `.to_string()`:
+
+```wado
+`Pi is {pi}`
+// -> __r.append(pi.to_string());
+```
+
+For tagged templates, the formatted value is passed in the values tuple (already stringified):
 
 ```wado
 fmt`Value: {pi:.2}`
@@ -150,12 +177,14 @@ Desugars to:
 ```wado
 __tmpl: {
     let __strings = CookedStrings::from(["Value: ", ""]);
-    let __values = [__format__(pi, ".2")];
+    let mut __f = Formatter::new(FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() });
+    Display::fmt(&pi, &mut __f);
+    let __values = [__f.finish()];
     fmt(__strings, __values)
 }
 ```
 
-For untagged templates, format specifiers are applied during the direct stringification.
+Note: format specifiers are resolved at the call site before the tag function receives them. The tag function sees pre-formatted strings in the values tuple.
 
 ### Brace Escaping
 
