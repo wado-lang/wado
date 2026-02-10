@@ -50,9 +50,9 @@ The compiler directly emits an efficient sequence using a mutable string and lab
 ```wado
 __tmpl: {
     let mut __r = "Hello, ";
-    Display::fmt(&name, &mut Formatter::new(&mut __r, FormatSpec::default()));
+    name.fmt(&mut Formatter::new(&mut __r, FormatSpec::default()));
     __r.append("! You are ");
-    Display::fmt(&age, &mut Formatter::new(&mut __r, FormatSpec::default()));
+    age.fmt(&mut Formatter::new(&mut __r, FormatSpec::default()));
     __r.append(".");
     __r
 }
@@ -100,7 +100,7 @@ impl String {
     fn raw<Values>(strings: RawStrings, values: Values) -> String {
         let mut result = strings[0];
         for let [i, v] of values.entries() {
-            Display::fmt(&v, &mut Formatter::new(&mut result, FormatSpec::default()));
+            v.fmt(&mut Formatter::new(&mut result, FormatSpec::default()));
             result.append(strings[i + 1]);
         }
         return result;
@@ -150,7 +150,7 @@ Desugars to:
 ```wado
 __tmpl: {
     let mut __r = "Pi is ";
-    Display::fmt(&pi, &mut Formatter::new(&mut __r, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
+    pi.fmt(&mut Formatter::new(&mut __r, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
     __r
 }
 ```
@@ -167,7 +167,7 @@ Desugars to:
 __tmpl: {
     let __strings = CookedStrings::from(["Value: ", ""]);
     let mut __formatted = "";
-    Display::fmt(&pi, &mut Formatter::new(&mut __formatted, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
+    pi.fmt(&mut Formatter::new(&mut __formatted, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
     let __values = [__formatted];
     fmt(__strings, __values)
 }
