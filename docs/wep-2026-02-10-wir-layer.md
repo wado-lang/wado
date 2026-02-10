@@ -161,15 +161,15 @@ Lower absorbs current `lower.rs`, `wasm_plan.rs`, `component_model.rs`, `wasm_bu
 
 The optimizer moves from TIR to WIR. Key changes:
 
-| Pass | Change |
-|------|--------|
-| inline | Simpler: `func_idx` direct lookup instead of name resolution |
-| ref_elim | Subsumed by GC allocation elimination: `StructGet(StructNew(fields), i) → fields[i]` |
-| copy_prop | Standard `LocalSet`/`LocalGet` propagation |
-| const_fold | Simpler: Wasm opcode encodes type, no newtype traversal |
-| licm | Similar: `Loop` + `StructGet` hoisting |
-| rewrite | Select lowering only. Move insertion and value-copy-types eliminated |
-| dce | Trivial: `func_idx` reachability instead of 500+ lines of name resolution |
+| Pass       | Change                                                                               |
+| ---------- | ------------------------------------------------------------------------------------ |
+| inline     | Simpler: `func_idx` direct lookup instead of name resolution                         |
+| ref_elim   | Subsumed by GC allocation elimination: `StructGet(StructNew(fields), i) → fields[i]` |
+| copy_prop  | Standard `LocalSet`/`LocalGet` propagation                                           |
+| const_fold | Simpler: Wasm opcode encodes type, no newtype traversal                              |
+| licm       | Similar: `Loop` + `StructGet` hoisting                                               |
+| rewrite    | Select lowering only. Move insertion and value-copy-types eliminated                 |
+| dce        | Trivial: `func_idx` reachability instead of 500+ lines of name resolution            |
 
 New optimizations enabled by WIR's tree structure:
 
