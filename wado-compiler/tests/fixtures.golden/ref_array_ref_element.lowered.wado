@@ -16,41 +16,43 @@
 fn run() with Stdout {
     let mut arr: Array<i32> = move [10, 20, 30];
     let __sroa_r_value: i32 = arr."Array<i32>^IndexValue::index_value"(1);
-    core::cli::println(move "String::concat"(move "ref element: ", __inline_i32__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(29), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        __r."String::append"(move "ref element: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(__sroa_r_value, &mut f);
-        break __inline_i32__to_string_0: buf;
-    }));
+        Box<i32> { value: __sroa_r_value }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     arr."Array<i32>^IndexAssign::index_assign"(1, 999);
-    core::cli::println(move "String::concat"(move "arr[1]: ", __inline_i32__to_string_1: {
-        let self: i32 = arr."Array<i32>^IndexValue::index_value"(1);
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(24), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "arr[1]: ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
-        break __inline_i32__to_string_1: buf;
-    }));
-    core::cli::println(move "String::concat"(move "ref still: ", __inline_i32__to_string_2: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1) }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(27), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "ref still: ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(__sroa_r_value, &mut f);
-        break __inline_i32__to_string_2: buf;
-    }));
+        Box<i32> { value: __sroa_r_value }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 
 fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {

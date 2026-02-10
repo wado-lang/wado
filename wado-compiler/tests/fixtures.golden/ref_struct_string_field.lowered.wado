@@ -21,34 +21,38 @@ struct User {
 fn run() with Stdout {
     let mut __sroa_u_name: String = move "Alice";
     let mut __sroa_u_age: i32 = 30;
-    core::cli::println(move "String::concat"(move "String::concat"(__sroa_u_name, move ", "), __inline_i32__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(34), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        __r."String::append"(__sroa_u_name);
+        __r."String::append"(move ", ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(__sroa_u_age, &mut f);
-        break __inline_i32__to_string_0: buf;
-    }));
-    __inline_rename_0: {
+        Box<i32> { value: __sroa_u_age }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    __inline_rename_2: {
         let new_name: String = move "Bob";
         __sroa_u_name = new_name;
     };
-    __inline_birthday_1: {
+    __inline_birthday_3: {
         __sroa_u_age = (__sroa_u_age + 1);
     };
-    core::cli::println(move "String::concat"(move "String::concat"(__sroa_u_name, move ", "), __inline_i32__to_string_1: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(34), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(__sroa_u_name);
+        __r."String::append"(move ", ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(__sroa_u_age, &mut f);
-        break __inline_i32__to_string_1: buf;
-    }));
+        Box<i32> { value: __sroa_u_age }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

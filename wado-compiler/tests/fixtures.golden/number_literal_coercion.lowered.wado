@@ -16,119 +16,95 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "a=", __inline_f64__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(58), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        __r."String::append"(move "a=");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f64_display(1, &mut f);
-        break __inline_f64__to_string_0: buf;
-    }), move ", b="), __inline_f64__to_string_1: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        Box<f64> { value: 1 }."f64@Display::fmt"(&mut __f);
+        __r."String::append"(move ", b=");
+        __f = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        Box<f64> { value: 42 }."f64@Display::fmt"(&mut __f);
+        __r."String::append"(move ", c=");
+        __f = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f64_display(42, &mut f);
-        break __inline_f64__to_string_1: buf;
-    }), move ", c="), __inline_f32__to_string_2: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        Box<f32> { value: 100 }."f32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(58), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "d=");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f32_display(100, &mut f);
-        break __inline_f32__to_string_2: buf;
-    }));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "d=", __inline_i32__to_string_3: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        Box<i32> { value: 1e2 }."i32@Display::fmt"(&mut __f);
+        __r."String::append"(move ", e=");
+        __f = __inline_Formatter__new_6: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        Box<i64> { value: 1e10 }."i64@Display::fmt"(&mut __f);
+        __r."String::append"(move ", f=");
+        __f = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(1e2, &mut f);
-        break __inline_i32__to_string_3: buf;
-    }), move ", e="), __inline_i64__to_string_4: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        Box<i32> { value: 5e3 }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_8: {
+            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(38), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "g=");
+        let mut __f: Formatter = __inline_Formatter__new_9: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i64_decimal(1e10, &mut f);
-        break __inline_i64__to_string_4: buf;
-    }), move ", f="), __inline_i32__to_string_5: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        Box<f64> { value: 1e2 }."f64@Display::fmt"(&mut __f);
+        __r."String::append"(move ", h=");
+        __f = __inline_Formatter__new_10: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        Box<f64> { value: 6.022e23 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_11: {
+            break __inline_String__with_capacity_11: String { repr: "array_new<u8>"(58), used: 0 };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(5e3, &mut f);
-        break __inline_i32__to_string_5: buf;
-    }));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "g=", __inline_f64__to_string_6: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        __r."String::append"(move "i=");
+        let mut __f: Formatter = __inline_Formatter__new_12: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        Box<f64> { value: 0xFF }."f64@Display::fmt"(&mut __f);
+        __r."String::append"(move ", j=");
+        __f = __inline_Formatter__new_13: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f64_display(1e2, &mut f);
-        break __inline_f64__to_string_6: buf;
-    }), move ", h="), __inline_f64__to_string_7: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        Box<f64> { value: 0b1010 }."f64@Display::fmt"(&mut __f);
+        __r."String::append"(move ", k=");
+        __f = __inline_Formatter__new_14: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        core::prelude/primitives.wado::fmt_f64_display(6.022e23, &mut f);
-        break __inline_f64__to_string_7: buf;
-    }));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "i=", __inline_f64__to_string_8: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
-        };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        core::prelude/primitives.wado::fmt_f64_display(0xFF, &mut f);
-        break __inline_f64__to_string_8: buf;
-    }), move ", j="), __inline_f64__to_string_9: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
-        };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        core::prelude/primitives.wado::fmt_f64_display(0b1010, &mut f);
-        break __inline_f64__to_string_9: buf;
-    }), move ", k="), __inline_f64__to_string_10: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
-        };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        core::prelude/primitives.wado::fmt_f64_display(0o77, &mut f);
-        break __inline_f64__to_string_10: buf;
-    }));
+        Box<f64> { value: 0o77 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

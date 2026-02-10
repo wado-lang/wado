@@ -24,19 +24,19 @@ fn run() with Stdout {
     let c2: Counter = __inline_Counter__add_1: {
         break __inline_Counter__add_1: Counter { value: (c.value + 10) };
     };
-    core::cli::println(move "String::concat"(move "value: ", __inline_u64__to_string_0: {
-        let self: u64 = __inline_Counter__get_2: {
-            break __inline_Counter__get_2: c2.value;
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(23), used: 0 };
         };
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        __r."String::append"(move "value: ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        core::prelude/primitives.wado::fmt_u64_decimal(self, &mut f);
-        break __inline_u64__to_string_0: buf;
-    }));
+        Box<u64> { value: __inline_Counter__get_4: {
+            break __inline_Counter__get_4: c2.value;
+        } }."u64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

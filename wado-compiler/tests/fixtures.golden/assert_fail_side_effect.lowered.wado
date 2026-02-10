@@ -23,27 +23,30 @@ fn run() with Stdout, Stderr {
         let __v0: i32 = get_value();
         let __cond: bool = (__v0 > 10);
         if !__cond {
-            core::internal::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "run"), move " at "), move "wado-compiler/tests/fixtures/assert_fail_side_effect.wado"), move ":"), __inline_i32__to_string_0: {
-                let mut buf: String = __inline_String__with_capacity_0: {
-                    break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+            core::internal::panic(__tmpl: {
+                let mut __r: String = __inline_String__with_capacity_0: {
+                    break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(132), used: 0 };
                 };
-                let mut f: Formatter = __inline_Formatter__new_1: {
-                    let buf: &mut String = &mut buf;
+                __r."String::append"(move "Assertion failed in ");
+                __r."String::append"(move "run");
+                __r."String::append"(move " at ");
+                __r."String::append"(move "wado-compiler/tests/fixtures/assert_fail_side_effect.wado");
+                __r."String::append"(move ":");
+                let mut __f: Formatter = __inline_Formatter__new_1: {
+                    let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                core::prelude/primitives.wado::fmt_i32_decimal(13, &mut f);
-                break __inline_i32__to_string_0: buf;
-            }), move "\ncondition: get_value() > 10\n"), move "get_value(): "), __inline_i32__to_string_1: {
-                let mut buf: String = __inline_String__with_capacity_0: {
-                    break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+                Box<i32> { value: 13 }."i32@Display::fmt"(&mut __f);
+                __r."String::append"(move "\ncondition: get_value() > 10\n");
+                __r."String::append"(move "get_value(): ");
+                __f = __inline_Formatter__new_2: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                let mut f: Formatter = __inline_Formatter__new_1: {
-                    let buf: &mut String = &mut buf;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                core::prelude/primitives.wado::fmt_i32_decimal(__v0, &mut f);
-                break __inline_i32__to_string_1: buf;
-            }), move "\n"));
+                Box<i32> { value: __v0 }."i32@Display::fmt"(&mut __f);
+                __r."String::append"(move "\n");
+                break __tmpl: __r;
+            });
         }
     }
 }

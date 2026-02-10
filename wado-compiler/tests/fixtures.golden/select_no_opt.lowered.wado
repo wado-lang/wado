@@ -14,17 +14,18 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn side_effect(x: i32) -> i32 with Stdout {
-    core::cli::println(move "String::concat"(move "called with ", __inline_i32__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(28), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        __r."String::append"(move "called with ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(x, &mut f);
-        break __inline_i32__to_string_0: buf;
-    }));
+        Box<i32> { value: x }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     return x;
 }
 
@@ -34,31 +35,31 @@ fn run() with Stdout {
     } else {
         side_effect(2);
     };
-    core::cli::println(__inline_i32__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(result, &mut f);
-        break __inline_i32__to_string_0: buf;
+        Box<i32> { value: result }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
     });
     let mut val: i32 = 0;
     if (10 > 5) {
         val = 42;
     }
-    core::cli::println(__inline_i32__to_string_1: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(16), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(val, &mut f);
-        break __inline_i32__to_string_1: buf;
+        Box<i32> { value: val }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
     });
 }
 

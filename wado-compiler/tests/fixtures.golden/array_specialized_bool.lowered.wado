@@ -32,7 +32,17 @@ fn run() with Stdout {
             let __pattern_temp_0: Option<bool> = __iter_0."ArrayIter<bool>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
                 let x: bool = __unwrap_option(__pattern_temp_0).value;
-                core::cli::println(move x."bool::to_string"());
+                core::cli::println(__tmpl: {
+                    let mut __r: String = __inline_String__with_capacity_1: {
+                        break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(16), used: 0 };
+                    };
+                    let mut __f: Formatter = __inline_Formatter__new_2: {
+                        let buf: &mut String = &mut __r;
+                        break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    Box<bool> { value: x }."bool@Display::fmt"(&mut __f);
+                    break __tmpl: __r;
+                });
             } else {
                 break;
             }

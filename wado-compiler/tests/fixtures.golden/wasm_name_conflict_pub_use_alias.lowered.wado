@@ -19,17 +19,18 @@ fn run() with Stdout {
         let u: String = move "meters";
         break __inline_make_metric_0: Metric { value: 3.14, unit: u };
     };
-    core::cli::println(move "String::concat"(move "String::concat"(__inline_f64__to_string_0: {
-        let self: f64 = m.value;
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_1: {
+            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(33), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f64_display(self, &mut f);
-        break __inline_f64__to_string_0: buf;
-    }, move " "), m.unit));
+        Box<f64> { value: m.value }."f64@Display::fmt"(&mut __f);
+        __r."String::append"(move " ");
+        __r."String::append"(m.unit);
+        break __tmpl: __r;
+    });
 }
 

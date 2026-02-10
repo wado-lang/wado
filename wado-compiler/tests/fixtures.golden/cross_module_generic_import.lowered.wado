@@ -17,37 +17,48 @@ fn run() with Stdout {
     let x: i32 = __inline_identity_i32__0: {
         break __inline_identity_i32__0: 42;
     };
-    core::cli::println(move "String::concat"(move "identity<i32>(42) = ", __inline_i32__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_1: {
+            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(36), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "identity<i32>(42) = ");
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(x, &mut f);
-        break __inline_i32__to_string_0: buf;
-    }));
-    let s: String = __inline_identity_String__1: {
+        Box<i32> { value: x }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    let s: String = __inline_identity_String__3: {
         let value: String = move "hello";
-        break __inline_identity_String__1: value;
+        break __inline_identity_String__3: value;
     };
-    core::cli::println(move "String::concat"(move "identity<String>(hello) = ", s));
-    let pair: [i32, String] = __inline_make_pair_i32_String__2: {
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(42), used: 0 };
+        };
+        __r."String::append"(move "identity<String>(hello) = ");
+        __r."String::append"(s);
+        break __tmpl: __r;
+    });
+    let pair: [i32, String] = __inline_make_pair_i32_String__5: {
         let second: String = move "world";
-        break __inline_make_pair_i32_String__2: [10, second];
+        break __inline_make_pair_i32_String__5: [10, second];
     };
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "make_pair = (", __inline_i32__to_string_1: {
-        let self: i32 = pair.0;
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(48), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "make_pair = (");
+        let mut __f: Formatter = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
-        break __inline_i32__to_string_1: buf;
-    }), move ", "), pair.1), move ")"));
+        Box<i32> { value: pair.0 }."i32@Display::fmt"(&mut __f);
+        __r."String::append"(move ", ");
+        __r."String::append"(pair.1);
+        __r."String::append"(move ")");
+        break __tmpl: __r;
+    });
 }
 

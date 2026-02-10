@@ -13,10 +13,20 @@ struct Person {
     name: String,
 }
 
+fn "Person^Greet::greet"(self: &Person) -> String {
+    return __tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        __r."String::append"(move "Hello, ");
+        __r."String::append"(self.name);
+        __r."String::append"(move "!");
+        break __tmpl: __r;
+    };
+}
+
 fn run() with Stdout {
-    let __sroa_p_name: String = move "Alice";
-    core::cli::println(__inline_Person_Greet__greet_0: {
-        break __inline_Person_Greet__greet_0: "String::concat"(move "String::concat"(move "Hello, ", __sroa_p_name), move "!");
-    });
+    let p: Person = move Person { name: "Alice" };
+    core::cli::println(move p."Person^Greet::greet"());
 }
 

@@ -16,16 +16,17 @@
 
 fn run() with Stdout {
     let dx: f64 = ((1.0 - -2.5) / 100 as f64);
-    core::cli::println(move "String::concat"(move "dx: ", __inline_f64__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(20), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        __r."String::append"(move "dx: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f64_display(dx, &mut f);
-        break __inline_f64__to_string_0: buf;
-    }));
+        Box<f64> { value: dx }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

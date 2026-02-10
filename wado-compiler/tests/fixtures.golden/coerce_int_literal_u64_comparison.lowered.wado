@@ -14,11 +14,33 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "0 is zero: ", move __inline_is_zero_0: {
-        break __inline_is_zero_0: (0 == 0);
-    }."bool::to_string"()));
-    core::cli::println(move "String::concat"(move "1 is zero: ", move __inline_is_zero_1: {
-        break __inline_is_zero_1: (1 == 0);
-    }."bool::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(27), used: 0 };
+        };
+        __r."String::append"(move "0 is zero: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<bool> { value: __inline_is_zero_2: {
+            break __inline_is_zero_2: (0 == 0);
+        } }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_3: {
+            break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(27), used: 0 };
+        };
+        __r."String::append"(move "1 is zero: ");
+        let mut __f: Formatter = __inline_Formatter__new_4: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<bool> { value: __inline_is_zero_5: {
+            break __inline_is_zero_5: (1 == 0);
+        } }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

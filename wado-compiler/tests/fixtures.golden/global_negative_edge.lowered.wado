@@ -18,29 +18,29 @@ global NEGATIVE_ONE: i64 = -1;
 global I64_MIN: i64 = -9223372036854775808;
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "NEGATIVE_ONE=", __inline_i64__to_string_0: {
-        let self: i64 = NEGATIVE_ONE;
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(29), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        __r."String::append"(move "NEGATIVE_ONE=");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i64_decimal(self, &mut f);
-        break __inline_i64__to_string_0: buf;
-    }));
-    core::cli::println(move "String::concat"(move "I64_MIN=", __inline_i64__to_string_1: {
-        let self: i64 = I64_MIN;
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        Box<i64> { value: NEGATIVE_ONE }."i64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(24), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "I64_MIN=");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i64_decimal(self, &mut f);
-        break __inline_i64__to_string_1: buf;
-    }));
+        Box<i64> { value: I64_MIN }."i64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

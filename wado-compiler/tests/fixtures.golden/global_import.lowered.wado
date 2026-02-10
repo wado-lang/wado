@@ -17,28 +17,29 @@ fn run() with Stdout {
     let c: i32 = __inline_get_constant_0: {
         break __inline_get_constant_0: ./sub/global_import_module.wado::CONSTANT;
     };
-    core::cli::println(move "String::concat"(move "get_constant=", __inline_i32__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_1: {
+            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(29), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "get_constant=");
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(c, &mut f);
-        break __inline_i32__to_string_0: buf;
-    }));
-    core::cli::println(move "String::concat"(move "CONSTANT=", __inline_i32__to_string_1: {
-        let self: i32 = ./sub/global_import_module.wado::CONSTANT;
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        Box<i32> { value: c }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_3: {
+            break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(25), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "CONSTANT=");
+        let mut __f: Formatter = __inline_Formatter__new_4: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
-        break __inline_i32__to_string_1: buf;
-    }));
+        Box<i32> { value: ./sub/global_import_module.wado::CONSTANT }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

@@ -18,16 +18,17 @@ fn run() with Stdout {
     let result: f64 = __inline_compute_f64_0: {
         break __inline_compute_f64_0: ((2.0 * 3.0) + 1.5);
     };
-    core::cli::println(move "String::concat"(move "result = ", __inline_f64__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_1: {
+            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(25), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "result = ");
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f64_display(result, &mut f);
-        break __inline_f64__to_string_0: buf;
-    }));
+        Box<f64> { value: result }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

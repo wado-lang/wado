@@ -13,21 +13,23 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
-fn print_via(r: Box<i32>) with Stdout {
-    let s: String = __inline_read_and_format_0: {
-        break __inline_read_and_format_0: "String::concat"(move "value=", __inline_i32__to_string_0: {
-            let self: i32 = r.value;
-            let mut buf: String = __inline_String__with_capacity_0: {
-                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
-            };
-            let mut f: Formatter = __inline_Formatter__new_1: {
-                let buf: &mut String = &mut buf;
-                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-            };
-            core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
-            break __inline_i32__to_string_0: buf;
-        });
+fn read_and_format(r: Box<i32>) -> String {
+    return __tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(22), used: 0 };
+        };
+        __r."String::append"(move "value=");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: r.value }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
     };
+}
+
+fn print_via(r: Box<i32>) with Stdout {
+    let s: String = move read_and_format(r);
     core::cli::println(s);
 }
 

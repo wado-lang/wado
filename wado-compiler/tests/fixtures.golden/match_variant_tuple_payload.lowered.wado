@@ -21,16 +21,17 @@ fn run() with Stdout {
         Rectangle((w, h)) => (w * h),
         Point => 0.0,
     };
-    core::cli::println(move "String::concat"(move "Rectangle area: ", __inline_f64__to_string_0: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(32), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        __r."String::append"(move "Rectangle area: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f64_display(area, &mut f);
-        break __inline_f64__to_string_0: buf;
-    }));
+        Box<f64> { value: area }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

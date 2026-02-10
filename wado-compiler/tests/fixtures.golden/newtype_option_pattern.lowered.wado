@@ -18,34 +18,36 @@ fn run() with Stdout {
     let angle: Option<Radians> = Option::Some(Box<f64> { value: 3.14159 });
     if __is_not_null(angle) {
         let r: Radians = __unwrap_option(angle).value;
-        core::cli::println(move "String::concat"(move "angle: ", __inline_f64__to_string_0: {
-            let mut buf: String = __inline_String__with_capacity_0: {
-                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_0: {
+                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(23), used: 0 };
             };
-            let mut f: Formatter = __inline_Formatter__new_1: {
-                let buf: &mut String = &mut buf;
+            __r."String::append"(move "angle: ");
+            let mut __f: Formatter = __inline_Formatter__new_1: {
+                let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            core::prelude/primitives.wado::fmt_f64_display(r, &mut f);
-            break __inline_f64__to_string_0: buf;
-        }));
+            Box<f64> { value: r }."f64@Display::fmt"(&mut __f);
+            break __tmpl: __r;
+        });
     } else {
         core::cli::println(move "no angle");
     }
     let empty: Option<Radians> = null;
     if __is_not_null(empty) {
         let r: Radians = __unwrap_option(empty).value;
-        core::cli::println(move "String::concat"(move "unexpected: ", __inline_f64__to_string_1: {
-            let mut buf: String = __inline_String__with_capacity_0: {
-                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_2: {
+                break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(28), used: 0 };
             };
-            let mut f: Formatter = __inline_Formatter__new_1: {
-                let buf: &mut String = &mut buf;
-                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            __r."String::append"(move "unexpected: ");
+            let mut __f: Formatter = __inline_Formatter__new_3: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            core::prelude/primitives.wado::fmt_f64_display(r, &mut f);
-            break __inline_f64__to_string_1: buf;
-        }));
+            Box<f64> { value: r }."f64@Display::fmt"(&mut __f);
+            break __tmpl: __r;
+        });
     } else {
         core::cli::println(move "empty: none");
     }
@@ -53,16 +55,17 @@ fn run() with Stdout {
         Some(v) => (v * 2.0),
         None => 0.0,
     };
-    core::cli::println(move "String::concat"(move "doubled: ", __inline_f64__to_string_2: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(25), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "doubled: ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_f64_display(result, &mut f);
-        break __inline_f64__to_string_2: buf;
-    }));
+        Box<f64> { value: result }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

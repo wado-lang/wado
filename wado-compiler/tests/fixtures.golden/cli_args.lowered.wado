@@ -15,19 +15,19 @@
 
 fn run() with Stdout, Environment {
     let arguments: Array<String> = move core::cli::args();
-    core::cli::println(move "String::concat"(move "args.len = ", __inline_i32__to_string_0: {
-        let self: i32 = __inline_Array_String___len_0: {
-            break __inline_Array_String___len_0: arguments.used;
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(27), used: 0 };
         };
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
-        };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
+        __r."String::append"(move "args.len = ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
-        break __inline_i32__to_string_0: buf;
-    }));
+        Box<i32> { value: __inline_Array_String___len_2: {
+            break __inline_Array_String___len_2: arguments.used;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

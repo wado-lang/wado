@@ -41,6 +41,14 @@ fn run() with Stdout {
             f.buf."String::append"(s);
         };
     };
-    core::cli::println(move "String::concat"(move "String::concat"(move "[", buf), move "]"));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_8: {
+            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(18), used: 0 };
+        };
+        __r."String::append"(move "[");
+        __r."String::append"(buf);
+        __r."String::append"(move "]");
+        break __tmpl: __r;
+    });
 }
 

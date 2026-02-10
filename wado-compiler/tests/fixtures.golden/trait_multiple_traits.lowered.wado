@@ -22,25 +22,39 @@ struct Person {
 fn run() with Stdout {
     let __sroa_p_name: String = move "Alice";
     let __sroa_p_city: String = move "Tokyo";
-    core::cli::println(move "String::concat"(move "Name: ", __inline_Person_Named__name_0: {
-        break __inline_Person_Named__name_0: __sroa_p_name;
-    }));
-    core::cli::println(move "String::concat"(move "Age: ", __inline_i32__to_string_0: {
-        let self: i32 = __inline_Person_Aged__age_1: {
-            break __inline_Person_Aged__age_1: 30;
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(22), used: 0 };
         };
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        __r."String::append"(move "Name: ");
+        __r."String::append"(__inline_Person_Named__name_1: {
+            break __inline_Person_Named__name_1: __sroa_p_name;
+        });
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(21), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "Age: ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
-        break __inline_i32__to_string_0: buf;
-    }));
-    core::cli::println(move "String::concat"(move "Location: ", __inline_Person_Located__location_2: {
-        break __inline_Person_Located__location_2: __sroa_p_city;
-    }));
+        Box<i32> { value: __inline_Person_Aged__age_4: {
+            break __inline_Person_Aged__age_4: 30;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_5: {
+            break __inline_String__with_capacity_5: String { repr: "array_new<u8>"(26), used: 0 };
+        };
+        __r."String::append"(move "Location: ");
+        __r."String::append"(__inline_Person_Located__location_6: {
+            break __inline_Person_Located__location_6: __sroa_p_city;
+        });
+        break __tmpl: __r;
+    });
 }
 

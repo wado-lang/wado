@@ -14,7 +14,14 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn side_effect(msg: String, result: bool) -> bool with Stdout {
-    core::cli::println(move "String::concat"(move "side_effect called: ", msg));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(36), used: 0 };
+        };
+        __r."String::append"(move "side_effect called: ");
+        __r."String::append"(msg);
+        break __tmpl: __r;
+    });
     return result;
 }
 
@@ -45,41 +52,38 @@ fn run() with Stdout {
         }) && (arr."Array<i32>^IndexValue::index_value"(i) < 100)) {
             break;
         }
-        core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "arr[", __inline_i32__to_string_0: {
-            let mut buf: String = __inline_String__with_capacity_0: {
-                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_1: {
+                break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(40), used: 0 };
             };
-            let mut f: Formatter = __inline_Formatter__new_1: {
-                let buf: &mut String = &mut buf;
-                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            __r."String::append"(move "arr[");
+            let mut __f: Formatter = __inline_Formatter__new_2: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            core::prelude/primitives.wado::fmt_i32_decimal(i, &mut f);
-            break __inline_i32__to_string_0: buf;
-        }), move "] = "), __inline_i32__to_string_1: {
-            let self: i32 = arr."Array<i32>^IndexValue::index_value"(i);
-            let mut buf: String = __inline_String__with_capacity_0: {
-                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+            Box<i32> { value: i }."i32@Display::fmt"(&mut __f);
+            __r."String::append"(move "] = ");
+            __f = __inline_Formatter__new_3: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            let mut f: Formatter = __inline_Formatter__new_1: {
-                let buf: &mut String = &mut buf;
-                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-            };
-            core::prelude/primitives.wado::fmt_i32_decimal(self, &mut f);
-            break __inline_i32__to_string_1: buf;
-        }));
+            Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(i) }."i32@Display::fmt"(&mut __f);
+            break __tmpl: __r;
+        });
         i = (i + 1);
     }
-    core::cli::println(move "String::concat"(move "Loop ended at i = ", __inline_i32__to_string_2: {
-        let mut buf: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(12), used: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(34), used: 0 };
         };
-        let mut f: Formatter = __inline_Formatter__new_1: {
-            let buf: &mut String = &mut buf;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __r."String::append"(move "Loop ended at i = ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        core::prelude/primitives.wado::fmt_i32_decimal(i, &mut f);
-        break __inline_i32__to_string_2: buf;
-    }));
+        Box<i32> { value: i }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     core::cli::println(move "\n=== Testing nested ===");
     if ((true && false) || side_effect(move "nested: should print", true)) {
         core::cli::println(move "nested branch taken (correct)");
