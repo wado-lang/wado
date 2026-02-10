@@ -1487,11 +1487,7 @@ impl<'a> Resolver<'a> {
             for (struct_name, info) in name_map {
                 for (_field_name, field_type_id) in &info.fields {
                     let mut dep_sources = Vec::new();
-                    Self::collect_cross_module_deps(
-                        *field_type_id,
-                        type_table,
-                        &mut dep_sources,
-                    );
+                    Self::collect_cross_module_deps(*field_type_id, type_table, &mut dep_sources);
                     for (ref_name, ref_module_source) in dep_sources {
                         // Skip self-references (same struct or same module)
                         if ref_name == *struct_name || ref_module_source == *module_src {
@@ -5599,6 +5595,19 @@ impl<'a> Resolver<'a> {
                     });
                 }
             }
+        }
+
+        // Handle null literal coercion: type null as the expected Option<T> type
+        // instead of Option<Unknown>
+        if let Some(target_type) = expected_type
+            && let Expr::Literal(lit) = expr
+            && matches!(&lit.value, Literal::Null)
+            && matches!(
+                self.type_table.borrow().get(target_type),
+                ResolvedType::Option(_)
+            )
+        {
+            return TirExpr::new(TirExprKind::Null, target_type, lit.span);
         }
 
         // Handle tuple literal to array coercion
@@ -10080,9 +10089,10 @@ impl<'a> Resolver<'a> {
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                // Find expected field type for literal coercion (only for numeric literals)
-                // We only use expected type for numeric literals (including negated ones)
-                // to avoid interfering with tuple-to-array coercion for generic struct fields
+                // Find expected field type for literal coercion
+                // We use expected type for numeric literals (including negated ones)
+                // and null literals to avoid interfering with tuple-to-array coercion
+                // for generic struct fields
                 let is_numeric_literal = matches!(
                     &field.value,
                     ast::Expr::Literal(lit) if matches!(
@@ -10100,7 +10110,12 @@ impl<'a> Resolver<'a> {
                     )
                 );
 
-                let expected_field_type = if is_numeric_literal {
+                let is_null_literal = matches!(
+                    &field.value,
+                    ast::Expr::Literal(lit) if matches!(&lit.value, ast::Literal::Null)
+                );
+
+                let expected_field_type = if is_numeric_literal || is_null_literal {
                     struct_field_types
                         .iter()
                         .find(|(name, _)| name == &field.name)
