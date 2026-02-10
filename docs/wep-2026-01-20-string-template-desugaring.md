@@ -104,7 +104,9 @@ impl String {
     fn raw<Values>(strings: RawStrings, values: Values) -> String {
         let mut result = strings[0];
         for let [i, v] of values.entries() {
-            result.append(v.to_string());
+            let mut f = Formatter::new(FormatSpec::default());
+            Display::fmt(&v, &mut f);
+            result.append(f.finish());
             result.append(strings[i + 1]);
         }
         return result;
