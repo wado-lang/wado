@@ -112,7 +112,7 @@ Usage:
 
 ```wado
 String::raw`Hello\nWorld`     // -> "Hello\\nWorld" (12 chars, not 11)
-String::raw`Path: {path}\n`   // -> "Path: " + to_string(path) + "\\n"
+String::raw`Path: {path}\n`   // -> "Path: " + path.fmt(...) + "\\n"
 ```
 
 ### `String::base64` Implementation
@@ -199,31 +199,6 @@ Lexer change required: `{{` -> `{`, `}}` -> `}` in template strings.
 | Escaped braces          | `` `{{x}}` ``           | `"{x}"` (literal)              |
 | Nested template         | `` `outer {`inner`}` `` | Inner template evaluated first |
 | Multiline               | Preserved               | Newlines in cooked/raw         |
-
-## Implementation Plan
-
-### Phase 1: Foundation
-
-- [ ] Add `{{` and `}}` escape support in lexer
-- [ ] Store both cooked and raw strings in `TemplatePart::String`
-- [ ] Define `CookedStrings` and `RawStrings` newtypes in `core:internal`
-
-### Phase 2: Untagged Template Optimization
-
-- [ ] Improve untagged template lowering for efficiency (buffer-based or `StringBuilder`)
-- [ ] Apply format specifiers during direct stringification
-
-### Phase 3: Tagged Templates
-
-- [ ] Implement tag function lookup and signature-based string selection
-- [ ] Generate `CookedStrings` or `RawStrings` based on tag function's first parameter type
-- [ ] Pass values as tuple to tag function
-- [ ] Implement `String::raw` using `RawStrings` and tuple enumeration
-- [ ] Implement `String::base64` with compile-time decoding
-
-### Phase 4: Brace Escaping
-
-- [ ] Implement `{{` / `}}` lexer support
 
 ## Consequences
 
