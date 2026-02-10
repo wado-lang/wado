@@ -7,11 +7,6 @@
 // - `String` and `Array<u8>` have the same Wasm-level representation: builtin::array<u8>
 // - A String is a single reference value (not a ptr+len pair)
 // - Use `builtin::array_len` to get the length of a String or Array
-
-// ============================================================================
-// Stream Intrinsics (wrappers around builtin::)
-// ============================================================================
-
 /// Create a new stream, returns i64 with rx in low 32 bits, tx in high 32 bits
 pub fn stream_new() -> i64 {
     return builtin::stream_new();
@@ -31,11 +26,6 @@ pub fn stream_drop_writable(tx: i32) {
 pub fn stream_drop_readable(rx: i32) {
     builtin::stream_drop_readable(rx);
 }
-
-// ============================================================================
-// Array/String Intrinsics (wrappers around builtin::)
-// ============================================================================
-
 /// Get length of an array
 /// Maps to Wasm GC `array.len` instruction
 pub fn array_len<T>(arr: Array<T>) -> i32 {
@@ -47,11 +37,6 @@ pub fn array_len<T>(arr: Array<T>) -> i32 {
 pub fn string_len(s: String) -> i32 {
     return builtin::array_len(s);
 }
-
-// ============================================================================
-// Async Task Intrinsics (wrappers around builtin::)
-// ============================================================================
-
 /// Create a new waitable set for async task management
 pub fn waitable_set_new() -> i32 {
     return builtin::waitable_set_new();
@@ -71,11 +56,6 @@ pub fn waitable_set_wait(set: i32, out_addr: i32) -> i32 {
 pub fn subtask_drop(subtask: i32) {
     builtin::subtask_drop(subtask);
 }
-
-// ============================================================================
-// Async Wait Helper
-// ============================================================================
-
 /// Wait for a write-via-stream subtask to complete if pending
 /// This is used after calling Stdout::write_via_stream or similar effect functions
 /// The subtask parameter is the return value from write-via-stream

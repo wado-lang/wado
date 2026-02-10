@@ -20,9 +20,7 @@ struct "Node<i32>" {
 }
 
 fn __test_0_create_recursive_node() {
-    let mut node: Node<i32> = __inline_Node_i32___new_0: {
-        break __inline_Node_i32___new_0: Node<i32> { value: 42, left: null, right: null };
-    };
+    let mut node: Node<i32> = move "Node<i32>::new"(42);
     __assert_0: {
         let __v0: i32 = node.value;
         let __cond: bool = (__v0 == 42);
@@ -30,5 +28,9 @@ fn __test_0_create_recursive_node() {
             core::internal::panic(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "Assertion failed in ", move "__test_0_create_recursive_node"), move " at "), move "wado-compiler/tests/fixtures/recursive-generic-struct.wado"), move ":"), move 22."i32::to_string"()), move "\ncondition: node.value == 42\n"), move "node.value: "), move __v0."i32::to_string"()), move "\n"));
         }
     }
+}
+
+fn "Node<i32>::new"(value: i32) -> Node<i32> {
+    return Node<i32> { value: value, left: null, right: null };
 }
 

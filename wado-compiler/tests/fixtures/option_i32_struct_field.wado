@@ -1,0 +1,23 @@
+// Test: Option<i32> as struct field
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    width: Option<i32>,
+}
+
+export fn run() with Stdout {
+    let c = Config { width: Option::<i32>::Some(42) };
+    if let Some(w) = c.width {
+        println(`width: {w}`);
+    }
+
+    let d = Config { width: null };
+    if let Some(w) = d.width {
+        println("should not print");
+    } else {
+        println("no width");
+    }
+}
+
+__DATA__
+{"stdout": "width: 42\nno width\n"}

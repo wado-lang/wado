@@ -1,0 +1,17 @@
+// Test: Formatter accessor methods (width, precision, alternate, sign_plus)
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut buf = String::with_capacity(64);
+    let spec = FormatSpec::default();
+    let f = Formatter::new(&mut buf, spec);
+
+    // Default spec values
+    println(`width: {f.width()}`);
+    println(`precision: {f.precision()}`);
+    println(`alternate: {f.alternate()}`);
+    println(`sign_plus: {f.sign_plus()}`);
+}
+
+__DATA__
+{"stdout": "width: -1\nprecision: -1\nalternate: false\nsign_plus: false\n"}
