@@ -50,9 +50,9 @@ The compiler directly emits an efficient append sequence using a mutable string 
 ```wado
 __tmpl: {
     let mut __r = "Hello, ";
-    __r.append(to_string(name));
+    __r.append(name.to_string());
     __r.append("! You are ");
-    __r.append(to_string(age));
+    __r.append(age.to_string());
     __r.append(".");
     __r
 }
@@ -82,7 +82,7 @@ fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut params: Array<SqlParam> = [];
     for let [i, v] of values.entries() {
         params.append(v.to_sql_param());
-        query.append(`${i + 1}`);
+        query.append((i + 1).to_string());
         query.append(strings[i + 1]);
     }
     return SqlQuery { query, params };
@@ -100,7 +100,7 @@ impl String {
     fn raw<Values>(strings: RawStrings, values: Values) -> String {
         let mut result = strings[0];
         for let [i, v] of values.entries() {
-            result.append(to_string(v));
+            result.append(v.to_string());
             result.append(strings[i + 1]);
         }
         return result;
