@@ -302,6 +302,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Variant Wasm GC Representation](./docs/wep-2026-02-08-variant-representation.md)
 - [Variant-Independent Types](./docs/wep-2026-02-09-variant-independent-types.md)
 - [Compile-Time Tuple Enumeration](./docs/wep-2026-02-10-compile-time-tuple-enumeration.md)
+- [WIR (Wasm IR) Layer](./docs/wep-2026-02-10-wir-layer.md)
 
 ### Structure
 
