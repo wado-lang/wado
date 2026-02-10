@@ -45,18 +45,14 @@ Untagged templates are special-cased by the compiler for efficiency. No `CookedS
 `Hello, {name}! You are {age}.`
 ```
 
-The compiler directly emits an efficient append sequence using a mutable string and labeled block expression. All interpolations go through `Formatter` + `Display::fmt` (see [Format Traits](./wep-2026-02-01-format-traits.md)) for predictable behavior, regardless of whether a format specifier is present.
+The compiler directly emits an efficient sequence using a mutable string and labeled block expression. All interpolations go through `Formatter` + `Display::fmt` (see [Format Traits](./wep-2026-02-01-format-traits.md)) for predictable behavior, regardless of whether a format specifier is present. `Formatter` wraps `&mut String` and writes directly into the output buffer with no intermediate allocations.
 
 ```wado
 __tmpl: {
     let mut __r = "Hello, ";
-    let mut __f0 = Formatter::new(FormatSpec::default());
-    Display::fmt(&name, &mut __f0);
-    __r.append(__f0.finish());
+    Display::fmt(&name, &mut Formatter::new(&mut __r, FormatSpec::default()));
     __r.append("! You are ");
-    let mut __f1 = Formatter::new(FormatSpec::default());
-    Display::fmt(&age, &mut __f1);
-    __r.append(__f1.finish());
+    Display::fmt(&age, &mut Formatter::new(&mut __r, FormatSpec::default()));
     __r.append(".");
     __r
 }
@@ -104,9 +100,7 @@ impl String {
     fn raw<Values>(strings: RawStrings, values: Values) -> String {
         let mut result = strings[0];
         for let [i, v] of values.entries() {
-            let mut f = Formatter::new(FormatSpec::default());
-            Display::fmt(&v, &mut f);
-            result.append(f.finish());
+            Display::fmt(&v, &mut Formatter::new(&mut result, FormatSpec::default()));
             result.append(strings[i + 1]);
         }
         return result;
@@ -156,9 +150,7 @@ Desugars to:
 ```wado
 __tmpl: {
     let mut __r = "Pi is ";
-    let mut __f = Formatter::new(FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() });
-    Display::fmt(&pi, &mut __f);
-    __r.append(__f.finish());
+    Display::fmt(&pi, &mut Formatter::new(&mut __r, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
     __r
 }
 ```
@@ -174,9 +166,9 @@ Desugars to:
 ```wado
 __tmpl: {
     let __strings = CookedStrings::from(["Value: ", ""]);
-    let mut __f = Formatter::new(FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() });
-    Display::fmt(&pi, &mut __f);
-    let __values = [__f.finish()];
+    let mut __formatted = "";
+    Display::fmt(&pi, &mut Formatter::new(&mut __formatted, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
+    let __values = [__formatted];
     fmt(__strings, __values)
 }
 ```
