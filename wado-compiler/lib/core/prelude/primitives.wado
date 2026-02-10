@@ -605,11 +605,6 @@ impl f64 {
     /// Floating-point remainder of x/y
     pub fn fmod(x: f64, y: f64) -> f64 { return builtin::f64_fmod(x, y); }
 }
-
-// ============================================================================
-// Display implementations for primitive types
-// ============================================================================
-
 impl Display for bool {
     pub fn fmt(&self, f: &mut Formatter) {
         f.write_str((*self).to_string());
@@ -680,12 +675,7 @@ impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
         f.write_str((*self).to_string());
     }
-}
-
-// ============================================================================
-// Ord implementations for primitive types
-// ============================================================================
-// These enable calling Ord::cmp on primitives when T: Ord bounds are used.
+}// These enable calling Ord::cmp on primitives when T: Ord bounds are used.
 
 impl Ord for i8 {
     pub fn cmp(&self, other: &Self) -> Ordering {

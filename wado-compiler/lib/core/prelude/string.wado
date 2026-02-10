@@ -6,11 +6,6 @@
 
 use {Eq, Ord, Iterator} from "core:prelude/traits.wado";
 use {Option} from "core:prelude/types.wado";
-
-// ============================================================================
-// String Type
-// ============================================================================
-
 /// UTF-8 encoded string type with O(1) amortized append
 pub struct String {
     repr: builtin::array<u8>,
@@ -46,11 +41,6 @@ impl String {
     pub fn set_byte(&mut self, index: i32, value: i32) {
         builtin::array_set_u8(self.repr, index, value);
     }
-
-    // =========================================================================
-    // Internal methods for stdlib use only
-    // =========================================================================
-
     /// Internal: Get raw bytes array (stdlib use only)
     /// Returns the underlying byte array. Caller must respect `len()` boundary.
     pub fn internal_raw_bytes(&self) -> builtin::array<u8> {
@@ -198,11 +188,6 @@ impl Ord for String {
         return Ordering::Equal;
     }
 }
-
-// ============================================================================
-// String Iterators
-// ============================================================================
-
 /// Iterator over UTF-8 bytes of a String.
 /// Yields each byte as u8.
 pub struct StrUtf8ByteIter {

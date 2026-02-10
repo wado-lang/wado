@@ -16,11 +16,6 @@ use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
 
 // Re-export commonly used effects for convenience
 pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
-
-// ============================================================================
-// Internal Helpers
-// ============================================================================
-
 // Write string to stream tx handle
 // Called AFTER write_via_stream has started the consumer
 // add_newline: if true, appends '\n' after the message
@@ -39,11 +34,6 @@ pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
     builtin::stream_write(tx, ptr, alloc_size);
     builtin::stream_drop_writable(tx);
 }
-
-// ============================================================================
-// Output Functions
-// ============================================================================
-
 /// Print a line to stdout (adds newline)
 /// Uses WASI P3 async stream with correct ordering: consumer starts before producer writes
 pub fn println(message: String) with Stdout {
@@ -88,11 +78,6 @@ pub fn eprint(message: String) with Stderr {
     Stderr::write_via_stream(rx);
     write_to_stream(tx, message, false);
 }
-
-// ============================================================================
-// Environment Functions
-// ============================================================================
-
 /// Get environment variable by name
 /// TODO: Implement when for-in loops are supported
 pub fn env(name: String) -> Option<String> with Environment;
@@ -106,11 +91,6 @@ pub fn args() -> Array<String> with Environment {
 pub fn cwd() -> Option<String> with Environment {
     return Environment::get_initial_cwd();
 }
-
-// ============================================================================
-// Exit Functions
-// ============================================================================
-
 /// Exit with success (code 0)
 pub fn exit_success() -> ! with Exit {
     Exit::exit(Ok(()));

@@ -10,11 +10,6 @@ use {
 } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { panic } from "core:internal";
-
-// ============================================================================
-// Array
-// ============================================================================
-
 pub struct Array<T> {
     repr: builtin::array<T>,
     used: i32,
@@ -112,11 +107,6 @@ impl Ord for Array<T> {
         return Ordering::Equal;
     }
 }
-
-// ============================================================================
-// ArrayIter
-// ============================================================================
-
 pub struct ArrayIter<T> {
     repr: builtin::array<T>,
     used: i32,
@@ -148,11 +138,6 @@ impl IntoIterator for Array<T> {
         };
     }
 }
-
-// ============================================================================
-// Array - sorting and iteration
-// ============================================================================
-
 impl Array<T> {
     pub fn iter(&self) -> ArrayIter<T> {
         return self.into_iter();
@@ -300,11 +285,6 @@ impl ArrayIter<T> {
         };
     }
 }
-
-// ============================================================================
-// EnumerateIter
-// ============================================================================
-
 pub struct EnumerateIter<T> {
     repr: builtin::array<T>,
     used: i32,
@@ -328,11 +308,6 @@ impl Iterator for EnumerateIter<T> {
 }
 
 // EnumerateIter uses Iterator::collect() default method
-
-// ============================================================================
-// MapIter
-// ============================================================================
-
 pub struct MapIter<T, U> {
     repr: builtin::array<T>,
     used: i32,
@@ -368,11 +343,6 @@ impl MapIter<T, U> {
         return acc;
     }
 }
-
-// ============================================================================
-// FilterIter
-// ============================================================================
-
 pub struct FilterIter<T> {
     repr: builtin::array<T>,
     used: i32,

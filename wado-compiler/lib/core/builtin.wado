@@ -9,11 +9,6 @@
 //
 // Functions with #[canonical("namespace", "name")] are imported as CM canonical built-ins.
 // Functions without #[canonical(...)] compile to Wasm instructions directly.
-
-// ============================================================================
-// Stream Intrinsics (Component Model async streams)
-// ============================================================================
-
 /// Create a new stream, returns (rx, tx) packed in i64
 /// Low 32 bits = rx (readable end), High 32 bits = tx (writable end)
 #[canonical("wasi", "stream-new")]
@@ -31,11 +26,6 @@ fn stream_drop_writable(tx: i32);
 /// Drop the readable end of a stream (close for reading)
 #[canonical("wasi", "stream-drop-readable")]
 fn stream_drop_readable(rx: i32);
-
-// ============================================================================
-// Future Intrinsics (Component Model async futures)
-// ============================================================================
-
 /// Create a new future, returns (rx, tx) packed in i64
 /// Low 32 bits = rx (readable end), High 32 bits = tx (writable end)
 #[canonical("wasi", "future-new")]
@@ -54,11 +44,6 @@ fn future_drop_writable(tx: i32);
 /// Drop the readable end of a future
 #[canonical("wasi", "future-drop-readable")]
 fn future_drop_readable(rx: i32);
-
-// ============================================================================
-// Async Task Intrinsics (Component Model async)
-// ============================================================================
-
 /// Signal task completion with a result value
 /// Used internally by the compiler to complete async exports
 #[canonical("wasi", "task-return")]
@@ -83,30 +68,15 @@ fn subtask_drop(subtask: i32);
 
 /// Wait for all pending effects to complete
 fn effect_wait();
-
-// ============================================================================
-// i32 Operations
-// ============================================================================
-
 /// Bitwise AND of two i32 values
 fn i32_and(a: i32, b: i32) -> i32;
 
 /// Check if i32 is zero (returns 1 if zero, 0 otherwise)
 fn i32_eqz(a: i32) -> i32;
-
-// ============================================================================
-// Branchless Conditional (Wasm select instruction)
-// ============================================================================
-
 /// Select between two values based on a condition, without branching.
 /// Returns if_true when cond is true, if_false when cond is false.
 /// Both operands are evaluated eagerly.
 fn select<T>(cond: bool, if_true: T, if_false: T) -> T;
-
-// ============================================================================
-// GC Array Operations
-// ============================================================================
-
 /// Get the length of a GC array
 fn array_len(arr: builtin::array<u8>) -> i32;
 
@@ -132,11 +102,6 @@ fn array_copy<T>(dst: builtin::array<T>, dst_offset: i32, src: builtin::array<T>
 /// Fill a builtin::array<T> with a value
 /// Fills `len` elements starting at `offset` with `value`
 fn array_fill<T>(arr: builtin::array<T>, offset: i32, value: T, len: i32);
-
-// ============================================================================
-// Linear Memory Operations
-// ============================================================================
-
 /// Store a byte to linear memory
 fn memory_store8(addr: i32, value: i32);
 
@@ -147,11 +112,6 @@ fn memory_load8_u(addr: i32) -> i32;
 /// Standard WASI realloc signature
 #[canonical("mem", "realloc")]
 fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
-
-// ============================================================================
-// Float-to-String Conversion (uses wado-bundled)
-// ============================================================================
-
 /// Convert f64 to string bytes in linear memory buffer
 /// Returns the number of bytes written
 #[canonical("bundled", "f64_to_buffer")]
@@ -161,11 +121,6 @@ fn f64_to_buffer(value: f64, ptr: i32) -> i32;
 /// Returns the number of bytes written
 #[canonical("bundled", "f32_to_buffer")]
 fn f32_to_buffer(value: f32, ptr: i32) -> i32;
-
-// ============================================================================
-// Transcendental Math Functions (uses wado-bundled libm)
-// ============================================================================
-
 /// Sine of x (in radians)
 #[canonical("bundled", "libm_sin")]
 fn f64_sin(x: f64) -> f64;
@@ -357,11 +312,6 @@ fn f32_hypot(x: f32, y: f32) -> f32;
 /// Floating-point remainder of x/y
 #[canonical("bundled", "libm_fmodf")]
 fn f32_fmod(x: f32, y: f32) -> f32;
-
-// ============================================================================
-// Wide Arithmetic Operations (Wasm wide-arithmetic proposal)
-// ============================================================================
-
 /// 128-bit addition: (a_lo, a_hi) + (b_lo, b_hi) = (result_lo, result_hi)
 /// Maps to Wasm i64.add128 instruction
 fn i64_add128(a_lo: i64, a_hi: i64, b_lo: i64, b_hi: i64) -> [i64, i64];
@@ -377,11 +327,6 @@ fn i64_mul_wide_u(a: i64, b: i64) -> [i64, i64];
 /// 64x64 signed multiplication producing 128-bit result: a * b = (result_lo, result_hi)
 /// Maps to Wasm i64.mul_wide_s(a: i64, b: i64) -> [i64, i64];
 fn i64_mul_wide_s(a: i64, b: i64) -> [i64, i64];
-
-// ============================================================================
-// Bit Counting Operations
-// ============================================================================
-
 /// Count leading zeros in a 32-bit integer
 /// Maps to Wasm i32.clz instruction
 fn i32_clz(x: i32) -> i32;
@@ -389,11 +334,6 @@ fn i32_clz(x: i32) -> i32;
 /// Count leading zeros in a 64-bit integer
 /// Maps to Wasm i64.clz instruction
 fn i64_clz(x: i64) -> i64;
-
-// ============================================================================
-// Float/Integer Reinterpret Operations
-// ============================================================================
-
 /// Reinterpret the bits of an f64 as an i64 (no conversion, just bit cast)
 /// Maps to Wasm i64.reinterpret_f64 instruction
 fn i64_reinterpret_f64(f: f64) -> i64;
@@ -409,28 +349,13 @@ fn i32_reinterpret_f32(f: f32) -> i32;
 /// Reinterpret the bits of an i32 as an f32 (no conversion, just bit cast)
 /// Maps to Wasm f32.reinterpret_i32 instruction
 fn f32_reinterpret_i32(i: i32) -> f32;
-
-// ============================================================================
-// Control Flow
-// ============================================================================
-
 /// Unconditional trap - marks unreachable code
 fn unreachable() -> !;
-
-// ============================================================================
-// Indirect Calls (for ambient I/O without effect tracking)
-// ============================================================================
-
 /// Call stdout's write_via_stream indirectly (ambient, no effect required)
 fn call_indirect_stdout_write_via_stream(rx: i32);
 
 /// Call stderr's write_via_stream indirectly (ambient, no effect required)
 fn call_indirect_stderr_write_via_stream(rx: i32);
-
-// ============================================================================
-// Float Math Operations (direct Wasm instructions)
-// ============================================================================
-
 /// Absolute value of f32
 /// Maps to Wasm f32.abs instruction
 fn f32_abs(x: f32) -> f32;

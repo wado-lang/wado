@@ -8,11 +8,6 @@
 #![no_prelude]
 
 use {Display} from "core:prelude/traits.wado";
-
-// ============================================================================
-// Alignment
-// ============================================================================
-
 /// Text alignment for padding.
 pub variant Alignment {
     /// Left-aligned: `{x:<5}` -> "42   "
@@ -22,11 +17,6 @@ pub variant Alignment {
     /// Right-aligned (default for numbers): `{x:>5}` -> "   42"
     Right,
 }
-
-// ============================================================================
-// FormatSpec
-// ============================================================================
-
 /// Format specification parsed from `{expr:spec}`.
 /// Matches Rust's format syntax: `[[fill]align][sign][#][0][width][.precision]type`
 ///
@@ -62,11 +52,6 @@ impl FormatSpec {
         };
     }
 }
-
-// ============================================================================
-// Formatter
-// ============================================================================
-
 /// Formatter that writes directly into a referenced output buffer.
 /// The Formatter does not own its buffer; it writes into the caller's `&mut String`.
 /// This avoids intermediate allocations.
@@ -112,12 +97,7 @@ impl Formatter {
     pub fn sign_plus(&self) -> bool {
         return self.spec.sign_plus;
     }
-}
-
-// ============================================================================
-// Display implementation for String
-// ============================================================================
-// Defined here (not in string.wado) to avoid string.wado depending on format.wado,
+}// Defined here (not in string.wado) to avoid string.wado depending on format.wado,
 // which would cause codegen struct registration order issues.
 
 impl Display for String {
