@@ -82,7 +82,7 @@ fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut params: Array<SqlParam> = [];
     for let [i, v] of values.enumerate() {
         params.append(v.to_sql_param());
-        query.append((i + 1).to_string());
+        query.append("?");
         query.append(strings[i + 1]);
     }
     return SqlQuery { query, params };
@@ -112,7 +112,7 @@ Usage:
 
 ```wado
 String::raw`Hello\nWorld`     // -> "Hello\\nWorld" (12 chars, not 11)
-String::raw`Path: {path}\n`   // -> "Path: " + path.fmt(...) + "\\n"
+String::raw`Path: {path}\n`   // -> "Path: " + display(path) + "\\n"
 ```
 
 ### `String::base64` Implementation
@@ -194,7 +194,7 @@ Lexer change required: `{{` -> `{`, `}}` -> `}` in template strings.
 | ----------------------- | ----------------------- | ------------------------------ |
 | Empty template          | `` ` ` ``               | `""`                           |
 | No interpolation        | `` `hello` ``           | `"hello"`                      |
-| Only interpolation      | `` `{x}` ``             | `to_string(x)`                 |
+| Only interpolation      | `` `{x}` ``             | `Display::fmt` of x            |
 | Adjacent interpolations | `` `{a}{b}` ``          | `strings = ["", "", ""]`       |
 | Escaped braces          | `` `{{x}}` ``           | `"{x}"` (literal)              |
 | Nested template         | `` `outer {`inner`}` `` | Inner template evaluated first |

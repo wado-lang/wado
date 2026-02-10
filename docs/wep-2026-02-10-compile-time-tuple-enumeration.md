@@ -127,7 +127,7 @@ Wado uses the **C++ template model** for tuple enumeration: the loop body is typ
 
 ```wado
 fn process<Values>(values: Values) {
-    for let v of values.enumerate() {
+    for let v of values {
         v.some_method();  // Not checked until Values is concrete
     }
 }

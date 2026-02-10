@@ -152,15 +152,21 @@ let query = sql`SELECT * FROM users WHERE id = ?`;  // Validated at compile time
 
 ### Phase 2: Interpolation support (Future)
 
-- Support syntax: `tag`text ${expr} more``
-- Function signature: `fn(Array<String>, Array<Value>) -> T`
-- Compile-time evaluation of interpolated expressions
+- Support syntax: `` tag`text {expr} more` ``
+- Function signature: `fn(CookedStrings/RawStrings, Values) -> T` where `Values` is a tuple type
+- See [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md) for the full interpolation design
+- See [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md) for iterating over heterogeneous values
 
 ### Phase 3: Compile-time I/O (Future consideration)
 
 - Carefully designed `embed` function for file inclusion
 - Security implications need thorough analysis
 - May require sandboxing or explicit opt-in
+
+## Related WEPs
+
+- [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md): Defines how tagged templates with interpolation are desugared
+- [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md): Required for iterating over heterogeneous interpolated values in tag functions
 
 ## References
 
