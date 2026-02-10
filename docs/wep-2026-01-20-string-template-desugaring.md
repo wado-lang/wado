@@ -2,7 +2,7 @@
 
 ## Context
 
-String templates (`` `Hello, {name}!` ``) are currently lowered in the resolver to chained `string_concat` calls. This approach has limitations:
+String templates (`` `Hello, {name}!` ``) are currently lowered in the resolver to chained `String::concat` calls. This approach has limitations:
 
 1. No support for tagged templates (`sql`...``, `String::raw`...``)
 2. Format specifiers are not fully implemented
@@ -45,15 +45,15 @@ Untagged templates are special-cased by the compiler for efficiency. No `CookedS
 `Hello, {name}! You are {age}.`
 ```
 
-The compiler directly emits an efficient concatenation sequence (the exact form is an implementation detail, not observable). Conceptually equivalent to:
+The compiler directly emits an efficient append sequence using a mutable string and labeled block expression. Conceptually equivalent to:
 
 ```wado
 __tmpl: {
     let mut __r = "Hello, ";
-    __r = String::concat(__r, to_string(name));
-    __r = String::concat(__r, "! You are ");
-    __r = String::concat(__r, to_string(age));
-    __r = String::concat(__r, ".");
+    __r.append(to_string(name));
+    __r.append("! You are ");
+    __r.append(to_string(age));
+    __r.append(".");
     __r
 }
 ```
@@ -82,8 +82,8 @@ fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut params: Array<SqlParam> = [];
     for let [i, v] of values.entries() {
         params.append(v.to_sql_param());
-        query = String::concat(query, `${i + 1}`);
-        query = String::concat(query, strings[i + 1]);
+        query.append(`${i + 1}`);
+        query.append(strings[i + 1]);
     }
     return SqlQuery { query, params };
 }
@@ -100,8 +100,8 @@ impl String {
     fn raw<Values>(strings: RawStrings, values: Values) -> String {
         let mut result = strings[0];
         for let [i, v] of values.entries() {
-            result = String::concat(result, to_string(v));
-            result = String::concat(result, strings[i + 1]);
+            result.append(to_string(v));
+            result.append(strings[i + 1]);
         }
         return result;
     }

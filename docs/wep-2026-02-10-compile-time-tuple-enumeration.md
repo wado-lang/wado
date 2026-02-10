@@ -159,8 +159,8 @@ fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
     let mut params: Array<SqlParam> = [];
     for let [i, v] of values.entries() {
         params.append(v.to_sql_param());
-        query = String::concat(query, "?");
-        query = String::concat(query, strings[i + 1]);
+        query.append("?");
+        query.append(strings[i + 1]);
     }
     return SqlQuery { query, params };
 }
@@ -173,15 +173,15 @@ __unroll_0: {
     let i: i32 = 0;
     let v: i32 = values.0;
     params.append(v.to_sql_param());      // resolves to i32::to_sql_param
-    query = String::concat(query, "?");
-    query = String::concat(query, strings[1]);
+    query.append("?");
+    query.append(strings[1]);
 }
 __unroll_1: {
     let i: i32 = 1;
     let v: String = values.1;
     params.append(v.to_sql_param());      // resolves to String::to_sql_param
-    query = String::concat(query, "?");
-    query = String::concat(query, strings[2]);
+    query.append("?");
+    query.append(strings[2]);
 }
 ```
 
