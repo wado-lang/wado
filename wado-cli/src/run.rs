@@ -98,7 +98,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
 }
 
 async fn run_cli_component(wasm: &[u8]) -> Result<()> {
-    let engine = runtime::create_engine()?;
+    let engine = runtime::create_engine(wasmtime::OptLevel::Speed)?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&engine)?;
     let mut store = runtime::create_store(&engine);

@@ -152,7 +152,7 @@ async fn collect_test_jobs(
 
     for (module_idx, path) in paths.iter().enumerate() {
         let wasm = compile::compile(path).await;
-        let engine = Arc::new(runtime::create_engine()?);
+        let engine = Arc::new(runtime::create_engine(wasmtime::OptLevel::None)?);
         let component = Arc::new(Component::new(&engine, &wasm)?);
 
         // Find test functions from exports

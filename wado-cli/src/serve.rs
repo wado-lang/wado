@@ -246,7 +246,7 @@ async fn handle_http_request(
 // ============================================================================
 
 async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
-    let engine = runtime::create_engine()?;
+    let engine = runtime::create_engine(wasmtime::OptLevel::Speed)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = create_http_linker(&engine)?;
 
