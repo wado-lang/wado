@@ -301,6 +301,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Trait Bounds Enforcement](./docs/wep-2026-02-07-trait-bounds.md)
 - [Variant Wasm GC Representation](./docs/wep-2026-02-08-variant-representation.md)
 - [Variant-Independent Types](./docs/wep-2026-02-09-variant-independent-types.md)
+- [Compile-Time Tuple Enumeration](./docs/wep-2026-02-10-compile-time-tuple-enumeration.md)
 
 ### Structure
 
