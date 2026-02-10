@@ -32,7 +32,7 @@ impl u128 {
             let digit = byte - ('0' as i32);
             if 0 <= digit && digit <= 9 {
                 let digit_u64: u64 = digit as u64;
-                result = result.mul_u64(10 as u64).add(&u128::from_u64(digit_u64));
+                result = result.mul_u64(10).add(&u128::from_u64(digit_u64));
             }
             i += 1;
         }
@@ -107,7 +107,7 @@ impl u128 {
     /// Panics if divisor is zero
     pub fn div_rem(&self, divisor: &u128) -> [u128, u128] {
         // Check for division by zero
-        if divisor.low == (0 as u64) && divisor.high == (0 as u64) {
+        if divisor.low == 0 && divisor.high == 0 {
             panic("division by zero");
         }
 
@@ -130,7 +130,7 @@ impl u128 {
         let mut i: i32 = 127;
         while i >= 0 {
             // remainder = remainder << 1
-            remainder = remainder << (1 as u32);
+            remainder = remainder << 1;
 
             // Get bit i of dividend and set bit 0 of remainder
             let bit = self.get_bit(i);
@@ -154,10 +154,10 @@ impl u128 {
     pub fn get_bit(&self, i: i32) -> bool {
         let shift: i64 = i as i64;
         if i < 64 {
-            return ((self.low >> (shift as u64)) & (1 as u64)) != (0 as u64);
+            return ((self.low >> (shift as u64)) & 1) != 0;
         } else {
             let s: i64 = (i - 64) as i64;
-            return ((self.high >> (s as u64)) & (1 as u64)) != (0 as u64);
+            return ((self.high >> (s as u64)) & 1) != 0;
         }
     }
 
@@ -166,14 +166,14 @@ impl u128 {
         let shift: i64 = i as i64;
         if i < 64 {
             return u128 {
-                low: self.low | ((1 as u64) << (shift as u64)),
+                low: self.low | (1 << (shift as u64)),
                 high: self.high,
             };
         } else {
             let s: i64 = (i - 64) as i64;
             return u128 {
                 low: self.low,
-                high: self.high | ((1 as u64) << (s as u64)),
+                high: self.high | (1 << (s as u64)),
             };
         }
     }
@@ -191,7 +191,7 @@ impl u128 {
         // Convert digits in reverse order by repeatedly dividing by 10
         let mut pos: i32 = 39;
         let mut temp = *self;
-        let ten = u128::from_u64(10 as u64);
+        let ten = u128::from_u64(10);
 
         while temp > u128::zero() {
             pos -= 1;
@@ -449,7 +449,7 @@ impl i128 {
     /// Create an i128 from an i64 value (sign-extended)
     pub fn from_i64(value: i64) -> i128 {
         // Sign extend: if value is negative, high bits are all 1s (-1)
-        let high: i64 = if value < (0 as i64) { -1 as i64 } else { 0 as i64 };
+        let high: i64 = if value < 0 { -1 as i64 } else { 0 as i64 };
         return i128 { low: value as u64, high };
     }
 
@@ -481,7 +481,7 @@ impl i128 {
             let byte = builtin::array_get_u8(bytes, i);
             let digit = byte - ('0' as i32);
             if 0 <= digit && digit <= 9 {
-                abs_value = abs_value.mul_u64(10 as u64).add(&u128::from_u64(digit as u64));
+                abs_value = abs_value.mul_u64(10).add(&u128::from_u64(digit as u64));
             }
             i += 1;
         }
@@ -516,7 +516,7 @@ impl i128 {
 
     /// Check if this i128 is negative
     pub fn is_negative(&self) -> bool {
-        return self.high < (0 as i64);
+        return self.high < 0;
     }
 
     /// Add two i128 values
@@ -575,7 +575,7 @@ impl i128 {
     /// Panics if divisor is zero
     pub fn div_rem(&self, divisor: &i128) -> [i128, i128] {
         // Check for division by zero
-        if divisor.low == (0 as u64) && divisor.high == (0 as i64) {
+        if divisor.low == 0 && divisor.high == 0 {
             panic("division by zero");
         }
 
@@ -829,10 +829,10 @@ impl Shr for i128 {
         let shift = rhs as i32;
         if shift >= 128 {
             // Fill with sign bit
-            if self.high < (0 as i64) {
+            if self.high < 0 {
                 return i128 {
-                    low: 0xFFFFFFFFFFFFFFFF as u64,
-                    high: -1 as i64,
+                    low: 0xFFFFFFFFFFFFFFFF,
+                    high: -1,
                 };
             } else {
                 return i128::zero();
@@ -841,7 +841,7 @@ impl Shr for i128 {
         if shift >= 64 {
             // All high bits shift into low, high becomes sign extension
             let s = (shift - 64) as i64;
-            let sign_ext: i64 = if self.high < (0 as i64) { -1 as i64 } else { 0 as i64 };
+            let sign_ext: i64 = if self.high < 0 { -1 as i64 } else { 0 as i64 };
             return i128 {
                 low: (self.high >> s) as u64,
                 high: sign_ext,

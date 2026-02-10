@@ -3692,6 +3692,15 @@ impl<'a> Resolver<'a> {
 
     /// Resolve a binary expression
     fn resolve_binary(&mut self, binary: &ast::BinaryExpr, ctx: &mut FunctionContext) -> TirExpr {
+        self.resolve_binary_with_expected_type(binary, ctx, None)
+    }
+
+    fn resolve_binary_with_expected_type(
+        &mut self,
+        binary: &ast::BinaryExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
         // Bidirectional coercion: if one operand is a numeric literal and the other is not,
         // resolve the non-literal first and use its type to coerce the literal
         let left_is_numeric_literal = self.is_numeric_literal(&binary.left);
@@ -3700,25 +3709,30 @@ impl<'a> Resolver<'a> {
         let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left to right's type
             let right = self.resolve_expr(&binary.right, ctx);
-            let expected_type = if self.type_table.borrow().is_numeric(right.type_id) {
+            let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
                 Some(right.type_id)
             } else {
                 None
             };
-            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, expected_type);
+            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, coerce_type);
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right to left's type
             let left = self.resolve_expr(&binary.left, ctx);
-            let expected_type = if self.type_table.borrow().is_numeric(left.type_id) {
+            let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
                 Some(left.type_id)
             } else {
                 None
             };
+            let right = self.resolve_expr_with_expected_type(&binary.right, ctx, coerce_type);
+            (left, right)
+        } else if left_is_numeric_literal && right_is_numeric_literal {
+            // Both literals - use expected type from context (e.g., assignment target)
+            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, expected_type);
             let right = self.resolve_expr_with_expected_type(&binary.right, ctx, expected_type);
             (left, right)
         } else {
-            // Both literals or both non-literals - resolve normally
+            // Both non-literals - resolve normally
             let left = self.resolve_expr(&binary.left, ctx);
             let right = self.resolve_expr(&binary.right, ctx);
             (left, right)
@@ -5542,6 +5556,18 @@ impl<'a> Resolver<'a> {
             return self.resolve_match_expr_with_expected_type(match_expr, ctx, target_type);
         }
 
+        // Handle binary expression with two numeric literals:
+        // propagate expected type so both operands coerce correctly
+        // e.g., `carry = 0 - 1` where carry is i64
+        if let Some(target_type) = expected_type
+            && let Expr::Binary(binary) = expr
+            && self.type_table.borrow().is_numeric(target_type)
+            && self.is_numeric_literal(&binary.left)
+            && self.is_numeric_literal(&binary.right)
+        {
+            return self.resolve_binary_with_expected_type(binary, ctx, Some(target_type));
+        }
+
         // Normal expression resolution
         self.resolve_expr(expr, ctx)
     }
@@ -5566,11 +5592,8 @@ impl<'a> Resolver<'a> {
         }
 
         let mut receiver = self.resolve_expr(&method_call.receiver, ctx);
-        let args: Vec<TirExpr> = method_call
-            .args
-            .iter()
-            .map(|a| self.resolve_expr(a, ctx))
-            .collect();
+        // NOTE: args are resolved later (after method lookup) to enable literal coercion
+        // using the method's parameter types as expected types.
 
         // Resolve explicit type arguments (method-level type args)
         let type_args: Vec<TypeId> = method_call
@@ -5711,6 +5734,17 @@ impl<'a> Resolver<'a> {
         } else {
             param_types
         };
+
+        // Resolve arguments with coercion using method parameter types
+        let args: Vec<TirExpr> = method_call
+            .args
+            .iter()
+            .enumerate()
+            .map(|(i, arg)| {
+                let expected_type = expected_param_types.get(i).copied();
+                self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+            })
+            .collect();
 
         // Check each argument against expected parameter type
         for (i, (arg, &expected_type)) in args.iter().zip(expected_param_types.iter()).enumerate() {
