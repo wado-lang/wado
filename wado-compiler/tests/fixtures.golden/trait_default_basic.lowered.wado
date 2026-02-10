@@ -18,16 +18,15 @@ struct Robot {
 }
 
 fn run() with Stdout {
-    let p: Person = move Person { name: "Alice" };
+    let __sroa_p_name: String = move "Alice";
     core::cli::println(__inline_Person_Greet__greet_0: {
         break __inline_Person_Greet__greet_0: "String::concat"(move "String::concat"(move "Hi, ", __inline_Person_Greet__name_0: {
-            break __inline_Person_Greet__name_0: p.name;
+            break __inline_Person_Greet__name_0: __sroa_p_name;
         }), move "!");
     });
-    let r: Robot = move Robot { id: 42 };
     core::cli::println(__inline_Robot_Greet__greet_1: {
         break __inline_Robot_Greet__greet_1: "String::concat"(move "String::concat"(move "Hello, ", __inline_Robot_Greet__name_1: {
-            break __inline_Robot_Greet__name_1: "String::concat"(move "Robot-", move r.id."i32::to_string"());
+            break __inline_Robot_Greet__name_1: "String::concat"(move "Robot-", move 42."i32::to_string"());
         }), move "!");
     });
 }

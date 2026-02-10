@@ -15,9 +15,9 @@ fn run() with Stdout {
     let val: i32 = r.value;
     r.value = ((val * 2) + 1);
     core::cli::println(move "String::concat"(move "modified: ", move original.value."i32::to_string"()));
-    let val2: Box<i32> = move Box<i32> { value: r.value };
+    let __sroa_val2_value: i32 = r.value;
     r.value = 0;
     core::cli::println(move "String::concat"(move "original: ", move original.value."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "copy: ", move val2.value."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "copy: ", move __sroa_val2_value."i32::to_string"()));
 }
 

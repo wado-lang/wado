@@ -217,20 +217,20 @@ fn "__Closure_2::__call"(self: &__Closure_2, x: Box<i32>, y: Box<i32>) -> Orderi
 }
 
 fn "__Closure_3::__call"(self: &__Closure_3, a: Box<i32>, b: Box<i32>) -> Ordering {
-    let va: Box<i32> = move Box<i32> { value: if (a.value < 0) {
+    let __sroa_va_value: i32 = if (a.value < 0) {
         (0 - a.value);
     } else {
         a.value;
-    } };
-    let vb: Box<i32> = move Box<i32> { value: if (b.value < 0) {
+    };
+    let __sroa_vb_value: i32 = if (b.value < 0) {
         (0 - b.value);
     } else {
         b.value;
-    } };
-    if (va.value < vb.value) {
+    };
+    if (__sroa_va_value < __sroa_vb_value) {
         return Ordering::Less;
     }
-    if (va.value > vb.value) {
+    if (__sroa_va_value > __sroa_vb_value) {
         return Ordering::Greater;
     }
     return Ordering::Equal;

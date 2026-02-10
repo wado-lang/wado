@@ -14,16 +14,14 @@ struct Point {
     y: i32,
 }
 
-fn reset(p: &mut Point) {
-    let __deref_val_2: Point = move Point { x: 0, y: 0 };
-    p.x = __deref_val_2.x;
-    p.y = __deref_val_2.y;
-}
-
 fn run() with Stdout {
-    let mut p: Point = move Point { x: 10, y: 20 };
-    core::cli::println(move "String::concat"(move "String::concat"(move p.x."i32::to_string"(), move ","), move p.y."i32::to_string"()));
-    reset(&mut p);
-    core::cli::println(move "String::concat"(move "String::concat"(move p.x."i32::to_string"(), move ","), move p.y."i32::to_string"()));
+    let mut __sroa_p_x: i32 = 10;
+    let mut __sroa_p_y: i32 = 20;
+    core::cli::println(move "String::concat"(move "String::concat"(move __sroa_p_x."i32::to_string"(), move ","), move __sroa_p_y."i32::to_string"()));
+    __inline_reset_0: {
+        __sroa_p_x = 0;
+        __sroa_p_y = 0;
+    };
+    core::cli::println(move "String::concat"(move "String::concat"(move __sroa_p_x."i32::to_string"(), move ","), move __sroa_p_y."i32::to_string"()));
 }
 

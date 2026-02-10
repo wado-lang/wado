@@ -20,14 +20,13 @@ struct "Node<String,i32>" {
 }
 
 fn run() with Stdout {
-    let node: Node<String,i32> = move Node<String,i32> { keys: ["apple", "banana", "cherry"], values: [10, 20, 30], deleted: [false, true, false] };
+    let __sroa_node_keys: Array<String> = move ["apple", "banana", "cherry"];
+    let __sroa_node_values: Array<i32> = move [10, 20, 30];
+    let __sroa_node_deleted: Array<bool> = move [false, true, false];
     let mut sum: i32 = 0;
     __for_0: {
         let mut i: i32 = 0;
-        let _licm_keys: Array<String> = node.keys;
-        let _licm_deleted: Array<bool> = node.deleted;
-        let _licm_values: Array<i32> = node.values;
-        let _licm_used: i32 = _licm_keys.used;
+        let _licm_used: i32 = __sroa_node_keys.used;
         loop {
             if !(i < __inline_Array_String___len_0: {
                 break __inline_Array_String___len_0: _licm_used;
@@ -35,15 +34,15 @@ fn run() with Stdout {
                 break __for_0;
             }
             __for_0_body: {
-                if !_licm_deleted."Array<bool>^IndexValue::index_value"(i) {
-                    sum = (sum + _licm_values."Array<i32>^IndexValue::index_value"(i));
+                if !__sroa_node_deleted."Array<bool>^IndexValue::index_value"(i) {
+                    sum = (sum + __sroa_node_values."Array<i32>^IndexValue::index_value"(i));
                 }
             }
             i = (i + 1);
         }
     }
     core::cli::println(move "String::concat"(move "sum (excluding deleted): ", move sum."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "first key: ", move node.keys."Array<String>^IndexValue::index_value"(0)));
+    core::cli::println(move "String::concat"(move "first key: ", move __sroa_node_keys."Array<String>^IndexValue::index_value"(0)));
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {

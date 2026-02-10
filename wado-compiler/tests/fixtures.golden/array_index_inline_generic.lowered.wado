@@ -18,10 +18,10 @@ struct "Container<i32>" {
 }
 
 fn run() with Stdout {
-    let c: Container<i32> = move Container<i32> { items: [10, 20, 30] };
-    let first: i32 = c.items."Array<i32>^IndexValue::index_value"(0);
-    let second: i32 = c.items."Array<i32>^IndexValue::index_value"(1);
-    let third: i32 = c.items."Array<i32>^IndexValue::index_value"(2);
+    let __sroa_c_items: Array<i32> = move [10, 20, 30];
+    let first: i32 = __sroa_c_items."Array<i32>^IndexValue::index_value"(0);
+    let second: i32 = __sroa_c_items."Array<i32>^IndexValue::index_value"(1);
+    let third: i32 = __sroa_c_items."Array<i32>^IndexValue::index_value"(2);
     core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move first."i32::to_string"(), move ", "), move second."i32::to_string"()), move ", "), move third."i32::to_string"()));
 }
 
