@@ -1,0 +1,18 @@
+// Bug: literal coercion does not propagate into if-expression branches.
+// `let x: i64 = if cond { -1 } else { 0 };` should work because the type
+// annotation i64 provides the expected type, but the compiler does not
+// propagate the expected type through if-expression branches.
+use { println, Stdout } from "core:cli";
+
+fn select(cond: bool) -> i64 {
+    let x: i64 = if cond { -1 } else { 0 };
+    return x;
+}
+
+export fn run() with Stdout {
+    println(`true: {select(true)}`);
+    println(`false: {select(false)}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "true: -1\nfalse: 0\n"}

@@ -1,0 +1,14 @@
+// Test: i64/u64 associated constants should work without `as` cast
+// Currently, pub const in i64/u64 impl blocks works (coercion applies).
+// But this test ensures const coercion for i64/u64 remains working.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`i64 MAX: {i64::MAX}`);
+    println(`i64 MIN: {i64::MIN}`);
+    println(`u64 MAX: {u64::MAX}`);
+    println(`u64 MIN: {u64::MIN}`);
+}
+
+__DATA__
+{"stdout": "i64 MAX: 9223372036854775807\ni64 MIN: -9223372036854775808\nu64 MAX: 18446744073709551615\nu64 MIN: 0\n"}

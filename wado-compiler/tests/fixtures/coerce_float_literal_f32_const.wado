@@ -1,0 +1,12 @@
+// Bug: f32 associated constant with float literal causes codegen error.
+// `pub const PI: f32 = 3.14159;` should coerce the f64 literal to f32,
+// but codegen emits f64.const instead of f32.const.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let pi = f32::PI;
+    println(`f32 PI: {pi}`);
+}
+
+__DATA__
+{"stdout": "f32 PI: 3.1415927\n"}
