@@ -45,14 +45,18 @@ Untagged templates are special-cased by the compiler for efficiency. No `CookedS
 `Hello, {name}! You are {age}.`
 ```
 
-The compiler directly emits an efficient append sequence using a mutable string and labeled block expression. Conceptually equivalent to:
+The compiler directly emits an efficient append sequence using a mutable string and labeled block expression. All interpolations go through `Formatter` + `Display::fmt` (see [Format Traits](./wep-2026-02-01-format-traits.md)) for predictable behavior, regardless of whether a format specifier is present.
 
 ```wado
 __tmpl: {
     let mut __r = "Hello, ";
-    __r.append(name.to_string());
+    let mut __f0 = Formatter::new(FormatSpec::default());
+    Display::fmt(&name, &mut __f0);
+    __r.append(__f0.finish());
     __r.append("! You are ");
-    __r.append(age.to_string());
+    let mut __f1 = Formatter::new(FormatSpec::default());
+    Display::fmt(&age, &mut __f1);
+    __r.append(__f1.finish());
     __r.append(".");
     __r
 }
@@ -139,9 +143,7 @@ Compile error if interpolation is present.
 
 ### Format Specifiers
 
-When a format specifier is present, the interpolation uses `Formatter` (see [Format Traits](./wep-2026-02-01-format-traits.md)) instead of `.to_string()`.
-
-For untagged templates:
+All interpolations use the `Formatter` infrastructure (see [Format Traits](./wep-2026-02-01-format-traits.md)). When a format specifier is present, it becomes a custom `FormatSpec`; otherwise `FormatSpec::default()` is used. This ensures consistent behavior regardless of whether a specifier is present.
 
 ```wado
 `Pi is {pi:.2}`
@@ -159,14 +161,7 @@ __tmpl: {
 }
 ```
 
-Contrast with no format specifier, which uses simple `.to_string()`:
-
-```wado
-`Pi is {pi}`
-// -> __r.append(pi.to_string());
-```
-
-For tagged templates, the formatted value is passed in the values tuple (already stringified):
+For tagged templates, format-specifier interpolations are pre-formatted and passed as strings in the values tuple:
 
 ```wado
 fmt`Value: {pi:.2}`
