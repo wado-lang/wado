@@ -1,0 +1,26 @@
+// Test: chained scalarized function calls
+// f() is scalarized, g() calls f() and is also scalarized
+
+use { println, Stdout } from "core:cli";
+
+struct Pair {
+    x: i32,
+    y: i32,
+}
+
+fn make_pair(a: i32, b: i32) -> Pair {
+    return Pair { x: a, y: b };
+}
+
+fn transform(p: Pair) -> Pair {
+    let inner = make_pair(p.x + 1, p.y + 2);
+    return Pair { x: inner.x * 2, y: inner.y * 3 };
+}
+
+export fn run() with Stdout {
+    let r = transform(make_pair(10, 20));
+    println(`{r.x}, {r.y}`);
+}
+
+__DATA__
+{"stdout": "22, 66\n"}

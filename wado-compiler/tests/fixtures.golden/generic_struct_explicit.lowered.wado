@@ -44,26 +44,20 @@ struct "Box<i32>" {
 }
 
 fn run() with Stdout {
-    let i32_box: Box<i32> = move Box<i32> { value: 42 };
-    let i64_box: Box<i64> = move Box<i64> { value: 9999999999 };
-    let f32_box: Box<f32> = move Box<f32> { value: 2.5 as f32 };
-    let f64_box: Box<f64> = move Box<f64> { value: 3.14159 };
-    let bool_box: Box<bool> = move Box<bool> { value: false };
-    let char_box: Box<char> = move Box<char> { value: 'Z' };
-    let str_box: Box<String> = move Box<String> { value: "world" };
-    core::cli::println(move "String::concat"(move "i32: ", move i32_box.value."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "i64: ", move i64_box.value."i64::to_string"()));
-    core::cli::println(move "String::concat"(move "f32: ", move f32_box.value."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "f64: ", move f64_box.value."f64::to_string"()));
+    let __sroa_f32_box_value: f32 = 2.5 as f32;
+    let __sroa_str_box_value: String = move "world";
+    core::cli::println(move "String::concat"(move "i32: ", move 42."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "i64: ", move 9999999999."i64::to_string"()));
+    core::cli::println(move "String::concat"(move "f32: ", move __sroa_f32_box_value."f32::to_string"()));
+    core::cli::println(move "String::concat"(move "f64: ", move 3.14159."f64::to_string"()));
     core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_0: {
-        let self: bool = bool_box.value;
-        break __inline_bool__to_string_0: if self {
+        break __inline_bool__to_string_0: if false {
             "true";
         } else {
             "false";
         };
     }));
-    core::cli::println(move "String::concat"(move "char: ", move char_box.value."char::to_string"()));
-    core::cli::println(move "String::concat"(move "str: ", str_box.value));
+    core::cli::println(move "String::concat"(move "char: ", move 'Z'."char::to_string"()));
+    core::cli::println(move "String::concat"(move "str: ", __sroa_str_box_value));
 }
 

@@ -15,11 +15,11 @@
 
 fn run() with Stdout {
     let mut arr: Array<i32> = move [10, 20, 30];
-    let r: Box<i32> = move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1) };
-    core::cli::println(move "String::concat"(move "ref element: ", move r.value."i32::to_string"()));
+    let __sroa_r_value: i32 = arr."Array<i32>^IndexValue::index_value"(1);
+    core::cli::println(move "String::concat"(move "ref element: ", move __sroa_r_value."i32::to_string"()));
     arr."Array<i32>^IndexAssign::index_assign"(1, 999);
     core::cli::println(move "String::concat"(move "arr[1]: ", move arr."Array<i32>^IndexValue::index_value"(1)."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "ref still: ", move r.value."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "ref still: ", move __sroa_r_value."i32::to_string"()));
 }
 
 fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {

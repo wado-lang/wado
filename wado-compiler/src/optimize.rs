@@ -4,6 +4,7 @@
 //! - Dead Code Elimination (DCE) via `optimize_dce` module
 //! - Function inlining via `optimize_inline` module
 //! - Reference elimination via `optimize_ref_elim` module
+//! - Scalar Replacement of Aggregates (SROA) via `optimize_sroa` module
 //! - Copy propagation via `optimize_copy_prop` module
 //! - Constant folding via `optimize_const_fold` module
 //! - Loop-Invariant Code Motion (LICM) via `optimize_licm` module
@@ -26,6 +27,7 @@ struct OptConfig {
 use crate::optimize_licm::apply_licm;
 use crate::optimize_ref_elim::eliminate_unnecessary_refs;
 use crate::optimize_rewrite::{collect_value_copy_types, insert_moves};
+use crate::optimize_sroa::scalar_replace_aggregates;
 use crate::project::Project;
 
 /// Optimization level for the compiler.
@@ -147,6 +149,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
 /// Each iteration runs the full optimization pipeline:
 /// - Function inlining
 /// - Reference elimination
+/// - Scalar Replacement of Aggregates (SROA)
 /// - Copy propagation
 /// - Constant folding
 /// - Loop-invariant code motion (LICM)
@@ -158,6 +161,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         let mut changed = false;
         changed |= inline_functions(project, config.inline_threshold);
         changed |= eliminate_unnecessary_refs(project);
+        changed |= scalar_replace_aggregates(project);
         changed |= propagate_copies(project);
         changed |= fold_constants(project);
         changed |= apply_licm(project);

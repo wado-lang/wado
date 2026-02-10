@@ -94,6 +94,7 @@ pub mod optimize_inline;
 pub mod optimize_licm;
 pub mod optimize_ref_elim;
 pub mod optimize_rewrite;
+pub mod optimize_sroa;
 pub mod parser;
 pub mod project;
 pub mod resolver;

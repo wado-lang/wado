@@ -16,15 +16,16 @@ struct Person {
 }
 
 fn run() with Stdout {
-    let p: Person = move Person { name: "Alice", age: 30, city: "Tokyo" };
+    let __sroa_p_name: String = move "Alice";
+    let __sroa_p_city: String = move "Tokyo";
     core::cli::println(move "String::concat"(move "Name: ", __inline_Person_Named__name_0: {
-        break __inline_Person_Named__name_0: p.name;
+        break __inline_Person_Named__name_0: __sroa_p_name;
     }));
     core::cli::println(move "String::concat"(move "Age: ", move __inline_Person_Aged__age_1: {
-        break __inline_Person_Aged__age_1: p.age;
+        break __inline_Person_Aged__age_1: 30;
     }."i32::to_string"()));
     core::cli::println(move "String::concat"(move "Location: ", __inline_Person_Located__location_2: {
-        break __inline_Person_Located__location_2: p.city;
+        break __inline_Person_Located__location_2: __sroa_p_city;
     }));
 }
 

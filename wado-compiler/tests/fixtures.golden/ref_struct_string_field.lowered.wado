@@ -15,15 +15,16 @@ struct User {
 }
 
 fn run() with Stdout {
-    let mut u: User = move User { name: "Alice", age: 30 };
-    core::cli::println(move "String::concat"(move "String::concat"(u.name, move ", "), move u.age."i32::to_string"()));
+    let mut __sroa_u_name: String = move "Alice";
+    let mut __sroa_u_age: i32 = 30;
+    core::cli::println(move "String::concat"(move "String::concat"(__sroa_u_name, move ", "), move __sroa_u_age."i32::to_string"()));
     __inline_rename_0: {
         let new_name: String = move "Bob";
-        u.name = new_name;
+        __sroa_u_name = new_name;
     };
     __inline_birthday_1: {
-        u.age = (u.age + 1);
+        __sroa_u_age = (__sroa_u_age + 1);
     };
-    core::cli::println(move "String::concat"(move "String::concat"(u.name, move ", "), move u.age."i32::to_string"()));
+    core::cli::println(move "String::concat"(move "String::concat"(__sroa_u_name, move ", "), move __sroa_u_age."i32::to_string"()));
 }
 

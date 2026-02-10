@@ -19,14 +19,15 @@ struct Tweet {
 }
 
 fn run() with Stdout {
-    let a: Article = move Article { headline: "Breaking News", content: "Something happened" };
+    let __sroa_a_headline: String = move "Breaking News";
+    let __sroa_a_content: String = move "Something happened";
     core::cli::println(__inline_Article_Summary__summary_0: {
-        break __inline_Article_Summary__summary_0: "String::concat"(move "String::concat"(a.headline, move " - "), a.content);
+        break __inline_Article_Summary__summary_0: "String::concat"(move "String::concat"(__sroa_a_headline, move " - "), __sroa_a_content);
     });
-    let t: Tweet = move Tweet { text: "Hello world" };
+    let __sroa_t_text: String = move "Hello world";
     core::cli::println(__inline_Tweet_Summary__summary_1: {
         break __inline_Tweet_Summary__summary_1: "String::concat"(move "Title: ", __inline_Tweet_Summary__title_0: {
-            break __inline_Tweet_Summary__title_0: t.text;
+            break __inline_Tweet_Summary__title_0: __sroa_t_text;
         });
     });
 }
