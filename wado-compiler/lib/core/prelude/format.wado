@@ -123,7 +123,7 @@ impl Formatter {
     }
 
     /// Write raw bytes from linear memory, applying width/alignment padding.
-    /// Used for values where sign is already embedded (e.g., floats).
+    /// Used only for values produced by bundled Wasm functions (e.g., f64_to_buffer).
     pub fn write_from_memory(&mut self, ptr: i32, len: i32) {
         if self.width <= 0 || len >= self.width {
             self.buf.internal_append_from_memory(ptr, len);
@@ -138,11 +138,13 @@ impl Formatter {
         self.pad(s);
     }
 
-    /// Write an integer value with sign and optional prefix, applying all format options.
-    /// Digits are read from linear memory at `digit_ptr` with length `digit_len`.
-    /// `is_negative` - whether the original number was negative.
-    /// `prefix` - alternate form prefix like "0x", "0b", "0o" (empty if not applicable).
-    pub fn write_int(&mut self, is_negative: bool, prefix: String, digit_ptr: i32, digit_len: i32) {
+    /// Prepare the output buffer for integer digits.
+    ///
+    /// Writes sign, prefix, and any padding/fill, then reserves `digit_count`
+    /// uninitialised bytes and returns their byte-offset inside `buf`.
+    /// The caller **must** fill exactly `digit_count` bytes (backwards) via
+    /// `buf.internal_raw_bytes()` at the returned offset.
+    pub fn prepare_int_write(&mut self, is_negative: bool, prefix: String, digit_count: i32) -> i32 {
         let mut sign = "";
         if is_negative {
             sign = "-";
@@ -152,32 +154,49 @@ impl Formatter {
 
         let sign_len = sign.len();
         let prefix_len = prefix.len();
-        let content_len = sign_len + prefix_len + digit_len;
+        let content_len = sign_len + prefix_len + digit_count;
 
         if self.width <= 0 || content_len >= self.width {
-            // No padding needed — write directly (no intermediate GC objects)
+            // No padding — write sign/prefix, reserve digit area
             if sign_len > 0 { self.buf.append(sign); }
             if prefix_len > 0 { self.buf.append(prefix); }
-            self.buf.internal_append_from_memory(digit_ptr, digit_len);
-            return;
+            return self.buf.internal_reserve_uninit(digit_count);
         }
 
-        // Padding is needed
         let padding = self.width - content_len;
 
         if self.zero_pad {
-            // Zero padding: sign + prefix + zeros + digits
+            // sign + prefix + zeros + [digits]
             if sign_len > 0 { self.buf.append(sign); }
             if prefix_len > 0 { self.buf.append(prefix); }
             self.write_char_n('0', padding);
-            self.buf.internal_append_from_memory(digit_ptr, digit_len);
+            return self.buf.internal_reserve_uninit(digit_count);
+        }
+
+        let align = self.align;
+        if align matches { Left } {
+            // [sign prefix digits] [fill...]
+            if sign_len > 0 { self.buf.append(sign); }
+            if prefix_len > 0 { self.buf.append(prefix); }
+            let offset = self.buf.internal_reserve_uninit(digit_count);
+            self.write_char_n(self.fill, padding);
+            return offset;
+        } else if align matches { Center } {
+            // [fill...] [sign prefix digits] [fill...]
+            let left_pad = padding / 2;
+            let right_pad = padding - left_pad;
+            self.write_char_n(self.fill, left_pad);
+            if sign_len > 0 { self.buf.append(sign); }
+            if prefix_len > 0 { self.buf.append(prefix); }
+            let offset = self.buf.internal_reserve_uninit(digit_count);
+            self.write_char_n(self.fill, right_pad);
+            return offset;
         } else {
-            // Regular fill/align — build content string for alignment
-            let mut content = String::with_capacity(content_len);
-            if sign_len > 0 { content.append(sign); }
-            if prefix_len > 0 { content.append(prefix); }
-            content.internal_append_from_memory(digit_ptr, digit_len);
-            self.pad(content);
+            // Right: [fill...] [sign prefix digits]
+            self.write_char_n(self.fill, padding);
+            if sign_len > 0 { self.buf.append(sign); }
+            if prefix_len > 0 { self.buf.append(prefix); }
+            return self.buf.internal_reserve_uninit(digit_count);
         }
     }
 }

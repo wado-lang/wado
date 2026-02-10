@@ -103,6 +103,20 @@ impl String {
         self.used = new_used;
     }
 
+    /// Internal: Reserve `n` uninitialised bytes at the end of the string (stdlib use only).
+    /// Returns the byte offset where the caller must write exactly `n` valid UTF-8 bytes
+    /// into `internal_raw_bytes()`. The string's length is advanced immediately, so the
+    /// caller MUST fill all `n` bytes before the string is observed.
+    pub fn internal_reserve_uninit(&mut self, n: i32) -> i32 {
+        let new_used = self.used + n;
+        if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
+            self.grow(new_used);
+        }
+        let start = self.used;
+        self.used = new_used;
+        return start;
+    }
+
     /// Append another string to this string
     /// Grows the string if necessary (O(1) amortized)
     pub fn append(&mut self, other: String) {
