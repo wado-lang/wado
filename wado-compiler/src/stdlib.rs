@@ -58,7 +58,7 @@ pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wad
 /// Located in prelude/ subdirectory and imported by prelude.wado
 pub const CORE_PRELUDE_PRIMITIVES: &str = include_str!("../lib/core/prelude/primitives.wado");
 
-/// Embedded source for core:prelude/format (Alignment, `FormatSpec`, Formatter)
+/// Embedded source for core:prelude/format (Alignment, Formatter)
 /// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_FORMAT: &str = include_str!("../lib/core/prelude/format.wado");
 
