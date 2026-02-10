@@ -1,0 +1,25 @@
+// Test: Option<i32> as struct field
+// Currently fails with Wasm validation error: "expected i32, found (ref (exact $type))"
+// because codegen doesn't properly handle nullable i32 in struct fields.
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    width: Option<i32>,
+}
+
+export fn run() with Stdout {
+    let c = Config { width: Option::<i32>::Some(42) };
+    if let Some(w) = c.width {
+        println(`width: {w}`);
+    }
+
+    let d = Config { width: null };
+    if let Some(w) = d.width {
+        println("should not print");
+    } else {
+        println("no width");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "width: 42\nno width\n"}
