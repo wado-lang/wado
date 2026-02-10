@@ -21,7 +21,7 @@ This WEP defines the trait system and Formatter infrastructure that backs these 
 
 ### Formatter Infrastructure
 
-Format traits write to a `Formatter` object that holds format options and an output buffer. This design follows Rust's `std::fmt` approach, adapted for Wado's semantics.
+Format traits write to a `Formatter` object that holds format options and a reference to the output buffer. The `Formatter` does not own its buffer; it writes directly into the caller's `&mut String`. This avoids intermediate allocations and follows Rust's `std::fmt::Formatter` design.
 
 ```wado
 /// Text alignment for padding
@@ -42,20 +42,20 @@ struct FormatSpec {
     zero_pad: bool,
 }
 
-/// Formatter that accumulates formatted output
+/// Formatter that writes directly into a referenced output buffer
 struct Formatter {
     spec: FormatSpec,
-    buf: String,
+    buf: &mut String,
 }
 
 impl Formatter {
-    fn write_str(&mut self, s: String);
+    fn new(buf: &mut String, spec: FormatSpec) -> Formatter;
+    fn write_str(&mut self, s: &String);
     fn write_char(&mut self, c: char);
     fn width(&self) -> Option<i32>;
     fn precision(&self) -> Option<i32>;
     fn alternate(&self) -> bool;
     fn sign_plus(&self) -> bool;
-    fn finish(&mut self) -> String;
 }
 ```
 

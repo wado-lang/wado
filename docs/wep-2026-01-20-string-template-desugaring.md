@@ -2,7 +2,7 @@
 
 ## Context
 
-String templates (`` `Hello, {name}!` ``) are currently lowered in the resolver to chained `string_concat` calls. This approach has limitations:
+String templates (`` `Hello, {name}!` ``) are currently lowered in the resolver to chained `String::concat` calls. This approach has limitations:
 
 1. No support for tagged templates (`sql`...``, `String::raw`...``)
 2. Format specifiers are not fully implemented
@@ -12,54 +12,49 @@ String templates (`` `Hello, {name}!` ``) are currently lowered in the resolver 
 We need a unified desugaring strategy that:
 
 - Supports tagged templates like JavaScript
-- Provides both cooked and raw string literals
 - Enables `String::raw` and `String::base64` as regular functions
-- Requires compile-time tuple enumeration for heterogeneous values
+- Requires compile-time tuple enumeration for heterogeneous values (see [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md))
 
 ## Decision
 
-### TemplateStrings Structure
+### String Parts Types
 
-All template literals produce a `TemplateStrings` struct containing both processed (cooked) and unprocessed (raw) string parts:
+Tag function signatures determine which form of string parts is provided. Two newtype aliases are defined:
 
 ```wado
-struct TemplateStrings {
-    cooked: Array<String>,  // Escape sequences processed (\n → newline)
-    raw: Array<String>,     // Escape sequences preserved (\n → "\\n")
-}
+type CookedStrings = Array<String>;  // Escape sequences processed (\n -> newline)
+type RawStrings = Array<String>;     // Escape sequences preserved (\n -> "\\n")
 ```
 
-Invariant: `cooked.len() == raw.len() == values.len() + 1`
+The compiler inspects the tag function's first parameter type and generates only the needed form:
 
-### Standard Template Desugaring
+| First parameter type | What the compiler emits | Use case              |
+| -------------------- | ----------------------- | --------------------- |
+| `CookedStrings`      | Cooked strings only     | Most tagged templates |
+| `RawStrings`         | Raw strings only        | `String::raw`         |
+
+Untagged templates are special-cased by the compiler and do not construct any array (see below).
+
+Invariant: `strings.len() == values.len() + 1`
+
+### Untagged Template Desugaring
+
+Untagged templates are special-cased by the compiler for efficiency. No `CookedStrings` array or values tuple is constructed.
 
 ```wado
 `Hello, {name}! You are {age}.`
 ```
 
-Desugars to:
+The compiler directly emits an efficient sequence using a mutable string and labeled block expression. All interpolations go through `Formatter` + `Display::fmt` (see [Format Traits](./wep-2026-02-01-format-traits.md)) for predictable behavior, regardless of whether a format specifier is present. `Formatter` wraps `&mut String` and writes directly into the output buffer with no intermediate allocations.
 
 ```wado
-{
-    let __strings = TemplateStrings {
-        cooked: ["Hello, ", "! You are ", "."],
-        raw: ["Hello, ", "! You are ", "."],
-    };
-    let __values = [name, age];
-    __default_template__(__strings, __values)
-}
-```
-
-Where `__default_template__` is implemented as:
-
-```wado
-fn __default_template__<T>(strings: TemplateStrings, values: T) -> String {
-    let mut result = strings.cooked[0];
-    for let [i, v] of values.entries() {
-        result += to_string(v);
-        result += strings.cooked[i + 1];
-    }
-    return result;
+__tmpl: {
+    let mut __r = "Hello, ";
+    name.fmt(&mut Formatter::new(&mut __r, FormatSpec::default()));
+    __r.append("! You are ");
+    age.fmt(&mut Formatter::new(&mut __r, FormatSpec::default()));
+    __r.append(".");
+    __r
 }
 ```
 
@@ -72,29 +67,41 @@ sql`SELECT * FROM users WHERE id = {id} AND name = {name}`
 Desugars to:
 
 ```wado
-{
-    let __strings = TemplateStrings {
-        cooked: ["SELECT * FROM users WHERE id = ", " AND name = ", ""],
-        raw: ["SELECT * FROM users WHERE id = ", " AND name = ", ""],
-    };
+__tmpl: {
+    let __strings = CookedStrings::from(["SELECT * FROM users WHERE id = ", " AND name = ", ""]);
     let __values = [id, name];
     sql(__strings, __values)
 }
 ```
 
-The tag function receives the raw values (not stringified), enabling type-safe query building.
+The tag function is a generic function that receives the values as a tuple, preserving each value's original type:
+
+```wado
+fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
+    let mut query = strings[0];
+    let mut params: Array<SqlParam> = [];
+    for let [i, v] of values.enumerate() {
+        params.append(v.to_sql_param());
+        query.append("?");
+        query.append(strings[i + 1]);
+    }
+    return SqlQuery { query, params };
+}
+```
+
+The `for let [i, v] of values.enumerate()` is compile-time tuple enumeration. See [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md) for the full specification.
 
 ### `String::raw` Implementation
 
-`String::raw` is a regular static method, not special parser syntax:
+`String::raw` is a regular static method. Its first parameter is `RawStrings`, so the compiler emits raw (unescaped) strings:
 
 ```wado
 impl String {
-    fn raw<T>(strings: TemplateStrings, values: T) -> String {
-        let mut result = strings.raw[0];  // Uses raw, not cooked
-        for let [i, v] of values.entries() {
-            result += to_string(v);
-            result += strings.raw[i + 1];
+    fn raw<Values>(strings: RawStrings, values: Values) -> String {
+        let mut result = strings[0];
+        for let [i, v] of values.enumerate() {
+            v.fmt(&mut Formatter::new(&mut result, FormatSpec::default()));
+            result.append(strings[i + 1]);
         }
         return result;
     }
@@ -104,20 +111,20 @@ impl String {
 Usage:
 
 ```wado
-String::raw`Hello\nWorld`     // → "Hello\\nWorld" (12 chars, not 11)
-String::raw`Path: {path}\n`   // → "Path: " + to_string(path) + "\\n"
+String::raw`Hello\nWorld`     // -> "Hello\\nWorld" (12 chars, not 11)
+String::raw`Path: {path}\n`   // -> "Path: " + display(path) + "\\n"
 ```
 
 ### `String::base64` Implementation
 
-Compile-time base64 decoding:
+Compile-time base64 decoding. Uses `CookedStrings` since there are no escape sequences to preserve:
 
 ```wado
 impl String {
-    fn base64(strings: TemplateStrings, values: []) -> Array<u8> {
+    fn base64(strings: CookedStrings, values: []) -> Array<u8> {
         // values must be empty (no interpolation allowed)
         // Decoded at compile time
-        return __builtin_base64_decode__(strings.raw[0]);
+        return __builtin_base64_decode__(strings[0]);
     }
 }
 ```
@@ -125,14 +132,30 @@ impl String {
 Usage:
 
 ```wado
-let bytes = String::base64`SGVsbG8=`;  // → [72, 101, 108, 108, 111]
+let bytes = String::base64`SGVsbG8=`;  // -> [72, 101, 108, 108, 111]
 ```
 
 Compile error if interpolation is present.
 
 ### Format Specifiers
 
-When a format specifier is present, the value is stringified before being passed to the tag:
+All interpolations use the `Formatter` infrastructure (see [Format Traits](./wep-2026-02-01-format-traits.md)). When a format specifier is present, it becomes a custom `FormatSpec`; otherwise `FormatSpec::default()` is used. This ensures consistent behavior regardless of whether a specifier is present.
+
+```wado
+`Pi is {pi:.2}`
+```
+
+Desugars to:
+
+```wado
+__tmpl: {
+    let mut __r = "Pi is ";
+    pi.fmt(&mut Formatter::new(&mut __r, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
+    __r
+}
+```
+
+For tagged templates, format-specifier interpolations are pre-formatted and passed as strings in the values tuple:
 
 ```wado
 fmt`Value: {pi:.2}`
@@ -141,20 +164,16 @@ fmt`Value: {pi:.2}`
 Desugars to:
 
 ```wado
-{
-    let __strings = TemplateStrings { ... };
-    let __values = [__format__(pi, ".2")];  // Pre-formatted
+__tmpl: {
+    let __strings = CookedStrings::from(["Value: ", ""]);
+    let mut __formatted = "";
+    pi.fmt(&mut Formatter::new(&mut __formatted, FormatSpec { precision: Option::<i32>::Some(2), ..FormatSpec::default() }));
+    let __values = [__formatted];
     fmt(__strings, __values)
 }
 ```
 
-For standard templates, format specifiers are applied during stringification:
-
-```wado
-`Pi is {pi:.2}`
-// → __default_template__(strings, [pi])
-// with format spec passed to to_string or dedicated formatter
-```
+Note: format specifiers are resolved at the call site before the tag function receives them. The tag function sees pre-formatted strings in the values tuple.
 
 ### Brace Escaping
 
@@ -167,70 +186,7 @@ For standard templates, format specifiers are applied during stringification:
 // values = [value]
 ```
 
-Lexer change required: `{{` → `{`, `}}` → `}` in template strings.
-
-### Compile-Time Tuple Enumeration
-
-`for-of` yields values only for both Array and Tuple, consistent with JavaScript and Rust. To get `[index, value]` pairs, use `.entries()`:
-
-```wado
-// Array (runtime)
-for let v of array { }              // value only
-for let [i, v] of array.entries() { }  // [index, value]
-
-// Tuple (compile-time unrolling)
-for let v of tuple { }              // value only
-for let [i, v] of tuple.entries() { }  // [index, value]
-```
-
-Key difference:
-
-- **Array `.entries()`**: Runtime method, returns `Iterator<[i32, T]>`
-- **Tuple `.entries()`**: Compile-time method, triggers loop unrolling with `[i, v]` pairs
-
-Expansion example:
-
-```wado
-let t: [i32, String, f64] = [1, "hi", 3.14];
-for let [i, v] of t.entries() {
-    println(`{i}: {v}`);
-}
-```
-
-Becomes:
-
-```wado
-{
-    let i = 0;
-    let v = t.0;  // v: i32
-    println(`{i}: {v}`);
-}
-{
-    let i = 1;
-    let v = t.1;  // v: String
-    println(`{i}: {v}`);
-}
-{
-    let i = 2;
-    let v = t.2;  // v: f64
-    println(`{i}: {v}`);
-}
-```
-
-Value-only iteration:
-
-```wado
-for let v of tuple {
-    // v changes type each iteration (comptime unrolling)
-}
-```
-
-Constraints:
-
-- Tuple `for-of` and `.entries()` are compile-time unrolled
-- Loop body must be valid for each element type (checked after expansion)
-- `break` and `continue` are not allowed in tuple iteration (compile error)
-- Index from `.entries()` is a compile-time constant, usable in array/tuple indexing
+Lexer change required: `{{` -> `{`, `}}` -> `}` in template strings.
 
 ### Edge Cases
 
@@ -238,44 +194,11 @@ Constraints:
 | ----------------------- | ----------------------- | ------------------------------ |
 | Empty template          | `` ` ` ``               | `""`                           |
 | No interpolation        | `` `hello` ``           | `"hello"`                      |
-| Only interpolation      | `` `{x}` ``             | `to_string(x)`                 |
+| Only interpolation      | `` `{x}` ``             | `Display::fmt` of x            |
 | Adjacent interpolations | `` `{a}{b}` ``          | `strings = ["", "", ""]`       |
 | Escaped braces          | `` `{{x}}` ``           | `"{x}"` (literal)              |
 | Nested template         | `` `outer {`inner`}` `` | Inner template evaluated first |
 | Multiline               | Preserved               | Newlines in cooked/raw         |
-
-## Implementation Plan
-
-### Phase 1: Foundation
-
-- [ ] Add `{{` and `}}` escape support in lexer
-- [ ] Store both cooked and raw strings in `TemplatePart::String`
-- [ ] Define `TemplateStrings` struct in `core:internal`
-
-### Phase 2: Desugaring
-
-- [ ] Implement template desugaring in `desugar.rs`
-- [ ] Generate `TemplateStrings` literal and values tuple
-- [ ] Call `__default_template__` for untagged templates
-
-### Phase 3: Compile-Time Tuple Enumeration
-
-- [ ] Implement `for let v of tuple` (value-only, comptime unrolling)
-- [ ] Implement `tuple.entries()` comptime method
-- [ ] Implement `for let [i, v] of tuple.entries()` (index+value, comptime unrolling)
-- [ ] Implement loop unrolling in desugar phase
-- [ ] Type-check each unrolled block independently
-
-### Phase 4: Tagged Templates
-
-- [ ] Implement `String::raw` using tuple enumeration
-- [ ] Implement `String::base64` with compile-time decoding
-- [ ] Add format specifier handling
-
-### Phase 5: Optimization
-
-- [ ] Constant-fold templates with only literals
-- [ ] Inline small templates without function call overhead
 
 ## Consequences
 
@@ -285,24 +208,23 @@ Constraints:
 - Tagged templates enable DSLs (SQL, regex, etc.)
 - `String::raw` works naturally without parser special-casing
 - Type-safe interpolation values in tagged templates
-- Compile-time tuple enumeration has broader applications
-- Consistent `for-of` semantics with JavaScript/Rust (value only, `.entries()` for index+value)
+- Signature-based string selection avoids unnecessary wasm bloat (no unused raw/cooked arrays)
 
 ### Negative
 
-- Compile-time tuple enumeration adds complexity to the compiler
-- Tuple `.entries()` as a comptime method is a novel concept requiring careful design
-- TemplateStrings struct adds runtime overhead (two arrays)
+- Depends on compile-time tuple enumeration (separate WEP)
 - Breaking change if existing code relies on current lowering
+- Two newtype aliases (`CookedStrings`, `RawStrings`) for conceptually similar data
 
 ### Risks
 
 - Compile-time tuple enumeration may interact unexpectedly with other features
-- Performance of unrolled loops for large tuples needs monitoring
+- Tag function signature inspection adds complexity to the compiler
 
 ## Related WEPs
 
-- [Tagged Template Literals for Compile-Time Execution](./wep-2026-01-10-tagged-template-literals.md): Covers compile-time evaluation of tag functions. This WEP provides the desugaring mechanism that feeds into that compile-time execution model.
+- [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md): Required for iterating over heterogeneous values in tag functions
+- [Tagged Template Literals for Compile-Time Execution](./wep-2026-01-10-tagged-template-literals.md): Covers compile-time evaluation of tag functions
 
 ## References
 
