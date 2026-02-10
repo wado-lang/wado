@@ -1,11 +1,16 @@
-// Test: uppercase global constants in if conditions should not be
-// parsed as struct literals. MY_CONST is SCREAMING_SNAKE_CASE,
-// not UpperCamelCase, so `MY_CONST {` should NOT be a struct literal.
+// Test: identifiers followed by `{` in expression context should only be
+// parsed as struct literals when the brace content looks like struct fields
+// (e.g., `{ field: value }` or `{ field, ... }`), regardless of naming
+// convention. `NAME {` where the block contains statements must parse as
+// an expression followed by a block, not as a struct literal.
 
 use { println, Stdout } from "core:cli";
 
 global MY_CONST: i32 = 0;
 global ANOTHER: i32 = 1;
+
+// Also test with UpperCamelCase names that are NOT structs
+global TypeLike: i32 = 2;
 
 fn dispatch(x: i32) -> i32 {
     let mut result = -1;
@@ -13,6 +18,8 @@ fn dispatch(x: i32) -> i32 {
         result = 100;
     } else if x == ANOTHER {
         result = 200;
+    } else if x == TypeLike {
+        result = 300;
     }
     return result;
 }
@@ -21,7 +28,8 @@ export fn run() with Stdout {
     println(`{dispatch(0)}`);
     println(`{dispatch(1)}`);
     println(`{dispatch(2)}`);
+    println(`{dispatch(3)}`);
 }
 
 __DATA__
-{"stdout": "100\n200\n-1\n"}
+{"stdout": "100\n200\n300\n-1\n"}

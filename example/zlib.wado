@@ -1,6 +1,21 @@
 // zlib port to Wado
-// Original: Copyright (C) 1995-2025 Jean-loup Gailly and Mark Adler
-// Port: Ported to Wado programming language
+//
+// Original: zlib 1.3.1 - https://github.com/madler/zlib
+// Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler
+// License: zlib License (see https://github.com/madler/zlib/blob/develop/LICENSE)
+//
+// This is a pure Wado port of the zlib compression library. It implements:
+//   - Adler-32 and CRC-32 checksums
+//   - DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
+//   - DEFLATE deflate (compression) with fixed Huffman codes and LZ77 matching
+//   - zlib format wrapper (header + compressed data + Adler-32 trailer)
+//
+// Usage - Compression:
+//   let input: Array<u8> = [...];
+//   let compressed = zlib_compress(&input);
+//
+// Usage - Decompression:
+//   let decompressed = inflate_zlib(&compressed);
 
 use { println, Stdout } from "core:cli";
 

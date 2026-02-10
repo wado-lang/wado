@@ -23,6 +23,11 @@ pub struct Parser {
     /// Tracks when we've split a `GtGt` into two Gt tokens for nested generics.
     /// When true, the next `expect_gt` call should succeed without consuming a token.
     pending_gt: bool,
+    /// When true, `Name {` is not parsed as a struct literal. This is set in
+    /// expression contexts where a block `{` follows the expression (e.g.,
+    /// if/while/match conditions), preventing ambiguity between struct literals
+    /// and blocks.
+    restrict_struct_literals: bool,
     /// Shebang line, passed from the lexer.
     shebang: Option<String>,
     /// Content of the __DATA__ section, passed from the lexer.
@@ -56,6 +61,7 @@ impl Parser {
             tokens,
             pos: 0,
             pending_gt: false,
+            restrict_struct_literals: false,
             shebang: None,
             data_section: None,
         }
@@ -71,23 +77,50 @@ impl Parser {
             tokens,
             pos: 0,
             pending_gt: false,
+            restrict_struct_literals: false,
             shebang,
             data_section,
         }
     }
 
-    /// Check if a name looks like a primitive type name (e.g., i32, u64, f32, i128, u128).
-    /// This allows struct literals with these names: `u128 { low: 0, high: 0 }`
-    fn looks_like_primitive_type(name: &str) -> bool {
-        if name.len() < 2 {
+    /// Parse an expression with struct literals restricted. Used in contexts
+    /// where the expression is followed by a block `{` (if/while/match conditions).
+    fn parse_expr_no_struct_literal(&mut self) -> ParseResult<Expr> {
+        let saved = self.restrict_struct_literals;
+        self.restrict_struct_literals = true;
+        let result = self.parse_expr();
+        self.restrict_struct_literals = saved;
+        result
+    }
+
+    /// Check if `Name {` should be parsed as a struct literal by looking at
+    /// the content inside the braces. This avoids relying on naming conventions
+    /// to distinguish struct literals from blocks.
+    ///
+    /// Returns true if the current `{` token is followed by content that looks
+    /// like struct field syntax: `{ field: ... }`, `{ field, ... }`, `{ field }`,
+    /// or `{ }` (empty struct).
+    fn looks_like_struct_literal_content(&self) -> bool {
+        let after_brace = &self.peek_nth(1).kind;
+
+        // Empty struct: `Name { }`
+        if matches!(after_brace, TokenKind::RBrace) {
+            return true;
+        }
+
+        // First token must be a valid field name (identifier or keyword)
+        if after_brace.as_ident_name().is_none() && after_brace.as_keyword_str().is_none() {
             return false;
         }
-        let mut chars = name.chars();
-        match chars.next() {
-            Some('i' | 'u' | 'f') => {
-                let rest: String = chars.collect();
-                !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+
+        // Check what follows the field name
+        match &self.peek_nth(2).kind {
+            // `{ field: value }` - but not `{ field:: ... }`
+            TokenKind::Colon => {
+                !matches!(&self.peek_nth(3).kind, TokenKind::Colon)
             }
+            // `{ field, ... }` or `{ field }` - shorthand
+            TokenKind::Comma | TokenKind::RBrace => true,
             _ => false,
         }
     }
@@ -998,7 +1031,7 @@ impl Parser {
                 let pattern_span = self.peek().span;
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_expr()?;
+                let expr = self.parse_expr_no_struct_literal()?;
                 let span = pattern_span.merge(&expr.span());
                 condition = Condition::Pattern {
                     pattern,
@@ -1011,11 +1044,11 @@ impl Parser {
                 let let_stmt = self.parse_let_stmt_after_let()?;
                 self.expect(&TokenKind::Semicolon)?;
                 init = Some(Box::new(let_stmt));
-                condition = Condition::Expr(self.parse_expr()?);
+                condition = Condition::Expr(self.parse_expr_no_struct_literal()?);
             }
         } else {
             // No 'let', just a regular condition expression
-            condition = Condition::Expr(self.parse_expr()?);
+            condition = Condition::Expr(self.parse_expr_no_struct_literal()?);
         }
 
         let then_block = self.parse_block()?;
@@ -1123,7 +1156,7 @@ impl Parser {
                 let pattern_span = self.peek().span;
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_expr()?;
+                let expr = self.parse_expr_no_struct_literal()?;
                 let span = pattern_span.merge(&expr.span());
                 Condition::Pattern {
                     pattern,
@@ -1137,7 +1170,7 @@ impl Parser {
                 });
             }
         } else {
-            Condition::Expr(self.parse_expr()?)
+            Condition::Expr(self.parse_expr_no_struct_literal()?)
         };
 
         let body = self.parse_block()?;
@@ -1180,7 +1213,7 @@ impl Parser {
                 if matches!(self.peek().kind, TokenKind::Of) {
                     // This is a for-of loop
                     self.advance(); // consume 'of'
-                    let iterable = self.parse_expr()?;
+                    let iterable = self.parse_expr_no_struct_literal()?;
                     let body = self.parse_block()?;
                     let span = start_span.merge(&body.span);
 
@@ -1228,7 +1261,7 @@ impl Parser {
                 let pattern_span = self.peek().span;
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_expr()?;
+                let expr = self.parse_expr_no_struct_literal()?;
                 let span = pattern_span.merge(&expr.span());
                 Some(Condition::Pattern {
                     pattern,
@@ -1242,7 +1275,7 @@ impl Parser {
                 });
             }
         } else {
-            Some(Condition::Expr(self.parse_expr()?))
+            Some(Condition::Expr(self.parse_expr_no_struct_literal()?))
         };
         self.expect(&TokenKind::Semicolon)?;
 
@@ -1257,7 +1290,7 @@ impl Parser {
         } else if self.check(&TokenKind::LBrace) {
             None
         } else {
-            Some(self.parse_expr()?)
+            Some(self.parse_expr_no_struct_literal()?)
         };
 
         if has_parens {
@@ -1890,7 +1923,11 @@ impl Parser {
                 TokenKind::LParen => {
                     let callee_span = expr.span();
                     self.advance();
+                    // Inside function call arguments, struct literals are allowed
+                    let saved = self.restrict_struct_literals;
+                    self.restrict_struct_literals = false;
                     let (args, has_trailing_comma) = self.parse_arg_list()?;
+                    self.restrict_struct_literals = saved;
                     let rparen_span = self.peek().span;
                     self.expect(&TokenKind::RParen)?;
                     let merged_span = callee_span.merge(&rparen_span);
@@ -1913,7 +1950,10 @@ impl Parser {
                         let callee_span = expr.span();
                         let type_args = self.parse_call_type_args()?;
                         self.expect(&TokenKind::LParen)?;
+                        let saved = self.restrict_struct_literals;
+                        self.restrict_struct_literals = false;
                         let (args, has_trailing_comma) = self.parse_arg_list()?;
+                        self.restrict_struct_literals = saved;
                         let rparen_span = self.peek().span;
                         self.expect(&TokenKind::RParen)?;
                         let merged_span = callee_span.merge(&rparen_span);
@@ -2069,32 +2109,36 @@ impl Parser {
         if let Some(name) = self.peek_kind().as_ident_name() {
             let name = name.to_string();
             self.advance();
-            // A name is considered a type name if:
-            // 1. It starts with uppercase (UpperCamelCase convention), OR
-            // 2. It looks like a primitive type (i32, u64, i128, u128, f32, etc.)
-            let is_type_name = (name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                && (name.len() == 1 || name.chars().any(|c| c.is_ascii_lowercase())))
-                || Self::looks_like_primitive_type(&name);
-
             // Check for qualified name (Effect::function) or static method call
             if self.check(&TokenKind::ColonColon) {
-                // Peek ahead to check if this is turbofish (::< for type args)
                 let checkpoint = self.pos;
                 self.advance(); // consume ::
 
-                if self.check(&TokenKind::Lt) && is_type_name {
-                    // This could be Type::<Args>::method() - static method on generic type
-                    // Parse type arguments
+                if self.check(&TokenKind::Lt) {
+                    // Speculatively try Type::<Args>::method() - static method
+                    // on generic type. If the parse doesn't match, backtrack.
+                    let saved_pending_gt = self.pending_gt;
                     self.advance(); // consume <
-                    let mut type_args = vec![self.parse_type()?];
-                    while self.check(&TokenKind::Comma) {
-                        self.advance();
-                        type_args.push(self.parse_type()?);
-                    }
-                    self.expect_gt()?;
 
-                    // Now expect ::method(args)
-                    if self.check(&TokenKind::ColonColon) {
+                    let mut type_args = Vec::new();
+                    let mut spec_ok = true;
+
+                    match self.parse_type() {
+                        Ok(t) => type_args.push(t),
+                        Err(_) => spec_ok = false,
+                    }
+                    while spec_ok && self.check(&TokenKind::Comma) {
+                        self.advance();
+                        match self.parse_type() {
+                            Ok(t) => type_args.push(t),
+                            Err(_) => spec_ok = false,
+                        }
+                    }
+                    if spec_ok {
+                        spec_ok = self.expect_gt().is_ok();
+                    }
+
+                    if spec_ok && self.check(&TokenKind::ColonColon) {
                         self.advance(); // consume ::
                         let method = self.consume_ident()?;
                         self.expect(&TokenKind::LParen)?;
@@ -2113,15 +2157,10 @@ impl Parser {
                             span: start_span.merge(&end_span),
                         })));
                     }
-                    // Not followed by ::method, backtrack for turbofish
+
+                    // Not a static method call on generic type, backtrack
                     self.pos = checkpoint;
-                    return Ok(Expr::Ident(IdentExpr {
-                        name,
-                        span: start_span,
-                    }));
-                } else if self.check(&TokenKind::Lt) {
-                    // Lowercase name with ::<, this is turbofish, backtrack
-                    self.pos = checkpoint;
+                    self.pending_gt = saved_pending_gt;
                     return Ok(Expr::Ident(IdentExpr {
                         name,
                         span: start_span,
@@ -2144,10 +2183,14 @@ impl Parser {
                     block,
                     span: start_span.merge(&end_span),
                 })));
-            } else if self.check(&TokenKind::LBrace) && is_type_name {
-                // Struct literal: `Point { x: 10, y: 20 }`
-                // Only parse as struct literal if name starts with uppercase
-                // (struct naming convention: UpperCamelCase)
+            } else if self.check(&TokenKind::LBrace)
+                && !self.restrict_struct_literals
+                && self.looks_like_struct_literal_content()
+            {
+                // Struct literal: `Name { field: value, ... }`
+                // Detected by looking at content inside braces, not naming convention.
+                // Restricted in contexts where a block follows the expression
+                // (e.g., if/while/match conditions) to avoid ambiguity.
                 return self.parse_struct_literal(Some(name), start_span);
             }
             return Ok(Expr::Ident(IdentExpr {
@@ -2213,14 +2256,23 @@ impl Parser {
                         span: start_span,
                     }));
                 }
+                // Inside parentheses, struct literals are always allowed
+                let saved = self.restrict_struct_literals;
+                self.restrict_struct_literals = false;
                 let expr = self.parse_expr()?;
+                self.restrict_struct_literals = saved;
                 let end_span = self.expect(&TokenKind::RParen)?.span;
                 // Update expression span to include the parentheses
                 Ok(expr.with_span(start_span.merge(&end_span)))
             }
             TokenKind::LBracket => {
                 self.advance();
-                self.parse_tuple_literal(start_span)
+                // Inside brackets, struct literals are always allowed
+                let saved = self.restrict_struct_literals;
+                self.restrict_struct_literals = false;
+                let result = self.parse_tuple_literal(start_span);
+                self.restrict_struct_literals = saved;
+                result
             }
             TokenKind::Pipe => self.parse_closure(),
             TokenKind::Or => {
@@ -2329,7 +2381,7 @@ impl Parser {
                 let pattern_span = self.peek().span;
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_expr()?;
+                let expr = self.parse_expr_no_struct_literal()?;
                 let span = pattern_span.merge(&expr.span());
                 condition = Condition::Pattern {
                     pattern,
@@ -2342,11 +2394,11 @@ impl Parser {
                 let let_stmt = self.parse_let_stmt_after_let()?;
                 self.expect(&TokenKind::Semicolon)?;
                 init = Some(Box::new(let_stmt));
-                condition = Condition::Expr(self.parse_expr()?);
+                condition = Condition::Expr(self.parse_expr_no_struct_literal()?);
             }
         } else {
             // No 'let', just a regular condition expression
-            condition = Condition::Expr(self.parse_expr()?);
+            condition = Condition::Expr(self.parse_expr_no_struct_literal()?);
         }
 
         let then_block = self.parse_block()?;
@@ -2388,8 +2440,8 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Match)?;
 
-        // Parse scrutinee expression
-        let scrutinee = self.parse_expr()?;
+        // Parse scrutinee expression (no struct literals - ambiguous with match body braces)
+        let scrutinee = self.parse_expr_no_struct_literal()?;
 
         // Expect opening brace
         self.expect(&TokenKind::LBrace)?;
