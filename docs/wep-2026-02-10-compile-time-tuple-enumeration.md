@@ -68,10 +68,10 @@ For arrays, `for let v of array` uses `IntoIterator` at runtime. For tuples, the
 
 `.enumerate()` on a tuple type is a compiler-recognized pattern, not a real method. It produces `[index, element]` pairs for compile-time enumeration. This follows Rust's naming convention for indexed iteration (`iter().enumerate()`), but applied directly to the tuple since tuples cannot produce a runtime iterator.
 
-| Receiver type | `.enumerate()` behavior | Returns |
-|---|---|---|
-| Iterator | Runtime combinator (Rust-style) | `EnumerateIter<T>` |
-| Tuple | Compile-time pseudo-method | Unrolled `[i32, T_k]` pairs |
+| Receiver type | `.enumerate()` behavior         | Returns                     |
+| ------------- | ------------------------------- | --------------------------- |
+| Iterator      | Runtime combinator (Rust-style) | `EnumerateIter<T>`          |
+| Tuple         | Compile-time pseudo-method      | Unrolled `[i32, T_k]` pairs |
 
 ### Expansion Rules
 

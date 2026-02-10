@@ -28,10 +28,10 @@ type RawStrings = Array<String>;     // Escape sequences preserved (\n -> "\\n")
 
 The compiler inspects the tag function's first parameter type and generates only the needed form:
 
-| First parameter type | What the compiler emits | Use case |
-|---|---|---|
-| `CookedStrings` | Cooked strings only | Most tagged templates |
-| `RawStrings` | Raw strings only | `String::raw` |
+| First parameter type | What the compiler emits | Use case              |
+| -------------------- | ----------------------- | --------------------- |
+| `CookedStrings`      | Cooked strings only     | Most tagged templates |
+| `RawStrings`         | Raw strings only        | `String::raw`         |
 
 Untagged templates are special-cased by the compiler and do not construct any array (see below).
 
