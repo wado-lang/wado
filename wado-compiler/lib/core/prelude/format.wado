@@ -1,0 +1,127 @@
+// Format Infrastructure
+//
+// This module defines the Formatter, FormatSpec, and Alignment types that
+// back template string format specifiers (`{x:spec}`).
+//
+// See WEP: Format Traits (wep-2026-02-01-format-traits.md)
+
+#![no_prelude]
+
+use {Display} from "core:prelude/traits.wado";
+
+// ============================================================================
+// Alignment
+// ============================================================================
+
+/// Text alignment for padding.
+pub variant Alignment {
+    /// Left-aligned: `{x:<5}` -> "42   "
+    Left,
+    /// Center-aligned: `{x:^5}` -> " 42  "
+    Center,
+    /// Right-aligned (default for numbers): `{x:>5}` -> "   42"
+    Right,
+}
+
+// ============================================================================
+// FormatSpec
+// ============================================================================
+
+/// Format specification parsed from `{expr:spec}`.
+/// Matches Rust's format syntax: `[[fill]align][sign][#][0][width][.precision]type`
+///
+/// Width and precision use -1 as sentinel for "not specified".
+pub struct FormatSpec {
+    /// Fill character for padding (default: ' ')
+    fill: char,
+    /// Text alignment mode
+    align: Alignment,
+    /// Whether to always show `+` sign for positive numbers
+    sign_plus: bool,
+    /// Whether to use alternate form (`#` flag: 0x, 0b, 0o prefixes)
+    alternate: bool,
+    /// Whether to use zero-padding (`0` flag)
+    zero_pad: bool,
+    /// Minimum field width (-1 = no minimum)
+    width: i32,
+    /// Precision for floats (decimal places) or strings (max width) (-1 = default)
+    precision: i32,
+}
+
+impl FormatSpec {
+    /// Create the default format spec (no special formatting).
+    pub fn default() -> FormatSpec {
+        return FormatSpec {
+            fill: ' ',
+            align: Alignment::Right,
+            sign_plus: false,
+            alternate: false,
+            zero_pad: false,
+            width: -1,
+            precision: -1,
+        };
+    }
+}
+
+// ============================================================================
+// Formatter
+// ============================================================================
+
+/// Formatter that writes directly into a referenced output buffer.
+/// The Formatter does not own its buffer; it writes into the caller's `&mut String`.
+/// This avoids intermediate allocations.
+pub struct Formatter {
+    /// Format specification
+    spec: FormatSpec,
+    /// Reference to the output buffer
+    buf: &mut String,
+}
+
+impl Formatter {
+    /// Create a new Formatter that writes into the given buffer with the given spec.
+    pub fn new(buf: &mut String, spec: FormatSpec) -> Formatter {
+        return Formatter { spec, buf };
+    }
+
+    /// Write a string to the output buffer.
+    pub fn write_str(&mut self, s: String) {
+        self.buf.append(s);
+    }
+
+    /// Write a single character to the output buffer.
+    pub fn write_char(&mut self, c: char) {
+        self.buf.append_char(c);
+    }
+
+    /// Get the width specification (-1 means not specified).
+    pub fn width(&self) -> i32 {
+        return self.spec.width;
+    }
+
+    /// Get the precision specification (-1 means not specified).
+    pub fn precision(&self) -> i32 {
+        return self.spec.precision;
+    }
+
+    /// Check if alternate form (`#`) is requested.
+    pub fn alternate(&self) -> bool {
+        return self.spec.alternate;
+    }
+
+    /// Check if sign display (`+`) is requested.
+    pub fn sign_plus(&self) -> bool {
+        return self.spec.sign_plus;
+    }
+}
+
+// ============================================================================
+// Display implementation for String
+// ============================================================================
+// Defined here (not in string.wado) to avoid string.wado depending on format.wado,
+// which would cause codegen struct registration order issues.
+
+impl Display for String {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_str(*self);
+    }
+}

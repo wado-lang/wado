@@ -1412,6 +1412,50 @@ impl<'a> Resolver<'a> {
 
     /// Topologically sort modules based on struct field type dependencies.
     ///
+    /// Recursively collect cross-module struct/variant dependencies from a type.
+    /// Unwraps all wrapper types (`Ref`, `MutRef`, `Option`, `GenericInstance`, `Tuple`, etc.)
+    /// to find underlying Struct/Variant types defined in other modules.
+    fn collect_cross_module_deps(
+        type_id: TypeId,
+        type_table: &TypeTable,
+        out: &mut Vec<(String, ModuleSource)>,
+    ) {
+        match type_table.get(type_id) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            }
+            | ResolvedType::Variant {
+                name,
+                module_source,
+                ..
+            } => {
+                out.push((name.clone(), module_source.clone()));
+            }
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Option(inner)
+            | ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Stream(inner)
+            | ResolvedType::Future(inner)
+            | ResolvedType::Reactive(inner) => {
+                Self::collect_cross_module_deps(*inner, type_table, out);
+            }
+            ResolvedType::GenericInstance { type_args, .. } => {
+                for arg in type_args {
+                    Self::collect_cross_module_deps(*arg, type_table, out);
+                }
+            }
+            ResolvedType::Tuple(elems) => {
+                for elem in elems {
+                    Self::collect_cross_module_deps(*elem, type_table, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// A module A depends on module B if A contains a struct with a field whose type
     /// is a struct defined in B. This ensures that when we register struct types in
     /// codegen, dependency structs are registered before the structs that reference them.
@@ -1433,24 +1477,27 @@ impl<'a> Resolver<'a> {
         // Build reverse graph: dependents[i] = modules that depend on module i
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); sources.len()];
 
-        // Analyze struct fields to find cross-module dependencies
+        // Analyze struct fields to find cross-module dependencies.
+        // Recursively unwrap wrapper types (Ref, MutRef, Option, GenericInstance,
+        // Tuple, etc.) to detect dependencies through any nesting level.
         for (module_src, name_map) in all_struct_fields {
             let Some(&from_idx) = source_to_idx.get(module_src) else {
                 continue;
             };
             for (struct_name, info) in name_map {
                 for (_field_name, field_type_id) in &info.fields {
-                    if let ResolvedType::Struct {
-                        name: ref_struct_name,
-                        module_source: ref_module_source,
-                        ..
-                    } = type_table.get(*field_type_id)
-                    {
+                    let mut dep_sources = Vec::new();
+                    Self::collect_cross_module_deps(
+                        *field_type_id,
+                        type_table,
+                        &mut dep_sources,
+                    );
+                    for (ref_name, ref_module_source) in dep_sources {
                         // Skip self-references (same struct or same module)
-                        if ref_struct_name == struct_name || ref_module_source == module_src {
+                        if ref_name == *struct_name || ref_module_source == *module_src {
                             continue;
                         }
-                        if let Some(&to_idx) = source_to_idx.get(ref_module_source) {
+                        if let Some(&to_idx) = source_to_idx.get(&ref_module_source) {
                             // from_idx depends on to_idx (dependency edge)
                             if seen_edges.insert((from_idx, to_idx)) {
                                 dependency_count[from_idx] += 1;
@@ -10000,7 +10047,15 @@ impl<'a> Resolver<'a> {
 
         // Look up the struct in the symbol table to resolve imports/aliases
         // We need both the struct name (for struct_fields lookup) and module_source (for disambiguation)
-        let (struct_name, symbol_module_source) = if let Some(symbol) = self.symbols.lookup(name) {
+        // Local struct definitions (current module) shadow imported/prelude structs.
+        let (struct_name, symbol_module_source) = if self
+            .struct_fields
+            .get(name)
+            .is_some_and(|info| info.module_source == self.current_module_source)
+        {
+            // Current module defines this struct locally - skip symbol table
+            (name.clone(), None)
+        } else if let Some(symbol) = self.symbols.lookup(name) {
             match &symbol.kind {
                 crate::symbol::SymbolKind::Struct(_) => {
                     (symbol.name.clone(), Some(symbol.module_source.clone()))
