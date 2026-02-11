@@ -1,117 +1,51 @@
 // Test: Formatter width, alignment, fill, zero_pad, sign_plus options
 use { println, Stdout } from "core:cli";
 
-export fn run() with Stdout {
-    // Right-aligned integer with width
+fn fmt_int(value: &i32, fill: char, align: Alignment, sign_plus: bool, zero_pad: bool, width: i32) -> String {
     let mut buf = String::with_capacity(64);
     let mut f = Formatter {
-        fill: ' ',
-        align: Alignment::Right,
-        sign_plus: false,
+        fill,
+        align,
+        sign_plus,
         alternate: false,
-        zero_pad: false,
-        width: 10,
+        zero_pad,
+        width,
         precision: -1,
         buf: &mut buf,
     };
+    value.fmt(&mut f);
+    return buf;
+}
+
+export fn run() with Stdout {
     let x: i32 = 42;
-    x.fmt(&mut f);
-    println(`[{buf}]`);
+    let neg: i32 = -42;
+    let big: i32 = 12345;
+
+    // Right-aligned integer with width
+    assert fmt_int(&x, ' ', Alignment::Right, false, false, 10) == "        42";
 
     // Left-aligned integer with width
-    buf = String::with_capacity(64);
-    f = Formatter {
-        fill: ' ',
-        align: Alignment::Left,
-        sign_plus: false,
-        alternate: false,
-        zero_pad: false,
-        width: 10,
-        precision: -1,
-        buf: &mut buf,
-    };
-    x.fmt(&mut f);
-    println(`[{buf}]`);
+    assert fmt_int(&x, ' ', Alignment::Left, false, false, 10) == "42        ";
 
     // Center-aligned integer with width
-    buf = String::with_capacity(64);
-    f = Formatter {
-        fill: ' ',
-        align: Alignment::Center,
-        sign_plus: false,
-        alternate: false,
-        zero_pad: false,
-        width: 10,
-        precision: -1,
-        buf: &mut buf,
-    };
-    x.fmt(&mut f);
-    println(`[{buf}]`);
+    assert fmt_int(&x, ' ', Alignment::Center, false, false, 10) == "    42    ";
 
     // Zero-padded integer
-    buf = String::with_capacity(64);
-    f = Formatter {
-        fill: '0',
-        align: Alignment::Right,
-        sign_plus: false,
-        alternate: false,
-        zero_pad: true,
-        width: 8,
-        precision: -1,
-        buf: &mut buf,
-    };
-    x.fmt(&mut f);
-    println(`[{buf}]`);
+    assert fmt_int(&x, '0', Alignment::Right, false, true, 8) == "00000042";
 
     // Zero-padded negative integer
-    buf = String::with_capacity(64);
-    f = Formatter {
-        fill: '0',
-        align: Alignment::Right,
-        sign_plus: false,
-        alternate: false,
-        zero_pad: true,
-        width: 8,
-        precision: -1,
-        buf: &mut buf,
-    };
-    let neg: i32 = -42;
-    neg.fmt(&mut f);
-    println(`[{buf}]`);
+    assert fmt_int(&neg, '0', Alignment::Right, false, true, 8) == "-0000042";
 
     // Sign plus
-    buf = String::with_capacity(64);
-    f = Formatter {
-        fill: ' ',
-        align: Alignment::Right,
-        sign_plus: true,
-        alternate: false,
-        zero_pad: false,
-        width: -1,
-        precision: -1,
-        buf: &mut buf,
-    };
-    x.fmt(&mut f);
-    println(`[{buf}]`);
+    assert fmt_int(&x, ' ', Alignment::Right, true, false, -1) == "+42";
 
     // Custom fill char
-    buf = String::with_capacity(64);
-    f = Formatter {
-        fill: '*',
-        align: Alignment::Center,
-        sign_plus: false,
-        alternate: false,
-        zero_pad: false,
-        width: 10,
-        precision: -1,
-        buf: &mut buf,
-    };
-    x.fmt(&mut f);
-    println(`[{buf}]`);
+    assert fmt_int(&x, '*', Alignment::Center, false, false, 10) == "****42****";
 
     // Bool with width
-    buf = String::with_capacity(64);
-    f = Formatter {
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter {
         fill: ' ',
         align: Alignment::Left,
         sign_plus: false,
@@ -122,24 +56,13 @@ export fn run() with Stdout {
         buf: &mut buf,
     };
     true.fmt(&mut f);
-    println(`[{buf}]`);
+    assert buf == "true    ";
 
     // No width (content wider than width)
-    buf = String::with_capacity(64);
-    f = Formatter {
-        fill: ' ',
-        align: Alignment::Right,
-        sign_plus: false,
-        alternate: false,
-        zero_pad: false,
-        width: 2,
-        precision: -1,
-        buf: &mut buf,
-    };
-    let big: i32 = 12345;
-    big.fmt(&mut f);
-    println(`[{buf}]`);
+    assert fmt_int(&big, ' ', Alignment::Right, false, false, 2) == "12345";
+
+    println("ok");
 }
 
 __DATA__
-{"stdout": "[        42]\n[42        ]\n[    42    ]\n[00000042]\n[-0000042]\n[+42]\n[****42****]\n[true    ]\n[12345]\n"}
+{"stdout": "ok\n"}

@@ -3,64 +3,56 @@ use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     // i8
-    let a: i8 = 127;
-    println(a.to_string());
-    let b: i8 = -128;
-    println(b.to_string());
+    assert (127 as i8).to_string() == "127";
+    assert (-128 as i8).to_string() == "-128";
 
     // u8
-    let c: u8 = 255;
-    println(c.to_string());
-    let d: u8 = 0;
-    println(d.to_string());
+    assert (255 as u8).to_string() == "255";
+    assert (0 as u8).to_string() == "0";
 
     // i16
-    let e: i16 = 32767;
-    println(e.to_string());
-    let f: i16 = -32768;
-    println(f.to_string());
+    assert (32767 as i16).to_string() == "32767";
+    assert (-32768 as i16).to_string() == "-32768";
 
     // u16
-    let g: u16 = 65535;
-    println(g.to_string());
+    assert (65535 as u16).to_string() == "65535";
 
     // i32
-    let h: i32 = 2147483647;
-    println(h.to_string());
-    let i: i32 = -2147483648;
-    println(i.to_string());
-    println(0.to_string());
+    assert 2147483647.to_string() == "2147483647";
+    assert (-2147483648).to_string() == "-2147483648";
+    assert 0.to_string() == "0";
 
     // u32
     let j: u32 = 4294967295;
-    println(j.to_string());
+    assert j.to_string() == "4294967295";
 
     // i64
     let k: i64 = 9223372036854775807;
-    println(k.to_string());
+    assert k.to_string() == "9223372036854775807";
     let l: i64 = -9223372036854775808;
-    println(l.to_string());
+    assert l.to_string() == "-9223372036854775808";
 
     // u64
     let m: u64 = 18446744073709551615;
-    println(m.to_string());
+    assert m.to_string() == "18446744073709551615";
 
     // f32
     let n: f32 = 3.14;
-    println(n.to_string());
+    assert n.to_string() == "3.14";
 
     // f64
     let o: f64 = 3.141592653589793;
-    println(o.to_string());
+    assert o.to_string() == "3.141592653589793";
 
     // bool
-    println(true.to_string());
-    println(false.to_string());
+    assert true.to_string() == "true";
+    assert false.to_string() == "false";
 
     // char
-    let p = 'Z';
-    println(p.to_string());
+    assert 'Z'.to_string() == "Z";
+
+    println("ok");
 }
 
 __DATA__
-{"stdout": "127\n-128\n255\n0\n32767\n-32768\n65535\n2147483647\n-2147483648\n0\n4294967295\n9223372036854775807\n-9223372036854775808\n18446744073709551615\n3.14\n3.141592653589793\ntrue\nfalse\nZ\n"}
+{"stdout": "ok\n"}

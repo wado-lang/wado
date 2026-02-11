@@ -86,6 +86,92 @@ fn count_digits_base(val: i64, base: i32) -> i32 {
     return n;
 }
 
+/// Count digits of a u64 value (as raw i64 bits) in the given power-of-2 base.
+/// `bits_per_digit` is log2(base): 1 for binary, 3 for octal, 4 for hex.
+fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
+    let zero: i64 = 0;
+    if val_i64 == zero { return 1; }
+    // Count leading zeros manually: find highest set bit
+    let mut highest_bit: i32 = 0;
+    // Check high 32 bits
+    let high32: i64 = (val_i64 >> 32) & 0xFFFFFFFF;
+    if high32 != zero {
+        // Bit is somewhere in bits 32..63
+        let mut b: i32 = 63;
+        while b >= 32 {
+            let one: i64 = 1;
+            if (val_i64 >> (b as i64)) & one != zero {
+                highest_bit = b;
+                break;
+            }
+            b -= 1;
+        }
+    } else {
+        // Bit is somewhere in bits 0..31
+        let mut b: i32 = 31;
+        while b >= 0 {
+            let one: i64 = 1;
+            if (val_i64 >> (b as i64)) & one != zero {
+                highest_bit = b;
+                break;
+            }
+            b -= 1;
+        }
+    }
+    return (highest_bit / bits_per_digit) + 1;
+}
+
+/// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
+fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
+    let zero: i64 = 0;
+    let mask64: i64 = mask as i64;
+    let mut pos = offset + digit_count;
+    if val_i64 == zero {
+        builtin::array_set_u8(arr, offset, '0' as i32);
+    } else {
+        let mut temp: i64 = val_i64;
+        while temp != zero {
+            pos -= 1;
+            let digit: i32 = (temp & mask64) as i32;
+            let ch = if digit < 10 {
+                ('0' as i32) + digit
+            } else if upper {
+                ('A' as i32) + digit - 10
+            } else {
+                ('a' as i32) + digit - 10
+            };
+            builtin::array_set_u8(arr, pos, ch);
+            // Unsigned right shift: use Wasm's i64.shr_u semantics
+            // In Wado, >> on i64 is arithmetic shift. For unsigned shift we need:
+            // (val as u64 >> bits) as i64
+            let shift_u64: u64 = bits_per_digit as u64;
+            temp = ((temp as u64) >> shift_u64) as i64;
+        }
+    }
+}
+
+/// Write a u64 value in the given power-of-2 base (2, 8, or 16) into the Formatter's output buffer.
+fn fmt_u64_base(val_i64: i64, f: &mut Formatter, base: i32, upper: bool) {
+    let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
+    let mask = base - 1;
+    let prefix = if f.alternate() {
+        if base == 2 {
+            "0b"
+        } else if base == 8 {
+            "0o"
+        } else if upper {
+            "0X"
+        } else {
+            "0x"
+        }
+    } else {
+        ""
+    };
+    let digit_count = count_digits_u64_base(val_i64, bits_per_digit);
+    let offset = f.prepare_int_write(false, prefix, digit_count);
+    write_u64_base_digits(f.buf.internal_raw_bytes(), offset, val_i64, digit_count, bits_per_digit, mask, upper);
+}
+
 /// Write i32 as decimal directly into the Formatter's output buffer.
 fn fmt_i32_decimal(value: i32, f: &mut Formatter) {
     let is_negative = value < 0;
@@ -669,13 +755,47 @@ impl Display for u64 {
 
 impl Display for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
+        if f.precision() >= 0 {
+            panic("TODO: precision for f32 Display");
+        }
         fmt_f32_display(*self, f);
     }
 }
 
 impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
+        if f.precision() >= 0 {
+            panic("TODO: precision for f64 Display");
+        }
         fmt_f64_display(*self, f);
+    }
+}
+
+// ============================================================
+// LowerExp / UpperExp trait implementations (TODO)
+// ============================================================
+
+impl LowerExp for f32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        panic("TODO: LowerExp for f32");
+    }
+}
+
+impl UpperExp for f32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        panic("TODO: UpperExp for f32");
+    }
+}
+
+impl LowerExp for f64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        panic("TODO: LowerExp for f64");
+    }
+}
+
+impl UpperExp for f64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        panic("TODO: UpperExp for f64");
     }
 }
 
@@ -971,7 +1091,37 @@ impl UpperHex for i64 {
             fmt_int_base(abs_val, is_neg, f, 16, true);
         }
     }
-}// These enable calling Ord::cmp on primitives when T: Ord bounds are used.
+}
+
+// ============================================================
+// u64 Binary/Octal/Hex trait implementations (unsigned, power-of-2 bases)
+// ============================================================
+
+impl Binary for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_u64_base((*self) as i64, f, 2, false);
+    }
+}
+
+impl Octal for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_u64_base((*self) as i64, f, 8, false);
+    }
+}
+
+impl LowerHex for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_u64_base((*self) as i64, f, 16, false);
+    }
+}
+
+impl UpperHex for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_u64_base((*self) as i64, f, 16, true);
+    }
+}
+
+// These enable calling Ord::cmp on primitives when T: Ord bounds are used.
 
 impl Ord for i8 {
     pub fn cmp(&self, other: &Self) -> Ordering {

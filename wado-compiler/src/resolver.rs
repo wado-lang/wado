@@ -9670,7 +9670,7 @@ impl<'a> Resolver<'a> {
         )
     }
 
-    /// Resolve a template string - desugars to labeled block with append + Display::fmt
+    /// Resolve a template string - desugars to labeled block with append + `Display::fmt`
     /// `Hello, {name}!` → `__tmpl: { let mut __r = ...; __r.append("Hello, "); name.fmt(&mut __f); __r.append("!"); break __tmpl: __r; }`
     fn resolve_template_string(
         &mut self,
@@ -10273,9 +10273,9 @@ impl<'a> Resolver<'a> {
         &self,
         base_type_id: TypeId,
         original_type_id: TypeId,
-        _trait_name: &str,
+        trait_name: &str,
     ) -> (String, ModuleSource) {
-        match self.type_table.borrow().get(base_type_id).clone() {
+        let (type_name, default_module) = match self.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct {
                 name,
                 module_source,
@@ -10299,7 +10299,39 @@ impl<'a> Resolver<'a> {
                 self.type_table.borrow().mangle_type_name(original_type_id),
                 self.current_module_source.clone(),
             ),
+        };
+
+        // Search for the actual module where `impl TraitName for TypeName` is defined,
+        // since the trait impl may live in a different module than the type itself
+        // (e.g., `impl Display for String` is in format.wado, not string.wado).
+        for (module_src, module) in self.loaded_modules {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    let impl_type_name = self.get_type_name(&impl_block.ty);
+                    let impl_trait_name = self.get_type_name(trait_type);
+                    if impl_type_name == type_name && impl_trait_name == trait_name {
+                        return (type_name, module_src.clone());
+                    }
+                }
+            }
         }
+
+        // Also check current module
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                let impl_type_name = self.get_type_name(&impl_block.ty);
+                let impl_trait_name = self.get_type_name(trait_type);
+                if impl_type_name == type_name && impl_trait_name == trait_name {
+                    return (type_name, self.current_module_source.clone());
+                }
+            }
+        }
+
+        (type_name, default_module)
     }
 
     /// Resolve a cast expression
