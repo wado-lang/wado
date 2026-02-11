@@ -198,7 +198,6 @@ See also `wado-vscode/README.md` for more details.
 - [x] float-to-string conversion (fts)
 - [x] math functions (libm)
 
-
 ## Wasm and WASI
 
 There are external references in the module for convenience:
@@ -210,17 +209,14 @@ There are external references in the module for convenience:
 
 ### Wasm and WASI Features
 
-This project relies on the following Wasm features:
+Wado is designed with the following Wasm features:
 
 - Wasm 3.0 (2025-09-17)
 - Wasm GC
-- Wasm Reference Types
-- Wasm Wide Arithmetic for i128 and u128
-- Wasm Threads
-- Wasm Stack Switching (not yet implemented in wasmtime)
 - Wasm Component Model
+- Wasm Stack Switching (not yet implemented in wasmtime)
 - WASI 0.3.0 (P3)
-  - P3 is supported by wasmtime v40 with `-W component-model-async=y`
+  - P3 is supported by wasmtime v41
   - See wasmtime P3 support: `find vendor/wasmtime/crates/wasi/src/p3/wit -name '*.wit'`
 
 ## General Rules
