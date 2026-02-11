@@ -52,8 +52,44 @@ export fn run() with Stdout {
     assert auto_gz.len() == 5000, "uncompress auto-detect gzip";
     println("uncompress auto-detect ok");
 
+    // Test multi-member gzip (concatenated gzip streams)
+    let mut member1_data: Array<u8> = [];
+    let m1 = "First member";
+    for let mut i = 0; i < m1.len(); i += 1 {
+        member1_data.append(m1.get_byte(i));
+    }
+    let mut member2_data: Array<u8> = [];
+    let m2 = "Second member";
+    for let mut i = 0; i < m2.len(); i += 1 {
+        member2_data.append(m2.get_byte(i));
+    }
+
+    let gz1 = gzip_compress(&member1_data);
+    let gz2 = gzip_compress(&member2_data);
+
+    // Concatenate two gzip streams
+    let mut multi: Array<u8> = Array::<u8>::with_capacity(gz1.len() + gz2.len());
+    for let mut i = 0; i < gz1.len(); i += 1 {
+        multi.append(gz1[i]);
+    }
+    for let mut i = 0; i < gz2.len(); i += 1 {
+        multi.append(gz2[i]);
+    }
+
+    let multi_decompressed = inflate_gzip(&multi);
+    assert multi_decompressed.len() == member1_data.len() + member2_data.len(), "multi-member size";
+    // Verify first member
+    for let mut i = 0; i < member1_data.len(); i += 1 {
+        assert multi_decompressed[i] == member1_data[i], "multi-member first data";
+    }
+    // Verify second member
+    for let mut i = 0; i < member2_data.len(); i += 1 {
+        assert multi_decompressed[member1_data.len() + i] == member2_data[i], "multi-member second data";
+    }
+    println("multi-member gzip ok");
+
     println("gzip ok");
 }
 
 __DATA__
-{"stdout_contains": ["gzip ok", "basic gzip ok", "gzip levels ok"]}
+{"stdout_contains": ["gzip ok", "basic gzip ok", "gzip levels ok", "multi-member gzip ok"]}

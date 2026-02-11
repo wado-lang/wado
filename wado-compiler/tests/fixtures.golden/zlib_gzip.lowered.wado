@@ -469,6 +469,271 @@ fn run() with Stdout {
         }
     }
     core::cli::println(move "uncompress auto-detect ok");
+    let mut member1_data: Array<u8> = move [];
+    let m1: String = move "First member";
+    __for_4: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = m1.used;
+        let _licm_repr: builtin::array<u8> = m1.repr;
+        loop {
+            if !(i < __inline_String__len_49: {
+                break __inline_String__len_49: _licm_used;
+            }) {
+                break __for_4;
+            }
+            __for_4_body: {
+                member1_data."Array<u8>::append"(__inline_String__get_byte_50: {
+                    break __inline_String__get_byte_50: core::builtin::array_get_u8(_licm_repr, i);
+                });
+            }
+            i = (i + 1);
+        }
+    }
+    let mut member2_data: Array<u8> = move [];
+    let m2: String = move "Second member";
+    __for_5: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = m2.used;
+        let _licm_repr: builtin::array<u8> = m2.repr;
+        loop {
+            if !(i < __inline_String__len_51: {
+                break __inline_String__len_51: _licm_used;
+            }) {
+                break __for_5;
+            }
+            __for_5_body: {
+                member2_data."Array<u8>::append"(__inline_String__get_byte_52: {
+                    break __inline_String__get_byte_52: core::builtin::array_get_u8(_licm_repr, i);
+                });
+            }
+            i = (i + 1);
+        }
+    }
+    let gz1: Array<u8> = __inline_gzip_compress_53: {
+        let input: &Array<u8> = &member1_data;
+        break __inline_gzip_compress_53: core::zlib::gzip_compress2(input, core::zlib::Z_DEFAULT_COMPRESSION);
+    };
+    let gz2: Array<u8> = __inline_gzip_compress_54: {
+        let input: &Array<u8> = &member2_data;
+        break __inline_gzip_compress_54: core::zlib::gzip_compress2(input, core::zlib::Z_DEFAULT_COMPRESSION);
+    };
+    let mut multi: Array<u8> = __inline_Array_u8___with_capacity_57: {
+        let capacity: i32 = (__inline_Array_u8___len_55: {
+            break __inline_Array_u8___len_55: gz1.used;
+        } + __inline_Array_u8___len_56: {
+            break __inline_Array_u8___len_56: gz2.used;
+        });
+        break __inline_Array_u8___with_capacity_57: Array<u8> { repr: core::builtin::array_new::<u8>(capacity), used: 0 };
+    };
+    __for_6: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = gz1.used;
+        loop {
+            if !(i < __inline_Array_u8___len_58: {
+                break __inline_Array_u8___len_58: _licm_used;
+            }) {
+                break __for_6;
+            }
+            __for_6_body: {
+                multi."Array<u8>::append"(gz1."Array<u8>^IndexValue::index_value"(i));
+            }
+            i = (i + 1);
+        }
+    }
+    __for_7: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = gz2.used;
+        loop {
+            if !(i < __inline_Array_u8___len_59: {
+                break __inline_Array_u8___len_59: _licm_used;
+            }) {
+                break __for_7;
+            }
+            __for_7_body: {
+                multi."Array<u8>::append"(gz2."Array<u8>^IndexValue::index_value"(i));
+            }
+            i = (i + 1);
+        }
+    }
+    let multi_decompressed: Array<u8> = move core::zlib::inflate_gzip(&multi);
+    __assert_10: {
+        let __v0: i32 = __inline_Array_u8___len_60: {
+            break __inline_Array_u8___len_60: multi_decompressed.used;
+        };
+        let __v1: i32 = __inline_Array_u8___len_61: {
+            break __inline_Array_u8___len_61: member1_data.used;
+        };
+        let __v2: i32 = __inline_Array_u8___len_62: {
+            break __inline_Array_u8___len_62: member2_data.used;
+        };
+        let __v3: i32 = (__inline_Array_u8___len_63: {
+            break __inline_Array_u8___len_63: member1_data.used;
+        } + __inline_Array_u8___len_64: {
+            break __inline_Array_u8___len_64: member2_data.used;
+        });
+        let __cond: bool = (__v0 == __v3);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = __inline_String__with_capacity_65: {
+                    break __inline_String__with_capacity_65: String { repr: "array_new<u8>"(346), used: 0 };
+                };
+                __r."String::append"(move "Assertion failed in ");
+                __r."String::append"(move "run");
+                __r."String::append"(move " at ");
+                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_gzip.wado");
+                __r."String::append"(move ":");
+                let mut __f: Formatter = __inline_Formatter__new_66: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_66: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                Box<i32> { value: 80 }."i32@Display::fmt"(&mut __f);
+                __r."String::append"(move ": ");
+                __r."String::append"(move "multi-member size");
+                __r."String::append"(move "\ncondition: multi_decompressed.len() == member1_data.len() + member2_data.len()\n");
+                __r."String::append"(move "multi_decompressed.len(): ");
+                __f = __inline_Formatter__new_67: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_67: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                Box<i32> { value: __v0 }."i32@Display::fmt"(&mut __f);
+                __r."String::append"(move "\n");
+                __r."String::append"(move "member1_data.len(): ");
+                __f = __inline_Formatter__new_68: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_68: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                Box<i32> { value: __v1 }."i32@Display::fmt"(&mut __f);
+                __r."String::append"(move "\n");
+                __r."String::append"(move "member2_data.len(): ");
+                __f = __inline_Formatter__new_69: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_69: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                Box<i32> { value: __v2 }."i32@Display::fmt"(&mut __f);
+                __r."String::append"(move "\n");
+                __r."String::append"(move "member1_data.len() + member2_data.len(): ");
+                __f = __inline_Formatter__new_70: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_70: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                Box<i32> { value: __v3 }."i32@Display::fmt"(&mut __f);
+                __r."String::append"(move "\n");
+                break __tmpl: __r;
+            });
+        }
+    }
+    __for_8: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = member1_data.used;
+        loop {
+            if !(i < __inline_Array_u8___len_71: {
+                break __inline_Array_u8___len_71: _licm_used;
+            }) {
+                break __for_8;
+            }
+            __for_8_body: {
+                __assert_11: {
+                    let __v0: u8 = multi_decompressed."Array<u8>^IndexValue::index_value"(i);
+                    let __v1: u8 = member1_data."Array<u8>^IndexValue::index_value"(i);
+                    let __cond: bool = (__v0 == __v1);
+                    if !__cond {
+                        core::internal::panic(__tmpl: {
+                            let mut __r: String = __inline_String__with_capacity_72: {
+                                break __inline_String__with_capacity_72: String { repr: "array_new<u8>"(218), used: 0 };
+                            };
+                            __r."String::append"(move "Assertion failed in ");
+                            __r."String::append"(move "run");
+                            __r."String::append"(move " at ");
+                            __r."String::append"(move "wado-compiler/tests/fixtures/zlib_gzip.wado");
+                            __r."String::append"(move ":");
+                            let mut __f: Formatter = __inline_Formatter__new_73: {
+                                let buf: &mut String = &mut __r;
+                                break __inline_Formatter__new_73: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                            };
+                            Box<i32> { value: 83 }."i32@Display::fmt"(&mut __f);
+                            __r."String::append"(move ": ");
+                            __r."String::append"(move "multi-member first data");
+                            __r."String::append"(move "\ncondition: multi_decompressed[i] == member1_data[i]\n");
+                            __r."String::append"(move "multi_decompressed[i]: ");
+                            __f = __inline_Formatter__new_74: {
+                                let buf: &mut String = &mut __r;
+                                break __inline_Formatter__new_74: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                            };
+                            Box<u8> { value: __v0 }."u8@Display::fmt"(&mut __f);
+                            __r."String::append"(move "\n");
+                            __r."String::append"(move "member1_data[i]: ");
+                            __f = __inline_Formatter__new_75: {
+                                let buf: &mut String = &mut __r;
+                                break __inline_Formatter__new_75: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                            };
+                            Box<u8> { value: __v1 }."u8@Display::fmt"(&mut __f);
+                            __r."String::append"(move "\n");
+                            break __tmpl: __r;
+                        });
+                    }
+                }
+            }
+            i = (i + 1);
+        }
+    }
+    __for_9: {
+        let mut i: i32 = 0;
+        let _licm_used: i32 = member2_data.used;
+        let _licm_used: i32 = member1_data.used;
+        loop {
+            if !(i < __inline_Array_u8___len_76: {
+                break __inline_Array_u8___len_76: _licm_used;
+            }) {
+                break __for_9;
+            }
+            __for_9_body: {
+                __assert_12: {
+                    let __v0: u8 = multi_decompressed."Array<u8>^IndexValue::index_value"((__inline_Array_u8___len_77: {
+                        break __inline_Array_u8___len_77: _licm_used;
+                    } + i));
+                    let __v1: u8 = member2_data."Array<u8>^IndexValue::index_value"(i);
+                    let __cond: bool = (__v0 == __v1);
+                    if !__cond {
+                        core::internal::panic(__tmpl: {
+                            let mut __r: String = __inline_String__with_capacity_78: {
+                                break __inline_String__with_capacity_78: String { repr: "array_new<u8>"(260), used: 0 };
+                            };
+                            __r."String::append"(move "Assertion failed in ");
+                            __r."String::append"(move "run");
+                            __r."String::append"(move " at ");
+                            __r."String::append"(move "wado-compiler/tests/fixtures/zlib_gzip.wado");
+                            __r."String::append"(move ":");
+                            let mut __f: Formatter = __inline_Formatter__new_79: {
+                                let buf: &mut String = &mut __r;
+                                break __inline_Formatter__new_79: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                            };
+                            Box<i32> { value: 87 }."i32@Display::fmt"(&mut __f);
+                            __r."String::append"(move ": ");
+                            __r."String::append"(move "multi-member second data");
+                            __r."String::append"(move "\ncondition: multi_decompressed[member1_data.len() + i] == member2_data[i]\n");
+                            __r."String::append"(move "multi_decompressed[member1_data.len() + i]: ");
+                            __f = __inline_Formatter__new_80: {
+                                let buf: &mut String = &mut __r;
+                                break __inline_Formatter__new_80: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                            };
+                            Box<u8> { value: __v0 }."u8@Display::fmt"(&mut __f);
+                            __r."String::append"(move "\n");
+                            __r."String::append"(move "member2_data[i]: ");
+                            __f = __inline_Formatter__new_81: {
+                                let buf: &mut String = &mut __r;
+                                break __inline_Formatter__new_81: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                            };
+                            Box<u8> { value: __v1 }."u8@Display::fmt"(&mut __f);
+                            __r."String::append"(move "\n");
+                            break __tmpl: __r;
+                        });
+                    }
+                }
+            }
+            i = (i + 1);
+        }
+    }
+    core::cli::println(move "multi-member gzip ok");
     core::cli::println(move "gzip ok");
 }
 
