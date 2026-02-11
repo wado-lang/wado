@@ -176,12 +176,12 @@ impl WasiRegistry {
         let wasi_filesystem = parse_module(stdlib::WASI_FILESYSTEM);
         registry.register_world_definitions(&wasi_filesystem, &mut world_registry);
 
-        // Parse and register wasi:http (for world definitions only)
-        // Note: HTTP functions with resource types (Request, Response) are not yet
-        // fully supported for Component Model lowering. We register the module
-        // to get the world definitions, but skip function registration.
+        // Parse and register wasi:http
+        // HTTP resource methods (Fields, Request, Response) are registered in the
+        // wasi_registry for type resolution and codegen lookup. CM imports for HTTP
+        // types are handled specially in import_http_types_for_service().
         let wasi_http = parse_module(stdlib::WASI_HTTP);
-        registry.register_world_definitions(&wasi_http, &mut world_registry);
+        registry.register_module(&wasi_http, &mut world_registry);
 
         (registry, world_registry)
     }
@@ -771,6 +771,9 @@ impl WasiRegistry {
 /// This is a pure conversion function - newtypes must already be resolved
 /// before calling this function. Use `WasiRegistry::resolve_type()` during
 /// registration to ensure types are pre-resolved.
+///
+/// Note: This returns a SINGLE `ValType`. For compound types that lower to
+/// multiple core values (like String → ptr+len), use `flatten_wasi_param_type` instead.
 pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
     match ty {
         Type::Named(named) => match named.name.as_str() {
@@ -797,8 +800,53 @@ pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
             "Option" => ValType::I32,
             other => panic!("unknown generic type in wasi_type_to_valtype: {other}"),
         },
+        Type::Reference(_) | Type::MutReference(_) => {
+            // borrow<resource> or own<resource> - just an i32 handle
+            ValType::I32
+        }
         Type::Tuple(_) => ValType::I32,
         other => panic!("unsupported type variant in wasi_type_to_valtype: {other:?}"),
+    }
+}
+
+/// Flatten a pre-resolved AST type into CM core-level `ValType`s.
+///
+/// Compound types like String and `Array<T>` are lowered to (ptr: i32, len: i32)
+/// in the Component Model core ABI. This function pushes the appropriate number
+/// of `ValType`s for each parameter.
+pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>) {
+    match ty {
+        Type::Named(named) => match named.name.as_str() {
+            // String is lowered to (ptr: i32, len: i32) in CM core ABI
+            "String" => {
+                out.push(ValType::I32); // ptr
+                out.push(ValType::I32); // len
+            }
+            "i32" | "u32" | "bool" | "char" | "u8" | "i8" | "u16" | "i16" => {
+                out.push(ValType::I32);
+            }
+            "i64" | "u64" => out.push(ValType::I64),
+            "f32" => out.push(ValType::F32),
+            "f64" => out.push(ValType::F64),
+            // Resource handles, enums, etc.
+            _ => out.push(ValType::I32),
+        },
+        Type::Generic(generic) => match generic.name.as_str() {
+            // list<T> is lowered to (ptr: i32, len: i32) in CM core ABI
+            "Array" => {
+                out.push(ValType::I32); // ptr
+                out.push(ValType::I32); // len
+            }
+            // Stream, Future, Result, Option are handles or discriminants
+            "Stream" | "Future" | "Result" | "Option" => out.push(ValType::I32),
+            _ => out.push(ValType::I32),
+        },
+        // borrow<resource> - i32 handle
+        Type::Reference(_) | Type::MutReference(_) => out.push(ValType::I32),
+        // Unit type - no core values
+        Type::Tuple(elems) if elems.is_empty() => {}
+        Type::Tuple(_) => out.push(ValType::I32),
+        _ => out.push(ValType::I32),
     }
 }
 

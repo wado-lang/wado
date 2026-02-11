@@ -125,6 +125,34 @@ pub fn unreachable() -> ! {
     builtin::unreachable();
 }
 
+/// Lower a GC String to CM linear memory representation.
+/// Returns (ptr | (len << 32)) as i64.
+/// The caller must free the allocated memory after the CM call.
+pub fn cm_lower_string(s: String) -> i64 {
+    let len = s.len();
+    let bytes = s.internal_raw_bytes();
+    let ptr = builtin::realloc(0, 0, 1, len);
+    gc_array_to_memory(bytes, ptr, len);
+    return (ptr as i64) | ((len as i64) << 32);
+}
+
+/// Lower a GC Array<u8> to CM linear memory representation.
+/// Returns (ptr | (len << 32)) as i64.
+/// The caller must free the allocated memory after the CM call.
+pub fn cm_lower_list_u8(data: builtin::array<u8>, len: i32) -> i64 {
+    let ptr = builtin::realloc(0, 0, 1, len);
+    gc_array_to_memory(data, ptr, len);
+    return (ptr as i64) | ((len as i64) << 32);
+}
+
+/// Lower a GC Array<u8> (e.g., FieldValue) to CM linear memory representation.
+/// Returns (ptr | (len << 32)) as i64.
+pub fn cm_lower_array_u8(arr: Array<u8>) -> i64 {
+    let data = arr.internal_raw_data();
+    let len = arr.len();
+    return cm_lower_list_u8(data, len);
+}
+
 /// Convert a Component Model list<tuple<string, string>> to a GC Array<[String, String]>
 /// The outptr points to the CM list representation in linear memory:
 ///   outptr[0..4]: base_ptr - pointer to array of tuples
