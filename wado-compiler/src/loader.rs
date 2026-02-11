@@ -139,6 +139,7 @@ fn cached_core_stdlib() -> &'static HashMap<ModuleSource, Module> {
             ("prelude/traits.wado", stdlib::CORE_PRELUDE_TRAITS),
             ("prelude/types.wado", stdlib::CORE_PRELUDE_TYPES),
             ("stream", stdlib::CORE_STREAM),
+            ("zlib", stdlib::CORE_ZLIB),
         ];
         let mut cache = HashMap::with_capacity(core_modules.len());
         for &(name, source) in core_modules {

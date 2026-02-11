@@ -1,0 +1,38 @@
+use { println, Stdout } from "core:cli";
+use { inflate_zlib, zlib_compress_stored } from "core:zlib";
+
+fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.len(); i += 1 {
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+export fn run() with Stdout {
+    // Test stored block round-trip: "Hello"
+    let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
+    let compressed = zlib_compress_stored(&data);
+    let decompressed = inflate_zlib(&compressed);
+    assert bytes_equal(&data, &decompressed), "stored block round-trip failed";
+    println("stored block round-trip passed");
+
+    // Test long stored block round-trip
+    let mut long_data: Array<u8> = [];
+    for let mut i = 0; i < 1000; i += 1 {
+        long_data.append((i % 256) as u8);
+    }
+    let compressed2 = zlib_compress_stored(&long_data);
+    let decompressed2 = inflate_zlib(&compressed2);
+    assert bytes_equal(&long_data, &decompressed2), "long stored round-trip failed";
+    println("long stored round-trip passed");
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "stored block round-trip passed\nlong stored round-trip passed\nok\n"}
