@@ -3416,13 +3416,13 @@ impl Parser {
 
         let mut functions = Vec::new();
         if !self.check(&TokenKind::RBrace) {
-            functions.push(self.consume_ident()?);
+            functions.push(self.consume_world_import_name()?);
             while self.check(&TokenKind::Comma) {
                 self.advance();
                 if self.check(&TokenKind::RBrace) {
                     break;
                 }
-                functions.push(self.consume_ident()?);
+                functions.push(self.consume_world_import_name()?);
             }
         }
 
@@ -3433,6 +3433,20 @@ impl Parser {
             functions,
             span: start_span,
         })
+    }
+
+    /// Consume a world import function name, which can be either:
+    /// - A simple identifier: `write_via_stream`
+    /// - A qualified path: `Fields::new`
+    fn consume_world_import_name(&mut self) -> ParseResult<String> {
+        let name = self.consume_ident()?;
+        if self.check(&TokenKind::ColonColon) {
+            self.advance();
+            let method = self.consume_ident()?;
+            Ok(format!("{name}::{method}"))
+        } else {
+            Ok(name)
+        }
     }
 
     /// Parse a world export declaration

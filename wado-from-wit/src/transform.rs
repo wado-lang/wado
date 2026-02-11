@@ -109,8 +109,13 @@ impl<'a> Transformer<'a> {
                     WorldKey::Interface(id) => self.get_interface_name(*id),
                 };
 
-                let functions: Vec<String> =
-                    iface.functions.keys().map(|n| to_snake_case(n)).collect();
+                let functions: Vec<String> = iface
+                    .functions
+                    .iter()
+                    .map(|(func_name, func)| {
+                        self.format_world_import_function_name(func_name, func)
+                    })
+                    .collect();
 
                 if !functions.is_empty() {
                     imports.push(WadoWorldImport {
@@ -170,6 +175,36 @@ impl<'a> Transformer<'a> {
             imports,
             exports,
         })
+    }
+
+    /// Format a function name for use in world import lists.
+    ///
+    /// For resource methods, uses `ResourceName::method_name` format.
+    /// For freestanding functions, uses plain `snake_case`.
+    fn format_world_import_function_name(&self, func_name: &str, func: &Function) -> String {
+        match &func.kind {
+            FunctionKind::Constructor(resource_id) => {
+                let resource_name = self.resolve.types[*resource_id]
+                    .name
+                    .as_ref()
+                    .map_or_else(|| "Unknown".to_string(), |n| to_upper_camel_case(n));
+                format!("{resource_name}::new")
+            }
+            FunctionKind::Method(resource_id)
+            | FunctionKind::Static(resource_id)
+            | FunctionKind::AsyncMethod(resource_id)
+            | FunctionKind::AsyncStatic(resource_id) => {
+                let resource_name = self.resolve.types[*resource_id]
+                    .name
+                    .as_ref()
+                    .map_or_else(|| "Unknown".to_string(), |n| to_upper_camel_case(n));
+                let method_name = func_name.split('.').next_back().unwrap_or(func_name);
+                format!("{}::{}", resource_name, to_snake_case(method_name))
+            }
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                to_snake_case(func_name)
+            }
+        }
     }
 
     fn get_interface_path(&self, iface_id: InterfaceId) -> (String, String, String) {
@@ -457,6 +492,7 @@ impl<'a> Transformer<'a> {
 
         // Find methods for this resource
         let mut methods = Vec::new();
+        let resource_wit_name = ty.name.as_ref().unwrap();
 
         // Look for methods in the owning interface
         if let TypeOwner::Interface(iface_id) = ty.owner {
@@ -465,6 +501,9 @@ impl<'a> Transformer<'a> {
                 // Determine the method kind prefix for the WASI attribute
                 // Handle both sync and async method variants
                 let (method_kind, is_async) = match &func.kind {
+                    FunctionKind::Constructor(resource_id) if *resource_id == type_id => {
+                        (Some("[constructor]"), false)
+                    }
                     FunctionKind::Method(resource_id) if *resource_id == type_id => {
                         (Some("[method]"), false)
                     }
@@ -481,23 +520,25 @@ impl<'a> Transformer<'a> {
                 };
 
                 if let Some(kind_prefix) = method_kind {
-                    let method_attr = format!(
-                        "{}#{}{}{}",
-                        wasi_interface,
-                        kind_prefix,
-                        ty.name.as_ref().unwrap(),
-                        // The WIT function name format is [kind]resource-name.method-name
-                        // But func_name already includes the resource prefix for methods,
-                        // so we use the raw func_name which is just the method part
-                        if func_name.contains('.') {
-                            // func_name is already in "resource.method" format
-                            format!(".{}", func_name.split('.').next_back().unwrap_or(func_name))
-                        } else {
-                            format!(".{func_name}")
-                        }
-                    );
+                    // Build WASI attribute and extract method name based on kind
+                    let (method_attr, method_name) = if kind_prefix == "[constructor]" {
+                        // Constructor: wasi attr is "interface#[constructor]resource-name"
+                        // Wado name is "new"
+                        (
+                            format!("{wasi_interface}#[constructor]{resource_wit_name}"),
+                            "new".to_string(),
+                        )
+                    } else {
+                        // Method/Static: extract just the method name after the dot
+                        let raw_method = func_name.split('.').next_back().unwrap_or(func_name);
+                        let method_attr = format!(
+                            "{wasi_interface}#{kind_prefix}{resource_wit_name}.{raw_method}"
+                        );
+                        (method_attr, to_snake_case(raw_method))
+                    };
+
                     methods.push(WadoFunction {
-                        name: to_snake_case(func_name),
+                        name: method_name,
                         doc_comment: func.docs.contents.clone(),
                         wasi_attr: method_attr,
                         params: self.transform_params(&func.params)?,

@@ -11,7 +11,7 @@
 
 fn run() with Stdout {
     let family: IpAddressFamily = IpAddressFamily::Ipv4;
-    let result: Result<TcpSocket, ErrorCode> = move "TcpSocket::static_tcp_socket_create"(family);
+    let result: Result<TcpSocket, ErrorCode> = move "TcpSocket::create"(family);
     if __variant_test(result, case=0, name=Ok) {
         let socket: TcpSocket = __variant_payload(result, case=0);
         core::cli::println(move "Resource extracted from Result");

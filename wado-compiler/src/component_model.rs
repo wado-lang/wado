@@ -1700,10 +1700,10 @@ mod tests {
         let (registry, _) = WasiRegistry::build_from_stdlib();
 
         // Check that TcpSocket resource methods are registered
-        let resolved = registry.resolve("TcpSocket::static_tcp_socket_create");
+        let resolved = registry.resolve("TcpSocket::create");
         assert!(
             resolved.is_some(),
-            "TcpSocket::static_tcp_socket_create should be resolved, got {:?}",
+            "TcpSocket::create should be resolved, got {:?}",
             resolved
         );
 

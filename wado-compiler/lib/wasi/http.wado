@@ -161,6 +161,11 @@ pub type StatusCode = u16;
 /// transport or when returning them from a method.
 #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#fields")]
 pub resource Fields {
+    /// Construct an empty HTTP Fields.
+    /// 
+    /// The resulting `fields` is mutable.
+    #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[constructor]fields")]
+    fn new() -> Fields;
     /// Construct an HTTP Fields.
     /// 
     /// The resulting `fields` is mutable.
@@ -177,29 +182,29 @@ pub resource Fields {
     /// An error result will be returned if any header or value was
     /// syntactically invalid, or if a header was forbidden.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[static]fields.from-list")]
-    fn static_fields_from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>;
+    fn from_list(entries: Array<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>;
     /// Get all of the values corresponding to a name. If the name is not present
     /// in this `fields`, an empty list is returned. However, if the name is
     /// present but empty, this is represented by a list with one or more
     /// empty field-values present.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]fields.get")]
-    fn method_fields_get(self: &Fields, name: FieldName) -> Array<FieldValue>;
+    fn get(self: &Fields, name: FieldName) -> Array<FieldValue>;
     /// Returns `true` when the name is present in this `fields`. If the name is
     /// syntactically invalid, `false` is returned.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]fields.has")]
-    fn method_fields_has(self: &Fields, name: FieldName) -> bool;
+    fn has(self: &Fields, name: FieldName) -> bool;
     /// Set all of the values for a name. Clears any existing values for that
     /// name, if they have been set.
     /// 
     /// Fails with `header-error.immutable` if the `fields` are immutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]fields.set")]
-    fn method_fields_set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>;
+    fn set(self: &Fields, name: FieldName, value: Array<FieldValue>) -> Result<(), HeaderError>;
     /// Delete all values for a name. Does nothing if no values for the name
     /// exist.
     /// 
     /// Fails with `header-error.immutable` if the `fields` are immutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]fields.delete")]
-    fn method_fields_delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>;
+    fn delete(self: &Fields, name: FieldName) -> Result<(), HeaderError>;
     /// Delete all values for a name. Does nothing if no values for the name
     /// exist.
     /// 
@@ -207,13 +212,13 @@ pub resource Fields {
     /// 
     /// Fails with `header-error.immutable` if the `fields` are immutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]fields.get-and-delete")]
-    fn method_fields_get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>;
+    fn get_and_delete(self: &Fields, name: FieldName) -> Result<Array<FieldValue>, HeaderError>;
     /// Append a value for a name. Does not change or delete any existing
     /// values for that name.
     /// 
     /// Fails with `header-error.immutable` if the `fields` are immutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]fields.append")]
-    fn method_fields_append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>;
+    fn append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError>;
     /// Retrieve the full set of names and values in the Fields. Like the
     /// constructor, the list represents each name-value pair.
     /// 
@@ -224,12 +229,12 @@ pub resource Fields {
     /// The names and values are always returned in the original casing and in
     /// the order in which they will be serialized for transport.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]fields.copy-all")]
-    fn method_fields_copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>;
+    fn copy_all(self: &Fields) -> Array<[FieldName, FieldValue]>;
     /// Make a deep copy of the Fields. Equivalent in behavior to calling the
     /// `fields` constructor on the return value of `copy-all`. The resulting
     /// `fields` is mutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]fields.clone")]
-    fn method_fields_clone(self: &Fields) -> Fields;
+    fn clone(self: &Fields) -> Fields;
 }
 
 /// Represents an HTTP Request.
@@ -257,43 +262,43 @@ pub resource Request {
     /// 
     /// The returned future resolves to result of transmission of this request.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[static]request.new")]
-    fn static_request_new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>];
+    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>];
     /// Get the Method for the Request.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.get-method")]
-    fn method_request_get_method(self: &Request) -> Method;
+    fn get_method(self: &Request) -> Method;
     /// Set the Method for the Request. Fails if the string present in a
     /// `method.other` argument is not a syntactically valid method.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.set-method")]
-    fn method_request_set_method(self: &Request, method: Method) -> Result<(), ()>;
+    fn set_method(self: &Request, method: Method) -> Result<(), ()>;
     /// Get the combination of the HTTP Path and Query for the Request.  When
     /// `none`, this represents an empty Path and empty Query.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.get-path-with-query")]
-    fn method_request_get_path_with_query(self: &Request) -> Option<String>;
+    fn get_path_with_query(self: &Request) -> Option<String>;
     /// Set the combination of the HTTP Path and Query for the Request.  When
     /// `none`, this represents an empty Path and empty Query. Fails is the
     /// string given is not a syntactically valid path and query uri component.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.set-path-with-query")]
-    fn method_request_set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>;
+    fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>;
     /// Get the HTTP Related Scheme for the Request. When `none`, the
     /// implementation may choose an appropriate default scheme.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.get-scheme")]
-    fn method_request_get_scheme(self: &Request) -> Option<Scheme>;
+    fn get_scheme(self: &Request) -> Option<Scheme>;
     /// Set the HTTP Related Scheme for the Request. When `none`, the
     /// implementation may choose an appropriate default scheme. Fails if the
     /// string given is not a syntactically valid uri scheme.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.set-scheme")]
-    fn method_request_set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>;
+    fn set_scheme(self: &Request, scheme: Option<Scheme>) -> Result<(), ()>;
     /// Get the authority of the Request's target URI. A value of `none` may be used
     /// with Related Schemes which do not require an authority. The HTTP and
     /// HTTPS schemes always require an authority.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.get-authority")]
-    fn method_request_get_authority(self: &Request) -> Option<String>;
+    fn get_authority(self: &Request) -> Option<String>;
     /// Set the authority of the Request's target URI. A value of `none` may be used
     /// with Related Schemes which do not require an authority. The HTTP and
     /// HTTPS schemes always require an authority. Fails if the string given is
     /// not a syntactically valid URI authority.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.set-authority")]
-    fn method_request_set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>;
+    fn set_authority(self: &Request, authority: Option<String>) -> Result<(), ()>;
     /// Get the `request-options` to be associated with this request
     /// 
     /// The returned `request-options` resource is immutable: `set-*` operations
@@ -303,13 +308,13 @@ pub resource Request {
     /// the parent `request` is dropped, or its ownership is transferred to
     /// another component by e.g. `handler.handle`.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.get-options")]
-    fn method_request_get_options(self: &Request) -> Option<RequestOptions>;
+    fn get_options(self: &Request) -> Option<RequestOptions>;
     /// Get the headers associated with the Request.
     /// 
     /// The returned `headers` resource is immutable: `set`, `append`, and
     /// `delete` operations will fail with `header-error.immutable`.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request.get-headers")]
-    fn method_request_get_headers(self: &Request) -> Headers;
+    fn get_headers(self: &Request) -> Headers;
     /// Get body of the Request.
     /// 
     /// Stream returned by this method represents the contents of the body.
@@ -323,7 +328,7 @@ pub resource Request {
     /// Note that function will move the `request`, but references to headers or
     /// request options acquired from it previously will remain valid.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[static]request.consume-body")]
-    fn static_request_consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+    fn consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
 }
 
 /// Parameters for making an HTTP Request. Each of these parameters is
@@ -334,35 +339,38 @@ pub resource Request {
 /// asynchronous call.
 #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#request-options")]
 pub resource RequestOptions {
+    /// Construct a default `request-options` value.
+    #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[constructor]request-options")]
+    fn new() -> RequestOptions;
     /// The timeout for the initial connect to the HTTP Server.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request-options.get-connect-timeout")]
-    fn method_request_options_get_connect_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn get_connect_timeout(self: &RequestOptions) -> Option<Duration>;
     /// Set the timeout for the initial connect to the HTTP Server. An error
     /// return value indicates that this timeout is not supported or that this
     /// handle is immutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request-options.set-connect-timeout")]
-    fn method_request_options_set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn set_connect_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
     /// The timeout for receiving the first byte of the Response body.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request-options.get-first-byte-timeout")]
-    fn method_request_options_get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn get_first_byte_timeout(self: &RequestOptions) -> Option<Duration>;
     /// Set the timeout for receiving the first byte of the Response body. An
     /// error return value indicates that this timeout is not supported or that
     /// this handle is immutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request-options.set-first-byte-timeout")]
-    fn method_request_options_set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn set_first_byte_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
     /// The timeout for receiving subsequent chunks of bytes in the Response
     /// body stream.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request-options.get-between-bytes-timeout")]
-    fn method_request_options_get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>;
+    fn get_between_bytes_timeout(self: &RequestOptions) -> Option<Duration>;
     /// Set the timeout for receiving subsequent chunks of bytes in the Response
     /// body stream. An error return value indicates that this timeout is not
     /// supported or that this handle is immutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request-options.set-between-bytes-timeout")]
-    fn method_request_options_set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
+    fn set_between_bytes_timeout(self: &RequestOptions, duration: Option<Duration>) -> Result<(), RequestOptionsError>;
     /// Make a deep copy of the `request-options`.
     /// The resulting `request-options` is mutable.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]request-options.clone")]
-    fn method_request_options_clone(self: &RequestOptions) -> RequestOptions;
+    fn clone(self: &RequestOptions) -> RequestOptions;
 }
 
 /// Represents an HTTP Response.
@@ -382,20 +390,20 @@ pub resource Response {
     /// 
     /// The returned future resolves to result of transmission of this response.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[static]response.new")]
-    fn static_response_new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>];
+    fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>];
     /// Get the HTTP Status Code for the Response.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]response.get-status-code")]
-    fn method_response_get_status_code(self: &Response) -> StatusCode;
+    fn get_status_code(self: &Response) -> StatusCode;
     /// Set the HTTP Status Code for the Response. Fails if the status-code
     /// given is not a valid http status code.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]response.set-status-code")]
-    fn method_response_set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>;
+    fn set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()>;
     /// Get the headers associated with the Response.
     /// 
     /// The returned `headers` resource is immutable: `set`, `append`, and
     /// `delete` operations will fail with `header-error.immutable`.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[method]response.get-headers")]
-    fn method_response_get_headers(self: &Response) -> Headers;
+    fn get_headers(self: &Response) -> Headers;
     /// Get body of the Response.
     /// 
     /// Stream returned by this method represents the contents of the body.
@@ -409,7 +417,7 @@ pub resource Response {
     /// Note that function will move the `response`, but references to headers
     /// acquired from it previously will remain valid.
     #[wasi("wasi:http/types@0.3.0-rc-2026-01-06#[static]response.consume-body")]
-    fn static_response_consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
+    fn consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>];
 }
 
 /// This interface defines a handler of HTTP Requests.
@@ -463,41 +471,41 @@ pub world Service {
     }
     
     import Types {
-        constructor_fields,
-        static_fields_from_list,
-        method_fields_get,
-        method_fields_has,
-        method_fields_set,
-        method_fields_delete,
-        method_fields_get_and_delete,
-        method_fields_append,
-        method_fields_copy_all,
-        method_fields_clone,
-        static_request_new,
-        method_request_get_method,
-        method_request_set_method,
-        method_request_get_path_with_query,
-        method_request_set_path_with_query,
-        method_request_get_scheme,
-        method_request_set_scheme,
-        method_request_get_authority,
-        method_request_set_authority,
-        method_request_get_options,
-        method_request_get_headers,
-        static_request_consume_body,
-        constructor_request_options,
-        method_request_options_get_connect_timeout,
-        method_request_options_set_connect_timeout,
-        method_request_options_get_first_byte_timeout,
-        method_request_options_set_first_byte_timeout,
-        method_request_options_get_between_bytes_timeout,
-        method_request_options_set_between_bytes_timeout,
-        method_request_options_clone,
-        static_response_new,
-        method_response_get_status_code,
-        method_response_set_status_code,
-        method_response_get_headers,
-        static_response_consume_body,
+        Fields::new,
+        Fields::from_list,
+        Fields::get,
+        Fields::has,
+        Fields::set,
+        Fields::delete,
+        Fields::get_and_delete,
+        Fields::append,
+        Fields::copy_all,
+        Fields::clone,
+        Request::new,
+        Request::get_method,
+        Request::set_method,
+        Request::get_path_with_query,
+        Request::set_path_with_query,
+        Request::get_scheme,
+        Request::set_scheme,
+        Request::get_authority,
+        Request::set_authority,
+        Request::get_options,
+        Request::get_headers,
+        Request::consume_body,
+        RequestOptions::new,
+        RequestOptions::get_connect_timeout,
+        RequestOptions::set_connect_timeout,
+        RequestOptions::get_first_byte_timeout,
+        RequestOptions::set_first_byte_timeout,
+        RequestOptions::get_between_bytes_timeout,
+        RequestOptions::set_between_bytes_timeout,
+        RequestOptions::clone,
+        Response::new,
+        Response::get_status_code,
+        Response::set_status_code,
+        Response::get_headers,
+        Response::consume_body,
     }
     
     import Client {
@@ -548,41 +556,41 @@ pub world Service {
 #[wasi("wasi:http/middleware@0.3.0-rc-2026-01-06")]
 pub world Middleware {
     import Types {
-        constructor_fields,
-        static_fields_from_list,
-        method_fields_get,
-        method_fields_has,
-        method_fields_set,
-        method_fields_delete,
-        method_fields_get_and_delete,
-        method_fields_append,
-        method_fields_copy_all,
-        method_fields_clone,
-        static_request_new,
-        method_request_get_method,
-        method_request_set_method,
-        method_request_get_path_with_query,
-        method_request_set_path_with_query,
-        method_request_get_scheme,
-        method_request_set_scheme,
-        method_request_get_authority,
-        method_request_set_authority,
-        method_request_get_options,
-        method_request_get_headers,
-        static_request_consume_body,
-        constructor_request_options,
-        method_request_options_get_connect_timeout,
-        method_request_options_set_connect_timeout,
-        method_request_options_get_first_byte_timeout,
-        method_request_options_set_first_byte_timeout,
-        method_request_options_get_between_bytes_timeout,
-        method_request_options_set_between_bytes_timeout,
-        method_request_options_clone,
-        static_response_new,
-        method_response_get_status_code,
-        method_response_set_status_code,
-        method_response_get_headers,
-        static_response_consume_body,
+        Fields::new,
+        Fields::from_list,
+        Fields::get,
+        Fields::has,
+        Fields::set,
+        Fields::delete,
+        Fields::get_and_delete,
+        Fields::append,
+        Fields::copy_all,
+        Fields::clone,
+        Request::new,
+        Request::get_method,
+        Request::set_method,
+        Request::get_path_with_query,
+        Request::set_path_with_query,
+        Request::get_scheme,
+        Request::set_scheme,
+        Request::get_authority,
+        Request::set_authority,
+        Request::get_options,
+        Request::get_headers,
+        Request::consume_body,
+        RequestOptions::new,
+        RequestOptions::get_connect_timeout,
+        RequestOptions::set_connect_timeout,
+        RequestOptions::get_first_byte_timeout,
+        RequestOptions::set_first_byte_timeout,
+        RequestOptions::get_between_bytes_timeout,
+        RequestOptions::set_between_bytes_timeout,
+        RequestOptions::clone,
+        Response::new,
+        Response::get_status_code,
+        Response::set_status_code,
+        Response::get_headers,
+        Response::consume_body,
     }
     
     import Handler {
