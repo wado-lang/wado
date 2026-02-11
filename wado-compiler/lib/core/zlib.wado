@@ -568,8 +568,7 @@ impl InflateState {
 // Decompress raw deflate data from a slice of input (no zlib/gzip header)
 fn inflate_raw_from(input: &Array<u8>, input_offset: i32, input_length: i32) -> Array<u8> {
     let mut state = InflateState::new(true);
-    let estimated = if input_length > 256 { input_length * 4 } else { 1024 };
-    let mut output: Array<u8> = Array::<u8>::with_capacity(estimated);
+    let mut output: Array<u8> = [];
 
     let mut inp = input_offset;
     let mut have = input_length;
@@ -1046,18 +1045,8 @@ fn inflate_raw_from(input: &Array<u8>, input_offset: i32, input_length: i32) -> 
                     if win_copy > copy {
                         win_copy = copy;
                     }
-                    let first_seg = state.wsize - from_win;
-                    if first_seg >= win_copy {
-                        for let mut i = 0; i < win_copy; i += 1 {
-                            output.append(state.window[from_win + i]);
-                        }
-                    } else {
-                        for let mut i = 0; i < first_seg; i += 1 {
-                            output.append(state.window[from_win + i]);
-                        }
-                        for let mut i = 0; i < win_copy - first_seg; i += 1 {
-                            output.append(state.window[i]);
-                        }
+                    for let mut i = 0; i < win_copy; i += 1 {
+                        output.append(state.window[(from_win + i) % state.wsize]);
                     }
                     copy -= win_copy;
                     // rest from output
@@ -1076,10 +1065,17 @@ fn inflate_raw_from(input: &Array<u8>, input_offset: i32, input_length: i32) -> 
                 }
             }
             if state.mode != INF_BAD {
+                // update window
+                state.update_window(&output, output.len(), state.length);
                 state.mode = INF_LEN;
             }
         } else if state.mode == INF_LIT {
             output.append(state.length as u8);
+            // update window periodically
+            if output.len() % 32768 == 0 {
+                let wlen = if output.len() > 32768 { 32768 } else { output.len() };
+                state.update_window(&output, output.len(), wlen);
+            }
             state.mode = INF_LEN;
         } else if state.mode == INF_CHECK {
             if state.wrap == 1 {
@@ -1111,6 +1107,12 @@ fn inflate_raw_from(input: &Array<u8>, input_offset: i32, input_length: i32) -> 
         } else {
             leave = true;
         }
+    }
+
+    // final window update
+    if output.len() > 0 {
+        let wlen = if output.len() > 32768 { 32768 } else { output.len() };
+        state.update_window(&output, output.len(), wlen);
     }
 
     return output;
