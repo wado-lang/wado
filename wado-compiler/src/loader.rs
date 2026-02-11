@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::ast::{Item, Module};
-use crate::bind::{self, BindError};
+use crate::bind;
 use crate::compiler_host::{CompilerHost, SourceError};
 use crate::desugar::desugar_module;
 use crate::lexer::Lexer;
@@ -155,10 +155,18 @@ fn cached_core_stdlib() -> &'static HashMap<ModuleSource, Module> {
             let ast = parser
                 .parse()
                 .unwrap_or_else(|e| panic!("parser error in core:{name}: {e:?}"));
-            bind::bind_module(&ast).unwrap_or_else(|errors| {
-                let msgs: Vec<String> = errors.iter().map(ToString::to_string).collect();
-                panic!("bind error in core:{name}: {}", msgs.join("; "));
-            });
+            {
+                let bind_host = crate::compiler_host::InMemoryCompilerHost::new();
+                let bind_logger = Logger::new(&bind_host, LogLevel::Off);
+                bind::bind_module(&ast, &bind_logger).unwrap_or_else(|_| {
+                    let msgs: Vec<String> = bind_host
+                        .diagnostics()
+                        .iter()
+                        .map(|d| d.message.clone())
+                        .collect();
+                    panic!("bind error in core:{name}: {}", msgs.join("; "));
+                });
+            }
             let desugared = desugar_module(&ast);
             cache.insert(module_source, desugared);
         }
@@ -479,15 +487,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Bind a module (local name resolution and scope checking)
     fn bind_module(&self, module: &Module, module_source: &ModuleSource) -> Result<(), LoadError> {
-        bind::bind_module(module).map_err(|errors| {
-            let message = errors
-                .iter()
-                .map(BindError::to_string)
-                .collect::<Vec<_>>()
-                .join("; ");
+        // Bind errors are emitted directly to the host via Logger.
+        // We use a temporary logger per module so error counting is per-module.
+        let logger = Logger::new(self.host, self.log_level);
+        bind::bind_module(module, &logger).map_err(|_bail| {
+            let error_count = logger.error_count();
             LoadError::BindError {
                 module_source: module_source.clone(),
-                message,
+                message: format!("{error_count} bind error(s)"),
             }
         })
     }

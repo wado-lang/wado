@@ -11,6 +11,8 @@ use std::collections::HashSet;
 
 use indexmap::IndexMap;
 
+use crate::compiler_host::CompilerHost;
+use crate::logger::{Bail, Logger};
 use crate::name::ModuleSource;
 use crate::tir::{
     FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind,
@@ -40,60 +42,81 @@ impl std::fmt::Display for EffectError {
 
 impl std::error::Error for EffectError {}
 
+impl From<EffectError> for crate::compiler_host::Diagnostic {
+    fn from(e: EffectError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        crate::compiler_host::Diagnostic {
+            severity: Severity::Error,
+            code: Code::TypeMismatch,
+            message: format!(
+                "missing effect '{}' required by '{}'",
+                e.missing_effect, e.callee
+            ),
+            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+        }
+    }
+}
+
 /// Check effects for all modules
 ///
-/// Returns a list of effect errors. If empty, all effect requirements are satisfied.
-pub fn check_effects(modules: &IndexMap<ModuleSource, TirModule>) -> Vec<EffectError> {
-    let mut checker = EffectChecker::new(modules);
-    checker.check_all();
-    checker.errors
+/// Errors are emitted to the logger. Returns `Err(Bail)` if any errors found.
+pub fn check_effects<H: CompilerHost>(
+    modules: &IndexMap<ModuleSource, TirModule>,
+    logger: &Logger<H>,
+) -> Result<(), Bail> {
+    let mut checker = EffectChecker::new(modules, logger);
+    // Ignore Bail from limit - just check if there were any errors
+    let _ = checker.check_all();
+    logger.ok_or_bail(())
 }
 
 /// Effect checker that walks TIR and validates effect requirements
-struct EffectChecker<'a> {
+struct EffectChecker<'a, H: CompilerHost> {
     modules: &'a IndexMap<ModuleSource, TirModule>,
-    errors: Vec<EffectError>,
+    logger: &'a Logger<'a, H>,
     /// Current function's effects (set when entering a function)
     current_effects: HashSet<String>,
 }
 
-impl<'a> EffectChecker<'a> {
-    fn new(modules: &'a IndexMap<ModuleSource, TirModule>) -> Self {
+impl<'a, H: CompilerHost> EffectChecker<'a, H> {
+    fn new(modules: &'a IndexMap<ModuleSource, TirModule>, logger: &'a Logger<'a, H>) -> Self {
         Self {
             modules,
-            errors: Vec::new(),
+            logger,
             current_effects: HashSet::new(),
         }
     }
 
     /// Check all modules
-    fn check_all(&mut self) {
+    fn check_all(&mut self) -> Result<(), Bail> {
         for module in self.modules.values() {
-            self.check_module(module);
+            self.check_module(module)?;
         }
+        Ok(())
     }
 
     /// Check a single module
-    fn check_module(&mut self, module: &TirModule) {
+    fn check_module(&mut self, module: &TirModule) -> Result<(), Bail> {
         // Check all functions
         for func_rc in &module.functions {
             let func = func_rc.borrow();
-            self.check_function(&func);
+            self.check_function(&func)?;
         }
 
         // Check impl methods
         for impl_block in &module.impls {
             for method in &impl_block.methods {
-                self.check_function(method);
+                self.check_function(method)?;
             }
         }
+        Ok(())
     }
 
     /// Check a single function
-    fn check_function(&mut self, func: &TirFunction) {
+    fn check_function(&mut self, func: &TirFunction) -> Result<(), Bail> {
         // Skip test functions - they implicitly have all effects
         if func.name.starts_with("__test_") {
-            return;
+            return Ok(());
         }
 
         // Set current context
@@ -101,27 +124,29 @@ impl<'a> EffectChecker<'a> {
 
         // Check the body if present
         if let Some(body) = &func.body {
-            self.check_block(body);
+            self.check_block(body)?;
         }
+        Ok(())
     }
 
     /// Check a block
-    fn check_block(&mut self, block: &TirBlock) {
+    fn check_block(&mut self, block: &TirBlock) -> Result<(), Bail> {
         for stmt in &block.stmts {
-            self.check_stmt(stmt);
+            self.check_stmt(stmt)?;
         }
+        Ok(())
     }
 
     /// Check a statement
-    fn check_stmt(&mut self, stmt: &TirStmt) {
+    fn check_stmt(&mut self, stmt: &TirStmt) -> Result<(), Bail> {
         match &stmt.kind {
             TirStmtKind::Let { value, .. } => {
-                self.check_expr(value);
+                self.check_expr(value)?;
             }
-            TirStmtKind::Expr(expr) => self.check_expr(expr),
+            TirStmtKind::Expr(expr) => self.check_expr(expr)?,
             TirStmtKind::Return { value } => {
                 if let Some(e) = value {
-                    self.check_expr(e);
+                    self.check_expr(e)?;
                 }
             }
             TirStmtKind::If {
@@ -129,23 +154,23 @@ impl<'a> EffectChecker<'a> {
                 then_block,
                 else_block,
             } => {
-                self.check_expr(condition);
-                self.check_block(then_block);
+                self.check_expr(condition)?;
+                self.check_block(then_block)?;
                 if let Some(else_blk) = else_block {
-                    self.check_block(else_blk);
+                    self.check_block(else_blk)?;
                 }
             }
             TirStmtKind::Loop { body } => {
-                self.check_block(body);
+                self.check_block(body)?;
             }
             TirStmtKind::Break { value, .. } => {
                 if let Some(expr) = value {
-                    self.check_expr(expr);
+                    self.check_expr(expr)?;
                 }
             }
             TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
-                self.check_block(block);
+                self.check_block(block)?;
             }
             TirStmtKind::IfPattern {
                 scrutinee,
@@ -153,25 +178,26 @@ impl<'a> EffectChecker<'a> {
                 else_block,
                 ..
             } => {
-                self.check_expr(scrutinee);
-                self.check_block(then_block);
+                self.check_expr(scrutinee)?;
+                self.check_block(then_block)?;
                 if let Some(else_blk) = else_block {
-                    self.check_block(else_blk);
+                    self.check_block(else_blk)?;
                 }
             }
             TirStmtKind::LetPattern { value, .. } => {
-                self.check_expr(value);
+                self.check_expr(value)?;
             }
         }
+        Ok(())
     }
 
     /// Check an expression for effect violations
-    fn check_expr(&mut self, expr: &TirExpr) {
+    fn check_expr(&mut self, expr: &TirExpr) -> Result<(), Bail> {
         match &expr.kind {
             TirExprKind::Call { func, args, .. } => {
-                self.check_call(func, expr.span);
+                self.check_call(func, expr.span)?;
                 for arg in args {
-                    self.check_expr(arg);
+                    self.check_expr(arg)?;
                 }
             }
             TirExprKind::MethodCall {
@@ -180,16 +206,16 @@ impl<'a> EffectChecker<'a> {
                 args,
                 ..
             } => {
-                self.check_expr(receiver);
-                self.check_call(func, expr.span);
+                self.check_expr(receiver)?;
+                self.check_call(func, expr.span)?;
                 for arg in args {
-                    self.check_expr(arg);
+                    self.check_expr(arg)?;
                 }
             }
             TirExprKind::StaticCall { func, args } => {
-                self.check_call(func, expr.span);
+                self.check_call(func, expr.span)?;
                 for arg in args {
-                    self.check_expr(arg);
+                    self.check_expr(arg)?;
                 }
             }
             TirExprKind::EffectCall {
@@ -197,114 +223,114 @@ impl<'a> EffectChecker<'a> {
             } => {
                 // Effect calls require the effect
                 if !self.current_effects.contains(effect_name) {
-                    self.errors.push(EffectError {
+                    self.logger.error(EffectError {
                         callee: effect_name.clone(),
                         missing_effect: effect_name.clone(),
                         span: expr.span,
-                    });
+                    })?;
                 }
                 for arg in args {
-                    self.check_expr(arg);
+                    self.check_expr(arg)?;
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
-                self.check_expr(callee);
+                self.check_expr(callee)?;
                 for arg in args {
-                    self.check_expr(arg);
+                    self.check_expr(arg)?;
                 }
                 // TODO: Check closure effects when we have effect types on closures
             }
             TirExprKind::ClosureToCanonical { functor, .. } => {
-                self.check_expr(functor);
+                self.check_expr(functor)?;
             }
             TirExprKind::Binary { left, right, .. } => {
-                self.check_expr(left);
-                self.check_expr(right);
+                self.check_expr(left)?;
+                self.check_expr(right)?;
             }
             TirExprKind::Unary { expr, .. } => {
-                self.check_expr(expr);
+                self.check_expr(expr)?;
             }
             TirExprKind::Assign { target, value } => {
-                self.check_expr(target);
-                self.check_expr(value);
+                self.check_expr(target)?;
+                self.check_expr(value)?;
             }
             TirExprKind::Cast { expr, .. } => {
-                self.check_expr(expr);
+                self.check_expr(expr)?;
             }
             TirExprKind::FieldAccess { expr, .. } => {
-                self.check_expr(expr);
+                self.check_expr(expr)?;
             }
             TirExprKind::Index { expr, index } => {
-                self.check_expr(expr);
-                self.check_expr(index);
+                self.check_expr(expr)?;
+                self.check_expr(index)?;
             }
             TirExprKind::Block(block) => {
-                self.check_block(block);
+                self.check_block(block)?;
             }
             TirExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
             } => {
-                self.check_expr(condition);
-                self.check_block(then_branch);
+                self.check_expr(condition)?;
+                self.check_block(then_branch)?;
                 if let Some(else_blk) = else_branch {
-                    self.check_block(else_blk);
+                    self.check_block(else_blk)?;
                 }
             }
             TirExprKind::Match { expr, arms } => {
-                self.check_expr(expr);
+                self.check_expr(expr)?;
                 for arm in arms {
                     if let Some(guard) = &arm.guard {
-                        self.check_expr(guard);
+                        self.check_expr(guard)?;
                     }
-                    self.check_expr(&arm.body);
+                    self.check_expr(&arm.body)?;
                 }
             }
             TirExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    self.check_expr(&field.value);
+                    self.check_expr(&field.value)?;
                 }
             }
             TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
-                    self.check_expr(elem);
+                    self.check_expr(elem)?;
                 }
             }
             TirExprKind::ArrayLiteral { elements } => {
                 for elem in elements {
-                    self.check_expr(elem);
+                    self.check_expr(elem)?;
                 }
             }
             TirExprKind::Closure { body, .. } => {
                 // Closures inherit effects from enclosing function, so we continue checking
-                self.check_expr(body);
+                self.check_expr(body)?;
             }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
-                    self.check_expr(payload_expr);
+                    self.check_expr(payload_expr)?;
                 }
             }
             TirExprKind::OptionSome { value } => {
-                self.check_expr(value);
+                self.check_expr(value)?;
             }
             TirExprKind::Move { expr } => {
-                self.check_expr(expr);
+                self.check_expr(expr)?;
             }
             TirExprKind::LabeledBlock { block, .. } => {
-                self.check_block(block);
+                self.check_block(block)?;
             }
             TirExprKind::GlobalVarSet { value, .. } => {
-                self.check_expr(value);
+                self.check_expr(value)?;
             }
             TirExprKind::IsNotNull { expr }
             | TirExprKind::UnwrapOption { expr, .. }
             | TirExprKind::VariantTag { expr }
             | TirExprKind::VariantTest { expr, .. } => {
-                self.check_expr(expr);
+                self.check_expr(expr)?;
             }
             TirExprKind::VariantPayload { expr, .. } => {
-                self.check_expr(expr);
+                self.check_expr(expr)?;
             }
             TirExprKind::Switch {
                 scrutinee,
@@ -312,11 +338,11 @@ impl<'a> EffectChecker<'a> {
                 default,
                 ..
             } => {
-                self.check_expr(scrutinee);
+                self.check_expr(scrutinee)?;
                 for arm in arms {
-                    self.check_block(arm);
+                    self.check_block(arm)?;
                 }
-                self.check_block(default);
+                self.check_block(default)?;
             }
             // Leaf expressions - no sub-expressions to check
             TirExprKind::IntLiteral { .. }
@@ -332,21 +358,23 @@ impl<'a> EffectChecker<'a> {
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
         }
+        Ok(())
     }
 
     /// Check a function call for effect violations
-    fn check_call(&mut self, func_ref: &FunctionRef, span: Span) {
+    fn check_call(&mut self, func_ref: &FunctionRef, span: Span) -> Result<(), Bail> {
         let callee_effects = self.get_function_effects(func_ref);
 
         for effect in &callee_effects {
             if !self.current_effects.contains(effect) {
-                self.errors.push(EffectError {
+                self.logger.error(EffectError {
                     callee: func_ref.name(),
                     missing_effect: effect.clone(),
                     span,
-                });
+                })?;
             }
         }
+        Ok(())
     }
 
     /// Get the effects required by a function

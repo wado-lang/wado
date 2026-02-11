@@ -115,7 +115,7 @@ pub use codegen::Codegen;
 pub use compiler_host::{
     Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SourceError,
 };
-pub use logger::Logger;
+pub use logger::{Bail, Logger};
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
@@ -205,7 +205,7 @@ pub async fn compile_with_host<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
     opt_level: OptLevel,
-) -> Result<CompileResult, CompileError> {
+) -> Result<CompileResult, Bail> {
     let options = CompilerOptions {
         opt_level,
         target_world: None,
@@ -260,16 +260,18 @@ pub async fn compile_with_options<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
     options: CompilerOptions,
-) -> Result<CompileResult, CompileError> {
+) -> Result<CompileResult, Bail> {
+    let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
+    if let Some(ref f) = filename {
+        logger.set_file(f);
+    }
 
     // === Phase 1: Lexer (for original AST) ===
     let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: filename.clone(),
+    let tokens = lexer.tokenize().map_err(|e| {
+        let _ = logger.error(e);
+        Bail
     })?;
     let (data_section, _comments, shebang) = lexer.into_parts();
 
@@ -277,11 +279,9 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Note: The AST is parsed here for early error detection, but the Loader
     // will re-parse the entry module along with all dependencies.
     let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-    let ast = parser.parse().map_err(|e| CompileError::Parser {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: filename.clone(),
+    let ast = parser.parse().map_err(|e| {
+        let _ = logger.error(e);
+        Bail
     })?;
 
     // Note: Bind phase moved to Loader for all modules (including entry module)
@@ -293,31 +293,24 @@ pub async fn compile_with_options<H: CompilerHost>(
         module_loader
             .load_all(source, filename.as_deref())
             .await
-            .map_err(|e| CompileError::Analyzer {
-                message: e.to_string(),
-                filename: filename.clone(),
+            .map_err(|e| {
+                let _ = logger.error(compiler_host::Diagnostic {
+                    severity: compiler_host::Severity::Error,
+                    code: compiler_host::Code::ModuleNotFound,
+                    message: e.to_string(),
+                    span: None,
+                });
+                Bail
             })?
     };
 
     // === Phase 5: Analyze all modules ===
-    let mut analyzer = Analyzer::new();
-    analyzer
-        .analyze_loaded_modules(
-            &load_result.modules,
-            &load_result.entry_module_source,
-            load_result.implicit_modules.clone(),
-        )
-        .map_err(|errors| {
-            let msg = errors
-                .into_iter()
-                .map(|e| e.to_string())
-                .collect::<Vec<_>>()
-                .join("; ");
-            CompileError::Analyzer {
-                message: msg,
-                filename: filename.clone(),
-            }
-        })?;
+    let mut analyzer = Analyzer::new(&logger);
+    analyzer.analyze_loaded_modules(
+        &load_result.modules,
+        &load_result.entry_module_source,
+        load_result.implicit_modules.clone(),
+    )?;
 
     let symbols = analyzer.into_symbols();
 
@@ -330,32 +323,11 @@ pub async fn compile_with_options<H: CompilerHost>(
         load_result.entry_module_source.clone(),
         load_result.implicit_modules.clone(),
         module_name,
-    )
-    .map_err(|errors| {
-        let msg = errors
-            .into_iter()
-            .map(|e| e.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        CompileError::Analyzer {
-            message: msg,
-            filename: filename.clone(),
-        }
-    })?;
+        &logger,
+    )?;
 
     // === Phase 7: Effect Check ===
-    let effect_errors = check_effects(&project.tir_modules);
-    if !effect_errors.is_empty() {
-        let msg = effect_errors
-            .into_iter()
-            .map(|e| e.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        return Err(CompileError::Analyzer {
-            message: msg,
-            filename: filename.clone(),
-        });
-    }
+    check_effects(&project.tir_modules, &logger)?;
 
     // === Phase 8: Monomorphize (Project -> Project) ===
     let mut project = monomorphize_project(project);
@@ -373,9 +345,14 @@ pub async fn compile_with_options<H: CompilerHost>(
     let project = optimize(project, options.opt_level);
 
     // === Phase 11: Wasm Plan (Project -> Project) ===
-    let project = wasm_plan(project).map_err(|message| CompileError::Analyzer {
-        message,
-        filename: filename.clone(),
+    let project = wasm_plan(project).map_err(|message| {
+        let _ = logger.error(compiler_host::Diagnostic {
+            severity: compiler_host::Severity::Error,
+            code: compiler_host::Code::UnsupportedFeature,
+            message,
+            span: None,
+        });
+        Bail
     })?;
 
     // === Phase 12: Codegen ===
@@ -396,16 +373,18 @@ pub async fn dump_with_host<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
     opt_level: OptLevel,
-) -> Result<DumpResult, CompileError> {
+) -> Result<DumpResult, Bail> {
+    let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
+    if let Some(ref f) = filename {
+        logger.set_file(f);
+    }
 
     // === Phase 1: Lexer ===
     let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().map_err(|e| CompileError::Lexer {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: filename.clone(),
+    let tokens = lexer.tokenize().map_err(|e| {
+        let _ = logger.error(e);
+        Bail
     })?;
     let (data_section, comments, shebang) = lexer.into_parts();
 
@@ -415,26 +394,14 @@ pub async fn dump_with_host<H: CompilerHost>(
     // === Phase 2: Parser ===
     let tokens_for_dump = tokens.clone();
     let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-    let ast = parser.parse().map_err(|e| CompileError::Parser {
-        message: e.message,
-        line: e.span.line,
-        column: e.span.column,
-        filename: filename.clone(),
+    let ast = parser.parse().map_err(|e| {
+        let _ = logger.error(e);
+        Bail
     })?;
 
     // === Phase 3: Bind ===
-    let mut binder = Binder::new();
-    binder.bind_module(&ast).map_err(|errors| {
-        let msg = errors
-            .into_iter()
-            .map(|e| e.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        CompileError::Bind {
-            message: msg,
-            filename: filename.clone(),
-        }
-    })?;
+    let mut binder = Binder::new(&logger);
+    binder.bind_module(&ast)?;
 
     // === Phase 4: Desugar ===
     let desugared_ast = desugar::desugar_module(&ast);
@@ -445,31 +412,24 @@ pub async fn dump_with_host<H: CompilerHost>(
         module_loader
             .load_all(source, filename.as_deref())
             .await
-            .map_err(|e| CompileError::Analyzer {
-                message: e.to_string(),
-                filename: filename.clone(),
+            .map_err(|e| {
+                let _ = logger.error(compiler_host::Diagnostic {
+                    severity: compiler_host::Severity::Error,
+                    code: compiler_host::Code::ModuleNotFound,
+                    message: e.to_string(),
+                    span: None,
+                });
+                Bail
             })?
     };
 
     // === Phase 6: Analyze all modules ===
-    let mut analyzer = Analyzer::new();
-    analyzer
-        .analyze_loaded_modules(
-            &load_result.modules,
-            &load_result.entry_module_source,
-            load_result.implicit_modules.clone(),
-        )
-        .map_err(|errors| {
-            let msg = errors
-                .into_iter()
-                .map(|e| e.to_string())
-                .collect::<Vec<_>>()
-                .join("; ");
-            CompileError::Analyzer {
-                message: msg,
-                filename: filename.clone(),
-            }
-        })?;
+    let mut analyzer = Analyzer::new(&logger);
+    analyzer.analyze_loaded_modules(
+        &load_result.modules,
+        &load_result.entry_module_source,
+        load_result.implicit_modules.clone(),
+    )?;
 
     let symbols = analyzer.into_symbols();
 
@@ -478,6 +438,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         &symbols,
         &load_result.modules,
         load_result.entry_module_source.clone(),
+        &logger,
     )
     .ok();
 

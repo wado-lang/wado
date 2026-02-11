@@ -232,8 +232,8 @@ pub async fn compile_with_full_opts(
 
     match result {
         Ok(result) => result.wasm,
-        Err(e) => {
-            eprintln!("{e}");
+        Err(_bail) => {
+            // Errors already printed by host via emit_diagnostic
             process::exit(1);
         }
     }

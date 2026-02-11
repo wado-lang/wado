@@ -31,6 +31,8 @@ pub enum LogLevel {
 /// Severity level for diagnostics
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
+    /// Fatal error (immediately stops compilation, e.g., too many errors)
+    Fatal,
     /// Compilation error (prevents successful compilation)
     Error,
     /// Warning (compilation continues but may indicate issues)
@@ -44,6 +46,7 @@ pub enum Severity {
 impl std::fmt::Display for Severity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Severity::Fatal => write!(f, "fatal"),
             Severity::Error => write!(f, "error"),
             Severity::Warning => write!(f, "warning"),
             Severity::Info => write!(f, "info"),

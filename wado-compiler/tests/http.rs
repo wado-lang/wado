@@ -17,7 +17,7 @@ use wasmtime_wasi::{WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::p3::bindings::Service;
 use wasmtime_wasi_http::p3::{Request, WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
-use wado_compiler::{CompileError, CompilerOptions, OptLevel};
+use wado_compiler::{Bail, CompileError, CompilerOptions, OptLevel};
 
 // ============================================================================
 // HTTP-specific WASI Context
@@ -64,15 +64,17 @@ async fn compile_http_service(path: &Path) -> Result<Vec<u8>, CompileError> {
 
     let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let host = common::FilesystemHost::new(base_path);
+    let filename = path.to_string_lossy();
 
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         target_world: Some("wasi:http/service".to_string()),
     };
 
-    wado_compiler::compile_with_options(&source, &host, Some(&path.to_string_lossy()), options)
+    wado_compiler::compile_with_options(&source, &host, Some(&filename), options)
         .await
         .map(|r| r.wasm)
+        .map_err(|_: Bail| common::bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
 // ============================================================================
