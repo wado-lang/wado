@@ -2137,7 +2137,7 @@ map.get("key")    // returns Option<V>
 
 ## Module System
 
-Wado uses an ESM-like import syntax with `use {...} from "source"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
+Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns with JavaScript/TypeScript conventions, as JavaScript is a primary host environment for Wado.
 
 ### Visibility
 
@@ -2540,7 +2540,7 @@ test "multiply" {
 }
 
 // Entry point required for valid Wado module
-fn run() {
+export fn run() {
 }
 ```
 
@@ -2563,7 +2563,7 @@ Test functions use the same async wrapper as `run()`, ensuring compatibility wit
 
 Wado has built-in reactive signals (called "signals" in other frameworks like SolidJS, Svelte 5). The compiler analyzes dependencies at compile-time and generates efficient update code.
 
-### reactive Keyword
+### The `reactive` Keyword
 
 **Source** values are mutable reactive state:
 
@@ -2586,7 +2586,7 @@ let x = doubled;    // Returns current computed value
 
 Derived values are recomputed when their dependencies change. The compiler builds a dependency graph and updates values in topological order.
 
-### observe Function
+### The `observe` Function
 
 The `observe` function (from `core:reactive`) executes side effects when reactive dependencies change. Dependencies are automatically tracked—any reactive value read within the closure becomes a dependency.
 

@@ -63,7 +63,7 @@ let z: i64 = 100;       // with type annotation
 ## Global Variables
 
 ```wado
-// Module-level globals (compile to Wasm globals)
+// Module-level globals
 global PI: f64 = 3.14159;           // immutable
 global mut counter: i32 = 0;        // mutable
 
@@ -73,7 +73,7 @@ pub global VERSION: i32 = 1;        // accessible from other modules
 // Arithmetic expressions
 global DOUBLED: i32 = 21 * 2;       // evaluated at initialization
 
-// Object type globals (lazy initialized)
+// Object type globals
 global mut MESSAGE: String = "Hello, World!";
 global mut ITEMS: Array<i32> = [1, 2, 3];
 
@@ -968,20 +968,20 @@ wado test --filter pattern      # filter tests by name
 
 ```wado
 // Named imports
-use {println, eprintln} from "core:cli";
+use { println, eprintln } from "core:cli";
 
 // Effect with operations
-use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
+use { Stdout, Stdout::{write_via_stream} } from "wasi:cli";
 
 // Namespace import
 use utils from "./utils.wado";
 
 // Rename
-use {foo as bar} from "./mod.wado";
+use { foo as bar } from "./mod.wado";
 
 // Re-export (pub use)
-pub use {foo, bar} from "./internal.wado";  // re-export for other modules
-pub use {foo as baz} from "./internal.wado"; // re-export with rename
+pub use { foo, bar } from "./internal.wado";   // re-export for other modules
+pub use { foo as baz } from "./internal.wado"; // re-export with rename
 ```
 
 ## Effects
@@ -1026,11 +1026,14 @@ Note: `stores` is for function parameters. Closures use "capture" terminology (`
 
 ## Entrypoint
 
-```wado
-use {println, Stdout} from "core:cli";
+The entrypoint is defined in a World, which requires `export` keyword.
 
-// run() is the entry point for wasi:cli Command world
-fn run() with Stdout {
+`run()` is the entry point for wasi:cli Command world.
+
+```wado
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
     println("Hello!");
 }
 ```
@@ -1043,21 +1046,21 @@ panic("error message");   // trap with message
 unreachable();            // trap
 
 // core:cli - Output
-use {println, eprintln, print, eprint, Stdout, Stderr} from "core:cli";
+use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
 println("with newline");
 eprintln("error line");
 
 // core:clocks
-use {now, MonotonicClock} from "core:clocks";
+use { now, MonotonicClock } from "core:clocks";
 let t = now();            // current time in nanoseconds
 
-// core:collections - TreeMap (sorted map)
-use {TreeMap} from "core:collections";
+// core:collections - TreeMap (insertion-order preserved)
+use { TreeMap } from "core:collections";
 let mut map = TreeMap::<String, i32>::new();
 map["key"] = 42;          // index assignment
 map["key2"] = 100;
 if let Some(v) = map["key"] { ... }  // index access returns Option<V>
-let keys = map.keys();    // keys in sorted order
+let keys = map.keys();    // keys in insertion order
 map.remove("key");
 ```
 
@@ -1315,8 +1318,6 @@ struct Foo {
     secret: String, // won't be shown in debug stringify
 }
 ```
-
-User-facing attributes are not yet supported.
 
 ## Macros
 
