@@ -7,7 +7,7 @@ use { TcpSocket, IpAddressFamily } from "wasi:sockets";
 
 export fn run() with Stdout {
     let family = IpAddressFamily::Ipv4;
-    let result = TcpSocket::static_tcp_socket_create(family);
+    let result = TcpSocket::create(family);
     if let Ok(socket) = result {
         // Successfully extracted TcpSocket from Result<TcpSocket, ErrorCode>
         println("Resource extracted from Result");
