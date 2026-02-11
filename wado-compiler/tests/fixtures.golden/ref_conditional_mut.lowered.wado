@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn clamp(r: Box<i32>, min: i32, max: i32) {
     if (r.value < min) {
@@ -22,12 +26,45 @@ fn clamp(r: Box<i32>, min: i32, max: i32) {
 fn run() with Stdout {
     let mut a: Box<i32> = move Box<i32> { value: 50 };
     clamp(a, 0, 100);
-    core::cli::println(move "String::concat"(move "clamped 50: ", move a.value."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(28), used: 0 };
+        };
+        __r."String::append"(move "clamped 50: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        a."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let mut b: Box<i32> = move Box<i32> { value: -10 };
     clamp(b, 0, 100);
-    core::cli::println(move "String::concat"(move "clamped -10: ", move b.value."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(29), used: 0 };
+        };
+        __r."String::append"(move "clamped -10: ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        b."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let mut c: Box<i32> = move Box<i32> { value: 200 };
     clamp(c, 0, 100);
-    core::cli::println(move "String::concat"(move "clamped 200: ", move c.value."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(29), used: 0 };
+        };
+        __r."String::append"(move "clamped 200: ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        c."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

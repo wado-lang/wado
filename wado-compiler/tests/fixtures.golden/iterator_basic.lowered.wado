@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 pub struct "ArrayIter<i32>" {
     repr: builtin::array<i32>,
@@ -25,22 +29,66 @@ fn run() with Stdout {
     let __pattern_temp_0: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
     if __is_not_null(__pattern_temp_0) {
         let a: i32 = __unwrap_option(__pattern_temp_0).value;
-        core::cli::println(move "String::concat"(move "first: ", move a."i32::to_string"()));
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_2: {
+                break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(23), used: 0 };
+            };
+            __r."String::append"(move "first: ");
+            let mut __f: Formatter = __inline_Formatter__new_3: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            Box<i32> { value: a }."i32@Display::fmt"(&mut __f);
+            break __tmpl: __r;
+        });
     }
     let __pattern_temp_1: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
     if __is_not_null(__pattern_temp_1) {
         let b: i32 = __unwrap_option(__pattern_temp_1).value;
-        core::cli::println(move "String::concat"(move "second: ", move b."i32::to_string"()));
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_4: {
+                break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(24), used: 0 };
+            };
+            __r."String::append"(move "second: ");
+            let mut __f: Formatter = __inline_Formatter__new_5: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            Box<i32> { value: b }."i32@Display::fmt"(&mut __f);
+            break __tmpl: __r;
+        });
     }
     let __pattern_temp_2: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
     if __is_not_null(__pattern_temp_2) {
         let c: i32 = __unwrap_option(__pattern_temp_2).value;
-        core::cli::println(move "String::concat"(move "third: ", move c."i32::to_string"()));
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_6: {
+                break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(23), used: 0 };
+            };
+            __r."String::append"(move "third: ");
+            let mut __f: Formatter = __inline_Formatter__new_7: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            Box<i32> { value: c }."i32@Display::fmt"(&mut __f);
+            break __tmpl: __r;
+        });
     }
     let __pattern_temp_3: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
     if __is_not_null(__pattern_temp_3) {
         let d: i32 = __unwrap_option(__pattern_temp_3).value;
-        core::cli::println(move "String::concat"(move "unexpected: ", move d."i32::to_string"()));
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_8: {
+                break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(28), used: 0 };
+            };
+            __r."String::append"(move "unexpected: ");
+            let mut __f: Formatter = __inline_Formatter__new_9: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            Box<i32> { value: d }."i32@Display::fmt"(&mut __f);
+            break __tmpl: __r;
+        });
     } else {
         core::cli::println(move "done");
     }

@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct Inner {
     value: i32,
@@ -19,14 +23,34 @@ struct Outer {
 
 fn run() with Stdout {
     let mut __sroa___sroa_o_inner_value: i32 = 42;
-    core::cli::println(move __inline_get_inner_value_0: {
-        break __inline_get_inner_value_0: __sroa___sroa_o_inner_value;
-    }."i32::to_string"());
-    __inline_set_inner_value_1: {
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_get_inner_value_2: {
+            break __inline_get_inner_value_2: __sroa___sroa_o_inner_value;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    __inline_set_inner_value_3: {
         __sroa___sroa_o_inner_value = 100;
     };
-    core::cli::println(move __inline_get_inner_value_2: {
-        break __inline_get_inner_value_2: __sroa___sroa_o_inner_value;
-    }."i32::to_string"());
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_get_inner_value_6: {
+            break __inline_get_inner_value_6: __sroa___sroa_o_inner_value;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

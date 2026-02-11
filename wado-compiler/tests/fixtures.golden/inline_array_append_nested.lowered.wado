@@ -75,10 +75,21 @@ fn run() with Stdout {
     let mut c: Container = move Container { items: [] };
     c."Container::add_items"(3);
     c."Container::process"();
-    core::cli::println(move "String::concat"(move "len=", move __inline_Array_i32___len_0: {
-        let self: &Array<i32> = &c.items;
-        break __inline_Array_i32___len_0: self.used;
-    }."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(20), used: 0 };
+        };
+        __r."String::append"(move "len=");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Array_i32___len_2: {
+            let self: &Array<i32> = &c.items;
+            break __inline_Array_i32___len_2: self.used;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

@@ -8,52 +8,108 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let mut a: Box<i64> = move Box<i64> { value: 100 };
-    core::cli::println(move "String::concat"(move "i64: ", move __inline_read_i64_0: {
-        let r: Box<i64> = a;
-        break __inline_read_i64_0: r.value;
-    }."i64::to_string"()));
-    __inline_set_i64_1: {
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "i64: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i64> { value: __inline_read_i64_2: {
+            let r: Box<i64> = a;
+            break __inline_read_i64_2: r.value;
+        } }."i64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    __inline_set_i64_3: {
         let r: Box<i64> = a;
         r.value = 200;
     };
-    core::cli::println(move "String::concat"(move "i64: ", move a.value."i64::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "i64: ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        a."i64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let mut b: Box<f64> = move Box<f64> { value: 3.14 };
-    core::cli::println(move "String::concat"(move "f64: ", move __inline_read_f64_2: {
-        let r: Box<f64> = b;
-        break __inline_read_f64_2: r.value;
-    }."f64::to_string"()));
-    __inline_set_f64_3: {
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "f64: ");
+        let mut __f: Formatter = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: __inline_read_f64_8: {
+            let r: Box<f64> = b;
+            break __inline_read_f64_8: r.value;
+        } }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    __inline_set_f64_9: {
         let r: Box<f64> = b;
         r.value = 2.718;
     };
-    core::cli::println(move "String::concat"(move "f64: ", move b.value."f64::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_10: {
+            break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "f64: ");
+        let mut __f: Formatter = __inline_Formatter__new_11: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        b."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let mut c: Box<bool> = move Box<bool> { value: true };
-    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_5: {
-        let self: bool = __inline_read_bool_4: {
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_12: {
+            break __inline_String__with_capacity_12: String { repr: "array_new<u8>"(22), used: 0 };
+        };
+        __r."String::append"(move "bool: ");
+        let mut __f: Formatter = __inline_Formatter__new_13: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<bool> { value: __inline_read_bool_14: {
             let r: Box<bool> = c;
-            break __inline_read_bool_4: r.value;
-        };
-        break __inline_bool__to_string_5: if self {
-            "true";
-        } else {
-            "false";
-        };
-    }));
-    __inline_set_bool_6: {
+            break __inline_read_bool_14: r.value;
+        } }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    __inline_set_bool_15: {
         let r: Box<bool> = c;
         r.value = false;
     };
-    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_7: {
-        let self: bool = c.value;
-        break __inline_bool__to_string_7: if self {
-            "true";
-        } else {
-            "false";
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_16: {
+            break __inline_String__with_capacity_16: String { repr: "array_new<u8>"(22), used: 0 };
         };
-    }));
+        __r."String::append"(move "bool: ");
+        let mut __f: Formatter = __inline_Formatter__new_17: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        c."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

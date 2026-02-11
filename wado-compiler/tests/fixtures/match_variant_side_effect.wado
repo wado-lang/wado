@@ -1,0 +1,34 @@
+// Test: match on variant used as a statement (side-effect only, no return value).
+// This is a TODO test because match-as-statement on variants currently generates
+// invalid Wasm (expects a typed result from branches that only perform side effects).
+// The workaround is to use if/else with `matches {}` instead.
+
+use { println, Stdout } from "core:cli";
+
+variant Direction {
+    Left,
+    Center,
+    Right,
+}
+
+export fn run() with Stdout {
+    let dir = Direction::Center;
+
+    // Match used as statement — branches have side effects only (no return value)
+    match dir {
+        Left => {
+            println("go left");
+        },
+        Center => {
+            println("go center");
+        },
+        Right => {
+            println("go right");
+        },
+    };
+
+    println("done");
+}
+
+__DATA__
+{"TODO": true, "stdout": "go center\ndone\n"}

@@ -46,18 +46,85 @@ struct "Box<i32>" {
 fn run() with Stdout {
     let __sroa_f32_box_value: f32 = 2.5 as f32;
     let __sroa_str_box_value: String = move "world";
-    core::cli::println(move "String::concat"(move "i32: ", move 42."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "i64: ", move 9999999999."i64::to_string"()));
-    core::cli::println(move "String::concat"(move "f32: ", move __sroa_f32_box_value."f32::to_string"()));
-    core::cli::println(move "String::concat"(move "f64: ", move 3.14159."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "bool: ", __inline_bool__to_string_0: {
-        break __inline_bool__to_string_0: if false {
-            "true";
-        } else {
-            "false";
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
         };
-    }));
-    core::cli::println(move "String::concat"(move "char: ", move 'Z'."char::to_string"()));
-    core::cli::println(move "String::concat"(move "str: ", __sroa_str_box_value));
+        __r."String::append"(move "i32: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: 42 }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "i64: ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i64> { value: 9999999999 }."i64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "f32: ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f32> { value: __sroa_f32_box_value }."f32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "f64: ");
+        let mut __f: Formatter = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 3.14159 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_8: {
+            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(22), used: 0 };
+        };
+        __r."String::append"(move "bool: ");
+        let mut __f: Formatter = __inline_Formatter__new_9: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<bool> { value: false }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_10: {
+            break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(22), used: 0 };
+        };
+        __r."String::append"(move "char: ");
+        let mut __f: Formatter = __inline_Formatter__new_11: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<char> { value: 'Z' }."char@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_12: {
+            break __inline_String__with_capacity_12: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "str: ");
+        __r."String::append"(__sroa_str_box_value);
+        break __tmpl: __r;
+    });
 }
 

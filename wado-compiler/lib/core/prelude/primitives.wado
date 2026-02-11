@@ -18,47 +18,331 @@ fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     return arr;
 }
 
+// ============================================================
+// Format helper functions
+// ============================================================
+// These write formatted values directly to a Formatter's buffer,
+// avoiding intermediate GC String allocations in the common case.
+
+/// Count decimal digits of a non-negative i64 value.
+fn count_digits_i64(val: i64) -> i32 {
+    let zero: i64 = 0;
+    if val == zero { return 1; }
+    let ten: i64 = 10;
+    let mut n: i32 = 0;
+    for let mut t: i64 = val; t > zero; t = t / ten {
+        n += 1;
+    }
+    return n;
+}
+
+/// Write `digit_count` decimal digits of `abs_val` backwards into `arr` starting at `offset`.
+fn write_decimal_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_count: i32) {
+    let zero: i64 = 0;
+    let ten: i64 = 10;
+    let mut pos = offset + digit_count;
+    if abs_val == zero {
+        builtin::array_set_u8(arr, offset, '0' as i32);
+    } else {
+        for let mut temp: i64 = abs_val; temp > zero; temp = temp / ten {
+            pos -= 1;
+            builtin::array_set_u8(arr, pos, ('0' as i32) + ((temp % ten) as i32));
+        }
+    }
+}
+
+/// Write `digit_count` digits of `abs_val` in given base backwards into `arr` at `offset`.
+fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_count: i32, base: i32, upper: bool) {
+    let zero: i64 = 0;
+    let base64: i64 = base as i64;
+    let mut pos = offset + digit_count;
+    if abs_val == zero {
+        builtin::array_set_u8(arr, offset, '0' as i32);
+    } else {
+        for let mut temp: i64 = abs_val; temp > zero; temp = temp / base64 {
+            pos -= 1;
+            let digit: i32 = (temp % base64) as i32;
+            let ch = if digit < 10 {
+                ('0' as i32) + digit
+            } else if upper {
+                ('A' as i32) + digit - 10
+            } else {
+                ('a' as i32) + digit - 10
+            };
+            builtin::array_set_u8(arr, pos, ch);
+        }
+    }
+}
+
+/// Count digits of a non-negative i64 value in the given base.
+fn count_digits_base(val: i64, base: i32) -> i32 {
+    let zero: i64 = 0;
+    if val == zero { return 1; }
+    let base64: i64 = base as i64;
+    let mut n: i32 = 0;
+    for let mut t: i64 = val; t > zero; t = t / base64 {
+        n += 1;
+    }
+    return n;
+}
+
+/// Count digits of a u64 value (as raw i64 bits) in the given power-of-2 base.
+/// `bits_per_digit` is log2(base): 1 for binary, 3 for octal, 4 for hex.
+fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
+    let zero: i64 = 0;
+    if val_i64 == zero { return 1; }
+    // Count leading zeros manually: find highest set bit
+    let mut highest_bit: i32 = 0;
+    // Check high 32 bits
+    let high32: i64 = (val_i64 >> 32) & 0xFFFFFFFF;
+    if high32 != zero {
+        // Bit is somewhere in bits 32..63
+        let mut b: i32 = 63;
+        while b >= 32 {
+            let one: i64 = 1;
+            if (val_i64 >> (b as i64)) & one != zero {
+                highest_bit = b;
+                break;
+            }
+            b -= 1;
+        }
+    } else {
+        // Bit is somewhere in bits 0..31
+        let mut b: i32 = 31;
+        while b >= 0 {
+            let one: i64 = 1;
+            if (val_i64 >> (b as i64)) & one != zero {
+                highest_bit = b;
+                break;
+            }
+            b -= 1;
+        }
+    }
+    return (highest_bit / bits_per_digit) + 1;
+}
+
+/// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
+fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
+    let zero: i64 = 0;
+    let mask64: i64 = mask as i64;
+    let mut pos = offset + digit_count;
+    if val_i64 == zero {
+        builtin::array_set_u8(arr, offset, '0' as i32);
+    } else {
+        let mut temp: i64 = val_i64;
+        while temp != zero {
+            pos -= 1;
+            let digit: i32 = (temp & mask64) as i32;
+            let ch = if digit < 10 {
+                ('0' as i32) + digit
+            } else if upper {
+                ('A' as i32) + digit - 10
+            } else {
+                ('a' as i32) + digit - 10
+            };
+            builtin::array_set_u8(arr, pos, ch);
+            // Unsigned right shift: use Wasm's i64.shr_u semantics
+            // In Wado, >> on i64 is arithmetic shift. For unsigned shift we need:
+            // (val as u64 >> bits) as i64
+            let shift_u64: u64 = bits_per_digit as u64;
+            temp = ((temp as u64) >> shift_u64) as i64;
+        }
+    }
+}
+
+/// Write a u64 value in the given power-of-2 base (2, 8, or 16) into the Formatter's output buffer.
+fn fmt_u64_base(val_i64: i64, f: &mut Formatter, base: i32, upper: bool) {
+    let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
+    let mask = base - 1;
+    let prefix = if f.alternate() {
+        if base == 2 {
+            "0b"
+        } else if base == 8 {
+            "0o"
+        } else if upper {
+            "0X"
+        } else {
+            "0x"
+        }
+    } else {
+        ""
+    };
+    let digit_count = count_digits_u64_base(val_i64, bits_per_digit);
+    let offset = f.prepare_int_write(false, prefix, digit_count);
+    write_u64_base_digits(f.buf.internal_raw_bytes(), offset, val_i64, digit_count, bits_per_digit, mask, upper);
+}
+
+/// Write i32 as decimal directly into the Formatter's output buffer.
+fn fmt_i32_decimal(value: i32, f: &mut Formatter) {
+    let is_negative = value < 0;
+    let abs_val: i64 = if is_negative { 0 - (value as i64) } else { value as i64 };
+    let digit_count = count_digits_i64(abs_val);
+    let offset = f.prepare_int_write(is_negative, "", digit_count);
+    write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
+}
+
+/// Write u32 as decimal directly into the Formatter's output buffer.
+fn fmt_u32_decimal(value: u32, f: &mut Formatter) {
+    let val_i32 = (value) as i32;
+    let abs_val: i64 = if val_i32 < 0 {
+        (val_i32 as i64) + 4294967296
+    } else {
+        val_i32 as i64
+    };
+    let digit_count = count_digits_i64(abs_val);
+    let offset = f.prepare_int_write(false, "", digit_count);
+    write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
+}
+
+/// Write i64 as decimal directly into the Formatter's output buffer.
+/// Handles i64::MIN specially.
+fn fmt_i64_decimal(value: i64, f: &mut Formatter) {
+    let zero_i64: i64 = 0;
+    let is_negative = value < zero_i64;
+    let i64_max: i64 = 9223372036854775807;
+    let one_i64: i64 = 1;
+    let i64_min: i64 = zero_i64 - i64_max - one_i64;
+    let ten_i64: i64 = 10;
+
+    if value == i64_min {
+        // i64::MIN = -9223372036854775808: last digit '8', remaining 922337203685477580
+        let remaining: i64 = 922337203685477580;
+        let remaining_digits = count_digits_i64(remaining);
+        let digit_count = remaining_digits + 1;
+        let offset = f.prepare_int_write(true, "", digit_count);
+        let repr = f.buf.internal_raw_bytes();
+        // Write the remaining digits, then the last '8'
+        write_decimal_digits(repr, offset, remaining, remaining_digits);
+        builtin::array_set_u8(repr, offset + remaining_digits, '8' as i32);
+    } else {
+        let abs_val: i64 = if is_negative { zero_i64 - value } else { value };
+        let digit_count = count_digits_i64(abs_val);
+        let offset = f.prepare_int_write(is_negative, "", digit_count);
+        write_decimal_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count);
+    }
+}
+
+/// Write u64 as decimal directly into the Formatter's output buffer.
+/// Uses special unsigned division for values > i64::MAX.
+fn fmt_u64_decimal(value: u64, f: &mut Formatter) {
+    let val_i64 = (value) as i64;
+    let zero: i64 = 0;
+    let ten: i64 = 10;
+
+    if val_i64 == zero {
+        let offset = f.prepare_int_write(false, "", 1);
+        builtin::array_set_u8(f.buf.internal_raw_bytes(), offset, '0' as i32);
+        return;
+    }
+
+    // Count digits using unsigned division
+    let mut digit_count: i32 = 0;
+    let offset_div: i64 = 1844674407370955161;
+    let mut temp: i64 = val_i64;
+    while temp != zero {
+        digit_count += 1;
+        if temp >= zero {
+            temp = temp / ten;
+        } else {
+            let signed_rem: i64 = temp % ten;
+            let rem_adjusted: i64 = signed_rem + 6;
+            let signed_quot: i64 = temp / ten;
+            let mut carry: i64 = 0;
+            if rem_adjusted < zero {
+                carry = 0 - 1;
+            }
+            temp = signed_quot + offset_div + carry;
+        }
+    }
+
+    let offset = f.prepare_int_write(false, "", digit_count);
+    let repr = f.buf.internal_raw_bytes();
+
+    // Write digits using unsigned division (backwards)
+    let mut pos = offset + digit_count;
+    temp = val_i64;
+    while temp != zero {
+        pos -= 1;
+        let mut digit: i32 = 0;
+        if temp >= zero {
+            digit = (temp % ten) as i32;
+            temp = temp / ten;
+        } else {
+            let signed_rem: i64 = temp % ten;
+            let rem_adjusted: i64 = signed_rem + 6;
+            if rem_adjusted >= zero {
+                digit = rem_adjusted as i32;
+            } else {
+                digit = (rem_adjusted + ten) as i32;
+            }
+            let signed_quot: i64 = temp / ten;
+            let mut carry: i64 = 0;
+            if rem_adjusted < zero {
+                carry = 0 - 1;
+            }
+            temp = signed_quot + offset_div + carry;
+        }
+        builtin::array_set_u8(repr, pos, ('0' as i32) + digit);
+    }
+}
+
+/// Write f32 to formatter using bundled float-to-string algorithm.
+/// (f32_to_buffer writes to linear memory — unavoidable for the bundled Wasm library.)
+fn fmt_f32_display(value: f32, f: &mut Formatter) {
+    let ptr = builtin::realloc(0, 0, 1, 16);
+    let len = builtin::f32_to_buffer(value, ptr);
+    f.write_from_memory(ptr, len);
+    builtin::realloc(ptr, 16, 1, 0);
+}
+
+/// Write f64 to formatter using bundled float-to-string algorithm.
+/// (f64_to_buffer writes to linear memory — unavoidable for the bundled Wasm library.)
+fn fmt_f64_display(value: f64, f: &mut Formatter) {
+    let ptr = builtin::realloc(0, 0, 1, 24);
+    let len = builtin::f64_to_buffer(value, ptr);
+    f.write_from_memory(ptr, len);
+    builtin::realloc(ptr, 24, 1, 0);
+}
+
+/// Write an integer (as i64 absolute value) in the given base (2, 8, or 16)
+/// directly into the Formatter's output buffer.
+fn fmt_int_base(abs_val: i64, is_negative: bool, f: &mut Formatter, base: i32, upper: bool) {
+    let prefix = if f.alternate() {
+        if base == 2 {
+            "0b"
+        } else if base == 8 {
+            "0o"
+        } else if upper {
+            "0X"
+        } else {
+            "0x"
+        }
+    } else {
+        ""
+    };
+    let digit_count = count_digits_base(abs_val, base);
+    let offset = f.prepare_int_write(is_negative, prefix, digit_count);
+    write_base_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count, base, upper);
+}
+
+// ============================================================
+// Primitive type methods
+// ============================================================
+
 impl bool {
-    /// Convert bool to String ("true" or "false")
     pub fn to_string(self) -> String {
-        return if self { "true" } else { "false" };
+        let mut buf = String::with_capacity(5);
+        let mut f = Formatter::new(&mut buf);
+        f.pad(if self { "true" } else { "false" });
+        return buf;
     }
 }
 
 impl char {
-    /// Convert char to String (single character as UTF-8)
     pub fn to_string(self) -> String {
-        let code = (self) as u32;
-
-        if code < 0x80 {
-            // ASCII: single byte
-            let arr = builtin::array_new::<u8>(1);
-            builtin::array_set_u8(arr, 0, code);
-            return String::internal_from_utf8_raw(arr, 1);
-        } else if code < 0x800 {
-            // 2-byte UTF-8
-            let arr = builtin::array_new::<u8>(2);
-            builtin::array_set_u8(arr, 0, 0xC0 | (code >> 6));
-            builtin::array_set_u8(arr, 1, 0x80 | (code & 0x3F));
-            return String::internal_from_utf8_raw(arr, 2);
-        } else if code < 0x10000 {
-            // 3-byte UTF-8: check for surrogates (0xD800-0xDFFF)
-            assert code < 0xD800 || code > 0xDFFF, "invalid Unicode scalar value: surrogate code point";
-            let arr = builtin::array_new::<u8>(3);
-            builtin::array_set_u8(arr, 0, 0xE0 | (code >> 12));
-            builtin::array_set_u8(arr, 1, 0x80 | ((code >> 6) & 0x3F));
-            builtin::array_set_u8(arr, 2, 0x80 | (code & 0x3F));
-            return String::internal_from_utf8_raw(arr, 3);
-        } else {
-            // 4-byte UTF-8: check for valid range (max 0x10FFFF)
-            assert code <= 0x10FFFF, "invalid Unicode scalar value: out of range";
-            let arr = builtin::array_new::<u8>(4);
-            builtin::array_set_u8(arr, 0, 0xF0 | (code >> 18));
-            builtin::array_set_u8(arr, 1, 0x80 | ((code >> 12) & 0x3F));
-            builtin::array_set_u8(arr, 2, 0x80 | ((code >> 6) & 0x3F));
-            builtin::array_set_u8(arr, 3, 0x80 | (code & 0x3F));
-            return String::internal_from_utf8_raw(arr, 4);
-        }
+        let mut buf = String::with_capacity(4);
+        buf.append_char(self);
+        return buf;
     }
 }
 
@@ -66,9 +350,7 @@ impl i8 {
     pub const MAX: i8 = 127;
     pub const MIN: i8 = -128;
 
-    /// Convert i8 to String
     pub fn to_string(self) -> String {
-        // Cast to i32 and use i32's algorithm
         return ((self) as i32).to_string();
     }
 }
@@ -77,9 +359,7 @@ impl u8 {
     pub const MAX: u8 = 255;
     pub const MIN: u8 = 0;
 
-    /// Convert u8 to String
     pub fn to_string(self) -> String {
-        // Cast to i32 and use i32's algorithm (u8 fits in positive i32)
         return ((self) as i32).to_string();
     }
 }
@@ -88,9 +368,7 @@ impl i16 {
     pub const MAX: i16 = 32767;
     pub const MIN: i16 = -32768;
 
-    /// Convert i16 to String
     pub fn to_string(self) -> String {
-        // Cast to i32 and use i32's algorithm
         return ((self) as i32).to_string();
     }
 }
@@ -99,9 +377,7 @@ impl u16 {
     pub const MAX: u16 = 65535;
     pub const MIN: u16 = 0;
 
-    /// Convert u16 to String
     pub fn to_string(self) -> String {
-        // Cast to i32 and use i32's algorithm (u16 fits in positive i32)
         return ((self) as i32).to_string();
     }
 }
@@ -110,51 +386,11 @@ impl i32 {
     pub const MAX: i32 = 2147483647;
     pub const MIN: i32 = -2147483648;
 
-    /// Convert i32 to String
-    /// Maximum i32 value is 2147483647 (10 digits) + optional minus sign = 11 chars max
     pub fn to_string(self) -> String {
-        let value = self;
-
-        // Handle zero case
-        if value == 0 {
-            return "0";
-        }
-
-        // Special case for i32::MIN: In two's complement, negating MIN overflows
-        // because -(-2147483648) = 2147483648 which exceeds i32::MAX (2147483647).
-        if value == -2147483648 {
-            return "-2147483648";
-        }
-
-        // Determine sign and work with absolute value
-        let is_negative = value < 0;
-        let abs_value = if is_negative { 0 - value } else { value };
-
-        // Allocate buffer in linear memory (12 bytes max: sign + 10 digits + safety)
-        let ptr = builtin::realloc(0, 0, 1, 12);
-
-        // Convert digits in reverse order
-        let mut pos = 11; // Start from end of buffer
-        for let mut temp = abs_value; temp > 0; temp = temp / 10 {
-            pos -= 1;
-            let digit = temp % 10;
-            builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
-        }
-
-        // Add sign if negative
-        if is_negative {
-            pos -= 1;
-            builtin::memory_store8(ptr + pos, '-' as i32);
-        }
-
-        // Calculate length and copy to GC array
-        let len = 11 - pos;
-        let arr = memory_to_gc_array(ptr + pos, len);
-
-        // Free linear memory buffer
-        builtin::realloc(ptr, 12, 1, 0);
-
-        return String::internal_from_utf8_raw(arr, len);
+        let mut buf = String::with_capacity(12);
+        let mut f = Formatter::new(&mut buf);
+        fmt_i32_decimal(self, &mut f);
+        return buf;
     }
 }
 
@@ -162,46 +398,11 @@ impl u32 {
     pub const MAX: u32 = 4294967295;
     pub const MIN: u32 = 0;
 
-    /// Convert u32 to String (unsigned)
-    /// Maximum u32 value is 4294967295 (10 digits)
     pub fn to_string(self) -> String {
-        // u32 is represented as i32 in Wasm, interpret as unsigned
-        let value = (self) as i32;
-
-        // Handle zero case
-        if value == 0 {
-            return "0";
-        }
-
-        // Convert to i64 for unsigned arithmetic
-        // If value is negative as i32, it means the u32 value is >= 2^31
-        let unsigned_val: i64 = if value < 0 {
-            (value as i64) + 4294967296
-        } else {
-            value as i64
-        };
-
-        // Allocate buffer in linear memory (11 bytes max: 10 digits + safety)
-        let ptr = builtin::realloc(0, 0, 1, 11);
-
-        // Convert digits in reverse order using i64 arithmetic
-        let mut pos: i32 = 10;
-        let ten: i64 = 10;
-        let zero: i64 = 0;
-        for let mut temp: i64 = unsigned_val; temp > zero; temp = temp / ten {
-            pos -= 1;
-            let digit: i32 = (temp % ten) as i32;
-            builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
-        }
-
-        // Calculate length and copy to GC array
-        let len: i32 = 10 - pos;
-        let arr = memory_to_gc_array(ptr + pos, len);
-
-        // Free linear memory buffer
-        builtin::realloc(ptr, 11, 1, 0);
-
-        return String::internal_from_utf8_raw(arr, len);
+        let mut buf = String::with_capacity(11);
+        let mut f = Formatter::new(&mut buf);
+        fmt_u32_decimal(self, &mut f);
+        return buf;
     }
 }
 
@@ -209,55 +410,11 @@ impl i64 {
     pub const MAX: i64 = 9223372036854775807;
     pub const MIN: i64 = -9223372036854775808;
 
-    /// Convert i64 to String
-    /// Maximum i64 value is 9223372036854775807 (19 digits) + optional minus sign = 20 chars max
     pub fn to_string(self) -> String {
-        let value = self;
-
-        // Handle zero case
-        let zero_i64: i64 = 0;
-        if value == zero_i64 {
-            return "0";
-        }
-
-        // Special case for i64::MIN: In two's complement, negating MIN overflows
-        let i64_max: i64 = 9223372036854775807;
-        let one_i64: i64 = 1;
-        let i64_min: i64 = zero_i64 - i64_max - one_i64;
-        if value == i64_min {
-            return "-9223372036854775808";
-        }
-
-        // Determine sign and work with absolute value
-        let is_negative = value < zero_i64;
-        let abs_value: i64 = if is_negative { zero_i64 - value } else { value };
-
-        // Allocate buffer in linear memory (21 bytes max: sign + 19 digits + safety)
-        let ptr: i32 = builtin::realloc(0, 0, 1, 21);
-
-        // Convert digits in reverse order
-        let mut pos: i32 = 20; // Start from end of buffer
-        let ten_i64: i64 = 10;
-        for let mut temp: i64 = abs_value; temp > zero_i64; temp = temp / ten_i64 {
-            pos -= 1;
-            let digit: i32 = (temp % ten_i64) as i32;
-            builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
-        }
-
-        // Add sign if negative
-        if is_negative {
-            pos -= 1;
-            builtin::memory_store8(ptr + pos, '-' as i32);
-        }
-
-        // Calculate length and copy to GC array
-        let len: i32 = 20 - pos;
-        let arr = memory_to_gc_array(ptr + pos, len);
-
-        // Free linear memory buffer
-        builtin::realloc(ptr, 21, 1, 0);
-
-        return String::internal_from_utf8_raw(arr, len);
+        let mut buf = String::with_capacity(21);
+        let mut f = Formatter::new(&mut buf);
+        fmt_i64_decimal(self, &mut f);
+        return buf;
     }
 }
 
@@ -265,68 +422,11 @@ impl u64 {
     pub const MAX: u64 = 18446744073709551615;
     pub const MIN: u64 = 0;
 
-    /// Convert u64 to String (unsigned)
-    /// Maximum u64 value is 18446744073709551615 (20 digits)
     pub fn to_string(self) -> String {
-        // u64 is represented as i64 in Wasm, interpret as unsigned
-        let value = (self) as i64;
-
-        // Handle zero case
-        let zero: i64 = 0;
-        if value == zero {
-            return "0";
-        }
-
-        // Allocate buffer in linear memory (21 bytes max: 20 digits + safety)
-        let ptr: i32 = builtin::realloc(0, 0, 1, 21);
-
-        // Convert digits in reverse order
-        let mut pos: i32 = 20;
-        let mut temp: i64 = value;
-        let ten: i64 = 10;
-        let offset_div: i64 = 1844674407370955161; // 2^64 / 10
-
-        // Loop until temp is zero
-        while temp != zero {
-            pos -= 1;
-            let mut digit: i32 = 0;
-
-            if temp >= zero {
-                // Positive temp: normal signed arithmetic works correctly
-                digit = (temp % ten) as i32;
-                temp = temp / ten;
-            } else {
-                // Negative temp: need unsigned semantics
-                let signed_rem: i64 = temp % ten;
-                let rem_adjusted: i64 = signed_rem + 6;
-
-                // Get digit in range [0, 9]
-                if rem_adjusted >= zero {
-                    digit = rem_adjusted as i32;
-                } else {
-                    digit = (rem_adjusted + ten) as i32;
-                }
-
-                // Calculate unsigned quotient
-                let signed_quot: i64 = temp / ten;
-                let mut carry: i64 = 0;
-                if rem_adjusted < zero {
-                    carry = 0 - 1;
-                }
-                temp = signed_quot + offset_div + carry;
-            }
-
-            builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
-        }
-
-        // Calculate length and copy to GC array
-        let len: i32 = 20 - pos;
-        let arr = memory_to_gc_array(ptr + pos, len);
-
-        // Free linear memory buffer
-        builtin::realloc(ptr, 21, 1, 0);
-
-        return String::internal_from_utf8_raw(arr, len);
+        let mut buf = String::with_capacity(21);
+        let mut f = Formatter::new(&mut buf);
+        fmt_u64_decimal(self, &mut f);
+        return buf;
     }
 }
 
@@ -346,22 +446,11 @@ impl f32 {
     pub const INFINITY: f32 = 1.0 / 0.0;
     pub const NEG_INFINITY: f32 = -1.0 / 0.0;
 
-    /// Convert f32 to String using the bundled float-to-string algorithm
     pub fn to_string(self) -> String {
-        let value = self;
-
-        // Allocate linear memory buffer (16 bytes max for f32)
-        let ptr = builtin::realloc(0, 0, 1, 16);
-
-        // Convert float to bytes in linear memory
-        let len = builtin::f32_to_buffer(value, ptr);
-
-        let arr = memory_to_gc_array(ptr, len);
-
-        // Free linear memory buffer
-        builtin::realloc(ptr, 16, 1, 0);
-
-        return String::internal_from_utf8_raw(arr, len);
+        let mut buf = String::with_capacity(16);
+        let mut f = Formatter::new(&mut buf);
+        fmt_f32_display(self, &mut f);
+        return buf;
     }
 
     // Wasm instruction math (direct)
@@ -484,22 +573,11 @@ impl f64 {
     pub const INFINITY: f64 = 1.0 / 0.0;
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
 
-    /// Convert f64 to String using the bundled float-to-string algorithm
     pub fn to_string(self) -> String {
-        let value = self;
-
-        // Allocate linear memory buffer (24 bytes max for f64)
-        let ptr = builtin::realloc(0, 0, 1, 24);
-
-        // Convert float to bytes in linear memory
-        let len = builtin::f64_to_buffer(value, ptr);
-
-        let arr = memory_to_gc_array(ptr, len);
-
-        // Free linear memory buffer
-        builtin::realloc(ptr, 24, 1, 0);
-
-        return String::internal_from_utf8_raw(arr, len);
+        let mut buf = String::with_capacity(24);
+        let mut f = Formatter::new(&mut buf);
+        fmt_f64_display(self, &mut f);
+        return buf;
     }
 
     // Wasm instruction math (direct)
@@ -605,77 +683,445 @@ impl f64 {
     /// Floating-point remainder of x/y
     pub fn fmod(x: f64, y: f64) -> f64 { return builtin::f64_fmod(x, y); }
 }
+// ============================================================
+// Display trait implementations
+// ============================================================
+
 impl Display for bool {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        f.pad(if *self { "true" } else { "false" });
     }
 }
 
 impl Display for char {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        if f.width() <= 0 {
+            f.write_char(*self);
+        } else {
+            let mut s = String::with_capacity(4);
+            s.append_char(*self);
+            f.pad(s);
+        }
     }
 }
 
 impl Display for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        fmt_i32_decimal((*self) as i32, f);
     }
 }
 
 impl Display for u8 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        fmt_i32_decimal((*self) as i32, f);
     }
 }
 
 impl Display for i16 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        fmt_i32_decimal((*self) as i32, f);
     }
 }
 
 impl Display for u16 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        fmt_i32_decimal((*self) as i32, f);
     }
 }
 
 impl Display for i32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        fmt_i32_decimal(*self, f);
     }
 }
 
 impl Display for u32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        fmt_u32_decimal(*self, f);
     }
 }
 
 impl Display for i64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        fmt_i64_decimal(*self, f);
     }
 }
 
 impl Display for u64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        fmt_u64_decimal(*self, f);
     }
 }
 
 impl Display for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        if f.precision() >= 0 {
+            panic("TODO: precision for f32 Display");
+        }
+        fmt_f32_display(*self, f);
     }
 }
 
 impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str((*self).to_string());
+        if f.precision() >= 0 {
+            panic("TODO: precision for f64 Display");
+        }
+        fmt_f64_display(*self, f);
     }
-}// These enable calling Ord::cmp on primitives when T: Ord bounds are used.
+}
+
+// ============================================================
+// LowerExp / UpperExp trait implementations (TODO)
+// ============================================================
+
+impl LowerExp for f32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        panic("TODO: LowerExp for f32");
+    }
+}
+
+impl UpperExp for f32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        panic("TODO: UpperExp for f32");
+    }
+}
+
+impl LowerExp for f64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        panic("TODO: LowerExp for f64");
+    }
+}
+
+impl UpperExp for f64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        panic("TODO: UpperExp for f64");
+    }
+}
+
+// ============================================================
+// Binary trait implementations (base 2)
+// ============================================================
+
+impl Binary for i8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = (*self) as i32;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 2, false);
+    }
+}
+
+impl Binary for u8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_int_base(((*self) as i32) as i64, false, f, 2, false);
+    }
+}
+
+impl Binary for i16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = (*self) as i32;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 2, false);
+    }
+}
+
+impl Binary for u16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_int_base(((*self) as i32) as i64, false, f, 2, false);
+    }
+}
+
+impl Binary for i32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = *self;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 2, false);
+    }
+}
+
+impl Binary for u32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let val_i32 = (*self) as i32;
+        let abs_val: i64 = if val_i32 < 0 {
+            (val_i32 as i64) + 4294967296
+        } else {
+            val_i32 as i64
+        };
+        fmt_int_base(abs_val, false, f, 2, false);
+    }
+}
+
+impl Binary for i64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = *self;
+        let zero_i64: i64 = 0;
+        let is_neg = v < zero_i64;
+        let i64_max: i64 = 9223372036854775807;
+        let one_i64: i64 = 1;
+        let i64_min: i64 = zero_i64 - i64_max - one_i64;
+        if v == i64_min {
+            // 2^63 = 9223372036854775808, handle by splitting: first bit + rest
+            // 9223372036854775808 / 2 = 4611686018427387904, remainder 0
+            let half: i64 = 4611686018427387904;
+            fmt_int_base(half, true, f, 2, false);
+        } else {
+            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            fmt_int_base(abs_val, is_neg, f, 2, false);
+        }
+    }
+}
+
+// ============================================================
+// Octal trait implementations (base 8)
+// ============================================================
+
+impl Octal for i8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = (*self) as i32;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 8, false);
+    }
+}
+
+impl Octal for u8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_int_base(((*self) as i32) as i64, false, f, 8, false);
+    }
+}
+
+impl Octal for i16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = (*self) as i32;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 8, false);
+    }
+}
+
+impl Octal for u16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_int_base(((*self) as i32) as i64, false, f, 8, false);
+    }
+}
+
+impl Octal for i32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = *self;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 8, false);
+    }
+}
+
+impl Octal for u32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let val_i32 = (*self) as i32;
+        let abs_val: i64 = if val_i32 < 0 {
+            (val_i32 as i64) + 4294967296
+        } else {
+            val_i32 as i64
+        };
+        fmt_int_base(abs_val, false, f, 8, false);
+    }
+}
+
+impl Octal for i64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = *self;
+        let zero_i64: i64 = 0;
+        let is_neg = v < zero_i64;
+        let i64_max: i64 = 9223372036854775807;
+        let one_i64: i64 = 1;
+        let i64_min: i64 = zero_i64 - i64_max - one_i64;
+        if v == i64_min {
+            let half: i64 = 4611686018427387904;
+            fmt_int_base(half, true, f, 8, false);
+        } else {
+            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            fmt_int_base(abs_val, is_neg, f, 8, false);
+        }
+    }
+}
+
+// ============================================================
+// LowerHex trait implementations (base 16, lowercase)
+// ============================================================
+
+impl LowerHex for i8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = (*self) as i32;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 16, false);
+    }
+}
+
+impl LowerHex for u8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_int_base(((*self) as i32) as i64, false, f, 16, false);
+    }
+}
+
+impl LowerHex for i16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = (*self) as i32;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 16, false);
+    }
+}
+
+impl LowerHex for u16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_int_base(((*self) as i32) as i64, false, f, 16, false);
+    }
+}
+
+impl LowerHex for i32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = *self;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 16, false);
+    }
+}
+
+impl LowerHex for u32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let val_i32 = (*self) as i32;
+        let abs_val: i64 = if val_i32 < 0 {
+            (val_i32 as i64) + 4294967296
+        } else {
+            val_i32 as i64
+        };
+        fmt_int_base(abs_val, false, f, 16, false);
+    }
+}
+
+impl LowerHex for i64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = *self;
+        let zero_i64: i64 = 0;
+        let is_neg = v < zero_i64;
+        let i64_max: i64 = 9223372036854775807;
+        let one_i64: i64 = 1;
+        let i64_min: i64 = zero_i64 - i64_max - one_i64;
+        if v == i64_min {
+            let half: i64 = 4611686018427387904;
+            fmt_int_base(half, true, f, 16, false);
+        } else {
+            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            fmt_int_base(abs_val, is_neg, f, 16, false);
+        }
+    }
+}
+
+// ============================================================
+// UpperHex trait implementations (base 16, uppercase)
+// ============================================================
+
+impl UpperHex for i8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = (*self) as i32;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 16, true);
+    }
+}
+
+impl UpperHex for u8 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_int_base(((*self) as i32) as i64, false, f, 16, true);
+    }
+}
+
+impl UpperHex for i16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = (*self) as i32;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 16, true);
+    }
+}
+
+impl UpperHex for u16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_int_base(((*self) as i32) as i64, false, f, 16, true);
+    }
+}
+
+impl UpperHex for i32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = *self;
+        let is_neg = v < 0;
+        let abs_val: i64 = if is_neg { 0 - (v as i64) } else { v as i64 };
+        fmt_int_base(abs_val, is_neg, f, 16, true);
+    }
+}
+
+impl UpperHex for u32 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let val_i32 = (*self) as i32;
+        let abs_val: i64 = if val_i32 < 0 {
+            (val_i32 as i64) + 4294967296
+        } else {
+            val_i32 as i64
+        };
+        fmt_int_base(abs_val, false, f, 16, true);
+    }
+}
+
+impl UpperHex for i64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        let v = *self;
+        let zero_i64: i64 = 0;
+        let is_neg = v < zero_i64;
+        let i64_max: i64 = 9223372036854775807;
+        let one_i64: i64 = 1;
+        let i64_min: i64 = zero_i64 - i64_max - one_i64;
+        if v == i64_min {
+            let half: i64 = 4611686018427387904;
+            fmt_int_base(half, true, f, 16, true);
+        } else {
+            let abs_val: i64 = if is_neg { zero_i64 - v } else { v };
+            fmt_int_base(abs_val, is_neg, f, 16, true);
+        }
+    }
+}
+
+// ============================================================
+// u64 Binary/Octal/Hex trait implementations (unsigned, power-of-2 bases)
+// ============================================================
+
+impl Binary for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_u64_base((*self) as i64, f, 2, false);
+    }
+}
+
+impl Octal for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_u64_base((*self) as i64, f, 8, false);
+    }
+}
+
+impl LowerHex for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_u64_base((*self) as i64, f, 16, false);
+    }
+}
+
+impl UpperHex for u64 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        fmt_u64_base((*self) as i64, f, 16, true);
+    }
+}
+
+// These enable calling Ord::cmp on primitives when T: Ord bounds are used.
 
 impl Ord for i8 {
     pub fn cmp(&self, other: &Self) -> Ordering {

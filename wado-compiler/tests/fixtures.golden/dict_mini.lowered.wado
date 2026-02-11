@@ -27,41 +27,81 @@ fn run() with Stdout {
     let __pattern_temp_0: Option<String> = move dict."MiniDict<String,String>::get"(move "name");
     if __is_not_null(__pattern_temp_0) {
         let name_val: String = __unwrap_option(__pattern_temp_0);
-        core::cli::println(move "String::concat"(move "name: ", name_val));
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_1: {
+                break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(22), used: 0 };
+            };
+            __r."String::append"(move "name: ");
+            __r."String::append"(name_val);
+            break __tmpl: __r;
+        });
     }
     let __pattern_temp_1: Option<String> = move dict."MiniDict<String,String>::get"(move "type");
     if __is_not_null(__pattern_temp_1) {
         let type_val: String = __unwrap_option(__pattern_temp_1);
-        core::cli::println(move "String::concat"(move "type: ", type_val));
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_2: {
+                break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(22), used: 0 };
+            };
+            __r."String::append"(move "type: ");
+            __r."String::append"(type_val);
+            break __tmpl: __r;
+        });
     }
     dict."MiniDict<String,String>::set"(move "name", move "Wado Language");
     let __pattern_temp_2: Option<String> = move dict."MiniDict<String,String>::get"(move "name");
     if __is_not_null(__pattern_temp_2) {
         let updated_val: String = __unwrap_option(__pattern_temp_2);
-        core::cli::println(move "String::concat"(move "updated name: ", updated_val));
+        core::cli::println(__tmpl: {
+            let mut __r: String = __inline_String__with_capacity_3: {
+                break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(30), used: 0 };
+            };
+            __r."String::append"(move "updated name: ");
+            __r."String::append"(updated_val);
+            break __tmpl: __r;
+        });
     }
-    core::cli::println(move "String::concat"(move "has 'target': ", __inline_bool__to_string_1: {
-        let self: bool = dict."MiniDict<String,String>::has"(move "target");
-        break __inline_bool__to_string_1: if self {
-            "true";
-        } else {
-            "false";
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(30), used: 0 };
         };
-    }));
-    core::cli::println(move "String::concat"(move "has 'version': ", __inline_bool__to_string_2: {
-        let self: bool = dict."MiniDict<String,String>::has"(move "version");
-        break __inline_bool__to_string_2: if self {
-            "true";
-        } else {
-            "false";
+        __r."String::append"(move "has 'target': ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-    }));
-    core::cli::println(move "String::concat"(move "size: ", move __inline_MiniDict_String_String___size_3: {
-        break __inline_MiniDict_String_String___size_3: __inline_Array_Tuple_String_String____len_0: {
-            let self: &Array<[String, String]> = &dict.entries;
-            break __inline_Array_Tuple_String_String____len_0: self.used;
+        Box<bool> { value: dict."MiniDict<String,String>::has"(move "target") }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(31), used: 0 };
         };
-    }."i32::to_string"()));
+        __r."String::append"(move "has 'version': ");
+        let mut __f: Formatter = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<bool> { value: dict."MiniDict<String,String>::has"(move "version") }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_8: {
+            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(22), used: 0 };
+        };
+        __r."String::append"(move "size: ");
+        let mut __f: Formatter = __inline_Formatter__new_9: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_MiniDict_String_String___size_10: {
+            break __inline_MiniDict_String_String___size_10: __inline_Array_Tuple_String_String____len_0: {
+                let self: &Array<[String, String]> = &dict.entries;
+                break __inline_Array_Tuple_String_String____len_0: self.used;
+            };
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let __pattern_temp_3: Option<String> = move dict."MiniDict<String,String>::get"(move "missing");
     if !__is_not_null(__pattern_temp_3) {
         core::cli::println(move "missing key returned None");

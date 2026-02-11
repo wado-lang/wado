@@ -869,6 +869,22 @@ fn analyze_expr(
                             method_name.clone(),
                         ));
                         analysis.callees.insert(method_id);
+
+                        // Also mark reachable using the FunctionRef's module source,
+                        // since trait impls may live in a different module than the type
+                        // (e.g., `impl Display for String` is in format.wado, not string.wado)
+                        let func_module = func.module_source();
+                        if func_module != module_source.clone()
+                            && let Some(info) = func.method_info()
+                        {
+                            let alt_method_id = FunctionId::Method(MethodName::new(
+                                func_module,
+                                info.struct_name.clone(),
+                                info.trait_name.clone(),
+                                info.method_name.clone(),
+                            ));
+                            analysis.callees.insert(alt_method_id);
+                        }
                     }
                     ResolvedType::Primitive(prim) => {
                         // Primitive method call (e.g., i32.to_string())

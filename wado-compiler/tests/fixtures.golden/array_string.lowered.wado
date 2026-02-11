@@ -15,7 +15,17 @@
 
 fn run() with Stdout {
     let names: Array<String> = move ["Alice", "Bob", "Charlie"];
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move names."Array<String>^IndexValue::index_value"(0), move ", "), move names."Array<String>^IndexValue::index_value"(1)), move ", "), move names."Array<String>^IndexValue::index_value"(2)));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(52), used: 0 };
+        };
+        __r."String::append"(move names."Array<String>^IndexValue::index_value"(0));
+        __r."String::append"(move ", ");
+        __r."String::append"(move names."Array<String>^IndexValue::index_value"(1));
+        __r."String::append"(move ", ");
+        __r."String::append"(move names."Array<String>^IndexValue::index_value"(2));
+        break __tmpl: __r;
+    });
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {

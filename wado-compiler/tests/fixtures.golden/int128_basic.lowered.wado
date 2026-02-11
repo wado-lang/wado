@@ -21,11 +21,33 @@ fn run() with Stdout {
         break __inline_u128__from_u64_1: u128 { low: 50, high: 0 };
     };
     let sum: u128 = move a."u128::add"(&b);
-    core::cli::println(move "String::concat"(move "u128 100 + 50 = ", move sum."u128::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(32), used: 0 };
+        };
+        __r."String::append"(move "u128 100 + 50 = ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        sum."u128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let diff: u128 = move a."u128::sub"(&b);
-    core::cli::println(move "String::concat"(move "u128 100 - 50 = ", move diff."u128::to_string"()));
-    let c: u128 = __inline_u128__from_u64_2: {
-        break __inline_u128__from_u64_2: u128 { low: 100, high: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(32), used: 0 };
+        };
+        __r."String::append"(move "u128 100 - 50 = ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        diff."u128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    let c: u128 = __inline_u128__from_u64_6: {
+        break __inline_u128__from_u64_6: u128 { low: 100, high: 0 };
     };
     if a."u128^Eq::eq"(&c) {
         core::cli::println(move "u128: 100 == 100 is true");
@@ -36,18 +58,51 @@ fn run() with Stdout {
     let x: i128 = move "i128::from_i64"(100);
     let y: i128 = move "i128::from_i64"(-50);
     let sum2: i128 = move x."i128::add"(&y);
-    core::cli::println(move "String::concat"(move "i128 100 + (-50) = ", move sum2."i128::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_7: {
+            break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(35), used: 0 };
+        };
+        __r."String::append"(move "i128 100 + (-50) = ");
+        let mut __f: Formatter = __inline_Formatter__new_8: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        sum2."i128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let z: i128 = move "i128::from_i64"(30);
     let diff2: i128 = move z."i128::sub"(&x);
-    core::cli::println(move "String::concat"(move "i128 30 - 100 = ", move diff2."i128::to_string"()));
-    let neg_x: i128 = __inline_i128__neg_3: {
-        let self: &i128 = &x;
-        let zero: i128 = __inline_i128__zero_4: {
-            break __inline_i128__zero_4: i128 { low: 0, high: 0 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_9: {
+            break __inline_String__with_capacity_9: String { repr: "array_new<u8>"(32), used: 0 };
         };
-        break __inline_i128__neg_3: zero."i128::sub"(self);
+        __r."String::append"(move "i128 30 - 100 = ");
+        let mut __f: Formatter = __inline_Formatter__new_10: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        diff2."i128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    let neg_x: i128 = __inline_i128__neg_11: {
+        let self: &i128 = &x;
+        let zero: i128 = __inline_i128__zero_12: {
+            break __inline_i128__zero_12: i128 { low: 0, high: 0 };
+        };
+        break __inline_i128__neg_11: zero."i128::sub"(self);
     };
-    core::cli::println(move "String::concat"(move "i128 -100 = ", move neg_x."i128::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_13: {
+            break __inline_String__with_capacity_13: String { repr: "array_new<u8>"(28), used: 0 };
+        };
+        __r."String::append"(move "i128 -100 = ");
+        let mut __f: Formatter = __inline_Formatter__new_14: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        neg_x."i128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     core::cli::println(move "All i128/u128 tests passed!");
 }
 

@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let ca: ContainerA = __inline_ContainerA__make_0: {
@@ -16,14 +20,38 @@ fn run() with Stdout {
     let cfg_a: Config = __inline_ContainerA__get_config_1: {
         break __inline_ContainerA__get_config_1: ca.config;
     };
-    core::cli::println(move "String::concat"(move "a: ", move cfg_a.value."i32::to_string"()));
-    let cb: ContainerB = __inline_ContainerB__make_2: {
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(19), used: 0 };
+        };
+        __r."String::append"(move "a: ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: cfg_a.value }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    let cb: ContainerB = __inline_ContainerB__make_4: {
         let n: String = move "hello";
-        break __inline_ContainerB__make_2: ContainerB { config: Config { name: n, count: 7 } };
+        break __inline_ContainerB__make_4: ContainerB { config: Config { name: n, count: 7 } };
     };
-    let cfg_b: Config = __inline_ContainerB__get_config_3: {
-        break __inline_ContainerB__get_config_3: cb.config;
+    let cfg_b: Config = __inline_ContainerB__get_config_5: {
+        break __inline_ContainerB__get_config_5: cb.config;
     };
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "b: ", cfg_b.name), move " "), move cfg_b.count."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(36), used: 0 };
+        };
+        __r."String::append"(move "b: ");
+        __r."String::append"(cfg_b.name);
+        __r."String::append"(move " ");
+        let mut __f: Formatter = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: cfg_b.count }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct Point {
     a: i32,
@@ -16,14 +20,47 @@ struct Point {
 }
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "local total: ", move __inline_Point__total_0: {
-        break __inline_Point__total_0: 6;
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "other sum: ", move __inline_Point__sum_1: {
-        break __inline_Point__sum_1: 14;
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "other product: ", move __inline_Point__product_2: {
-        break __inline_Point__product_2: 40;
-    }."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(29), used: 0 };
+        };
+        __r."String::append"(move "local total: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Point__total_2: {
+            break __inline_Point__total_2: 6;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_3: {
+            break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(27), used: 0 };
+        };
+        __r."String::append"(move "other sum: ");
+        let mut __f: Formatter = __inline_Formatter__new_4: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Point__sum_5: {
+            break __inline_Point__sum_5: 14;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(31), used: 0 };
+        };
+        __r."String::append"(move "other product: ");
+        let mut __f: Formatter = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Point__product_8: {
+            break __inline_Point__product_8: 40;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

@@ -14,7 +14,15 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn join_names(names: Array<String>) -> String {
-    return "String::concat"(move "String::concat"(move names."Array<String>^IndexValue::index_value"(0), move " and "), move names."Array<String>^IndexValue::index_value"(1));
+    return __tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(37), used: 0 };
+        };
+        __r."String::append"(move names."Array<String>^IndexValue::index_value"(0));
+        __r."String::append"(move " and ");
+        __r."String::append"(move names."Array<String>^IndexValue::index_value"(1));
+        break __tmpl: __r;
+    };
 }
 
 fn run() with Stdout {

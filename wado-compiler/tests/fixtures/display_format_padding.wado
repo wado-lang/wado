@@ -1,0 +1,68 @@
+// Test: Formatter width, alignment, fill, zero_pad, sign_plus options
+use { println, Stdout } from "core:cli";
+
+fn fmt_int(value: &i32, fill: char, align: Alignment, sign_plus: bool, zero_pad: bool, width: i32) -> String {
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter {
+        fill,
+        align,
+        sign_plus,
+        alternate: false,
+        zero_pad,
+        width,
+        precision: -1,
+        buf: &mut buf,
+    };
+    value.fmt(&mut f);
+    return buf;
+}
+
+export fn run() with Stdout {
+    let x: i32 = 42;
+    let neg: i32 = -42;
+    let big: i32 = 12345;
+
+    // Right-aligned integer with width
+    assert fmt_int(&x, ' ', Alignment::Right, false, false, 10) == "        42";
+
+    // Left-aligned integer with width
+    assert fmt_int(&x, ' ', Alignment::Left, false, false, 10) == "42        ";
+
+    // Center-aligned integer with width
+    assert fmt_int(&x, ' ', Alignment::Center, false, false, 10) == "    42    ";
+
+    // Zero-padded integer
+    assert fmt_int(&x, '0', Alignment::Right, false, true, 8) == "00000042";
+
+    // Zero-padded negative integer
+    assert fmt_int(&neg, '0', Alignment::Right, false, true, 8) == "-0000042";
+
+    // Sign plus
+    assert fmt_int(&x, ' ', Alignment::Right, true, false, -1) == "+42";
+
+    // Custom fill char
+    assert fmt_int(&x, '*', Alignment::Center, false, false, 10) == "****42****";
+
+    // Bool with width
+    let mut buf = String::with_capacity(64);
+    let mut f = Formatter {
+        fill: ' ',
+        align: Alignment::Left,
+        sign_plus: false,
+        alternate: false,
+        zero_pad: false,
+        width: 8,
+        precision: -1,
+        buf: &mut buf,
+    };
+    true.fmt(&mut f);
+    assert buf == "true    ";
+
+    // No width (content wider than width)
+    assert fmt_int(&big, ' ', Alignment::Right, false, false, 2) == "12345";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
