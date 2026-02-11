@@ -35,6 +35,18 @@ pub struct LexError {
     pub span: Span,
 }
 
+impl From<LexError> for crate::compiler_host::Diagnostic {
+    fn from(e: LexError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        Self {
+            severity: Severity::Error,
+            code: Code::InvalidSyntax,
+            message: format!("lexer error: {}", e.message),
+            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+        }
+    }
+}
+
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {

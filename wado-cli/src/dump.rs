@@ -369,7 +369,7 @@ async fn generate_output_params(
     // Dump using async API
     let result = wado_compiler::dump_with_host(&source, &host, Some(input), opt_level)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|_bail| "compilation failed".to_string())?;
 
     let mut output = Vec::new();
 
@@ -432,8 +432,8 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     let result =
         match wado_compiler::dump_with_host(&source, &host, Some(input), opts.opt_level).await {
             Ok(r) => r,
-            Err(e) => {
-                eprintln!("{e}");
+            Err(_bail) => {
+                // Errors already printed by host via emit_diagnostic
                 process::exit(1);
             }
         };

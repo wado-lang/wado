@@ -16,7 +16,7 @@ use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
-use wado_compiler::{CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
+use wado_compiler::{Bail, CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
 
 // ============================================================================
 // Compiler Hosts
@@ -61,7 +61,27 @@ impl CompilerHost for FilesystemHost {
 }
 
 /// An in-memory CompilerHost for tests that don't need file loading
-pub struct InMemoryHost;
+pub struct InMemoryHost {
+    diagnostics: Mutex<Vec<Diagnostic>>,
+}
+
+impl InMemoryHost {
+    pub fn new() -> Self {
+        Self {
+            diagnostics: Mutex::new(Vec::new()),
+        }
+    }
+
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.diagnostics.lock().unwrap().clone()
+    }
+}
+
+impl Default for InMemoryHost {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl CompilerHost for InMemoryHost {
     fn load_source(
@@ -72,7 +92,64 @@ impl CompilerHost for InMemoryHost {
         async move { Err(SourceError::NotFound { path }) }
     }
 
-    fn emit_diagnostic(&self, _diagnostic: Diagnostic) {}
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        self.diagnostics.lock().unwrap().push(diagnostic);
+    }
+}
+
+/// Convert a `Bail` + host diagnostics into a `CompileError` for test backward compat
+pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>) -> CompileError {
+    if let Some(d) = diagnostics.first() {
+        let fname = filename.map(String::from).or_else(|| {
+            d.span.as_ref().and_then(|s| {
+                if s.file.is_empty() {
+                    None
+                } else {
+                    Some(s.file.clone())
+                }
+            })
+        });
+        let code = d.code;
+        let message = d.message.clone();
+        let line = d.span.as_ref().map_or(0, |s| s.line);
+        let column = d.span.as_ref().map_or(0, |s| s.column);
+
+        // Map diagnostic code to CompileError variant
+        use wado_compiler::Code;
+        if code == Code::InvalidSyntax && message.starts_with("lexer error:") {
+            CompileError::Lexer {
+                message: message
+                    .strip_prefix("lexer error: ")
+                    .unwrap_or(&message)
+                    .to_string(),
+                line,
+                column,
+                filename: fname,
+            }
+        } else if code == Code::InvalidSyntax && message.starts_with("parse error:") {
+            CompileError::Parser {
+                message: message
+                    .strip_prefix("parse error: ")
+                    .unwrap_or(&message)
+                    .to_string(),
+                line,
+                column,
+                filename: fname,
+            }
+        } else {
+            // All other errors
+            let all_messages: Vec<String> = diagnostics.iter().map(|d| d.message.clone()).collect();
+            CompileError::Analyzer {
+                message: all_messages.join("; "),
+                filename: fname,
+            }
+        }
+    } else {
+        CompileError::Analyzer {
+            message: "compilation failed".to_string(),
+            filename: filename.map(String::from),
+        }
+    }
 }
 
 // ============================================================================
@@ -204,13 +281,15 @@ pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<CliWasiState>> {
 
 /// Compile source string using in-memory host
 pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, CompileError> {
-    let host = InMemoryHost;
-    runtime().block_on(wado_compiler::compile_with_host(
-        source,
-        &host,
-        None,
-        OptLevel::default(),
-    ))
+    let host = InMemoryHost::new();
+    runtime()
+        .block_on(wado_compiler::compile_with_host(
+            source,
+            &host,
+            None,
+            OptLevel::default(),
+        ))
+        .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), None))
 }
 
 /// Compile a file using filesystem host
@@ -239,13 +318,16 @@ pub fn compile_source_with_opts(
 ) -> Result<wado_compiler::CompileResult, CompileError> {
     let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
+    let filename = path.to_string_lossy();
 
-    runtime().block_on(wado_compiler::compile_with_host(
-        source,
-        &host,
-        Some(&path.to_string_lossy()),
-        opt_level,
-    ))
+    runtime()
+        .block_on(wado_compiler::compile_with_host(
+            source,
+            &host,
+            Some(&filename),
+            opt_level,
+        ))
+        .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
 /// Compile a file asynchronously (for use within async context)
@@ -260,8 +342,11 @@ pub async fn compile_file_async(
 
     let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
+    let filename = path.to_string_lossy();
 
-    wado_compiler::compile_with_host(&source, &host, Some(&path.to_string_lossy()), opt_level).await
+    wado_compiler::compile_with_host(&source, &host, Some(&filename), opt_level)
+        .await
+        .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
 // ============================================================================

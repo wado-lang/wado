@@ -17,7 +17,8 @@ use crate::ast::{
     AssertStmt, Block, ClosureExpr, Condition, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
     IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt, Stmt, WhileStmt,
 };
-use crate::logger::{Bail, ErrorLog};
+use crate::compiler_host::CompilerHost;
+use crate::logger::{Bail, Logger};
 use crate::token::Span;
 
 /// Binding information for a local variable
@@ -100,28 +101,58 @@ impl std::fmt::Display for BindError {
 
 impl std::error::Error for BindError {}
 
+impl From<BindError> for crate::compiler_host::Diagnostic {
+    fn from(e: BindError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        let (code, message, span) = match &e {
+            BindError::UseBeforeDefine { name, used_at } => (
+                Code::UndefinedVariable,
+                format!("'{name}' is not in scope"),
+                *used_at,
+            ),
+            BindError::DuplicateInScope {
+                name,
+                first,
+                second,
+            } => (
+                Code::DuplicateDefinition,
+                format!(
+                    "cannot redeclare '{name}' in the same scope (first defined at {}:{})",
+                    first.line, first.column
+                ),
+                *second,
+            ),
+            BindError::AssignToImmutable { name, span } => (
+                Code::ImmutableAssignment,
+                format!("cannot assign to immutable variable '{name}'"),
+                *span,
+            ),
+        };
+        crate::compiler_host::Diagnostic {
+            severity: Severity::Error,
+            code,
+            message,
+            span: Some(DiagnosticSpan::from_span(&span, None)),
+        }
+    }
+}
+
 /// The binder performs local name resolution
-pub struct Binder {
+pub struct Binder<'a, H: CompilerHost> {
     scopes: Vec<Scope>,
-    errors: ErrorLog<BindError>,
+    logger: &'a Logger<'a, H>,
     current_depth: u32,
     /// All local variable names defined in the current function
     /// Used to distinguish "out of scope" errors from "global reference"
     local_names_in_function: HashSet<String>,
 }
 
-impl Default for Binder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Binder {
+impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Create a new binder
-    pub fn new() -> Self {
+    pub fn new(logger: &'a Logger<'a, H>) -> Self {
         Self {
             scopes: vec![Scope::new()], // Global scope
-            errors: ErrorLog::new(),
+            logger,
             current_depth: 0,
             local_names_in_function: HashSet::new(),
         }
@@ -129,13 +160,13 @@ impl Binder {
 
     /// Bind all local names in a module
     ///
-    /// Returns Ok(()) if successful, or Err with all binding errors found.
-    pub fn bind_module(&mut self, module: &Module) -> Result<(), Vec<BindError>> {
+    /// Errors are emitted to the logger. Returns `Err(Bail)` if any errors found.
+    pub fn bind_module(&mut self, module: &Module) -> Result<(), Bail> {
         let bail = self.bind_module_inner(module).is_err();
-        if bail {
-            return Err(self.errors.take());
+        if bail || self.logger.has_errors() {
+            return Err(Bail);
         }
-        self.errors.finish()
+        Ok(())
     }
 
     fn bind_module_inner(&mut self, module: &Module) -> Result<(), Bail> {
@@ -403,7 +434,7 @@ impl Binder {
                     // Unknown names might be global functions/constants - those are
                     // resolved later by the analyzer.
                     if self.local_names_in_function.contains(&ident.name) {
-                        self.errors.error(BindError::UseBeforeDefine {
+                        self.logger.error(BindError::UseBeforeDefine {
                             name: ident.name.clone(),
                             used_at: ident.span,
                         })?;
@@ -417,7 +448,7 @@ impl Binder {
                     && let Some(binding) = self.lookup(&ident.name)
                     && !binding.is_mut
                 {
-                    self.errors.error(BindError::AssignToImmutable {
+                    self.logger.error(BindError::AssignToImmutable {
                         name: ident.name.clone(),
                         span: assign.span,
                     })?;
@@ -432,7 +463,7 @@ impl Binder {
                     && let Some(binding) = self.lookup(&ident.name)
                     && !binding.is_mut
                 {
-                    self.errors.error(BindError::AssignToImmutable {
+                    self.logger.error(BindError::AssignToImmutable {
                         name: ident.name.clone(),
                         span: compound.span,
                     })?;
@@ -694,7 +725,7 @@ impl Binder {
 
         // Check for duplicate in the same scope
         if let Some(existing) = scope.bindings.get(name) {
-            self.errors.error(BindError::DuplicateInScope {
+            self.logger.error(BindError::DuplicateInScope {
                 name: name.to_string(),
                 first: existing.defined_at,
                 second: span,
@@ -731,14 +762,15 @@ impl Binder {
 }
 
 /// Convenience function to bind a module
-pub fn bind_module(module: &Module) -> Result<(), Vec<BindError>> {
-    let mut binder = Binder::new();
+pub fn bind_module<H: CompilerHost>(module: &Module, logger: &Logger<H>) -> Result<(), Bail> {
+    let mut binder = Binder::new(logger);
     binder.bind_module(module)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::{InMemoryCompilerHost, LogLevel, Severity};
     use crate::lexer::Lexer;
     use crate::parser::Parser;
 
@@ -747,6 +779,13 @@ mod tests {
         let tokens = lexer.tokenize().unwrap();
         let mut parser = Parser::new(tokens);
         parser.parse().unwrap()
+    }
+
+    fn bind_and_check(module: &Module) -> (bool, Vec<crate::compiler_host::Diagnostic>) {
+        let host = InMemoryCompilerHost::new();
+        let logger = Logger::new(&host, LogLevel::Error);
+        let result = bind_module(module, &logger);
+        (result.is_ok(), host.diagnostics())
     }
 
     #[test]
@@ -759,12 +798,13 @@ mod tests {
             }
         "#,
         );
-        assert!(bind_module(&module).is_ok());
+        let (ok, diags) = bind_and_check(&module);
+        assert!(ok);
+        assert!(diags.is_empty());
     }
 
     #[test]
     fn test_out_of_scope() {
-        // Test that a variable defined in an inner scope is not accessible outside
         let module = parse(
             r#"
             fn run() {
@@ -775,10 +815,11 @@ mod tests {
             }
         "#,
         );
-        let result = bind_module(&module);
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(matches!(errors[0], BindError::UseBeforeDefine { .. }));
+        let (ok, diags) = bind_and_check(&module);
+        assert!(!ok);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].severity, Severity::Error);
+        assert!(diags[0].message.contains("is not in scope"));
     }
 
     #[test]
@@ -791,15 +832,14 @@ mod tests {
             }
         "#,
         );
-        let result = bind_module(&module);
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(matches!(errors[0], BindError::DuplicateInScope { .. }));
+        let (ok, diags) = bind_and_check(&module);
+        assert!(!ok);
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.contains("cannot redeclare"));
     }
 
     #[test]
     fn test_shadowing_in_nested_scope() {
-        // Shadowing in nested scope is allowed
         let module = parse(
             r#"
             fn run() {
@@ -810,7 +850,9 @@ mod tests {
             }
         "#,
         );
-        assert!(bind_module(&module).is_ok());
+        let (ok, diags) = bind_and_check(&module);
+        assert!(ok);
+        assert!(diags.is_empty());
     }
 
     #[test]
@@ -823,10 +865,10 @@ mod tests {
             }
         "#,
         );
-        let result = bind_module(&module);
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(matches!(errors[0], BindError::AssignToImmutable { .. }));
+        let (ok, diags) = bind_and_check(&module);
+        assert!(!ok);
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.contains("cannot assign to immutable"));
     }
 
     #[test]
@@ -839,6 +881,8 @@ mod tests {
             }
         "#,
         );
-        assert!(bind_module(&module).is_ok());
+        let (ok, diags) = bind_and_check(&module);
+        assert!(ok);
+        assert!(diags.is_empty());
     }
 }

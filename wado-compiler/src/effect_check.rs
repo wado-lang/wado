@@ -11,7 +11,8 @@ use std::collections::HashSet;
 
 use indexmap::IndexMap;
 
-use crate::logger::{Bail, ErrorLog};
+use crate::compiler_host::CompilerHost;
+use crate::logger::{Bail, Logger};
 use crate::name::ModuleSource;
 use crate::tir::{
     FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind,
@@ -41,29 +42,47 @@ impl std::fmt::Display for EffectError {
 
 impl std::error::Error for EffectError {}
 
+impl From<EffectError> for crate::compiler_host::Diagnostic {
+    fn from(e: EffectError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        crate::compiler_host::Diagnostic {
+            severity: Severity::Error,
+            code: Code::TypeMismatch,
+            message: format!(
+                "missing effect '{}' required by '{}'",
+                e.missing_effect, e.callee
+            ),
+            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+        }
+    }
+}
+
 /// Check effects for all modules
 ///
-/// Returns a list of effect errors. If empty, all effect requirements are satisfied.
-pub fn check_effects(modules: &IndexMap<ModuleSource, TirModule>) -> Vec<EffectError> {
-    let mut checker = EffectChecker::new(modules);
-    // Ignore Bail - just return whatever errors were collected
+/// Errors are emitted to the logger. Returns `Err(Bail)` if any errors found.
+pub fn check_effects<H: CompilerHost>(
+    modules: &IndexMap<ModuleSource, TirModule>,
+    logger: &Logger<H>,
+) -> Result<(), Bail> {
+    let mut checker = EffectChecker::new(modules, logger);
+    // Ignore Bail from limit - just check if there were any errors
     let _ = checker.check_all();
-    checker.errors.take()
+    logger.ok_or_bail(())
 }
 
 /// Effect checker that walks TIR and validates effect requirements
-struct EffectChecker<'a> {
+struct EffectChecker<'a, H: CompilerHost> {
     modules: &'a IndexMap<ModuleSource, TirModule>,
-    errors: ErrorLog<EffectError>,
+    logger: &'a Logger<'a, H>,
     /// Current function's effects (set when entering a function)
     current_effects: HashSet<String>,
 }
 
-impl<'a> EffectChecker<'a> {
-    fn new(modules: &'a IndexMap<ModuleSource, TirModule>) -> Self {
+impl<'a, H: CompilerHost> EffectChecker<'a, H> {
+    fn new(modules: &'a IndexMap<ModuleSource, TirModule>, logger: &'a Logger<'a, H>) -> Self {
         Self {
             modules,
-            errors: ErrorLog::new(),
+            logger,
             current_effects: HashSet::new(),
         }
     }
@@ -204,7 +223,7 @@ impl<'a> EffectChecker<'a> {
             } => {
                 // Effect calls require the effect
                 if !self.current_effects.contains(effect_name) {
-                    self.errors.error(EffectError {
+                    self.logger.error(EffectError {
                         callee: effect_name.clone(),
                         missing_effect: effect_name.clone(),
                         span: expr.span,
@@ -348,7 +367,7 @@ impl<'a> EffectChecker<'a> {
 
         for effect in &callee_effects {
             if !self.current_effects.contains(effect) {
-                self.errors.error(EffectError {
+                self.logger.error(EffectError {
                     callee: func_ref.name(),
                     missing_effect: effect.clone(),
                     span,

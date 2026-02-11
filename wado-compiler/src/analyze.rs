@@ -6,7 +6,8 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
-use crate::logger::{Bail, ErrorLog};
+use crate::compiler_host::CompilerHost;
+use crate::logger::{Bail, Logger};
 use crate::name::{ModuleSource, resolve_import, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
@@ -96,24 +97,74 @@ impl std::fmt::Display for AnalyzeError {
 
 impl std::error::Error for AnalyzeError {}
 
+impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
+    fn from(e: AnalyzeError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        let (code, message, span) = match &e {
+            AnalyzeError::ModuleNotFound {
+                module_source,
+                span,
+            } => (
+                Code::ModuleNotFound,
+                format!("module not found: '{module_source}'"),
+                *span,
+            ),
+            AnalyzeError::ImportNotFound {
+                module_source,
+                name,
+                span,
+            } => (
+                Code::UndefinedVariable,
+                format!("symbol '{name}' not found in module '{module_source}'"),
+                *span,
+            ),
+            AnalyzeError::DuplicateDefinition { name, span } => (
+                Code::DuplicateDefinition,
+                format!("duplicate definition '{name}'"),
+                *span,
+            ),
+            AnalyzeError::UndefinedSymbol { name, span } => (
+                Code::UndefinedVariable,
+                format!("undefined symbol '{name}'"),
+                *span,
+            ),
+            AnalyzeError::InvalidModulePath {
+                path,
+                message,
+                span,
+            } => (
+                Code::ModuleNotFound,
+                format!("invalid module path '{path}': {message}"),
+                *span,
+            ),
+        };
+        crate::compiler_host::Diagnostic {
+            severity: Severity::Error,
+            code,
+            message,
+            span: Some(DiagnosticSpan::from_span(&span, None)),
+        }
+    }
+}
+
 /// Semantic analyzer
 ///
 /// Builds a symbol table from pre-loaded modules and validates imports.
-pub struct Analyzer {
+pub struct Analyzer<'a, H: CompilerHost> {
     /// The symbol table being built
     pub symbols: SymbolTable,
-    /// Collected errors
-    errors: ErrorLog<AnalyzeError>,
+    /// Logger for emitting diagnostics
+    logger: &'a Logger<'a, H>,
     /// Modules loaded implicitly by the compiler (not by user imports)
     implicit_modules: std::collections::HashSet<ModuleSource>,
 }
 
-impl Analyzer {
+impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// Create a new analyzer
-    pub fn new() -> Self {
+    pub fn new(logger: &'a Logger<'a, H>) -> Self {
         Self {
             symbols: SymbolTable::new(),
-            errors: ErrorLog::new(),
+            logger,
             implicit_modules: std::collections::HashSet::new(),
         }
     }
@@ -372,7 +423,7 @@ impl Analyzer {
         modules: &std::collections::HashMap<ModuleSource, Module>,
         _entry_source: &ModuleSource,
         implicit_modules: std::collections::HashSet<ModuleSource>,
-    ) -> Result<(), Vec<AnalyzeError>> {
+    ) -> Result<(), Bail> {
         self.implicit_modules = implicit_modules;
 
         // First pass: collect definitions from all modules (excluding pub use)
@@ -386,12 +437,9 @@ impl Analyzer {
         }
 
         // Third pass: validate imports in each module
-        let bail = self.validate_all_imports(modules).is_err();
-        if bail {
-            return Err(self.errors.take());
-        }
+        let _ = self.validate_all_imports(modules);
 
-        self.errors.finish()
+        self.logger.ok_or_bail(())
     }
 
     fn validate_all_imports(
@@ -479,7 +527,7 @@ impl Analyzer {
             if let Item::Use(use_decl) = item {
                 // Validate the import source
                 if let Err(message) = validate_module_path(&use_decl.source) {
-                    self.errors.error(AnalyzeError::InvalidModulePath {
+                    self.logger.error(AnalyzeError::InvalidModulePath {
                         path: use_decl.source.clone(),
                         message,
                         span: use_decl.span,
@@ -492,7 +540,7 @@ impl Analyzer {
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_source) {
-                    self.errors.error(AnalyzeError::ModuleNotFound {
+                    self.logger.error(AnalyzeError::ModuleNotFound {
                         module_source: module_source.clone(),
                         span: use_decl.span,
                     })?;
@@ -510,7 +558,7 @@ impl Analyzer {
                                 let import_name = alias.as_ref().unwrap_or(name);
                                 self.symbols.register_import(import_name, symbol_id);
                             } else {
-                                self.errors.error(AnalyzeError::ImportNotFound {
+                                self.logger.error(AnalyzeError::ImportNotFound {
                                     module_source: module_source.clone(),
                                     name: name.clone(),
                                     span: use_decl.span,
@@ -531,7 +579,7 @@ impl Analyzer {
                                         func_item.alias.as_ref().unwrap_or(&func_item.name);
                                     self.symbols.register_import(import_name, symbol_id);
                                 } else {
-                                    self.errors.error(AnalyzeError::ImportNotFound {
+                                    self.logger.error(AnalyzeError::ImportNotFound {
                                         module_source: module_source.clone(),
                                         name: lookup_name,
                                         span: use_decl.span,
@@ -549,11 +597,5 @@ impl Analyzer {
     /// Get a copy of the implicit modules set
     pub fn get_implicit_modules(&self) -> &std::collections::HashSet<ModuleSource> {
         &self.implicit_modules
-    }
-}
-
-impl Default for Analyzer {
-    fn default() -> Self {
-        Self::new()
     }
 }

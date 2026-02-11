@@ -40,6 +40,18 @@ pub struct ParseError {
     pub span: Span,
 }
 
+impl From<ParseError> for crate::compiler_host::Diagnostic {
+    fn from(e: ParseError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        Self {
+            severity: Severity::Error,
+            code: Code::InvalidSyntax,
+            message: format!("parse error: {}", e.message),
+            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+        }
+    }
+}
+
 type ParseResult<T> = Result<T, ParseError>;
 
 /// Groups of comparison operators for chain validation

@@ -23,7 +23,8 @@ use crate::ast::{
     IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt, Type,
     UnaryOp,
 };
-use crate::logger::ErrorLog;
+use crate::compiler_host::CompilerHost;
+use crate::logger::{Bail, Logger};
 use crate::project::Project;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::tir::{
@@ -254,6 +255,90 @@ impl std::fmt::Display for TypeError {
 
 impl std::error::Error for TypeError {}
 
+impl From<TypeError> for crate::compiler_host::Diagnostic {
+    fn from(e: TypeError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        let (code, message, span) = match &e {
+            TypeError::TypeMismatch {
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("type mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
+            TypeError::UnknownType { name, span } => {
+                (Code::UnknownType, format!("unknown type '{name}'"), *span)
+            }
+            TypeError::UnknownFunction { name, span } => (
+                Code::UndefinedVariable,
+                format!("unknown function '{name}'"),
+                *span,
+            ),
+            TypeError::UnknownIdentifier { name, span } => (
+                Code::UndefinedVariable,
+                format!("unknown identifier '{name}'"),
+                *span,
+            ),
+            TypeError::FieldNotFound {
+                struct_name,
+                field_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("field '{field_name}' not found on struct '{struct_name}'"),
+                *span,
+            ),
+            TypeError::ArgumentCountMismatch {
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("expected {expected} arguments, found {found}"),
+                *span,
+            ),
+            TypeError::InvalidLiteral { message, span } => {
+                (Code::InvalidSyntax, message.clone(), *span)
+            }
+            TypeError::NotYetImplemented { feature, span } => (
+                Code::UnsupportedFeature,
+                format!("{feature} is not yet implemented"),
+                *span,
+            ),
+            TypeError::CannotAssign { message, span } => (
+                Code::ImmutableAssignment,
+                format!("cannot assign: {message}"),
+                *span,
+            ),
+            TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name,
+                param_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
+                ),
+                *span,
+            ),
+            TypeError::InvalidPattern { message, span } => (
+                Code::InvalidSyntax,
+                format!("invalid pattern: {message}"),
+                *span,
+            ),
+        };
+        crate::compiler_host::Diagnostic {
+            severity: Severity::Error,
+            code,
+            message,
+            span: Some(DiagnosticSpan::from_span(&span, None)),
+        }
+    }
+}
+
 /// Local variable information during resolution
 #[derive(Debug, Clone)]
 struct LocalVar {
@@ -455,7 +540,7 @@ enum VarRef {
 }
 
 /// The resolver converts AST to TIR with resolved types
-pub struct Resolver<'a> {
+pub struct Resolver<'a, H: CompilerHost> {
     /// Type table (shared across all modules via Rc<RefCell>)
     type_table: Rc<RefCell<TypeTable>>,
     /// Symbol table from analyzer
@@ -484,8 +569,8 @@ pub struct Resolver<'a> {
     function_return_types: HashMap<String, TypeId>,
     /// Imported function names for the current module
     imported_functions: HashSet<String>,
-    /// Errors collected during resolution
-    errors: ErrorLog<TypeError>,
+    /// Logger for emitting diagnostics
+    logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`)
     current_module_source: ModuleSource,
     /// Current module items (for local function parameter lookup)
@@ -595,12 +680,13 @@ struct ArithmeticTraitInfo {
     trait_name: String,
 }
 
-impl<'a> Resolver<'a> {
+impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Create a new resolver
     pub fn new(
         symbols: &'a SymbolTable,
         loaded_modules: &'a HashMap<ModuleSource, Module>,
         builtin_registry: &'a BuiltinRegistry,
+        logger: &'a Logger<'a, H>,
     ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
@@ -620,7 +706,7 @@ impl<'a> Resolver<'a> {
             all_resource_types: HashMap::new(),
             function_return_types: HashMap::new(),
             imported_functions: HashSet::new(),
-            errors: ErrorLog::new(),
+            logger,
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),
             current_type_params: HashMap::new(),
@@ -644,7 +730,7 @@ impl<'a> Resolver<'a> {
         &mut self,
         module: &Module,
         module_source: ModuleSource,
-    ) -> Result<TirModule, Vec<TypeError>> {
+    ) -> Result<TirModule, Bail> {
         // Set current module source for struct type creation
         self.current_module_source = module_source.clone();
         // Store current module items for local function parameter lookup
@@ -894,11 +980,7 @@ impl<'a> Resolver<'a> {
             tir_module = tir_module.with_data_section(Some(data.to_string()));
         }
 
-        if self.errors.has_errors() {
-            Err(self.errors.take())
-        } else {
-            Ok(tir_module)
-        }
+        self.logger.ok_or_bail(tir_module)
     }
 
     /// Resolve all modules to TIR
@@ -910,9 +992,9 @@ impl<'a> Resolver<'a> {
         symbols: &'a SymbolTable,
         modules: &'a HashMap<ModuleSource, Module>,
         _entry_module_source: ModuleSource,
-    ) -> Result<IndexMap<ModuleSource, TirModule>, Vec<TypeError>> {
+        logger: &'a Logger<'a, H>,
+    ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::new();
-        let mut all_errors = ErrorLog::new();
 
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
@@ -1270,7 +1352,7 @@ impl<'a> Resolver<'a> {
                 all_resource_types: all_resource_types.clone(),
                 function_return_types,
                 imported_functions,
-                errors: ErrorLog::new(),
+                logger,
                 current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"), // Set in resolve_module
                 current_module_items: Vec::new(), // Set in resolve_module
                 current_type_params: HashMap::new(),
@@ -1288,21 +1370,14 @@ impl<'a> Resolver<'a> {
                 module_type_maps_cache: HashMap::new(),
             };
 
-            match resolver.resolve_module(module, module_source.clone()) {
-                Ok(tir_module) => {
-                    // TypeTable is already shared via Rc, no need to merge
-                    result.insert(module_source.clone(), tir_module);
-                }
-                Err(errors) => {
-                    if all_errors.extend(errors).is_err() {
-                        // Too many errors across all modules - stop early
-                        return Err(all_errors.take());
-                    }
-                }
+            // Errors are emitted to the logger; if resolve_module returns Bail,
+            // we continue to resolve remaining modules to collect more errors
+            if let Ok(tir_module) = resolver.resolve_module(module, module_source.clone()) {
+                result.insert(module_source.clone(), tir_module);
             }
         }
 
-        all_errors.into_result(result)
+        logger.ok_or_bail(result)
     }
 
     /// Build a module-specific flat map from per-module entries.
@@ -2112,7 +2187,7 @@ impl<'a> Resolver<'a> {
             && initializer.type_id != TypeTable::UNKNOWN
             && ty != TypeTable::UNKNOWN
         {
-            let _ = self.errors.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: self.type_table.borrow().type_name(ty),
                 found: self.type_table.borrow().type_name(initializer.type_id),
                 span: global_decl.initializer.span(),
@@ -2656,7 +2731,7 @@ impl<'a> Resolver<'a> {
                             if resolved.type_id != element_type
                                 && resolved.type_id != TypeTable::UNKNOWN
                             {
-                                let _ = self.errors.error(TypeError::TypeMismatch {
+                                let _ = self.logger.error(TypeError::TypeMismatch {
                                     expected: self.type_table.borrow().type_name(element_type),
                                     found: self.type_table.borrow().type_name(resolved.type_id),
                                     span: elem.span(),
@@ -2688,7 +2763,7 @@ impl<'a> Resolver<'a> {
                                     && resolved.type_id != expected_type
                                     && resolved.type_id != TypeTable::UNKNOWN
                                 {
-                                    let _ = self.errors.error(TypeError::TypeMismatch {
+                                    let _ = self.logger.error(TypeError::TypeMismatch {
                                         expected: self.type_table.borrow().type_name(expected_type),
                                         found: self.type_table.borrow().type_name(resolved.type_id),
                                         span: elem.span(),
@@ -2700,7 +2775,7 @@ impl<'a> Resolver<'a> {
 
                         // Also check length mismatch
                         if tuple_lit.elements.len() != expected_elem_types.len() {
-                            let _ = self.errors.error(TypeError::TypeMismatch {
+                            let _ = self.logger.error(TypeError::TypeMismatch {
                                 expected: format!(
                                     "tuple with {} elements",
                                     expected_elem_types.len()
@@ -2756,7 +2831,7 @@ impl<'a> Resolver<'a> {
                         (value, target_type)
                     } else {
                         // Target type is not a struct - error
-                        let _ = self.errors.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: self.type_table.borrow().type_name(target_type),
                             found: "implicit struct literal".into(),
                             span: struct_lit.span,
@@ -2795,7 +2870,7 @@ impl<'a> Resolver<'a> {
                 )
             };
             if !is_null_to_option {
-                let _ = self.errors.error(TypeError::TypeMismatch {
+                let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: self.type_table.borrow().type_name(type_id),
                     found: self.type_table.borrow().type_name(value.type_id),
                     span: let_stmt.value.span(),
@@ -2844,7 +2919,7 @@ impl<'a> Resolver<'a> {
             }
             ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
                 // These patterns are not valid in let statements
-                let _ = self.errors.error(TypeError::InvalidPattern {
+                let _ = self.logger.error(TypeError::InvalidPattern {
                     message: "literal and variant patterns are not allowed in let statements"
                         .to_string(),
                     span: let_stmt.span,
@@ -2881,7 +2956,7 @@ impl<'a> Resolver<'a> {
                         elem_types.clone()
                     } else {
                         // Error: expected tuple type
-                        let _ = self.errors.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: "tuple type".to_string(),
                             found: type_table.type_name(type_id),
                             span,
@@ -2892,7 +2967,7 @@ impl<'a> Resolver<'a> {
 
                 // Check length
                 if patterns.len() != elem_types.len() {
-                    let _ = self.errors.error(TypeError::TypeMismatch {
+                    let _ = self.logger.error(TypeError::TypeMismatch {
                         expected: format!("tuple with {} elements", elem_types.len()),
                         found: format!("pattern with {} elements", patterns.len()),
                         span,
@@ -2917,7 +2992,7 @@ impl<'a> Resolver<'a> {
             ast::Pattern::Wildcard => TirPattern::Wildcard,
             ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
                 // These patterns are not valid in let statements
-                let _ = self.errors.error(TypeError::InvalidPattern {
+                let _ = self.logger.error(TypeError::InvalidPattern {
                     message: "literal and variant patterns are not allowed in let statements"
                         .to_string(),
                     span,
@@ -3041,7 +3116,7 @@ impl<'a> Resolver<'a> {
                     Literal::Number(n) => {
                         // Float literals cannot be used in match patterns
                         if Self::is_float_only_literal(&n.repr) {
-                            let _ = self.errors.error(TypeError::InvalidPattern {
+                            let _ = self.logger.error(TypeError::InvalidPattern {
                                 message: "float literals cannot be used in match patterns"
                                     .to_string(),
                                 span,
@@ -3130,7 +3205,7 @@ impl<'a> Resolver<'a> {
                         if self.variant_cases.contains_key(name) {
                             self.get_variant_case_payload_type(name, variant_name, type_args, *span)
                         } else {
-                            let _ = self.errors.error(TypeError::TypeMismatch {
+                            let _ = self.logger.error(TypeError::TypeMismatch {
                                 expected: "variant type".to_string(),
                                 found: name.clone(),
                                 span: *span,
@@ -3139,7 +3214,7 @@ impl<'a> Resolver<'a> {
                         }
                     }
                     _ => {
-                        let _ = self.errors.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: "variant type (Option or custom variant)".to_string(),
                             found: format!("{resolved_type:?}"),
                             span: *span,
@@ -3197,13 +3272,13 @@ impl<'a> Resolver<'a> {
 
         // Check if variant exists but case not found
         if self.variant_cases.contains_key(variant_name) {
-            let _ = self.errors.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: format!("valid case of variant {variant_name}"),
                 found: case_name.to_string(),
                 span,
             });
         } else {
-            let _ = self.errors.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: "known variant type".to_string(),
                 found: variant_name.to_string(),
                 span,
@@ -3225,7 +3300,7 @@ impl<'a> Resolver<'a> {
         if let Some(label) = &break_stmt.label
             && !ctx.active_labels.iter().any(|l| l == label)
         {
-            let _ = self.errors.error(TypeError::UnknownIdentifier {
+            let _ = self.logger.error(TypeError::UnknownIdentifier {
                 name: format!("labeled break target not found: {label}"),
                 span: break_stmt.span,
             });
@@ -3517,7 +3592,7 @@ impl<'a> Resolver<'a> {
                             TypeTable::F64,
                         ),
                         Err(message) => {
-                            let _ = self.errors.error(TypeError::InvalidLiteral {
+                            let _ = self.logger.error(TypeError::InvalidLiteral {
                                 message,
                                 span: lit.span,
                             });
@@ -3541,7 +3616,7 @@ impl<'a> Resolver<'a> {
                             TypeTable::I32,
                         ),
                         Err(message) => {
-                            let _ = self.errors.error(TypeError::InvalidLiteral {
+                            let _ = self.logger.error(TypeError::InvalidLiteral {
                                 message,
                                 span: lit.span,
                             });
@@ -3651,7 +3726,7 @@ impl<'a> Resolver<'a> {
                         ResolvedType::Unit
                     );
                     if !payload_is_unit {
-                        let _ = self.errors.error(TypeError::ArgumentCountMismatch {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                             expected: 1,
                             found: 0,
                             span: ident.span,
@@ -3765,7 +3840,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Unknown variable - report error
-        let _ = self.errors.error(TypeError::UnknownIdentifier {
+        let _ = self.logger.error(TypeError::UnknownIdentifier {
             name: ident.name.clone(),
             span: ident.span,
         });
@@ -4168,7 +4243,7 @@ impl<'a> Resolver<'a> {
             if (left_is_newtype || right_is_newtype) && left.type_id != right.type_id {
                 let left_name = type_table.type_name(left.type_id);
                 let right_name = type_table.type_name(right.type_id);
-                let _ = self.errors.error(TypeError::TypeMismatch {
+                let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: left_name,
                     found: right_name,
                     span: binary.span,
@@ -4218,7 +4293,7 @@ impl<'a> Resolver<'a> {
             && let Some(local) = ctx.lookup(name)
             && !local.is_mut
         {
-            let _ = self.errors.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: "mutable variable".to_string(),
                 found: format!("immutable variable '{name}'"),
                 span: unary.span,
@@ -4244,7 +4319,7 @@ impl<'a> Resolver<'a> {
             if matches!(field_type, ResolvedType::Primitive(_))
                 || matches!(base_type, ResolvedType::Primitive(_))
             {
-                let _ = self.errors.error(TypeError::CannotAssign {
+                let _ = self.logger.error(TypeError::CannotAssign {
                     message: "cannot take mutable reference to primitive struct field; use the struct reference directly".to_string(),
                     span: unary.span,
                 });
@@ -4416,7 +4491,7 @@ impl<'a> Resolver<'a> {
                     *inner
                 } else {
                     // Cannot dereference non-reference type
-                    let _ = self.errors.error(TypeError::TypeMismatch {
+                    let _ = self.logger.error(TypeError::TypeMismatch {
                         expected: "reference type".to_string(),
                         found: self.type_table.borrow().type_name(expr.type_id),
                         span: unary.span,
@@ -4532,7 +4607,7 @@ impl<'a> Resolver<'a> {
 
             if let Some(is_mut) = is_mutable {
                 if !is_mut {
-                    let _ = self.errors.error(TypeError::CannotAssign {
+                    let _ = self.logger.error(TypeError::CannotAssign {
                         message: format!("cannot assign to immutable global variable '{name}'"),
                         span: assign.target.span(),
                     });
@@ -4564,7 +4639,7 @@ impl<'a> Resolver<'a> {
             } => {
                 let inner_type = self.type_table.borrow().get(expr.type_id).clone();
                 if matches!(inner_type, ResolvedType::Ref(_)) {
-                    let _ = self.errors.error(TypeError::CannotAssign {
+                    let _ = self.logger.error(TypeError::CannotAssign {
                         message: "cannot assign through immutable reference".to_string(),
                         span: assign.target.span(),
                     });
@@ -4578,7 +4653,7 @@ impl<'a> Resolver<'a> {
 
         if !is_valid_lvalue {
             // Report error for invalid assignment target
-            let _ = self.errors.error(TypeError::CannotAssign {
+            let _ = self.logger.error(TypeError::CannotAssign {
                 message: "expression is not assignable".to_string(),
                 span: assign.target.span(),
             });
@@ -4804,7 +4879,7 @@ impl<'a> Resolver<'a> {
                             let expected_args = usize::from(!payload_is_unit);
 
                             if args.len() != expected_args {
-                                let _ = self.errors.error(TypeError::ArgumentCountMismatch {
+                                let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                                     expected: expected_args,
                                     found: args.len(),
                                     span: call.span,
@@ -4837,7 +4912,7 @@ impl<'a> Resolver<'a> {
                             );
                         } else {
                             // Unknown case name
-                            let _ = self.errors.error(TypeError::UnknownFunction {
+                            let _ = self.logger.error(TypeError::UnknownFunction {
                                 name: format!("{prefix}::{suffix}"),
                                 span: call.span,
                             });
@@ -4911,7 +4986,7 @@ impl<'a> Resolver<'a> {
 
         // Report error for unknown functions
         if !is_known {
-            let _ = self.errors.error(TypeError::UnknownFunction {
+            let _ = self.logger.error(TypeError::UnknownFunction {
                 name: func_name.clone(),
                 span: call.span,
             });
@@ -5307,7 +5382,7 @@ impl<'a> Resolver<'a> {
             {
                 // Check if the literal can be an integer
                 if Self::is_float_only_literal(&num_lit.repr) {
-                    let _ = self.errors.error(TypeError::InvalidLiteral {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!(
                             "cannot use float literal '{}' as integer (has decimal point or negative exponent)",
                             num_lit.repr
@@ -5335,7 +5410,7 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     Err(message) => {
-                        let _ = self.errors.error(TypeError::InvalidLiteral {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
@@ -5360,7 +5435,7 @@ impl<'a> Resolver<'a> {
             {
                 // Check if the literal can be an integer
                 if Self::is_float_only_literal(&num_lit.repr) {
-                    let _ = self.errors.error(TypeError::InvalidLiteral {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!(
                             "cannot use float literal '-{}' as integer (has decimal point or negative exponent)",
                             num_lit.repr
@@ -5390,7 +5465,7 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     Err(message) => {
-                        let _ = self.errors.error(TypeError::InvalidLiteral {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
@@ -5423,7 +5498,7 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     Err(message) => {
-                        let _ = self.errors.error(TypeError::InvalidLiteral {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
@@ -5458,7 +5533,7 @@ impl<'a> Resolver<'a> {
                         );
                     }
                     Err(message) => {
-                        let _ = self.errors.error(TypeError::InvalidLiteral {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
@@ -5549,7 +5624,7 @@ impl<'a> Resolver<'a> {
                                 lit.span,
                             );
                         }
-                        let _ = self.errors.error(TypeError::InvalidLiteral {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
                             message: format!("invalid u128 literal: {}", num_lit.repr),
                             span: lit.span,
                         });
@@ -5565,7 +5640,7 @@ impl<'a> Resolver<'a> {
                                 lit.span,
                             );
                         }
-                        let _ = self.errors.error(TypeError::InvalidLiteral {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
                             message: format!("invalid i128 literal: {}", num_lit.repr),
                             span: lit.span,
                         });
@@ -5601,7 +5676,7 @@ impl<'a> Resolver<'a> {
                             unary.span,
                         );
                     }
-                    let _ = self.errors.error(TypeError::InvalidLiteral {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!("invalid i128 literal: -{}", num_lit.repr),
                         span: unary.span,
                     });
@@ -5806,7 +5881,7 @@ impl<'a> Resolver<'a> {
             info
         } else {
             let type_name = self.type_table.borrow().type_name(base_type_id);
-            let _ = self.errors.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: format!(
                     "type '{}' to have method '{}'",
                     type_name, method_call.method
@@ -5853,7 +5928,7 @@ impl<'a> Resolver<'a> {
             if let Some((expected_name, actual_name)) =
                 self.check_newtype_arg_mismatch(arg.type_id, expected_type)
             {
-                let _ = self.errors.error(TypeError::TypeMismatch {
+                let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: format!("argument {} to be {}", i + 1, expected_name),
                     found: actual_name,
                     span: method_call
@@ -6077,7 +6152,7 @@ impl<'a> Resolver<'a> {
                 "Some" => {
                     // Option::Some(value) - wrap in OptionSome
                     if args.len() != 1 {
-                        let _ = self.errors.error(TypeError::ArgumentCountMismatch {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                             expected: 1,
                             found: args.len(),
                             span: static_call.span,
@@ -6097,7 +6172,7 @@ impl<'a> Resolver<'a> {
                 "None" => {
                     // Option::None - return null with Option<T> type
                     if !args.is_empty() {
-                        let _ = self.errors.error(TypeError::ArgumentCountMismatch {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                             expected: 0,
                             found: args.len(),
                             span: static_call.span,
@@ -6137,7 +6212,7 @@ impl<'a> Resolver<'a> {
                     let expected_args = usize::from(!payload_is_unit);
 
                     if args.len() != expected_args {
-                        let _ = self.errors.error(TypeError::ArgumentCountMismatch {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                             expected: expected_args,
                             found: args.len(),
                             span: static_call.span,
@@ -6161,7 +6236,7 @@ impl<'a> Resolver<'a> {
                     );
                 } else {
                     // Unknown case name
-                    let _ = self.errors.error(TypeError::UnknownFunction {
+                    let _ = self.logger.error(TypeError::UnknownFunction {
                         name: format!("{}::{}", name, static_call.method),
                         span: static_call.span,
                     });
@@ -6169,7 +6244,7 @@ impl<'a> Resolver<'a> {
                 }
             } else {
                 // Variant not found in variant_cases (shouldn't happen)
-                let _ = self.errors.error(TypeError::UnknownType {
+                let _ = self.logger.error(TypeError::UnknownType {
                     name: name.clone(),
                     span: static_call.span,
                 });
@@ -6202,7 +6277,7 @@ impl<'a> Resolver<'a> {
                     let expected_args = usize::from(!payload_is_unit);
 
                     if args.len() != expected_args {
-                        let _ = self.errors.error(TypeError::ArgumentCountMismatch {
+                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                             expected: expected_args,
                             found: args.len(),
                             span: static_call.span,
@@ -6226,7 +6301,7 @@ impl<'a> Resolver<'a> {
                     );
                 } else {
                     // Unknown case name
-                    let _ = self.errors.error(TypeError::UnknownFunction {
+                    let _ = self.logger.error(TypeError::UnknownFunction {
                         name: format!("{}::{}", name, static_call.method),
                         span: static_call.span,
                     });
@@ -8337,7 +8412,7 @@ impl<'a> Resolver<'a> {
                 for bound in &param.bounds {
                     if !self.type_implements_trait(type_arg, bound) {
                         let type_name = self.type_id_to_string(type_arg);
-                        let _ = self.errors.error(TypeError::TraitBoundNotSatisfied {
+                        let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                             type_name,
                             trait_name: bound.clone(),
                             param_name: param.name.clone(),
@@ -8978,7 +9053,7 @@ impl<'a> Resolver<'a> {
                     if index < elements.len() {
                         return (index as u32, elements[index]);
                     }
-                    let _ = self.errors.error(TypeError::InvalidLiteral {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!(
                             "tuple index {} out of bounds, tuple has {} elements",
                             index,
@@ -9161,7 +9236,7 @@ impl<'a> Resolver<'a> {
                         index.span,
                     );
                 } else {
-                    let _ = self.errors.error(TypeError::InvalidLiteral {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!(
                             "tuple index {} out of bounds, tuple has {} elements",
                             idx,
@@ -9174,7 +9249,7 @@ impl<'a> Resolver<'a> {
                 }
             }
             // Non-constant index on tuple
-            let _ = self.errors.error(TypeError::InvalidLiteral {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
                 message: "tuple index must be a constant integer".to_string(),
                 span: index.span,
             });
@@ -9285,7 +9360,7 @@ impl<'a> Resolver<'a> {
         }
 
         // Fallback: report error for unsupported indexing
-        let _ = self.errors.error(TypeError::TypeMismatch {
+        let _ = self.logger.error(TypeError::TypeMismatch {
             expected: "array or type implementing Index or IndexValue trait".to_string(),
             found: self.type_table.borrow().type_name(expr.type_id),
             span: index.span,
@@ -9353,7 +9428,7 @@ impl<'a> Resolver<'a> {
         let condition = match &if_expr.condition {
             ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
             ast::Condition::Pattern { span, .. } => {
-                let _ = self.errors.error(TypeError::NotYetImplemented {
+                let _ = self.logger.error(TypeError::NotYetImplemented {
                     feature: "pattern matching in if expressions (use if statement instead)"
                         .to_string(),
                     span: *span,
@@ -9384,7 +9459,7 @@ impl<'a> Resolver<'a> {
                 // No else branch - require then branch to be unit
                 if then_type != TypeTable::UNIT {
                     let type_name = self.type_table.borrow().type_name(then_type);
-                    let _ = self.errors.error(TypeError::TypeMismatch {
+                    let _ = self.logger.error(TypeError::TypeMismatch {
                         expected: "()".to_string(),
                         found: type_name,
                         span: if_expr.then_block.span,
@@ -9395,7 +9470,7 @@ impl<'a> Resolver<'a> {
                 // Both branches exist but types don't match - report error
                 let then_name = self.type_table.borrow().type_name(then_type);
                 let else_name = self.type_table.borrow().type_name(else_type);
-                let _ = self.errors.error(TypeError::TypeMismatch {
+                let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: then_name,
                     found: else_name,
                     span: if_expr.else_block.as_ref().unwrap().span,
@@ -9406,7 +9481,7 @@ impl<'a> Resolver<'a> {
             // Types don't match
             let then_name = self.type_table.borrow().type_name(then_type);
             let else_name = self.type_table.borrow().type_name(else_type);
-            let _ = self.errors.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: then_name,
                 found: else_name,
                 span: if_expr.else_block.as_ref().unwrap().span,
@@ -9452,7 +9527,7 @@ impl<'a> Resolver<'a> {
         let condition = match &if_expr.condition {
             ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
             ast::Condition::Pattern { span, .. } => {
-                let _ = self.errors.error(TypeError::NotYetImplemented {
+                let _ = self.logger.error(TypeError::NotYetImplemented {
                     feature: "pattern matching in if expressions (use if statement instead)"
                         .to_string(),
                     span: *span,
@@ -10350,7 +10425,7 @@ impl<'a> Resolver<'a> {
                     let resolved = self.resolve_expr(elem, ctx);
                     // Type check: each element must match Array element type
                     if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
-                        let _ = self.errors.error(TypeError::TypeMismatch {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: self.type_table.borrow().type_name(element_type),
                             found: self.type_table.borrow().type_name(resolved.type_id),
                             span: elem.span(),
@@ -10441,7 +10516,7 @@ impl<'a> Resolver<'a> {
                             cast.span,
                         );
                     }
-                    let _ = self.errors.error(TypeError::InvalidLiteral {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!("invalid u128 literal: {}", num_lit.repr),
                         span: lit.span,
                     });
@@ -10451,7 +10526,7 @@ impl<'a> Resolver<'a> {
                         let (low, high) = Self::unpack_i128(value);
                         return self.build_from_pair_call(name, low, high, target_type, cast.span);
                     }
-                    let _ = self.errors.error(TypeError::InvalidLiteral {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
                         message: format!("invalid i128 literal: {}", num_lit.repr),
                         span: lit.span,
                     });
@@ -10472,7 +10547,7 @@ impl<'a> Resolver<'a> {
                     let (low, high) = Self::unpack_i128(value);
                     return self.build_from_pair_call(name, low, high, target_type, unary.span);
                 }
-                let _ = self.errors.error(TypeError::InvalidLiteral {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!("invalid i128 literal: -{}", num_lit.repr),
                     span: unary.span,
                 });
@@ -10583,7 +10658,7 @@ impl<'a> Resolver<'a> {
         // Handle implicit struct literals (name is None)
         let Some(name) = &struct_lit.name else {
             // Implicit struct literal without type context - error
-            let _ = self.errors.error(TypeError::TypeMismatch {
+            let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: "named struct literal (e.g., Point { x: 1, y: 2 })".into(),
                 found: "implicit struct literal without type context".into(),
                 span: struct_lit.span,
@@ -11024,7 +11099,7 @@ impl<'a> Resolver<'a> {
                 return type_id;
             }
             // If not found, it's an unknown associated type
-            let _ = self.errors.error(TypeError::UnknownType {
+            let _ = self.logger.error(TypeError::UnknownType {
                 name: format!("Self::{}", namespaced.name),
                 span: namespaced.span,
             });
@@ -11034,7 +11109,7 @@ impl<'a> Resolver<'a> {
         if namespaced.namespace.as_str() == "builtin" {
             if namespaced.name.as_str() == "array" {
                 if namespaced.args.len() != 1 {
-                    let _ = self.errors.error(TypeError::ArgumentCountMismatch {
+                    let _ = self.logger.error(TypeError::ArgumentCountMismatch {
                         expected: 1,
                         found: namespaced.args.len(),
                         span: namespaced.span,
@@ -11046,14 +11121,14 @@ impl<'a> Resolver<'a> {
                     .borrow_mut()
                     .make_builtin_array(element_type)
             } else {
-                let _ = self.errors.error(TypeError::UnknownType {
+                let _ = self.logger.error(TypeError::UnknownType {
                     name: format!("builtin::{}", namespaced.name),
                     span: namespaced.span,
                 });
                 TypeTable::ERROR
             }
         } else {
-            let _ = self.errors.error(TypeError::UnknownType {
+            let _ = self.logger.error(TypeError::UnknownType {
                 name: format!("{}::{}", namespaced.namespace, namespaced.name),
                 span: namespaced.span,
             });
@@ -11143,7 +11218,7 @@ impl<'a> Resolver<'a> {
 
                 if !found_as_variant {
                     // Option not found as a variant - likely #![no_prelude] without explicit import
-                    let _ = self.errors.error(TypeError::UnknownType {
+                    let _ = self.logger.error(TypeError::UnknownType {
                         name: "Option".to_string(),
                         span,
                     });
@@ -11195,7 +11270,7 @@ impl<'a> Resolver<'a> {
                                         // Get the type name for the error message
                                         let type_name = self.type_id_to_string(type_arg);
                                         let _ =
-                                            self.errors.error(TypeError::TraitBoundNotSatisfied {
+                                            self.logger.error(TypeError::TraitBoundNotSatisfied {
                                                 type_name,
                                                 trait_name: bound.clone(),
                                                 param_name: param_name.clone(),
@@ -11276,15 +11351,16 @@ fn convert_unary_op(op: UnaryOp) -> TirUnaryOp {
 }
 
 /// Convenience function to resolve a module
-pub fn resolve_module(
+pub fn resolve_module<H: CompilerHost>(
     module: &Module,
     module_source: ModuleSource,
     symbols: &SymbolTable,
     loaded_modules: &HashMap<ModuleSource, Module>,
-) -> Result<TirModule, Vec<TypeError>> {
+    logger: &Logger<H>,
+) -> Result<TirModule, Bail> {
     let type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
     let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
-    let mut resolver = Resolver::new(symbols, loaded_modules, &builtin_registry);
+    let mut resolver = Resolver::new(symbols, loaded_modules, &builtin_registry, logger);
     resolver.resolve_module(module, module_source)
 }
 
@@ -11292,15 +11368,16 @@ pub fn resolve_module(
 ///
 /// This is the main entry point for the resolve phase. It resolves all modules
 /// to TIR and packages them into a Project struct.
-pub fn resolve_to_project(
+pub fn resolve_to_project<H: CompilerHost>(
     symbols: SymbolTable,
     modules: &HashMap<ModuleSource, Module>,
     entry_module_source: ModuleSource,
     implicit_modules: HashSet<ModuleSource>,
     module_name: String,
-) -> Result<Project, Vec<TypeError>> {
+    logger: &Logger<H>,
+) -> Result<Project, Bail> {
     let tir_modules =
-        Resolver::resolve_all_modules(&symbols, modules, entry_module_source.clone())?;
+        Resolver::resolve_all_modules(&symbols, modules, entry_module_source.clone(), logger)?;
 
     let (wasi_registry, world_registry) = crate::component_model::WasiRegistry::build_from_stdlib();
 
