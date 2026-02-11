@@ -162,6 +162,10 @@ benchmark-mandelbrot:
 benchmark-sieve:
 	mise run -C benchmark sieve
 
+.PHONY: benchmark-zlib
+benchmark-zlib:
+	mise run -C benchmark zlib
+
 .PHONY: report-wasm-size
 report-wasm-size:
 	mise run -C wasm-size report-wasm-size

@@ -1,0 +1,51 @@
+// Test raw deflate and inflate (no zlib header/trailer)
+use {println, Stdout} from "core:cli";
+use {deflate_raw, deflate_raw2, inflate_raw, Z_BEST_SPEED, Z_BEST_COMPRESSION} from "core:zlib";
+
+export fn run() with Stdout {
+    // Test basic raw round-trip
+    let mut data: Array<u8> = [];
+    let msg = "Hello, raw deflate!";
+    for let mut i = 0; i < msg.len(); i += 1 {
+        data.append(msg.get_byte(i));
+    }
+
+    let compressed = deflate_raw(&data);
+    // Raw deflate has no header: first byte should NOT be 0x78 (zlib header)
+    assert compressed[0] != 0x78 as u8, "raw should not have zlib header";
+
+    let decompressed = inflate_raw(&compressed);
+    assert decompressed.len() == data.len(), "raw round-trip size";
+    for let mut i = 0; i < data.len(); i += 1 {
+        assert decompressed[i] == data[i], "raw round-trip data";
+    }
+    println("basic raw ok");
+
+    // Test raw with different levels
+    let c1 = deflate_raw2(&data, Z_BEST_SPEED);
+    let d1 = inflate_raw(&c1);
+    assert d1.len() == data.len(), "raw level 1 size";
+
+    let c9 = deflate_raw2(&data, Z_BEST_COMPRESSION);
+    let d9 = inflate_raw(&c9);
+    assert d9.len() == data.len(), "raw level 9 size";
+    println("raw levels ok");
+
+    // Test larger raw data
+    let mut big_data: Array<u8> = Array::<u8>::with_capacity(2000);
+    for let mut i = 0; i < 2000; i += 1 {
+        big_data.append((i % 256) as u8);
+    }
+    let big_compressed = deflate_raw(&big_data);
+    let big_decompressed = inflate_raw(&big_compressed);
+    assert big_decompressed.len() == 2000, "raw big data size";
+    for let mut i = 0; i < 2000; i += 1 {
+        assert big_decompressed[i] == big_data[i], "raw big data content";
+    }
+    println("raw big data ok");
+
+    println("raw ok");
+}
+
+__DATA__
+{"stdout_contains": ["raw ok", "basic raw ok", "raw levels ok", "raw big data ok"]}

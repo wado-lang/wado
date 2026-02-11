@@ -1,0 +1,52 @@
+// Test adler32_combine and crc32_combine
+use {println, Stdout} from "core:cli";
+use {adler32, adler32_init, adler32_combine, crc32, crc32_init, crc32_combine} from "core:zlib";
+
+export fn run() with Stdout {
+    // Create two data segments
+    let mut seg1: Array<u8> = [];
+    let msg1 = "Hello, ";
+    for let mut i = 0; i < msg1.len(); i += 1 {
+        seg1.append(msg1.get_byte(i));
+    }
+
+    let mut seg2: Array<u8> = [];
+    let msg2 = "World!";
+    for let mut i = 0; i < msg2.len(); i += 1 {
+        seg2.append(msg2.get_byte(i));
+    }
+
+    // Combined data
+    let mut combined: Array<u8> = [];
+    for let mut i = 0; i < seg1.len(); i += 1 {
+        combined.append(seg1[i]);
+    }
+    for let mut i = 0; i < seg2.len(); i += 1 {
+        combined.append(seg2[i]);
+    }
+
+    // Adler-32 combine test
+    let a1 = adler32(adler32_init(), &seg1, 0, seg1.len());
+    let a2 = adler32(adler32_init(), &seg2, 0, seg2.len());
+    let a_combined = adler32(adler32_init(), &combined, 0, combined.len());
+    let a_joined = adler32_combine(a1, a2, seg2.len());
+    println(`adler32 seg1: {a1 as i32}`);
+    println(`adler32 seg2: {a2 as i32}`);
+    println(`adler32 combined: {a_combined as i32}`);
+    println(`adler32 joined: {a_joined as i32}`);
+
+    // CRC-32 combine test
+    let c1 = crc32(crc32_init(), &seg1, 0, seg1.len());
+    let c2 = crc32(crc32_init(), &seg2, 0, seg2.len());
+    let c_combined = crc32(crc32_init(), &combined, 0, combined.len());
+    let c_joined = crc32_combine(c1, c2, seg2.len());
+    println(`crc32 combined: {c_combined as i32}`);
+    println(`crc32 joined: {c_joined as i32}`);
+    assert c_combined == c_joined, "crc32_combine should match";
+    println("crc32_combine ok");
+
+    println("combine ok");
+}
+
+__DATA__
+{"stdout_contains": ["crc32_combine ok", "combine ok"]}

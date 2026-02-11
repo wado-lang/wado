@@ -1,0 +1,59 @@
+// Test zlib public constants
+use {println, Stdout} from "core:cli";
+use {
+    Z_OK, Z_STREAM_END, Z_NEED_DICT, Z_ERRNO, Z_STREAM_ERROR, Z_DATA_ERROR, Z_MEM_ERROR, Z_BUF_ERROR, Z_VERSION_ERROR,
+    Z_NO_FLUSH, Z_PARTIAL_FLUSH, Z_SYNC_FLUSH, Z_FULL_FLUSH, Z_FINISH, Z_BLOCK, Z_TREES,
+    Z_NO_COMPRESSION, Z_BEST_SPEED, Z_BEST_COMPRESSION, Z_DEFAULT_COMPRESSION,
+    Z_DEFAULT_STRATEGY, Z_FILTERED, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED,
+    Z_BINARY, Z_TEXT, Z_UNKNOWN,
+    Z_DEFLATED, MAX_WBITS
+} from "core:zlib";
+
+export fn run() with Stdout {
+    // Return codes
+    assert Z_OK == 0, "Z_OK";
+    assert Z_STREAM_END == 1, "Z_STREAM_END";
+    assert Z_NEED_DICT == 2, "Z_NEED_DICT";
+    assert Z_ERRNO == -1, "Z_ERRNO";
+    assert Z_STREAM_ERROR == -2, "Z_STREAM_ERROR";
+    assert Z_DATA_ERROR == -3, "Z_DATA_ERROR";
+    assert Z_MEM_ERROR == -4, "Z_MEM_ERROR";
+    assert Z_BUF_ERROR == -5, "Z_BUF_ERROR";
+    assert Z_VERSION_ERROR == -6, "Z_VERSION_ERROR";
+
+    // Flush modes
+    assert Z_NO_FLUSH == 0, "Z_NO_FLUSH";
+    assert Z_PARTIAL_FLUSH == 1, "Z_PARTIAL_FLUSH";
+    assert Z_SYNC_FLUSH == 2, "Z_SYNC_FLUSH";
+    assert Z_FULL_FLUSH == 3, "Z_FULL_FLUSH";
+    assert Z_FINISH == 4, "Z_FINISH";
+    assert Z_BLOCK == 5, "Z_BLOCK";
+    assert Z_TREES == 6, "Z_TREES";
+
+    // Compression levels
+    assert Z_NO_COMPRESSION == 0, "Z_NO_COMPRESSION";
+    assert Z_BEST_SPEED == 1, "Z_BEST_SPEED";
+    assert Z_BEST_COMPRESSION == 9, "Z_BEST_COMPRESSION";
+    assert Z_DEFAULT_COMPRESSION == 6, "Z_DEFAULT_COMPRESSION";
+
+    // Strategies
+    assert Z_DEFAULT_STRATEGY == 0, "Z_DEFAULT_STRATEGY";
+    assert Z_FILTERED == 1, "Z_FILTERED";
+    assert Z_HUFFMAN_ONLY == 2, "Z_HUFFMAN_ONLY";
+    assert Z_RLE == 3, "Z_RLE";
+    assert Z_FIXED == 4, "Z_FIXED";
+
+    // Data types
+    assert Z_BINARY == 0, "Z_BINARY";
+    assert Z_TEXT == 1, "Z_TEXT";
+    assert Z_UNKNOWN == 2, "Z_UNKNOWN";
+
+    // Other
+    assert Z_DEFLATED == 8, "Z_DEFLATED";
+    assert MAX_WBITS == 15, "MAX_WBITS";
+
+    println("constants ok");
+}
+
+__DATA__
+{"stdout": "constants ok\n"}

@@ -1,0 +1,84 @@
+// Test zlib compression levels and strategies
+use {println, Stdout} from "core:cli";
+use {compress2, compress_with_strategy, inflate_zlib, compress_bound,
+     Z_NO_COMPRESSION, Z_BEST_SPEED, Z_BEST_COMPRESSION, Z_DEFAULT_COMPRESSION,
+     Z_DEFAULT_STRATEGY, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED} from "core:zlib";
+
+export fn run() with Stdout {
+    // Generate test data: 1000 bytes of patterned data
+    let mut data: Array<u8> = Array::<u8>::with_capacity(1000);
+    for let mut i = 0; i < 1000; i += 1 {
+        data.append((i % 256) as u8);
+    }
+
+    // Test compress_bound
+    let bound = compress_bound(1000);
+    assert bound > 1000, "compress_bound should exceed source length";
+
+    // Test level 0 (stored)
+    let c0 = compress2(&data, Z_NO_COMPRESSION);
+    let d0 = inflate_zlib(&c0);
+    assert d0.len() == 1000, "level 0 round-trip size";
+    for let mut i = 0; i < 1000; i += 1 {
+        assert d0[i] == data[i], "level 0 round-trip data";
+    }
+    println(`level 0: {c0.len()} bytes`);
+
+    // Test level 1 (fastest)
+    let c1 = compress2(&data, Z_BEST_SPEED);
+    let d1 = inflate_zlib(&c1);
+    assert d1.len() == 1000, "level 1 round-trip size";
+    for let mut i = 0; i < 1000; i += 1 {
+        assert d1[i] == data[i], "level 1 round-trip data";
+    }
+    println(`level 1: {c1.len()} bytes`);
+
+    // Test level 6 (default)
+    let c6 = compress2(&data, Z_DEFAULT_COMPRESSION);
+    let d6 = inflate_zlib(&c6);
+    assert d6.len() == 1000, "level 6 round-trip size";
+    for let mut i = 0; i < 1000; i += 1 {
+        assert d6[i] == data[i], "level 6 round-trip data";
+    }
+    println(`level 6: {c6.len()} bytes`);
+
+    // Test level 9 (best compression)
+    let c9 = compress2(&data, Z_BEST_COMPRESSION);
+    let d9 = inflate_zlib(&c9);
+    assert d9.len() == 1000, "level 9 round-trip size";
+    for let mut i = 0; i < 1000; i += 1 {
+        assert d9[i] == data[i], "level 9 round-trip data";
+    }
+    println(`level 9: {c9.len()} bytes`);
+
+    // Stored should be larger than compressed
+    assert c0.len() > c1.len(), "stored > fastest";
+
+    // Test strategies
+    // Z_HUFFMAN_ONLY
+    let ch = compress_with_strategy(&data, 6, Z_HUFFMAN_ONLY);
+    let dh = inflate_zlib(&ch);
+    assert dh.len() == 1000, "huffman_only round-trip";
+    println(`huffman_only: {ch.len()} bytes`);
+
+    // Z_RLE
+    let mut rle_data: Array<u8> = Array::<u8>::with_capacity(1000);
+    for let mut i = 0; i < 1000; i += 1 {
+        rle_data.append(65 as u8);  // all 'A'
+    }
+    let cr = compress_with_strategy(&rle_data, 6, Z_RLE);
+    let dr = inflate_zlib(&cr);
+    assert dr.len() == 1000, "rle round-trip";
+    println(`rle: {cr.len()} bytes`);
+
+    // Z_FIXED
+    let cf = compress_with_strategy(&data, 6, Z_FIXED);
+    let df = inflate_zlib(&cf);
+    assert df.len() == 1000, "fixed round-trip";
+    println(`fixed: {cf.len()} bytes`);
+
+    println("levels ok");
+}
+
+__DATA__
+{"stdout_contains": ["levels ok", "level 0:", "level 1:", "level 6:", "level 9:"]}

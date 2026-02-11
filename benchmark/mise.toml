@@ -91,8 +91,25 @@ echo "=== Wado ==="
 cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sieve.wado
 """
 
+[tasks.zlib]
+description = "Run zlib benchmark (compression)"
+run = """
+#!/usr/bin/env bash
+set -e
+
+echo "=== Compiling zlib-rs benchmark ==="
+cargo build --release --manifest-path zlib_rs/Cargo.toml --quiet
+
+echo "=== zlib-rs (native Rust) ==="
+./zlib_rs/target/release/zlib_rs_bench
+
+echo "=== Wado ==="
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib_bench.wado
+"""
+
 [tasks.clean]
 description = "Clean benchmark artifacts"
 run = """
 rm -f *.wasm count_prime_c mandelbrot_c sieve_c
+rm -rf zlib_rs/target
 """

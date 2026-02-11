@@ -1,0 +1,105 @@
+// Test streaming deflate/inflate API
+use {println, Stdout} from "core:cli";
+use {DeflateStream, InflateStream, inflate_zlib,
+     Z_DEFAULT_COMPRESSION, Z_BEST_SPEED} from "core:zlib";
+
+export fn run() with Stdout {
+    // Test basic DeflateStream (one-shot)
+    let mut data: Array<u8> = Array::<u8>::with_capacity(500);
+    for let mut i = 0; i < 500; i += 1 {
+        data.append((i % 256) as u8);
+    }
+
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    let compressed = ds.compress(&data);
+    let decompressed = inflate_zlib(&compressed);
+    assert decompressed.len() == 500, "stream round-trip size";
+    for let mut i = 0; i < 500; i += 1 {
+        assert decompressed[i] == data[i], "stream round-trip data";
+    }
+    println("deflate stream ok");
+
+    // Test InflateStream (one-shot)
+    let is = InflateStream::new();
+    let decompressed2 = is.decompress(&compressed);
+    assert decompressed2.len() == 500, "inflate stream size";
+    println("inflate stream ok");
+
+    // Test update/finish chunked API
+    let mut ds2 = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    // Feed data in chunks
+    let mut chunk1: Array<u8> = Array::<u8>::with_capacity(200);
+    for let mut i = 0; i < 200; i += 1 {
+        chunk1.append(data[i]);
+    }
+    let mut chunk2: Array<u8> = Array::<u8>::with_capacity(300);
+    for let mut i = 200; i < 500; i += 1 {
+        chunk2.append(data[i]);
+    }
+    ds2.update(&chunk1);
+    ds2.update(&chunk2);
+    let compressed2 = ds2.finish();
+    let decompressed3 = inflate_zlib(&compressed2);
+    assert decompressed3.len() == 500, "chunked round-trip size";
+    for let mut i = 0; i < 500; i += 1 {
+        assert decompressed3[i] == data[i], "chunked round-trip data";
+    }
+    println("chunked deflate ok");
+
+    // Test InflateStream update/finish
+    let mut is2 = InflateStream::new();
+    // Feed compressed data in two chunks
+    let half = compressed2.len() / 2;
+    let mut cchunk1: Array<u8> = Array::<u8>::with_capacity(half);
+    for let mut i = 0; i < half; i += 1 {
+        cchunk1.append(compressed2[i]);
+    }
+    let mut cchunk2: Array<u8> = Array::<u8>::with_capacity(compressed2.len() - half);
+    for let mut i = half; i < compressed2.len(); i += 1 {
+        cchunk2.append(compressed2[i]);
+    }
+    is2.update(&cchunk1);
+    is2.update(&cchunk2);
+    let decompressed4 = is2.finish();
+    assert decompressed4.len() == 500, "chunked inflate size";
+    println("chunked inflate ok");
+
+    // Test with preset dictionary
+    let mut dict: Array<u8> = [];
+    let dict_str = "common pattern data ";
+    for let mut i = 0; i < dict_str.len(); i += 1 {
+        dict.append(dict_str.get_byte(i));
+    }
+
+    // Create data that references the dictionary
+    let mut dict_data: Array<u8> = [];
+    let msg = "common pattern data here";
+    for let mut i = 0; i < msg.len(); i += 1 {
+        dict_data.append(msg.get_byte(i));
+    }
+
+    let mut ds3 = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    ds3.set_dictionary(&dict);
+    let compressed3 = ds3.compress(&dict_data);
+
+    let mut is3 = InflateStream::new();
+    is3.set_dictionary(&dict);
+    let decompressed5 = is3.decompress(&compressed3);
+    assert decompressed5.len() == dict_data.len(), "dict round-trip size";
+    for let mut i = 0; i < dict_data.len(); i += 1 {
+        assert decompressed5[i] == dict_data[i], "dict round-trip data";
+    }
+    println("preset dictionary ok");
+
+    // Test with different level
+    let mut ds4 = DeflateStream::new(Z_BEST_SPEED);
+    let compressed4 = ds4.compress(&data);
+    let decompressed6 = inflate_zlib(&compressed4);
+    assert decompressed6.len() == 500, "stream level 1 round-trip";
+    println("stream levels ok");
+
+    println("streaming ok");
+}
+
+__DATA__
+{"stdout_contains": ["streaming ok", "deflate stream ok", "inflate stream ok", "chunked deflate ok", "chunked inflate ok", "preset dictionary ok"]}
