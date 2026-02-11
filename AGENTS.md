@@ -47,18 +47,21 @@ Each test fixture group has the same prefix in their filenames.
 #### Examples
 
 ```wado
-// Success test - expects specific output
-fn run() {
-    println("Hello");
+// Success test
+export fn run() {
+    let x = 1;
+    assert x == 1; // prefer `assert` for test expectations
+
+    println("ok");
 }
 
 __DATA__
-{"stdout": "Hello\n"}
+{"stdout": "ok\n"}
 ```
 
 ```wado
 // Error test - expects compilation to fail
-fn run() {
+export fn run() {
     let a = 1 != 2 != 3;
 }
 
@@ -70,7 +73,7 @@ __DATA__
 // TODO test - for unimplemented features
 // Test runs but MUST fail (compile/runtime error or wrong output)
 // If it passes, the test fails to remind you to remove TODO
-fn run() {
+export fn run() {
     let r: Result<i32, String> = Result::<i32, String>::Ok(42);
     if let Ok(value) = r {  // Result pattern matching not yet implemented
         println(`{value}`);
@@ -91,7 +94,7 @@ Those modules are generated from WIT files by the `wado-from-wit` tool, so if `w
 make update-stdlib-wasi
 ```
 
-It requires a git submodule `vendor/wasmtime`.
+It requires a git submodule `vendor/wasmtime` to be initialized.
 
 ## The CLI
 
@@ -193,6 +196,8 @@ See also `wado-vscode/README.md` for more details.
 `wado-bundled/` is a Rust crate that provides bundled Wasm modules for Wado, providing:
 
 - [x] float-to-string conversion (fts)
+- [x] math functions (libm)
+
 
 ## Wasm and WASI
 
