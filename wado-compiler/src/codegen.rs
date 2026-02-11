@@ -642,11 +642,6 @@ impl Codegen<'_> {
                     let trait_name = info.trait_name.as_deref();
                     let method_name = &info.method_name;
 
-                    // Skip non-pub methods (except monomorphized ones which are generated for
-                    // concrete instantiation sites and must be included)
-                    if !func.is_pub && func.monomorph_info.is_none() {
-                        continue;
-                    }
                     // Skip bodyless methods
                     if func.body.is_none() {
                         continue;
@@ -835,23 +830,23 @@ impl Codegen<'_> {
             if module_source == entry_module_source {
                 continue;
             }
-            // Collect non-generic, non-monomorphized public structs
+            // Collect non-generic, non-monomorphized structs (including private ones,
+            // since non-pub functions that use them may be emitted)
             let lib_structs: Vec<_> = tir_mod
                 .structs
                 .iter()
                 .filter(|s| {
-                    s.is_pub
-                        && s.type_params.is_empty()
+                    s.type_params.is_empty()
                         && s.monomorph_info.is_none()
                         && !self.struct_contains_type_params(s, &tir_mod.type_table.borrow())
                 })
                 .cloned()
                 .collect();
-            // Collect non-generic public variants
+            // Collect non-generic variants (including private ones)
             let lib_variants: Vec<_> = tir_mod
                 .variants
                 .iter()
-                .filter(|v| v.is_pub && v.type_params.is_empty())
+                .filter(|v| v.type_params.is_empty())
                 .cloned()
                 .collect();
             // Sort structs and variants together topologically

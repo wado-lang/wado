@@ -1,0 +1,20 @@
+use { println, Stdout } from "core:cli";
+use { adler32, adler32_init, crc32, crc32_init } from "core:zlib";
+
+export fn run() with Stdout {
+    // Test adler32
+    let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8]; // "Hello"
+    let checksum = adler32(adler32_init(), &data, 0, 5);
+    println(`adler32("Hello") = {checksum}`);
+    assert checksum == 93061621 as u32, "adler32 mismatch";
+
+    // Test crc32
+    let crc = crc32(crc32_init(), &data, 0, 5);
+    println(`crc32("Hello") = {crc}`);
+    assert crc == 4157704578 as u32, "crc32 mismatch";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "adler32(\"Hello\") = 93061621\ncrc32(\"Hello\") = 4157704578\nok\n"}

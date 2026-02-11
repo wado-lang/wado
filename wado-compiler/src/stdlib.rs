@@ -69,6 +69,9 @@ pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wad
 /// Embedded source for core:collections (`TreeMap`)
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 
+/// Embedded source for core:zlib (compression/decompression)
+pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
+
 /// Embedded source for wasi:cli
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
 
@@ -115,6 +118,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:internal" => Some(CORE_INTERNAL),
         "core:builtin" => Some(CORE_BUILTIN),
         "core:clocks" => Some(CORE_CLOCKS),
+        "core:zlib" => Some(CORE_ZLIB),
 
         // WASI library
         "wasi:cli" => Some(WASI_CLI),

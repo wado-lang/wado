@@ -294,35 +294,47 @@ pub fn analyze_project(project: &mut Project) {
             // Build function ID(s) to check if it's reachable
             // Note: monomorphized methods are tracked as FunctionId::Free in the call graph
             // but their names look like methods (e.g., "TreeMap<String,i32>^Index::index")
-            let is_reachable =
-                if let Some(Some(method_info)) = module.function_method_info.get(func_name) {
-                    // Method with method_info
-                    // Check as MethodName first (for non-monomorphized methods)
-                    let method_id = FunctionId::Method(MethodName::new(
-                        module_source.clone(),
-                        method_info.struct_name.clone(),
-                        method_info.trait_name.clone(),
-                        method_info.method_name.clone(),
-                    ));
-                    if reachable.contains(&method_id) {
-                        true
-                    } else {
-                        // For monomorphized methods, also check as FreeFunctionName
-                        // Monomorphized methods have type args in the struct name (e.g., "TreeMap<String,i32>")
-                        let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                            module_source,
-                            func_name,
-                        ));
-                        reachable.contains(&free_id)
-                    }
+            let is_reachable = if let Some(Some(method_info)) =
+                module.function_method_info.get(func_name)
+            {
+                // Method with method_info
+                // Check as MethodName first (for non-monomorphized methods)
+                let method_id = FunctionId::Method(MethodName::new(
+                    module_source.clone(),
+                    method_info.struct_name.clone(),
+                    method_info.trait_name.clone(),
+                    method_info.method_name.clone(),
+                ));
+                if reachable.contains(&method_id) {
+                    true
                 } else {
-                    // Regular function (no method_info)
-                    let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                    // For monomorphized methods, also check as FreeFunctionName
+                    // Monomorphized methods have type args in the struct name (e.g., "TreeMap<String,i32>")
+                    let free_id = FunctionId::Free(FreeFunctionName::from_module_source(
                         module_source,
                         func_name,
                     ));
-                    reachable.contains(&func_id)
-                };
+                    if reachable.contains(&free_id) {
+                        true
+                    } else {
+                        // Monomorphized methods are tracked in the call graph with
+                        // <monomorph> entry point source, not the module where they
+                        // were generated. Check with the sentinel module source.
+                        let monomorph_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                            &ModuleSource::entry_point_with_filename("<monomorph>"),
+                            func_name,
+                        ));
+                        reachable.contains(&monomorph_id)
+                    }
+                }
+            } else {
+                // Regular function (no method_info)
+                let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                    module_source,
+                    func_name,
+                ));
+                reachable.contains(&func_id)
+            };
 
             if is_reachable {
                 for s in strings {
@@ -557,8 +569,11 @@ fn build_analysis_graph(
                 // This is a method - use MethodName or FreeFunctionName with monomorph info
                 if let Some(monomorph_info) = &func.monomorph_info {
                     // Monomorphized method - use FreeFunctionName with metadata
+                    // Use <monomorph> sentinel as the module source, because callers
+                    // reference monomorphized methods with this sentinel regardless
+                    // of which module the method was placed in.
                     FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        module_source.clone(),
+                        ModuleSource::entry_point_with_filename("<monomorph>"),
                         func.name.clone(),
                         monomorph_info.generic_name.clone(),
                     ))
@@ -574,8 +589,10 @@ fn build_analysis_graph(
             } else {
                 // Regular function - use FreeFunctionName
                 if let Some(monomorph_info) = &func.monomorph_info {
+                    // Monomorphized function - use <monomorph> sentinel for consistency
+                    // with how callers reference them
                     FunctionId::Free(FreeFunctionName::with_monomorph_info(
-                        module_source.clone(),
+                        ModuleSource::entry_point_with_filename("<monomorph>"),
                         func.name.clone(),
                         monomorph_info.generic_name.clone(),
                     ))

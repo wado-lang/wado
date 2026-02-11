@@ -1,0 +1,74 @@
+use { println, Stdout } from "core:cli";
+use { inflate_zlib, zlib_compress } from "core:zlib";
+
+fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.len(); i += 1 {
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
+export fn run() with Stdout {
+    // Test Huffman deflate compression round-trip: "Hello"
+    let data: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8];
+    let comp_hello = zlib_compress(&data);
+    println(`compressed Hello: {data.len()} -> {comp_hello.len()} bytes`);
+    let decomp_hello = inflate_zlib(&comp_hello);
+    assert bytes_equal(&data, &decomp_hello), "Huffman round-trip Hello failed";
+    println("Huffman Hello passed");
+
+    // Test Huffman deflate: empty data
+    let empty_data: Array<u8> = [];
+    let comp_empty = zlib_compress(&empty_data);
+    let decomp_empty = inflate_zlib(&comp_empty);
+    assert decomp_empty.len() == 0, "Huffman round-trip empty failed";
+    println("Huffman empty passed");
+
+    // Test Huffman deflate: repetitive data (should compress well)
+    let mut rep_data: Array<u8> = [];
+    for let mut i = 0; i < 1000; i += 1 {
+        rep_data.append(65 as u8);  // 'A'
+    }
+    let comp_rep = zlib_compress(&rep_data);
+    println(`compressed 1000xA: {rep_data.len()} -> {comp_rep.len()} bytes`);
+    assert comp_rep.len() < rep_data.len(), "repetitive data should compress";
+    let decomp_rep = inflate_zlib(&comp_rep);
+    assert bytes_equal(&rep_data, &decomp_rep), "Huffman round-trip 1000xA failed";
+    println("Huffman 1000xA passed");
+
+    // Test Huffman deflate: mixed data
+    let mut mixed_data: Array<u8> = [];
+    for let mut i = 0; i < 500; i += 1 {
+        mixed_data.append((i % 256) as u8);
+    }
+    let comp_mixed = zlib_compress(&mixed_data);
+    println(`compressed mixed 500: {mixed_data.len()} -> {comp_mixed.len()} bytes`);
+    let decomp_mixed = inflate_zlib(&comp_mixed);
+    assert bytes_equal(&mixed_data, &decomp_mixed), "Huffman round-trip mixed failed";
+    println("Huffman mixed passed");
+
+    // Test Huffman deflate: "Hello, World! " x 20
+    let mut hw_data: Array<u8> = [];
+    let hw_bytes: Array<u8> = [72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8, 44 as u8, 32 as u8, 87 as u8, 111 as u8, 114 as u8, 108 as u8, 100 as u8, 33 as u8, 32 as u8];
+    for let mut j = 0; j < 20; j += 1 {
+        for let mut i = 0; i < 14; i += 1 {
+            hw_data.append(hw_bytes[i]);
+        }
+    }
+    let comp_hw = zlib_compress(&hw_data);
+    println(`compressed HW x20: {hw_data.len()} -> {comp_hw.len()} bytes`);
+    assert comp_hw.len() < hw_data.len(), "HW x20 should compress";
+    let decomp_hw = inflate_zlib(&comp_hw);
+    assert bytes_equal(&hw_data, &decomp_hw), "Huffman round-trip HW x20 failed";
+    println("Huffman HW x20 passed");
+
+    println("ok");
+}
+
+__DATA__
+{"stdout_contains": ["Huffman Hello passed", "Huffman empty passed", "Huffman 1000xA passed", "Huffman mixed passed", "Huffman HW x20 passed", "ok"]}
