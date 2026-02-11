@@ -115,7 +115,7 @@ pub use codegen::Codegen;
 pub use compiler_host::{
     Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SourceError,
 };
-pub use logger::Logger;
+pub use logger::{Bail, ErrorLog, Logger};
 
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;

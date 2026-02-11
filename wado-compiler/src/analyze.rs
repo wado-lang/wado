@@ -6,6 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{Item, Module, UseItem};
+use crate::logger::{Bail, ErrorLog};
 use crate::name::{ModuleSource, resolve_import, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
@@ -102,7 +103,7 @@ pub struct Analyzer {
     /// The symbol table being built
     pub symbols: SymbolTable,
     /// Collected errors
-    errors: Vec<AnalyzeError>,
+    errors: ErrorLog<AnalyzeError>,
     /// Modules loaded implicitly by the compiler (not by user imports)
     implicit_modules: std::collections::HashSet<ModuleSource>,
 }
@@ -112,7 +113,7 @@ impl Analyzer {
     pub fn new() -> Self {
         Self {
             symbols: SymbolTable::new(),
-            errors: Vec::new(),
+            errors: ErrorLog::new(),
             implicit_modules: std::collections::HashSet::new(),
         }
     }
@@ -385,15 +386,22 @@ impl Analyzer {
         }
 
         // Third pass: validate imports in each module
+        let bail = self.validate_all_imports(modules).is_err();
+        if bail {
+            return Err(self.errors.take());
+        }
+
+        self.errors.finish()
+    }
+
+    fn validate_all_imports(
+        &mut self,
+        modules: &std::collections::HashMap<ModuleSource, Module>,
+    ) -> Result<(), Bail> {
         for (source, module) in modules {
             self.validate_imports(module, source, modules)?;
         }
-
-        if self.errors.is_empty() {
-            Ok(())
-        } else {
-            Err(std::mem::take(&mut self.errors))
-        }
+        Ok(())
     }
 
     /// Process pub use declarations (re-exports) in a module
@@ -466,16 +474,16 @@ impl Analyzer {
         module: &Module,
         from_module_source: &ModuleSource,
         all_modules: &std::collections::HashMap<ModuleSource, Module>,
-    ) -> Result<(), Vec<AnalyzeError>> {
+    ) -> Result<(), Bail> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
                 // Validate the import source
                 if let Err(message) = validate_module_path(&use_decl.source) {
-                    self.errors.push(AnalyzeError::InvalidModulePath {
+                    self.errors.error(AnalyzeError::InvalidModulePath {
                         path: use_decl.source.clone(),
                         message,
                         span: use_decl.span,
-                    });
+                    })?;
                     continue;
                 }
 
@@ -484,10 +492,10 @@ impl Analyzer {
 
                 // Check the module exists in pre-loaded modules
                 if !all_modules.contains_key(&module_source) {
-                    self.errors.push(AnalyzeError::ModuleNotFound {
+                    self.errors.error(AnalyzeError::ModuleNotFound {
                         module_source: module_source.clone(),
                         span: use_decl.span,
-                    });
+                    })?;
                     continue;
                 }
 
@@ -502,11 +510,11 @@ impl Analyzer {
                                 let import_name = alias.as_ref().unwrap_or(name);
                                 self.symbols.register_import(import_name, symbol_id);
                             } else {
-                                self.errors.push(AnalyzeError::ImportNotFound {
+                                self.errors.error(AnalyzeError::ImportNotFound {
                                     module_source: module_source.clone(),
                                     name: name.clone(),
                                     span: use_decl.span,
-                                });
+                                })?;
                             }
                         }
                         UseItem::EffectFunctions {
@@ -523,11 +531,11 @@ impl Analyzer {
                                         func_item.alias.as_ref().unwrap_or(&func_item.name);
                                     self.symbols.register_import(import_name, symbol_id);
                                 } else {
-                                    self.errors.push(AnalyzeError::ImportNotFound {
+                                    self.errors.error(AnalyzeError::ImportNotFound {
                                         module_source: module_source.clone(),
                                         name: lookup_name,
                                         span: use_decl.span,
-                                    });
+                                    })?;
                                 }
                             }
                         }
@@ -535,12 +543,7 @@ impl Analyzer {
                 }
             }
         }
-
-        if self.errors.is_empty() {
-            Ok(())
-        } else {
-            Err(std::mem::take(&mut self.errors))
-        }
+        Ok(())
     }
 
     /// Get a copy of the implicit modules set
