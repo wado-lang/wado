@@ -814,6 +814,292 @@ impl WasiRegistry {
 }
 
 // ============================================================================
+// CM Instance Type Generation
+// ============================================================================
+
+use wasm_encoder::{ComponentValType, InstanceType, PrimitiveValType, TypeBounds};
+
+/// Helper for generating CM types within an [`InstanceType`] from registry metadata.
+///
+/// Tracks type indices and deduplicates types (borrow, list, result, etc.)
+/// within a single instance type definition. Used by codegen to replace
+/// hardcoded type indices with metadata-driven generation.
+pub struct CmInstanceTypeGen {
+    next_idx: u32,
+    cache: HashMap<String, u32>,
+}
+
+impl CmInstanceTypeGen {
+    pub fn new(start_idx: u32) -> Self {
+        Self {
+            next_idx: start_idx,
+            cache: HashMap::new(),
+        }
+    }
+
+    /// Register a pre-existing type index for cache lookups
+    pub fn register_existing(&mut self, key: &str, idx: u32) {
+        self.cache.insert(key.to_string(), idx);
+    }
+
+    pub fn alloc_idx(&mut self) -> u32 {
+        let idx = self.next_idx;
+        self.next_idx += 1;
+        idx
+    }
+
+    /// Compute a stable cache key for an AST type (ignoring spans)
+    fn type_key(ty: &Type) -> String {
+        match ty {
+            Type::Named(n) => n.name.clone(),
+            Type::Reference(inner) => format!("&{}", Self::type_key(inner)),
+            Type::MutReference(inner) => format!("&mut {}", Self::type_key(inner)),
+            Type::Generic(g) => {
+                let args: Vec<String> = g.args.iter().map(Self::type_key).collect();
+                format!("{}:{}", g.name, args.join(","))
+            }
+            Type::Tuple(elems) => {
+                let args: Vec<String> = elems.iter().map(Self::type_key).collect();
+                format!("[{}]", args.join(","))
+            }
+            _ => format!("{ty:?}"),
+        }
+    }
+
+    /// Define a variant type and its named export, returning the exported type index.
+    fn define_variant(
+        &mut self,
+        instance_type: &mut InstanceType,
+        cm_name: &str,
+        cases: &[(String, bool)],
+    ) -> u32 {
+        let cache_key = format!("variant:{cm_name}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+
+        let variant_cases: Vec<(&str, Option<ComponentValType>, Option<u32>)> = cases
+            .iter()
+            .map(|(name, _has_payload)| (name.as_str(), None, None))
+            .collect();
+        instance_type.ty().defined_type().variant(variant_cases);
+        let variant_idx = self.alloc_idx();
+
+        // Export to make it "named" (required by CM spec for records/variants)
+        instance_type.export(
+            cm_name,
+            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(variant_idx)),
+        );
+        let export_idx = self.alloc_idx();
+
+        self.cache.insert(cache_key, export_idx);
+        export_idx
+    }
+
+    /// Define a borrow type, returning the type index.
+    fn define_borrow(
+        &mut self,
+        instance_type: &mut InstanceType,
+        resource_export_idx: u32,
+        resource_cm_name: &str,
+    ) -> u32 {
+        let cache_key = format!("borrow:{resource_cm_name}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type
+            .ty()
+            .defined_type()
+            .borrow(resource_export_idx);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a list type, returning the type index.
+    fn define_list(
+        &mut self,
+        instance_type: &mut InstanceType,
+        elem_type: ComponentValType,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("list:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type.ty().defined_type().list(elem_type);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a tuple type, returning the type index.
+    fn define_tuple(
+        &mut self,
+        instance_type: &mut InstanceType,
+        elems: Vec<ComponentValType>,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("tuple:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type.ty().defined_type().tuple(elems);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a result type, returning the type index.
+    fn define_result(
+        &mut self,
+        instance_type: &mut InstanceType,
+        ok_type: Option<ComponentValType>,
+        err_type: Option<ComponentValType>,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("result:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type
+            .ty()
+            .defined_type()
+            .result(ok_type, err_type);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Convert a resolved Wado AST type to a CM [`ComponentValType`] within the instance type.
+    ///
+    /// Creates intermediate types as needed and caches them for deduplication.
+    /// The `resource_exports` maps CM resource names (e.g., "fields") to their
+    /// export indices within the instance type.
+    pub fn ast_type_to_cm(
+        &mut self,
+        ty: &Type,
+        instance_type: &mut InstanceType,
+        wasi_registry: &WasiRegistry,
+        resource_exports: &HashMap<&str, u32>,
+    ) -> ComponentValType {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "String" => ComponentValType::Primitive(PrimitiveValType::String),
+                "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
+                "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
+                "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
+                "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
+                "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
+                "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
+                "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
+                "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
+                "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
+                "char" => ComponentValType::Primitive(PrimitiveValType::Char),
+                name => {
+                    if wasi_registry.is_resource(name) {
+                        // own<resource>
+                        let cm_name = wasi_registry.get_resource_cm_name(name).unwrap();
+                        let cache_key = format!("own:{cm_name}");
+                        if let Some(&idx) = self.cache.get(&cache_key) {
+                            return ComponentValType::Type(idx);
+                        }
+                        let export_idx = resource_exports[cm_name];
+                        instance_type.ty().defined_type().own(export_idx);
+                        let idx = self.alloc_idx();
+                        self.cache.insert(cache_key, idx);
+                        ComponentValType::Type(idx)
+                    } else if wasi_registry.is_variant(name) {
+                        let cm_name =
+                            wasi_registry.get_variant_cm_name(name).unwrap().to_string();
+                        let cases = wasi_registry.get_variant_cases(name).unwrap().to_vec();
+                        let idx = self.define_variant(instance_type, &cm_name, &cases);
+                        ComponentValType::Type(idx)
+                    } else {
+                        panic!("unsupported named type for CM instance: {name}")
+                    }
+                }
+            },
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                if let Type::Named(n) = inner.as_ref() {
+                    if wasi_registry.is_resource(&n.name) {
+                        let cm_name = wasi_registry.get_resource_cm_name(&n.name).unwrap();
+                        let export_idx = resource_exports[cm_name];
+                        let idx = self.define_borrow(instance_type, export_idx, cm_name);
+                        return ComponentValType::Type(idx);
+                    }
+                }
+                panic!("unsupported reference type for CM instance: {ty:?}")
+            }
+            Type::Generic(generic) => match generic.name.as_str() {
+                "Array" => {
+                    let elem_cm = self.ast_type_to_cm(
+                        &generic.args[0],
+                        instance_type,
+                        wasi_registry,
+                        resource_exports,
+                    );
+                    let key = Self::type_key(&generic.args[0]);
+                    let idx = self.define_list(instance_type, elem_cm, &key);
+                    ComponentValType::Type(idx)
+                }
+                "Result" => {
+                    // Unit type is Named("()") in Wado, not Tuple([])
+                    let is_unit = matches!(&generic.args[0], Type::Tuple(t) if t.is_empty())
+                        || matches!(&generic.args[0], Type::Named(n) if n.name == "()");
+                    let ok_type = if is_unit {
+                        None
+                    } else {
+                        Some(self.ast_type_to_cm(
+                            &generic.args[0],
+                            instance_type,
+                            wasi_registry,
+                            resource_exports,
+                        ))
+                    };
+                    let err_type = Some(self.ast_type_to_cm(
+                        &generic.args[1],
+                        instance_type,
+                        wasi_registry,
+                        resource_exports,
+                    ));
+                    let key = format!(
+                        "{},{}",
+                        Self::type_key(&generic.args[0]),
+                        Self::type_key(&generic.args[1])
+                    );
+                    let idx = self.define_result(instance_type, ok_type, err_type, &key);
+                    ComponentValType::Type(idx)
+                }
+                _ => panic!(
+                    "unsupported generic type for CM instance: {}",
+                    generic.name
+                ),
+            },
+            Type::Tuple(elems) if elems.is_empty() => {
+                panic!("unit type should be handled at Result level, not directly")
+            }
+            Type::Tuple(elems) => {
+                let cm_elems: Vec<ComponentValType> = elems
+                    .iter()
+                    .map(|e| {
+                        self.ast_type_to_cm(e, instance_type, wasi_registry, resource_exports)
+                    })
+                    .collect();
+                let key = elems
+                    .iter()
+                    .map(Self::type_key)
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let idx = self.define_tuple(instance_type, cm_elems, &key);
+                ComponentValType::Type(idx)
+            }
+            _ => panic!("unsupported type for CM instance: {ty:?}"),
+        }
+    }
+}
+
+// ============================================================================
 // Type Conversion (AST Type to Wasm ValType)
 // ============================================================================
 
