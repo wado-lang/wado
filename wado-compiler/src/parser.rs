@@ -116,9 +116,7 @@ impl Parser {
         // Check what follows the field name
         match &self.peek_nth(2).kind {
             // `{ field: value }` - but not `{ field:: ... }`
-            TokenKind::Colon => {
-                !matches!(&self.peek_nth(3).kind, TokenKind::Colon)
-            }
+            TokenKind::Colon => !matches!(&self.peek_nth(3).kind, TokenKind::Colon),
             // `{ field, ... }` or `{ field }` - shorthand
             TokenKind::Comma | TokenKind::RBrace => true,
             _ => false,
