@@ -565,13 +565,14 @@ impl InflateState {
     }
 }
 
-// Decompress raw deflate data (no zlib/gzip header)
-pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
+// Decompress raw deflate data from a slice of input (no zlib/gzip header)
+fn inflate_raw_from(input: &Array<u8>, input_offset: i32, input_length: i32) -> Array<u8> {
     let mut state = InflateState::new(true);
-    let mut output: Array<u8> = [];
+    let estimated = if input_length > 256 { input_length * 4 } else { 1024 };
+    let mut output: Array<u8> = Array::<u8>::with_capacity(estimated);
 
-    let mut inp = 0;     // input position
-    let mut have = input.len();  // available input
+    let mut inp = input_offset;
+    let mut have = input_length;
     let mut left = 0;    // available output (we grow dynamically)
 
     let order = get_order();
@@ -1045,8 +1046,18 @@ pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
                     if win_copy > copy {
                         win_copy = copy;
                     }
-                    for let mut i = 0; i < win_copy; i += 1 {
-                        output.append(state.window[(from_win + i) % state.wsize]);
+                    let first_seg = state.wsize - from_win;
+                    if first_seg >= win_copy {
+                        for let mut i = 0; i < win_copy; i += 1 {
+                            output.append(state.window[from_win + i]);
+                        }
+                    } else {
+                        for let mut i = 0; i < first_seg; i += 1 {
+                            output.append(state.window[from_win + i]);
+                        }
+                        for let mut i = 0; i < win_copy - first_seg; i += 1 {
+                            output.append(state.window[i]);
+                        }
                     }
                     copy -= win_copy;
                     // rest from output
@@ -1065,17 +1076,10 @@ pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
                 }
             }
             if state.mode != INF_BAD {
-                // update window
-                state.update_window(&output, output.len(), state.length);
                 state.mode = INF_LEN;
             }
         } else if state.mode == INF_LIT {
             output.append(state.length as u8);
-            // update window periodically
-            if output.len() % 32768 == 0 {
-                let wlen = if output.len() > 32768 { 32768 } else { output.len() };
-                state.update_window(&output, output.len(), wlen);
-            }
             state.mode = INF_LEN;
         } else if state.mode == INF_CHECK {
             if state.wrap == 1 {
@@ -1109,13 +1113,12 @@ pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
         }
     }
 
-    // final window update
-    if output.len() > 0 {
-        let wlen = if output.len() > 32768 { 32768 } else { output.len() };
-        state.update_window(&output, output.len(), wlen);
-    }
-
     return output;
+}
+
+// Decompress raw deflate data (no zlib/gzip header)
+pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
+    return inflate_raw_from(input, 0, input.len());
 }
 
 // Decompress zlib-format data (2-byte header + deflate + 4-byte adler32)
@@ -1135,13 +1138,8 @@ pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
         panic("unsupported compression method");
     }
 
-    // Strip header (2 bytes) and trailer (4 bytes adler32)
-    let mut raw_data: Array<u8> = [];
-    for let mut i = 2; i < input.len() - 4; i += 1 {
-        raw_data.append(input[i]);
-    }
-
-    let result = inflate_raw(&raw_data);
+    // Decompress directly from input, skipping header (2 bytes) and trailer (4 bytes adler32)
+    let result = inflate_raw_from(input, 2, input.len() - 6);
 
     // Verify adler32
     let computed = adler32(adler32_init(), &result, 0, result.len());
@@ -1162,9 +1160,9 @@ pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
 
 // Simple deflate using stored blocks (no compression, for testing)
 pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
-    let mut output: Array<u8> = [];
-    let mut pos = 0;
     let total = input.len();
+    let mut output: Array<u8> = Array::<u8>::with_capacity(total + (total / 65535 + 1) * 5);
+    let mut pos = 0;
 
     while pos < total {
         let mut block_len = total - pos;
@@ -1201,7 +1199,7 @@ pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
 
 // Wrap raw deflate data in zlib format (stored blocks)
 pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
-    let mut output: Array<u8> = [];
+    let mut output: Array<u8> = Array::<u8>::with_capacity(input.len() + 12);
 
     // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01 (check bits)
     output.append(0x78 as u8);
@@ -1504,7 +1502,7 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
 
 // Full zlib compression with fixed Huffman codes + LZ77
 pub fn zlib_compress(input: &Array<u8>) -> Array<u8> {
-    let mut output: Array<u8> = [];
+    let mut output: Array<u8> = Array::<u8>::with_capacity(input.len() + 64);
 
     // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01
     // (0x78 * 256 + 0x01) % 31 == 0
