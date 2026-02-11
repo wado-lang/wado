@@ -75,8 +75,10 @@ fn make_crc_table() -> Array<u32> {
     return table;
 }
 
+global CRC_TABLE: Array<u32> = make_crc_table();
+
 pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
-    let table = make_crc_table();
+    let table = &CRC_TABLE;
     let mut c = crc ^ 0xFFFFFFFF as u32;
     for let mut i = 0; i < len; i += 1 {
         let index = (c ^ buf[offset + i] as u32) & 0xFF as u32;
@@ -119,6 +121,32 @@ global ENOUGH_DISTS: i32 = 592;
 global ENOUGH: i32 = 1444;  // ENOUGH_LENS + ENOUGH_DISTS
 global MAXBITS: i32 = 15;
 
+// inflate_table constant arrays (cached as globals)
+global INFLATE_LBASE: Array<u16> = [
+    3 as u16, 4 as u16, 5 as u16, 6 as u16, 7 as u16, 8 as u16, 9 as u16, 10 as u16,
+    11 as u16, 13 as u16, 15 as u16, 17 as u16, 19 as u16, 23 as u16, 27 as u16, 31 as u16,
+    35 as u16, 43 as u16, 51 as u16, 59 as u16, 67 as u16, 83 as u16, 99 as u16, 115 as u16,
+    131 as u16, 163 as u16, 195 as u16, 227 as u16, 258 as u16, 0 as u16, 0 as u16
+];
+global INFLATE_LEXT: Array<u16> = [
+    16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16,
+    17 as u16, 17 as u16, 17 as u16, 17 as u16, 18 as u16, 18 as u16, 18 as u16, 18 as u16,
+    19 as u16, 19 as u16, 19 as u16, 19 as u16, 20 as u16, 20 as u16, 20 as u16, 20 as u16,
+    21 as u16, 21 as u16, 21 as u16, 21 as u16, 16 as u16, 64 as u16, 204 as u16
+];
+global INFLATE_DBASE: Array<u16> = [
+    1 as u16, 2 as u16, 3 as u16, 4 as u16, 5 as u16, 7 as u16, 9 as u16, 13 as u16,
+    17 as u16, 25 as u16, 33 as u16, 49 as u16, 65 as u16, 97 as u16, 129 as u16, 193 as u16,
+    257 as u16, 385 as u16, 513 as u16, 769 as u16, 1025 as u16, 1537 as u16, 2049 as u16, 3073 as u16,
+    4097 as u16, 6145 as u16, 8193 as u16, 12289 as u16, 16385 as u16, 24577 as u16, 0 as u16, 0 as u16
+];
+global INFLATE_DEXT: Array<u16> = [
+    16 as u16, 16 as u16, 16 as u16, 16 as u16, 17 as u16, 17 as u16, 18 as u16, 18 as u16,
+    19 as u16, 19 as u16, 20 as u16, 20 as u16, 21 as u16, 21 as u16, 22 as u16, 22 as u16,
+    23 as u16, 23 as u16, 24 as u16, 24 as u16, 25 as u16, 25 as u16, 26 as u16, 26 as u16,
+    27 as u16, 27 as u16, 28 as u16, 28 as u16, 29 as u16, 29 as u16, 64 as u16, 64 as u16
+];
+
 // Build a set of tables to decode the provided canonical Huffman code.
 // Returns [result, root_bits, table_offset_after]
 // result: 0=success, -1=invalid code, 1=not enough space
@@ -132,35 +160,6 @@ fn inflate_table(
     bits_in: i32,
     work: &mut Array<u16>
 ) -> [i32, i32, i32] {
-    // Length codes 257..285 base
-    let lbase: Array<u16> = [
-        3 as u16, 4 as u16, 5 as u16, 6 as u16, 7 as u16, 8 as u16, 9 as u16, 10 as u16,
-        11 as u16, 13 as u16, 15 as u16, 17 as u16, 19 as u16, 23 as u16, 27 as u16, 31 as u16,
-        35 as u16, 43 as u16, 51 as u16, 59 as u16, 67 as u16, 83 as u16, 99 as u16, 115 as u16,
-        131 as u16, 163 as u16, 195 as u16, 227 as u16, 258 as u16, 0 as u16, 0 as u16
-    ];
-    // Length codes 257..285 extra
-    let lext: Array<u16> = [
-        16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16,
-        17 as u16, 17 as u16, 17 as u16, 17 as u16, 18 as u16, 18 as u16, 18 as u16, 18 as u16,
-        19 as u16, 19 as u16, 19 as u16, 19 as u16, 20 as u16, 20 as u16, 20 as u16, 20 as u16,
-        21 as u16, 21 as u16, 21 as u16, 21 as u16, 16 as u16, 64 as u16, 204 as u16
-    ];
-    // Distance codes 0..29 base
-    let dbase: Array<u16> = [
-        1 as u16, 2 as u16, 3 as u16, 4 as u16, 5 as u16, 7 as u16, 9 as u16, 13 as u16,
-        17 as u16, 25 as u16, 33 as u16, 49 as u16, 65 as u16, 97 as u16, 129 as u16, 193 as u16,
-        257 as u16, 385 as u16, 513 as u16, 769 as u16, 1025 as u16, 1537 as u16, 2049 as u16, 3073 as u16,
-        4097 as u16, 6145 as u16, 8193 as u16, 12289 as u16, 16385 as u16, 24577 as u16, 0 as u16, 0 as u16
-    ];
-    // Distance codes 0..29 extra
-    let dext: Array<u16> = [
-        16 as u16, 16 as u16, 16 as u16, 16 as u16, 17 as u16, 17 as u16, 18 as u16, 18 as u16,
-        19 as u16, 19 as u16, 20 as u16, 20 as u16, 21 as u16, 21 as u16, 22 as u16, 22 as u16,
-        23 as u16, 23 as u16, 24 as u16, 24 as u16, 25 as u16, 25 as u16, 26 as u16, 26 as u16,
-        27 as u16, 27 as u16, 28 as u16, 28 as u16, 29 as u16, 29 as u16, 64 as u16, 64 as u16
-    ];
-
     let mut count: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0 as u16);
     let mut offs: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0 as u16);
 
@@ -230,8 +229,8 @@ fn inflate_table(
     }
 
     // set up for code type
-    let mut base_table = &lbase;
-    let mut extra_table = &lext;
+    let mut base_table = &INFLATE_LBASE;
+    let mut extra_table = &INFLATE_LEXT;
     let mut match_val = 0;
 
     if codetype == CODES_TYPE {
@@ -239,12 +238,12 @@ fn inflate_table(
         extra_table = &work;
         match_val = 20;
     } else if codetype == LENS_TYPE {
-        base_table = &lbase;
-        extra_table = &lext;
+        base_table = &INFLATE_LBASE;
+        extra_table = &INFLATE_LEXT;
         match_val = 257;
     } else {
-        base_table = &dbase;
-        extra_table = &dext;
+        base_table = &INFLATE_DBASE;
+        extra_table = &INFLATE_DEXT;
         match_val = 0;
     }
 
@@ -393,11 +392,9 @@ global INF_DONE: i32 = 14;
 global INF_BAD: i32 = 15;
 
 // Permutation of code lengths for dynamic blocks
-fn get_order() -> Array<u16> {
-    return [16 as u16, 17 as u16, 18 as u16, 0 as u16, 8 as u16, 7 as u16,
-            9 as u16, 6 as u16, 10 as u16, 5 as u16, 11 as u16, 4 as u16,
-            12 as u16, 3 as u16, 13 as u16, 2 as u16, 14 as u16, 1 as u16, 15 as u16];
-}
+global INFLATE_ORDER: Array<u16> = [16 as u16, 17 as u16, 18 as u16, 0 as u16, 8 as u16, 7 as u16,
+        9 as u16, 6 as u16, 10 as u16, 5 as u16, 11 as u16, 4 as u16,
+        12 as u16, 3 as u16, 13 as u16, 2 as u16, 14 as u16, 1 as u16, 15 as u16];
 
 struct InflateState {
     mode: i32,
@@ -574,7 +571,7 @@ pub fn inflate_raw(input: &Array<u8>) -> Array<u8> {
     let mut have = input.len();  // available input
     let mut left = 0;    // available output (we grow dynamically)
 
-    let order = get_order();
+    let order = &INFLATE_ORDER;
     let mut ret = 0;  // Z_OK
     let mut leave = false;
 
@@ -1336,34 +1333,73 @@ fn build_fixed_dtree() -> Array<EncCode> {
     return tree;
 }
 
-// Map match length (3-258) to [symbol, extra_bits_count, extra_value]
-fn get_length_code(length: i32) -> [i32, i32, i32] {
-    let base_length: Array<i32> = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
-    let extra_lbits: Array<i32> = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+// Cached fixed Huffman encoding trees
+global FIXED_LTREE: Array<EncCode> = build_fixed_ltree();
+global FIXED_DTREE: Array<EncCode> = build_fixed_dtree();
 
-    if length == 258 {
-        return [285, 0, 0];
-    }
-    for let mut c = 0; c < 28; c += 1 {
-        if length >= base_length[c] && length < base_length[c + 1] {
-            return [257 + c, extra_lbits[c], length - base_length[c]];
+// Length/distance code constant tables (cached as globals)
+global LENGTH_BASE: Array<i32> = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+global LENGTH_EXTRA: Array<i32> = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+global DIST_BASE: Array<i32> = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+global DIST_EXTRA: Array<i32> = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+
+// Direct lookup table: LENGTH_CODES[length - 3] = code index (0..28)
+// Built using the zlib tr_static_init algorithm
+fn build_length_codes() -> Array<u8> {
+    let mut table = Array::<u8>::filled(256, 0 as u8);
+    let mut length = 0;
+    for let mut code = 0; code < 28; code += 1 {
+        let count = 1 << LENGTH_EXTRA[code];
+        for let mut n = 0; n < count; n += 1 {
+            table[length] = code as u8;
+            length += 1;
         }
     }
-    return [285, 0, 0];
+    table[255] = 28 as u8;  // length 258 -> code 28 (symbol 285)
+    return table;
+}
+
+global LENGTH_CODES: Array<u8> = build_length_codes();
+
+// zlib-style distance code lookup table (512 entries)
+// First 256: direct lookup for dist-1 < 256
+// Next 256: shifted lookup for (dist-1) >> 7 when dist > 256
+fn build_dist_codes() -> Array<u8> {
+    let mut table = Array::<u8>::filled(512, 0 as u8);
+    let mut dist = 0;
+    // First 16 codes: direct entries (covers dist 1..256)
+    for let mut code = 0; code < 16; code += 1 {
+        let count = 1 << DIST_EXTRA[code];
+        for let mut n = 0; n < count; n += 1 {
+            table[dist] = code as u8;
+            dist += 1;
+        }
+    }
+    // Remaining codes 16..29: shifted entries (covers dist 257..32768)
+    dist = dist >> 7;
+    for let mut code = 16; code < 30; code += 1 {
+        let count = 1 << (DIST_EXTRA[code] - 7);
+        for let mut n = 0; n < count; n += 1 {
+            table[256 + dist] = code as u8;
+            dist += 1;
+        }
+    }
+    return table;
+}
+
+global DIST_CODES: Array<u8> = build_dist_codes();
+
+// Map match length (3-258) to [symbol, extra_bits_count, extra_value]
+fn get_length_code(length: i32) -> [i32, i32, i32] {
+    let code = LENGTH_CODES[length - 3] as i32;
+    return [257 + code, LENGTH_EXTRA[code], length - LENGTH_BASE[code]];
 }
 
 // Map distance (1-32768) to [code, extra_bits_count, extra_value]
 fn get_dist_code(dist: i32) -> [i32, i32, i32] {
-    let base_dist: Array<i32> = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
-    let extra_dbits: Array<i32> = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
-
-    for let mut c = 0; c < 29; c += 1 {
-        if dist >= base_dist[c] && dist < base_dist[c + 1] {
-            return [c, extra_dbits[c], dist - base_dist[c]];
-        }
-    }
-    // Last code (29)
-    return [29, extra_dbits[29], dist - base_dist[29]];
+    let d = dist - 1;
+    let code = if d < 256 { DIST_CODES[d] as i32 } else { DIST_CODES[256 + (d >> 7)] as i32 };
+    return [code, DIST_EXTRA[code], dist - DIST_BASE[code]];
 }
 
 // 3-byte hash function for LZ77
@@ -1373,8 +1409,8 @@ fn hash3(a: u8, b: u8, c: u8) -> i32 {
 
 // Deflate using fixed Huffman codes with LZ77 matching
 pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
-    let ltree = build_fixed_ltree();
-    let dtree = build_fixed_dtree();
+    let ltree = &FIXED_LTREE;
+    let dtree = &FIXED_DTREE;
     let mut bw = BitWriter::new();
 
     let input_len = input.len();

@@ -308,10 +308,7 @@ export fn run() with Stdout {{
     let wado_compressed = parse_bytes(&stdout);
 
     let decompressed = zlib_rs_decompress(&wado_compressed, 1024);
-    assert_eq!(
-        decompressed, input,
-        "Round-trip failed for bytes 0..=255"
-    );
+    assert_eq!(decompressed, input, "Round-trip failed for bytes 0..=255");
 }
 
 // ============================================================================
@@ -354,14 +351,8 @@ fn adler32_crc32_bytes_0_to_255_matches_zlib_rs() {
     let rs_adler = zlib_rs::adler32::adler32(1, &input);
     let rs_crc = zlib_rs::crc32::crc32(0, &input);
 
-    assert_eq!(
-        wado_adler, rs_adler,
-        "adler32 mismatch for bytes 0..=255"
-    );
-    assert_eq!(
-        wado_crc, rs_crc,
-        "crc32 mismatch for bytes 0..=255"
-    );
+    assert_eq!(wado_adler, rs_adler, "adler32 mismatch for bytes 0..=255");
+    assert_eq!(wado_crc, rs_crc, "crc32 mismatch for bytes 0..=255");
 }
 
 #[test]
@@ -377,14 +368,8 @@ fn adler32_crc32_empty_matches_zlib_rs() {
     let rs_adler = zlib_rs::adler32::adler32(1, input);
     let rs_crc = zlib_rs::crc32::crc32(0, input);
 
-    assert_eq!(
-        wado_adler, rs_adler,
-        "adler32 mismatch for empty input"
-    );
-    assert_eq!(
-        wado_crc, rs_crc,
-        "crc32 mismatch for empty input"
-    );
+    assert_eq!(wado_adler, rs_adler, "adler32 mismatch for empty input");
+    assert_eq!(wado_crc, rs_crc, "crc32 mismatch for empty input");
 }
 
 // ============================================================================
