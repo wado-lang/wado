@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct Person {
     name: String,
@@ -17,17 +21,51 @@ struct Robot {
     id: i32,
 }
 
+fn "Person^Greet::greet"(self: &Person) -> String {
+    return __tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "Hi, ");
+        __r."String::append"(__inline_Person_Greet__name_1: {
+            break __inline_Person_Greet__name_1: self.name;
+        });
+        __r."String::append"(move "!");
+        break __tmpl: __r;
+    };
+}
+
+fn "Robot^Greet::name"(self: &Robot) -> String {
+    return __tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(22), used: 0 };
+        };
+        __r."String::append"(move "Robot-");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: self.id }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    };
+}
+
+pub fn "Robot^Greet::greet"(self: &Robot) -> String {
+    return __tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        __r."String::append"(move "Hello, ");
+        __r."String::append"(move self."Robot^Greet::name"());
+        __r."String::append"(move "!");
+        break __tmpl: __r;
+    };
+}
+
 fn run() with Stdout {
-    let __sroa_p_name: String = move "Alice";
-    core::cli::println(__inline_Person_Greet__greet_0: {
-        break __inline_Person_Greet__greet_0: "String::concat"(move "String::concat"(move "Hi, ", __inline_Person_Greet__name_0: {
-            break __inline_Person_Greet__name_0: __sroa_p_name;
-        }), move "!");
-    });
-    core::cli::println(__inline_Robot_Greet__greet_1: {
-        break __inline_Robot_Greet__greet_1: "String::concat"(move "String::concat"(move "Hello, ", __inline_Robot_Greet__name_1: {
-            break __inline_Robot_Greet__name_1: "String::concat"(move "Robot-", move 42."i32::to_string"());
-        }), move "!");
-    });
+    let p: Person = move Person { name: "Alice" };
+    core::cli::println(move p."Person^Greet::greet"());
+    let r: Robot = move Robot { id: 42 };
+    core::cli::println(move r."Robot^Greet::greet"());
 }
 

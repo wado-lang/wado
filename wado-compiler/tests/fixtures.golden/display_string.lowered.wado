@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let mut buf: String = __inline_String__with_capacity_0: {
@@ -20,27 +24,31 @@ fn run() with Stdout {
     let s: String = move "Hello, World!";
     __inline_String_Display__fmt_2: {
         let self: &String = &s;
-        __inline_Formatter__write_str_3: {
-            let s: String = *self;
-            f.buf."String::append"(s);
-        };
+        let f: &mut Formatter = &mut f;
+        f."Formatter::pad"(*self);
     };
     core::cli::println(buf);
-    buf = __inline_String__with_capacity_4: {
-        break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(64), used: 0 };
+    buf = __inline_String__with_capacity_3: {
+        break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(64), used: 0 };
     };
-    f = __inline_Formatter__new_5: {
+    f = __inline_Formatter__new_4: {
         let buf: &mut String = &mut buf;
-        break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
     };
     let empty: String = move "";
-    __inline_String_Display__fmt_6: {
+    __inline_String_Display__fmt_5: {
         let self: &String = &empty;
-        __inline_Formatter__write_str_7: {
-            let s: String = *self;
-            f.buf."String::append"(s);
-        };
+        let f: &mut Formatter = &mut f;
+        f."Formatter::pad"(*self);
     };
-    core::cli::println(move "String::concat"(move "String::concat"(move "[", buf), move "]"));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(18), used: 0 };
+        };
+        __r."String::append"(move "[");
+        __r."String::append"(buf);
+        __r."String::append"(move "]");
+        break __tmpl: __r;
+    });
 }
 

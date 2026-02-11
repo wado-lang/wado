@@ -22,30 +22,40 @@ fn run() with Stdout {
         break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
     };
     __inline_i32_Display__fmt_2: {
-        __inline_Formatter__write_str_3: {
-            let s: String = move 42."i32::to_string"();
-            f.buf."String::append"(s);
-        };
+        let f: &mut Formatter = &mut f;
+        core::prelude/primitives.wado::fmt_i32_decimal(42, f);
     };
     core::cli::println(buf);
-    buf = __inline_String__with_capacity_4: {
-        break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(64), used: 0 };
+    buf = __inline_String__with_capacity_3: {
+        break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(64), used: 0 };
     };
-    f = __inline_Formatter__new_5: {
+    f = __inline_Formatter__new_4: {
         let buf: &mut String = &mut buf;
-        break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
     };
-    __inline_bool_Display__fmt_6: {
-        __inline_Formatter__write_str_7: {
-            let s: String = __inline_bool__to_string_8: {
-                break __inline_bool__to_string_8: if true {
-                    "true";
-                } else {
-                    "false";
-                };
-            };
-            f.buf."String::append"(s);
-        };
+    __inline_bool_Display__fmt_5: {
+        let f: &mut Formatter = &mut f;
+        f."Formatter::pad"(if true {
+            "true";
+        } else {
+            "false";
+        });
+    };
+    core::cli::println(buf);
+    buf = __inline_String__with_capacity_6: {
+        break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(64), used: 0 };
+    };
+    f = __inline_Formatter__new_7: {
+        let buf: &mut String = &mut buf;
+        break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+    };
+    __inline_bool_Display__fmt_8: {
+        let f: &mut Formatter = &mut f;
+        f."Formatter::pad"(if false {
+            "true";
+        } else {
+            "false";
+        });
     };
     core::cli::println(buf);
     buf = __inline_String__with_capacity_9: {
@@ -55,45 +65,18 @@ fn run() with Stdout {
         let buf: &mut String = &mut buf;
         break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
     };
-    __inline_bool_Display__fmt_11: {
-        __inline_Formatter__write_str_12: {
-            let s: String = __inline_bool__to_string_13: {
-                break __inline_bool__to_string_13: if false {
-                    "true";
-                } else {
-                    "false";
-                };
-            };
-            f.buf."String::append"(s);
-        };
-    };
+    Box<char> { value: 'A' }."char^Display::fmt"(&mut f);
     core::cli::println(buf);
-    buf = __inline_String__with_capacity_14: {
-        break __inline_String__with_capacity_14: String { repr: "array_new<u8>"(64), used: 0 };
+    buf = __inline_String__with_capacity_11: {
+        break __inline_String__with_capacity_11: String { repr: "array_new<u8>"(64), used: 0 };
     };
-    f = __inline_Formatter__new_15: {
+    f = __inline_Formatter__new_12: {
         let buf: &mut String = &mut buf;
-        break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
     };
-    __inline_char_Display__fmt_16: {
-        __inline_Formatter__write_str_17: {
-            let s: String = move 'A'."char::to_string"();
-            f.buf."String::append"(s);
-        };
-    };
-    core::cli::println(buf);
-    buf = __inline_String__with_capacity_18: {
-        break __inline_String__with_capacity_18: String { repr: "array_new<u8>"(64), used: 0 };
-    };
-    f = __inline_Formatter__new_19: {
-        let buf: &mut String = &mut buf;
-        break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-    };
-    __inline_i32_Display__fmt_20: {
-        __inline_Formatter__write_str_21: {
-            let s: String = move -123."i32::to_string"();
-            f.buf."String::append"(s);
-        };
+    __inline_i32_Display__fmt_13: {
+        let f: &mut Formatter = &mut f;
+        core::prelude/primitives.wado::fmt_i32_decimal(-123, f);
     };
     core::cli::println(buf);
 }

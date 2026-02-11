@@ -7,18 +7,42 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let mut a: Box<i32> = move Box<i32> { value: 10 };
-    core::cli::println(move __inline_read_value_0: {
-        let x: Box<i32> = a;
-        break __inline_read_value_0: x.value;
-    }."i32::to_string"());
-    __inline_increment_1: {
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_read_value_2: {
+            let x: Box<i32> = a;
+            break __inline_read_value_2: x.value;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    __inline_increment_3: {
         let x: Box<i32> = a;
         x.value = (x.value + 1);
     };
-    core::cli::println(move a.value."i32::to_string"());
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(16), used: 0 };
+        };
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        a."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

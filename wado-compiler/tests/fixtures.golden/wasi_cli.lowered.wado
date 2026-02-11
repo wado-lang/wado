@@ -7,19 +7,45 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout, Stderr, Environment {
     core::cli::println(move "test: stdout works");
     core::cli::eprintln(move "test: stderr works");
     let arguments: Array<String> = move Environment::get_arguments();
-    core::cli::println(move "String::concat"(move "test: Environment::get_arguments().len = ", move __inline_Array_String___len_0: {
-        break __inline_Array_String___len_0: arguments.used;
-    }."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(57), used: 0 };
+        };
+        __r."String::append"(move "test: Environment::get_arguments().len = ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Array_String___len_2: {
+            break __inline_Array_String___len_2: arguments.used;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let env_vars: Array<[String, String]> = move Environment::get_environment();
-    core::cli::println(move "String::concat"(move "test: Environment::get_environment().len = ", move __inline_Array_Tuple_String_String____len_1: {
-        break __inline_Array_Tuple_String_String____len_1: env_vars.used;
-    }."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_3: {
+            break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(59), used: 0 };
+        };
+        __r."String::append"(move "test: Environment::get_environment().len = ");
+        let mut __f: Formatter = __inline_Formatter__new_4: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Array_Tuple_String_String____len_5: {
+            break __inline_Array_Tuple_String_String____len_5: env_vars.used;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     core::cli::println(move "all cli tests passed");
 }
 

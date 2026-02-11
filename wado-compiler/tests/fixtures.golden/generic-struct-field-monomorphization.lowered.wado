@@ -30,21 +30,65 @@ fn run() with Stdout {
     __inline_Container_i32___add_3: {
         container.items."Array<i32>::append"(30);
     };
-    core::cli::println(move "String::concat"(move "Length: ", move __inline_Container_i32___len_4: {
-        break __inline_Container_i32___len_4: __inline_Array_i32___len_0: {
-            let self: &Array<i32> = &container.items;
-            break __inline_Array_i32___len_0: self.used;
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(24), used: 0 };
         };
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "First: ", move __inline_Container_i32___get_5: {
-        break __inline_Container_i32___get_5: container.items."Array<i32>^IndexValue::index_value"(0);
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "Second: ", move __inline_Container_i32___get_6: {
-        break __inline_Container_i32___get_6: container.items."Array<i32>^IndexValue::index_value"(1);
-    }."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "Third: ", move __inline_Container_i32___get_7: {
-        break __inline_Container_i32___get_7: container.items."Array<i32>^IndexValue::index_value"(2);
-    }."i32::to_string"()));
+        __r."String::append"(move "Length: ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Container_i32___len_6: {
+            break __inline_Container_i32___len_6: __inline_Array_i32___len_0: {
+                let self: &Array<i32> = &container.items;
+                break __inline_Array_i32___len_0: self.used;
+            };
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_7: {
+            break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(23), used: 0 };
+        };
+        __r."String::append"(move "First: ");
+        let mut __f: Formatter = __inline_Formatter__new_8: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Container_i32___get_9: {
+            break __inline_Container_i32___get_9: container.items."Array<i32>^IndexValue::index_value"(0);
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_10: {
+            break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        __r."String::append"(move "Second: ");
+        let mut __f: Formatter = __inline_Formatter__new_11: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Container_i32___get_12: {
+            break __inline_Container_i32___get_12: container.items."Array<i32>^IndexValue::index_value"(1);
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_13: {
+            break __inline_String__with_capacity_13: String { repr: "array_new<u8>"(23), used: 0 };
+        };
+        __r."String::append"(move "Third: ");
+        let mut __f: Formatter = __inline_Formatter__new_14: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_Container_i32___get_15: {
+            break __inline_Container_i32___get_15: container.items."Array<i32>^IndexValue::index_value"(2);
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

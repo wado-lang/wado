@@ -7,20 +7,46 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
     let a: Pair = __inline_make_pair_a_0: {
         break __inline_make_pair_a_0: Pair { x: 42 };
     };
-    core::cli::println(move "String::concat"(move "a: ", move __inline_pair_a_value_1: {
-        break __inline_pair_a_value_1: a.x;
-    }."i32::to_string"()));
-    let b: Pair = __inline_make_pair_b_2: {
-        break __inline_make_pair_b_2: Pair { a: 10, b: 20 };
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_1: {
+            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(19), used: 0 };
+        };
+        __r."String::append"(move "a: ");
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_pair_a_value_3: {
+            break __inline_pair_a_value_3: a.x;
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    let b: Pair = __inline_make_pair_b_4: {
+        break __inline_make_pair_b_4: Pair { a: 10, b: 20 };
     };
-    core::cli::println(move "String::concat"(move "b: ", move __inline_pair_b_sum_3: {
-        break __inline_pair_b_sum_3: (b.a + b.b);
-    }."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_5: {
+            break __inline_String__with_capacity_5: String { repr: "array_new<u8>"(19), used: 0 };
+        };
+        __r."String::append"(move "b: ");
+        let mut __f: Formatter = __inline_Formatter__new_6: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: __inline_pair_b_sum_7: {
+            break __inline_pair_b_sum_7: (b.a + b.b);
+        } }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

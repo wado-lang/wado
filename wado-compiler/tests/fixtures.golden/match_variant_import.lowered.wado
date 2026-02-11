@@ -15,23 +15,8 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    core::cli::println(__inline_f64_to_string_fill_0: {
-        let align: Align = move Align::Right;
-        let s: String = move 42.0."f64::to_string"();
-        let spec: FormatSpec = move FormatSpec { fill: '_', align: align, width: 8 };
-        break __inline_f64_to_string_fill_0: ./match_variant_import_module.wado::apply_padding(s, spec);
-    });
-    core::cli::println(__inline_f64_to_string_fill_1: {
-        let align: Align = move Align::Left;
-        let s: String = move 42.0."f64::to_string"();
-        let spec: FormatSpec = move FormatSpec { fill: '_', align: align, width: 8 };
-        break __inline_f64_to_string_fill_1: ./match_variant_import_module.wado::apply_padding(s, spec);
-    });
-    core::cli::println(__inline_f64_to_string_fill_2: {
-        let align: Align = move Align::Center;
-        let s: String = move 42.0."f64::to_string"();
-        let spec: FormatSpec = move FormatSpec { fill: '_', align: align, width: 8 };
-        break __inline_f64_to_string_fill_2: ./match_variant_import_module.wado::apply_padding(s, spec);
-    });
+    core::cli::println(move ./match_variant_import_module.wado::f64_to_string_fill(42.0, 8, '_', move Align::Right));
+    core::cli::println(move ./match_variant_import_module.wado::f64_to_string_fill(42.0, 8, '_', move Align::Left));
+    core::cli::println(move ./match_variant_import_module.wado::f64_to_string_fill(42.0, 8, '_', move Align::Center));
 }
 

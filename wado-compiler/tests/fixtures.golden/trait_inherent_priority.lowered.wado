@@ -7,15 +7,33 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct Robot {
     id: i32,
 }
 
+fn "Robot::greet"(self: &Robot) -> String {
+    return __tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(39), used: 0 };
+        };
+        __r."String::append"(move "Beep boop, I am Robot #");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: self.id }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    };
+}
+
 fn run() with Stdout {
-    core::cli::println(__inline_Robot__greet_0: {
-        break __inline_Robot__greet_0: "String::concat"(move "Beep boop, I am Robot #", move 42."i32::to_string"());
-    });
+    let r: Robot = move Robot { id: 42 };
+    core::cli::println(move r."Robot::greet"());
 }
 

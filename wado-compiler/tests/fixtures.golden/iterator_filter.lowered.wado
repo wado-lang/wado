@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 pub struct "FilterIter<i32>" {
     repr: builtin::array<i32>,
@@ -48,31 +52,51 @@ fn run() with Stdout {
             let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
                 let x: i32 = __unwrap_option(__pattern_temp_0).value;
-                core::cli::println(move x."i32::to_string"());
+                core::cli::println(__tmpl: {
+                    let mut __r: String = __inline_String__with_capacity_3: {
+                        break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(16), used: 0 };
+                    };
+                    let mut __f: Formatter = __inline_Formatter__new_4: {
+                        let buf: &mut String = &mut __r;
+                        break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    Box<i32> { value: x }."i32@Display::fmt"(&mut __f);
+                    break __tmpl: __r;
+                });
             } else {
                 break;
             }
         }
     }
-    let large: Array<i32> = move __inline_ArrayIter_i32___filter_4: {
-        let self: &ArrayIter<i32> = &__inline_Array_i32___iter_3: {
-            break __inline_Array_i32___iter_3: __inline_Array_i32__IntoIterator__into_iter_1: {
+    let large: Array<i32> = move __inline_ArrayIter_i32___filter_6: {
+        let self: &ArrayIter<i32> = &__inline_Array_i32___iter_5: {
+            break __inline_Array_i32___iter_5: __inline_Array_i32__IntoIterator__into_iter_1: {
                 break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
             };
         };
         let pred: fn(i32) -> bool = &__Closure_1 {  };
-        break __inline_ArrayIter_i32___filter_4: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
+        break __inline_ArrayIter_i32___filter_6: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
     }."FilterIter<i32>^Iterator::collect"();
     core::cli::println(move "large:");
     __for_of_1: {
-        let mut __iter_1: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_5: {
-            break __inline_Array_i32__IntoIterator__into_iter_5: ArrayIter<i32> { repr: large.repr, used: large.used, index: 0 };
+        let mut __iter_1: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_7: {
+            break __inline_Array_i32__IntoIterator__into_iter_7: ArrayIter<i32> { repr: large.repr, used: large.used, index: 0 };
         };
         loop {
             let __pattern_temp_1: Option<i32> = __iter_1."ArrayIter<i32>^Iterator::next"();
             if __is_not_null(__pattern_temp_1) {
                 let x: i32 = __unwrap_option(__pattern_temp_1).value;
-                core::cli::println(move x."i32::to_string"());
+                core::cli::println(__tmpl: {
+                    let mut __r: String = __inline_String__with_capacity_8: {
+                        break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(16), used: 0 };
+                    };
+                    let mut __f: Formatter = __inline_Formatter__new_9: {
+                        let buf: &mut String = &mut __r;
+                        break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    Box<i32> { value: x }."i32@Display::fmt"(&mut __f);
+                    break __tmpl: __r;
+                });
             } else {
                 break;
             }

@@ -17,8 +17,30 @@ fn run() with Stdout {
     let a: Array<i32> = move [1, 2, 3];
     let mut b: Array<i32> = a;
     b."Array<i32>^IndexAssign::index_assign"(0, 99);
-    core::cli::println(move "String::concat"(move "a[0]=", move a."Array<i32>^IndexValue::index_value"(0)."i32::to_string"()));
-    core::cli::println(move "String::concat"(move "b[0]=", move b."Array<i32>^IndexValue::index_value"(0)."i32::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "a[0]=");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: a."Array<i32>^IndexValue::index_value"(0) }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(21), used: 0 };
+        };
+        __r."String::append"(move "b[0]=");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: b."Array<i32>^IndexValue::index_value"(0) }."i32@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

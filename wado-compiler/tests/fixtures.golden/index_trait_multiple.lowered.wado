@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct Point {
     x: i32,
@@ -38,7 +42,43 @@ fn run() with Stdout {
     let p2: Point = *__inline_PointHolder_Index__index_3: {
         break __inline_PointHolder_Index__index_3: &__sroa_h2_point;
     };
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "h1: (", move p1.x."i32::to_string"()), move ", "), move p1.y."i32::to_string"()), move ")"));
-    core::cli::println(move "String::concat"(move "String::concat"(move "String::concat"(move "String::concat"(move "h2: (", move p2.x."i32::to_string"()), move ", "), move p2.y."i32::to_string"()), move ")"));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(40), used: 0 };
+        };
+        __r."String::append"(move "h1: (");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: p1.x }."i32@Display::fmt"(&mut __f);
+        __r."String::append"(move ", ");
+        __f = __inline_Formatter__new_6: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: p1.y }."i32@Display::fmt"(&mut __f);
+        __r."String::append"(move ")");
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_7: {
+            break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(40), used: 0 };
+        };
+        __r."String::append"(move "h2: (");
+        let mut __f: Formatter = __inline_Formatter__new_8: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: p2.x }."i32@Display::fmt"(&mut __f);
+        __r."String::append"(move ", ");
+        __f = __inline_Formatter__new_9: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<i32> { value: p2.y }."i32@Display::fmt"(&mut __f);
+        __r."String::append"(move ")");
+        break __tmpl: __r;
+    });
 }
 

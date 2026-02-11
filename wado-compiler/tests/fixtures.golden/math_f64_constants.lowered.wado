@@ -8,45 +8,204 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    core::cli::println(move "String::concat"(move "PI = ", move 3.14159265358979323846."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "TAU = ", move 6.28318530717958647692."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "E = ", move 2.71828182845904523536."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "LN2 = ", move 0.69314718055994530942."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "LN10 = ", move 2.30258509299404568402."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "LOG2_E = ", move 1.44269504088896340736."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "LOG10_E = ", move 0.43429448190325182765."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "SQRT2 = ", move 1.41421356237309504880."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "FRAC_1_SQRT2 = ", move 0.70710678118654752440."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "FRAC_PI_2 = ", move 1.57079632679489661923."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "FRAC_PI_4 = ", move 0.78539816339744830962."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "INFINITY = ", move (1.0 / 0.0)."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "NEG_INFINITY = ", move (-1.0 / 0.0)."f64::to_string"()));
-    core::cli::println(move "String::concat"(move "TAU == 2*PI: ", __inline_bool__to_string_0: {
-        let self: bool = (6.28318530717958647692 == (3.14159265358979323846 * 2.0));
-        break __inline_bool__to_string_0: if self {
-            "true";
-        } else {
-            "false";
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(21), used: 0 };
         };
-    }));
-    core::cli::println(move "String::concat"(move "FRAC_PI_2 == PI/2: ", __inline_bool__to_string_1: {
-        let self: bool = (1.57079632679489661923 == (3.14159265358979323846 / 2.0));
-        break __inline_bool__to_string_1: if self {
-            "true";
-        } else {
-            "false";
+        __r."String::append"(move "PI = ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-    }));
-    core::cli::println(move "String::concat"(move "FRAC_PI_4 == PI/4: ", __inline_bool__to_string_2: {
-        let self: bool = (0.78539816339744830962 == (3.14159265358979323846 / 4.0));
-        break __inline_bool__to_string_2: if self {
-            "true";
-        } else {
-            "false";
+        Box<f64> { value: 3.14159265358979323846 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(22), used: 0 };
         };
-    }));
+        __r."String::append"(move "TAU = ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 6.28318530717958647692 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(20), used: 0 };
+        };
+        __r."String::append"(move "E = ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 2.71828182845904523536 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(22), used: 0 };
+        };
+        __r."String::append"(move "LN2 = ");
+        let mut __f: Formatter = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 0.69314718055994530942 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_8: {
+            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(23), used: 0 };
+        };
+        __r."String::append"(move "LN10 = ");
+        let mut __f: Formatter = __inline_Formatter__new_9: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 2.30258509299404568402 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_10: {
+            break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(25), used: 0 };
+        };
+        __r."String::append"(move "LOG2_E = ");
+        let mut __f: Formatter = __inline_Formatter__new_11: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 1.44269504088896340736 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_12: {
+            break __inline_String__with_capacity_12: String { repr: "array_new<u8>"(26), used: 0 };
+        };
+        __r."String::append"(move "LOG10_E = ");
+        let mut __f: Formatter = __inline_Formatter__new_13: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 0.43429448190325182765 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_14: {
+            break __inline_String__with_capacity_14: String { repr: "array_new<u8>"(24), used: 0 };
+        };
+        __r."String::append"(move "SQRT2 = ");
+        let mut __f: Formatter = __inline_Formatter__new_15: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 1.41421356237309504880 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_16: {
+            break __inline_String__with_capacity_16: String { repr: "array_new<u8>"(31), used: 0 };
+        };
+        __r."String::append"(move "FRAC_1_SQRT2 = ");
+        let mut __f: Formatter = __inline_Formatter__new_17: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 0.70710678118654752440 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_18: {
+            break __inline_String__with_capacity_18: String { repr: "array_new<u8>"(28), used: 0 };
+        };
+        __r."String::append"(move "FRAC_PI_2 = ");
+        let mut __f: Formatter = __inline_Formatter__new_19: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 1.57079632679489661923 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_20: {
+            break __inline_String__with_capacity_20: String { repr: "array_new<u8>"(28), used: 0 };
+        };
+        __r."String::append"(move "FRAC_PI_4 = ");
+        let mut __f: Formatter = __inline_Formatter__new_21: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: 0.78539816339744830962 }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_22: {
+            break __inline_String__with_capacity_22: String { repr: "array_new<u8>"(27), used: 0 };
+        };
+        __r."String::append"(move "INFINITY = ");
+        let mut __f: Formatter = __inline_Formatter__new_23: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: (1.0 / 0.0) }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_24: {
+            break __inline_String__with_capacity_24: String { repr: "array_new<u8>"(31), used: 0 };
+        };
+        __r."String::append"(move "NEG_INFINITY = ");
+        let mut __f: Formatter = __inline_Formatter__new_25: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<f64> { value: (-1.0 / 0.0) }."f64@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_26: {
+            break __inline_String__with_capacity_26: String { repr: "array_new<u8>"(29), used: 0 };
+        };
+        __r."String::append"(move "TAU == 2*PI: ");
+        let mut __f: Formatter = __inline_Formatter__new_27: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<bool> { value: (6.28318530717958647692 == (3.14159265358979323846 * 2.0)) }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_28: {
+            break __inline_String__with_capacity_28: String { repr: "array_new<u8>"(35), used: 0 };
+        };
+        __r."String::append"(move "FRAC_PI_2 == PI/2: ");
+        let mut __f: Formatter = __inline_Formatter__new_29: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_29: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<bool> { value: (1.57079632679489661923 == (3.14159265358979323846 / 2.0)) }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_30: {
+            break __inline_String__with_capacity_30: String { repr: "array_new<u8>"(35), used: 0 };
+        };
+        __r."String::append"(move "FRAC_PI_4 == PI/4: ");
+        let mut __f: Formatter = __inline_Formatter__new_31: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_31: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        Box<bool> { value: (0.78539816339744830962 == (3.14159265358979323846 / 4.0)) }."bool@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
 }
 

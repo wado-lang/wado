@@ -15,15 +15,70 @@
 
 fn run() with Stdout {
     let a: u128 = move "u128::from_string"(move "100");
-    core::cli::println(move "String::concat"(move "u128 from \"100\": ", move a."u128::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_0: {
+            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(33), used: 0 };
+        };
+        __r."String::append"(move "u128 from \"100\": ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        a."u128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let b: u128 = move "u128::from_string"(move "18446744073709551616");
-    core::cli::println(move "String::concat"(move "u128 from \"2^64\": ", move b."u128::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_2: {
+            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(34), used: 0 };
+        };
+        __r."String::append"(move "u128 from \"2^64\": ");
+        let mut __f: Formatter = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        b."u128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let x: i128 = move "i128::from_string"(move "100");
-    core::cli::println(move "String::concat"(move "i128 from \"100\": ", move x."i128::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(33), used: 0 };
+        };
+        __r."String::append"(move "i128 from \"100\": ");
+        let mut __f: Formatter = __inline_Formatter__new_5: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        x."i128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let y: i128 = move "i128::from_string"(move "-100");
-    core::cli::println(move "String::concat"(move "i128 from \"-100\": ", move y."i128::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(34), used: 0 };
+        };
+        __r."String::append"(move "i128 from \"-100\": ");
+        let mut __f: Formatter = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        y."i128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     let sum: u128 = move a."u128^Add::add"(&"u128::from_string"(move "50"));
-    core::cli::println(move "String::concat"(move "100 + 50 = ", move sum."u128::to_string"()));
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_8: {
+            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(27), used: 0 };
+        };
+        __r."String::append"(move "100 + 50 = ");
+        let mut __f: Formatter = __inline_Formatter__new_9: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        sum."u128@Display::fmt"(&mut __f);
+        break __tmpl: __r;
+    });
     core::cli::println(move "All from_string tests passed!");
 }
 
