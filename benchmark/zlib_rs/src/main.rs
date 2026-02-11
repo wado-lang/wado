@@ -1,7 +1,7 @@
 // zlib-rs native benchmark for comparison with Wado's core:zlib
 //
 // Compresses and decompresses 100KB of patterned data x10 iterations,
-// using the same data pattern as zlib.wado.
+// using the same data pattern as zlib_bench.wado.
 
 use std::time::Instant;
 use zlib_rs::{DeflateConfig, InflateConfig, ReturnCode};
