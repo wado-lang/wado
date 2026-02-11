@@ -49,6 +49,278 @@ fn string_module_source() -> ModuleSource {
     ModuleSource::core("prelude/string.wado")
 }
 
+/// Helper for generating CM types within an `InstanceType` from registry metadata.
+///
+/// Tracks type indices and deduplicates types (borrow, list, result, etc.)
+/// within a single instance type definition.
+struct CmInstanceTypeGen {
+    next_idx: u32,
+    cache: HashMap<String, u32>,
+}
+
+impl CmInstanceTypeGen {
+    fn new(start_idx: u32) -> Self {
+        Self {
+            next_idx: start_idx,
+            cache: HashMap::new(),
+        }
+    }
+
+    /// Register a pre-existing type index for cache lookups
+    fn register_existing(&mut self, key: &str, idx: u32) {
+        self.cache.insert(key.to_string(), idx);
+    }
+
+    fn alloc_idx(&mut self) -> u32 {
+        let idx = self.next_idx;
+        self.next_idx += 1;
+        idx
+    }
+
+    /// Compute a stable cache key for an AST type (ignoring spans)
+    fn type_key(ty: &Type) -> String {
+        match ty {
+            Type::Named(n) => n.name.clone(),
+            Type::Reference(inner) => format!("&{}", Self::type_key(inner)),
+            Type::MutReference(inner) => format!("&mut {}", Self::type_key(inner)),
+            Type::Generic(g) => {
+                let args: Vec<String> = g.args.iter().map(Self::type_key).collect();
+                format!("{}:{}", g.name, args.join(","))
+            }
+            Type::Tuple(elems) => {
+                let args: Vec<String> = elems.iter().map(Self::type_key).collect();
+                format!("[{}]", args.join(","))
+            }
+            _ => format!("{ty:?}"),
+        }
+    }
+
+    /// Define a variant type and its named export, returning the exported type index.
+    fn define_variant(
+        &mut self,
+        instance_type: &mut InstanceType,
+        cm_name: &str,
+        cases: &[(String, bool)],
+    ) -> u32 {
+        let cache_key = format!("variant:{cm_name}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+
+        let variant_cases: Vec<(&str, Option<ComponentValType>, Option<u32>)> = cases
+            .iter()
+            .map(|(name, _has_payload)| (name.as_str(), None, None))
+            .collect();
+        instance_type.ty().defined_type().variant(variant_cases);
+        let variant_idx = self.alloc_idx();
+
+        // Export to make it "named" (required by CM spec for records/variants)
+        instance_type.export(
+            cm_name,
+            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(variant_idx)),
+        );
+        let export_idx = self.alloc_idx();
+
+        self.cache.insert(cache_key, export_idx);
+        export_idx
+    }
+
+    /// Define a borrow type, returning the type index.
+    fn define_borrow(
+        &mut self,
+        instance_type: &mut InstanceType,
+        resource_export_idx: u32,
+        resource_cm_name: &str,
+    ) -> u32 {
+        let cache_key = format!("borrow:{resource_cm_name}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type
+            .ty()
+            .defined_type()
+            .borrow(resource_export_idx);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a list type, returning the type index.
+    fn define_list(
+        &mut self,
+        instance_type: &mut InstanceType,
+        elem_type: ComponentValType,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("list:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type.ty().defined_type().list(elem_type);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a tuple type, returning the type index.
+    fn define_tuple(
+        &mut self,
+        instance_type: &mut InstanceType,
+        elems: Vec<ComponentValType>,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("tuple:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type.ty().defined_type().tuple(elems);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a result type, returning the type index.
+    fn define_result(
+        &mut self,
+        instance_type: &mut InstanceType,
+        ok_type: Option<ComponentValType>,
+        err_type: Option<ComponentValType>,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("result:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type
+            .ty()
+            .defined_type()
+            .result(ok_type, err_type);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Convert a resolved Wado AST type to a CM `ComponentValType` within the instance type.
+    ///
+    /// Creates intermediate types as needed and caches them for deduplication.
+    /// The `resource_exports` maps CM resource names (e.g., "fields") to their
+    /// export indices within the instance type.
+    fn ast_type_to_cm(
+        &mut self,
+        ty: &Type,
+        instance_type: &mut InstanceType,
+        wasi_registry: &crate::component_model::WasiRegistry,
+        resource_exports: &HashMap<&str, u32>,
+    ) -> ComponentValType {
+        match ty {
+            Type::Named(named) => match named.name.as_str() {
+                "String" => ComponentValType::Primitive(PrimitiveValType::String),
+                "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
+                "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
+                "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
+                "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
+                "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
+                "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
+                "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
+                "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
+                "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
+                "char" => ComponentValType::Primitive(PrimitiveValType::Char),
+                name => {
+                    if wasi_registry.is_resource(name) {
+                        // own<resource>
+                        let cm_name = wasi_registry.get_resource_cm_name(name).unwrap();
+                        let cache_key = format!("own:{cm_name}");
+                        if let Some(&idx) = self.cache.get(&cache_key) {
+                            return ComponentValType::Type(idx);
+                        }
+                        let export_idx = resource_exports[cm_name];
+                        instance_type.ty().defined_type().own(export_idx);
+                        let idx = self.alloc_idx();
+                        self.cache.insert(cache_key, idx);
+                        ComponentValType::Type(idx)
+                    } else if wasi_registry.is_variant(name) {
+                        let cm_name = wasi_registry.get_variant_cm_name(name).unwrap().to_string();
+                        let cases = wasi_registry.get_variant_cases(name).unwrap().to_vec();
+                        let idx = self.define_variant(instance_type, &cm_name, &cases);
+                        ComponentValType::Type(idx)
+                    } else {
+                        panic!("unsupported named type for CM instance: {name}")
+                    }
+                }
+            },
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                if let Type::Named(n) = inner.as_ref() {
+                    if wasi_registry.is_resource(&n.name) {
+                        let cm_name = wasi_registry.get_resource_cm_name(&n.name).unwrap();
+                        let export_idx = resource_exports[cm_name];
+                        let idx = self.define_borrow(instance_type, export_idx, cm_name);
+                        return ComponentValType::Type(idx);
+                    }
+                }
+                panic!("unsupported reference type for CM instance: {ty:?}")
+            }
+            Type::Generic(generic) => match generic.name.as_str() {
+                "Array" => {
+                    let elem_cm = self.ast_type_to_cm(
+                        &generic.args[0],
+                        instance_type,
+                        wasi_registry,
+                        resource_exports,
+                    );
+                    let key = Self::type_key(&generic.args[0]);
+                    let idx = self.define_list(instance_type, elem_cm, &key);
+                    ComponentValType::Type(idx)
+                }
+                "Result" => {
+                    // Unit type is Named("()") in Wado, not Tuple([])
+                    let is_unit = matches!(&generic.args[0], Type::Tuple(t) if t.is_empty())
+                        || matches!(&generic.args[0], Type::Named(n) if n.name == "()");
+                    let ok_type = if is_unit {
+                        None
+                    } else {
+                            Some(self.ast_type_to_cm(
+                                &generic.args[0],
+                                instance_type,
+                                wasi_registry,
+                                resource_exports,
+                            ))
+                        };
+                    let err_type = Some(self.ast_type_to_cm(
+                        &generic.args[1],
+                        instance_type,
+                        wasi_registry,
+                        resource_exports,
+                    ));
+                    let key = format!(
+                        "{},{}",
+                        Self::type_key(&generic.args[0]),
+                        Self::type_key(&generic.args[1])
+                    );
+                    let idx = self.define_result(instance_type, ok_type, err_type, &key);
+                    ComponentValType::Type(idx)
+                }
+                _ => panic!(
+                    "unsupported generic type for CM instance: {}",
+                    generic.name
+                ),
+            },
+            Type::Tuple(elems) if elems.is_empty() => {
+                panic!("unit type should be handled at Result level, not directly")
+            }
+            Type::Tuple(elems) => {
+                let cm_elems: Vec<ComponentValType> = elems
+                    .iter()
+                    .map(|e| self.ast_type_to_cm(e, instance_type, wasi_registry, resource_exports))
+                    .collect();
+                let key = elems.iter().map(Self::type_key).collect::<Vec<_>>().join(",");
+                let idx = self.define_tuple(instance_type, cm_elems, &key);
+                ComponentValType::Type(idx)
+            }
+            _ => panic!("unsupported type for CM instance: {ty:?}"),
+        }
+    }
+}
+
 /// Information about a user-defined struct type
 #[derive(Debug, Clone)]
 struct StructTypeInfo {
@@ -3276,181 +3548,91 @@ impl Codegen<'_> {
             );
 
             // ================================================================
-            // Fields resource methods
+            // Fields resource methods (metadata-driven)
             // ================================================================
-            // Note: The two Func exports above ([constructor]fields and
+            // Generate function types and exports from wasi_registry metadata
+            // instead of hardcoding type indices.
+            //
+            // The two Func exports above ([constructor]fields and
             // [static]response.new) do NOT create type indices. Only ty()
             // calls and Type(...) exports create type indices. So the next
             // type index after type 28 is 29 (not 31).
 
-            // Type 29: header-error variant (all cases are unit - no payloads)
-            // Must be a variant (not enum) to match wasmtime's WIT definition
-            instance_type.ty().defined_type().variant([
-                ("invalid-syntax", None, None),
-                ("forbidden", None, None),
-                ("immutable", None, None),
-            ]);
+            let mut type_gen = CmInstanceTypeGen::new(29);
+            // Register pre-existing own<fields> at type 21
+            type_gen.register_existing("own:fields", 21);
+            // Resource export indices within the instance type
+            let resource_exports: HashMap<&str, u32> =
+                [("fields", 2), ("response", 1), ("request", 0)]
+                    .into_iter()
+                    .collect();
 
-            // Type 30: export "header-error"
-            instance_type.export(
-                "header-error",
-                wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(29)),
-            );
+            // Get Fields methods from wasi_registry (excluding constructor,
+            // which is already handled above as a pre-existing type)
+            let fields_methods: Vec<WasiFunctionInfo> = self
+                .project
+                .wasi_registry
+                .interfaces()
+                .find(|i| i.package == "http" && i.interface == "types")
+                .map(|i| {
+                    i.functions
+                        .into_iter()
+                        .filter(|f| {
+                            f.effect_name == "Fields"
+                                && f.wasi_func_name != "[constructor]fields"
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
 
-            // Type 31: borrow<fields> (for instance method self parameter)
-            instance_type.ty().defined_type().borrow(2); // fields is at export index 2
+            for func in &fields_methods {
+                // Resolve return type (params are already resolved at registration)
+                let resolved_return = func
+                    .return_type
+                    .as_ref()
+                    .map(|ty| self.project.wasi_registry.resolve_type(ty));
 
-            // Type 32: list<u8> (field-value in WIT)
-            instance_type
-                .ty()
-                .defined_type()
-                .list(ComponentValType::Primitive(PrimitiveValType::U8));
+                // Build CM parameter types
+                let cm_params: Vec<(String, ComponentValType)> = func
+                    .params
+                    .iter()
+                    .map(|(name, ty)| {
+                        let cm_type = type_gen.ast_type_to_cm(
+                            ty,
+                            &mut instance_type,
+                            &self.project.wasi_registry,
+                            &resource_exports,
+                        );
+                        (name.clone(), cm_type)
+                    })
+                    .collect();
 
-            // Type 33: result<_, header-error> (for append, delete, set)
-            instance_type
-                .ty()
-                .defined_type()
-                .result(None, Some(ComponentValType::Type(30)));
+                // Build CM result type
+                let cm_result = resolved_return.as_ref().map(|ty| {
+                    type_gen.ast_type_to_cm(
+                        ty,
+                        &mut instance_type,
+                        &self.project.wasi_registry,
+                        &resource_exports,
+                    )
+                });
 
-            // Type 34: list<list<u8>> (for get, set, get-and-delete)
-            instance_type
-                .ty()
-                .defined_type()
-                .list(ComponentValType::Type(32));
+                // Define function type
+                let param_refs: Vec<(&str, ComponentValType)> =
+                    cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
+                instance_type
+                    .ty()
+                    .function()
+                    .params(param_refs)
+                    .result(cm_result);
+                let func_type_idx = type_gen.alloc_idx();
 
-            // Type 35: tuple<string, list<u8>> (field-name, field-value pair)
-            instance_type.ty().defined_type().tuple([
-                ComponentValType::Primitive(PrimitiveValType::String),
-                ComponentValType::Type(32), // list<u8>
-            ]);
-
-            // Type 36: list<tuple<string, list<u8>>> (for from-list, copy-all)
-            instance_type
-                .ty()
-                .defined_type()
-                .list(ComponentValType::Type(35));
-
-            // Type 37: result<own<fields>, header-error> (for from-list)
-            instance_type.ty().defined_type().result(
-                Some(ComponentValType::Type(21)), // own<fields>
-                Some(ComponentValType::Type(30)), // header-error
-            );
-
-            // Type 38: result<list<list<u8>>, header-error> (for get-and-delete)
-            instance_type.ty().defined_type().result(
-                Some(ComponentValType::Type(34)), // list<list<u8>>
-                Some(ComponentValType::Type(30)), // header-error
-            );
-
-            // Type 39: [method]fields.has function type
-            // Signature: (self: borrow<fields>, name: string) -> bool
-            instance_type
-                .ty()
-                .function()
-                .params([
-                    ("self", ComponentValType::Type(31)),                    // borrow<fields>
-                    ("name", ComponentValType::Primitive(PrimitiveValType::String)),
-                ])
-                .result(Some(ComponentValType::Primitive(PrimitiveValType::Bool)));
-
-            // Type 40: [method]fields.clone function type
-            // Signature: (self: borrow<fields>) -> own<fields>
-            instance_type
-                .ty()
-                .function()
-                .params([("self", ComponentValType::Type(31))]) // borrow<fields>
-                .result(Some(ComponentValType::Type(21))); // own<fields>
-
-            // Type 41: [method]fields.append function type
-            // Signature: (self: borrow<fields>, name: string, value: list<u8>)
-            //         -> result<_, header-error>
-            instance_type
-                .ty()
-                .function()
-                .params([
-                    ("self", ComponentValType::Type(31)),                    // borrow<fields>
-                    ("name", ComponentValType::Primitive(PrimitiveValType::String)),
-                    ("value", ComponentValType::Type(32)),                   // list<u8>
-                ])
-                .result(Some(ComponentValType::Type(33))); // result<_, header-error>
-
-            // Type 42: [method]fields.delete function type
-            // Signature: (self: borrow<fields>, name: string) -> result<_, header-error>
-            instance_type
-                .ty()
-                .function()
-                .params([
-                    ("self", ComponentValType::Type(31)),                    // borrow<fields>
-                    ("name", ComponentValType::Primitive(PrimitiveValType::String)),
-                ])
-                .result(Some(ComponentValType::Type(33))); // result<_, header-error>
-
-            // Type 43: [method]fields.get function type
-            // Signature: (self: borrow<fields>, name: string) -> list<list<u8>>
-            instance_type
-                .ty()
-                .function()
-                .params([
-                    ("self", ComponentValType::Type(31)),                    // borrow<fields>
-                    ("name", ComponentValType::Primitive(PrimitiveValType::String)),
-                ])
-                .result(Some(ComponentValType::Type(34))); // list<list<u8>>
-
-            // Type 44: [method]fields.set function type
-            // Signature: (self: borrow<fields>, name: string, value: list<list<u8>>)
-            //         -> result<_, header-error>
-            instance_type
-                .ty()
-                .function()
-                .params([
-                    ("self", ComponentValType::Type(31)),                    // borrow<fields>
-                    ("name", ComponentValType::Primitive(PrimitiveValType::String)),
-                    ("value", ComponentValType::Type(34)),                   // list<list<u8>>
-                ])
-                .result(Some(ComponentValType::Type(33))); // result<_, header-error>
-
-            // Type 45: [static]fields.from-list function type
-            // Signature: (entries: list<tuple<string, list<u8>>>)
-            //         -> result<own<fields>, header-error>
-            instance_type
-                .ty()
-                .function()
-                .params([(
-                    "entries",
-                    ComponentValType::Type(36), // list<tuple<string, list<u8>>>
-                )])
-                .result(Some(ComponentValType::Type(37))); // result<own<fields>, header-error>
-
-            // Type 46: [method]fields.get-and-delete function type
-            // Signature: (self: borrow<fields>, name: string)
-            //         -> result<list<list<u8>>, header-error>
-            instance_type
-                .ty()
-                .function()
-                .params([
-                    ("self", ComponentValType::Type(31)),                    // borrow<fields>
-                    ("name", ComponentValType::Primitive(PrimitiveValType::String)),
-                ])
-                .result(Some(ComponentValType::Type(38))); // result<list<list<u8>>, header-error>
-
-            // Type 47: [method]fields.copy-all function type
-            // Signature: (self: borrow<fields>) -> list<tuple<string, list<u8>>>
-            instance_type
-                .ty()
-                .function()
-                .params([("self", ComponentValType::Type(31))]) // borrow<fields>
-                .result(Some(ComponentValType::Type(36))); // list<tuple<string, list<u8>>>
-
-            // Export Fields methods
-            instance_type.export("[method]fields.has", wasm_encoder::ComponentTypeRef::Func(39));
-            instance_type.export("[method]fields.clone", wasm_encoder::ComponentTypeRef::Func(40));
-            instance_type.export("[method]fields.append", wasm_encoder::ComponentTypeRef::Func(41));
-            instance_type.export("[method]fields.delete", wasm_encoder::ComponentTypeRef::Func(42));
-            instance_type.export("[method]fields.get", wasm_encoder::ComponentTypeRef::Func(43));
-            instance_type.export("[method]fields.set", wasm_encoder::ComponentTypeRef::Func(44));
-            instance_type.export("[static]fields.from-list", wasm_encoder::ComponentTypeRef::Func(45));
-            instance_type.export("[method]fields.get-and-delete", wasm_encoder::ComponentTypeRef::Func(46));
-            instance_type.export("[method]fields.copy-all", wasm_encoder::ComponentTypeRef::Func(47));
+                // Export the function (Func exports don't create type indices)
+                instance_type.export(
+                    &func.wasi_func_name,
+                    wasm_encoder::ComponentTypeRef::Func(func_type_idx),
+                );
+            }
 
             enc.instance(&instance_type);
         }
@@ -3517,25 +3699,32 @@ impl Codegen<'_> {
         // but user code references it as "wasi:http/Fields::new" via the wasi_registry.
         ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
 
-        // Alias Fields resource methods
-        let fields_methods = [
-            ("[method]fields.has", "wasi:http/Fields::has"),
-            ("[method]fields.clone", "wasi:http/Fields::clone"),
-            ("[method]fields.append", "wasi:http/Fields::append"),
-            ("[method]fields.delete", "wasi:http/Fields::delete"),
-            ("[method]fields.get", "wasi:http/Fields::get"),
-            ("[method]fields.set", "wasi:http/Fields::set"),
-            ("[static]fields.from-list", "wasi:http/Fields::from_list"),
-            ("[method]fields.get-and-delete", "wasi:http/Fields::get_and_delete"),
-            ("[method]fields.copy-all", "wasi:http/Fields::copy_all"),
-        ];
-        for (cm_name, local_name) in fields_methods {
-            ctx.register_comp_func(local_name);
-            builder.alias_export(
-                ctx.instance_idx("http-types"),
-                cm_name,
-                ComponentExportKind::Func,
-            );
+        // Alias Fields resource methods from wasi_registry metadata
+        {
+            let fields_funcs: Vec<(String, String)> = self
+                .project
+                .wasi_registry
+                .interfaces()
+                .find(|i| i.package == "http" && i.interface == "types")
+                .map(|i| {
+                    i.functions
+                        .iter()
+                        .filter(|f| {
+                            f.effect_name == "Fields"
+                                && f.wasi_func_name != "[constructor]fields"
+                        })
+                        .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            for (cm_name, local_name) in &fields_funcs {
+                ctx.register_comp_func(local_name);
+                builder.alias_export(
+                    ctx.instance_idx("http-types"),
+                    cm_name,
+                    ComponentExportKind::Func,
+                );
+            }
         }
 
         // NOTE: The lowering of these functions is done in lower_wasi_functions()

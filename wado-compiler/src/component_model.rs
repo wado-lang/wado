@@ -117,6 +117,10 @@ pub struct WasiRegistry {
     /// Enum types collected from WASI modules (e.g., `ErrorCode`, `IpAddressFamily`)
     /// Maps Wado enum name -> (CM enum name kebab-case, variant names in kebab-case)
     enums: HashMap<String, (String, Vec<String>)>,
+
+    /// Variant types collected from WASI modules (e.g., `HeaderError`)
+    /// Maps Wado variant name -> (CM variant name kebab-case, cases: Vec<(case_cm_name, has_payload)>)
+    variants: HashMap<String, (String, Vec<(String, bool)>)>,
 }
 
 impl WasiRegistry {
@@ -244,6 +248,34 @@ impl WasiRegistry {
                 if let Some(path) = interface_path {
                     let full_key = format!("{path}#{}", enum_def.name);
                     self.enums.insert(full_key, (cm_name, variant_names));
+                }
+            }
+        }
+
+        // Collect variant types from this module (e.g., HeaderError)
+        for item in &module.items {
+            if let Item::Variant(variant_def) = item {
+                let cm_name = to_kebab_case(&variant_def.name);
+                let cases: Vec<(String, bool)> = variant_def
+                    .cases
+                    .iter()
+                    .map(|c| (to_kebab_case(&c.name), c.payload.is_some()))
+                    .collect();
+
+                self.variants
+                    .insert(variant_def.name.clone(), (cm_name.clone(), cases.clone()));
+
+                // Also store by interface path + name for disambiguation
+                let interface_path = variant_def
+                    .attrs
+                    .iter()
+                    .find(|a| a.name == "wasi")
+                    .and_then(|a| a.args.first())
+                    .and_then(|s| s.split('#').next())
+                    .map(std::string::ToString::to_string);
+                if let Some(path) = interface_path {
+                    let full_key = format!("{path}#{}", variant_def.name);
+                    self.variants.insert(full_key, (cm_name, cases));
                 }
             }
         }
@@ -414,6 +446,25 @@ impl WasiRegistry {
             .get(&full_key)
             .or_else(|| self.enums.get(name))
             .map(|(cm_name, _)| cm_name.as_str())
+    }
+
+    /// Check if a type name is a registered variant
+    pub fn is_variant(&self, name: &str) -> bool {
+        self.variants.contains_key(name)
+    }
+
+    /// Get the CM kebab-case name for a variant
+    pub fn get_variant_cm_name(&self, name: &str) -> Option<&str> {
+        self.variants
+            .get(name)
+            .map(|(cm_name, _)| cm_name.as_str())
+    }
+
+    /// Get the variant cases (CM kebab-case name, has_payload)
+    pub fn get_variant_cases(&self, name: &str) -> Option<&[(String, bool)]> {
+        self.variants
+            .get(name)
+            .map(|(_, cases)| cases.as_slice())
     }
 
     /// Get the resource type from a return type (if it's Option<ResourceName>)

@@ -1103,6 +1103,8 @@ pub struct VariantDecl {
     /// Generic type parameters: `variant Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<VariantCase>,
+    /// Attributes like `#[wasi("...")]`
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 
