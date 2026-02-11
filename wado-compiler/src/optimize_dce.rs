@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::ast::Type;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
@@ -109,6 +110,39 @@ pub fn analyze_project(project: &mut Project) {
         {
             cm_requirements.analyze_type(return_type);
         }
+    }
+
+    // Add CM parameter lowering functions based on WASI function parameter types
+    // These functions lower GC values to CM linear memory format for resource method calls
+    let mut needs_cm_lower_string = false;
+    let mut needs_cm_lower_array_u8 = false;
+    for func_name in &used_wasi_functions {
+        if let Some(func_info) = project.wasi_registry.get_function(func_name) {
+            for (_param_name, param_type) in &func_info.params {
+                let resolved = project.wasi_registry.resolve_type(param_type);
+                match &resolved {
+                    Type::Named(named) if named.name == "String" => {
+                        needs_cm_lower_string = true;
+                    }
+                    Type::Generic(generic)
+                        if generic.name == "Array"
+                            && generic.args.len() == 1
+                            && matches!(&generic.args[0], Type::Named(n) if n.name == "u8") =>
+                    {
+                        needs_cm_lower_array_u8 = true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    if needs_cm_lower_string {
+        let func = core_internal("cm_lower_string");
+        reachable.extend(compute_reachable(&call_graph, &func));
+    }
+    if needs_cm_lower_array_u8 {
+        let func = core_internal("cm_lower_array_u8");
+        reachable.extend(compute_reachable(&call_graph, &func));
     }
 
     // Add converter functions and their transitive dependencies
@@ -972,6 +1006,13 @@ fn analyze_expr(
                             base_name,
                         ));
                         analysis.callees.insert(callee_id);
+                    }
+                    ResolvedType::Resource { name, .. } => {
+                        // Resource instance method call (e.g., fields.has(), fields.append())
+                        // Record as effect call so it's tracked in used_wasi_functions
+                        analysis
+                            .effect_calls
+                            .insert((name.clone(), method_name.clone()));
                     }
                     _ => {}
                 }

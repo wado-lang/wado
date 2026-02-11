@@ -7456,7 +7456,7 @@ fn analyze_scratch_locals_module(
             let mut analyzer = ScratchLocalAnalyzer::new(&type_table);
             analyzer.analyze_block(body);
 
-            let (needs_async, needs_outptr) =
+            let (needs_async, needs_outptr, needs_i64_temp, needs_err_disc) =
                 analyze_effect_scratch_needs(body, &func.effects, &type_table, wasi_registry);
             if needs_async {
                 func.scratch_locals
@@ -7471,6 +7471,18 @@ fn analyze_scratch_locals_module(
                     .push(ScratchLocal::new("__cm_outptr".to_string(), TypeTable::I32));
                 func.scratch_locals.push(ScratchLocal::new(
                     "__cm_i32_result".to_string(),
+                    TypeTable::I32,
+                ));
+            }
+            if needs_i64_temp {
+                func.scratch_locals.push(ScratchLocal::new(
+                    "__cm_i64_temp".to_string(),
+                    TypeTable::I64,
+                ));
+            }
+            if needs_err_disc {
+                func.scratch_locals.push(ScratchLocal::new(
+                    "__cm_err_disc".to_string(),
                     TypeTable::I32,
                 ));
             }
@@ -7728,40 +7740,54 @@ impl<'a> ScratchLocalAnalyzer<'a> {
     }
 }
 
-/// Returns `(needs_async, needs_outptr)`.
+/// Returns `(needs_async, needs_outptr, needs_i64_temp, needs_err_disc)`.
 /// Analyzes the body regardless of declared effects because internal functions
 /// may call async builtins without declaring effects.
 fn analyze_effect_scratch_needs(
     body: &TirBlock,
     _effects: &[String],
-    _type_table: &TypeTable,
+    type_table: &TypeTable,
     wasi_registry: &crate::component_model::WasiRegistry,
-) -> (bool, bool) {
-    let mut analyzer = EffectScratchAnalyzer::new(wasi_registry);
+) -> (bool, bool, bool, bool) {
+    let mut analyzer = EffectScratchAnalyzer::new(wasi_registry, type_table);
     analyzer.analyze_block(body);
-    (analyzer.needs_async, analyzer.needs_outptr)
+    (
+        analyzer.needs_async,
+        analyzer.needs_outptr,
+        analyzer.needs_i64_temp,
+        analyzer.needs_err_disc,
+    )
 }
 
 struct EffectScratchAnalyzer<'a> {
     wasi_registry: &'a crate::component_model::WasiRegistry,
+    type_table: &'a TypeTable,
     needs_async: bool,
     needs_outptr: bool,
+    needs_i64_temp: bool,
+    needs_err_disc: bool,
 }
 
 impl<'a> EffectScratchAnalyzer<'a> {
-    fn new(wasi_registry: &'a crate::component_model::WasiRegistry) -> Self {
+    fn new(
+        wasi_registry: &'a crate::component_model::WasiRegistry,
+        type_table: &'a TypeTable,
+    ) -> Self {
         Self {
             wasi_registry,
+            type_table,
             needs_async: false,
             needs_outptr: false,
+            needs_i64_temp: false,
+            needs_err_disc: false,
         }
     }
 
     fn analyze_block(&mut self, block: &TirBlock) {
         for stmt in &block.stmts {
             self.analyze_stmt(stmt);
-            if self.needs_async && self.needs_outptr {
-                return; // Early exit if both are already true
+            if self.needs_async && self.needs_outptr && self.needs_i64_temp && self.needs_err_disc {
+                return; // Early exit if all are already true
             }
         }
     }
@@ -7812,6 +7838,9 @@ impl<'a> EffectScratchAnalyzer<'a> {
                     if conv.outptr_alloc.is_some() {
                         self.needs_outptr = true;
                     }
+                    if let Some((_, true)) = conv.result_return {
+                        self.needs_err_disc = true;
+                    }
                 }
                 for arg in args {
                     self.analyze_expr(arg);
@@ -7843,6 +7872,9 @@ impl<'a> EffectScratchAnalyzer<'a> {
                                     if conv.outptr_alloc.is_some() {
                                         self.needs_outptr = true;
                                     }
+                                    if let Some((_, true)) = conv.result_return {
+                                        self.needs_err_disc = true;
+                                    }
                                 }
                             }
                         }
@@ -7855,6 +7887,9 @@ impl<'a> EffectScratchAnalyzer<'a> {
                                 }
                                 if conv.outptr_alloc.is_some() {
                                     self.needs_outptr = true;
+                                }
+                                if let Some((_, true)) = conv.result_return {
+                                    self.needs_err_disc = true;
                                 }
                             }
                         }
@@ -7899,6 +7934,9 @@ impl<'a> EffectScratchAnalyzer<'a> {
                                     if conv.outptr_alloc.is_some() {
                                         self.needs_outptr = true;
                                     }
+                                    if let Some((_, true)) = conv.result_return {
+                                        self.needs_err_disc = true;
+                                    }
                                 }
                             }
                         }
@@ -7911,6 +7949,9 @@ impl<'a> EffectScratchAnalyzer<'a> {
                                 }
                                 if conv.outptr_alloc.is_some() {
                                     self.needs_outptr = true;
+                                }
+                                if let Some((_, true)) = conv.result_return {
+                                    self.needs_err_disc = true;
                                 }
                             }
                         }
@@ -7932,7 +7973,50 @@ impl<'a> EffectScratchAnalyzer<'a> {
                     self.analyze_expr(arg);
                 }
             }
-            TirExprKind::MethodCall { receiver, args, .. } => {
+            TirExprKind::MethodCall {
+                receiver,
+                func,
+                args,
+                ..
+            } => {
+                // Check if this is a resource method call that needs outptr
+                let mut recv_type = self.type_table.get(receiver.type_id).clone();
+                while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = recv_type {
+                    recv_type = self.type_table.get(inner).clone();
+                }
+                if let ResolvedType::Resource { name, .. } = &recv_type
+                    && let Some(method_info) = func.method_info()
+                {
+                    let func_name = format!("{name}::{}", method_info.method_name);
+                    if let Some(func_info) = self.wasi_registry.get_function(&func_name) {
+                        if func_info.call_convention.outptr_alloc.is_some() {
+                            self.needs_outptr = true;
+                        }
+                        // Check if any parameter needs i64 temp for CM lowering
+                        // (String and Array<u8> params are lowered via i64-returning helpers)
+                        for (_pname, ptype) in &func_info.params {
+                            let resolved = self.wasi_registry.resolve_type(ptype);
+                            match &resolved {
+                                crate::ast::Type::Named(n) if n.name == "String" => {
+                                    self.needs_i64_temp = true;
+                                }
+                                crate::ast::Type::Generic(g)
+                                    if g.name == "Array"
+                                        && g.args.len() == 1
+                                        && matches!(&g.args[0], crate::ast::Type::Named(n) if n.name == "u8") =>
+                                {
+                                    self.needs_i64_temp = true;
+                                }
+                                _ => {}
+                            }
+                        }
+                        // Check if result return has enum error (needs __cm_err_disc local
+                        // for br_table dispatch to create correct variant subtypes)
+                        if let Some((_, true)) = func_info.call_convention.result_return {
+                            self.needs_err_disc = true;
+                        }
+                    }
+                }
                 self.analyze_expr(receiver);
                 for arg in args {
                     self.analyze_expr(arg);

@@ -33,6 +33,10 @@ impl Array<T> {
         return self.used;
     }
 
+    pub fn internal_raw_data(&self) -> builtin::array<T> {
+        return self.repr;
+    }
+
     pub fn append(&mut self, value: T) {
         let used = self.used;
         let capacity = builtin::array_len(self.repr);

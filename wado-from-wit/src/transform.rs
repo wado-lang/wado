@@ -468,6 +468,15 @@ impl<'a> Transformer<'a> {
                     target: WadoType::Tuple(types),
                 })))
             }
+            TypeDefKind::List(inner) => {
+                // List newtype (e.g., `type field-value = list<u8>;` in WIT)
+                let element = self.transform_type(*inner)?;
+                Ok(Some(WadoTypeDef::Newtype(WadoNewtype {
+                    name,
+                    wasi_attr: Some(wasi_attr),
+                    target: WadoType::Array(Box::new(element)),
+                })))
+            }
             _ => Ok(None),
         }
     }

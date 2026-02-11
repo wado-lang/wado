@@ -298,3 +298,12 @@ async fn test_http_500_response() {
     )
     .await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_http_fields() {
+    run_http_fixture_test(
+        Path::new("tests/fixtures.http/http-fields.wado"),
+        "http-fields.wado",
+    )
+    .await;
+}
