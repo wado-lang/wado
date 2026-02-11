@@ -1,0 +1,47 @@
+// Test zlib utility functions: version, compress_bound, uncompress2
+use {println, Stdout} from "core:cli";
+use {zlib_version, compress_bound, compress2, uncompress, uncompress2,
+     Z_DEFAULT_COMPRESSION} from "core:zlib";
+
+export fn run() with Stdout {
+    // Test version string
+    let ver = zlib_version();
+    assert ver.len() > 0, "version not empty";
+    println(`version: {ver}`);
+
+    // Test compress_bound
+    let b0 = compress_bound(0);
+    assert b0 > 0, "compress_bound(0) > 0";
+    let b100 = compress_bound(100);
+    assert b100 > 100, "compress_bound(100) > 100";
+    let b65535 = compress_bound(65535);
+    assert b65535 > 65535, "compress_bound(65535) > 65535";
+    println("compress_bound ok");
+
+    // Verify compress_bound is actually an upper bound
+    let mut data: Array<u8> = Array::<u8>::with_capacity(100);
+    for let mut i = 0; i < 100; i += 1 {
+        data.append((i % 256) as u8);
+    }
+    let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
+    assert compressed.len() <= b100, "compressed fits in bound";
+    println("bound verified ok");
+
+    // Test uncompress
+    let decompressed = uncompress(&compressed);
+    assert decompressed.len() == 100, "uncompress size";
+    for let mut i = 0; i < 100; i += 1 {
+        assert decompressed[i] == data[i], "uncompress data";
+    }
+    println("uncompress ok");
+
+    // Test uncompress2 with sufficient limit
+    let d2 = uncompress2(&compressed, 200);
+    assert d2.len() == 100, "uncompress2 size";
+    println("uncompress2 ok");
+
+    println("utility ok");
+}
+
+__DATA__
+{"stdout_contains": ["utility ok", "compress_bound ok", "uncompress ok", "uncompress2 ok"]}

@@ -332,9 +332,9 @@ pub fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
 
         let linker = cli_linker(engine)?;
 
-        let stdout_pipe = MemoryOutputPipe::new(4096);
+        let stdout_pipe = MemoryOutputPipe::new(65536);
         let stdout_clone = stdout_pipe.clone();
-        let stderr_pipe = MemoryOutputPipe::new(4096);
+        let stderr_pipe = MemoryOutputPipe::new(65536);
         let stderr_clone = stderr_pipe.clone();
 
         let state = CliWasiState::new_with_pipes(stdout_pipe, stderr_pipe);
