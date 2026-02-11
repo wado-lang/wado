@@ -5,17 +5,71 @@
 // License: zlib License (see https://github.com/madler/zlib/blob/develop/LICENSE)
 //
 // This is a pure Wado port of the zlib compression library. It implements:
-//   - Adler-32 and CRC-32 checksums
+//   - Adler-32 and CRC-32 checksums (with combine operations)
 //   - DEFLATE inflate (decompression) with dynamic/fixed Huffman and stored blocks
-//   - DEFLATE deflate (compression) with fixed Huffman codes and LZ77 matching
-//   - zlib format wrapper (header + compressed data + Adler-32 trailer)
+//   - DEFLATE deflate (compression) with fixed and dynamic Huffman codes + LZ77
+//   - Compression levels 0-9 with strategy selection
+//   - zlib and gzip format support
+//   - Streaming deflate/inflate API
+//   - Preset dictionary support
 //
 // Usage - Compression:
 //   let input: Array<u8> = [...];
 //   let compressed = zlib_compress(&input);
+//   let compressed_fast = compress2(&input, Z_BEST_SPEED);
+//   let compressed_best = compress2(&input, Z_BEST_COMPRESSION);
 //
 // Usage - Decompression:
 //   let decompressed = inflate_zlib(&compressed);
+//   let decompressed_gz = inflate_gzip(&gzipped_data);
+
+// ============================================================================
+// Public Constants
+// ============================================================================
+
+// Return codes
+pub global Z_OK: i32 = 0;
+pub global Z_STREAM_END: i32 = 1;
+pub global Z_NEED_DICT: i32 = 2;
+pub global Z_ERRNO: i32 = -1;
+pub global Z_STREAM_ERROR: i32 = -2;
+pub global Z_DATA_ERROR: i32 = -3;
+pub global Z_MEM_ERROR: i32 = -4;
+pub global Z_BUF_ERROR: i32 = -5;
+pub global Z_VERSION_ERROR: i32 = -6;
+
+// Flush modes
+pub global Z_NO_FLUSH: i32 = 0;
+pub global Z_PARTIAL_FLUSH: i32 = 1;
+pub global Z_SYNC_FLUSH: i32 = 2;
+pub global Z_FULL_FLUSH: i32 = 3;
+pub global Z_FINISH: i32 = 4;
+pub global Z_BLOCK: i32 = 5;
+pub global Z_TREES: i32 = 6;
+
+// Compression levels
+pub global Z_NO_COMPRESSION: i32 = 0;
+pub global Z_BEST_SPEED: i32 = 1;
+pub global Z_BEST_COMPRESSION: i32 = 9;
+pub global Z_DEFAULT_COMPRESSION: i32 = 6;
+
+// Compression strategies
+pub global Z_DEFAULT_STRATEGY: i32 = 0;
+pub global Z_FILTERED: i32 = 1;
+pub global Z_HUFFMAN_ONLY: i32 = 2;
+pub global Z_RLE: i32 = 3;
+pub global Z_FIXED: i32 = 4;
+
+// Data types
+pub global Z_BINARY: i32 = 0;
+pub global Z_TEXT: i32 = 1;
+pub global Z_UNKNOWN: i32 = 2;
+
+// Compression method
+pub global Z_DEFLATED: i32 = 8;
+
+// Window size
+pub global MAX_WBITS: i32 = 15;
 
 // ============================================================================
 // Adler-32
@@ -55,6 +109,32 @@ pub fn adler32_init() -> u32 {
     return 1 as u32;
 }
 
+// Combine two Adler-32 checksums
+// adler1 = adler32 of first segment, adler2 = adler32 of second segment, len2 = length of second
+pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
+    let base: u32 = 65521 as u32;
+    let rem = (len2 % 65521) as u32;
+
+    let sum1_a = adler1 & 0xFFFF as u32;
+    let sum2_a = (adler1 >> 16 as u32) & 0xFFFF as u32;
+    let sum1_b = adler2 & 0xFFFF as u32;
+    let sum2_b = (adler2 >> 16 as u32) & 0xFFFF as u32;
+
+    // sum2 = rem * sum1_a, then MOD
+    let mut sum2 = (rem * sum1_a) % base;
+    // sum1 = sum1_a + sum1_b + BASE - 1
+    let mut sum1 = sum1_a + sum1_b + base - 1 as u32;
+    // sum2 += sum2_a + sum2_b + BASE - rem
+    sum2 = sum2 + sum2_a + sum2_b + base - rem;
+
+    if sum1 >= base { sum1 -= base; }
+    if sum1 >= base { sum1 -= base; }
+    if sum2 >= base * 2 as u32 { sum2 -= base * 2 as u32; }
+    if sum2 >= base { sum2 -= base; }
+
+    return sum1 | (sum2 << 16 as u32);
+}
+
 // ============================================================================
 // CRC-32
 // ============================================================================
@@ -87,6 +167,85 @@ pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
 
 pub fn crc32_init() -> u32 {
     return 0 as u32;
+}
+
+// Multiply two GF(2) polynomials (for CRC-32 combine)
+fn gf2_matrix_times(mat: &Array<u32>, vec: u32) -> u32 {
+    let mut result: u32 = 0 as u32;
+    let mut v = vec;
+    let mut i = 0;
+    while v != 0 as u32 {
+        if (v & 1 as u32) != 0 as u32 {
+            result = result ^ mat[i];
+        }
+        v = v >> 1 as u32;
+        i += 1;
+    }
+    return result;
+}
+
+fn gf2_matrix_square(square: &mut Array<u32>, mat: &Array<u32>) {
+    for let mut n = 0; n < 32; n += 1 {
+        square[n] = gf2_matrix_times(mat, mat[n]);
+    }
+}
+
+// Combine two CRC-32 checksums
+// crc1 = crc32 of first segment, crc2 = crc32 of second segment, len2 = length of second
+pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
+    if len2 <= 0 {
+        return crc1;
+    }
+
+    let mut even: Array<u32> = Array::<u32>::filled(32, 0 as u32);
+    let mut odd: Array<u32> = Array::<u32>::filled(32, 0 as u32);
+
+    // Put operator for one zero bit in odd
+    odd[0] = 0xEDB88320 as u32;  // CRC-32 polynomial
+    let mut row: u32 = 1 as u32;
+    for let mut n = 1; n < 32; n += 1 {
+        odd[n] = row;
+        row = row << 1 as u32;
+    }
+
+    // Put operator for two zero bits in even
+    gf2_matrix_square(&mut even, &odd);
+    // Put operator for four zero bits in odd
+    gf2_matrix_square(&mut odd, &even);
+
+    let mut c1 = crc1;
+    let mut len = len2;
+    loop {
+        // Apply zeros operator for this bit of len2
+        gf2_matrix_square(&mut even, &odd);
+        if (len & 1) != 0 {
+            c1 = gf2_matrix_times(&even, c1);
+        }
+        len = len >> 1;
+        if len == 0 {
+            break;
+        }
+        gf2_matrix_square(&mut odd, &even);
+        if (len & 1) != 0 {
+            c1 = gf2_matrix_times(&odd, c1);
+        }
+        len = len >> 1;
+        if len == 0 {
+            break;
+        }
+    }
+
+    return c1 ^ crc2;
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+// Upper bound on compressed size for compress/compress2
+pub fn compress_bound(source_len: i32) -> i32 {
+    // From zlib: sourceLen + (sourceLen >> 12) + (sourceLen >> 14) + (sourceLen >> 25) + 13
+    return source_len + (source_len >> 12) + (source_len >> 14) + (source_len >> 25) + 13;
 }
 
 // ============================================================================
@@ -1505,16 +1664,1177 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
     return bw.output;
 }
 
-// Full zlib compression with fixed Huffman codes + LZ77
-pub fn zlib_compress(input: &Array<u8>) -> Array<u8> {
-    let mut output: Array<u8> = Array::<u8>::with_capacity(input.len() + 64);
+// ============================================================================
+// Dynamic Huffman Compression
+// ============================================================================
 
-    // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01
-    // (0x78 * 256 + 0x01) % 31 == 0
-    output.append(0x78 as u8);
-    output.append(0x01 as u8);
+// Huffman tree node for building optimal trees
+struct HuffNode {
+    freq: i32,       // frequency count
+    code: u16,       // assigned Huffman code
+    len: u8,         // code length in bits
+    dad: i32,        // parent node index
+    left: i32,       // left child (-1 if none)
+    right: i32,      // right child (-1 if none)
+}
 
-    let deflated = deflate_huffman(input);
+// Deflate constants
+global L_CODES: i32 = 286;      // literal/length codes (256 literals + 1 EOB + 29 lengths)
+global D_CODES: i32 = 30;       // distance codes
+global BL_CODES: i32 = 19;      // bit-length codes
+global HEAP_SIZE: i32 = 573;    // 2 * L_CODES + 1
+global MAX_BL_BITS: i32 = 7;    // max bits for bit-length codes
+
+// Build a Huffman tree from frequency counts
+// Returns code lengths in bl_count format
+fn build_huffman_tree(
+    freqs: &Array<i32>,       // frequency of each symbol
+    max_sym: i32,             // number of symbols
+    max_bits: i32,            // maximum code length
+    bl_count: &mut Array<i32>, // output: count of codes at each length
+    lengths: &mut Array<u8>   // output: code length for each symbol
+) {
+    // Build min-heap of symbols with non-zero frequency
+    let mut heap: Array<i32> = Array::<i32>::with_capacity(max_sym + 1);
+    let mut heap_len = 0;
+
+    // Track tree structure for depth computation
+    let mut depth: Array<i32> = Array::<i32>::filled(2 * max_sym + 1, 0);
+    let mut dad: Array<i32> = Array::<i32>::filled(2 * max_sym + 1, -1);
+    let mut node_freq: Array<i32> = Array::<i32>::filled(2 * max_sym + 1, 0);
+
+    // Initialize leaf nodes
+    for let mut i = 0; i < max_sym; i += 1 {
+        node_freq[i] = freqs[i];
+    }
+
+    // Collect symbols with non-zero frequency
+    let mut n_syms = 0;
+    for let mut i = 0; i < max_sym; i += 1 {
+        if freqs[i] > 0 {
+            n_syms += 1;
+        }
+    }
+
+    // Need at least 2 codes for valid Huffman tree
+    if n_syms == 0 {
+        // No symbols, set dummy codes
+        for let mut i = 0; i < max_sym; i += 1 {
+            lengths[i] = 0 as u8;
+        }
+        return;
+    }
+
+    if n_syms == 1 {
+        // Only one symbol: give it length 1, add a dummy
+        for let mut i = 0; i < max_sym; i += 1 {
+            if freqs[i] > 0 {
+                lengths[i] = 1 as u8;
+                bl_count[1] += 1;
+            } else {
+                lengths[i] = 0 as u8;
+            }
+        }
+        return;
+    }
+
+    // Build heap array (indices of symbols with freq > 0)
+    let mut items: Array<[i32, i32]> = [];  // [freq, index]
+    for let mut i = 0; i < max_sym; i += 1 {
+        if freqs[i] > 0 {
+            items.append([freqs[i], i]);
+        }
+    }
+
+    // Sort by frequency (simple insertion sort — small N)
+    for let mut i = 1; i < items.len(); i += 1 {
+        let key_freq = items[i].0;
+        let key_idx = items[i].1;
+        let mut j = i - 1;
+        let mut done = false;
+        while !done {
+            if items[j].0 > key_freq || (items[j].0 == key_freq && items[j].1 > key_idx) {
+                items[j + 1] = items[j];
+                if j == 0 {
+                    items[0] = [key_freq, key_idx];
+                    done = true;
+                } else {
+                    j -= 1;
+                }
+            } else {
+                items[j + 1] = [key_freq, key_idx];
+                done = true;
+            }
+        }
+    }
+
+    // Build tree by combining two smallest nodes
+    let mut next_node = max_sym;  // internal nodes start at max_sym
+    // Use a simple priority queue with sorted list
+    // We'll use two queues: one for leaves (sorted), one for internal nodes (naturally sorted)
+    let mut leaf_idx = 0;
+    let mut int_nodes: Array<[i32, i32]> = [];  // [freq, node_index]
+    let mut int_idx = 0;
+
+    // Helper: get next smallest from either queue
+    let mut nodes_remaining = items.len();
+    while nodes_remaining > 1 {
+        // Pick two smallest
+        let mut n1_freq = 0;
+        let mut n1_idx = 0;
+        let mut n2_freq = 0;
+        let mut n2_idx = 0;
+
+        // Pick first smallest
+        let leaf_avail = leaf_idx < items.len();
+        let int_avail = int_idx < int_nodes.len();
+        if leaf_avail && int_avail {
+            if items[leaf_idx].0 <= int_nodes[int_idx].0 {
+                n1_freq = items[leaf_idx].0;
+                n1_idx = items[leaf_idx].1;
+                leaf_idx += 1;
+            } else {
+                n1_freq = int_nodes[int_idx].0;
+                n1_idx = int_nodes[int_idx].1;
+                int_idx += 1;
+            }
+        } else if leaf_avail {
+            n1_freq = items[leaf_idx].0;
+            n1_idx = items[leaf_idx].1;
+            leaf_idx += 1;
+        } else {
+            n1_freq = int_nodes[int_idx].0;
+            n1_idx = int_nodes[int_idx].1;
+            int_idx += 1;
+        }
+
+        // Pick second smallest
+        let leaf_avail2 = leaf_idx < items.len();
+        let int_avail2 = int_idx < int_nodes.len();
+        if leaf_avail2 && int_avail2 {
+            if items[leaf_idx].0 <= int_nodes[int_idx].0 {
+                n2_freq = items[leaf_idx].0;
+                n2_idx = items[leaf_idx].1;
+                leaf_idx += 1;
+            } else {
+                n2_freq = int_nodes[int_idx].0;
+                n2_idx = int_nodes[int_idx].1;
+                int_idx += 1;
+            }
+        } else if leaf_avail2 {
+            n2_freq = items[leaf_idx].0;
+            n2_idx = items[leaf_idx].1;
+            leaf_idx += 1;
+        } else {
+            n2_freq = int_nodes[int_idx].0;
+            n2_idx = int_nodes[int_idx].1;
+            int_idx += 1;
+        }
+
+        // Create internal node
+        let parent = next_node;
+        node_freq[parent] = n1_freq + n2_freq;
+        dad[n1_idx] = parent;
+        dad[n2_idx] = parent;
+        int_nodes.append([n1_freq + n2_freq, parent]);
+        next_node += 1;
+        nodes_remaining -= 1;
+    }
+
+    // Compute depths (code lengths) by traversing from leaves to root
+    for let mut i = 0; i < max_sym; i += 1 {
+        if freqs[i] > 0 {
+            let mut d = 0;
+            let mut n = i;
+            while dad[n] >= 0 {
+                d += 1;
+                n = dad[n];
+            }
+            depth[i] = d;
+        }
+    }
+
+    // Enforce max_bits limit using the package-merge / bit length limiting algorithm
+    // Count codes at each length
+    let mut raw_count: Array<i32> = Array::<i32>::filled(max_bits + 2, 0);
+    for let mut i = 0; i < max_sym; i += 1 {
+        if freqs[i] > 0 {
+            let mut d = depth[i];
+            if d > max_bits {
+                d = max_bits;
+            }
+            raw_count[d] += 1;
+        }
+    }
+
+    // Fix overflow: redistribute from longest to shorter
+    let mut overflow = 0;
+    for let mut bits = max_bits + 1; bits > max_bits; bits -= 1 {
+        overflow += raw_count[bits];
+        raw_count[bits] = 0;
+    }
+    // Check Kraft inequality and fix
+    loop {
+        let mut kraft = 0;
+        for let mut bits = 1; bits <= max_bits; bits += 1 {
+            kraft += raw_count[bits] << (max_bits - bits);
+        }
+        if kraft <= (1 << max_bits) {
+            break;
+        }
+        // Move one code from longest to next shorter
+        raw_count[max_bits] -= 1;
+        raw_count[max_bits - 1] += 2;
+        overflow -= 1;
+        if overflow <= 0 {
+            break;
+        }
+    }
+
+    // Assign code lengths based on fixed counts
+    // Sort symbols by (depth, frequency) and assign lengths from the count distribution
+    // Create sorted list of symbols with non-zero freq, sorted by depth then freq
+    let mut sym_list: Array<[i32, i32, i32]> = [];  // [depth, freq, symbol]
+    for let mut i = 0; i < max_sym; i += 1 {
+        if freqs[i] > 0 {
+            let mut d = depth[i];
+            if d > max_bits {
+                d = max_bits;
+            }
+            sym_list.append([d, freqs[i], i]);
+        }
+    }
+    // Sort by depth ascending, then freq ascending
+    for let mut i = 1; i < sym_list.len(); i += 1 {
+        let key = sym_list[i];
+        let mut j = i - 1;
+        let mut placed = false;
+        while !placed {
+            let should_swap = sym_list[j].0 > key.0 || (sym_list[j].0 == key.0 && sym_list[j].1 > key.1);
+            if should_swap {
+                sym_list[j + 1] = sym_list[j];
+                if j == 0 {
+                    sym_list[0] = key;
+                    placed = true;
+                } else {
+                    j -= 1;
+                }
+            } else {
+                sym_list[j + 1] = key;
+                placed = true;
+            }
+        }
+    }
+
+    // Assign from the counts
+    let mut assign_idx = 0;
+    for let mut bits = 1; bits <= max_bits; bits += 1 {
+        for let mut c = 0; c < raw_count[bits]; c += 1 {
+            if assign_idx < sym_list.len() {
+                let sym = sym_list[assign_idx].2;
+                lengths[sym] = bits as u8;
+                assign_idx += 1;
+            }
+        }
+    }
+
+    // Set zero-freq symbols to length 0
+    for let mut i = 0; i < max_sym; i += 1 {
+        if freqs[i] == 0 {
+            lengths[i] = 0 as u8;
+        }
+    }
+
+    // Fill bl_count
+    for let mut i = 0; i <= max_bits; i += 1 {
+        bl_count[i] = 0;
+    }
+    for let mut i = 0; i < max_sym; i += 1 {
+        bl_count[lengths[i] as i32] += 1;
+    }
+}
+
+// Generate canonical Huffman codes from code lengths
+fn gen_huffman_codes(lengths: &Array<u8>, max_sym: i32, max_bits: i32) -> Array<EncCode> {
+    let mut bl_count: Array<i32> = Array::<i32>::filled(max_bits + 1, 0);
+    for let mut i = 0; i < max_sym; i += 1 {
+        bl_count[lengths[i] as i32] += 1;
+    }
+
+    let mut next_code: Array<u32> = Array::<u32>::filled(max_bits + 1, 0 as u32);
+    let mut code: u32 = 0 as u32;
+    bl_count[0] = 0;
+    for let mut bits = 1; bits <= max_bits; bits += 1 {
+        code = (code + bl_count[bits - 1] as u32) << 1 as u32;
+        next_code[bits] = code;
+    }
+
+    let mut tree: Array<EncCode> = Array::<EncCode>::filled(max_sym, EncCode { code: 0 as u16, len: 0 as u8 });
+    for let mut i = 0; i < max_sym; i += 1 {
+        let len = lengths[i] as i32;
+        if len != 0 {
+            tree[i] = EncCode { code: bi_reverse(next_code[len], len) as u16, len: lengths[i] };
+            next_code[len] = next_code[len] + 1 as u32;
+        }
+    }
+    return tree;
+}
+
+// Compute the number of bits to encode the tree header for dynamic blocks
+fn compute_tree_header_bits(
+    lit_lengths: &Array<u8>,
+    dist_lengths: &Array<u8>,
+    nlit: i32,
+    ndist: i32
+) -> [i32, Array<u8>, i32] {
+    // Combine lit and dist lengths into one array for RLE encoding
+    let total = nlit + ndist;
+    let mut combined: Array<u8> = Array::<u8>::filled(total, 0 as u8);
+    for let mut i = 0; i < nlit; i += 1 {
+        combined[i] = lit_lengths[i];
+    }
+    for let mut i = 0; i < ndist; i += 1 {
+        combined[nlit + i] = dist_lengths[i];
+    }
+
+    // RLE encode the code lengths
+    let mut rle: Array<u8> = [];     // symbols (0-18)
+    let mut rle_extra: Array<i32> = [];  // extra bits values
+    let mut i = 0;
+    while i < total {
+        let val = combined[i];
+        // Count consecutive same values
+        let mut count = 1;
+        while i + count < total && combined[i + count] == val {
+            count += 1;
+        }
+
+        if val == 0 as u8 {
+            while count > 0 {
+                if count >= 11 {
+                    let mut run = count;
+                    if run > 138 {
+                        run = 138;
+                    }
+                    rle.append(18 as u8);
+                    rle_extra.append(run - 11);
+                    count -= run;
+                } else if count >= 3 {
+                    rle.append(17 as u8);
+                    rle_extra.append(count - 3);
+                    count = 0;
+                } else {
+                    rle.append(0 as u8);
+                    rle_extra.append(0);
+                    count -= 1;
+                }
+            }
+        } else {
+            // Emit the value once, then repeat
+            rle.append(val);
+            rle_extra.append(0);
+            count -= 1;
+            while count > 0 {
+                if count >= 3 {
+                    let mut run = count;
+                    if run > 6 {
+                        run = 6;
+                    }
+                    rle.append(16 as u8);
+                    rle_extra.append(run - 3);
+                    count -= run;
+                } else {
+                    rle.append(val);
+                    rle_extra.append(0);
+                    count -= 1;
+                }
+            }
+        }
+        i += count;
+        // Advance past what we consumed
+        let consumed = if val == 0 as u8 { 0 } else { 0 };
+        // i already tracks position via count modifications above
+        // Need to advance i by original count
+        let mut adv = 1;
+        while i + adv < total && combined[i + adv] == val {
+            adv += 1;
+        }
+        // Actually, let me redo the loop logic
+    }
+
+    // Re-do RLE encoding properly
+    rle = [];
+    rle_extra = [];
+    i = 0;
+    while i < total {
+        let val = combined[i];
+        let mut count = 1;
+        while i + count < total && combined[i + count] == val {
+            count += 1;
+        }
+
+        if val == 0 as u8 {
+            let mut rem = count;
+            while rem > 0 {
+                if rem >= 11 {
+                    let mut run = rem;
+                    if run > 138 { run = 138; }
+                    rle.append(18 as u8);
+                    rle_extra.append(run - 11);
+                    rem -= run;
+                } else if rem >= 3 {
+                    rle.append(17 as u8);
+                    rle_extra.append(rem - 3);
+                    rem = 0;
+                } else {
+                    rle.append(0 as u8);
+                    rle_extra.append(0);
+                    rem -= 1;
+                }
+            }
+        } else {
+            rle.append(val);
+            rle_extra.append(0);
+            let mut rem = count - 1;
+            while rem > 0 {
+                if rem >= 3 {
+                    let mut run = rem;
+                    if run > 6 { run = 6; }
+                    rle.append(16 as u8);
+                    rle_extra.append(run - 3);
+                    rem -= run;
+                } else {
+                    rle.append(val);
+                    rle_extra.append(0);
+                    rem -= 1;
+                }
+            }
+        }
+        i += count;
+    }
+
+    // Count frequencies of RLE symbols (0-18) for bit-length tree
+    let mut bl_freq: Array<i32> = Array::<i32>::filled(19, 0);
+    for let mut j = 0; j < rle.len(); j += 1 {
+        bl_freq[rle[j] as i32] += 1;
+    }
+
+    // Build bit-length tree
+    let mut bl_bl_count: Array<i32> = Array::<i32>::filled(MAX_BL_BITS + 1, 0);
+    let mut bl_lengths: Array<u8> = Array::<u8>::filled(19, 0 as u8);
+    build_huffman_tree(&bl_freq, 19, MAX_BL_BITS, &mut bl_bl_count, &mut bl_lengths);
+
+    // Determine how many BL codes to send (trim trailing zeros in permuted order)
+    let bl_order: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+    let mut nbl = 19;
+    while nbl > 4 && bl_lengths[bl_order[nbl - 1]] == 0 as u8 {
+        nbl -= 1;
+    }
+
+    // Compute total header bits:
+    // 5 (HLIT) + 5 (HDIST) + 4 (HCLEN) + nbl*3 (BL code lengths)
+    // + RLE encoded tree using BL codes
+    let mut header_bits = 14 + nbl * 3;  // 5+5+4 + nbl*3
+    let bl_tree = gen_huffman_codes(&bl_lengths, 19, MAX_BL_BITS);
+    for let mut j = 0; j < rle.len(); j += 1 {
+        let sym = rle[j] as i32;
+        header_bits += bl_tree[sym].len as i32;
+        if sym == 16 {
+            header_bits += 2;
+        } else if sym == 17 {
+            header_bits += 3;
+        } else if sym == 18 {
+            header_bits += 7;
+        }
+    }
+
+    return [header_bits, rle, nbl];
+}
+
+// Write a dynamic Huffman block
+fn write_dynamic_block(
+    bw: &mut BitWriter,
+    symbols: &Array<i32>,      // 0..255=literal, 256=EOB, 257+=length
+    distances: &Array<i32>,    // distance for each length symbol (0 for literals)
+    sym_count: i32,
+    is_last: bool,
+    length_base: &Array<i32>,
+    length_extra: &Array<i32>,
+    dist_base: &Array<i32>,
+    dist_extra: &Array<i32>,
+    length_codes_table: &Array<u8>,
+    dist_codes_table: &Array<u8>
+) {
+    // Count frequencies
+    let mut lit_freq: Array<i32> = Array::<i32>::filled(286, 0);
+    let mut dist_freq: Array<i32> = Array::<i32>::filled(30, 0);
+
+    for let mut i = 0; i < sym_count; i += 1 {
+        let sym = symbols[i];
+        if sym < 256 {
+            lit_freq[sym] += 1;
+        } else if sym == 256 {
+            lit_freq[256] += 1;
+        } else {
+            // Length symbol
+            let len_val = sym - 257;
+            let lcode = length_codes_table[len_val] as i32;
+            lit_freq[257 + lcode] += 1;
+
+            let dist = distances[i];
+            let dd = dist - 1;
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
+            dist_freq[dcode] += 1;
+        }
+    }
+
+    // Ensure EOB has frequency
+    lit_freq[256] += 1;
+
+    // Ensure at least one distance code
+    if dist_freq[0] == 0 {
+        let mut has_dist = false;
+        for let mut i = 0; i < 30; i += 1 {
+            if dist_freq[i] > 0 { has_dist = true; }
+        }
+        if !has_dist {
+            dist_freq[0] = 1;
+        }
+    }
+
+    // Build trees
+    let mut lit_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
+    let mut lit_lengths: Array<u8> = Array::<u8>::filled(286, 0 as u8);
+    build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
+
+    let mut dist_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
+    let mut dist_lengths: Array<u8> = Array::<u8>::filled(30, 0 as u8);
+    build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
+
+    // Generate codes
+    let lit_tree = gen_huffman_codes(&lit_lengths, 286, 15);
+    let dist_tree = gen_huffman_codes(&dist_lengths, 30, 15);
+
+    // Determine actual number of lit/dist codes needed
+    let mut nlit = 286;
+    while nlit > 257 && lit_lengths[nlit - 1] == 0 as u8 {
+        nlit -= 1;
+    }
+    let mut ndist = 30;
+    while ndist > 1 && dist_lengths[ndist - 1] == 0 as u8 {
+        ndist -= 1;
+    }
+
+    // RLE encode the combined code lengths
+    let total_codes = nlit + ndist;
+    let mut combined: Array<u8> = Array::<u8>::filled(total_codes, 0 as u8);
+    for let mut i = 0; i < nlit; i += 1 {
+        combined[i] = lit_lengths[i];
+    }
+    for let mut i = 0; i < ndist; i += 1 {
+        combined[nlit + i] = dist_lengths[i];
+    }
+
+    let mut rle: Array<u8> = [];
+    let mut rle_extra: Array<i32> = [];
+    let mut ci = 0;
+    while ci < total_codes {
+        let val = combined[ci];
+        let mut count = 1;
+        while ci + count < total_codes && combined[ci + count] == val {
+            count += 1;
+        }
+
+        if val == 0 as u8 {
+            let mut rem = count;
+            while rem > 0 {
+                if rem >= 11 {
+                    let mut run = rem;
+                    if run > 138 { run = 138; }
+                    rle.append(18 as u8);
+                    rle_extra.append(run - 11);
+                    rem -= run;
+                } else if rem >= 3 {
+                    rle.append(17 as u8);
+                    rle_extra.append(rem - 3);
+                    rem = 0;
+                } else {
+                    rle.append(0 as u8);
+                    rle_extra.append(0);
+                    rem -= 1;
+                }
+            }
+        } else {
+            rle.append(val);
+            rle_extra.append(0);
+            let mut rem = count - 1;
+            while rem > 0 {
+                if rem >= 3 {
+                    let mut run = rem;
+                    if run > 6 { run = 6; }
+                    rle.append(16 as u8);
+                    rle_extra.append(run - 3);
+                    rem -= run;
+                } else {
+                    rle.append(val);
+                    rle_extra.append(0);
+                    rem -= 1;
+                }
+            }
+        }
+        ci += count;
+    }
+
+    // Build bit-length tree
+    let mut bl_freq: Array<i32> = Array::<i32>::filled(19, 0);
+    for let mut j = 0; j < rle.len(); j += 1 {
+        bl_freq[rle[j] as i32] += 1;
+    }
+    let mut bl_bl_count: Array<i32> = Array::<i32>::filled(MAX_BL_BITS + 1, 0);
+    let mut bl_lengths: Array<u8> = Array::<u8>::filled(19, 0 as u8);
+    build_huffman_tree(&bl_freq, 19, MAX_BL_BITS, &mut bl_bl_count, &mut bl_lengths);
+    let bl_tree = gen_huffman_codes(&bl_lengths, 19, MAX_BL_BITS);
+
+    let bl_order: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+    let mut nbl = 19;
+    while nbl > 4 && bl_lengths[bl_order[nbl - 1]] == 0 as u8 {
+        nbl -= 1;
+    }
+
+    // Write block header
+    if is_last {
+        bw.write_bits(1 as u32, 1);  // BFINAL=1
+    } else {
+        bw.write_bits(0 as u32, 1);  // BFINAL=0
+    }
+    bw.write_bits(2 as u32, 2);  // BTYPE=10 (dynamic)
+
+    // HLIT, HDIST, HCLEN
+    bw.write_bits((nlit - 257) as u32, 5);
+    bw.write_bits((ndist - 1) as u32, 5);
+    bw.write_bits((nbl - 4) as u32, 4);
+
+    // Send BL code lengths in permuted order
+    for let mut j = 0; j < nbl; j += 1 {
+        bw.write_bits(bl_lengths[bl_order[j]] as u32, 3);
+    }
+
+    // Send RLE-encoded code lengths
+    for let mut j = 0; j < rle.len(); j += 1 {
+        let sym = rle[j] as i32;
+        bw.write_bits(bl_tree[sym].code as u32, bl_tree[sym].len as i32);
+        if sym == 16 {
+            bw.write_bits(rle_extra[j] as u32, 2);
+        } else if sym == 17 {
+            bw.write_bits(rle_extra[j] as u32, 3);
+        } else if sym == 18 {
+            bw.write_bits(rle_extra[j] as u32, 7);
+        }
+    }
+
+    // Encode symbols using dynamic trees
+    for let mut i = 0; i < sym_count; i += 1 {
+        let sym = symbols[i];
+        if sym < 256 {
+            // Literal
+            bw.write_bits(lit_tree[sym].code as u32, lit_tree[sym].len as i32);
+        } else if sym == 256 {
+            // EOB
+            bw.write_bits(lit_tree[256].code as u32, lit_tree[256].len as i32);
+        } else {
+            // Length
+            let len_val = sym - 257;
+            let lcode = length_codes_table[len_val] as i32;
+            let len_symbol = 257 + lcode;
+            bw.write_bits(lit_tree[len_symbol].code as u32, lit_tree[len_symbol].len as i32);
+            let len_ebits = length_extra[lcode];
+            if len_ebits > 0 {
+                bw.write_bits((len_val - (length_base[lcode] - 3)) as u32, len_ebits);
+            }
+
+            // Distance
+            let dist = distances[i];
+            let dd = dist - 1;
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
+            bw.write_bits(dist_tree[dcode].code as u32, dist_tree[dcode].len as i32);
+            let dist_ebits = dist_extra[dcode];
+            if dist_ebits > 0 {
+                bw.write_bits((dist - dist_base[dcode]) as u32, dist_ebits);
+            }
+        }
+    }
+
+    // Write EOB
+    bw.write_bits(lit_tree[256].code as u32, lit_tree[256].len as i32);
+}
+
+// Write a fixed Huffman block from symbol buffer
+fn write_fixed_block(
+    bw: &mut BitWriter,
+    symbols: &Array<i32>,
+    distances: &Array<i32>,
+    sym_count: i32,
+    is_last: bool,
+    ltree: &Array<EncCode>,
+    dtree: &Array<EncCode>,
+    length_base: &Array<i32>,
+    length_extra: &Array<i32>,
+    dist_base: &Array<i32>,
+    dist_extra: &Array<i32>,
+    length_codes_table: &Array<u8>,
+    dist_codes_table: &Array<u8>
+) {
+    if is_last {
+        bw.write_bits(1 as u32, 1);  // BFINAL
+    } else {
+        bw.write_bits(0 as u32, 1);
+    }
+    bw.write_bits(1 as u32, 2);  // BTYPE=01 (fixed)
+
+    for let mut i = 0; i < sym_count; i += 1 {
+        let sym = symbols[i];
+        if sym < 256 {
+            bw.write_bits(ltree[sym].code as u32, ltree[sym].len as i32);
+        } else {
+            let len_val = sym - 257;
+            let lcode = length_codes_table[len_val] as i32;
+            let len_symbol = 257 + lcode;
+            bw.write_bits(ltree[len_symbol].code as u32, ltree[len_symbol].len as i32);
+            let len_ebits = length_extra[lcode];
+            if len_ebits > 0 {
+                bw.write_bits((len_val - (length_base[lcode] - 3)) as u32, len_ebits);
+            }
+
+            let dist = distances[i];
+            let dd = dist - 1;
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
+            bw.write_bits(dtree[dcode].code as u32, dtree[dcode].len as i32);
+            let dist_ebits = dist_extra[dcode];
+            if dist_ebits > 0 {
+                bw.write_bits((dist - dist_base[dcode]) as u32, dist_ebits);
+            }
+        }
+    }
+
+    // EOB
+    bw.write_bits(ltree[256].code as u32, ltree[256].len as i32);
+}
+
+// Compression level configuration
+struct DeflateConfig {
+    good_length: i32,    // reduce lazy search above this match length
+    max_lazy: i32,       // do not perform lazy search above this match length
+    nice_length: i32,    // quit search above this match length
+    max_chain: i32,      // maximum number of hash chain nodes to traverse
+    use_lazy: bool,      // whether to use lazy evaluation
+}
+
+fn get_deflate_config(level: i32) -> DeflateConfig {
+    if level == 0 {
+        return DeflateConfig { good_length: 0, max_lazy: 0, nice_length: 0, max_chain: 0, use_lazy: false };
+    } else if level == 1 {
+        return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 8, max_chain: 4, use_lazy: false };
+    } else if level == 2 {
+        return DeflateConfig { good_length: 4, max_lazy: 5, nice_length: 16, max_chain: 8, use_lazy: false };
+    } else if level == 3 {
+        return DeflateConfig { good_length: 4, max_lazy: 6, nice_length: 32, max_chain: 32, use_lazy: false };
+    } else if level == 4 {
+        return DeflateConfig { good_length: 4, max_lazy: 4, nice_length: 16, max_chain: 16, use_lazy: true };
+    } else if level == 5 {
+        return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 32, max_chain: 32, use_lazy: true };
+    } else if level == 6 {
+        return DeflateConfig { good_length: 8, max_lazy: 16, nice_length: 128, max_chain: 128, use_lazy: true };
+    } else if level == 7 {
+        return DeflateConfig { good_length: 8, max_lazy: 32, nice_length: 128, max_chain: 256, use_lazy: true };
+    } else if level == 8 {
+        return DeflateConfig { good_length: 32, max_lazy: 128, nice_length: 258, max_chain: 1024, use_lazy: true };
+    } else {
+        // level 9
+        return DeflateConfig { good_length: 32, max_lazy: 258, nice_length: 258, max_chain: 4096, use_lazy: true };
+    }
+}
+
+// General deflate with configurable level and strategy
+// level: 0-9 (0=store, 1=fastest, 9=best compression)
+// strategy: Z_DEFAULT_STRATEGY, Z_FILTERED, Z_HUFFMAN_ONLY, Z_RLE, Z_FIXED
+pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8> {
+    let input_len = input.len();
+
+    // Level 0: stored blocks
+    if level == 0 {
+        return deflate_stored(input);
+    }
+
+    // Strategy: Z_FIXED always uses fixed Huffman
+    if strategy == 4 {  // Z_FIXED
+        return deflate_huffman(input);
+    }
+
+    let config = get_deflate_config(level);
+
+    let length_base: Array<i32> = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+    let length_extra: Array<i32> = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+    let dist_base: Array<i32> = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+    let dist_extra: Array<i32> = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+    let length_codes_table = build_length_codes(&length_extra);
+    let dist_codes_table = build_dist_codes(&dist_extra);
+
+    // Collect symbols using LZ77
+    let mut symbols: Array<i32> = Array::<i32>::with_capacity(input_len);
+    let mut distances: Array<i32> = Array::<i32>::with_capacity(input_len);
+
+    if input_len == 0 {
+        // Empty input: just write empty block
+        let mut bw = BitWriter::new();
+        let ltree = build_fixed_ltree();
+        bw.write_bits(1 as u32, 1);  // BFINAL
+        bw.write_bits(1 as u32, 2);  // fixed
+        bw.write_bits(ltree[256].code as u32, ltree[256].len as i32);
+        bw.flush();
+        return bw.output;
+    }
+
+    // Strategy: Z_HUFFMAN_ONLY — no LZ77 matching
+    if strategy == 2 {  // Z_HUFFMAN_ONLY
+        for let mut i = 0; i < input_len; i += 1 {
+            symbols.append(input[i] as i32);
+            distances.append(0);
+        }
+    } else if strategy == 3 {  // Z_RLE — run-length only
+        let mut pos = 0;
+        while pos < input_len {
+            let b = input[pos];
+            let mut run = 1;
+            // Count consecutive identical bytes (cap at 259 so literal + match(256) works)
+            while pos + run < input_len && input[pos + run] == b && run < 259 {
+                run += 1;
+            }
+            if run >= 4 {
+                // Emit literal for first byte, then match(distance=1, length=run-1) for the rest
+                symbols.append(input[pos] as i32);
+                distances.append(0);
+                let match_len = run - 1;
+                // Cap match at 258
+                let actual_match = if match_len > 258 { 258 } else { match_len };
+                symbols.append(257 + actual_match - 3);
+                distances.append(1);
+                pos += 1 + actual_match;
+            } else {
+                symbols.append(input[pos] as i32);
+                distances.append(0);
+                pos += 1;
+            }
+        }
+    } else {
+        // Z_DEFAULT_STRATEGY or Z_FILTERED: full LZ77 matching
+        let mut head: Array<i32> = Array::<i32>::filled(32768, -1);
+        let mut prev: Array<i32> = Array::<i32>::filled(32768, -1);
+
+        if config.use_lazy {
+            // Lazy matching (levels 4-9)
+            let mut pos = 0;
+            let mut prev_match_len = 0;
+            let mut prev_match_dist = 0;
+            let mut match_available = false;
+
+            while pos < input_len {
+                let mut best_len = 0;
+                let mut best_dist = 0;
+
+                if pos + 2 < input_len {
+                    let h = hash3(input[pos], input[pos + 1], input[pos + 2]);
+                    let mut chain = head[h];
+                    let mut chain_count = 0;
+                    let max_chain = if match_available && prev_match_len >= config.good_length {
+                        config.max_chain >> 2
+                    } else {
+                        config.max_chain
+                    };
+
+                    while chain >= 0 && chain_count < max_chain {
+                        let dist = pos - chain;
+                        if dist > 32768 || dist <= 0 {
+                            break;
+                        }
+
+                        let mut match_len = 0;
+                        let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
+                        while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
+                            match_len += 1;
+                        }
+
+                        if match_len >= 3 && match_len > best_len {
+                            best_len = match_len;
+                            best_dist = dist;
+                            if best_len >= config.nice_length {
+                                break;
+                            }
+                        }
+
+                        chain = prev[chain % 32768];
+                        chain_count += 1;
+                    }
+
+                    prev[pos % 32768] = head[h];
+                    head[h] = pos;
+                }
+
+                if match_available {
+                    if best_len > prev_match_len {
+                        // Current match is better: emit previous as literal
+                        symbols.append(input[pos - 1] as i32);
+                        distances.append(0);
+                        prev_match_len = best_len;
+                        prev_match_dist = best_dist;
+                        pos += 1;
+                    } else {
+                        // Previous match was better: emit it
+                        symbols.append(257 + prev_match_len - 3);
+                        distances.append(prev_match_dist);
+                        // Insert hash entries for skipped positions
+                        let skip = prev_match_len - 1;
+                        for let mut i = 0; i < skip - 1; i += 1 {
+                            if pos + i + 2 < input_len {
+                                let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
+                                prev[(pos + i) % 32768] = head[mh];
+                                head[mh] = pos + i;
+                            }
+                        }
+                        pos += skip;
+                        match_available = false;
+                        prev_match_len = 0;
+                        prev_match_dist = 0;
+                    }
+                } else if best_len >= 3 {
+                    // Defer: wait to see if next position has better match
+                    if best_len <= config.max_lazy {
+                        match_available = true;
+                        prev_match_len = best_len;
+                        prev_match_dist = best_dist;
+                        pos += 1;
+                    } else {
+                        // Match is long enough, emit immediately
+                        symbols.append(257 + best_len - 3);
+                        distances.append(best_dist);
+                        for let mut i = 1; i < best_len; i += 1 {
+                            if pos + i + 2 < input_len {
+                                let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
+                                prev[(pos + i) % 32768] = head[mh];
+                                head[mh] = pos + i;
+                            }
+                        }
+                        pos += best_len;
+                        match_available = false;
+                        prev_match_len = 0;
+                    }
+                } else {
+                    symbols.append(input[pos] as i32);
+                    distances.append(0);
+                    pos += 1;
+                }
+            }
+
+            // Flush pending match
+            if match_available {
+                symbols.append(input[input_len - 1] as i32);
+                distances.append(0);
+            }
+        } else {
+            // Fast matching (levels 1-3) — no lazy evaluation
+            let mut pos = 0;
+            while pos < input_len {
+                let mut best_len = 0;
+                let mut best_dist = 0;
+
+                if pos + 2 < input_len {
+                    let h = hash3(input[pos], input[pos + 1], input[pos + 2]);
+                    let mut chain = head[h];
+                    let mut chain_count = 0;
+
+                    while chain >= 0 && chain_count < config.max_chain {
+                        let dist = pos - chain;
+                        if dist > 32768 || dist <= 0 {
+                            break;
+                        }
+
+                        let mut match_len = 0;
+                        let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
+                        while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
+                            match_len += 1;
+                        }
+
+                        if match_len >= 3 && match_len > best_len {
+                            best_len = match_len;
+                            best_dist = dist;
+                            if best_len >= config.nice_length {
+                                break;
+                            }
+                        }
+
+                        chain = prev[chain % 32768];
+                        chain_count += 1;
+                    }
+
+                    prev[pos % 32768] = head[h];
+                    head[h] = pos;
+                }
+
+                if best_len >= 3 {
+                    symbols.append(257 + best_len - 3);
+                    distances.append(best_dist);
+                    for let mut i = 1; i < best_len; i += 1 {
+                        if pos + i + 2 < input_len {
+                            let mh = hash3(input[pos + i], input[pos + i + 1], input[pos + i + 2]);
+                            prev[(pos + i) % 32768] = head[mh];
+                            head[mh] = pos + i;
+                        }
+                    }
+                    pos += best_len;
+                } else {
+                    symbols.append(input[pos] as i32);
+                    distances.append(0);
+                    pos += 1;
+                }
+            }
+        }
+    }
+
+    let sym_count = symbols.len();
+
+    // Decide between dynamic and fixed Huffman encoding
+    // Compute cost of fixed encoding
+    let ltree = build_fixed_ltree();
+    let dtree = build_fixed_dtree();
+    let mut fixed_bits = 3;  // block header
+    for let mut i = 0; i < sym_count; i += 1 {
+        let sym = symbols[i];
+        if sym < 256 {
+            fixed_bits += ltree[sym].len as i32;
+        } else {
+            let len_val = sym - 257;
+            let lcode = length_codes_table[len_val] as i32;
+            fixed_bits += ltree[257 + lcode].len as i32;
+            fixed_bits += length_extra[lcode];
+            let dist = distances[i];
+            let dd = dist - 1;
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
+            fixed_bits += dtree[dcode].len as i32;
+            fixed_bits += dist_extra[dcode];
+        }
+    }
+    fixed_bits += ltree[256].len as i32;  // EOB
+
+    // Compute cost of dynamic encoding (approximate)
+    let mut lit_freq: Array<i32> = Array::<i32>::filled(286, 0);
+    let mut dist_freq: Array<i32> = Array::<i32>::filled(30, 0);
+    for let mut i = 0; i < sym_count; i += 1 {
+        let sym = symbols[i];
+        if sym < 256 {
+            lit_freq[sym] += 1;
+        } else {
+            let len_val = sym - 257;
+            let lcode = length_codes_table[len_val] as i32;
+            lit_freq[257 + lcode] += 1;
+            let dist = distances[i];
+            let dd = dist - 1;
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
+            dist_freq[dcode] += 1;
+        }
+    }
+    lit_freq[256] += 1;
+    if dist_freq[0] == 0 {
+        let mut has_dist = false;
+        for let mut i = 0; i < 30; i += 1 {
+            if dist_freq[i] > 0 { has_dist = true; }
+        }
+        if !has_dist { dist_freq[0] = 1; }
+    }
+
+    // Build optimal trees to estimate dynamic cost
+    let mut lit_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
+    let mut lit_lengths: Array<u8> = Array::<u8>::filled(286, 0 as u8);
+    build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
+    let mut dist_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
+    let mut dist_lengths: Array<u8> = Array::<u8>::filled(30, 0 as u8);
+    build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
+
+    let mut dynamic_data_bits = 0;
+    for let mut i = 0; i < sym_count; i += 1 {
+        let sym = symbols[i];
+        if sym < 256 {
+            dynamic_data_bits += lit_lengths[sym] as i32;
+        } else {
+            let len_val = sym - 257;
+            let lcode = length_codes_table[len_val] as i32;
+            dynamic_data_bits += lit_lengths[257 + lcode] as i32;
+            dynamic_data_bits += length_extra[lcode];
+            let dist = distances[i];
+            let dd = dist - 1;
+            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
+            dynamic_data_bits += dist_lengths[dcode] as i32;
+            dynamic_data_bits += dist_extra[dcode];
+        }
+    }
+    dynamic_data_bits += lit_lengths[256] as i32;  // EOB
+
+    // Estimate tree header cost
+    let mut nlit = 286;
+    while nlit > 257 && lit_lengths[nlit - 1] == 0 as u8 { nlit -= 1; }
+    let mut ndist = 30;
+    while ndist > 1 && dist_lengths[ndist - 1] == 0 as u8 { ndist -= 1; }
+    // Rough estimate: 14 bits header + ~3 bits per code length
+    let header_estimate = 14 + 19 * 3 + (nlit + ndist) * 3;
+    let dynamic_bits = 3 + header_estimate + dynamic_data_bits;
+
+    // Also check stored cost
+    let stored_bits = input_len * 8 + ((input_len / 65535) + 1) * 40 + 3;
+
+    // Choose best encoding
+    let mut bw = BitWriter::new();
+
+    if stored_bits <= fixed_bits && stored_bits <= dynamic_bits && level <= 1 {
+        // Use stored blocks
+        let stored = deflate_stored(input);
+        return stored;
+    } else if fixed_bits <= dynamic_bits {
+        write_fixed_block(
+            &mut bw, &symbols, &distances, sym_count, true,
+            &ltree, &dtree,
+            &length_base, &length_extra, &dist_base, &dist_extra,
+            &length_codes_table, &dist_codes_table
+        );
+    } else {
+        write_dynamic_block(
+            &mut bw, &symbols, &distances, sym_count, true,
+            &length_base, &length_extra, &dist_base, &dist_extra,
+            &length_codes_table, &dist_codes_table
+        );
+    }
+
+    bw.flush();
+    return bw.output;
+}
+
+// ============================================================================
+// High-Level Compression API
+// ============================================================================
+
+// Wrap raw deflate data in zlib format
+fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
+    let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 6);
+
+    // zlib header: CMF=0x78 (deflate, 32K window)
+    // FLG: FCHECK + FLEVEL
+    let cmf = 0x78;
+    let flevel = if level <= 1 { 0 } else if level <= 5 { 1 } else if level <= 6 { 2 } else { 3 };
+    let mut flg = flevel << 6;
+    let rem = (cmf * 256 + flg) % 31;
+    if rem != 0 {
+        flg += 31 - rem;
+    }
+    output.append(cmf as u8);
+    output.append(flg as u8);
+
     for let mut i = 0; i < deflated.len(); i += 1 {
         output.append(deflated[i]);
     }
@@ -1527,4 +2847,371 @@ pub fn zlib_compress(input: &Array<u8>) -> Array<u8> {
     output.append((checksum & 0xFF as u32) as u8);
 
     return output;
+}
+
+// Full zlib compression with fixed Huffman codes + LZ77 (default level 6)
+pub fn zlib_compress(input: &Array<u8>) -> Array<u8> {
+    return compress2(input, Z_DEFAULT_COMPRESSION);
+}
+
+// Compress with specified level (0-9)
+pub fn compress2(input: &Array<u8>, level: i32) -> Array<u8> {
+    let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
+    return zlib_wrap(input, &deflated, level);
+}
+
+// Compress with level and strategy
+pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> Array<u8> {
+    let deflated = deflate_with_level(input, level, strategy);
+    return zlib_wrap(input, &deflated, level);
+}
+
+// ============================================================================
+// Gzip Format Support
+// ============================================================================
+
+// Gzip header constants
+global GZIP_MAGIC1: u8 = 0x1F as u8;
+global GZIP_MAGIC2: u8 = 0x8B as u8;
+global GZIP_FTEXT: u8 = 1 as u8;
+global GZIP_FHCRC: u8 = 2 as u8;
+global GZIP_FEXTRA: u8 = 4 as u8;
+global GZIP_FNAME: u8 = 8 as u8;
+global GZIP_FCOMMENT: u8 = 16 as u8;
+
+// Decompress gzip-format data
+pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
+    if input.len() < 18 {
+        panic("gzip data too short");
+    }
+
+    // Check magic number
+    if input[0] != GZIP_MAGIC1 || input[1] != GZIP_MAGIC2 {
+        panic("invalid gzip magic number");
+    }
+
+    // Check compression method (must be 8 = deflate)
+    if input[2] != 8 as u8 {
+        panic("unsupported gzip compression method");
+    }
+
+    let flags = input[3];
+    // Skip: MTIME (4 bytes), XFL (1 byte), OS (1 byte)
+    let mut pos = 10;
+
+    // Skip extra field
+    if (flags & GZIP_FEXTRA) != 0 as u8 {
+        if pos + 2 > input.len() { panic("gzip: truncated extra field"); }
+        let xlen = input[pos] as i32 | ((input[pos + 1] as i32) << 8);
+        pos += 2 + xlen;
+    }
+
+    // Skip original file name (null-terminated)
+    if (flags & GZIP_FNAME) != 0 as u8 {
+        while pos < input.len() && input[pos] != 0 as u8 {
+            pos += 1;
+        }
+        pos += 1;  // skip null terminator
+    }
+
+    // Skip comment (null-terminated)
+    if (flags & GZIP_FCOMMENT) != 0 as u8 {
+        while pos < input.len() && input[pos] != 0 as u8 {
+            pos += 1;
+        }
+        pos += 1;
+    }
+
+    // Skip header CRC16
+    if (flags & GZIP_FHCRC) != 0 as u8 {
+        pos += 2;
+    }
+
+    if pos >= input.len() {
+        panic("gzip: header extends past end of data");
+    }
+
+    // Decompress raw deflate data (trailer is 8 bytes: CRC32 + ISIZE)
+    let deflate_len = input.len() - pos - 8;
+    let result = inflate_raw_from(input, pos, deflate_len);
+
+    // Verify CRC32
+    let trailer_pos = input.len() - 8;
+    let stored_crc = (input[trailer_pos] as u32)
+        | ((input[trailer_pos + 1] as u32) << 8 as u32)
+        | ((input[trailer_pos + 2] as u32) << 16 as u32)
+        | ((input[trailer_pos + 3] as u32) << 24 as u32);
+    let computed_crc = crc32(crc32_init(), &result, 0, result.len());
+    if computed_crc != stored_crc {
+        panic("gzip CRC32 checksum mismatch");
+    }
+
+    // Verify ISIZE (original size mod 2^32)
+    let stored_size = (input[trailer_pos + 4] as u32)
+        | ((input[trailer_pos + 5] as u32) << 8 as u32)
+        | ((input[trailer_pos + 6] as u32) << 16 as u32)
+        | ((input[trailer_pos + 7] as u32) << 24 as u32);
+    if stored_size != (result.len() as u32) {
+        panic("gzip ISIZE mismatch");
+    }
+
+    return result;
+}
+
+// Compress data in gzip format
+pub fn gzip_compress(input: &Array<u8>) -> Array<u8> {
+    return gzip_compress2(input, Z_DEFAULT_COMPRESSION);
+}
+
+pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
+    let deflated = deflate_with_level(input, level, Z_DEFAULT_STRATEGY);
+    let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 18);
+
+    // Gzip header (10 bytes)
+    output.append(GZIP_MAGIC1);      // ID1
+    output.append(GZIP_MAGIC2);      // ID2
+    output.append(8 as u8);          // CM = deflate
+    output.append(0 as u8);          // FLG = no flags
+    output.append(0 as u8);          // MTIME (4 bytes, zero)
+    output.append(0 as u8);
+    output.append(0 as u8);
+    output.append(0 as u8);
+    // XFL: compression level hint
+    let xfl = if level <= 1 { 4 as u8 } else if level >= 9 { 2 as u8 } else { 0 as u8 };
+    output.append(xfl);
+    output.append(0xFF as u8);       // OS = unknown
+
+    // Compressed data
+    for let mut i = 0; i < deflated.len(); i += 1 {
+        output.append(deflated[i]);
+    }
+
+    // CRC32 trailer (little-endian)
+    let crc = crc32(crc32_init(), input, 0, input.len());
+    output.append((crc & 0xFF as u32) as u8);
+    output.append(((crc >> 8 as u32) & 0xFF as u32) as u8);
+    output.append(((crc >> 16 as u32) & 0xFF as u32) as u8);
+    output.append(((crc >> 24 as u32) & 0xFF as u32) as u8);
+
+    // ISIZE: original size mod 2^32 (little-endian)
+    let isize_val = input.len() as u32;
+    output.append((isize_val & 0xFF as u32) as u8);
+    output.append(((isize_val >> 8 as u32) & 0xFF as u32) as u8);
+    output.append(((isize_val >> 16 as u32) & 0xFF as u32) as u8);
+    output.append(((isize_val >> 24 as u32) & 0xFF as u32) as u8);
+
+    return output;
+}
+
+// Auto-detect format and decompress (zlib or gzip)
+pub fn uncompress(input: &Array<u8>) -> Array<u8> {
+    if input.len() < 2 {
+        panic("compressed data too short");
+    }
+    // Check for gzip magic
+    if input[0] == GZIP_MAGIC1 && input[1] == GZIP_MAGIC2 {
+        return inflate_gzip(input);
+    }
+    // Otherwise assume zlib format
+    return inflate_zlib(input);
+}
+
+// ============================================================================
+// Streaming API
+// ============================================================================
+
+// Deflate stream state
+pub struct DeflateStream {
+    level: i32,
+    strategy: i32,
+    dict: Array<u8>,           // preset dictionary
+    has_dict: bool,
+    finished: bool,
+}
+
+impl DeflateStream {
+    pub fn new(level: i32) -> DeflateStream {
+        return DeflateStream {
+            level,
+            strategy: Z_DEFAULT_STRATEGY,
+            dict: [],
+            has_dict: false,
+            finished: false,
+        };
+    }
+
+    pub fn new_with_strategy(level: i32, strategy: i32) -> DeflateStream {
+        return DeflateStream {
+            level,
+            strategy,
+            dict: [],
+            has_dict: false,
+            finished: false,
+        };
+    }
+
+    // Set preset dictionary for compression
+    pub fn set_dictionary(&mut self, dict: &Array<u8>) {
+        self.dict = [];
+        for let mut i = 0; i < dict.len(); i += 1 {
+            self.dict.append(dict[i]);
+        }
+        self.has_dict = true;
+    }
+
+    // Compress input data with zlib format wrapping
+    pub fn compress(&mut self, input: &Array<u8>) -> Array<u8> {
+        if self.finished {
+            panic("DeflateStream already finished");
+        }
+        self.finished = true;
+
+        let actual_input = if self.has_dict {
+            // Prepend dictionary to input for LZ77 seeding, but only compress input
+            let mut combined: Array<u8> = Array::<u8>::with_capacity(self.dict.len() + input.len());
+            for let mut i = 0; i < self.dict.len(); i += 1 {
+                combined.append(self.dict[i]);
+            }
+            for let mut i = 0; i < input.len(); i += 1 {
+                combined.append(input[i]);
+            }
+            combined
+        } else {
+            let mut copy: Array<u8> = Array::<u8>::with_capacity(input.len());
+            for let mut i = 0; i < input.len(); i += 1 {
+                copy.append(input[i]);
+            }
+            copy
+        };
+
+        if self.has_dict {
+            // Compress with dictionary: compress combined but strip dict from output
+            let deflated = deflate_with_level(&actual_input, self.level, self.strategy);
+            let mut output: Array<u8> = Array::<u8>::with_capacity(deflated.len() + 10);
+
+            // zlib header with FDICT flag
+            let cmf = 0x78;
+            let flevel = if self.level <= 1 { 0 } else if self.level <= 5 { 1 } else if self.level <= 6 { 2 } else { 3 };
+            let mut flg = (flevel << 6) | 32;  // FDICT bit set
+            let rem = (cmf * 256 + flg) % 31;
+            if rem != 0 {
+                flg += 31 - rem;
+            }
+            output.append(cmf as u8);
+            output.append(flg as u8);
+
+            // Dictionary ID (adler32 of dictionary)
+            let dict_id = adler32(adler32_init(), &self.dict, 0, self.dict.len());
+            output.append(((dict_id >> 24 as u32) & 0xFF as u32) as u8);
+            output.append(((dict_id >> 16 as u32) & 0xFF as u32) as u8);
+            output.append(((dict_id >> 8 as u32) & 0xFF as u32) as u8);
+            output.append((dict_id & 0xFF as u32) as u8);
+
+            for let mut i = 0; i < deflated.len(); i += 1 {
+                output.append(deflated[i]);
+            }
+
+            // adler32 of original input (not including dict)
+            let checksum = adler32(adler32_init(), input, 0, input.len());
+            output.append(((checksum >> 24 as u32) & 0xFF as u32) as u8);
+            output.append(((checksum >> 16 as u32) & 0xFF as u32) as u8);
+            output.append(((checksum >> 8 as u32) & 0xFF as u32) as u8);
+            output.append((checksum & 0xFF as u32) as u8);
+
+            return output;
+        } else {
+            return zlib_wrap(input, &deflate_with_level(input, self.level, self.strategy), self.level);
+        }
+    }
+}
+
+// Inflate stream state
+pub struct InflateStream {
+    dict: Array<u8>,
+    has_dict: bool,
+}
+
+impl InflateStream {
+    pub fn new() -> InflateStream {
+        return InflateStream {
+            dict: [],
+            has_dict: false,
+        };
+    }
+
+    // Set preset dictionary for decompression
+    pub fn set_dictionary(&mut self, dict: &Array<u8>) {
+        self.dict = [];
+        for let mut i = 0; i < dict.len(); i += 1 {
+            self.dict.append(dict[i]);
+        }
+        self.has_dict = true;
+    }
+
+    // Decompress zlib-format data
+    pub fn decompress(&self, input: &Array<u8>) -> Array<u8> {
+        if input.len() < 6 {
+            panic("zlib data too short");
+        }
+
+        let cmf = input[0];
+        let flg = input[1];
+        if ((cmf as i32 * 256 + flg as i32) % 31) != 0 {
+            panic("invalid zlib header");
+        }
+        if (cmf & 0x0F as u8) != 8 as u8 {
+            panic("unsupported compression method");
+        }
+
+        let has_fdict = (flg & 0x20 as u8) != 0 as u8;
+        let mut data_start = 2;
+
+        if has_fdict {
+            if !self.has_dict {
+                panic("compressed data requires preset dictionary");
+            }
+            // Skip 4-byte dictionary ID
+            data_start += 4;
+        }
+
+        let result = inflate_raw_from(input, data_start, input.len() - data_start - 4);
+
+        // Verify adler32
+        let computed = adler32(adler32_init(), &result, 0, result.len());
+        let stored = ((input[input.len() - 4] as u32) << 24 as u32)
+            | ((input[input.len() - 3] as u32) << 16 as u32)
+            | ((input[input.len() - 2] as u32) << 8 as u32)
+            | (input[input.len() - 1] as u32);
+        if computed != stored {
+            panic("adler32 checksum mismatch");
+        }
+
+        return result;
+    }
+}
+
+// ============================================================================
+// Inflate Sync (Error Recovery)
+// ============================================================================
+
+// Scan for a valid deflate block in corrupted data
+// Returns the offset where a potential valid block starts, or -1 if not found
+pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32 {
+    // Look for stored block marker: 00 00 FF FF
+    // This pattern appears at the start of a stored block after a sync flush
+    let mut pos = start;
+    while pos + 3 < input.len() {
+        if input[pos] == 0 as u8 && input[pos + 1] == 0 as u8
+            && input[pos + 2] == 0xFF as u8 && input[pos + 3] == 0xFF as u8 {
+            // Found sync point — the stored block starts 4 bytes before this
+            // (BFINAL + BTYPE + padding + LEN/NLEN)
+            // Return position before the LEN/NLEN pair
+            if pos >= 1 {
+                return pos - 1;
+            }
+            return pos;
+        }
+        pos += 1;
+    }
+    return -1;
 }

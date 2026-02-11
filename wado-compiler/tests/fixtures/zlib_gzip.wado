@@ -1,0 +1,59 @@
+// Test gzip compression and decompression
+use {println, Stdout} from "core:cli";
+use {gzip_compress, gzip_compress2, inflate_gzip, uncompress,
+     Z_BEST_SPEED, Z_BEST_COMPRESSION} from "core:zlib";
+
+export fn run() with Stdout {
+    // Test basic gzip round-trip
+    let mut data: Array<u8> = [];
+    let msg = "Hello, gzip!";
+    for let mut i = 0; i < msg.len(); i += 1 {
+        data.append(msg.get_byte(i));
+    }
+
+    let compressed = gzip_compress(&data);
+    // Check gzip magic bytes
+    assert compressed[0] == 0x1F as u8, "gzip magic 1";
+    assert compressed[1] == 0x8B as u8, "gzip magic 2";
+    assert compressed[2] == 8 as u8, "gzip method";
+
+    let decompressed = inflate_gzip(&compressed);
+    assert decompressed.len() == data.len(), "gzip round-trip size";
+    for let mut i = 0; i < data.len(); i += 1 {
+        assert decompressed[i] == data[i], "gzip round-trip data";
+    }
+    println("basic gzip ok");
+
+    // Test with different levels
+    let c1 = gzip_compress2(&data, Z_BEST_SPEED);
+    let d1 = inflate_gzip(&c1);
+    assert d1.len() == data.len(), "gzip level 1 size";
+
+    let c9 = gzip_compress2(&data, Z_BEST_COMPRESSION);
+    let d9 = inflate_gzip(&c9);
+    assert d9.len() == data.len(), "gzip level 9 size";
+    println("gzip levels ok");
+
+    // Test larger data
+    let mut big_data: Array<u8> = Array::<u8>::with_capacity(5000);
+    for let mut i = 0; i < 5000; i += 1 {
+        big_data.append((i % 256) as u8);
+    }
+    let big_compressed = gzip_compress(&big_data);
+    let big_decompressed = inflate_gzip(&big_compressed);
+    assert big_decompressed.len() == 5000, "gzip big data size";
+    for let mut i = 0; i < 5000; i += 1 {
+        assert big_decompressed[i] == big_data[i], "gzip big data content";
+    }
+    println("gzip big data ok");
+
+    // Test uncompress auto-detection
+    let auto_gz = uncompress(&big_compressed);
+    assert auto_gz.len() == 5000, "uncompress auto-detect gzip";
+    println("uncompress auto-detect ok");
+
+    println("gzip ok");
+}
+
+__DATA__
+{"stdout_contains": ["gzip ok", "basic gzip ok", "gzip levels ok"]}

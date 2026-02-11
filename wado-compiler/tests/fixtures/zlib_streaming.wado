@@ -1,0 +1,39 @@
+// Test streaming deflate/inflate API
+use {println, Stdout} from "core:cli";
+use {DeflateStream, InflateStream, inflate_zlib,
+     Z_DEFAULT_COMPRESSION, Z_BEST_SPEED} from "core:zlib";
+
+export fn run() with Stdout {
+    // Test basic DeflateStream
+    let mut data: Array<u8> = Array::<u8>::with_capacity(500);
+    for let mut i = 0; i < 500; i += 1 {
+        data.append((i % 256) as u8);
+    }
+
+    let mut ds = DeflateStream::new(Z_DEFAULT_COMPRESSION);
+    let compressed = ds.compress(&data);
+    let decompressed = inflate_zlib(&compressed);
+    assert decompressed.len() == 500, "stream round-trip size";
+    for let mut i = 0; i < 500; i += 1 {
+        assert decompressed[i] == data[i], "stream round-trip data";
+    }
+    println("deflate stream ok");
+
+    // Test InflateStream
+    let is = InflateStream::new();
+    let decompressed2 = is.decompress(&compressed);
+    assert decompressed2.len() == 500, "inflate stream size";
+    println("inflate stream ok");
+
+    // Test with different level
+    let mut ds2 = DeflateStream::new(Z_BEST_SPEED);
+    let compressed2 = ds2.compress(&data);
+    let decompressed3 = inflate_zlib(&compressed2);
+    assert decompressed3.len() == 500, "stream level 1 round-trip";
+    println("stream levels ok");
+
+    println("streaming ok");
+}
+
+__DATA__
+{"stdout_contains": ["streaming ok", "deflate stream ok", "inflate stream ok"]}
