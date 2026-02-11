@@ -7786,8 +7786,7 @@ impl<'a> EffectScratchAnalyzer<'a> {
     fn analyze_block(&mut self, block: &TirBlock) {
         for stmt in &block.stmts {
             self.analyze_stmt(stmt);
-            if self.needs_async && self.needs_outptr && self.needs_i64_temp && self.needs_err_disc
-            {
+            if self.needs_async && self.needs_outptr && self.needs_i64_temp && self.needs_err_disc {
                 return; // Early exit if all are already true
             }
         }
@@ -7985,36 +7984,36 @@ impl<'a> EffectScratchAnalyzer<'a> {
                 while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = recv_type {
                     recv_type = self.type_table.get(inner).clone();
                 }
-                if let ResolvedType::Resource { name, .. } = &recv_type {
-                    if let Some(method_info) = func.method_info() {
-                        let func_name = format!("{name}::{}", method_info.method_name);
-                        if let Some(func_info) = self.wasi_registry.get_function(&func_name) {
-                            if func_info.call_convention.outptr_alloc.is_some() {
-                                self.needs_outptr = true;
-                            }
-                            // Check if any parameter needs i64 temp for CM lowering
-                            // (String and Array<u8> params are lowered via i64-returning helpers)
-                            for (_pname, ptype) in &func_info.params {
-                                let resolved = self.wasi_registry.resolve_type(ptype);
-                                match &resolved {
-                                    crate::ast::Type::Named(n) if n.name == "String" => {
-                                        self.needs_i64_temp = true;
-                                    }
-                                    crate::ast::Type::Generic(g)
-                                        if g.name == "Array"
-                                            && g.args.len() == 1
-                                            && matches!(&g.args[0], crate::ast::Type::Named(n) if n.name == "u8") =>
-                                    {
-                                        self.needs_i64_temp = true;
-                                    }
-                                    _ => {}
+                if let ResolvedType::Resource { name, .. } = &recv_type
+                    && let Some(method_info) = func.method_info()
+                {
+                    let func_name = format!("{name}::{}", method_info.method_name);
+                    if let Some(func_info) = self.wasi_registry.get_function(&func_name) {
+                        if func_info.call_convention.outptr_alloc.is_some() {
+                            self.needs_outptr = true;
+                        }
+                        // Check if any parameter needs i64 temp for CM lowering
+                        // (String and Array<u8> params are lowered via i64-returning helpers)
+                        for (_pname, ptype) in &func_info.params {
+                            let resolved = self.wasi_registry.resolve_type(ptype);
+                            match &resolved {
+                                crate::ast::Type::Named(n) if n.name == "String" => {
+                                    self.needs_i64_temp = true;
                                 }
+                                crate::ast::Type::Generic(g)
+                                    if g.name == "Array"
+                                        && g.args.len() == 1
+                                        && matches!(&g.args[0], crate::ast::Type::Named(n) if n.name == "u8") =>
+                                {
+                                    self.needs_i64_temp = true;
+                                }
+                                _ => {}
                             }
-                            // Check if result return has enum error (needs __cm_err_disc local
-                            // for br_table dispatch to create correct variant subtypes)
-                            if let Some((_, true)) = func_info.call_convention.result_return {
-                                self.needs_err_disc = true;
-                            }
+                        }
+                        // Check if result return has enum error (needs __cm_err_disc local
+                        // for br_table dispatch to create correct variant subtypes)
+                        if let Some((_, true)) = func_info.call_convention.result_return {
+                            self.needs_err_disc = true;
                         }
                     }
                 }

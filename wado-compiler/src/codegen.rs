@@ -3307,8 +3307,7 @@ impl Codegen<'_> {
                     i.functions
                         .into_iter()
                         .filter(|f| {
-                            f.effect_name == "Fields"
-                                && f.wasi_func_name != "[constructor]fields"
+                            f.effect_name == "Fields" && f.wasi_func_name != "[constructor]fields"
                         })
                         .collect()
                 })
@@ -3329,7 +3328,7 @@ impl Codegen<'_> {
                         let cm_type = type_gen.ast_type_to_cm(
                             ty,
                             &mut instance_type,
-                            &self.project.wasi_registry,
+                            self.project.wasi_registry,
                             &resource_exports,
                         );
                         (name.clone(), cm_type)
@@ -3341,7 +3340,7 @@ impl Codegen<'_> {
                     type_gen.ast_type_to_cm(
                         ty,
                         &mut instance_type,
-                        &self.project.wasi_registry,
+                        self.project.wasi_registry,
                         &resource_exports,
                     )
                 });
@@ -3439,8 +3438,7 @@ impl Codegen<'_> {
                     i.functions
                         .iter()
                         .filter(|f| {
-                            f.effect_name == "Fields"
-                                && f.wasi_func_name != "[constructor]fields"
+                            f.effect_name == "Fields" && f.wasi_func_name != "[constructor]fields"
                         })
                         .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
                         .collect()
@@ -7792,73 +7790,59 @@ impl Codegen<'_> {
                             // When error type is a variant with GC subtypes, dispatch via br_table
                             // to create the correct subtype. Otherwise just load the i32 from outptr.
                             let mut emitted_err_dispatch = false;
-                            if _err_is_enum {
-                                if let Some(ValType::Ref(ref_type)) =
+                            if _err_is_enum
+                                && let Some(ValType::Ref(ref_type)) =
                                     &result_info.cases[1].payload_type
-                                {
-                                    if let HeapType::Concrete(error_base_idx) = ref_type.heap_type {
-                                        let error_variant_info = self
-                                            .variant_types
-                                            .values()
-                                            .find(|v| v.base_type_idx == error_base_idx);
+                                && let HeapType::Concrete(error_base_idx) = ref_type.heap_type
+                            {
+                                let error_variant_info = self
+                                    .variant_types
+                                    .values()
+                                    .find(|v| v.base_type_idx == error_base_idx);
 
-                                        if let Some(variant_info) = error_variant_info {
-                                            // Save CM error discriminant to local (blocks partition the stack)
-                                            func.instruction(&Instruction::LocalGet(outptr_local));
-                                            func.instruction(&Instruction::I32Load(
-                                                wasm_encoder::MemArg {
-                                                    offset: 4,
-                                                    align: 2,
-                                                    memory_index: 0,
-                                                },
-                                            ));
-                                            let err_disc_local =
-                                                ctx.alloc_local("__cm_err_disc", ValType::I32);
-                                            func.instruction(&Instruction::LocalSet(
-                                                err_disc_local,
-                                            ));
+                                if let Some(variant_info) = error_variant_info {
+                                    // Save CM error discriminant to local (blocks partition the stack)
+                                    func.instruction(&Instruction::LocalGet(outptr_local));
+                                    func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                                        offset: 4,
+                                        align: 2,
+                                        memory_index: 0,
+                                    }));
+                                    let err_disc_local =
+                                        ctx.alloc_local("__cm_err_disc", ValType::I32);
+                                    func.instruction(&Instruction::LocalSet(err_disc_local));
 
-                                            let error_ref_type = ValType::Ref(RefType {
-                                                nullable: true,
-                                                heap_type: HeapType::Concrete(error_base_idx),
-                                            });
-                                            let num_cases = variant_info.cases.len();
+                                    let error_ref_type = ValType::Ref(RefType {
+                                        nullable: true,
+                                        heap_type: HeapType::Concrete(error_base_idx),
+                                    });
+                                    let num_cases = variant_info.cases.len();
 
-                                            func.instruction(&Instruction::Block(
-                                                wasm_encoder::BlockType::Result(error_ref_type),
+                                    func.instruction(&Instruction::Block(
+                                        wasm_encoder::BlockType::Result(error_ref_type),
+                                    ));
+                                    for _ in 0..num_cases {
+                                        func.instruction(&Instruction::Block(
+                                            wasm_encoder::BlockType::Empty,
+                                        ));
+                                    }
+                                    func.instruction(&Instruction::LocalGet(err_disc_local));
+                                    let labels: Vec<u32> = (0..num_cases as u32).collect();
+                                    func.instruction(&Instruction::BrTable(labels.into(), 0));
+                                    for i in 0..num_cases {
+                                        func.instruction(&Instruction::End);
+                                        func.instruction(&Instruction::I32Const(i as i32));
+                                        func.instruction(&Instruction::StructNew(
+                                            variant_info.cases[i].type_idx,
+                                        ));
+                                        if i < num_cases - 1 {
+                                            func.instruction(&Instruction::Br(
+                                                (num_cases - 1 - i) as u32,
                                             ));
-                                            for _ in 0..num_cases {
-                                                func.instruction(&Instruction::Block(
-                                                    wasm_encoder::BlockType::Empty,
-                                                ));
-                                            }
-                                            func.instruction(&Instruction::LocalGet(
-                                                err_disc_local,
-                                            ));
-                                            let labels: Vec<u32> =
-                                                (0..num_cases as u32).collect();
-                                            func.instruction(&Instruction::BrTable(
-                                                labels.into(),
-                                                0,
-                                            ));
-                                            for i in 0..num_cases {
-                                                func.instruction(&Instruction::End);
-                                                func.instruction(&Instruction::I32Const(
-                                                    i as i32,
-                                                ));
-                                                func.instruction(&Instruction::StructNew(
-                                                    variant_info.cases[i].type_idx,
-                                                ));
-                                                if i < num_cases - 1 {
-                                                    func.instruction(&Instruction::Br(
-                                                        (num_cases - 1 - i) as u32,
-                                                    ));
-                                                }
-                                            }
-                                            func.instruction(&Instruction::End);
-                                            emitted_err_dispatch = true;
                                         }
                                     }
+                                    func.instruction(&Instruction::End);
+                                    emitted_err_dispatch = true;
                                 }
                             }
                             if !emitted_err_dispatch {
@@ -7881,22 +7865,18 @@ impl Codegen<'_> {
                                 func.instruction(&Instruction::LocalGet(outptr_local));
                                 if ok_is_resource {
                                     // Resource handle is i32
-                                    func.instruction(&Instruction::I32Load(
-                                        wasm_encoder::MemArg {
-                                            offset: 4,
-                                            align: 2,
-                                            memory_index: 0,
-                                        },
-                                    ));
+                                    func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                                        offset: 4,
+                                        align: 2,
+                                        memory_index: 0,
+                                    }));
                                 } else {
                                     // Primitive type - for now assume i32
-                                    func.instruction(&Instruction::I32Load(
-                                        wasm_encoder::MemArg {
-                                            offset: 4,
-                                            align: 2,
-                                            memory_index: 0,
-                                        },
-                                    ));
+                                    func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                                        offset: 4,
+                                        align: 2,
+                                        memory_index: 0,
+                                    }));
                                 }
                             }
                             func.instruction(&Instruction::StructNew(ok_type_idx));
@@ -11670,7 +11650,7 @@ impl Codegen<'_> {
 
     /// Generate code for a Component Model resource method call.
     ///
-    /// Resource methods (e.g., Fields::has, Fields::append) need special handling:
+    /// Resource methods (e.g., `Fields::has`, `Fields::append`) need special handling:
     /// - Receiver is a resource handle (i32) representing borrow<resource>
     /// - String/Array parameters must be lowered to linear memory (ptr, len) pairs
     /// - Result return types are read from an outptr
@@ -11778,9 +11758,7 @@ impl Codegen<'_> {
             let variant_types = &self.variant_types;
             let result_info = variant_types
                 .get(&qualified_mangled_name)
-                .unwrap_or_else(|| {
-                    panic!("Result type not registered: {qualified_mangled_name}")
-                });
+                .unwrap_or_else(|| panic!("Result type not registered: {qualified_mangled_name}"));
             // Result has cases [Ok (0), Err (1)]
             let ok_type_idx = result_info.cases[0].type_idx;
             let err_type_idx = result_info.cases[1].type_idx;
@@ -11812,67 +11790,56 @@ impl Codegen<'_> {
             // When error type is a variant with GC subtypes, dispatch via br_table
             // to create the correct subtype. Otherwise just load the i32 from outptr.
             let mut emitted_err_dispatch = false;
-            if err_is_enum {
-                if let Some(ValType::Ref(ref_type)) = &result_info.cases[1].payload_type {
-                    if let HeapType::Concrete(error_base_idx) = ref_type.heap_type {
-                        let error_variant_info = self
-                            .variant_types
-                            .values()
-                            .find(|v| v.base_type_idx == error_base_idx);
+            if err_is_enum
+                && let Some(ValType::Ref(ref_type)) = &result_info.cases[1].payload_type
+                && let HeapType::Concrete(error_base_idx) = ref_type.heap_type
+            {
+                let error_variant_info = self
+                    .variant_types
+                    .values()
+                    .find(|v| v.base_type_idx == error_base_idx);
 
-                        if let Some(variant_info) = error_variant_info {
-                            // Load CM error discriminant and save to a temp local,
-                            // because blocks partition the operand stack.
-                            func.instruction(&Instruction::LocalGet(outptr_local));
-                            func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                                offset: 4,
-                                align: 2,
-                                memory_index: 0,
-                            }));
-                            let err_disc_local =
-                                ctx.alloc_local("__cm_err_disc", ValType::I32);
-                            func.instruction(&Instruction::LocalSet(err_disc_local));
+                if let Some(variant_info) = error_variant_info {
+                    // Load CM error discriminant and save to a temp local,
+                    // because blocks partition the operand stack.
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
+                        offset: 4,
+                        align: 2,
+                        memory_index: 0,
+                    }));
+                    let err_disc_local = ctx.alloc_local("__cm_err_disc", ValType::I32);
+                    func.instruction(&Instruction::LocalSet(err_disc_local));
 
-                            let error_ref_type = ValType::Ref(RefType {
-                                nullable: true,
-                                heap_type: HeapType::Concrete(error_base_idx),
-                            });
+                    let error_ref_type = ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: HeapType::Concrete(error_base_idx),
+                    });
 
-                            let num_cases = variant_info.cases.len();
+                    let num_cases = variant_info.cases.len();
 
-                            // Dispatch using br_table with the discriminant loaded from local
-                            func.instruction(&Instruction::Block(
-                                wasm_encoder::BlockType::Result(error_ref_type),
-                            ));
-                            for _ in 0..num_cases {
-                                func.instruction(&Instruction::Block(
-                                    wasm_encoder::BlockType::Empty,
-                                ));
-                            }
-                            // Load discriminant inside the innermost block
-                            func.instruction(&Instruction::LocalGet(err_disc_local));
-                            let labels: Vec<u32> = (0..num_cases as u32).collect();
-                            func.instruction(&Instruction::BrTable(
-                                labels.into(),
-                                0,
-                            ));
+                    // Dispatch using br_table with the discriminant loaded from local
+                    func.instruction(&Instruction::Block(wasm_encoder::BlockType::Result(
+                        error_ref_type,
+                    )));
+                    for _ in 0..num_cases {
+                        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+                    }
+                    // Load discriminant inside the innermost block
+                    func.instruction(&Instruction::LocalGet(err_disc_local));
+                    let labels: Vec<u32> = (0..num_cases as u32).collect();
+                    func.instruction(&Instruction::BrTable(labels.into(), 0));
 
-                            for i in 0..num_cases {
-                                func.instruction(&Instruction::End);
-                                func.instruction(&Instruction::I32Const(i as i32));
-                                func.instruction(&Instruction::StructNew(
-                                    variant_info.cases[i].type_idx,
-                                ));
-                                if i < num_cases - 1 {
-                                    func.instruction(&Instruction::Br(
-                                        (num_cases - 1 - i) as u32,
-                                    ));
-                                }
-                            }
-                            func.instruction(&Instruction::End);
-                            emitted_err_dispatch = true;
+                    for i in 0..num_cases {
+                        func.instruction(&Instruction::End);
+                        func.instruction(&Instruction::I32Const(i as i32));
+                        func.instruction(&Instruction::StructNew(variant_info.cases[i].type_idx));
+                        if i < num_cases - 1 {
+                            func.instruction(&Instruction::Br((num_cases - 1 - i) as u32));
                         }
                     }
+                    func.instruction(&Instruction::End);
+                    emitted_err_dispatch = true;
                 }
             }
             if !emitted_err_dispatch {

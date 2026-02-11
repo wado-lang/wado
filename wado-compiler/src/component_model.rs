@@ -119,7 +119,7 @@ pub struct WasiRegistry {
     enums: HashMap<String, (String, Vec<String>)>,
 
     /// Variant types collected from WASI modules (e.g., `HeaderError`)
-    /// Maps Wado variant name -> (CM variant name kebab-case, cases: Vec<(case_cm_name, has_payload)>)
+    /// Maps Wado variant name -> (CM variant name kebab-case, cases: Vec<(`case_cm_name`, `has_payload`)>)
     variants: HashMap<String, (String, Vec<(String, bool)>)>,
 }
 
@@ -455,16 +455,12 @@ impl WasiRegistry {
 
     /// Get the CM kebab-case name for a variant
     pub fn get_variant_cm_name(&self, name: &str) -> Option<&str> {
-        self.variants
-            .get(name)
-            .map(|(cm_name, _)| cm_name.as_str())
+        self.variants.get(name).map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Get the variant cases (CM kebab-case name, has_payload)
+    /// Get the variant cases (CM kebab-case name, `has_payload`)
     pub fn get_variant_cases(&self, name: &str) -> Option<&[(String, bool)]> {
-        self.variants
-            .get(name)
-            .map(|(_, cases)| cases.as_slice())
+        self.variants.get(name).map(|(_, cases)| cases.as_slice())
     }
 
     /// Get the resource type from a return type (if it's Option<ResourceName>)
@@ -962,10 +958,7 @@ impl CmInstanceTypeGen {
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
-        instance_type
-            .ty()
-            .defined_type()
-            .result(ok_type, err_type);
+        instance_type.ty().defined_type().result(ok_type, err_type);
         let idx = self.alloc_idx();
         self.cache.insert(cache_key, idx);
         idx
@@ -1010,8 +1003,7 @@ impl CmInstanceTypeGen {
                         self.cache.insert(cache_key, idx);
                         ComponentValType::Type(idx)
                     } else if wasi_registry.is_variant(name) {
-                        let cm_name =
-                            wasi_registry.get_variant_cm_name(name).unwrap().to_string();
+                        let cm_name = wasi_registry.get_variant_cm_name(name).unwrap().to_string();
                         let cases = wasi_registry.get_variant_cases(name).unwrap().to_vec();
                         let idx = self.define_variant(instance_type, &cm_name, &cases);
                         ComponentValType::Type(idx)
@@ -1021,13 +1013,13 @@ impl CmInstanceTypeGen {
                 }
             },
             Type::Reference(inner) | Type::MutReference(inner) => {
-                if let Type::Named(n) = inner.as_ref() {
-                    if wasi_registry.is_resource(&n.name) {
-                        let cm_name = wasi_registry.get_resource_cm_name(&n.name).unwrap();
-                        let export_idx = resource_exports[cm_name];
-                        let idx = self.define_borrow(instance_type, export_idx, cm_name);
-                        return ComponentValType::Type(idx);
-                    }
+                if let Type::Named(n) = inner.as_ref()
+                    && wasi_registry.is_resource(&n.name)
+                {
+                    let cm_name = wasi_registry.get_resource_cm_name(&n.name).unwrap();
+                    let export_idx = resource_exports[cm_name];
+                    let idx = self.define_borrow(instance_type, export_idx, cm_name);
+                    return ComponentValType::Type(idx);
                 }
                 panic!("unsupported reference type for CM instance: {ty:?}")
             }
@@ -1071,10 +1063,7 @@ impl CmInstanceTypeGen {
                     let idx = self.define_result(instance_type, ok_type, err_type, &key);
                     ComponentValType::Type(idx)
                 }
-                _ => panic!(
-                    "unsupported generic type for CM instance: {}",
-                    generic.name
-                ),
+                _ => panic!("unsupported generic type for CM instance: {}", generic.name),
             },
             Type::Tuple(elems) if elems.is_empty() => {
                 panic!("unit type should be handled at Result level, not directly")
@@ -1082,9 +1071,7 @@ impl CmInstanceTypeGen {
             Type::Tuple(elems) => {
                 let cm_elems: Vec<ComponentValType> = elems
                     .iter()
-                    .map(|e| {
-                        self.ast_type_to_cm(e, instance_type, wasi_registry, resource_exports)
-                    })
+                    .map(|e| self.ast_type_to_cm(e, instance_type, wasi_registry, resource_exports))
                     .collect();
                 let key = elems
                     .iter()
