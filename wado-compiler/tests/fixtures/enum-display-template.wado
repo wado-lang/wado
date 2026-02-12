@@ -1,0 +1,30 @@
+// Test: Enum Display in template strings and match expressions
+use { println, Stdout } from "core:cli";
+
+enum Fruit {
+    Apple,
+    Banana,
+    Cherry,
+}
+
+fn describe(f: Fruit) -> String {
+    return match f {
+        Apple => `I like {f}`,
+        Banana => `{f} is yellow`,
+        Cherry => `{f} is small`,
+    };
+}
+
+export fn run() with Stdout {
+    // Template string interpolation
+    let f = Fruit::Apple;
+    println(`fruit: {f}`);
+
+    // Display in function using match
+    println(describe(Fruit::Apple));
+    println(describe(Fruit::Banana));
+    println(describe(Fruit::Cherry));
+}
+
+__DATA__
+{"stdout": "fruit: Apple\nI like Apple\nBanana is yellow\nCherry is small\n"}

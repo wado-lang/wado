@@ -27,24 +27,32 @@ fn run() with Stdout {
                 let mut __r: String = __inline_String__with_capacity_0: {
                     break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(123), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/labeled_block_expr_nested.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/labeled_block_expr_nested.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_1: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: 17 }."i32@Display::fmt"(&mut __f);
-                __r."String::append"(move "\ncondition: result == 20\n");
-                __r."String::append"(move "result: ");
-                __f = __inline_Formatter__new_2: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                __inline_i32_Display__fmt_2: {
+                    let self: Box<i32> = move Box<i32> { value: 17 };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                Box<i32> { value: result }."i32@Display::fmt"(&mut __f);
-                __r."String::append"(move "\n");
+                __r.String::append(move "\ncondition: result == 20\n");
+                __r.String::append(move "result: ");
+                __f = __inline_Formatter__new_3: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_4: {
+                    let self: Box<i32> = move Box<i32> { value: result };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                };
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }

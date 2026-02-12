@@ -22,7 +22,7 @@ struct PointHolder {
     point: Point,
 }
 
-fn "Point::move_by"(self: &mut Point, dx: i32, dy: i32) {
+fn Point::move_by(self: &mut Point, dx: i32, dy: i32) {
     self.x = (self.x + dx);
     self.y = (self.y + dy);
 }
@@ -32,10 +32,10 @@ fn run() with Stdout {
     let mut __sroa_h2_point: Point = move Point { x: 10, y: 10 };
     __inline_PointHolder_IndexMut__index_mut_0: {
         break __inline_PointHolder_IndexMut__index_mut_0: &mut __sroa_h1_point;
-    }."Point::move_by"(5, 5);
+    }.Point::move_by(5, 5);
     __inline_PointHolder_IndexMut__index_mut_1: {
         break __inline_PointHolder_IndexMut__index_mut_1: &mut __sroa_h2_point;
-    }."Point::move_by"(-3, -3);
+    }.Point::move_by(-3, -3);
     let p1: Point = *__inline_PointHolder_Index__index_2: {
         break __inline_PointHolder_Index__index_2: &__sroa_h1_point;
     };
@@ -46,38 +46,54 @@ fn run() with Stdout {
         let mut __r: String = __inline_String__with_capacity_4: {
             break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(40), used: 0 };
         };
-        __r."String::append"(move "h1: (");
+        __r.String::append(move "h1: (");
         let mut __f: Formatter = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<i32> { value: p1.x }."i32@Display::fmt"(&mut __f);
-        __r."String::append"(move ", ");
-        __f = __inline_Formatter__new_6: {
-            let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __inline_i32_Display__fmt_6: {
+            let self: Box<i32> = move Box<i32> { value: p1.x };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        Box<i32> { value: p1.y }."i32@Display::fmt"(&mut __f);
-        __r."String::append"(move ")");
+        __r.String::append(move ", ");
+        __f = __inline_Formatter__new_7: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_i32_Display__fmt_8: {
+            let self: Box<i32> = move Box<i32> { value: p1.y };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+        };
+        __r.String::append(move ")");
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_7: {
-            break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(40), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_9: {
+            break __inline_String__with_capacity_9: String { repr: "array_new<u8>"(40), used: 0 };
         };
-        __r."String::append"(move "h2: (");
-        let mut __f: Formatter = __inline_Formatter__new_8: {
+        __r.String::append(move "h2: (");
+        let mut __f: Formatter = __inline_Formatter__new_10: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<i32> { value: p2.x }."i32@Display::fmt"(&mut __f);
-        __r."String::append"(move ", ");
-        __f = __inline_Formatter__new_9: {
+        __inline_i32_Display__fmt_11: {
+            let self: Box<i32> = move Box<i32> { value: p2.x };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+        };
+        __r.String::append(move ", ");
+        __f = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<i32> { value: p2.y }."i32@Display::fmt"(&mut __f);
-        __r."String::append"(move ")");
+        __inline_i32_Display__fmt_13: {
+            let self: Box<i32> = move Box<i32> { value: p2.y };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+        };
+        __r.String::append(move ")");
         break __tmpl: __r;
     });
 }

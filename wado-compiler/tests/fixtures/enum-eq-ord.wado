@@ -1,0 +1,55 @@
+// Test: Enum auto-derived Eq and Ord traits
+use { println, Stdout } from "core:cli";
+
+enum Priority {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+export fn run() with Stdout {
+    let a = Priority::Low;
+    let b = Priority::Medium;
+    let c = Priority::Low;
+
+    // Eq: == and !=
+    if a == c {
+        println("low == low");
+    }
+    if a != b {
+        println("low != medium");
+    }
+    if a == b {
+        println("BUG: low == medium");
+    }
+
+    // Ord: < > <= >=
+    if a < b {
+        println("low < medium");
+    }
+    if b > a {
+        println("medium > low");
+    }
+    if a <= c {
+        println("low <= low");
+    }
+    if a >= c {
+        println("low >= low");
+    }
+
+    // Ord with match
+    let h = Priority::High;
+    let cr = Priority::Critical;
+    if h < cr {
+        println("high < critical");
+    }
+
+    // Chained comparison
+    if a < b < h {
+        println("low < medium < high");
+    }
+}
+
+__DATA__
+{"stdout": "low == low\nlow != medium\nlow < medium\nmedium > low\nlow <= low\nlow >= low\nhigh < critical\nlow < medium < high\n"}

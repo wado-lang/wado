@@ -7501,6 +7501,54 @@ impl Codegen<'_> {
                         }
                     }
 
+                    // Enum type method calls (user-defined impl blocks and auto-derived traits)
+                    ResolvedType::Enum {
+                        name,
+                        module_source,
+                    } => {
+                        let mangled_name = MethodName::new(
+                            module_source.clone(),
+                            name.clone(),
+                            trait_name.clone(),
+                            method_name.clone(),
+                        )
+                        .to_string();
+
+                        let simple_name = MethodName::format_local(&name, None, &method_name);
+                        let simple_trait_name =
+                            MethodName::format_local(&name, trait_name.as_deref(), &method_name);
+
+                        let func_idx = builder
+                            .try_func_idx(&mangled_name)
+                            .or_else(|| builder.try_func_idx(&simple_trait_name))
+                            .or_else(|| builder.try_func_idx(&simple_name))
+                            .or_else(|| {
+                                if let Some(info) = method_func.method_info() {
+                                    let method_name_str = info.full_method_name();
+                                    let original_name = MethodName::new(
+                                        method_func.module_source(),
+                                        info.struct_name,
+                                        info.trait_name,
+                                        method_name_str,
+                                    )
+                                    .to_string();
+                                    builder.try_func_idx(&original_name)
+                                } else {
+                                    None
+                                }
+                            });
+
+                        if let Some(idx) = func_idx {
+                            self.generate_expr(func, receiver, type_table, ctx, builder);
+                            self.generate_args(func, args, type_table, ctx, builder);
+                            func.instruction(&Instruction::Call(idx));
+                        } else {
+                            panic!(
+                                "unknown method '{method_name}' on enum '{name}': tried [{mangled_name}], [{simple_trait_name}], [{simple_name}]"
+                            );
+                        }
+                    }
+
                     other => {
                         panic!(
                             "method call receiver has unexpected type: {:?}, method: {}, receiver.type_id: {}",
@@ -9651,7 +9699,9 @@ impl Codegen<'_> {
                         TirPattern::Wildcard => {
                             // Wildcard - don't bind anything
                         }
-                        TirPattern::Literal(_) | TirPattern::Variant { .. } => {
+                        TirPattern::Literal(_)
+                        | TirPattern::Variant { .. }
+                        | TirPattern::Enum { .. } => {
                             // These patterns are not valid in let statements
                             // Should have been caught by resolver
                         }
@@ -9671,7 +9721,7 @@ impl Codegen<'_> {
                 // Wildcard - just drop the value
                 func.instruction(&Instruction::Drop);
             }
-            TirPattern::Literal(_) | TirPattern::Variant { .. } => {
+            TirPattern::Literal(_) | TirPattern::Variant { .. } | TirPattern::Enum { .. } => {
                 // These patterns are not valid in let statements
                 // Drop the value
                 func.instruction(&Instruction::Drop);
@@ -9828,7 +9878,7 @@ impl Codegen<'_> {
         arms: &[TirMatchArm],
         scrutinee_type: &ResolvedType,
     ) -> Option<BrTableAnalysis> {
-        // Only applicable to integer types
+        // Applicable to integer types and enums (enums are i32 discriminants)
         let is_i64 = match scrutinee_type {
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => true,
             ResolvedType::Primitive(
@@ -9838,7 +9888,8 @@ impl Codegen<'_> {
                 | PrimitiveType::U16
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
-            ) => false,
+            )
+            | ResolvedType::Enum { .. } => false,
             _ => return None,
         };
 
@@ -9856,6 +9907,9 @@ impl Codegen<'_> {
                 }
                 TirPattern::Literal(TirLiteralPattern::U128(v)) => {
                     value_to_arm.push((*v as i64, arm_idx));
+                }
+                TirPattern::Enum { case_index, .. } => {
+                    value_to_arm.push((i64::from(*case_index), arm_idx));
                 }
                 TirPattern::Wildcard | TirPattern::Binding { .. } => {
                     // Wildcard/binding is the default case
@@ -10501,6 +10555,13 @@ impl Codegen<'_> {
                         case_type_idx,
                     )));
                 }
+                true
+            }
+
+            // Enum pattern: compare i32 discriminant directly
+            (_, TirPattern::Enum { case_index, .. }) => {
+                func.instruction(&Instruction::I32Const(*case_index as i32));
+                func.instruction(&Instruction::I32Eq);
                 true
             }
 

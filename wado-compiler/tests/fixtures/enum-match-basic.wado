@@ -1,0 +1,25 @@
+// Test: Basic enum pattern matching with match expression
+use { println, Stdout } from "core:cli";
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn color_name(c: Color) -> String {
+    return match c {
+        Red => "red",
+        Green => "green",
+        Blue => "blue",
+    };
+}
+
+export fn run() with Stdout {
+    println(color_name(Color::Red));
+    println(color_name(Color::Green));
+    println(color_name(Color::Blue));
+}
+
+__DATA__
+{"stdout": "red\ngreen\nblue\n"}

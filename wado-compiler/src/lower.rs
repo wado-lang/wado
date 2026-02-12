@@ -16,13 +16,14 @@ use std::rc::Rc;
 
 use indexmap::IndexMap;
 
-use crate::name::{LocalMethodName, ModuleSource, mangle_generic_name};
+use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::project::Project;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    ClosureFunctor, MonomorphInfo, PrimitiveType, ResolvedType, ScratchLocal, TirBlock, TirCapture,
-    TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLiteralPattern, TirModule, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    ClosureFunctor, MonomorphInfo, PrimitiveType, ResolvedType, ScratchLocal, TirBinaryOp,
+    TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal,
+    TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
+    TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -119,6 +120,12 @@ pub fn lower_modules_indexed(
             (source, module)
         })
         .collect();
+
+    // Phase 2: Generate auto-derived trait implementations (Eq, Ord, Display) for enums.
+    // This must happen before boxing so the generated functions get properly transformed.
+    for module in modules.values_mut() {
+        generate_enum_trait_impls(module);
+    }
 
     // Phase 2.5: Lower boxing across ALL modules with a single BoxLowerer.
     // All modules share the same TypeTable, so box type creation and type
@@ -671,7 +678,7 @@ fn analyze_match_for_switch(
 ) -> Option<SwitchAnalysis> {
     use crate::tir::PrimitiveType;
 
-    // Only applicable to integer types
+    // Only applicable to integer types and enums (enums are i32 discriminants)
     match scrutinee_type {
         ResolvedType::Primitive(
             PrimitiveType::I32
@@ -682,7 +689,8 @@ fn analyze_match_for_switch(
             | PrimitiveType::U16
             | PrimitiveType::I8
             | PrimitiveType::U8,
-        ) => {}
+        )
+        | ResolvedType::Enum { .. } => {}
         _ => return None,
     }
 
@@ -700,6 +708,9 @@ fn analyze_match_for_switch(
             }
             TirPattern::Literal(TirLiteralPattern::U128(v)) => {
                 value_to_arm.push((*v as i64, arm_idx));
+            }
+            TirPattern::Enum { case_index, .. } => {
+                value_to_arm.push((i64::from(*case_index), arm_idx));
             }
             TirPattern::Wildcard | TirPattern::Binding { .. } => {
                 // Wildcard/binding is the default case
@@ -1031,22 +1042,23 @@ impl<'a> PatternLowerer<'a> {
                 // Lower expressions in scrutinee first
                 self.lower_expr(&mut scrutinee, type_table);
 
-                // Check if this is an Option or custom Variant pattern that we can lower
+                // Check if this is an Option, custom Variant, or Enum pattern that we can lower
                 let scrutinee_type = type_table.get(scrutinee.type_id);
                 let can_lower = matches!(
                     scrutinee_type,
                     ResolvedType::Option(_)
                         | ResolvedType::Variant { .. }
                         | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Enum { .. }
                 );
 
                 if can_lower {
-                    // Lower Option and Variant patterns to Let + If
+                    // Lower Option, Variant, and Enum patterns to Let + If
                     self.lower_if_pattern_option(
                         scrutinee, &pattern, then_block, else_block, stmt.span, out, type_table,
                     );
                 } else {
-                    // All IfPattern statements should have Option/Variant scrutinee types
+                    // All IfPattern statements should have Option/Variant/Enum scrutinee types
                     // after proper type checking. If we reach here, it's a compiler bug.
                     panic!(
                         "IfPattern with unexpected scrutinee type {scrutinee_type:?} - this should not happen after type checking"
@@ -1280,8 +1292,8 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
             }
-            TirPattern::Literal(_) => {
-                // Literal patterns don't bind anything, just evaluate for side effects
+            TirPattern::Literal(_) | TirPattern::Enum { .. } => {
+                // Literal/Enum patterns don't bind anything, just evaluate for side effects
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
         }
@@ -1426,8 +1438,8 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
             }
-            TirPattern::Literal(_) => {
-                // Just evaluate for side effects
+            TirPattern::Literal(_) | TirPattern::Enum { .. } => {
+                // Just evaluate for side effects (no bindings)
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
             }
         }
@@ -1655,6 +1667,32 @@ impl<'a> PatternLowerer<'a> {
                 TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
                 binding_stmts,
             ),
+            TirPattern::Enum {
+                enum_type,
+                case_name,
+                case_index,
+            } => {
+                // Enum pattern: compare i32 discriminant using EnumConstruct
+                let condition = TirExpr::new(
+                    TirExprKind::Binary {
+                        left: Box::new(scrutinee),
+                        op: TirBinaryOp::Eq,
+                        right: Box::new(TirExpr::new(
+                            TirExprKind::EnumConstruct {
+                                enum_type: *enum_type,
+                                case_index: *case_index,
+                                case_name: case_name.clone(),
+                            },
+                            *enum_type,
+                            span,
+                        )),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                // No bindings for enum patterns (no payload)
+                (condition, binding_stmts)
+            }
             TirPattern::Tuple(_) | TirPattern::Literal(_) => {
                 // These shouldn't appear at the top level of IfPattern
                 // Just return true for now
@@ -4102,7 +4140,7 @@ impl ClosureLowerer {
             // Generate __call method
             // Use a qualified name for the function to avoid collisions in the inliner's candidate map
             let simple_method_name = "__call".to_string();
-            let qualified_method_name = format!("{struct_name}::__call");
+            let qualified_method_name = MethodName::format_local(&struct_name, None, "__call");
             let self_ref_type = type_table.make_ref(struct_type_id);
 
             // Parameters: self + closure params
@@ -4929,6 +4967,15 @@ impl ClosureLowerer {
                     .map(|p| self.transform_closure_body_pattern(p))
                     .collect(),
                 payload_type: *payload_type,
+            },
+            TirPattern::Enum {
+                enum_type,
+                case_name,
+                case_index,
+            } => TirPattern::Enum {
+                enum_type: *enum_type,
+                case_name: case_name.clone(),
+                case_index: *case_index,
             },
         }
     }
@@ -5951,7 +5998,8 @@ impl ClosureLowerer {
                         .iter()
                         .find(|f| f.struct_type_id == functor_type)
                     {
-                        let call_method_name = format!("{}::__call", functor.struct_name);
+                        let call_method_name =
+                            MethodName::format_local(&functor.struct_name, None, "__call");
 
                         // Transform to MethodCall
                         let new_callee = self.specialize_expr(callee, param_to_functor, type_table);
@@ -7717,7 +7765,10 @@ impl<'a> ScratchLocalAnalyzer<'a> {
                     self.collect_let_pattern_types(binding, *payload_type);
                 }
             }
-            TirPattern::Binding { .. } | TirPattern::Wildcard | TirPattern::Literal(_) => {
+            TirPattern::Binding { .. }
+            | TirPattern::Wildcard
+            | TirPattern::Literal(_)
+            | TirPattern::Enum { .. } => {
                 // These don't need temp locals
             }
         }
@@ -8113,6 +8164,671 @@ impl<'a> EffectScratchAnalyzer<'a> {
             // Leaf expressions
             _ => {}
         }
+    }
+}
+
+// ============================================================================
+// Auto-derived Enum Trait Implementations
+// ============================================================================
+
+/// Generate auto-derived trait implementations (Eq, Ord, Display) for enum types.
+///
+/// For each enum declaration in the module, generates synthetic TIR functions:
+/// - `EnumName^Eq::eq(&self, &Self) -> bool` - discriminant equality
+/// - `EnumName^Ord::cmp(&self, &Self) -> Ordering` - discriminant ordering
+/// - `EnumName^Display::fmt(&self, &mut Formatter)` - case name stringification
+fn generate_enum_trait_impls(module: &mut TirModule) {
+    if module.enums.is_empty() {
+        return;
+    }
+
+    let module_source = module.module_source.clone();
+
+    // Collect enum info
+    let enum_infos: Vec<_> = module
+        .enums
+        .iter()
+        .map(|e| {
+            let cases: Vec<(String, u32)> =
+                e.cases.iter().map(|c| (c.name.clone(), c.index)).collect();
+            (e.name.clone(), e.span, cases)
+        })
+        .collect();
+
+    // Check which trait methods already have user-provided implementations.
+    // If the user wrote `impl Eq for Color { ... }`, skip generating Eq::eq.
+    let existing_trait_methods: HashSet<String> = module
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let func = f.borrow();
+            func.method_info.as_ref().and_then(|info| {
+                info.trait_name.as_ref().map(|trait_name| {
+                    format!(
+                        "{}^{}::{}",
+                        info.base_struct_name, trait_name, info.method_name
+                    )
+                })
+            })
+        })
+        .collect();
+
+    let mut generated_functions = Vec::new();
+
+    for (enum_name, span, cases) in &enum_infos {
+        let mut type_table = module.type_table.borrow_mut();
+        let enum_type = type_table.make_enum(enum_name.clone(), module_source.clone());
+        let ref_enum_type = type_table.make_ref(enum_type);
+
+        // Generate Eq::eq
+        let eq_key = MethodName::format_local(enum_name, Some("Eq"), "eq");
+        if !existing_trait_methods.contains(&eq_key) {
+            let func =
+                generate_enum_eq_fn(enum_name, enum_type, ref_enum_type, &module_source, *span);
+            generated_functions.push(Rc::new(RefCell::new(func)));
+        }
+
+        // Generate Ord::cmp
+        let cmp_key = MethodName::format_local(enum_name, Some("Ord"), "cmp");
+        if !existing_trait_methods.contains(&cmp_key) {
+            let ordering_type = type_table.make_variant(
+                "Ordering".to_string(),
+                ModuleSource::core("prelude/traits.wado"),
+            );
+            let func = generate_enum_ord_fn(
+                enum_name,
+                enum_type,
+                ref_enum_type,
+                ordering_type,
+                &module_source,
+                *span,
+            );
+            generated_functions.push(Rc::new(RefCell::new(func)));
+        }
+
+        // Generate Display::fmt
+        let fmt_key = MethodName::format_local(enum_name, Some("Display"), "fmt");
+        if !existing_trait_methods.contains(&fmt_key) {
+            let formatter_type = type_table.make_struct(
+                "Formatter".to_string(),
+                ModuleSource::core("prelude/format.wado"),
+            );
+            let mut_ref_formatter = type_table.make_mut_ref(formatter_type);
+            let string_type = type_table.make_struct(
+                "String".to_string(),
+                ModuleSource::core("prelude/string.wado"),
+            );
+            let func = generate_enum_display_fn(
+                enum_name,
+                enum_type,
+                ref_enum_type,
+                cases,
+                mut_ref_formatter,
+                string_type,
+                &module_source,
+                *span,
+            );
+            generated_functions.push(Rc::new(RefCell::new(func)));
+        }
+    }
+
+    module.functions.extend(generated_functions);
+}
+
+/// Generate `EnumName^Eq::eq(&self, &Self) -> bool`
+///
+/// Body: `return *self == *other;` (i32 comparison via enum discriminant)
+fn generate_enum_eq_fn(
+    enum_name: &str,
+    enum_type: TypeId,
+    ref_enum_type: TypeId,
+    module_source: &ModuleSource,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        enum_name.to_string(),
+        Some("Eq".to_string()),
+        "eq".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    // params: self: &EnumType (local 0), other: &EnumType (local 1)
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_enum_type,
+            local_index: 0,
+            span,
+        },
+        TirParam {
+            name: "other".to_string(),
+            type_id: ref_enum_type,
+            local_index: 1,
+            span,
+        },
+    ];
+
+    // Body: return *self == *other
+    let deref_self = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: Box::new(TirExpr::new(
+                TirExprKind::Local {
+                    index: 0,
+                    name: "self".to_string(),
+                },
+                ref_enum_type,
+                span,
+            )),
+        },
+        enum_type,
+        span,
+    );
+    let deref_other = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: Box::new(TirExpr::new(
+                TirExprKind::Local {
+                    index: 1,
+                    name: "other".to_string(),
+                },
+                ref_enum_type,
+                span,
+            )),
+        },
+        enum_type,
+        span,
+    );
+    let comparison = TirExpr::new(
+        TirExprKind::Binary {
+            left: Box::new(deref_self),
+            op: TirBinaryOp::Eq,
+            right: Box::new(deref_other),
+        },
+        TypeTable::BOOL,
+        span,
+    );
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(comparison),
+            },
+            span,
+        )],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        params,
+        TypeTable::BOOL,
+        body,
+        module_source,
+        span,
+        vec![ref_enum_type, ref_enum_type],
+    )
+}
+
+/// Generate `EnumName^Ord::cmp(&self, &Self) -> Ordering`
+///
+/// Body:
+/// ```text
+/// let a = *self;
+/// let b = *other;
+/// if a < b { return Ordering::Less; }
+/// if a > b { return Ordering::Greater; }
+/// return Ordering::Equal;
+/// ```
+fn generate_enum_ord_fn(
+    enum_name: &str,
+    enum_type: TypeId,
+    ref_enum_type: TypeId,
+    ordering_type: TypeId,
+    module_source: &ModuleSource,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        enum_name.to_string(),
+        Some("Ord".to_string()),
+        "cmp".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_enum_type,
+            local_index: 0,
+            span,
+        },
+        TirParam {
+            name: "other".to_string(),
+            type_id: ref_enum_type,
+            local_index: 1,
+            span,
+        },
+    ];
+
+    // Local 2: a = *self, Local 3: b = *other
+    let deref_self = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: Box::new(TirExpr::new(
+                TirExprKind::Local {
+                    index: 0,
+                    name: "self".to_string(),
+                },
+                ref_enum_type,
+                span,
+            )),
+        },
+        enum_type,
+        span,
+    );
+    let deref_other = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: Box::new(TirExpr::new(
+                TirExprKind::Local {
+                    index: 1,
+                    name: "other".to_string(),
+                },
+                ref_enum_type,
+                span,
+            )),
+        },
+        enum_type,
+        span,
+    );
+
+    let local_a = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 2,
+                name: "a".to_string(),
+            },
+            enum_type,
+            span,
+        )
+    };
+    let local_b = |span: Span| {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 3,
+                name: "b".to_string(),
+            },
+            enum_type,
+            span,
+        )
+    };
+
+    // Ordering variant constructors
+    let ordering_less = TirExpr::new(
+        TirExprKind::VariantConstruct {
+            variant_type: ordering_type,
+            case_index: 0,
+            case_name: "Less".to_string(),
+            payload: None,
+        },
+        ordering_type,
+        span,
+    );
+    let ordering_greater = TirExpr::new(
+        TirExprKind::VariantConstruct {
+            variant_type: ordering_type,
+            case_index: 2,
+            case_name: "Greater".to_string(),
+            payload: None,
+        },
+        ordering_type,
+        span,
+    );
+    let ordering_equal = TirExpr::new(
+        TirExprKind::VariantConstruct {
+            variant_type: ordering_type,
+            case_index: 1,
+            case_name: "Equal".to_string(),
+            payload: None,
+        },
+        ordering_type,
+        span,
+    );
+
+    // if a < b { return Ordering::Less; }
+    let cond_lt = TirExpr::new(
+        TirExprKind::Binary {
+            left: Box::new(local_a(span)),
+            op: TirBinaryOp::Lt,
+            right: Box::new(local_b(span)),
+        },
+        TypeTable::BOOL,
+        span,
+    );
+    let if_lt = TirStmt::new(
+        TirStmtKind::If {
+            condition: cond_lt,
+            then_block: TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Return {
+                        value: Some(ordering_less),
+                    },
+                    span,
+                )],
+                span,
+            ),
+            else_block: None,
+        },
+        span,
+    );
+
+    // if a > b { return Ordering::Greater; }
+    let cond_gt = TirExpr::new(
+        TirExprKind::Binary {
+            left: Box::new(local_a(span)),
+            op: TirBinaryOp::Gt,
+            right: Box::new(local_b(span)),
+        },
+        TypeTable::BOOL,
+        span,
+    );
+    let if_gt = TirStmt::new(
+        TirStmtKind::If {
+            condition: cond_gt,
+            then_block: TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Return {
+                        value: Some(ordering_greater),
+                    },
+                    span,
+                )],
+                span,
+            ),
+            else_block: None,
+        },
+        span,
+    );
+
+    // return Ordering::Equal;
+    let return_equal = TirStmt::new(
+        TirStmtKind::Return {
+            value: Some(ordering_equal),
+        },
+        span,
+    );
+
+    let body = TirBlock::new(
+        vec![
+            TirStmt::new(
+                TirStmtKind::Let {
+                    name: "a".to_string(),
+                    local_index: 2,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: enum_type,
+                    value: deref_self,
+                },
+                span,
+            ),
+            TirStmt::new(
+                TirStmtKind::Let {
+                    name: "b".to_string(),
+                    local_index: 3,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: enum_type,
+                    value: deref_other,
+                },
+                span,
+            ),
+            if_lt,
+            if_gt,
+            return_equal,
+        ],
+        span,
+    );
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        params,
+        ordering_type,
+        body,
+        module_source,
+        span,
+        vec![ref_enum_type, ref_enum_type, enum_type, enum_type],
+    )
+}
+
+/// Generate `EnumName^Display::fmt(&self, &mut Formatter)`
+///
+/// Body: if-else chain that calls `f.write_str(case_name)` for each case
+#[allow(clippy::too_many_arguments)]
+fn generate_enum_display_fn(
+    enum_name: &str,
+    enum_type: TypeId,
+    ref_enum_type: TypeId,
+    cases: &[(String, u32)],
+    mut_ref_formatter: TypeId,
+    string_type: TypeId,
+    module_source: &ModuleSource,
+    span: Span,
+) -> TirFunction {
+    let method_info = LocalMethodName::new(
+        enum_name.to_string(),
+        Some("Display".to_string()),
+        "fmt".to_string(),
+    );
+    let qualified_name = method_info.to_mangled_name();
+
+    let params = vec![
+        TirParam {
+            name: "self".to_string(),
+            type_id: ref_enum_type,
+            local_index: 0,
+            span,
+        },
+        TirParam {
+            name: "f".to_string(),
+            type_id: mut_ref_formatter,
+            local_index: 1,
+            span,
+        },
+    ];
+
+    // Local 2: val = *self
+    let deref_self = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: Box::new(TirExpr::new(
+                TirExprKind::Local {
+                    index: 0,
+                    name: "self".to_string(),
+                },
+                ref_enum_type,
+                span,
+            )),
+        },
+        enum_type,
+        span,
+    );
+
+    let local_val = || {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 2,
+                name: "val".to_string(),
+            },
+            enum_type,
+            span,
+        )
+    };
+    let formatter_local = || {
+        TirExpr::new(
+            TirExprKind::Local {
+                index: 1,
+                name: "f".to_string(),
+            },
+            mut_ref_formatter,
+            span,
+        )
+    };
+
+    // Build write_str method call helper
+    let make_write_str_call = |case_name: &str| -> TirExpr {
+        let string_lit = TirExpr::new(
+            TirExprKind::StringLiteral(case_name.to_string()),
+            string_type,
+            span,
+        );
+        TirExpr::new(
+            TirExprKind::MethodCall {
+                receiver: Box::new(formatter_local()),
+                func: FunctionRef::External {
+                    module_source: ModuleSource::core("prelude/format.wado"),
+                    name: "Formatter::write_str".to_string(),
+                    monomorph_info: None,
+                    method_info: Some(LocalMethodName::new(
+                        "Formatter".to_string(),
+                        None,
+                        "write_str".to_string(),
+                    )),
+                },
+                type_args: vec![],
+                args: vec![string_lit],
+            },
+            TypeTable::UNIT,
+            span,
+        )
+    };
+
+    // Build if-else chain: if val == Case0 { write_str("Case0") } else if ...
+    let mut stmts = vec![TirStmt::new(
+        TirStmtKind::Let {
+            name: "val".to_string(),
+            local_index: 2,
+            is_mut: false,
+            is_reactive: false,
+            type_id: enum_type,
+            value: deref_self,
+        },
+        span,
+    )];
+
+    if cases.is_empty() {
+        // No cases - unreachable, but generate valid empty body
+        stmts.push(TirStmt::new(TirStmtKind::Return { value: None }, span));
+    } else if cases.len() == 1 {
+        // Single case - just write the name
+        stmts.push(TirStmt::new(
+            TirStmtKind::Expr(make_write_str_call(&cases[0].0)),
+            span,
+        ));
+    } else {
+        // Build nested if-else chain from the last case backward
+        // Last case is the else branch (no condition needed)
+        let last_case = &cases[cases.len() - 1];
+        let mut else_block = Some(TirBlock::new(
+            vec![TirStmt::new(
+                TirStmtKind::Expr(make_write_str_call(&last_case.0)),
+                span,
+            )],
+            span,
+        ));
+
+        // Build from second-to-last to first
+        for case in cases[..cases.len() - 1].iter().rev() {
+            let condition = TirExpr::new(
+                TirExprKind::Binary {
+                    left: Box::new(local_val()),
+                    op: TirBinaryOp::Eq,
+                    right: Box::new(TirExpr::new(
+                        TirExprKind::EnumConstruct {
+                            enum_type,
+                            case_index: case.1,
+                            case_name: case.0.clone(),
+                        },
+                        enum_type,
+                        span,
+                    )),
+                },
+                TypeTable::BOOL,
+                span,
+            );
+            let then_block = TirBlock::new(
+                vec![TirStmt::new(
+                    TirStmtKind::Expr(make_write_str_call(&case.0)),
+                    span,
+                )],
+                span,
+            );
+            let if_stmt = TirStmt::new(
+                TirStmtKind::If {
+                    condition,
+                    then_block,
+                    else_block,
+                },
+                span,
+            );
+            else_block = Some(TirBlock::new(vec![if_stmt], span));
+        }
+
+        // Unwrap the outermost if-else block and add its single statement
+        if let Some(block) = else_block {
+            stmts.extend(block.stmts);
+        }
+    }
+
+    let body = TirBlock::new(stmts, span);
+
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        params,
+        TypeTable::UNIT,
+        body,
+        module_source,
+        span,
+        vec![ref_enum_type, mut_ref_formatter, enum_type],
+    )
+}
+
+/// Helper to create a synthetic `TirFunction` for an auto-derived method.
+fn make_synthetic_method(
+    name: String,
+    method_info: LocalMethodName,
+    params: Vec<TirParam>,
+    return_type: TypeId,
+    body: TirBlock,
+    _module_source: &ModuleSource,
+    span: Span,
+    local_types: Vec<TypeId>,
+) -> TirFunction {
+    let local_count = local_types.len() as u32;
+
+    TirFunction {
+        name,
+        is_pub: true,
+        is_export: false,
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params,
+        return_type,
+        effects: Vec::new(),
+        body: Some(body),
+        span,
+        local_count,
+        local_types,
+        address_taken_locals: HashSet::new(),
+        needed_copy_types: HashSet::new(),
+        scratch_locals: Vec::new(),
+        copy_source_types: HashSet::new(),
+        indirect_call_counts: HashMap::new(),
+        match_scrutinee_types: Vec::new(),
+        let_pattern_types: Vec::new(),
+        cm_export_info: None,
     }
 }
 

@@ -25,12 +25,21 @@ fn run() with Stdout {
         let mut __r: String = __inline_String__with_capacity_2: {
             break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(19), used: 0 };
         };
-        __r."String::append"(move "a: ");
+        __r.String::append(move "a: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: va }."f64@Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_0: {
+            let self: Box<f64> = move Box<f64> { value: va };
+            let f: &mut Formatter = &mut __f;
+            if (__inline_Formatter__precision_0: {
+                break __inline_Formatter__precision_0: f.precision;
+            } >= 0) {
+                core::internal::panic(move "TODO: precision for f64 Display");
+            }
+            "core::prelude/primitives.wado::fmt_f64_display"(self.value, f);
+        };
         break __tmpl: __r;
     });
     let b: Measurement = __inline_make_measurement_b_4: {
@@ -43,12 +52,16 @@ fn run() with Stdout {
         let mut __r: String = __inline_String__with_capacity_6: {
             break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(19), used: 0 };
         };
-        __r."String::append"(move "b: ");
+        __r.String::append(move "b: ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<i32> { value: vb }."i32@Display::fmt"(&mut __f);
+        __inline_i32_Display__fmt_8: {
+            let self: Box<i32> = move Box<i32> { value: vb };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+        };
         break __tmpl: __r;
     });
 }

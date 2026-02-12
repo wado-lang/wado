@@ -36,14 +36,14 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
                 break __for_0;
             }
             __for_0_body: {
-                pad."String::append"(move " ");
+                pad.String::append(move " ");
             }
             i = (i + 1);
         }
     }
     return match opts.align {
-        Left => "String::concat"(s, pad),
-        Right => "String::concat"(pad, s),
+        Left => String::concat(s, pad),
+        Right => String::concat(pad, s),
         Center => {
             let left: i32 = (pad_len / 2);
             let right: i32 = (pad_len - left);
@@ -60,7 +60,7 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
                         break __for_0;
                     }
                     __for_0_body: {
-                        lpad."String::append"(move " ");
+                        lpad.String::append(move " ");
                     }
                     i = (i + 1);
                 }
@@ -72,12 +72,12 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
                         break __for_1;
                     }
                     __for_1_body: {
-                        rpad."String::append"(move " ");
+                        rpad.String::append(move " ");
                     }
                     i = (i + 1);
                 }
             }
-            "String::concat"(move "String::concat"(lpad, s), rpad);
+            String::concat(move String::concat(lpad, s), rpad);
         },
     };
 }

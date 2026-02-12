@@ -60,7 +60,11 @@ fn run() with Stdout {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    Box<i32> { value: x }."i32@Display::fmt"(&mut __f);
+                    __inline_i32_Display__fmt_5: {
+                        let self: Box<i32> = move Box<i32> { value: x };
+                        let f: &mut Formatter = &mut __f;
+                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    };
                     break __tmpl: __r;
                 });
             } else {
@@ -68,33 +72,37 @@ fn run() with Stdout {
             }
         }
     }
-    let large: Array<i32> = move __inline_ArrayIter_i32___filter_6: {
-        let self: &ArrayIter<i32> = &__inline_Array_i32___iter_5: {
-            break __inline_Array_i32___iter_5: __inline_Array_i32__IntoIterator__into_iter_1: {
+    let large: Array<i32> = move __inline_ArrayIter_i32___filter_7: {
+        let self: &ArrayIter<i32> = &__inline_Array_i32___iter_6: {
+            break __inline_Array_i32___iter_6: __inline_Array_i32__IntoIterator__into_iter_1: {
                 break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
             };
         };
         let pred: fn(i32) -> bool = &__Closure_1 {  };
-        break __inline_ArrayIter_i32___filter_6: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
+        break __inline_ArrayIter_i32___filter_7: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
     }."FilterIter<i32>^Iterator::collect"();
     core::cli::println(move "large:");
     __for_of_1: {
-        let mut __iter_1: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_7: {
-            break __inline_Array_i32__IntoIterator__into_iter_7: ArrayIter<i32> { repr: large.repr, used: large.used, index: 0 };
+        let mut __iter_1: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_8: {
+            break __inline_Array_i32__IntoIterator__into_iter_8: ArrayIter<i32> { repr: large.repr, used: large.used, index: 0 };
         };
         loop {
             let __pattern_temp_1: Option<i32> = __iter_1."ArrayIter<i32>^Iterator::next"();
             if __is_not_null(__pattern_temp_1) {
                 let x: i32 = __unwrap_option(__pattern_temp_1).value;
                 core::cli::println(__tmpl: {
-                    let mut __r: String = __inline_String__with_capacity_8: {
-                        break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(16), used: 0 };
+                    let mut __r: String = __inline_String__with_capacity_9: {
+                        break __inline_String__with_capacity_9: String { repr: "array_new<u8>"(16), used: 0 };
                     };
-                    let mut __f: Formatter = __inline_Formatter__new_9: {
+                    let mut __f: Formatter = __inline_Formatter__new_10: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    Box<i32> { value: x }."i32@Display::fmt"(&mut __f);
+                    __inline_i32_Display__fmt_11: {
+                        let self: Box<i32> = move Box<i32> { value: x };
+                        let f: &mut Formatter = &mut __f;
+                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    };
                     break __tmpl: __r;
                 });
             } else {
@@ -156,11 +164,11 @@ fn "FilterIter<i32>^Iterator::next"(self: &mut FilterIter<i32>) -> Option<i32> {
     }
 }
 
-fn "__Closure_0::__call"(self: &__Closure_0, x: i32) -> bool {
+fn __Closure_0::__call(self: &__Closure_0, x: i32) -> bool {
     return ((x % 2) == 0);
 }
 
-fn "__Closure_1::__call"(self: &__Closure_1, x: i32) -> bool {
+fn __Closure_1::__call(self: &__Closure_1, x: i32) -> bool {
     return (x > 5);
 }
 

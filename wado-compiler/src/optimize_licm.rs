@@ -310,7 +310,7 @@ fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut HashSet<u32>) {
                 collect_pattern_bindings(p, modified);
             }
         }
-        TirPattern::Wildcard | TirPattern::Literal(_) => {
+        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => {
             // No bindings
         }
     }
