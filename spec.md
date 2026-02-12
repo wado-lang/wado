@@ -1975,15 +1975,47 @@ Wado follows Component Model's distinction between enums and variants (unlike Ru
 **Enums** (no payloads - Component Model `enum`):
 
 ```wado
-// Simple enumeration - all variants have no data
+// Simple enumeration - all cases have no data
 enum Color {
     Red,
     Green,
     Blue,
 }
 
-// Used as:
+// Construction
 let c = Color::Red;
+
+// Pattern matching: match, if let, matches
+let name = match c {
+    Red => "red",
+    Green => "green",
+    Blue => "blue",
+};
+
+if let Red = c { /* ... */ }
+
+if c matches { Green } { /* ... */ }
+
+// Match with wildcards and guards
+match c {
+    Red => "warm",
+    _ => "other",
+}
+```
+
+Enums auto-derive `Display` (case name), `Eq` (discriminant equality), and `Ord` (declaration order).
+
+Enums can have `impl` blocks:
+
+```wado
+impl Color {
+    fn is_warm(&self) -> bool {
+        return match *self {
+            Red => true,
+            _ => false,
+        };
+    }
+}
 ```
 
 **Variants** (with payloads - Component Model `variant`):

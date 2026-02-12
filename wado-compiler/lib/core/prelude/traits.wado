@@ -1,38 +1,13 @@
 // Prelude Traits
 // This module defines all traits that are automatically available in every Wado module.
 /// Result of a comparison between two values.
-pub variant Ordering {
+pub enum Ordering {
     /// The first value is less than the second.
     Less,
     /// The two values are equal.
     Equal,
     /// The first value is greater than the second.
     Greater,
-}
-
-/// Display implementation for Ordering
-impl Display for Ordering {
-    pub fn fmt(&self, f: &mut Formatter) {
-        let val = *self;
-        f.write_str(match val {
-            Less => "Less",
-            Equal => "Equal",
-            Greater => "Greater",
-        });
-    }
-}
-
-/// Eq implementation for Ordering
-impl Eq for Ordering {
-    pub fn eq(&self, other: &Self) -> bool {
-        let self_val = *self;
-        let other_val = *other;
-        return match self_val {
-            Less => other_val matches { Less },
-            Equal => other_val matches { Equal },
-            Greater => other_val matches { Greater },
-        };
-    }
 }
 
 /// Trait for equality comparisons.

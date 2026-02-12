@@ -8231,7 +8231,7 @@ fn generate_enum_trait_impls(module: &mut TirModule) {
         // Generate Ord::cmp
         let cmp_key = MethodName::format_local(enum_name, Some("Ord"), "cmp");
         if !existing_trait_methods.contains(&cmp_key) {
-            let ordering_type = type_table.make_variant(
+            let ordering_type = type_table.make_enum(
                 "Ordering".to_string(),
                 ModuleSource::core("prelude/traits.wado"),
             );
@@ -8463,33 +8463,30 @@ fn generate_enum_ord_fn(
         )
     };
 
-    // Ordering variant constructors
+    // Ordering enum constructors
     let ordering_less = TirExpr::new(
-        TirExprKind::VariantConstruct {
-            variant_type: ordering_type,
+        TirExprKind::EnumConstruct {
+            enum_type: ordering_type,
             case_index: 0,
             case_name: "Less".to_string(),
-            payload: None,
         },
         ordering_type,
         span,
     );
     let ordering_greater = TirExpr::new(
-        TirExprKind::VariantConstruct {
-            variant_type: ordering_type,
+        TirExprKind::EnumConstruct {
+            enum_type: ordering_type,
             case_index: 2,
             case_name: "Greater".to_string(),
-            payload: None,
         },
         ordering_type,
         span,
     );
     let ordering_equal = TirExpr::new(
-        TirExprKind::VariantConstruct {
-            variant_type: ordering_type,
+        TirExprKind::EnumConstruct {
+            enum_type: ordering_type,
             case_index: 1,
             case_name: "Equal".to_string(),
-            payload: None,
         },
         ordering_type,
         span,

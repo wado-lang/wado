@@ -4034,7 +4034,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
 
                 // Handle Ord trait (<, >, <=, >=)
-                // Ord::cmp returns Ordering variant with discriminants: Less=0, Equal=1, Greater=2
+                // Ord::cmp returns Ordering enum with discriminants: Less=0, Equal=1, Greater=2
                 if matches!(
                     binary.op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
@@ -4062,7 +4062,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                     // Get Ordering type for cmp return value
                     let ordering_type_id =
-                        self.type_table.borrow_mut().intern(ResolvedType::Variant {
+                        self.type_table.borrow_mut().intern(ResolvedType::Enum {
                             name: "Ordering".to_string(),
                             module_source: ModuleSource::core("prelude"),
                         });
@@ -4104,13 +4104,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             _ => unreachable!(),
                         };
 
-                    // Create Ordering variant for comparison
+                    // Create Ordering enum value for comparison
                     let ordering_variant = TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type: ordering_type_id,
+                        TirExprKind::EnumConstruct {
+                            enum_type: ordering_type_id,
                             case_name: case_name.to_string(),
                             case_index,
-                            payload: None,
                         },
                         ordering_type_id,
                         binary.span,
@@ -10311,7 +10310,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Construct Formatter struct literal with custom fields
         let pf = parsed.as_ref().unwrap();
-        let alignment_type = self.type_table.borrow_mut().make_variant(
+        let alignment_type = self.type_table.borrow_mut().make_enum(
             "Alignment".to_string(),
             ModuleSource::core("prelude/format.wado"),
         );
@@ -10344,11 +10343,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     TirStructField {
                         name: "align".to_string(),
                         value: TirExpr::new(
-                            TirExprKind::VariantConstruct {
-                                variant_type: alignment_type,
+                            TirExprKind::EnumConstruct {
+                                enum_type: alignment_type,
                                 case_index: align_index,
                                 case_name: align_name.to_string(),
-                                payload: None,
                             },
                             alignment_type,
                             span,
