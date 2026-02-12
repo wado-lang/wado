@@ -50,7 +50,11 @@ fn print_array(arr: &Array<i32>) with Stdout {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(i) }."i32@Display::fmt"(&mut __f);
+                    __inline_i32_Display__fmt_3: {
+                        let self: Box<i32> = move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(i) };
+                        let f: &mut Formatter = &mut __f;
+                        core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    };
                     break __tmpl: __r;
                 });
             }
@@ -94,19 +98,23 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<i32> { value: __inline_Array_i32___len_4: {
-            break __inline_Array_i32___len_4: empty.used;
-        } }."i32@Display::fmt"(&mut __f);
+        __inline_i32_Display__fmt_4: {
+            let self: Box<i32> = move Box<i32> { value: __inline_Array_i32___len_5: {
+                break __inline_Array_i32___len_5: empty.used;
+            } };
+            let f: &mut Formatter = &mut __f;
+            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+        };
         break __tmpl: __r;
     });
     let mut single: Array<i32> = move [42];
-    __inline_Array_i32___sort_5: {
+    __inline_Array_i32___sort_6: {
         let self: &mut Array<i32> = &mut single;
         self."Array<i32>::sort_by$__Closure_4"(&__Closure_4 {  });
     };
     print_array(&single);
     let mut two: Array<i32> = move [2, 1];
-    __inline_Array_i32___sort_6: {
+    __inline_Array_i32___sort_7: {
         let self: &mut Array<i32> = &mut two;
         self."Array<i32>::sort_by$__Closure_4"(&__Closure_4 {  });
     };

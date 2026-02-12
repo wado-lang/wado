@@ -1,0 +1,50 @@
+// Test: Enum with impl blocks (methods) and trait implementations
+use { println, Stdout } from "core:cli";
+
+enum Season {
+    Spring,
+    Summer,
+    Autumn,
+    Winter,
+}
+
+impl Season {
+    fn is_warm(&self) -> bool {
+        return match *self {
+            Spring => true,
+            Summer => true,
+            _ => false,
+        };
+    }
+
+    fn next(&self) -> Season {
+        return match *self {
+            Spring => Season::Summer,
+            Summer => Season::Autumn,
+            Autumn => Season::Winter,
+            Winter => Season::Spring,
+        };
+    }
+}
+
+export fn run() with Stdout {
+    let s = Season::Spring;
+    if s.is_warm() {
+        println("spring is warm");
+    }
+
+    let n = s.next();
+    if let Summer = n {
+        println("next is summer");
+    }
+
+    let w = Season::Winter;
+    if w.is_warm() {
+        println("winter is warm");
+    } else {
+        println("winter is cold");
+    }
+}
+
+__DATA__
+{"stdout": "spring is warm\nnext is summer\nwinter is cold\n"}

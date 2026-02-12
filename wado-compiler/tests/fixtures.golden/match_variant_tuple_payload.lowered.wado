@@ -30,7 +30,16 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: area }."f64@Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_0: {
+            let self: Box<f64> = move Box<f64> { value: area };
+            let f: &mut Formatter = &mut __f;
+            if (__inline_Formatter__precision_0: {
+                break __inline_Formatter__precision_0: f.precision;
+            } >= 0) {
+                core::internal::panic(move "TODO: precision for f64 Display");
+            }
+            core::prelude/primitives.wado::fmt_f64_display(self.value, f);
+        };
         break __tmpl: __r;
     });
 }

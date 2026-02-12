@@ -61,16 +61,28 @@ fn run() with Stdout {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: 21 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_2: {
+                    let self: Box<i32> = move Box<i32> { value: 21 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "inflate zlib Hello failed");
                 __r."String::append"(move "\ncondition: bytes_equal(&expected_hello, &result)\n");
                 __r."String::append"(move "bytes_equal(&expected_hello, &result): ");
-                __f = __inline_Formatter__new_2: {
+                __f = __inline_Formatter__new_3: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<bool> { value: __v0 }."bool@Display::fmt"(&mut __f);
+                __inline_bool_Display__fmt_4: {
+                    let self: Box<bool> = move Box<bool> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    f."Formatter::pad"(if self.value {
+                        "true";
+                    } else {
+                        "false";
+                    });
+                };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
@@ -80,34 +92,42 @@ fn run() with Stdout {
     let zlib_1000a: Array<u8> = move [120, 156, 115, 116, 28, 5, 163, 96, 20, 12, 119, 0, 0, 137, 12, 253, 233];
     let result_1000a: Array<u8> = move core::zlib::inflate_zlib(&zlib_1000a);
     __assert_1: {
-        let __v0: i32 = __inline_Array_u8___len_3: {
-            break __inline_Array_u8___len_3: result_1000a.used;
+        let __v0: i32 = __inline_Array_u8___len_5: {
+            break __inline_Array_u8___len_5: result_1000a.used;
         };
         let __cond: bool = (__v0 == 1000);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_4: {
-                    break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(167), used: 0 };
+                let mut __r: String = __inline_String__with_capacity_6: {
+                    break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(167), used: 0 };
                 };
                 __r."String::append"(move "Assertion failed in ");
                 __r."String::append"(move "run");
                 __r."String::append"(move " at ");
                 __r."String::append"(move "wado-compiler/tests/fixtures/zlib_inflate.wado");
                 __r."String::append"(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_5: {
+                let mut __f: Formatter = __inline_Formatter__new_7: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: 27 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_8: {
+                    let self: Box<i32> = move Box<i32> { value: 27 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "1000xA: wrong length");
                 __r."String::append"(move "\ncondition: result_1000a.len() == 1000\n");
                 __r."String::append"(move "result_1000a.len(): ");
-                __f = __inline_Formatter__new_6: {
+                __f = __inline_Formatter__new_9: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: __v0 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_10: {
+                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
@@ -132,45 +152,8 @@ fn run() with Stdout {
     __assert_2: {
         if !all_a {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_7: {
-                    break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(133), used: 0 };
-                };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_inflate.wado");
-                __r."String::append"(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_8: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                Box<i32> { value: 35 }."i32@Display::fmt"(&mut __f);
-                __r."String::append"(move ": ");
-                __r."String::append"(move "1000xA: wrong content");
-                __r."String::append"(move "\ncondition: all_a\n");
-                __r."String::append"(move "all_a: ");
-                __f = __inline_Formatter__new_9: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                Box<bool> { value: all_a }."bool@Display::fmt"(&mut __f);
-                __r."String::append"(move "\n");
-                break __tmpl: __r;
-            });
-        }
-    }
-    core::cli::println(move "inflate 1000xA passed");
-    let zlib_hw20: Array<u8> = move [120, 156, 243, 72, 205, 201, 201, 215, 81, 8, 207, 47, 202, 73, 81, 84, 240, 24, 229, 65, 121, 0, 245, 131, 90, 181];
-    let result_hw20: Array<u8> = move core::zlib::inflate_zlib(&zlib_hw20);
-    __assert_3: {
-        let __v0: i32 = __inline_Array_u8___len_10: {
-            break __inline_Array_u8___len_10: result_hw20.used;
-        };
-        let __cond: bool = (__v0 == 280);
-        if !__cond {
-            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_11: {
-                    break __inline_String__with_capacity_11: String { repr: "array_new<u8>"(164), used: 0 };
+                    break __inline_String__with_capacity_11: String { repr: "array_new<u8>"(133), used: 0 };
                 };
                 __r."String::append"(move "Assertion failed in ");
                 __r."String::append"(move "run");
@@ -181,16 +164,73 @@ fn run() with Stdout {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: 41 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_13: {
+                    let self: Box<i32> = move Box<i32> { value: 35 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
+                __r."String::append"(move ": ");
+                __r."String::append"(move "1000xA: wrong content");
+                __r."String::append"(move "\ncondition: all_a\n");
+                __r."String::append"(move "all_a: ");
+                __f = __inline_Formatter__new_14: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_bool_Display__fmt_15: {
+                    let self: Box<bool> = move Box<bool> { value: all_a };
+                    let f: &mut Formatter = &mut __f;
+                    f."Formatter::pad"(if self.value {
+                        "true";
+                    } else {
+                        "false";
+                    });
+                };
+                __r."String::append"(move "\n");
+                break __tmpl: __r;
+            });
+        }
+    }
+    core::cli::println(move "inflate 1000xA passed");
+    let zlib_hw20: Array<u8> = move [120, 156, 243, 72, 205, 201, 201, 215, 81, 8, 207, 47, 202, 73, 81, 84, 240, 24, 229, 65, 121, 0, 245, 131, 90, 181];
+    let result_hw20: Array<u8> = move core::zlib::inflate_zlib(&zlib_hw20);
+    __assert_3: {
+        let __v0: i32 = __inline_Array_u8___len_16: {
+            break __inline_Array_u8___len_16: result_hw20.used;
+        };
+        let __cond: bool = (__v0 == 280);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = __inline_String__with_capacity_17: {
+                    break __inline_String__with_capacity_17: String { repr: "array_new<u8>"(164), used: 0 };
+                };
+                __r."String::append"(move "Assertion failed in ");
+                __r."String::append"(move "run");
+                __r."String::append"(move " at ");
+                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_inflate.wado");
+                __r."String::append"(move ":");
+                let mut __f: Formatter = __inline_Formatter__new_18: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_19: {
+                    let self: Box<i32> = move Box<i32> { value: 41 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "HW20: wrong length");
                 __r."String::append"(move "\ncondition: result_hw20.len() == 280\n");
                 __r."String::append"(move "result_hw20.len(): ");
-                __f = __inline_Formatter__new_13: {
+                __f = __inline_Formatter__new_20: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: __v0 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_21: {
+                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
@@ -210,35 +250,47 @@ fn run() with Stdout {
                     let __cond: bool = (__v0 == __v1);
                     if !__cond {
                         core::internal::panic(__tmpl: {
-                            let mut __r: String = __inline_String__with_capacity_14: {
-                                break __inline_String__with_capacity_14: String { repr: "array_new<u8>"(202), used: 0 };
+                            let mut __r: String = __inline_String__with_capacity_22: {
+                                break __inline_String__with_capacity_22: String { repr: "array_new<u8>"(202), used: 0 };
                             };
                             __r."String::append"(move "Assertion failed in ");
                             __r."String::append"(move "run");
                             __r."String::append"(move " at ");
                             __r."String::append"(move "wado-compiler/tests/fixtures/zlib_inflate.wado");
                             __r."String::append"(move ":");
-                            let mut __f: Formatter = __inline_Formatter__new_15: {
+                            let mut __f: Formatter = __inline_Formatter__new_23: {
                                 let buf: &mut String = &mut __r;
-                                break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                                break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                             };
-                            Box<i32> { value: 44 }."i32@Display::fmt"(&mut __f);
+                            __inline_i32_Display__fmt_24: {
+                                let self: Box<i32> = move Box<i32> { value: 44 };
+                                let f: &mut Formatter = &mut __f;
+                                core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                            };
                             __r."String::append"(move ": ");
                             __r."String::append"(move "HW20: wrong content");
                             __r."String::append"(move "\ncondition: result_hw20[i] == expected_hw[i]\n");
                             __r."String::append"(move "result_hw20[i]: ");
-                            __f = __inline_Formatter__new_16: {
+                            __f = __inline_Formatter__new_25: {
                                 let buf: &mut String = &mut __r;
-                                break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                                break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                             };
-                            Box<u8> { value: __v0 }."u8@Display::fmt"(&mut __f);
+                            __inline_u8_Display__fmt_26: {
+                                let self: Box<u8> = move Box<u8> { value: __v0 };
+                                let f: &mut Formatter = &mut __f;
+                                core::prelude/primitives.wado::fmt_i32_decimal(self.value as i32, f);
+                            };
                             __r."String::append"(move "\n");
                             __r."String::append"(move "expected_hw[i]: ");
-                            __f = __inline_Formatter__new_17: {
+                            __f = __inline_Formatter__new_27: {
                                 let buf: &mut String = &mut __r;
-                                break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                                break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                             };
-                            Box<u8> { value: __v1 }."u8@Display::fmt"(&mut __f);
+                            __inline_u8_Display__fmt_28: {
+                                let self: Box<u8> = move Box<u8> { value: __v1 };
+                                let f: &mut Formatter = &mut __f;
+                                core::prelude/primitives.wado::fmt_i32_decimal(self.value as i32, f);
+                            };
                             __r."String::append"(move "\n");
                             break __tmpl: __r;
                         });
@@ -252,34 +304,42 @@ fn run() with Stdout {
     let zlib_256: Array<u8> = move [120, 156, 1, 0, 1, 255, 254, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 173, 246, 127, 129];
     let result_256: Array<u8> = move core::zlib::inflate_zlib(&zlib_256);
     __assert_5: {
-        let __v0: i32 = __inline_Array_u8___len_18: {
-            break __inline_Array_u8___len_18: result_256.used;
+        let __v0: i32 = __inline_Array_u8___len_29: {
+            break __inline_Array_u8___len_29: result_256.used;
         };
         let __cond: bool = (__v0 == 256);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_19: {
-                    break __inline_String__with_capacity_19: String { repr: "array_new<u8>"(162), used: 0 };
+                let mut __r: String = __inline_String__with_capacity_30: {
+                    break __inline_String__with_capacity_30: String { repr: "array_new<u8>"(162), used: 0 };
                 };
                 __r."String::append"(move "Assertion failed in ");
                 __r."String::append"(move "run");
                 __r."String::append"(move " at ");
                 __r."String::append"(move "wado-compiler/tests/fixtures/zlib_inflate.wado");
                 __r."String::append"(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_20: {
+                let mut __f: Formatter = __inline_Formatter__new_31: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_31: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: 51 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_32: {
+                    let self: Box<i32> = move Box<i32> { value: 51 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "bytes 0-255: wrong length");
                 __r."String::append"(move "\ncondition: result_256.len() == 256\n");
                 __r."String::append"(move "result_256.len(): ");
-                __f = __inline_Formatter__new_21: {
+                __f = __inline_Formatter__new_33: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_33: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: __v0 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_34: {
+                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
@@ -297,28 +357,36 @@ fn run() with Stdout {
                     let __cond: bool = (__v0 == i as u8);
                     if !__cond {
                         core::internal::panic(__tmpl: {
-                            let mut __r: String = __inline_String__with_capacity_22: {
-                                break __inline_String__with_capacity_22: String { repr: "array_new<u8>"(160), used: 0 };
+                            let mut __r: String = __inline_String__with_capacity_35: {
+                                break __inline_String__with_capacity_35: String { repr: "array_new<u8>"(160), used: 0 };
                             };
                             __r."String::append"(move "Assertion failed in ");
                             __r."String::append"(move "run");
                             __r."String::append"(move " at ");
                             __r."String::append"(move "wado-compiler/tests/fixtures/zlib_inflate.wado");
                             __r."String::append"(move ":");
-                            let mut __f: Formatter = __inline_Formatter__new_23: {
+                            let mut __f: Formatter = __inline_Formatter__new_36: {
                                 let buf: &mut String = &mut __r;
-                                break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                                break __inline_Formatter__new_36: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                             };
-                            Box<i32> { value: 53 }."i32@Display::fmt"(&mut __f);
+                            __inline_i32_Display__fmt_37: {
+                                let self: Box<i32> = move Box<i32> { value: 53 };
+                                let f: &mut Formatter = &mut __f;
+                                core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                            };
                             __r."String::append"(move ": ");
                             __r."String::append"(move "bytes 0-255: wrong content");
                             __r."String::append"(move "\ncondition: result_256[i] == i as u8\n");
                             __r."String::append"(move "result_256[i]: ");
-                            __f = __inline_Formatter__new_24: {
+                            __f = __inline_Formatter__new_38: {
                                 let buf: &mut String = &mut __r;
-                                break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                                break __inline_Formatter__new_38: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                             };
-                            Box<u8> { value: __v0 }."u8@Display::fmt"(&mut __f);
+                            __inline_u8_Display__fmt_39: {
+                                let self: Box<u8> = move Box<u8> { value: __v0 };
+                                let f: &mut Formatter = &mut __f;
+                                core::prelude/primitives.wado::fmt_i32_decimal(self.value as i32, f);
+                            };
                             __r."String::append"(move "\n");
                             break __tmpl: __r;
                         });
@@ -332,34 +400,42 @@ fn run() with Stdout {
     let zlib_empty: Array<u8> = move [120, 156, 3, 0, 0, 0, 0, 1];
     let result_empty: Array<u8> = move core::zlib::inflate_zlib(&zlib_empty);
     __assert_7: {
-        let __v0: i32 = __inline_Array_u8___len_25: {
-            break __inline_Array_u8___len_25: result_empty.used;
+        let __v0: i32 = __inline_Array_u8___len_40: {
+            break __inline_Array_u8___len_40: result_empty.used;
         };
         let __cond: bool = (__v0 == 0);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_26: {
-                    break __inline_String__with_capacity_26: String { repr: "array_new<u8>"(164), used: 0 };
+                let mut __r: String = __inline_String__with_capacity_41: {
+                    break __inline_String__with_capacity_41: String { repr: "array_new<u8>"(164), used: 0 };
                 };
                 __r."String::append"(move "Assertion failed in ");
                 __r."String::append"(move "run");
                 __r."String::append"(move " at ");
                 __r."String::append"(move "wado-compiler/tests/fixtures/zlib_inflate.wado");
                 __r."String::append"(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_27: {
+                let mut __f: Formatter = __inline_Formatter__new_42: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_42: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: 60 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_43: {
+                    let self: Box<i32> = move Box<i32> { value: 60 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "empty: wrong length");
                 __r."String::append"(move "\ncondition: result_empty.len() == 0\n");
                 __r."String::append"(move "result_empty.len(): ");
-                __f = __inline_Formatter__new_28: {
+                __f = __inline_Formatter__new_44: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_44: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                Box<i32> { value: __v0 }."i32@Display::fmt"(&mut __f);
+                __inline_i32_Display__fmt_45: {
+                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });

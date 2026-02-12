@@ -16,7 +16,7 @@ use indexmap::IndexMap;
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
-use crate::name::{self as name, LocalMethodName, ModuleSource, mangle_generic_name};
+use crate::name::{self as name, LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 
 use crate::ast::{
     self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, Function, GlobalDecl, IfExpr,
@@ -29,9 +29,10 @@ use crate::project::Project;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::tir::{
     FunctionRef, MonomorphInfo, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp,
-    TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLiteralPattern,
-    TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirTest, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFunction, TirGlobal,
+    TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStruct, TirStructField, TirTest, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -805,7 +806,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 if let Item::Impl(impl_block) = item {
                     let type_name = self.get_type_name(&impl_block.ty);
                     for assoc_const in &impl_block.constants {
-                        let key = format!("{type_name}::{}", assoc_const.name);
+                        let key = MethodName::format_local(&type_name, None, &assoc_const.name);
                         self.associated_constants
                             .insert(key, (assoc_const.ty.clone(), assoc_const.value.clone()));
                     }
@@ -897,15 +898,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &impl_block.ty,
                             trait_name.as_deref(),
                         ) {
-                            // Mangle the method name:
-                            // - Trait impl: StructName^TraitName::method_name
-                            // - Inherent impl: StructName::method_name
-                            tir_func.name = match &trait_name {
-                                Some(trait_n) => {
-                                    format!("{}^{}::{}", struct_name, trait_n, method.name)
-                                }
-                                None => format!("{}::{}", struct_name, method.name),
-                            };
+                            tir_func.name = MethodName::format_local(
+                                &struct_name,
+                                trait_name.as_deref(),
+                                &method.name,
+                            );
                             tir_module.add_function(tir_func);
                         }
                     }
@@ -929,8 +926,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 &impl_block.ty,
                                 Some(trait_n),
                             ) {
-                                tir_func.name =
-                                    format!("{}^{}::{}", struct_name, trait_n, default_method.name);
+                                tir_func.name = MethodName::format_local(
+                                    &struct_name,
+                                    Some(trait_n),
+                                    &default_method.name,
+                                );
                                 // Default methods from trait declarations are not marked pub
                                 // in the AST, but they should be treated as pub since they are
                                 // part of a trait implementation
@@ -966,6 +966,26 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     if let Some(tir_global) = self.resolve_global(global_decl) {
                         tir_module.globals.push(tir_global);
                     }
+                }
+                Item::Enum(enum_decl) => {
+                    let tir_enum = TirEnum {
+                        name: enum_decl.name.clone(),
+                        is_pub: enum_decl.is_pub,
+                        type_params: Vec::new(),
+                        monomorph_info: None,
+                        cases: enum_decl
+                            .cases
+                            .iter()
+                            .enumerate()
+                            .map(|(i, case)| TirEnumCase {
+                                name: case.name.clone(),
+                                index: i as u32,
+                                span: case.span,
+                            })
+                            .collect(),
+                        span: enum_decl.span,
+                    };
+                    tir_module.add_enum(tir_enum);
                 }
                 // Other items will be added as needed
                 _ => {}
@@ -2096,15 +2116,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .map(|t| self.resolve_type(t))
                             .unwrap_or(TypeTable::UNIT);
 
-                        // Mangle the method name:
-                        // - Trait impl: StructName^TraitName::method_name
-                        // - Inherent impl: StructName::method_name
-                        let mangled_name = match &trait_name {
-                            Some(trait_n) => {
-                                format!("{}^{}::{}", struct_name, trait_n, method.name)
-                            }
-                            None => format!("{}::{}", struct_name, method.name),
-                        };
+                        let mangled_name = MethodName::format_local(
+                            &struct_name,
+                            trait_name.as_deref(),
+                            &method.name,
+                        );
                         self.function_return_types.insert(mangled_name, return_type);
                     }
 
@@ -2502,16 +2518,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)
-        // Use trait-mangled name for trait impls: StructName^TraitName::method_name
-        let mangled_name = match trait_name {
-            Some(t) => format!("{}^{}::{}", struct_name, t, func.name),
-            None => format!("{}::{}", struct_name, func.name),
-        };
+        let mangled_name = MethodName::format_local(struct_name, trait_name, &func.name);
         self.function_return_types
             .insert(mangled_name.clone(), return_type);
 
         // Display name for #function: StructName::method_name
-        let display_name = format!("{}::{}", struct_name, func.name);
+        let display_name = MethodName::format_local(struct_name, None, &func.name);
         let mut ctx = FunctionContext::new(return_type, display_name);
 
         // Resolve parameters (including &self)
@@ -3182,6 +3194,48 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             } => {
                 let resolved_type = self.type_table.borrow().get(scrutinee_type).clone();
 
+                // Handle enum types (no payload, just discriminant matching)
+                if let ResolvedType::Enum { name, .. } = &resolved_type {
+                    if !bindings.is_empty() {
+                        let _ = self.logger.error(TypeError::InvalidPattern {
+                            message: format!("enum case `{variant_name}` does not have a payload"),
+                            span: *span,
+                        });
+                    }
+                    // Look up the enum case index
+                    if let Some(enum_info) = self.enum_cases.get(name) {
+                        if let Some(case_data) =
+                            enum_info.cases.iter().find(|c| c.name == *variant_name)
+                        {
+                            return TirPattern::Enum {
+                                enum_type: scrutinee_type,
+                                case_name: variant_name.clone(),
+                                case_index: case_data.index,
+                            };
+                        }
+                        let _ = self.logger.error(TypeError::TypeMismatch {
+                            expected: format!(
+                                "one of: {}",
+                                enum_info
+                                    .cases
+                                    .iter()
+                                    .map(|c| c.name.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ),
+                            found: variant_name.clone(),
+                            span: *span,
+                        });
+                        return TirPattern::Wildcard;
+                    }
+                    let _ = self.logger.error(TypeError::TypeMismatch {
+                        expected: format!("enum type `{name}`"),
+                        found: "unknown enum".to_string(),
+                        span: *span,
+                    });
+                    return TirPattern::Wildcard;
+                }
+
                 // Each variant case has exactly one payload type.
                 // Determine the payload type for the variant case.
                 let payload_type: TypeId = match &resolved_type {
@@ -3215,7 +3269,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     }
                     _ => {
                         let _ = self.logger.error(TypeError::TypeMismatch {
-                            expected: "variant type (Option or custom variant)".to_string(),
+                            expected: "variant or enum type".to_string(),
                             found: format!("{resolved_type:?}"),
                             span: *span,
                         });
@@ -3942,7 +3996,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     );
 
                     let mangled_method_name =
-                        format!("{}^{}::{}", struct_name, trait_info.trait_name, "eq");
+                        MethodName::format_local(&struct_name, Some(&trait_info.trait_name), "eq");
 
                     let call_expr = TirExpr::new(
                         TirExprKind::MethodCall {
@@ -4014,7 +4068,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         });
 
                     let mangled_method_name =
-                        format!("{}^{}::{}", struct_name, trait_info.trait_name, "cmp");
+                        MethodName::format_local(&struct_name, Some(&trait_info.trait_name), "cmp");
 
                     let cmp_call = TirExpr::new(
                         TirExprKind::MethodCall {
@@ -4140,9 +4194,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         binary.span,
                     );
 
-                    // Get the mangled method name: StructName^Add::add
-                    let mangled_method_name =
-                        format!("{}^{}::{}", struct_name, trait_info.trait_name, method_name);
+                    let mangled_method_name = MethodName::format_local(
+                        &struct_name,
+                        Some(&trait_info.trait_name),
+                        method_name,
+                    );
 
                     return TirExpr::new(
                         TirExprKind::MethodCall {
@@ -4202,9 +4258,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     );
 
                     // For shift operations, rhs is u32 (not &Self), so pass directly
-                    // Get the mangled method name: StructName^Shl::shl
-                    let mangled_method_name =
-                        format!("{}^{}::{}", struct_name, trait_info.trait_name, method_name);
+                    let mangled_method_name = MethodName::format_local(
+                        &struct_name,
+                        Some(&trait_info.trait_name),
+                        method_name,
+                    );
 
                     return TirExpr::new(
                         TirExprKind::MethodCall {
@@ -4347,9 +4405,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         unary.span,
                     );
 
-                    // Get the mangled method name: StructName^Neg::neg
                     let mangled_method_name =
-                        format!("{}^{}::neg", struct_name, trait_info.trait_name);
+                        MethodName::format_local(&struct_name, Some(&trait_info.trait_name), "neg");
 
                     return TirExpr::new(
                         TirExprKind::MethodCall {
@@ -4395,9 +4452,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         unary.span,
                     );
 
-                    // Get the mangled method name: StructName^BitNot::bitnot
-                    let mangled_method_name =
-                        format!("{}^{}::bitnot", struct_name, trait_info.trait_name);
+                    let mangled_method_name = MethodName::format_local(
+                        &struct_name,
+                        Some(&trait_info.trait_name),
+                        "bitnot",
+                    );
 
                     return TirExpr::new(
                         TirExprKind::MethodCall {
@@ -4552,8 +4611,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         );
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
-                        let mangled_method_name =
-                            format!("{}^{}::index_assign", struct_name, trait_info.trait_name);
+                        let mangled_method_name = MethodName::format_local(
+                            &struct_name,
+                            Some(&trait_info.trait_name),
+                            "index_assign",
+                        );
 
                         return TirExpr::new(
                             TirExprKind::MethodCall {
@@ -4851,7 +4913,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     // Static methods are registered with mangled names "Type::method"
                     else if self.is_static_method(prefix, suffix) {
                         // Return as a static method call - will be converted to StaticCall below
-                        let mangled_name = format!("{prefix}::{suffix}");
+                        let mangled_name = MethodName::format_local(prefix, None, suffix);
                         return self.resolve_static_method_call_from_qualified(
                             prefix,
                             suffix,
@@ -5278,9 +5340,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             span,
         );
 
-        let mangled_func_name = format!("{type_name}::from_pair");
         let method_info =
             LocalMethodName::new(type_name.to_string(), None, "from_pair".to_string());
+        let mangled_func_name = method_info.to_mangled_name();
 
         TirExpr::new(
             TirExprKind::StaticCall {
@@ -5591,9 +5653,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             );
 
                             // Build static call: u128::from_u64(value) or i128::from_i64(value)
-                            let mangled_func_name = format!("{name}::{method_name}");
                             let method_info =
                                 LocalMethodName::new(name.clone(), None, method_name.to_string());
+                            let mangled_func_name = method_info.to_mangled_name();
 
                             return TirExpr::new(
                                 TirExprKind::StaticCall {
@@ -5812,6 +5874,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 };
                 ("Array".to_string(), array_module)
             }
+            // Enum types - use enum name and its defining module
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => (name.clone(), module_source.clone()),
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -6042,20 +6109,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             };
 
-        // Build mangled method name:
-        // - Trait method: StructName^TraitName::method_name
-        // - Inherent method: StructName::method_name
-        let mangled_method_name = match &trait_name {
-            Some(trait_n) => format!(
-                "{}^{}::{}",
-                receiver_struct_name, trait_n, method_call.method
-            ),
-            None => format!("{}::{}", receiver_struct_name, method_call.method),
-        };
+        let mangled_method_name = MethodName::format_local(
+            &receiver_struct_name,
+            trait_name.as_deref(),
+            &method_call.method,
+        );
 
         // Build monomorph_info for method calls on generic types
         let monomorph_info = receiver_type_args.map(|type_args| {
-            let generic_name = format!("{}::{}", base_struct_name, method_call.method);
+            let generic_name =
+                MethodName::format_local(&base_struct_name, None, &method_call.method);
             MonomorphInfo {
                 generic_name,
                 type_args,
@@ -6412,8 +6475,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         };
 
-        // Build the mangled function name
-        let mangled_func_name = format!("{}::{}", mangled_struct_name, static_call.method);
+        let mangled_func_name =
+            MethodName::format_local(&mangled_struct_name, None, &static_call.method);
 
         // Look up return type
         let mut return_type = self.lookup_static_method_return_type(
@@ -6434,7 +6497,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 (None, vec![])
             } else {
                 // Generic static method: track the original generic name
-                let generic_name = format!("{}::{}", struct_name, static_call.method);
+                let generic_name =
+                    MethodName::format_local(&struct_name, None, &static_call.method);
                 let type_arg_names: Vec<String> = struct_type_args
                     .iter()
                     .map(|t| self.type_table.borrow().mangle_type_name(*t))
@@ -6485,7 +6549,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Also try with just StructName::method (for non-generic types)
-        let simple_name = format!("{struct_name}::{method_name}");
+        let simple_name = MethodName::format_local(struct_name, None, method_name);
         if let Some(&return_type) = self.function_return_types.get(&simple_name) {
             return return_type;
         }
@@ -6715,8 +6779,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Check if a qualified name `struct_name::method_name` is a static method
     fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
-        // Build the mangled function name
-        let mangled_name = format!("{struct_name}::{method_name}");
+        let mangled_name = MethodName::format_local(struct_name, None, method_name);
 
         // Check if it's registered in function_return_types (static methods are registered there)
         if self.function_return_types.contains_key(&mangled_name) {
@@ -6816,7 +6879,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 {
                     // Follow the chain to find the ultimate struct
                     let base_name = self.get_ultimate_base_struct_name(base_type);
-                    let mangled = format!("{base_name}::{method_name}");
+                    let mangled = MethodName::format_local(&base_name, None, method_name);
                     (base_name, mangled)
                 } else {
                     (struct_name.to_string(), mangled_func_name.to_string())
@@ -6981,11 +7044,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 // Use None to trigger "search all loaded modules" logic
                 (prim.as_str().to_string(), None, None, None)
             }
+            // Enum types - search for impl blocks by enum name
+            ResolvedType::Enum {
+                name,
+                module_source,
+            } => (name.clone(), Some(module_source.clone()), None, None),
             _ => return None,
         };
 
-        // Build the mangled method name and look it up locally first
-        let mangled_name = format!("{struct_name}::{method_name}");
+        let mangled_name = MethodName::format_local(&struct_name, None, method_name);
         if let Some(&return_type) = self.function_return_types.get(&mangled_name) {
             // For locally registered methods, find self_kind and param_types from the AST
             // Also checks that bounded impl block constraints are satisfied
@@ -8182,6 +8249,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return self.find_trait_impl_for_type(&type_name, trait_name);
         }
 
+        // All enums automatically implement Eq, Ord, and Display
+        if let ResolvedType::Enum { .. } = &resolved {
+            match trait_name {
+                "Eq" | "Ord" | "Display" => return true,
+                _ => {}
+            }
+        }
+
         // Get the type name and type args for looking up implementations
         let (type_name, type_args) = match &resolved {
             ResolvedType::Struct { name, .. } => (name.clone(), None),
@@ -8910,7 +8985,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         );
 
         let mangled_index_mut_name =
-            format!("{}^{}::index_mut", struct_name, index_mut_info.trait_name);
+            MethodName::format_local(&struct_name, Some(&index_mut_info.trait_name), "index_mut");
 
         // IndexMut returns &mut Output
         let mut_ref_output_type = self
@@ -8957,11 +9032,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let receiver_for_method =
             self.adjust_receiver_for_self_kind(index_mut_call, self_kind, method_call.span);
 
-        // Build mangled method name
-        let mangled_method_name = match &method_trait_name {
-            Some(trait_n) => format!("{}^{}::{}", output_struct_name, trait_n, method_call.method),
-            None => format!("{}::{}", output_struct_name, method_call.method),
-        };
+        let mangled_method_name = MethodName::format_local(
+            &output_struct_name,
+            method_trait_name.as_deref(),
+            &method_call.method,
+        );
 
         // Use trait impl module source if this is a trait method, otherwise current module
         let method_call_module_source =
@@ -9280,9 +9355,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     index.span,
                 );
 
-                // Get the mangled method name: StructName^Index<IndexType>::index
                 let mangled_method_name =
-                    format!("{}^{}::index", struct_name, trait_info.trait_name);
+                    MethodName::format_local(&struct_name, Some(&trait_info.trait_name), "index");
 
                 // The method returns &Output, so the type is Ref(output_type)
                 let ref_output_type = self
@@ -9332,9 +9406,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     index.span,
                 );
 
-                // Get the mangled method name: StructName^IndexValue<IndexType>::index_value
-                let mangled_method_name =
-                    format!("{}^{}::index_value", struct_name, trait_info.trait_name);
+                let mangled_method_name = MethodName::format_local(
+                    &struct_name,
+                    Some(&trait_info.trait_name),
+                    "index_value",
+                );
 
                 // IndexValue returns Output directly (not a reference)
                 return TirExpr::new(
@@ -10019,7 +10095,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             }
                         }
                     };
-                    let mangled_name = format!("{receiver_type_name}@{trait_name}::fmt");
+                    let mangled_name =
+                        MethodName::format_local(&receiver_type_name, Some(trait_name), "fmt");
                     let fmt_mut_ref = TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -10484,9 +10561,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             lit.span,
                         );
 
-                        let mangled_func_name = format!("{name}::{method_name}");
                         let method_info =
                             LocalMethodName::new(name.clone(), None, method_name.to_string());
+                        let mangled_func_name = method_info.to_mangled_name();
 
                         return TirExpr::new(
                             TirExprKind::StaticCall {
@@ -10580,8 +10657,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                 // Build static call: u128::from_u64(expr as u64)
                 // Note: i128/u128 are defined in core:prelude/int128
-                let mangled_func_name = format!("{name}::{method_name}");
                 let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
+                let mangled_func_name = method_info.to_mangled_name();
 
                 return TirExpr::new(
                     TirExprKind::StaticCall {

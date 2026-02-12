@@ -1420,6 +1420,12 @@ pub enum TirPattern {
         /// Payload type for the matched variant case (unit for no-payload cases)
         payload_type: TypeId,
     },
+    /// Enum case pattern (enums are simple i32 discriminants with no payload)
+    Enum {
+        enum_type: TypeId,
+        case_name: String,
+        case_index: u32,
+    },
 }
 
 #[derive(Debug, Clone)]

@@ -1973,6 +1973,15 @@ fn remap_pattern(
                 .collect(),
             payload_type: *payload_type,
         },
+        TirPattern::Enum {
+            enum_type,
+            case_name,
+            case_index,
+        } => TirPattern::Enum {
+            enum_type: *enum_type,
+            case_name: case_name.clone(),
+            case_index: *case_index,
+        },
     }
 }
 

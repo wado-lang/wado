@@ -702,6 +702,9 @@ impl Monomorphizer {
                     self.rewrite_types_in_pattern(binding, type_table);
                 }
             }
+            TirPattern::Enum { enum_type, .. } => {
+                *enum_type = self.rewrite_type_id(*enum_type, type_table);
+            }
         }
     }
 
@@ -2204,6 +2207,9 @@ impl Monomorphizer {
                 for binding in bindings {
                     self.substitute_types_in_pattern(binding, substitution, type_table);
                 }
+            }
+            TirPattern::Enum { enum_type, .. } => {
+                *enum_type = self.substitute_type(*enum_type, substitution, type_table);
             }
         }
     }

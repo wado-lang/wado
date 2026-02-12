@@ -1,0 +1,59 @@
+// Test: Enum pattern matching with if let, matches, and match with guards
+use { println, Stdout } from "core:cli";
+
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+export fn run() with Stdout {
+    let d = Direction::Up;
+
+    // if let pattern
+    if let Up = d {
+        println("is up");
+    } else {
+        println("not up");
+    }
+
+    // if let with non-matching case
+    if let Down = d {
+        println("is down");
+    } else {
+        println("not down");
+    }
+
+    // matches operator
+    if d matches { Up } {
+        println("matches up");
+    }
+
+    if d matches { Left } {
+        println("matches left");
+    } else {
+        println("not left");
+    }
+
+    // match with wildcard
+    let label = match d {
+        Up => "up!",
+        Down => "down!",
+        _ => "other",
+    };
+    println(label);
+
+    // match with guard
+    let x = Direction::Right;
+    let val = 42;
+    let msg = match x {
+        Right && val > 10 => "right and big",
+        Right => "right and small",
+        _ => "other",
+    };
+    println(msg);
+}
+
+__DATA__
+{"stdout": "is up\nnot down\nmatches up\nnot left\nup!\nright and big\n"}

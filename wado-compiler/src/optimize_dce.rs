@@ -869,18 +869,14 @@ fn analyze_expr(
                         ..
                     } => {
                         // Monomorphized struct method call - use FunctionId::Free
-                        // Include trait name for trait methods
-                        let mangled_func_name = if let Some(ref trait_n) = trait_name {
-                            format!("{name}^{trait_n}::{method_name}")
-                        } else {
-                            format!("{name}::{method_name}")
-                        };
+                        let mangled_func_name =
+                            MethodName::format_local(name, trait_name.as_deref(), &method_name);
                         // Build base method name using the original generic struct name
-                        let base_method_name = if let Some(ref trait_n) = trait_name {
-                            format!("{base_struct}^{trait_n}::{method_name}")
-                        } else {
-                            format!("{base_struct}::{method_name}")
-                        };
+                        let base_method_name = MethodName::format_local(
+                            base_struct,
+                            trait_name.as_deref(),
+                            &method_name,
+                        );
                         // Use entry point module because monomorphized functions are added
                         // to the entry module, not the original struct's module
                         let callee_id = FunctionId::Free(FreeFunctionName::with_monomorph_info(
@@ -1006,6 +1002,19 @@ fn analyze_expr(
                             base_name,
                         ));
                         analysis.callees.insert(callee_id);
+                    }
+                    ResolvedType::Enum {
+                        name,
+                        module_source,
+                    } => {
+                        // Enum method call (user-defined or auto-derived trait impls)
+                        let method_id = FunctionId::Method(MethodName::new(
+                            module_source.clone(),
+                            name.clone(),
+                            trait_name.clone(),
+                            method_name.clone(),
+                        ));
+                        analysis.callees.insert(method_id);
                     }
                     ResolvedType::Resource { name, .. } => {
                         // Resource instance method call (e.g., fields.has(), fields.append())
@@ -1892,6 +1901,9 @@ fn collect_types_from_pattern(
             for binding in bindings {
                 collect_types_from_pattern(binding, type_table, reachable);
             }
+        }
+        TirPattern::Enum { enum_type, .. } => {
+            collect_type_transitive(*enum_type, type_table, reachable);
         }
     }
 }

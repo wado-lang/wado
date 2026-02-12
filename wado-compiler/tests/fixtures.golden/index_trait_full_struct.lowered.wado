@@ -37,7 +37,11 @@ fn "Value::describe"(self: &Value) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<i32> { value: self.n }."i32@Display::fmt"(&mut __f);
+        __inline_i32_Display__fmt_2: {
+            let __sroa_self_value: i32 = self.n;
+            let f: &mut Formatter = &mut __f;
+            core::prelude/primitives.wado::fmt_i32_decimal(__sroa_self_value, f);
+        };
         break __tmpl: __r;
     };
 }
@@ -52,13 +56,21 @@ fn "Container::stats"(self: &Container) -> String {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<i32> { value: self.read_count }."i32@Display::fmt"(&mut __f);
-        __r."String::append"(move ", writes=");
-        __f = __inline_Formatter__new_2: {
-            let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        __inline_i32_Display__fmt_2: {
+            let __sroa_self_value: i32 = self.read_count;
+            let f: &mut Formatter = &mut __f;
+            core::prelude/primitives.wado::fmt_i32_decimal(__sroa_self_value, f);
         };
-        Box<i32> { value: self.write_count }."i32@Display::fmt"(&mut __f);
+        __r."String::append"(move ", writes=");
+        __f = __inline_Formatter__new_3: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_i32_Display__fmt_4: {
+            let __sroa_self_value: i32 = self.write_count;
+            let f: &mut Formatter = &mut __f;
+            core::prelude/primitives.wado::fmt_i32_decimal(__sroa_self_value, f);
+        };
         break __tmpl: __r;
     };
 }
@@ -197,40 +209,44 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<i32> { value: c."Container::total"() }."i32@Display::fmt"(&mut __f);
+        __inline_i32_Display__fmt_16: {
+            let self: Box<i32> = move Box<i32> { value: c."Container::total"() };
+            let f: &mut Formatter = &mut __f;
+            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+        };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_16: {
-            break __inline_String__with_capacity_16: String { repr: "array_new<u8>"(23), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_17: {
+            break __inline_String__with_capacity_17: String { repr: "array_new<u8>"(23), used: 0 };
         };
         __r."String::append"(move "Stats: ");
         __r."String::append"(move c."Container::stats"());
         break __tmpl: __r;
     });
-    __inline_Container__reset_stats_17: {
+    __inline_Container__reset_stats_18: {
         c.read_count = 0;
         c.write_count = 0;
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_18: {
-            break __inline_String__with_capacity_18: String { repr: "array_new<u8>"(29), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_19: {
+            break __inline_String__with_capacity_19: String { repr: "array_new<u8>"(29), used: 0 };
         };
         __r."String::append"(move "After reset: ");
         __r."String::append"(move c."Container::stats"());
         break __tmpl: __r;
     });
-    __inline_Value__increment_19: {
+    __inline_Value__increment_20: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(0);
         self.n = (self.n + 1);
     };
-    __inline_Value__increment_20: {
+    __inline_Value__increment_21: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(1);
         self.n = (self.n + 1);
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_21: {
-            break __inline_String__with_capacity_21: String { repr: "array_new<u8>"(29), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_22: {
+            break __inline_String__with_capacity_22: String { repr: "array_new<u8>"(29), used: 0 };
         };
         __r."String::append"(move "Final stats: ");
         __r."String::append"(move c."Container::stats"());

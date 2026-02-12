@@ -2561,6 +2561,9 @@ impl<'a> TirUnparser<'a> {
                     self.output.push(')');
                 }
             }
+            TirPattern::Enum { case_name, .. } => {
+                self.output.push_str(case_name);
+            }
         }
     }
 
@@ -3083,6 +3086,9 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.output.push(')');
                 }
+            }
+            TirPattern::Enum { case_name, .. } => {
+                self.output.push_str(case_name);
             }
         }
     }
