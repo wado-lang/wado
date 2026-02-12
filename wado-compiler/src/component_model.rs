@@ -1038,10 +1038,11 @@ impl CmInstanceTypeGen {
                     ComponentValType::Type(idx)
                 }
                 "Result" => {
-                    // Unit type is Named("()") in Wado, not Tuple([])
-                    let is_unit = matches!(&generic.args[0], Type::Tuple(t) if t.is_empty())
+                    let is_ok_unit = matches!(&generic.args[0], Type::Tuple(t) if t.is_empty())
                         || matches!(&generic.args[0], Type::Named(n) if n.name == "()");
-                    let ok_type = if is_unit {
+                    let is_err_unit = matches!(&generic.args[1], Type::Tuple(t) if t.is_empty())
+                        || matches!(&generic.args[1], Type::Named(n) if n.name == "()");
+                    let ok_type = if is_ok_unit {
                         None
                     } else {
                         Some(self.ast_type_to_cm(
@@ -1051,12 +1052,16 @@ impl CmInstanceTypeGen {
                             resource_exports,
                         ))
                     };
-                    let err_type = Some(self.ast_type_to_cm(
-                        &generic.args[1],
-                        instance_type,
-                        wasi_registry,
-                        resource_exports,
-                    ));
+                    let err_type = if is_err_unit {
+                        None
+                    } else {
+                        Some(self.ast_type_to_cm(
+                            &generic.args[1],
+                            instance_type,
+                            wasi_registry,
+                            resource_exports,
+                        ))
+                    };
                     let key = format!(
                         "{},{}",
                         Self::type_key(&generic.args[0]),
@@ -1402,6 +1407,10 @@ pub fn is_wasi_function_supported(func: &WasiFunctionInfo) -> bool {
 /// - Add an outptr: i32 parameter
 /// - Return nothing (result is written to outptr)
 pub fn return_type_requires_outptr(ty: &Type) -> bool {
+    // Check if an AST type represents unit () — can be Tuple([]) or Named("()")
+    let is_unit = |t: &Type| -> bool {
+        matches!(t, Type::Tuple(e) if e.is_empty()) || matches!(t, Type::Named(n) if n.name == "()")
+    };
     match ty {
         // Simple types are returned directly
         Type::Named(named) => matches!(
@@ -1409,10 +1418,18 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
             "String" // String (list<u8> in CM) requires outptr
         ),
         // Generic types that require outptr
-        Type::Generic(generic) => matches!(
-            generic.name.as_str(),
-            "Array" | "Option" | "Result" | "Tuple"
-        ),
+        Type::Generic(generic) => match generic.name.as_str() {
+            // Result<(), ()> returns a single i32 discriminant — no outptr needed
+            "Result"
+                if generic.args.len() == 2
+                    && is_unit(&generic.args[0])
+                    && is_unit(&generic.args[1]) =>
+            {
+                false
+            }
+            "Array" | "Option" | "Result" | "Tuple" => true,
+            _ => false,
+        },
         // Tuple types [...] require outptr (non-empty tuples only)
         Type::Tuple(elems) => !elems.is_empty(),
         _ => false,
@@ -1684,6 +1701,18 @@ impl CmCallConvention {
 
     /// Convention for result<T, E> return types
     fn for_result_return(ok_type: &Type, err_type: &Type) -> Self {
+        // Check if both ok and err are unit type (no payload)
+        // result<_, _> flattens to a single i32 discriminant — no outptr needed
+        let ok_is_unit = Self::is_unit_type(ok_type);
+        let err_is_unit = Self::is_unit_type(err_type);
+
+        if ok_is_unit && err_is_unit {
+            return Self {
+                result_return: Some((false, false)),
+                ..Self::default()
+            };
+        }
+
         // Check if ok_type is a resource (named type that's not a primitive)
         let ok_is_resource = matches!(ok_type, Type::Named(named) if !matches!(
             named.name.as_str(),
@@ -1708,6 +1737,12 @@ impl CmCallConvention {
             option_resource_return: false,
             result_return: Some((ok_is_resource, err_is_enum)),
         }
+    }
+
+    /// Check if a type is the unit type `()` — can be Tuple([]) or Named("()")
+    fn is_unit_type(ty: &Type) -> bool {
+        matches!(ty, Type::Tuple(elems) if elems.is_empty())
+            || matches!(ty, Type::Named(n) if n.name == "()")
     }
 
     /// Set the `is_async` flag
@@ -1760,6 +1795,14 @@ impl CmCallConvention {
                 "u64" => Some(CmPrimitiveType::U64),
                 "f32" => Some(CmPrimitiveType::F32),
                 "f64" => Some(CmPrimitiveType::F64),
+                // String is a complex type (list<u8> in CM), not a primitive
+                "String" => None,
+                // Other named types are resource handles, enums, etc. — all i32 in core wasm
+                _ => Some(CmPrimitiveType::I32),
+            },
+            // Stream<T> and Future<T> are i32 handles in core wasm
+            Type::Generic(generic) => match generic.name.as_str() {
+                "Stream" | "Future" => Some(CmPrimitiveType::I32),
                 _ => None,
             },
             _ => None,

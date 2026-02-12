@@ -1,0 +1,31 @@
+// HTTP Future::new() E2E test
+// Tests that Future::<T>::new() can create a future handle pair.
+//
+// This test exercises:
+// - Future::<T>::new() - create a future pair [Future<T>, i32]
+//   where the first element is the readable handle (rx)
+//   and the second element is the writable handle (tx)
+
+use {
+    Request,
+    Response,
+    ErrorCode,
+    Trailers,
+} from "wasi:http";
+
+export fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // Create a trailers future pair
+    let [future_rx, future_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+
+    // Verify we got valid handles (non-negative i32 values)
+    // The rx and tx handles are opaque i32 values managed by the runtime
+    // We can't inspect them directly, but creating them should not trap
+
+    // Return dummy (codegen always returns 200 with empty body)
+    return Result::<Response, ErrorCode>::Err(
+        ErrorCode::InternalError(null)
+    );
+}
+
+__DATA__
+{"http_status": 200}

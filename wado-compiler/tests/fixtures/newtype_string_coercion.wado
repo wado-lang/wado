@@ -1,0 +1,29 @@
+// String literal coercion to String newtypes
+
+use { println, Stdout } from "core:cli";
+
+type Label = String;
+type Name = String;
+
+fn greet(name: Name) -> String {
+    return `Hello, {name}!`;
+}
+
+export fn run() with Stdout {
+    // String literal coercion to newtype via type annotation
+    let label: Label = "hello";
+
+    // String literal coercion via function parameter
+    let greeting = greet("Alice");
+
+    // Template string coercion to newtype
+    let x = "world";
+    let label2: Label = `hello {x}`;
+
+    println(label);
+    println(greeting);
+    println(label2);
+}
+
+__DATA__
+{"stdout": "hello\nHello, Alice!\nhello world\n"}

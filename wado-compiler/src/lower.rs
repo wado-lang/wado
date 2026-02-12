@@ -7956,6 +7956,10 @@ impl<'a> EffectScratchAnalyzer<'a> {
                             {
                                 self.needs_async = true;
                             }
+                            // future/stream create pair returns i64 that needs unpacking
+                            if name == "future_create_pair" || name == "stream_create_pair" {
+                                self.needs_i64_temp = true;
+                            }
                         }
                         _ => {}
                     }

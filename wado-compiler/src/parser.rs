@@ -314,7 +314,7 @@ impl Parser {
             TokenKind::Type => self.parse_newtype(is_pub).map(Item::Type),
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
-            TokenKind::Resource => self.parse_resource_decl(attrs).map(Item::Resource),
+            TokenKind::Resource => self.parse_resource_decl(is_pub, attrs).map(Item::Resource),
             TokenKind::World => self.parse_world_decl().map(Item::World),
             TokenKind::Global => self.parse_global_decl(is_pub, attrs).map(Item::Global),
             _ => Err(ParseError {
@@ -477,10 +477,17 @@ impl Parser {
         })
     }
 
-    fn parse_resource_decl(&mut self, attrs: Vec<Attribute>) -> ParseResult<ResourceDecl> {
+    fn parse_resource_decl(
+        &mut self,
+        is_pub: bool,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<ResourceDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Resource)?;
         let name = self.consume_ident()?;
+
+        // Parse optional generic type parameters: `resource Future<T> { ... }`
+        let type_params = self.parse_generic_params()?;
 
         // Either `resource Name;` (opaque) or `resource Name { ... }` (with methods)
         let (methods, end_span) = if self.check(&TokenKind::LBrace) {
@@ -501,6 +508,8 @@ impl Parser {
 
         Ok(ResourceDecl {
             name,
+            is_pub,
+            type_params,
             attrs,
             methods,
             span: start_span.merge(&end_span),

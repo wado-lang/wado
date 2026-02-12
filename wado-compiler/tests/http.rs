@@ -6,7 +6,7 @@
 mod common;
 
 use bytes::Bytes;
-use futures::try_join;
+use futures::{FutureExt, try_join};
 use http_body_util::{BodyExt, Empty};
 use serde::Deserialize;
 use std::path::Path;
@@ -206,20 +206,35 @@ async fn run_http_fixture_test(fixture_path: &Path, fixture_name: &str) {
     if spec.todo {
         eprintln!("[{fixture_name}] TODO test - expecting failure");
 
-        let test_result = run_http_test_inner(fixture_path, fixture_name, &spec).await;
+        // Use catch_unwind to recover from panics (e.g., codegen validation failures)
+        let test_result =
+            std::panic::AssertUnwindSafe(run_http_test_inner(fixture_path, fixture_name, &spec))
+                .catch_unwind()
+                .await;
 
         match test_result {
-            Ok(()) => {
+            Ok(Ok(())) => {
                 panic!(
                     "[{fixture_name}] TODO test PASSED! This means the feature is now implemented.\n\
                      Please remove 'TODO: true' from the __DATA__ section."
                 );
             }
-            Err(msg) => {
+            Ok(Err(msg)) => {
                 eprintln!(
                     "[{fixture_name}] TODO test failed as expected (feature not yet implemented)"
                 );
                 eprintln!("[{fixture_name}] Error: {msg}");
+            }
+            Err(panic_err) => {
+                let msg = panic_err
+                    .downcast_ref::<String>()
+                    .map(|s| s.as_str())
+                    .or_else(|| panic_err.downcast_ref::<&str>().copied())
+                    .unwrap_or("(unknown panic)");
+                eprintln!(
+                    "[{fixture_name}] TODO test panicked as expected (feature not yet implemented)"
+                );
+                eprintln!("[{fixture_name}] Panic: {msg}");
             }
         }
     } else {
@@ -304,6 +319,24 @@ async fn test_http_fields() {
     run_http_fixture_test(
         Path::new("tests/fixtures.http/http-fields.wado"),
         "http-fields.wado",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_http_future_new() {
+    run_http_fixture_test(
+        Path::new("tests/fixtures.http/http-future-new.wado"),
+        "http-future-new.wado",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_http_response_ops() {
+    run_http_fixture_test(
+        Path::new("tests/fixtures.http/http-response-ops.wado"),
+        "http-response-ops.wado",
     )
     .await;
 }
