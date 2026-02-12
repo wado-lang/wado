@@ -355,24 +355,6 @@ wado compile --log-level off file.wado     # silent
 
 `--log-level` is available on `compile`, `run`, and `serve` subcommands.
 
-### Reading the Output
-
-At `debug` level, the compiler logs phase spans with timestamps:
-
-```
-[00:00:00.0012] >> load <entry>       # phase start
-[00:00:00.0034] << load <entry>       # phase end
-[00:00:00.0035] >> load core:prelude
-[00:00:00.0051] << load core:prelude
-[00:00:00.0100] >> type_check
-[00:00:00.0250] << type_check
-```
-
-- `>>` marks the start of a phase, `<<` marks the end
-- Timestamps are `[hh:mm:ss.mmmm]` (0.1ms precision) from compilation start
-- Duration of a phase = its `<<` timestamp minus its `>>` timestamp
-- Errors and warnings include source location: `[timestamp] file:line:col: severity: message`
-
 ## Development Workflow
 
 ### When Starting a Task
