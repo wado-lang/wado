@@ -965,7 +965,7 @@ impl Codegen<'_> {
 
         // Register newtypes for re-exported types.
         // This handles cases like core:prelude re-exporting types from sub-modules:
-        // - Ordering variant from core:prelude/traits
+        // - Ordering enum from core:prelude/traits
         // - Option/Result variants from core:prelude/types
         // - i128/u128 structs from core:prelude/int128
         // Types are registered under the defining module's source, but lookups use

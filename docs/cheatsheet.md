@@ -532,7 +532,7 @@ The prelude defines several builtin traits for common operations:
 
 ```wado
 // Ordering - result of a three-way comparison
-variant Ordering {
+enum Ordering {
     Less,    // first value is less than second
     Equal,   // values are equal
     Greater, // first value is greater than second

@@ -3241,7 +3241,7 @@ impl Monomorphizer {
         }
 
         // Handle Ord trait (<, >, <=, >=)
-        // Ord::cmp returns Ordering variant with discriminants: Less=0, Equal=1, Greater=2
+        // Ord::cmp returns Ordering enum with discriminants: Less=0, Equal=1, Greater=2
         if matches!(
             op,
             TirBinaryOp::Lt | TirBinaryOp::Gt | TirBinaryOp::LtEq | TirBinaryOp::GtEq
@@ -3269,7 +3269,7 @@ impl Monomorphizer {
             );
 
             // Get Ordering type for cmp return value
-            let ordering_type_id = type_table.intern(ResolvedType::Variant {
+            let ordering_type_id = type_table.intern(ResolvedType::Enum {
                 name: "Ordering".to_string(),
                 module_source: ModuleSource::core("prelude"),
             });
@@ -3308,13 +3308,12 @@ impl Monomorphizer {
                 _ => unreachable!(),
             };
 
-            // Create Ordering variant for comparison
+            // Create Ordering enum value for comparison
             let ordering_variant = TirExpr::new(
-                TirExprKind::VariantConstruct {
-                    variant_type: ordering_type_id,
+                TirExprKind::EnumConstruct {
+                    enum_type: ordering_type_id,
                     case_name: case_name.to_string(),
                     case_index,
-                    payload: None,
                 },
                 ordering_type_id,
                 span,
