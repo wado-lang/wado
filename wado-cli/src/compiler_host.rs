@@ -99,12 +99,23 @@ impl FilesystemCompilerHost {
         }
     }
 
-    /// Format diagnostic with timestamp for span tracking
+    /// Format elapsed time as `hh:mm:ss.mmmm` (fixed-width under 100 minutes).
     ///
     /// Time tracking is done here in the CLI to keep the compiler syscall-free.
-    fn format_diagnostic(&self, diagnostic: &Diagnostic) -> String {
+    fn format_timestamp(&self) -> String {
         let elapsed = self.start_time.elapsed();
-        let timestamp = format!("[{:>6.3}s]", elapsed.as_secs_f64());
+        let total_secs = elapsed.as_secs();
+        let hours = total_secs / 3600;
+        let minutes = (total_secs % 3600) / 60;
+        let seconds = total_secs % 60;
+        // 4 decimal places = 0.1ms precision
+        let frac = elapsed.subsec_micros() / 100;
+        format!("[{hours:02}:{minutes:02}:{seconds:02}.{frac:04}]")
+    }
+
+    /// Format diagnostic with timestamp for span tracking
+    fn format_diagnostic(&self, diagnostic: &Diagnostic) -> String {
+        let timestamp = self.format_timestamp();
 
         match diagnostic.code {
             Code::SpanStart => {

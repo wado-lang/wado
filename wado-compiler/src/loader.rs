@@ -28,11 +28,15 @@ pub enum LoadError {
     ParseError {
         module_source: ModuleSource,
         message: String,
+        line: usize,
+        column: usize,
     },
     /// Lexer error
     LexError {
         module_source: ModuleSource,
         message: String,
+        line: usize,
+        column: usize,
     },
     /// Bind error (scope checking)
     BindError {
@@ -56,14 +60,24 @@ impl std::fmt::Display for LoadError {
             LoadError::ParseError {
                 module_source,
                 message,
+                line,
+                column,
             } => {
-                write!(f, "parse error in {module_source}: {message}")
+                write!(
+                    f,
+                    "parse error in {module_source}: line {line}, column {column}: {message}"
+                )
             }
             LoadError::LexError {
                 module_source,
                 message,
+                line,
+                column,
             } => {
-                write!(f, "lex error in {module_source}: {message}")
+                write!(
+                    f,
+                    "lex error in {module_source}: line {line}, column {column}: {message}"
+                )
             }
             LoadError::BindError {
                 module_source,
@@ -92,6 +106,63 @@ impl std::fmt::Display for LoadError {
 
 impl std::error::Error for LoadError {}
 
+impl From<LoadError> for crate::compiler_host::Diagnostic {
+    fn from(e: LoadError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        match e {
+            LoadError::LexError {
+                message,
+                line,
+                column,
+                ..
+            } => Self {
+                severity: Severity::Error,
+                code: Code::InvalidSyntax,
+                message: format!("lexer error: {message}"),
+                span: Some(DiagnosticSpan {
+                    file: String::new(),
+                    line,
+                    column,
+                    end_line: None,
+                    end_column: None,
+                }),
+            },
+            LoadError::ParseError {
+                message,
+                line,
+                column,
+                ..
+            } => Self {
+                severity: Severity::Error,
+                code: Code::InvalidSyntax,
+                message: format!("parse error: {message}"),
+                span: Some(DiagnosticSpan {
+                    file: String::new(),
+                    line,
+                    column,
+                    end_line: None,
+                    end_column: None,
+                }),
+            },
+            LoadError::BindError {
+                module_source,
+                message,
+            } => Self {
+                severity: Severity::Error,
+                code: Code::DuplicateDefinition,
+                message: format!("bind error in {module_source}: {message}"),
+                span: None,
+            },
+            ref other => Self {
+                severity: Severity::Error,
+                code: Code::ModuleNotFound,
+                message: other.to_string(),
+                span: None,
+            },
+        }
+    }
+}
+
 impl From<SourceError> for LoadError {
     fn from(err: SourceError) -> Self {
         match err {
@@ -110,6 +181,8 @@ pub struct LoadResult {
     pub modules: IndexMap<ModuleSource, Module>,
     /// The entry module source
     pub entry_module_source: ModuleSource,
+    /// Original (non-desugared) entry module AST, for tooling
+    pub entry_ast: Module,
     /// Modules that were implicitly loaded (not from user imports)
     pub implicit_modules: IndexSet<ModuleSource>,
 }
@@ -203,11 +276,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
     }
 
-    /// Create a logger for emitting diagnostics
-    fn logger(&self) -> Logger<'_, H> {
-        Logger::new(self.host, self.log_level)
-    }
-
     /// Load all modules starting from the entry source
     ///
     /// This loads the entry module and all its transitive dependencies.
@@ -221,8 +289,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_source: &str,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
-        self.logger().span_start("load");
-
         // Parse, bind, and desugar entry module
         // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
         let entry_module_source =
@@ -234,11 +300,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
         self.collect_imports(&entry_ast, &entry_module_source, &mut pending)?;
 
-        // Bind and desugar, then store
+        // Bind and desugar, then store (keep original AST for tooling)
         self.bind_module(&entry_ast, &entry_module_source)?;
         let desugared_entry = desugar_module(&entry_ast);
         self.loaded
             .insert(entry_module_source.clone(), desugared_entry);
+        let entry_ast_original = entry_ast;
 
         // Load all dependencies iteratively
         let core_cache = cached_core_stdlib();
@@ -280,11 +347,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Load implicit modules (for compiler-generated code)
         self.load_implicit_modules()?;
 
-        self.logger().span_end("load");
-
         Ok(LoadResult {
             modules: self.loaded,
             entry_module_source,
+            entry_ast: entry_ast_original,
             implicit_modules: self.implicit_modules,
         })
     }
@@ -472,20 +538,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().map_err(|e| LoadError::LexError {
             module_source: module_source.clone(),
-            message: format!(
-                "line {}, column {}: {}",
-                e.span.line, e.span.column, e.message
-            ),
+            message: e.message,
+            line: e.span.line,
+            column: e.span.column,
         })?;
         let (data_section, _comments, shebang) = lexer.into_parts();
 
         let mut parser = Parser::with_metadata(tokens, shebang, data_section);
         parser.parse().map_err(|e| LoadError::ParseError {
             module_source: module_source.clone(),
-            message: format!(
-                "line {}, column {}: {}",
-                e.span.line, e.span.column, e.message
-            ),
+            message: e.message,
+            line: e.span.line,
+            column: e.span.column,
         })
     }
 
