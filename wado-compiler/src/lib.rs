@@ -271,11 +271,6 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Loader performs: lex → parse → bind → desugar for each module
     // Also preserves the original (non-desugared) entry AST for tooling
     let load_result = {
-        let span_name = match filename {
-            Some(ref f) => format!("load {f}"),
-            None => "load".to_string(),
-        };
-        let _span = logger.span(&span_name);
         let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
             .load_all(source, filename.as_deref())
@@ -429,22 +424,12 @@ pub async fn dump_with_host<H: CompilerHost>(
 
     // === Phase 5: Load all modules ===
     let load_result = {
-        let span_name = match filename {
-            Some(ref f) => format!("load {f}"),
-            None => "load".to_string(),
-        };
-        let _span = logger.span(&span_name);
         let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
             .load_all(source, filename.as_deref())
             .await
             .map_err(|e| {
-                let _ = logger.error(compiler_host::Diagnostic {
-                    severity: compiler_host::Severity::Error,
-                    code: compiler_host::Code::ModuleNotFound,
-                    message: e.to_string(),
-                    span: None,
-                });
+                let _ = logger.error(e);
                 Bail
             })?
     };
