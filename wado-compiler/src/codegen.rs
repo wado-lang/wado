@@ -9463,19 +9463,119 @@ impl Codegen<'_> {
                     // For async exports, call task-return with the result value
                     if ctx.has_http_handler_export {
                         // Service world: result<response, error-code>
-                        // TODO: Properly handle user's return value (deferred to future PR)
-                        // For now, drop the return value and create HTTP 200 response
+                        // Handle user's return value: extract Response from Ok,
+                        // fallback to hard-coded 200 for Err or missing return.
+
                         if let Some(expr) = value {
+                            // Generate the user's Result<Response, ErrorCode> expression
                             self.generate_expr(func, expr, type_table, ctx, builder);
+
+                            // Get Result variant type info for GC struct access
+                            let result_type_id = expr.type_id;
+                            let mangled_name = type_table.mangle_type_name(result_type_id);
+                            let result_module_source = match type_table.get(result_type_id) {
+                                ResolvedType::GenericInstance {
+                                    module_source, ..
+                                } => module_source.clone(),
+                                other => {
+                                    panic!("Expected GenericInstance (Result) for HTTP handler return, got: {other:?}")
+                                }
+                            };
+                            let qualified_name =
+                                result_module_source.qualify_name(&mangled_name);
+                            let result_info = self
+                                .variant_types
+                                .get(&qualified_name)
+                                .unwrap_or_else(|| {
+                                    panic!("Result type not registered: {qualified_name}")
+                                })
+                                .clone();
+                            let base_type_idx = result_info.base_type_idx;
+                            let ok_type_idx = result_info.cases[0].type_idx;
+
+                            // Save the Result value to a pre-allocated anyref local
+                            let result_local =
+                                ctx.alloc_local("_http_result", ValType::I32 /* unused, pre-allocated as anyref */);
+                            func.instruction(&Instruction::LocalSet(result_local));
+
+                            // Read discriminant: 0 = Ok, non-zero = Err
+                            // Cast from anyref to concrete Result base type first
+                            func.instruction(&Instruction::LocalGet(result_local));
+                            func.instruction(&Instruction::RefCastNonNull(
+                                HeapType::Concrete(base_type_idx),
+                            ));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: base_type_idx,
+                                field_index: 0,
+                            });
+                            func.instruction(&Instruction::I32Eqz); // true if Ok
+
+                            func.instruction(&Instruction::If(
+                                wasm_encoder::BlockType::Empty,
+                            ));
+
+                            // === Ok case: extract Response handle and task-return ===
+                            func.instruction(&Instruction::LocalGet(result_local));
+                            func.instruction(&Instruction::RefCastNonNull(
+                                HeapType::Concrete(ok_type_idx),
+                            ));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: ok_type_idx,
+                                field_index: 1, // payload (Response handle)
+                            });
+                            let user_response =
+                                ctx.alloc_local("_user_response", ValType::I32);
+                            func.instruction(&Instruction::LocalSet(user_response));
+
+                            // task-return Ok(response)
+                            func.instruction(&Instruction::I32Const(0)); // Ok discriminant
+                            func.instruction(&Instruction::LocalGet(user_response));
+                            func.instruction(&Instruction::I32Const(0)); // padding
+                            func.instruction(&Instruction::I64Const(0)); // padding
+                            func.instruction(&Instruction::I32Const(0)); // padding
+                            func.instruction(&Instruction::I32Const(0)); // padding
+                            func.instruction(&Instruction::I32Const(0)); // padding
+                            func.instruction(&Instruction::I32Const(0)); // padding
+                            let task_ret = builder.func_idx("task-return");
+                            func.instruction(&Instruction::Call(task_ret));
+
+                            // Post-return: resolve the user's trailers future by writing None.
+                            // The tx handle was saved during Future::new() codegen.
+                            let user_tx =
+                                ctx.alloc_local("_user_trailers_tx", ValType::I32);
+                            // Write Result<Option<Trailers>, ErrorCode>::Ok(None) to memory
+                            func.instruction(&Instruction::I32Const(256)); // offset for result disc
+                            func.instruction(&Instruction::I32Const(0)); // Ok discriminant
+                            func.instruction(&Instruction::I32Store(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+                            func.instruction(&Instruction::I32Const(260)); // offset for option disc
+                            func.instruction(&Instruction::I32Const(0)); // None discriminant
+                            func.instruction(&Instruction::I32Store(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+                            func.instruction(&Instruction::LocalGet(user_tx));
+                            func.instruction(&Instruction::I32Const(256)); // payload ptr
+                            let future_write_idx = builder.func_idx("future-write");
+                            func.instruction(&Instruction::Call(future_write_idx));
                             func.instruction(&Instruction::Drop);
+
+                            func.instruction(&Instruction::Return);
+
+                            func.instruction(&Instruction::End); // end Ok if
                         }
 
-                        // Create HTTP 200 response:
+                        // Fallback: Err case or no return value.
+                        // Create a hard-coded HTTP 200 response with empty body.
                         // 1. Create headers
                         // 2. Create trailers future (rx, tx)
-                        // 3. Call response.new(rx) - this starts the reader!
-                        // 4. Write None to trailers future (reader should be ready now)
-                        // 5. Return Ok(response)
+                        // 3. Call response.new
+                        // 4. task-return Ok(response)
+                        // 5. Write None to trailers future (post-return)
 
                         // 1. Create headers
                         let fields_constructor_idx = builder.func_idx("http-fields-constructor");
@@ -9501,8 +9601,7 @@ impl Codegen<'_> {
                         let trailers_tx = ctx.alloc_local("_trailers_tx", ValType::I32);
                         func.instruction(&Instruction::LocalSet(trailers_tx));
 
-                        // 3. Call response.new FIRST (this starts the reader!)
-                        // response.new returns tuple: [response_handle, transmission_future]
+                        // 3. Call response.new
                         let response_new_idx = builder.func_idx("http-response-new");
                         func.instruction(&Instruction::LocalGet(headers_handle)); // headers
                         func.instruction(&Instruction::I32Const(0)); // body discriminant = None
@@ -9511,7 +9610,7 @@ impl Codegen<'_> {
                         func.instruction(&Instruction::I32Const(128)); // out_ptr
                         func.instruction(&Instruction::Call(response_new_idx));
 
-                        // 4. Read response handle from offset 128 (before task.return)
+                        // 4. Read response handle from offset 128
                         func.instruction(&Instruction::I32Const(128));
                         func.instruction(&Instruction::I32Load(MemArg {
                             offset: 0,
@@ -9521,7 +9620,7 @@ impl Codegen<'_> {
                         let response_handle = ctx.alloc_local("_response_handle", ValType::I32);
                         func.instruction(&Instruction::LocalSet(response_handle));
 
-                        // 5. Return Ok(response) via task-return
+                        // task-return Ok(response)
                         func.instruction(&Instruction::I32Const(0)); // Ok discriminant
                         func.instruction(&Instruction::LocalGet(response_handle));
                         func.instruction(&Instruction::I32Const(0)); // padding
@@ -9533,13 +9632,7 @@ impl Codegen<'_> {
                         let task_ret = builder.func_idx("task-return");
                         func.instruction(&Instruction::Call(task_ret));
 
-                        // 6. Write None (no trailers) to the trailers future
-                        // This is post-return execution - Component Model allows
-                        // code to run after task.return
-                        //
-                        // future-write payload: result<option<fields>, error-code>
-                        // - Ok(None) = 0 (result Ok), 0 (option None)
-                        // The payload is at memory offset, we'll use offset 256
+                        // 5. Write None to trailers future (post-return)
                         func.instruction(&Instruction::I32Const(256)); // offset for payload
                         func.instruction(&Instruction::I32Const(0)); // Ok discriminant
                         func.instruction(&Instruction::I32Store(MemArg {
@@ -9554,12 +9647,10 @@ impl Codegen<'_> {
                             align: 2,
                             memory_index: 0,
                         }));
-                        // Call future-write(tx, payload_ptr)
                         func.instruction(&Instruction::LocalGet(trailers_tx));
                         func.instruction(&Instruction::I32Const(256)); // payload ptr
                         let future_write_idx = builder.func_idx("future-write");
                         func.instruction(&Instruction::Call(future_write_idx));
-                        // Drop the return code (we don't check it)
                         func.instruction(&Instruction::Drop);
 
                         func.instruction(&Instruction::Return);
@@ -12641,6 +12732,15 @@ impl Codegen<'_> {
                 func.instruction(&Instruction::I64Const(32));
                 func.instruction(&Instruction::I64ShrU);
                 func.instruction(&Instruction::I32WrapI64);
+
+                // In HTTP handler, save the future tx handle so post-return code
+                // can resolve the trailers future after task-return.
+                if ctx.has_http_handler_export {
+                    let user_tx =
+                        ctx.alloc_local("_user_trailers_tx", ValType::I32);
+                    // Duplicate the tx value on the stack (tee saves and keeps)
+                    func.instruction(&Instruction::LocalTee(user_tx));
+                }
 
                 // Create tuple struct [rx, tx] unless skip_tuple_wrap is set
                 if !ctx.skip_tuple_wrap {

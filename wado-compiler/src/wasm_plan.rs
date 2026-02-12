@@ -115,6 +115,18 @@ impl CmExportInfo {
                     name: "_response_handle".to_string(),
                     val_type: CmValType::I32,
                 },
+                CmScratchLocal {
+                    name: "_http_result".to_string(),
+                    val_type: CmValType::AnyRef,
+                },
+                CmScratchLocal {
+                    name: "_user_response".to_string(),
+                    val_type: CmValType::I32,
+                },
+                CmScratchLocal {
+                    name: "_user_trailers_tx".to_string(),
+                    val_type: CmValType::I32,
+                },
             ]);
         }
 
