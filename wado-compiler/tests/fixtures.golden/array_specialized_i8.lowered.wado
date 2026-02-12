@@ -32,7 +32,7 @@ fn run() with Stdout {
             let __pattern_temp_0: Option<i8> = __iter_0."ArrayIter<i8>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
                 let x: i8 = __unwrap_option(__pattern_temp_0).value;
-                "core::cli::println"(__tmpl: {
+                core::cli::println(__tmpl: {
                     let mut __r: String = __inline_String__with_capacity_1: {
                         break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(16), used: 0 };
                     };
@@ -58,24 +58,24 @@ fn "ArrayIter<i8>^Iterator::next"(self: &mut ArrayIter<i8>) -> Option<i8> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i8 = "core::builtin::array_get"::<i8>(self.repr, self.index);
+    let item: i8 = core::builtin::array_get::<i8>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(Box<i8> { value: item });
 }
 
 pub fn "Array<i8>::append"(self: &mut Array<i8>, value: i8) {
     let used: i32 = self.used;
-    let capacity: i32 = "core::builtin::array_len"(self.repr);
-    if "core::builtin::unlikely"((used >= capacity)) {
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<i8> = "core::builtin::array_new"::<i8>(new_capacity);
-        "core::builtin::array_copy"::<i8>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<i8> = core::builtin::array_new::<i8>(new_capacity);
+        core::builtin::array_copy::<i8>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    "core::builtin::array_set"::<i8>(self.repr, used, value);
+    core::builtin::array_set::<i8>(self.repr, used, value);
     self.used = (used + 1);
 }
 

@@ -32,7 +32,7 @@ fn run() with Stdout {
                 if (n == 3) {
                     break;
                 }
-                "core::cli::println"(__tmpl: {
+                core::cli::println(__tmpl: {
                     let mut __r: String = __inline_String__with_capacity_1: {
                         break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(16), used: 0 };
                     };
@@ -52,14 +52,14 @@ fn run() with Stdout {
             }
         }
     }
-    "core::cli::println"(move "done");
+    core::cli::println(move "done");
 }
 
 fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = "core::builtin::array_get"::<i32>(self.repr, self.index);
+    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(Box<i32> { value: item });
 }

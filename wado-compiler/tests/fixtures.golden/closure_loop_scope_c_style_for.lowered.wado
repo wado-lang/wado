@@ -52,7 +52,7 @@ fn run() with Stdout {
         let f: fn(i32) -> i32 = closures."Array<Fn<1,i32>>^IndexValue::index_value"(4);
         break __inline_call_fn_4: f(0);
     };
-    "core::cli::println"(__tmpl: {
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_5: {
             break __inline_String__with_capacity_5: String { repr: "array_new<u8>"(84), used: 0 };
         };
@@ -65,7 +65,7 @@ fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r."String::append"(move ",");
+        __r.String::append(move ",");
         __f = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -75,7 +75,7 @@ fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r."String::append"(move ",");
+        __r.String::append(move ",");
         __f = __inline_Formatter__new_10: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -85,7 +85,7 @@ fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r."String::append"(move ",");
+        __r.String::append(move ",");
         __f = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -95,7 +95,7 @@ fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r."String::append"(move ",");
+        __r.String::append(move ",");
         __f = __inline_Formatter__new_14: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -111,28 +111,28 @@ fn run() with Stdout {
 
 fn "Array<Fn<1,i32>>^IndexValue::index_value"(self: &Array<fn(i32) -> i32>, index: i32) -> fn(i32) -> i32 {
     if (index >= self.used) {
-        "core::internal::panic"(move "index out of bounds");
+        core::internal::panic(move "index out of bounds");
     }
-    return "core::builtin::array_get"::<fn(i32) -> i32>(self.repr, index);
+    return core::builtin::array_get::<fn(i32) -> i32>(self.repr, index);
 }
 
 pub fn "Array<Fn<1,i32>>::append"(self: &mut Array<fn(i32) -> i32>, value: fn(i32) -> i32) {
     let used: i32 = self.used;
-    let capacity: i32 = "core::builtin::array_len"(self.repr);
-    if "core::builtin::unlikely"((used >= capacity)) {
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<fn(i32) -> i32> = "core::builtin::array_new"::<fn(i32) -> i32>(new_capacity);
-        "core::builtin::array_copy"::<fn(i32) -> i32>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<fn(i32) -> i32> = core::builtin::array_new::<fn(i32) -> i32>(new_capacity);
+        core::builtin::array_copy::<fn(i32) -> i32>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    "core::builtin::array_set"::<fn(i32) -> i32>(self.repr, used, value);
+    core::builtin::array_set::<fn(i32) -> i32>(self.repr, used, value);
     self.used = (used + 1);
 }
 
-fn "__Closure_0::__call"(self: &__Closure_0, _: i32) -> i32 {
+fn __Closure_0::__call(self: &__Closure_0, _: i32) -> i32 {
     return self.__capture_0;
 }
 

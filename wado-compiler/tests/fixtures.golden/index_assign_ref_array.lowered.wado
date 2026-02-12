@@ -17,42 +17,42 @@ fn run() with Stdout {
     let mut strings: Array<String> = move ["a", "b", "c"];
     strings."Array<String>^IndexAssign::index_assign"(0, move "hello");
     strings."Array<String>^IndexAssign::index_assign"(1, move "world");
-    "core::cli::println"(__tmpl: {
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(50), used: 0 };
         };
-        __r."String::append"(move strings."Array<String>^IndexValue::index_value"(0));
-        __r."String::append"(move " ");
-        __r."String::append"(move strings."Array<String>^IndexValue::index_value"(1));
-        __r."String::append"(move " ");
-        __r."String::append"(move strings."Array<String>^IndexValue::index_value"(2));
+        __r.String::append(move strings."Array<String>^IndexValue::index_value"(0));
+        __r.String::append(move " ");
+        __r.String::append(move strings."Array<String>^IndexValue::index_value"(1));
+        __r.String::append(move " ");
+        __r.String::append(move strings."Array<String>^IndexValue::index_value"(2));
         break __tmpl: __r;
     });
     let mut messages: Array<String> = move ["", ""];
     messages."Array<String>^IndexAssign::index_assign"(0, move "first");
     messages."Array<String>^IndexAssign::index_assign"(1, move "second");
-    "core::cli::println"(__tmpl: {
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_1: {
             break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(33), used: 0 };
         };
-        __r."String::append"(move messages."Array<String>^IndexValue::index_value"(0));
-        __r."String::append"(move " ");
-        __r."String::append"(move messages."Array<String>^IndexValue::index_value"(1));
+        __r.String::append(move messages."Array<String>^IndexValue::index_value"(0));
+        __r.String::append(move " ");
+        __r.String::append(move messages."Array<String>^IndexValue::index_value"(1));
         break __tmpl: __r;
     });
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        "core::internal::panic"(move "index out of bounds");
+        core::internal::panic(move "index out of bounds");
     }
-    return "core::builtin::array_get"::<String>(self.repr, index);
+    return core::builtin::array_get::<String>(self.repr, index);
 }
 
 fn "Array<String>^IndexAssign::index_assign"(self: &mut Array<String>, index: i32, value: String) {
     if (index >= self.used) {
-        "core::internal::panic"(move "index out of bounds");
+        core::internal::panic(move "index out of bounds");
     }
-    "core::builtin::array_set"::<String>(self.repr, index, value);
+    core::builtin::array_set::<String>(self.repr, index, value);
 }
 

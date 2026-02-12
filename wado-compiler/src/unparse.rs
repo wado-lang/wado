@@ -2134,9 +2134,10 @@ impl<'a> TirUnparser<'a> {
 
     /// Quote an identifier if it contains characters that make it invalid Wado syntax.
     /// Valid Wado identifiers match /^[a-zA-Z_][a-zA-Z0-9_]*$/
-    /// Names with `<`, `>`, `,` (monomorphized), `^` (trait), `::` (namespaced) need quoting.
+    /// `::` is allowed as a namespace separator (each segment must be a valid identifier).
+    /// Names with `<`, `>`, `,` (monomorphized), `^` (trait), `/`, `.` need quoting.
     fn quote_if_needed(name: &str) -> String {
-        if is_valid_ident(name) {
+        if name.split("::").all(is_valid_ident) {
             name.to_string()
         } else {
             format!("\"{name}\"")

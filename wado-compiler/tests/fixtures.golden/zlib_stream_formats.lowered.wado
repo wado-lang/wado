@@ -15,7 +15,7 @@
 
 fn run() with Stdout {
     let mut data: Array<u8> = __inline_Array_u8___with_capacity_0: {
-        break __inline_Array_u8___with_capacity_0: Array<u8> { repr: "core::builtin::array_new"::<u8>(200), used: 0 };
+        break __inline_Array_u8___with_capacity_0: Array<u8> { repr: core::builtin::array_new::<u8>(200), used: 0 };
     };
     __for_0: {
         let mut i: i32 = 0;
@@ -29,21 +29,21 @@ fn run() with Stdout {
             i = (i + 1);
         }
     }
-    let mut ds_raw: DeflateStream = move "DeflateStream::new_with_format"(core::zlib::Z_DEFAULT_COMPRESSION, core::zlib::RAW_FORMAT);
-    let raw_compressed: Array<u8> = move ds_raw."DeflateStream::compress"(&data);
+    let mut ds_raw: DeflateStream = move DeflateStream::new_with_format(core::zlib::Z_DEFAULT_COMPRESSION, core::zlib::RAW_FORMAT);
+    let raw_compressed: Array<u8> = move ds_raw.DeflateStream::compress(&data);
     __assert_0: {
         let __v0: u8 = raw_compressed."Array<u8>^IndexValue::index_value"(0);
         let __cond: bool = (__v0 != 120);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_1: {
                     break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(171), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -53,10 +53,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "raw stream no zlib header");
-                __r."String::append"(move "\ncondition: raw_compressed[0] != 0x78 as u8\n");
-                __r."String::append"(move "raw_compressed[0]: ");
+                __r.String::append(move ": ");
+                __r.String::append(move "raw stream no zlib header");
+                __r.String::append(move "\ncondition: raw_compressed[0] != 0x78 as u8\n");
+                __r.String::append(move "raw_compressed[0]: ");
                 __f = __inline_Formatter__new_4: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -66,14 +66,14 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value as i32, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
     let raw_decompressed: Array<u8> = __inline_inflate_raw_6: {
         let input: &Array<u8> = &raw_compressed;
-        break __inline_inflate_raw_6: "core::zlib::inflate_raw_from"(input, 0, __inline_Array_u8___len_7: {
+        break __inline_inflate_raw_6: core::zlib::inflate_raw_from(input, 0, __inline_Array_u8___len_7: {
             break __inline_Array_u8___len_7: input.used;
         });
     };
@@ -83,15 +83,15 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_9: {
                     break __inline_String__with_capacity_9: String { repr: "array_new<u8>"(174), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_10: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -101,10 +101,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "raw format round-trip size");
-                __r."String::append"(move "\ncondition: raw_decompressed.len() == 200\n");
-                __r."String::append"(move "raw_decompressed.len(): ");
+                __r.String::append(move ": ");
+                __r.String::append(move "raw format round-trip size");
+                __r.String::append(move "\ncondition: raw_decompressed.len() == 200\n");
+                __r.String::append(move "raw_decompressed.len(): ");
                 __f = __inline_Formatter__new_12: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -114,32 +114,32 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    "core::cli::println"(move "raw format ok");
+    core::cli::println(move "raw format ok");
     let is_raw: InflateStream = __inline_InflateStream__new_with_format_14: {
         let format: i32 = core::zlib::RAW_FORMAT;
         break __inline_InflateStream__new_with_format_14: InflateStream { dict: [], has_dict: false, format: format, buffer: [], total_in: 0, total_out: 0 };
     };
-    let raw_d2: Array<u8> = move is_raw."InflateStream::decompress"(&raw_compressed);
+    let raw_d2: Array<u8> = move is_raw.InflateStream::decompress(&raw_compressed);
     __assert_2: {
         let __v0: i32 = __inline_Array_u8___len_15: {
             break __inline_Array_u8___len_15: raw_d2.used;
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_16: {
                     break __inline_String__with_capacity_16: String { repr: "array_new<u8>"(154), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_17: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -149,10 +149,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "raw inflate stream size");
-                __r."String::append"(move "\ncondition: raw_d2.len() == 200\n");
-                __r."String::append"(move "raw_d2.len(): ");
+                __r.String::append(move ": ");
+                __r.String::append(move "raw inflate stream size");
+                __r.String::append(move "\ncondition: raw_d2.len() == 200\n");
+                __r.String::append(move "raw_d2.len(): ");
                 __f = __inline_Formatter__new_19: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -162,27 +162,27 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    "core::cli::println"(move "raw inflate stream ok");
-    let mut ds_gz: DeflateStream = move "DeflateStream::new_with_format"(core::zlib::Z_DEFAULT_COMPRESSION, core::zlib::GZIP_FORMAT);
-    let gz_compressed: Array<u8> = move ds_gz."DeflateStream::compress"(&data);
+    core::cli::println(move "raw inflate stream ok");
+    let mut ds_gz: DeflateStream = move DeflateStream::new_with_format(core::zlib::Z_DEFAULT_COMPRESSION, core::zlib::GZIP_FORMAT);
+    let gz_compressed: Array<u8> = move ds_gz.DeflateStream::compress(&data);
     __assert_3: {
         let __v0: u8 = gz_compressed."Array<u8>^IndexValue::index_value"(0);
         let __cond: bool = (__v0 == 31);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_21: {
                     break __inline_String__with_capacity_21: String { repr: "array_new<u8>"(169), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_22: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -192,10 +192,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "gzip magic 1");
-                __r."String::append"(move "\ncondition: gz_compressed[0] == 0x1F as u8\n");
-                __r."String::append"(move "gz_compressed[0]: ");
+                __r.String::append(move ": ");
+                __r.String::append(move "gzip magic 1");
+                __r.String::append(move "\ncondition: gz_compressed[0] == 0x1F as u8\n");
+                __r.String::append(move "gz_compressed[0]: ");
                 __f = __inline_Formatter__new_24: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -205,7 +205,7 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value as i32, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
@@ -214,15 +214,15 @@ fn run() with Stdout {
         let __v0: u8 = gz_compressed."Array<u8>^IndexValue::index_value"(1);
         let __cond: bool = (__v0 == 139);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_26: {
                     break __inline_String__with_capacity_26: String { repr: "array_new<u8>"(169), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_27: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -232,10 +232,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "gzip magic 2");
-                __r."String::append"(move "\ncondition: gz_compressed[1] == 0x8B as u8\n");
-                __r."String::append"(move "gz_compressed[1]: ");
+                __r.String::append(move ": ");
+                __r.String::append(move "gzip magic 2");
+                __r.String::append(move "\ncondition: gz_compressed[1] == 0x8B as u8\n");
+                __r.String::append(move "gz_compressed[1]: ");
                 __f = __inline_Formatter__new_29: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_29: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -245,27 +245,27 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value as i32, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    let gz_decompressed: Array<u8> = move "core::zlib::inflate_gzip"(&gz_compressed);
+    let gz_decompressed: Array<u8> = move core::zlib::inflate_gzip(&gz_compressed);
     __assert_5: {
         let __v0: i32 = __inline_Array_u8___len_31: {
             break __inline_Array_u8___len_31: gz_decompressed.used;
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_32: {
                     break __inline_String__with_capacity_32: String { repr: "array_new<u8>"(172), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_33: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_33: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -275,10 +275,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "gzip format round-trip size");
-                __r."String::append"(move "\ncondition: gz_decompressed.len() == 200\n");
-                __r."String::append"(move "gz_decompressed.len(): ");
+                __r.String::append(move ": ");
+                __r.String::append(move "gzip format round-trip size");
+                __r.String::append(move "\ncondition: gz_decompressed.len() == 200\n");
+                __r.String::append(move "gz_decompressed.len(): ");
                 __f = __inline_Formatter__new_35: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_35: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -288,32 +288,32 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    "core::cli::println"(move "gzip format ok");
+    core::cli::println(move "gzip format ok");
     let is_gz: InflateStream = __inline_InflateStream__new_with_format_37: {
         let format: i32 = core::zlib::GZIP_FORMAT;
         break __inline_InflateStream__new_with_format_37: InflateStream { dict: [], has_dict: false, format: format, buffer: [], total_in: 0, total_out: 0 };
     };
-    let gz_d2: Array<u8> = move is_gz."InflateStream::decompress"(&gz_compressed);
+    let gz_d2: Array<u8> = move is_gz.InflateStream::decompress(&gz_compressed);
     __assert_6: {
         let __v0: i32 = __inline_Array_u8___len_38: {
             break __inline_Array_u8___len_38: gz_d2.used;
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_39: {
                     break __inline_String__with_capacity_39: String { repr: "array_new<u8>"(152), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_40: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_40: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -323,10 +323,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "gzip inflate stream size");
-                __r."String::append"(move "\ncondition: gz_d2.len() == 200\n");
-                __r."String::append"(move "gz_d2.len(): ");
+                __r.String::append(move ": ");
+                __r.String::append(move "gzip inflate stream size");
+                __r.String::append(move "\ncondition: gz_d2.len() == 200\n");
+                __r.String::append(move "gz_d2.len(): ");
                 __f = __inline_Formatter__new_42: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_42: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -336,34 +336,34 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    "core::cli::println"(move "gzip inflate stream ok");
-    let mut ds_zlib: DeflateStream = move "DeflateStream::new"(core::zlib::Z_DEFAULT_COMPRESSION);
-    let zlib_compressed: Array<u8> = move ds_zlib."DeflateStream::compress"(&data);
+    core::cli::println(move "gzip inflate stream ok");
+    let mut ds_zlib: DeflateStream = move DeflateStream::new(core::zlib::Z_DEFAULT_COMPRESSION);
+    let zlib_compressed: Array<u8> = move ds_zlib.DeflateStream::compress(&data);
     let is_auto_zlib: InflateStream = __inline_InflateStream__new_with_format_44: {
         let format: i32 = core::zlib::AUTO_FORMAT;
         break __inline_InflateStream__new_with_format_44: InflateStream { dict: [], has_dict: false, format: format, buffer: [], total_in: 0, total_out: 0 };
     };
-    let auto_d1: Array<u8> = move is_auto_zlib."InflateStream::decompress"(&zlib_compressed);
+    let auto_d1: Array<u8> = move is_auto_zlib.InflateStream::decompress(&zlib_compressed);
     __assert_7: {
         let __v0: i32 = __inline_Array_u8___len_45: {
             break __inline_Array_u8___len_45: auto_d1.used;
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_46: {
                     break __inline_String__with_capacity_46: String { repr: "array_new<u8>"(156), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_47: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_47: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -373,10 +373,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "auto detect zlib size");
-                __r."String::append"(move "\ncondition: auto_d1.len() == 200\n");
-                __r."String::append"(move "auto_d1.len(): ");
+                __r.String::append(move ": ");
+                __r.String::append(move "auto detect zlib size");
+                __r.String::append(move "\ncondition: auto_d1.len() == 200\n");
+                __r.String::append(move "auto_d1.len(): ");
                 __f = __inline_Formatter__new_49: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_49: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -386,32 +386,32 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    "core::cli::println"(move "auto detect zlib ok");
+    core::cli::println(move "auto detect zlib ok");
     let is_auto_gz: InflateStream = __inline_InflateStream__new_with_format_51: {
         let format: i32 = core::zlib::AUTO_FORMAT;
         break __inline_InflateStream__new_with_format_51: InflateStream { dict: [], has_dict: false, format: format, buffer: [], total_in: 0, total_out: 0 };
     };
-    let auto_d2: Array<u8> = move is_auto_gz."InflateStream::decompress"(&gz_compressed);
+    let auto_d2: Array<u8> = move is_auto_gz.InflateStream::decompress(&gz_compressed);
     __assert_8: {
         let __v0: i32 = __inline_Array_u8___len_52: {
             break __inline_Array_u8___len_52: auto_d2.used;
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_53: {
                     break __inline_String__with_capacity_53: String { repr: "array_new<u8>"(156), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_54: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_54: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -421,10 +421,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "auto detect gzip size");
-                __r."String::append"(move "\ncondition: auto_d2.len() == 200\n");
-                __r."String::append"(move "auto_d2.len(): ");
+                __r.String::append(move ": ");
+                __r.String::append(move "auto detect gzip size");
+                __r.String::append(move "\ncondition: auto_d2.len() == 200\n");
+                __r.String::append(move "auto_d2.len(): ");
                 __f = __inline_Formatter__new_56: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_56: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -434,16 +434,16 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    "core::cli::println"(move "auto detect gzip ok");
-    let mut ds_reset: DeflateStream = move "DeflateStream::new"(core::zlib::Z_DEFAULT_COMPRESSION);
-    let c1: Array<u8> = move ds_reset."DeflateStream::compress"(&data);
-    ds_reset."DeflateStream::reset"();
-    let c2: Array<u8> = move ds_reset."DeflateStream::compress"(&data);
+    core::cli::println(move "auto detect gzip ok");
+    let mut ds_reset: DeflateStream = move DeflateStream::new(core::zlib::Z_DEFAULT_COMPRESSION);
+    let c1: Array<u8> = move ds_reset.DeflateStream::compress(&data);
+    ds_reset.DeflateStream::reset();
+    let c2: Array<u8> = move ds_reset.DeflateStream::compress(&data);
     __assert_9: {
         let __v0: i32 = __inline_Array_u8___len_58: {
             break __inline_Array_u8___len_58: c1.used;
@@ -453,15 +453,15 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == __v1);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_60: {
                     break __inline_String__with_capacity_60: String { repr: "array_new<u8>"(178), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_61: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_61: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -471,10 +471,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "reset produces same-size output");
-                __r."String::append"(move "\ncondition: c1.len() == c2.len()\n");
-                __r."String::append"(move "c1.len(): ");
+                __r.String::append(move ": ");
+                __r.String::append(move "reset produces same-size output");
+                __r.String::append(move "\ncondition: c1.len() == c2.len()\n");
+                __r.String::append(move "c1.len(): ");
                 __f = __inline_Formatter__new_63: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_63: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -484,8 +484,8 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
-                __r."String::append"(move "c2.len(): ");
+                __r.String::append(move "\n");
+                __r.String::append(move "c2.len(): ");
                 __f = __inline_Formatter__new_65: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_65: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -495,17 +495,17 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    "core::cli::println"(move "stream reset ok");
-    let mut ds_copy: DeflateStream = move "DeflateStream::new"(core::zlib::Z_DEFAULT_COMPRESSION);
-    ds_copy."DeflateStream::update"(&data);
-    let ds_clone: DeflateStream = move ds_copy."DeflateStream::copy"();
-    let f1: Array<u8> = move ds_copy."DeflateStream::finish"();
-    let f2: Array<u8> = move ds_clone."DeflateStream::finish"();
+    core::cli::println(move "stream reset ok");
+    let mut ds_copy: DeflateStream = move DeflateStream::new(core::zlib::Z_DEFAULT_COMPRESSION);
+    ds_copy.DeflateStream::update(&data);
+    let ds_clone: DeflateStream = move ds_copy.DeflateStream::copy();
+    let f1: Array<u8> = move ds_copy.DeflateStream::finish();
+    let f2: Array<u8> = move ds_clone.DeflateStream::finish();
     __assert_10: {
         let __v0: i32 = __inline_Array_u8___len_67: {
             break __inline_Array_u8___len_67: f1.used;
@@ -515,15 +515,15 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == __v1);
         if !__cond {
-            "core::internal::panic"(__tmpl: {
+            core::internal::panic(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_69: {
                     break __inline_String__with_capacity_69: String { repr: "array_new<u8>"(178), used: 0 };
                 };
-                __r."String::append"(move "Assertion failed in ");
-                __r."String::append"(move "run");
-                __r."String::append"(move " at ");
-                __r."String::append"(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
-                __r."String::append"(move ":");
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/zlib_stream_formats.wado");
+                __r.String::append(move ":");
                 let mut __f: Formatter = __inline_Formatter__new_70: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_70: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -533,10 +533,10 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move ": ");
-                __r."String::append"(move "copy produces same-size output");
-                __r."String::append"(move "\ncondition: f1.len() == f2.len()\n");
-                __r."String::append"(move "f1.len(): ");
+                __r.String::append(move ": ");
+                __r.String::append(move "copy produces same-size output");
+                __r.String::append(move "\ncondition: f1.len() == f2.len()\n");
+                __r.String::append(move "f1.len(): ");
                 __f = __inline_Formatter__new_72: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_72: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -546,8 +546,8 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
-                __r."String::append"(move "f2.len(): ");
+                __r.String::append(move "\n");
+                __r.String::append(move "f2.len(): ");
                 __f = __inline_Formatter__new_74: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_74: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -557,35 +557,35 @@ fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r."String::append"(move "\n");
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    "core::cli::println"(move "stream copy ok");
-    "core::cli::println"(move "stream formats ok");
+    core::cli::println(move "stream copy ok");
+    core::cli::println(move "stream formats ok");
 }
 
 fn "Array<u8>^IndexValue::index_value"(self: &Array<u8>, index: i32) -> u8 {
     if (index >= self.used) {
-        "core::internal::panic"(move "index out of bounds");
+        core::internal::panic(move "index out of bounds");
     }
-    return "core::builtin::array_get"::<u8>(self.repr, index);
+    return core::builtin::array_get::<u8>(self.repr, index);
 }
 
 pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
     let used: i32 = self.used;
-    let capacity: i32 = "core::builtin::array_len"(self.repr);
-    if "core::builtin::unlikely"((used >= capacity)) {
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<u8> = "core::builtin::array_new"::<u8>(new_capacity);
-        "core::builtin::array_copy"::<u8>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<u8> = core::builtin::array_new::<u8>(new_capacity);
+        core::builtin::array_copy::<u8>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    "core::builtin::array_set"::<u8>(self.repr, used, value);
+    core::builtin::array_set::<u8>(self.repr, used, value);
     self.used = (used + 1);
 }
 

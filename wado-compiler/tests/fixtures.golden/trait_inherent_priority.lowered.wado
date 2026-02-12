@@ -17,12 +17,12 @@ struct Robot {
     id: i32,
 }
 
-fn "Robot::greet"(self: &Robot) -> String {
+fn Robot::greet(self: &Robot) -> String {
     return __tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(39), used: 0 };
         };
-        __r."String::append"(move "Beep boop, I am Robot #");
+        __r.String::append(move "Beep boop, I am Robot #");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -38,6 +38,6 @@ fn "Robot::greet"(self: &Robot) -> String {
 
 fn run() with Stdout {
     let r: Robot = move Robot { id: 42 };
-    "core::cli::println"(move r."Robot::greet"());
+    core::cli::println(move r.Robot::greet());
 }
 

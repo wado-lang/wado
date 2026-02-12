@@ -17,9 +17,9 @@ pub struct Opts {
 pub fn format_str(s: String, opts: Opts) -> String {
     let pad: String = move "  ";
     return match opts.align {
-        Left => "String::concat"(s, pad),
-        Right => "String::concat"(pad, s),
-        Center => "String::concat"(move "String::concat"(pad, s), pad),
+        Left => String::concat(s, pad),
+        Right => String::concat(pad, s),
+        Center => String::concat(move String::concat(pad, s), pad),
     };
 }
 
@@ -28,13 +28,13 @@ fn run() with Stdout {
         break __inline_Opts__default_0: Opts { align: Align::Right, width: 0 };
     };
     let s: String = move format_str(move "hi", opts);
-    "core::cli::println"(__tmpl: {
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_1: {
             break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(18), used: 0 };
         };
-        __r."String::append"(move "[");
-        __r."String::append"(s);
-        __r."String::append"(move "]");
+        __r.String::append(move "[");
+        __r.String::append(s);
+        __r.String::append(move "]");
         break __tmpl: __r;
     });
 }

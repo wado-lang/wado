@@ -22,7 +22,7 @@ pub struct "ArrayIter<i32>" {
 fn run() with Stdout {
     let c: Container<i32> = move Container<i32> { items: [1, 2, 3] };
     c."Container<i32>::process"();
-    "core::cli::println"(move "done");
+    core::cli::println(move "done");
 }
 
 fn "Container<i32>::process"(self: &Container<i32>) {
@@ -46,7 +46,7 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = "core::builtin::array_get"::<i32>(self.repr, self.index);
+    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(Box<i32> { value: item });
 }

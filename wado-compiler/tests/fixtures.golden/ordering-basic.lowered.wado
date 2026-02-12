@@ -17,52 +17,52 @@ fn run() with Stdout {
         Less => true,
         _ => false,
     } {
-        "core::cli::println"(move "Less matches Less");
+        core::cli::println(move "Less matches Less");
     }
     if match equal {
         Equal => true,
         _ => false,
     } {
-        "core::cli::println"(move "Equal matches Equal");
+        core::cli::println(move "Equal matches Equal");
     }
     if match greater {
         Greater => true,
         _ => false,
     } {
-        "core::cli::println"(move "Greater matches Greater");
+        core::cli::println(move "Greater matches Greater");
     }
     let arr1: Array<i32> = move [1, 2, 3];
     let arr2: Array<i32> = move [1, 2, 4];
     let arr3: Array<i32> = move [1, 2, 3];
     if (arr1."Array<i32>^Ord::cmp"(&arr2) == Ordering::Less) {
-        "core::cli::println"(move "arr1 < arr2");
+        core::cli::println(move "arr1 < arr2");
     }
     if (arr1."Array<i32>^Ord::cmp"(&arr3) != Ordering::Greater) {
-        "core::cli::println"(move "arr1 <= arr3");
+        core::cli::println(move "arr1 <= arr3");
     }
     if (arr2."Array<i32>^Ord::cmp"(&arr1) == Ordering::Greater) {
-        "core::cli::println"(move "arr2 > arr1");
+        core::cli::println(move "arr2 > arr1");
     }
     if (arr3."Array<i32>^Ord::cmp"(&arr1) != Ordering::Less) {
-        "core::cli::println"(move "arr3 >= arr1");
+        core::cli::println(move "arr3 >= arr1");
     }
     if arr1."Array<i32>^Eq::eq"(&arr3) {
-        "core::cli::println"(move "arr1 == arr3");
+        core::cli::println(move "arr1 == arr3");
     }
     let s1: String = move "apple";
     let s2: String = move "banana";
     let s3: String = move "apple";
     if (s1."String^Ord::cmp"(&s2) == Ordering::Less) {
-        "core::cli::println"(move "apple < banana");
+        core::cli::println(move "apple < banana");
     }
     if (s1."String^Ord::cmp"(&s3) != Ordering::Greater) {
-        "core::cli::println"(move "apple <= apple");
+        core::cli::println(move "apple <= apple");
     }
     if (s2."String^Ord::cmp"(&s1) == Ordering::Greater) {
-        "core::cli::println"(move "banana > apple");
+        core::cli::println(move "banana > apple");
     }
     if s1."String^Eq::eq"(&s3) {
-        "core::cli::println"(move "apple == apple");
+        core::cli::println(move "apple == apple");
     }
 }
 
@@ -80,7 +80,7 @@ pub fn "Array<i32>^Eq::eq"(self: &Array<i32>, other: &Array<i32>) -> bool {
                 break __for_0;
             }
             __for_0_body: {
-                if ("core::builtin::array_get"::<i32>(_licm_repr, i) != "core::builtin::array_get"::<i32>(_licm_repr, i)) {
+                if (core::builtin::array_get::<i32>(_licm_repr, i) != core::builtin::array_get::<i32>(_licm_repr, i)) {
                     return false;
                 }
             }
@@ -105,8 +105,8 @@ pub fn "Array<i32>^Ord::cmp"(self: &Array<i32>, other: &Array<i32>) -> Ordering 
                 break __for_1;
             }
             __for_1_body: {
-                let a: i32 = "core::builtin::array_get"::<i32>(_licm_repr, i);
-                let b: i32 = "core::builtin::array_get"::<i32>(_licm_repr, i);
+                let a: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
+                let b: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
                 if (a < b) {
                     return Ordering::Less;
                 }

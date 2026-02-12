@@ -16,11 +16,11 @@
 fn run() with Stdout {
     let mut nums: Array<i32> = move [1, 2, 3];
     let before: i32 = nums."Array<i32>^IndexValue::index_value"(0);
-    "core::cli::println"(__tmpl: {
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
         };
-        __r."String::append"(move "before: ");
+        __r.String::append(move "before: ");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -37,11 +37,11 @@ fn run() with Stdout {
         arr."Array<i32>^IndexAssign::index_assign"(0, 100);
     };
     let after: i32 = nums."Array<i32>^IndexValue::index_value"(0);
-    "core::cli::println"(__tmpl: {
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_4: {
             break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(23), used: 0 };
         };
-        __r."String::append"(move "after: ");
+        __r.String::append(move "after: ");
         let mut __f: Formatter = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -57,15 +57,15 @@ fn run() with Stdout {
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
-        "core::internal::panic"(move "index out of bounds");
+        core::internal::panic(move "index out of bounds");
     }
-    return "core::builtin::array_get"::<i32>(self.repr, index);
+    return core::builtin::array_get::<i32>(self.repr, index);
 }
 
 fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
     if (index >= self.used) {
-        "core::internal::panic"(move "index out of bounds");
+        core::internal::panic(move "index out of bounds");
     }
-    "core::builtin::array_set"::<i32>(self.repr, index, value);
+    core::builtin::array_set::<i32>(self.repr, index, value);
 }
 

@@ -10,30 +10,30 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout, MonotonicClock {
-    let t1: Mark = "MonotonicClock::now"();
-    let t2: Mark = "MonotonicClock::now"();
-    let t3: Mark = "MonotonicClock::now"();
+    let t1: Mark = MonotonicClock::now();
+    let t2: Mark = MonotonicClock::now();
+    let t3: Mark = MonotonicClock::now();
     if (t2 >= t1) {
-        "core::cli::println"(move "test: monotonic clock t2 >= t1");
+        core::cli::println(move "test: monotonic clock t2 >= t1");
     } else {
-        "core::cli::println"(move "test: FAILED - monotonic clock went backwards");
+        core::cli::println(move "test: FAILED - monotonic clock went backwards");
     }
     if (t3 >= t2) {
-        "core::cli::println"(move "test: monotonic clock t3 >= t2");
+        core::cli::println(move "test: monotonic clock t3 >= t2");
     } else {
-        "core::cli::println"(move "test: FAILED - monotonic clock went backwards");
+        core::cli::println(move "test: FAILED - monotonic clock went backwards");
     }
     if (((t1 > 0) || (t2 > 0)) || (t3 > 0)) {
-        "core::cli::println"(move "test: monotonic clock returns positive values");
+        core::cli::println(move "test: monotonic clock returns positive values");
     } else {
-        "core::cli::println"(move "test: monotonic clock returned all zeros (unusual)");
+        core::cli::println(move "test: monotonic clock returned all zeros (unusual)");
     }
     let elapsed: Mark = (t3 - t1);
     if (elapsed >= 0) {
-        "core::cli::println"(move "test: elapsed time is non-negative");
+        core::cli::println(move "test: elapsed time is non-negative");
     } else {
-        "core::cli::println"(move "test: FAILED - elapsed time is negative");
+        core::cli::println(move "test: FAILED - elapsed time is negative");
     }
-    "core::cli::println"(move "all clocks tests passed");
+    core::cli::println(move "all clocks tests passed");
 }
 

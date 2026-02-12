@@ -25,13 +25,13 @@ fn run() with Stdout {
             let __pattern_temp_0: Option<String> = move __iter_0."ArrayIter<String>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
                 let name: String = __unwrap_option(__pattern_temp_0);
-                "core::cli::println"(__tmpl: {
+                core::cli::println(__tmpl: {
                     let mut __r: String = __inline_String__with_capacity_1: {
                         break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(24), used: 0 };
                     };
-                    __r."String::append"(move "Hello, ");
-                    __r."String::append"(name);
-                    __r."String::append"(move "!");
+                    __r.String::append(move "Hello, ");
+                    __r.String::append(name);
+                    __r.String::append(move "!");
                     break __tmpl: __r;
                 });
             } else {
@@ -45,7 +45,7 @@ fn "ArrayIter<String>^Iterator::next"(self: &mut ArrayIter<String>) -> Option<St
     if (self.index >= self.used) {
         return null;
     }
-    let item: String = move "core::builtin::array_get"::<String>(self.repr, self.index);
+    let item: String = move core::builtin::array_get::<String>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }

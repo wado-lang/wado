@@ -14,14 +14,14 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout, Stderr, Environment {
-    "core::cli::println"(move "test: stdout works");
-    "core::cli::eprintln"(move "test: stderr works");
-    let arguments: Array<String> = move "Environment::get_arguments"();
-    "core::cli::println"(__tmpl: {
+    core::cli::println(move "test: stdout works");
+    core::cli::eprintln(move "test: stderr works");
+    let arguments: Array<String> = move Environment::get_arguments();
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(57), used: 0 };
         };
-        __r."String::append"(move "test: Environment::get_arguments().len = ");
+        __r.String::append(move "test: Environment::get_arguments().len = ");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -35,12 +35,12 @@ fn run() with Stdout, Stderr, Environment {
         };
         break __tmpl: __r;
     });
-    let env_vars: Array<[String, String]> = move "Environment::get_environment"();
-    "core::cli::println"(__tmpl: {
+    let env_vars: Array<[String, String]> = move Environment::get_environment();
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_4: {
             break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(59), used: 0 };
         };
-        __r."String::append"(move "test: Environment::get_environment().len = ");
+        __r.String::append(move "test: Environment::get_environment().len = ");
         let mut __f: Formatter = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -54,6 +54,6 @@ fn run() with Stdout, Stderr, Environment {
         };
         break __tmpl: __r;
     });
-    "core::cli::println"(move "all cli tests passed");
+    core::cli::println(move "all cli tests passed");
 }
 

@@ -10,16 +10,16 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let x: i128 = move "i128::from_i64"(42);
-    let r1: String = if x."i128^Eq::eq"(&"i128::from_i64"(0)) {
+    let x: i128 = move i128::from_i64(42);
+    let r1: String = if x."i128^Eq::eq"(&i128::from_i64(0)) {
         "zero";
     } else {
-        if x."i128^Eq::eq"(&"i128::from_i64"(42)) {
+        if x."i128^Eq::eq"(&i128::from_i64(42)) {
             "answer";
         } else {
             "other";
         };
     };
-    "core::cli::println"(r1);
+    core::cli::println(r1);
 }
 

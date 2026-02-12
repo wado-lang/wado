@@ -23,11 +23,11 @@ fn run() with Stdout {
     let c: Container<String,i32> = move Container<String,i32> { keys: ["apple", "banana", "cherry"], values: [10, 20, 30], deleted: [false, true, false] };
     let idx: i32 = c."Container<String,i32>::find_key_index"(&"cherry");
     let full: bool = c."Container<String,i32>::is_full"(5);
-    "core::cli::println"(__tmpl: {
+    core::cli::println(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(47), used: 0 };
         };
-        __r."String::append"(move "index: ");
+        __r.String::append(move "index: ");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -37,7 +37,7 @@ fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r."String::append"(move ", full: ");
+        __r.String::append(move ", full: ");
         __f = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -45,7 +45,7 @@ fn run() with Stdout {
         __inline_bool_Display__fmt_4: {
             let self: Box<bool> = move Box<bool> { value: full };
             let f: &mut Formatter = &mut __f;
-            f."Formatter::pad"(if self.value {
+            f.Formatter::pad(if self.value {
                 "true";
             } else {
                 "false";
@@ -81,9 +81,9 @@ fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32)
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
     if (index >= self.used) {
-        "core::internal::panic"(move "index out of bounds");
+        core::internal::panic(move "index out of bounds");
     }
-    return "core::builtin::array_get"::<bool>(self.repr, index);
+    return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 fn "Container<String,i32>::find_key_index"(self: &Container<String,i32>, key: &String) -> i32 {
@@ -103,8 +103,8 @@ fn "Container<String,i32>::find_key_index"(self: &Container<String,i32>, key: &S
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        "core::internal::panic"(move "index out of bounds");
+        core::internal::panic(move "index out of bounds");
     }
-    return "core::builtin::array_get"::<String>(self.repr, index);
+    return core::builtin::array_get::<String>(self.repr, index);
 }
 
