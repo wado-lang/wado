@@ -1427,7 +1427,7 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 - `trait` declarations (static dispatch, default method implementations)
 - `impl Trait for Type` (trait implementations)
 - Associated types in traits (`type Output;` and `type Output = T;`)
-- `enum` declarations (payload-free, CM semantics)
+- `enum` declarations (payload-free, CM semantics, match/if let/matches, auto-derived Display/Eq/Ord, impl blocks)
 - `global` declarations (module-level Wasm globals)
 - `type` declarations (newtypes)
 - `resource` declarations

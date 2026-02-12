@@ -278,7 +278,7 @@ let v = b.value;
 
 ## Enums
 
-Enums are discriminated values without payloads:
+Enums are discriminated values without payloads (i32 discriminant):
 
 ```wado
 enum Color {
@@ -287,10 +287,63 @@ enum Color {
     Blue,
 }
 
-let c = Color::Red;  // enum value (i32 discriminant)
+let c = Color::Red;
+
+// Pattern matching with match
+let name = match c {
+    Red => "red",
+    Green => "green",
+    Blue => "blue",
+};
+
+// if let pattern matching
+if let Red = c {
+    println("it's red");
+}
+
+// matches operator
+if c matches { Green } {
+    println("it's green");
+}
+
+// match with guards
+let desc = match c {
+    Red => "warm",
+    Blue => "cool",
+    _ => "neutral",
+};
 ```
 
-Note: Enum pattern matching is not yet implemented.
+Enums auto-derive `Display`, `Eq`, and `Ord`:
+
+```wado
+// Display: case name as string
+println(`{c}`);              // "Red"
+
+// Eq: compare by discriminant
+let a = Color::Red;
+let b = Color::Red;
+if a == b { println("same"); }
+
+// Ord: ordered by declaration order (Red=0 < Green=1 < Blue=2)
+if Color::Red < Color::Blue {
+    println("red comes before blue");
+}
+```
+
+Enums can have methods via `impl` blocks:
+
+```wado
+impl Color {
+    fn is_primary(&self) -> bool {
+        return match *self {
+            Red => true,
+            Green => false,
+            Blue => true,
+        };
+    }
+}
+```
 
 ## Variants
 
@@ -1325,7 +1378,6 @@ Wado intentionally does not support macros.
 
 ## Not Yet Implemented
 
-- `enum` pattern matching
 - `flags` (parsed but no codegen)
 - `resource` (Wasm CM resource handles)
 - Trait bounds: using bounds for method resolution on type params (e.g., calling `T.method()` where `T: Trait`)
