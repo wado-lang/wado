@@ -3,8 +3,8 @@
 //! This module collects function signatures from lib/core/builtin.wado
 //! and provides type information for code generation.
 
+use indexmap::IndexMap;
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 use crate::ast::{Function, Type};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -38,7 +38,7 @@ pub struct BuiltinFunctionInfo {
 #[derive(Debug, Default)]
 pub struct BuiltinRegistry {
     /// `function_name` -> function info
-    functions: HashMap<String, BuiltinFunctionInfo>,
+    functions: IndexMap<String, BuiltinFunctionInfo>,
 }
 
 impl BuiltinRegistry {

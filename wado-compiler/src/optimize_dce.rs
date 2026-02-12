@@ -3,7 +3,7 @@
 //! This module provides function-level dead code elimination through reachability analysis.
 //! It starts from the entry point and traces all reachable functions via the call graph.
 
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexSet;
 
 use crate::ast::Type;
 use crate::name::{
@@ -19,18 +19,18 @@ use crate::wasm_plan::{CmConverterKind, CmConverterRequirements};
 use indexmap::IndexMap;
 
 /// Call graph: function ID -> set of called function IDs
-type CallGraph = HashMap<FunctionId, HashSet<FunctionId>>;
+type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 
 /// Effect usage: function ID -> set of (`effect_name`, `operation_name`) pairs
-type EffectUsageMap = HashMap<FunctionId, HashSet<(String, String)>>;
+type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 
 /// Analysis results for a single function
 #[derive(Debug, Clone, Default)]
 struct FunctionAnalysis {
     /// Functions called by this function
-    callees: HashSet<FunctionId>,
+    callees: IndexSet<FunctionId>,
     /// Effect calls: (`effect_name`, `op_name`)
-    effect_calls: HashSet<(String, String)>,
+    effect_calls: IndexSet<(String, String)>,
 }
 
 /// Analyze the project and populate its usage fields with DCE analysis results.
@@ -50,7 +50,7 @@ pub fn analyze_project(project: &mut Project) {
         .unwrap_or_else(|| vec!["run".to_string()]);
 
     // Compute reachable functions from all entry points
-    let mut reachable = HashSet::new();
+    let mut reachable = IndexSet::new();
     for entry_name in &entry_func_names {
         let entry_func = FunctionId::Free(FreeFunctionName::from_module_source(
             &project.entry_module_source,
@@ -74,7 +74,7 @@ pub fn analyze_project(project: &mut Project) {
     }
 
     // Collect used WASI functions from reachable functions
-    let mut used_wasi_functions: HashSet<String> = HashSet::new();
+    let mut used_wasi_functions: IndexSet<String> = IndexSet::new();
     for func_id in &reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (effect_name, op_name) in effects {
@@ -228,10 +228,10 @@ pub fn analyze_project(project: &mut Project) {
     }
 
     // Collect imports using registry lookup instead of hard-coded match
-    let mut imports: HashSet<TirImport> = HashSet::new();
+    let mut imports: IndexSet<TirImport> = IndexSet::new();
 
     // Helper to add an import from builtin registry by function name
-    let add_import_by_name = |imports: &mut HashSet<TirImport>, name: &str| {
+    let add_import_by_name = |imports: &mut IndexSet<TirImport>, name: &str| {
         if let Some(info) = project.builtin_registry.get(name)
             && let Some(canonical_name) = &info.canonical_name
         {
@@ -385,7 +385,7 @@ pub fn analyze_project(project: &mut Project) {
 
 /// Populate project with all features enabled (no DCE, for O0 mode).
 pub fn populate_all_features(project: &mut Project) {
-    project.reachable_functions = HashSet::new();
+    project.reachable_functions = IndexSet::new();
     project.all_reachable = true;
     // Standard WASI functions + any non-standard WASI functions used in entry module
     project.used_wasi_functions = project
@@ -435,8 +435,8 @@ pub fn populate_all_features(project: &mut Project) {
 
 /// Scan a module for WASI function usage without full DCE analysis.
 /// Returns WASI function names in "`Effect::method`" format (e.g., "`TcpSocket::static_tcp_socket_create`").
-fn scan_wasi_usage(module: &TirModule) -> HashSet<String> {
-    let mut wasi_funcs = HashSet::new();
+fn scan_wasi_usage(module: &TirModule) -> IndexSet<String> {
+    let mut wasi_funcs = IndexSet::new();
     for func_rc in &module.functions {
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
@@ -446,13 +446,13 @@ fn scan_wasi_usage(module: &TirModule) -> HashSet<String> {
     wasi_funcs
 }
 
-fn scan_wasi_block(block: &TirBlock, wasi_funcs: &mut HashSet<String>) {
+fn scan_wasi_block(block: &TirBlock, wasi_funcs: &mut IndexSet<String>) {
     for stmt in &block.stmts {
         scan_wasi_stmt(stmt, wasi_funcs);
     }
 }
 
-fn scan_wasi_stmt(stmt: &crate::tir::TirStmt, wasi_funcs: &mut HashSet<String>) {
+fn scan_wasi_stmt(stmt: &crate::tir::TirStmt, wasi_funcs: &mut IndexSet<String>) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
             scan_wasi_expr(value, wasi_funcs);
@@ -497,7 +497,7 @@ fn scan_wasi_stmt(stmt: &crate::tir::TirStmt, wasi_funcs: &mut HashSet<String>) 
     }
 }
 
-fn scan_wasi_expr(expr: &TirExpr, wasi_funcs: &mut HashSet<String>) {
+fn scan_wasi_expr(expr: &TirExpr, wasi_funcs: &mut IndexSet<String>) {
     match &expr.kind {
         TirExprKind::StaticCall { func, args } => {
             let module_path = func.module_path();
@@ -589,8 +589,8 @@ fn scan_wasi_expr(expr: &TirExpr, wasi_funcs: &mut HashSet<String>) {
 fn build_analysis_graph(
     modules: &IndexMap<ModuleSource, TirModule>,
 ) -> (CallGraph, EffectUsageMap) {
-    let mut call_graph: CallGraph = HashMap::new();
-    let mut effect_usage: EffectUsageMap = HashMap::new();
+    let mut call_graph: CallGraph = IndexMap::new();
+    let mut effect_usage: EffectUsageMap = IndexMap::new();
 
     for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
@@ -1286,10 +1286,10 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
 /// Mangle a type ID into a string suitable for struct/function names.
 /// Compute the set of reachable functions from an entry point
 fn compute_reachable(
-    call_graph: &HashMap<FunctionId, HashSet<FunctionId>>,
+    call_graph: &IndexMap<FunctionId, IndexSet<FunctionId>>,
     entry: &FunctionId,
-) -> HashSet<FunctionId> {
-    let mut reachable = HashSet::new();
+) -> IndexSet<FunctionId> {
+    let mut reachable = IndexSet::new();
     let mut worklist = vec![entry.clone()];
 
     while let Some(func) = worklist.pop() {
@@ -1389,7 +1389,7 @@ pub fn remove_unreachable_functions(project: &mut Project) {
 /// Check if a generic function has any monomorphized version that is reachable.
 /// For example, "`Array::with_capacity`" should be kept if "Array<i32>`::with_capacity`" is reachable.
 fn is_generic_func_reachable(
-    reachable: &HashSet<FunctionId>,
+    reachable: &IndexSet<FunctionId>,
     module_source: &ModuleSource,
     func_name: &str,
 ) -> bool {
@@ -1455,8 +1455,8 @@ fn is_generic_func_reachable(
 /// Compute the set of reachable types from reachable functions.
 /// A type is reachable if it's used in any reachable function's signature,
 /// locals, or expressions.
-fn compute_reachable_types(project: &Project) -> HashSet<TypeId> {
-    let mut reachable_types: HashSet<TypeId> = HashSet::new();
+fn compute_reachable_types(project: &Project) -> IndexSet<TypeId> {
+    let mut reachable_types: IndexSet<TypeId> = IndexSet::new();
 
     // Always include primitive types (TypeId 0-17)
     for i in 0..18 {
@@ -1602,7 +1602,7 @@ fn compute_reachable_types(project: &Project) -> HashSet<TypeId> {
 fn collect_types_from_function(
     func: &TirFunction,
     type_table: &TypeTable,
-    reachable: &mut HashSet<TypeId>,
+    reachable: &mut IndexSet<TypeId>,
 ) {
     // Collect parameter types
     for param in &func.params {
@@ -1627,7 +1627,7 @@ fn collect_types_from_function(
 fn collect_types_from_block(
     block: &TirBlock,
     type_table: &TypeTable,
-    reachable: &mut HashSet<TypeId>,
+    reachable: &mut IndexSet<TypeId>,
 ) {
     for stmt in &block.stmts {
         match &stmt.kind {
@@ -1691,7 +1691,7 @@ fn collect_types_from_block(
 fn collect_types_from_expr(
     expr: &TirExpr,
     type_table: &TypeTable,
-    reachable: &mut HashSet<TypeId>,
+    reachable: &mut IndexSet<TypeId>,
 ) {
     // Always collect the expression's type
     collect_type_transitive(expr.type_id, type_table, reachable);
@@ -1875,7 +1875,7 @@ fn collect_types_from_expr(
 fn collect_types_from_pattern(
     pattern: &crate::tir::TirPattern,
     type_table: &TypeTable,
-    reachable: &mut HashSet<TypeId>,
+    reachable: &mut IndexSet<TypeId>,
 ) {
     use crate::tir::TirPattern;
 
@@ -1912,7 +1912,7 @@ fn collect_types_from_pattern(
 fn collect_type_transitive(
     type_id: TypeId,
     type_table: &TypeTable,
-    reachable: &mut HashSet<TypeId>,
+    reachable: &mut IndexSet<TypeId>,
 ) {
     if reachable.contains(&type_id) {
         return;
@@ -1925,7 +1925,7 @@ fn collect_type_transitive(
 fn collect_type_dependencies(
     type_id: TypeId,
     type_table: &TypeTable,
-    reachable: &mut HashSet<TypeId>,
+    reachable: &mut IndexSet<TypeId>,
 ) {
     match type_table.get(type_id) {
         ResolvedType::BuiltinArray(inner)
@@ -1996,7 +1996,7 @@ pub fn remove_unreachable_types(project: &mut Project) {
         // 1. Its Struct type is reachable, OR
         // 2. Any GenericInstance with its base name is reachable (e.g., Box<i32> for Box)
         // 3. Any monomorphized Struct with its base name is reachable
-        let keep_structs: HashSet<String> = module
+        let keep_structs: IndexSet<String> = module
             .structs
             .iter()
             .filter(|s| {
@@ -2042,7 +2042,7 @@ pub fn remove_unreachable_types(project: &mut Project) {
         // A variant is kept if:
         // 1. Its base Variant type is reachable, OR
         // 2. Any GenericInstance with its name is reachable (e.g., Result<i32, String>)
-        let keep_variants: HashSet<String> = module
+        let keep_variants: IndexSet<String> = module
             .variants
             .iter()
             .filter(|v| {
@@ -2069,7 +2069,7 @@ pub fn remove_unreachable_types(project: &mut Project) {
             .collect();
 
         // Collect names of enums to keep
-        let keep_enums: HashSet<String> = module
+        let keep_enums: IndexSet<String> = module
             .enums
             .iter()
             .filter(|e| {
@@ -2111,7 +2111,7 @@ mod tests {
 
     #[test]
     fn test_empty_reachable_set() {
-        let call_graph = HashMap::new();
+        let call_graph = IndexMap::new();
         let entry = free_fn("run");
         let reachable = compute_reachable(&call_graph, &entry);
         assert!(reachable.contains(&free_fn("run")));
@@ -2120,11 +2120,11 @@ mod tests {
 
     #[test]
     fn test_transitive_reachability() {
-        let mut call_graph = HashMap::new();
-        call_graph.insert(free_fn("run"), HashSet::from([free_fn("foo")]));
-        call_graph.insert(free_fn("foo"), HashSet::from([free_fn("bar")]));
-        call_graph.insert(free_fn("bar"), HashSet::new());
-        call_graph.insert(free_fn("unused"), HashSet::from([free_fn("bar")]));
+        let mut call_graph = IndexMap::new();
+        call_graph.insert(free_fn("run"), IndexSet::from([free_fn("foo")]));
+        call_graph.insert(free_fn("foo"), IndexSet::from([free_fn("bar")]));
+        call_graph.insert(free_fn("bar"), IndexSet::new());
+        call_graph.insert(free_fn("unused"), IndexSet::from([free_fn("bar")]));
 
         let reachable = compute_reachable(&call_graph, &free_fn("run"));
         assert!(reachable.contains(&free_fn("run")));

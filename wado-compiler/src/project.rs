@@ -15,8 +15,7 @@ use crate::symbol::SymbolTable;
 use crate::tir::TirModule;
 use crate::wasm_plan::ComponentPlan;
 use crate::world_registry::WorldRegistry;
-use indexmap::IndexMap;
-use std::collections::HashSet;
+use indexmap::{IndexMap, IndexSet};
 
 /// A Wado project ready for code generation.
 ///
@@ -35,7 +34,7 @@ pub struct Project {
     /// Symbol table from analysis phase
     pub symbols: SymbolTable,
     /// Implicitly imported modules (e.g., core:prelude)
-    pub implicit_modules: HashSet<ModuleSource>,
+    pub implicit_modules: IndexSet<ModuleSource>,
     /// Module name for the output (derived from filename)
     pub module_name: String,
 
@@ -53,11 +52,11 @@ pub struct Project {
     // Usage analysis results (what the project contains)
     // ========================================
     /// Set of reachable functions (from DCE analysis)
-    pub reachable_functions: HashSet<FunctionId>,
+    pub reachable_functions: IndexSet<FunctionId>,
     /// When true, all functions are considered reachable (DCE disabled)
     pub all_reachable: bool,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
-    pub used_wasi_functions: HashSet<String>,
+    pub used_wasi_functions: IndexSet<String>,
     // ========================================
     // Codegen options
     // ========================================
@@ -87,7 +86,7 @@ impl Project {
         entry_module_source: ModuleSource,
         tir_modules: IndexMap<ModuleSource, TirModule>,
         symbols: SymbolTable,
-        implicit_modules: HashSet<ModuleSource>,
+        implicit_modules: IndexSet<ModuleSource>,
         module_name: String,
         wasi_registry: &'static WasiRegistry,
         world_registry: &'static WorldRegistry,
@@ -103,9 +102,9 @@ impl Project {
             world_registry,
             builtin_registry,
             // Usage analysis fields default to empty/false
-            reachable_functions: HashSet::new(),
+            reachable_functions: IndexSet::new(),
             all_reachable: false,
-            used_wasi_functions: HashSet::new(),
+            used_wasi_functions: IndexSet::new(),
             // Codegen options
             strip_names: false,
             target_world: "Command".to_string(),

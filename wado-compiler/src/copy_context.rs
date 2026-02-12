@@ -16,7 +16,7 @@
 //! and looked up in `generate_*_copy` functions, but the logic was fragmented
 //! and didn't handle nested types like `Option<Variant>` correctly.
 
-use std::collections::{HashMap, HashSet};
+use indexmap::{IndexMap, IndexSet};
 
 use wasm_encoder::{HeapType, RefType, ValType};
 
@@ -47,14 +47,14 @@ pub struct ArrayCopyLocals {
 pub struct CopyContext {
     /// Map from Wasm struct type index to its copy source local index.
     /// Used for struct, tuple, and variant types.
-    struct_source_locals: HashMap<u32, u32>,
+    struct_source_locals: IndexMap<u32, u32>,
 
     /// Map from Wasm array type index to its copy locals.
-    array_copy_locals: HashMap<u32, ArrayCopyLocals>,
+    array_copy_locals: IndexMap<u32, ArrayCopyLocals>,
 
     /// Map from Option's inner Wasm heap type to its copy source local index.
     /// Keyed by inner type to handle multiple Option types in the same function.
-    option_source_locals: HashMap<u32, u32>,
+    option_source_locals: IndexMap<u32, u32>,
 }
 
 impl CopyContext {
@@ -67,8 +67,8 @@ impl CopyContext {
     ///
     /// For example, `Option<Variant>` expands to include both the Option type
     /// and the Variant type, since copying an Option requires copying its inner value.
-    pub fn expand_copy_types(types: &HashSet<TypeId>, type_table: &TypeTable) -> HashSet<TypeId> {
-        let mut expanded = HashSet::new();
+    pub fn expand_copy_types(types: &IndexSet<TypeId>, type_table: &TypeTable) -> IndexSet<TypeId> {
+        let mut expanded = IndexSet::new();
         for &type_id in types {
             Self::expand_type_recursive(type_id, type_table, &mut expanded);
         }
@@ -78,7 +78,7 @@ impl CopyContext {
     fn expand_type_recursive(
         type_id: TypeId,
         type_table: &TypeTable,
-        expanded: &mut HashSet<TypeId>,
+        expanded: &mut IndexSet<TypeId>,
     ) {
         if expanded.contains(&type_id) {
             return;

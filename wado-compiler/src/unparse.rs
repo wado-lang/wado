@@ -15,13 +15,13 @@ use crate::ast::{
 };
 use crate::comment::{Comment, CommentKind, CommentMap};
 use crate::token::Span;
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 pub struct Unparser<'a> {
     comments: &'a CommentMap,
     output: String,
     indent_level: usize,
-    emitted_comments: HashSet<usize>,
+    emitted_comments: IndexSet<usize>,
     last_source_line: usize,
 }
 
@@ -31,7 +31,7 @@ impl<'a> Unparser<'a> {
             comments,
             output: String::new(),
             indent_level: 0,
-            emitted_comments: HashSet::new(),
+            emitted_comments: IndexSet::new(),
             last_source_line: 0,
         }
     }

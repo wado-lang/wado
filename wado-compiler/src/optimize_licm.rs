@@ -9,7 +9,8 @@ use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexMap;
+use indexmap::IndexSet;
 
 /// Apply Loop-Invariant Code Motion to all functions in the project.
 pub fn apply_licm(project: &mut Project) -> bool {
@@ -51,7 +52,7 @@ fn licm_block(
         match &mut stmt.kind {
             TirStmtKind::Loop { body } => {
                 // Apply LICM to the loop body
-                let empty_set = HashSet::new();
+                let empty_set = IndexSet::new();
                 let hoist_stmts = licm_loop(body, local_count, local_types, type_table, &empty_set);
 
                 if !hoist_stmts.is_empty() {
@@ -108,7 +109,7 @@ fn licm_loop(
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
     type_table: &TypeTable,
-    extra_modified: &HashSet<u32>,
+    extra_modified: &IndexSet<u32>,
 ) -> Vec<TirStmt> {
     let mut all_hoist_stmts = Vec::new();
 
@@ -127,7 +128,7 @@ fn licm_loop(
 
         // Step 3: Find field accesses that can be hoisted
         let mut candidates = Vec::new();
-        let mut seen = HashSet::new();
+        let mut seen = IndexSet::new();
         let mut next_local = *local_count;
         find_hoist_candidates_in_block(
             loop_body,
@@ -202,7 +203,7 @@ fn licm_loop(
 }
 
 /// Collect all local variable indices that are modified (assigned) in a block.
-fn collect_modified_vars_in_block(block: &TirBlock, modified: &mut HashSet<u32>) {
+fn collect_modified_vars_in_block(block: &TirBlock, modified: &mut IndexSet<u32>) {
     for stmt in &block.stmts {
         collect_modified_vars_in_stmt(stmt, modified);
     }
@@ -210,7 +211,7 @@ fn collect_modified_vars_in_block(block: &TirBlock, modified: &mut HashSet<u32>)
 
 /// Mark the underlying local variable as modified, traversing through field accesses.
 /// This is used when taking a mutable reference to a field, e.g., `&mut self.items`.
-fn mark_local_as_modified(expr: &TirExpr, modified: &mut HashSet<u32>) {
+fn mark_local_as_modified(expr: &TirExpr, modified: &mut IndexSet<u32>) {
     match &expr.kind {
         TirExprKind::Local { index, .. } => {
             modified.insert(*index);
@@ -226,7 +227,7 @@ fn mark_local_as_modified(expr: &TirExpr, modified: &mut HashSet<u32>) {
     }
 }
 
-fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut HashSet<u32>) {
+fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut IndexSet<u32>) {
     match &stmt.kind {
         TirStmtKind::Let {
             local_index, value, ..
@@ -295,7 +296,7 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut HashSet<u32>) {
 
 /// Collect all local variable indices bound by a pattern.
 /// These variables are assigned fresh each time the pattern matches.
-fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut HashSet<u32>) {
+fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut IndexSet<u32>) {
     match pattern {
         TirPattern::Binding { local_index, .. } => {
             modified.insert(*local_index);
@@ -316,7 +317,7 @@ fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut HashSet<u32>) {
     }
 }
 
-fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut HashSet<u32>) {
+fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
     match &expr.kind {
         TirExprKind::Assign { target, value } => {
             // Mark the root local as modified (handles field accesses, dereferences, etc.)
@@ -465,7 +466,7 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut HashSet<u32>) {
 /// 2. It's a local variable not in the modified set
 /// 3. It's a field access on a loop-invariant expression
 #[allow(dead_code)]
-fn is_loop_invariant(expr: &TirExpr, modified_vars: &HashSet<u32>) -> bool {
+fn is_loop_invariant(expr: &TirExpr, modified_vars: &IndexSet<u32>) -> bool {
     match &expr.kind {
         // Constants are always invariant
         TirExprKind::IntLiteral { .. }
@@ -512,8 +513,8 @@ struct LicmRefBinding {
 fn collect_immutable_ref_bindings(
     block: &TirBlock,
     type_table: &TypeTable,
-) -> HashMap<u32, LicmRefBinding> {
-    let mut bindings = HashMap::new();
+) -> IndexMap<u32, LicmRefBinding> {
+    let mut bindings = IndexMap::new();
     collect_licm_ref_bindings_in_block(block, type_table, &mut bindings);
     bindings
 }
@@ -521,7 +522,7 @@ fn collect_immutable_ref_bindings(
 fn collect_licm_ref_bindings_in_block(
     block: &TirBlock,
     type_table: &TypeTable,
-    bindings: &mut HashMap<u32, LicmRefBinding>,
+    bindings: &mut IndexMap<u32, LicmRefBinding>,
 ) {
     for stmt in &block.stmts {
         collect_licm_ref_bindings_in_stmt(stmt, type_table, bindings);
@@ -531,7 +532,7 @@ fn collect_licm_ref_bindings_in_block(
 fn collect_licm_ref_bindings_in_stmt(
     stmt: &TirStmt,
     type_table: &TypeTable,
-    bindings: &mut HashMap<u32, LicmRefBinding>,
+    bindings: &mut IndexMap<u32, LicmRefBinding>,
 ) {
     match &stmt.kind {
         TirStmtKind::Let {
@@ -614,7 +615,7 @@ fn collect_licm_ref_bindings_in_stmt(
 fn collect_licm_ref_bindings_in_expr(
     expr: &TirExpr,
     type_table: &TypeTable,
-    bindings: &mut HashMap<u32, LicmRefBinding>,
+    bindings: &mut IndexMap<u32, LicmRefBinding>,
 ) {
     // Recurse into all sub-expressions to find nested let bindings
     match &expr.kind {
@@ -765,10 +766,10 @@ struct HoistCandidate {
 /// Returns a list of candidates to hoist.
 fn find_hoist_candidates_in_block(
     block: &TirBlock,
-    modified_vars: &HashSet<u32>,
-    ref_bindings: &HashMap<u32, LicmRefBinding>,
+    modified_vars: &IndexSet<u32>,
+    ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
-    seen: &mut HashSet<(u32, u32)>, // (local_index, field_index) pairs already seen
+    seen: &mut IndexSet<(u32, u32)>, // (local_index, field_index) pairs already seen
     next_local: &mut u32,
 ) {
     for stmt in &block.stmts {
@@ -785,10 +786,10 @@ fn find_hoist_candidates_in_block(
 
 fn find_hoist_candidates_in_stmt(
     stmt: &TirStmt,
-    modified_vars: &HashSet<u32>,
-    ref_bindings: &HashMap<u32, LicmRefBinding>,
+    modified_vars: &IndexSet<u32>,
+    ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
-    seen: &mut HashSet<(u32, u32)>,
+    seen: &mut IndexSet<(u32, u32)>,
     next_local: &mut u32,
 ) {
     match &stmt.kind {
@@ -937,10 +938,10 @@ fn find_hoist_candidates_in_stmt(
 
 fn find_hoist_candidates_in_expr(
     expr: &TirExpr,
-    modified_vars: &HashSet<u32>,
-    ref_bindings: &HashMap<u32, LicmRefBinding>,
+    modified_vars: &IndexSet<u32>,
+    ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
-    seen: &mut HashSet<(u32, u32)>,
+    seen: &mut IndexSet<(u32, u32)>,
     next_local: &mut u32,
 ) {
     match &expr.kind {
@@ -1363,7 +1364,7 @@ fn find_hoist_candidates_in_expr(
 fn replace_hoisted_in_block(
     block: &mut TirBlock,
     candidates: &[HoistCandidate],
-    ref_bindings: &HashMap<u32, LicmRefBinding>,
+    ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
     for stmt in &mut block.stmts {
         replace_hoisted_in_stmt(stmt, candidates, ref_bindings);
@@ -1373,7 +1374,7 @@ fn replace_hoisted_in_block(
 fn replace_hoisted_in_stmt(
     stmt: &mut TirStmt,
     candidates: &[HoistCandidate],
-    ref_bindings: &HashMap<u32, LicmRefBinding>,
+    ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
@@ -1431,7 +1432,7 @@ fn replace_hoisted_in_stmt(
 fn replace_hoisted_in_expr(
     expr: &mut TirExpr,
     candidates: &[HoistCandidate],
-    ref_bindings: &HashMap<u32, LicmRefBinding>,
+    ref_bindings: &IndexMap<u32, LicmRefBinding>,
 ) {
     // First, check if this expression matches a hoist candidate
     if let TirExprKind::FieldAccess {

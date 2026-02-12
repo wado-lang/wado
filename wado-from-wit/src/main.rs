@@ -1,6 +1,6 @@
 //! wado-from-wit CLI
 
-use std::collections::HashMap;
+use indexmap::{IndexMap, IndexSet};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
@@ -218,7 +218,7 @@ fn run_directory_mode(
         let mut combined_module = wado_from_wit::WadoModule::new(pkg_name.clone(), version);
 
         // Collect all source files
-        let mut source_files: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut source_files: IndexSet<String> = IndexSet::new();
 
         // Process all interfaces
         for (iface_name, iface_id) in &pkg.interfaces {
@@ -276,8 +276,8 @@ fn run_directory_mode(
 }
 
 /// Build a map from interface/world name to the WIT file that defines it
-fn build_interface_to_file_map(dir: &PathBuf) -> Result<HashMap<String, String>> {
-    let mut map = HashMap::new();
+fn build_interface_to_file_map(dir: &PathBuf) -> Result<IndexMap<String, String>> {
+    let mut map = IndexMap::new();
     let base_dir = std::env::current_dir()?;
     build_interface_map_recursive(dir, &base_dir, &mut map)?;
     Ok(map)
@@ -286,7 +286,7 @@ fn build_interface_to_file_map(dir: &PathBuf) -> Result<HashMap<String, String>>
 fn build_interface_map_recursive(
     dir: &PathBuf,
     base_dir: &PathBuf,
-    map: &mut HashMap<String, String>,
+    map: &mut IndexMap<String, String>,
 ) -> Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {

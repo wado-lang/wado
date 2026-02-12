@@ -3,7 +3,7 @@
 //! This module provides utilities to transform Wasm modules, such as
 //! converting memory definitions to imports and dead code elimination.
 
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 use walrus::passes;
 use wasm_encoder::{
@@ -16,7 +16,7 @@ use wasmparser::{Parser, Payload};
 /// This uses walrus to remove unused functions and other items from the module.
 /// The `keep_exports` set contains the names of exports that should be preserved.
 /// The gc pass automatically treats exports as roots, so we remove unwanted exports first.
-pub fn eliminate_dead_code(wasm_bytes: &[u8], keep_exports: &HashSet<String>) -> Vec<u8> {
+pub fn eliminate_dead_code(wasm_bytes: &[u8], keep_exports: &IndexSet<String>) -> Vec<u8> {
     let mut module =
         walrus::Module::from_buffer(wasm_bytes).expect("bundled module should be valid");
 

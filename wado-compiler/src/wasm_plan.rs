@@ -27,7 +27,8 @@ use crate::ast::Type;
 use crate::project::Project;
 use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeId, TypeTable};
 use crate::world_registry::WorldExportInfo;
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexMap;
+use indexmap::IndexSet;
 
 /// Wasm value type for CM scratch locals
 ///
@@ -207,7 +208,7 @@ pub enum CmConverterKind {
 #[derive(Debug, Clone, Default)]
 pub struct CmConverterRequirements {
     /// Set of required converters
-    needed: std::collections::HashSet<CmConverterKind>,
+    needed: IndexSet<CmConverterKind>,
 }
 
 impl CmConverterRequirements {
@@ -463,12 +464,12 @@ pub fn sort_types_topologically<'a>(
     type_table: &TypeTable,
 ) -> Vec<TypeDecl<'a>> {
     // Collect all type names
-    let struct_names: HashSet<String> = structs.iter().map(|s| s.name.clone()).collect();
-    let variant_names: HashSet<String> = variants.iter().map(|v| v.name.clone()).collect();
-    let all_names: HashSet<String> = struct_names.union(&variant_names).cloned().collect();
+    let struct_names: IndexSet<String> = structs.iter().map(|s| s.name.clone()).collect();
+    let variant_names: IndexSet<String> = variants.iter().map(|v| v.name.clone()).collect();
+    let all_names: IndexSet<String> = struct_names.union(&variant_names).cloned().collect();
 
     // Build dependency graph: deps[A] = [B] means A depends on B (B must come before A)
-    let mut deps: HashMap<String, Vec<String>> = HashMap::new();
+    let mut deps: IndexMap<String, Vec<String>> = IndexMap::new();
 
     for s in structs {
         let mut type_deps = Vec::new();
@@ -497,13 +498,13 @@ pub fn sort_types_topologically<'a>(
     }
 
     // Topological sort using Kahn's algorithm
-    let mut in_degree: HashMap<String, usize> = HashMap::new();
+    let mut in_degree: IndexMap<String, usize> = IndexMap::new();
     for name in &all_names {
         let type_deps = deps.get(name).map(std::vec::Vec::len).unwrap_or(0);
         in_degree.insert(name.clone(), type_deps);
     }
 
-    let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
+    let mut dependents: IndexMap<String, Vec<String>> = IndexMap::new();
     for (name, type_deps) in &deps {
         for dep in type_deps {
             dependents
@@ -534,9 +535,9 @@ pub fn sort_types_topologically<'a>(
     }
 
     // Map names back to TypeDecl
-    let name_to_struct: HashMap<&str, &TirStruct> =
+    let name_to_struct: IndexMap<&str, &TirStruct> =
         structs.iter().map(|s| (s.name.as_str(), s)).collect();
-    let name_to_variant: HashMap<&str, &TirVariantDecl> =
+    let name_to_variant: IndexMap<&str, &TirVariantDecl> =
         variants.iter().map(|v| (v.name.as_str(), v)).collect();
 
     sorted_names

@@ -3,7 +3,11 @@
 //! Loads all modules (entry module + dependencies) upfront before analysis.
 //! This enables converting ALL modules to TIR before codegen.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
+
+use indexmap::IndexSet;
+
+use indexmap::IndexMap;
 
 use crate::ast::{Item, Module};
 use crate::bind;
@@ -103,11 +107,11 @@ impl From<SourceError> for LoadError {
 /// Result of loading all modules
 pub struct LoadResult {
     /// All loaded modules (module source -> desugared AST)
-    pub modules: HashMap<ModuleSource, Module>,
+    pub modules: IndexMap<ModuleSource, Module>,
     /// The entry module source
     pub entry_module_source: ModuleSource,
     /// Modules that were implicitly loaded (not from user imports)
-    pub implicit_modules: HashSet<ModuleSource>,
+    pub implicit_modules: IndexSet<ModuleSource>,
 }
 
 use crate::compiler_host::LogLevel;
@@ -119,10 +123,10 @@ use crate::compiler_host::LogLevel;
 /// Cached desugared AST modules for all core stdlib modules.
 ///
 /// Each module is parsed, bound, and desugared exactly once per process.
-fn cached_core_stdlib() -> &'static HashMap<ModuleSource, Module> {
+fn cached_core_stdlib() -> &'static IndexMap<ModuleSource, Module> {
     use std::sync::OnceLock;
 
-    static CACHE: OnceLock<HashMap<ModuleSource, Module>> = OnceLock::new();
+    static CACHE: OnceLock<IndexMap<ModuleSource, Module>> = OnceLock::new();
     CACHE.get_or_init(|| {
         let core_modules: &[(&str, &str)] = &[
             ("builtin", stdlib::CORE_BUILTIN),
@@ -141,7 +145,7 @@ fn cached_core_stdlib() -> &'static HashMap<ModuleSource, Module> {
             ("stream", stdlib::CORE_STREAM),
             ("zlib", stdlib::CORE_ZLIB),
         ];
-        let mut cache = HashMap::with_capacity(core_modules.len());
+        let mut cache = IndexMap::with_capacity(core_modules.len());
         for &(name, source) in core_modules {
             let module_source = ModuleSource::Core {
                 name: name.to_string(),
@@ -180,11 +184,11 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Log level for filtering messages
     log_level: LogLevel,
     /// Cache of already parsed modules
-    loaded: HashMap<ModuleSource, Module>,
+    loaded: IndexMap<ModuleSource, Module>,
     /// Set of modules currently being loaded (for cycle detection during collection)
-    loading: HashSet<ModuleSource>,
+    loading: IndexSet<ModuleSource>,
     /// Modules that were implicitly loaded
-    implicit_modules: HashSet<ModuleSource>,
+    implicit_modules: IndexSet<ModuleSource>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -193,9 +197,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Self {
             host,
             log_level,
-            loaded: HashMap::new(),
-            loading: HashSet::new(),
-            implicit_modules: HashSet::new(),
+            loaded: IndexMap::new(),
+            loading: IndexSet::new(),
+            implicit_modules: IndexSet::new(),
         }
     }
 
@@ -270,7 +274,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.bind_module(&ast, &module_source)?;
             let desugared = desugar_module(&ast);
             self.loaded.insert(module_source.clone(), desugared);
-            self.loading.remove(&module_source);
+            self.loading.swap_remove(&module_source);
         }
 
         // Load implicit modules (for compiler-generated code)

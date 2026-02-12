@@ -10,7 +10,7 @@ use crate::tir::{
     TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use indexmap::IndexMap;
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexSet;
 
 // The inline threshold is based on expression count, which provides a more
 // accurate measure of function complexity than statement count.
@@ -142,7 +142,7 @@ fn count_block_exprs(block: &TirBlock) -> usize {
 /// Check if a function is eligible for inlining
 fn is_inline_eligible(
     func: &TirFunction,
-    recursive_functions: &HashSet<String>,
+    recursive_functions: &IndexSet<String>,
     _module_path: &[String],
     type_table: &TypeTable,
     inline_threshold: usize,
@@ -478,11 +478,11 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
 }
 
 /// Detect recursive functions using call graph analysis
-fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> HashSet<String> {
-    let mut recursive = HashSet::new();
+fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> IndexSet<String> {
+    let mut recursive = IndexSet::new();
 
     // Build a simple call graph: function name -> called function names
-    let mut call_graph: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut call_graph: IndexMap<String, IndexSet<String>> = IndexMap::new();
 
     for module in modules.values() {
         for func_rc in &module.functions {
@@ -494,7 +494,7 @@ fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> Hash
 
     // Find functions that can reach themselves
     for func_name in call_graph.keys() {
-        if can_reach(&call_graph, func_name, func_name, &mut HashSet::new()) {
+        if can_reach(&call_graph, func_name, func_name, &mut IndexSet::new()) {
             recursive.insert(func_name.clone());
         }
     }
@@ -503,21 +503,21 @@ fn find_recursive_functions(modules: &IndexMap<ModuleSource, TirModule>) -> Hash
 }
 
 /// Collect all function names called from a function
-fn collect_callees_from_function(func: &TirFunction) -> HashSet<String> {
-    let mut callees = HashSet::new();
+fn collect_callees_from_function(func: &TirFunction) -> IndexSet<String> {
+    let mut callees = IndexSet::new();
     if let Some(body) = &func.body {
         collect_callees_from_block(body, &mut callees);
     }
     callees
 }
 
-fn collect_callees_from_block(block: &TirBlock, callees: &mut HashSet<String>) {
+fn collect_callees_from_block(block: &TirBlock, callees: &mut IndexSet<String>) {
     for stmt in &block.stmts {
         collect_callees_from_stmt(stmt, callees);
     }
 }
 
-fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
+fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
             collect_callees_from_expr(value, callees);
@@ -563,7 +563,7 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut HashSet<String>) {
     }
 }
 
-fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
+fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
             callees.insert(func.name());
@@ -717,10 +717,10 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut HashSet<String>) {
 
 /// Check if `start` can reach `target` in the call graph
 fn can_reach(
-    call_graph: &HashMap<String, HashSet<String>>,
+    call_graph: &IndexMap<String, IndexSet<String>>,
     start: &str,
     target: &str,
-    visited: &mut HashSet<String>,
+    visited: &mut IndexSet<String>,
 ) -> bool {
     if !visited.insert(start.to_string()) {
         return false; // Already visited
@@ -749,10 +749,10 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
 
     // Collect inline candidates from all modules
     // Key: (module_path, func_name), Value: cloned function
-    let mut inline_candidates: HashMap<(Vec<String>, String), TirFunction> = HashMap::new();
+    let mut inline_candidates: IndexMap<(Vec<String>, String), TirFunction> = IndexMap::new();
 
     // Also collect function_strings for each candidate (to update caller's strings after inlining)
-    let mut candidate_strings: HashMap<(Vec<String>, String), Vec<String>> = HashMap::new();
+    let mut candidate_strings: IndexMap<(Vec<String>, String), Vec<String>> = IndexMap::new();
 
     for (module_source, module) in &project.tir_modules {
         let module_path = module_source.to_path();
@@ -840,7 +840,7 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
 /// Inline function calls in a block
 fn inline_calls_in_block(
     block: &mut TirBlock,
-    candidates: &HashMap<(Vec<String>, String), TirFunction>,
+    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
     current_module: &[String],
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
@@ -1283,7 +1283,7 @@ fn create_default_value(type_id: TypeId, type_table: &TypeTable, span: crate::Sp
 /// Try to inline a call expression, returning the inlined expression and key
 fn try_inline_call_expr(
     expr: &TirExpr,
-    candidates: &HashMap<(Vec<String>, String), TirFunction>,
+    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
     current_module: &[String],
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
@@ -1359,7 +1359,7 @@ fn try_inline_call_expr(
     // IMPORTANT: Push param types first to match index assignment order
     // (params get indices local_offset+0, local_offset+1, ..., then non-params follow)
     let mut block_stmts = Vec::new();
-    let mut param_to_local: HashMap<u32, u32> = HashMap::new();
+    let mut param_to_local: IndexMap<u32, u32> = IndexMap::new();
 
     for (i, (param, arg)) in candidate.params.iter().zip(args.iter()).enumerate() {
         let new_local_index = local_offset + i as u32;
@@ -1426,7 +1426,7 @@ fn try_inline_call_expr(
 /// Try to inline a method call expression, returning the inlined expression and key
 fn try_inline_method_call_expr(
     expr: &TirExpr,
-    candidates: &HashMap<(Vec<String>, String), TirFunction>,
+    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
     current_module: &[String],
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
@@ -1503,7 +1503,7 @@ fn try_inline_method_call_expr(
     // IMPORTANT: Push param types first to match index assignment order
     // For methods, first param is `self` (receiver), then the rest are args
     let mut block_stmts = Vec::new();
-    let mut param_to_local: HashMap<u32, u32> = HashMap::new();
+    let mut param_to_local: IndexMap<u32, u32> = IndexMap::new();
 
     // Bind receiver to first parameter (self)
     // Use receiver's type_id to handle monomorphization type variance
@@ -1593,7 +1593,7 @@ fn try_inline_method_call_expr(
 #[allow(clippy::too_many_arguments)]
 fn try_inline_static_call_expr(
     expr: &TirExpr,
-    candidates: &HashMap<(Vec<String>, String), TirFunction>,
+    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
     current_module: &[String],
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
@@ -1659,7 +1659,7 @@ fn try_inline_static_call_expr(
     // IMPORTANT: Push param types first to match index assignment order
     // For static calls, all args map directly to params
     let mut block_stmts = Vec::new();
-    let mut param_to_local: HashMap<u32, u32> = HashMap::new();
+    let mut param_to_local: IndexMap<u32, u32> = IndexMap::new();
 
     // Bind all args to parameters
     // Use argument's type_id to handle monomorphization type variance
@@ -1726,7 +1726,7 @@ fn try_inline_static_call_expr(
 /// Remap locals and convert returns to break statements with the given label
 fn remap_and_convert_returns(
     block: &TirBlock,
-    param_to_local: &HashMap<u32, u32>,
+    param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
     label: &str,
@@ -1768,7 +1768,7 @@ fn remap_and_convert_returns(
 /// Remap local indices in a statement, converting nested returns to breaks
 fn remap_stmt_with_label(
     stmt: &TirStmt,
-    param_to_local: &HashMap<u32, u32>,
+    param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
     label: &str,
@@ -1937,7 +1937,7 @@ fn remap_stmt_with_label(
 /// Remap local indices in a pattern
 fn remap_pattern(
     pattern: &TirPattern,
-    param_to_local: &HashMap<u32, u32>,
+    param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
 ) -> TirPattern {
@@ -1988,7 +1988,7 @@ fn remap_pattern(
 /// Remap local indices in a block with label for return conversion
 fn remap_block_with_label(
     block: &TirBlock,
-    param_to_local: &HashMap<u32, u32>,
+    param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
     label: &str,
@@ -2016,7 +2016,7 @@ fn remap_block_with_label(
 /// Remap a local index
 fn remap_local_index(
     index: u32,
-    param_to_local: &HashMap<u32, u32>,
+    param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
 ) -> u32 {
@@ -2038,7 +2038,7 @@ fn remap_local_index(
 /// used to convert local calls to use the full module path.
 fn remap_expr(
     expr: &TirExpr,
-    param_to_local: &HashMap<u32, u32>,
+    param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
     source_module: &[String],
@@ -2556,7 +2556,7 @@ fn remap_function_ref(func: &FunctionRef, source_module: &[String]) -> FunctionR
 /// Remap local indices in a block (without label for return conversion)
 fn remap_block(
     block: &TirBlock,
-    param_to_local: &HashMap<u32, u32>,
+    param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
     source_module: &[String],
@@ -2574,7 +2574,7 @@ fn remap_block(
 /// Remap local indices in a statement (without return conversion)
 fn remap_stmt(
     stmt: &TirStmt,
-    param_to_local: &HashMap<u32, u32>,
+    param_to_local: &IndexMap<u32, u32>,
     local_offset: u32,
     param_count: u32,
     source_module: &[String],
@@ -2714,7 +2714,7 @@ fn remap_stmt(
 /// Recursively inline calls within an expression
 fn inline_calls_in_expr(
     expr: &mut TirExpr,
-    candidates: &HashMap<(Vec<String>, String), TirFunction>,
+    candidates: &IndexMap<(Vec<String>, String), TirFunction>,
     current_module: &[String],
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,

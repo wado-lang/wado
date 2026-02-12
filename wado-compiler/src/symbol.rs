@@ -3,7 +3,7 @@
 //! The symbol table tracks all definitions (functions, types, effects, etc.)
 //! and their metadata. It supports module namespacing and scoped lookups.
 
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::ops::Index;
 
 use crate::ast::WasiImport;
@@ -250,13 +250,13 @@ pub struct SymbolTable {
     /// All symbols in the table
     symbols: SymbolVec,
     /// Module → symbol name → symbol id
-    modules: HashMap<ModuleSource, HashMap<String, SymbolId>>,
+    modules: IndexMap<ModuleSource, IndexMap<String, SymbolId>>,
     /// Re-exports: module → exported name → re-export target
-    reexports: HashMap<ModuleSource, HashMap<String, ReExportTarget>>,
+    reexports: IndexMap<ModuleSource, IndexMap<String, ReExportTarget>>,
     /// Imported symbols in the current module (name → symbol id)
-    imports: HashMap<String, SymbolId>,
+    imports: IndexMap<String, SymbolId>,
     /// Current scope stack for local variables (innermost scope last)
-    scopes: Vec<HashMap<String, SymbolId>>,
+    scopes: Vec<IndexMap<String, SymbolId>>,
 }
 
 impl SymbolTable {
@@ -446,7 +446,7 @@ impl SymbolTable {
 
     /// Enter a new local scope
     pub fn enter_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.scopes.push(IndexMap::new());
     }
 
     /// Exit the current local scope

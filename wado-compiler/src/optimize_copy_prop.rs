@@ -15,7 +15,8 @@ use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexMap;
+use indexmap::IndexSet;
 
 /// Information about a copy binding that may be eliminable.
 /// Pattern: `let x: T = y` where y is a local variable or simple literal
@@ -32,7 +33,7 @@ struct CopyBinding {
     is_mut: bool,
     /// Locals assigned within the containing labeled block (empty if not in a labeled block).
     /// Used to check if source is modified within the block scope.
-    block_local_assigned: HashSet<u32>,
+    block_local_assigned: IndexSet<u32>,
 }
 
 /// Source of a copy binding
@@ -102,32 +103,32 @@ fn analyze_copy_binding(stmt: &TirStmt) -> Option<CopyBinding> {
         source,
         type_id: value.type_id,
         is_mut: *is_mut,
-        block_local_assigned: HashSet::new(),
+        block_local_assigned: IndexSet::new(),
     })
 }
 
 /// Collect usage information for all locals in a function body.
-fn collect_local_usage(body: &TirBlock) -> HashMap<u32, LocalUsage> {
-    let mut usage: HashMap<u32, LocalUsage> = HashMap::new();
+fn collect_local_usage(body: &TirBlock) -> IndexMap<u32, LocalUsage> {
+    let mut usage: IndexMap<u32, LocalUsage> = IndexMap::new();
     collect_usage_in_block(body, &mut usage, false);
     usage
 }
 
 /// Collect which locals are assigned within a block (non-recursively for labeled blocks).
 /// This is used to check if a source variable is modified within a labeled block scope.
-fn collect_assigned_in_block(block: &TirBlock) -> HashSet<u32> {
-    let mut assigned: HashSet<u32> = HashSet::new();
+fn collect_assigned_in_block(block: &TirBlock) -> IndexSet<u32> {
+    let mut assigned: IndexSet<u32> = IndexSet::new();
     collect_assigned_in_stmts(&block.stmts, &mut assigned);
     assigned
 }
 
-fn collect_assigned_in_stmts(stmts: &[TirStmt], assigned: &mut HashSet<u32>) {
+fn collect_assigned_in_stmts(stmts: &[TirStmt], assigned: &mut IndexSet<u32>) {
     for stmt in stmts {
         collect_assigned_in_stmt(stmt, assigned);
     }
 }
 
-fn collect_assigned_in_stmt(stmt: &TirStmt, assigned: &mut HashSet<u32>) {
+fn collect_assigned_in_stmt(stmt: &TirStmt, assigned: &mut IndexSet<u32>) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
             collect_assigned_in_expr(value, assigned);
@@ -181,7 +182,7 @@ fn collect_assigned_in_stmt(stmt: &TirStmt, assigned: &mut HashSet<u32>) {
     }
 }
 
-fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
+fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut IndexSet<u32>) {
     match &expr.kind {
         TirExprKind::Assign { target, value } => {
             if let TirExprKind::Local { index, .. } = &target.kind {
@@ -315,13 +316,13 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut HashSet<u32>) {
     }
 }
 
-fn collect_usage_in_block(block: &TirBlock, usage: &mut HashMap<u32, LocalUsage>, in_loop: bool) {
+fn collect_usage_in_block(block: &TirBlock, usage: &mut IndexMap<u32, LocalUsage>, in_loop: bool) {
     for stmt in &block.stmts {
         collect_usage_in_stmt(stmt, usage, in_loop);
     }
 }
 
-fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut HashMap<u32, LocalUsage>, in_loop: bool) {
+fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, in_loop: bool) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
             collect_usage_in_expr(value, usage, in_loop, false);
@@ -377,7 +378,7 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut HashMap<u32, LocalUsage>, i
 
 fn collect_usage_in_expr(
     expr: &TirExpr,
-    usage: &mut HashMap<u32, LocalUsage>,
+    usage: &mut IndexMap<u32, LocalUsage>,
     in_loop: bool,
     in_condition: bool,
 ) {
@@ -556,7 +557,7 @@ fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// Check if a binding can be safely eliminated via copy propagation.
 fn can_propagate_copy(
     binding: &CopyBinding,
-    usage: &HashMap<u32, LocalUsage>,
+    usage: &IndexMap<u32, LocalUsage>,
     type_table: &TypeTable,
 ) -> bool {
     let target_usage = usage.get(&binding.target_local);
@@ -626,13 +627,13 @@ fn can_propagate_copy(
 
 /// Substitute local references in a block.
 /// Replaces uses of locals in `substitutions` with the corresponding source expression.
-fn substitute_in_block(block: &mut TirBlock, substitutions: &HashMap<u32, CopySource>) {
+fn substitute_in_block(block: &mut TirBlock, substitutions: &IndexMap<u32, CopySource>) {
     for stmt in &mut block.stmts {
         substitute_in_stmt(stmt, substitutions);
     }
 }
 
-fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &HashMap<u32, CopySource>) {
+fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &IndexMap<u32, CopySource>) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
             substitute_in_expr(value, substitutions);
@@ -686,7 +687,7 @@ fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &HashMap<u32, CopySourc
     }
 }
 
-fn substitute_in_expr(expr: &mut TirExpr, substitutions: &HashMap<u32, CopySource>) {
+fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySource>) {
     // Check if this is a local that needs substitution
     if let TirExprKind::Local { index, .. } = &expr.kind
         && let Some(source) = substitutions.get(index)
@@ -863,7 +864,7 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &HashMap<u32, CopySourc
 fn collect_copy_bindings(
     stmts: &[TirStmt],
     bindings: &mut Vec<CopyBinding>,
-    block_local_assigned: &HashSet<u32>,
+    block_local_assigned: &IndexSet<u32>,
 ) {
     for stmt in stmts {
         if let Some(mut binding) = analyze_copy_binding(stmt) {
@@ -877,7 +878,7 @@ fn collect_copy_bindings(
 fn collect_copy_bindings_in_stmt(
     stmt: &TirStmt,
     bindings: &mut Vec<CopyBinding>,
-    block_local_assigned: &HashSet<u32>,
+    block_local_assigned: &IndexSet<u32>,
 ) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
@@ -937,7 +938,7 @@ fn collect_copy_bindings_in_stmt(
 fn collect_copy_bindings_in_expr(
     expr: &TirExpr,
     bindings: &mut Vec<CopyBinding>,
-    block_local_assigned: &HashSet<u32>,
+    block_local_assigned: &IndexSet<u32>,
 ) {
     match &expr.kind {
         TirExprKind::Block(block) => {
@@ -1071,7 +1072,7 @@ fn collect_copy_bindings_in_expr(
 }
 
 /// Remove dead copy bindings from statements.
-fn remove_copy_bindings(stmts: &mut Vec<TirStmt>, dead_locals: &HashSet<u32>) {
+fn remove_copy_bindings(stmts: &mut Vec<TirStmt>, dead_locals: &IndexSet<u32>) {
     stmts.retain(|stmt| {
         if let TirStmtKind::Let { local_index, .. } = &stmt.kind {
             !dead_locals.contains(local_index)
@@ -1085,7 +1086,7 @@ fn remove_copy_bindings(stmts: &mut Vec<TirStmt>, dead_locals: &HashSet<u32>) {
     }
 }
 
-fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u32>) {
+fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &IndexSet<u32>) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
             remove_copy_bindings_in_expr(value, dead_locals);
@@ -1139,7 +1140,7 @@ fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u32>) 
     }
 }
 
-fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) {
+fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>) {
     match &mut expr.kind {
         TirExprKind::Block(block) => {
             remove_copy_bindings(&mut block.stmts, dead_locals);
@@ -1281,7 +1282,7 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
     loop {
         // Step 1: Collect all copy bindings (single walk)
         let mut copy_bindings: Vec<CopyBinding> = Vec::new();
-        collect_copy_bindings(&body.stmts, &mut copy_bindings, &HashSet::new());
+        collect_copy_bindings(&body.stmts, &mut copy_bindings, &IndexSet::new());
 
         if copy_bindings.is_empty() {
             break;
@@ -1304,9 +1305,9 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
         // A binding can be batched if its source local is not a target of another eliminable
         // binding. This prevents interference when two bindings form a chain
         // (e.g., `let a = 5; let x = a`).
-        let target_set: HashSet<u32> = eliminable.iter().map(|b| b.target_local).collect();
+        let target_set: IndexSet<u32> = eliminable.iter().map(|b| b.target_local).collect();
 
-        let mut substitutions: HashMap<u32, CopySource> = HashMap::new();
+        let mut substitutions: IndexMap<u32, CopySource> = IndexMap::new();
         let mut has_deferred = false;
 
         for binding in eliminable {
@@ -1327,7 +1328,7 @@ fn propagate_copies_in_function(func: &mut TirFunction, type_table: &TypeTable) 
         }
 
         // Step 5: Apply all substitutions in a single walk
-        let dead_locals: HashSet<u32> = substitutions.keys().copied().collect();
+        let dead_locals: IndexSet<u32> = substitutions.keys().copied().collect();
         substitute_in_block(body, &substitutions);
 
         // Step 6: Remove all dead bindings in a single walk

@@ -11,7 +11,9 @@
 //! - Resolve cross-module references (that's the resolve phase)
 //! - Perform type checking (that's the resolve phase)
 
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexSet;
+
+use indexmap::IndexMap;
 
 use crate::ast::{
     AssertStmt, Block, ClosureExpr, Condition, Expr, ExprStmt, ForOfStmt, ForStmt, Function,
@@ -39,13 +41,13 @@ pub struct BindingInfo {
 /// A scope containing local variable bindings
 #[derive(Debug)]
 struct Scope {
-    bindings: HashMap<String, BindingInfo>,
+    bindings: IndexMap<String, BindingInfo>,
 }
 
 impl Scope {
     fn new() -> Self {
         Self {
-            bindings: HashMap::new(),
+            bindings: IndexMap::new(),
         }
     }
 }
@@ -144,7 +146,7 @@ pub struct Binder<'a, H: CompilerHost> {
     current_depth: u32,
     /// All local variable names defined in the current function
     /// Used to distinguish "out of scope" errors from "global reference"
-    local_names_in_function: HashSet<String>,
+    local_names_in_function: IndexSet<String>,
 }
 
 impl<'a, H: CompilerHost> Binder<'a, H> {
@@ -154,7 +156,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             scopes: vec![Scope::new()], // Global scope
             logger,
             current_depth: 0,
-            local_names_in_function: HashSet::new(),
+            local_names_in_function: IndexSet::new(),
         }
     }
 

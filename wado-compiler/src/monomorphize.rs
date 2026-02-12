@@ -11,10 +11,9 @@
 //! 4. Rewrite types and function calls to use monomorphized names
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name};
 use crate::project::Project;
@@ -55,7 +54,7 @@ pub fn monomorphize_modules_indexed(
     modules: IndexMap<ModuleSource, TirModule>,
 ) -> IndexMap<ModuleSource, TirModule> {
     // First pass: collect all generic functions from all modules
-    let mut all_generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> = HashMap::new();
+    let mut all_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
     for module in modules.values() {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
@@ -69,7 +68,7 @@ pub fn monomorphize_modules_indexed(
     // (a struct name can appear in multiple modules due to shadowing)
     // This includes private structs as they may be needed for instantiating public structs
     // (e.g., TreeMap uses TreeMapNode internally)
-    let mut all_generic_structs: HashMap<String, Vec<(ModuleSource, TirStruct)>> = HashMap::new();
+    let mut all_generic_structs: IndexMap<String, Vec<(ModuleSource, TirStruct)>> = IndexMap::new();
     for (module_source, module) in &modules {
         for tir_struct in &module.structs {
             if !tir_struct.type_params.is_empty() {
@@ -95,7 +94,7 @@ pub fn monomorphize_modules_indexed(
                 .expect("monomorphize_modules_indexed called with empty modules")
         });
 
-    let entry_generic_struct_names: std::collections::HashSet<String> = modules
+    let entry_generic_struct_names: IndexSet<String> = modules
         .get(&entry_module_source)
         .map(|m| {
             m.structs
@@ -130,16 +129,15 @@ fn monomorphize_with_externals(
     module: TirModule,
     current_module_source: &ModuleSource,
     entry_module_source: &ModuleSource,
-    entry_generic_struct_names: &std::collections::HashSet<String>,
-    all_generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
-    all_generic_structs_with_sources: &HashMap<String, Vec<(ModuleSource, TirStruct)>>,
+    entry_generic_struct_names: &IndexSet<String>,
+    all_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
+    all_generic_structs_with_sources: &IndexMap<String, Vec<(ModuleSource, TirStruct)>>,
 ) -> TirModule {
     let is_entry_module = current_module_source == entry_module_source;
 
     // Find modules whose structs are shadowed by the entry module's definitions
     // This is computed globally, not per-module, because we want consistent shadowing
-    let mut shadowed_modules: std::collections::HashSet<ModuleSource> =
-        std::collections::HashSet::new();
+    let mut shadowed_modules: IndexSet<ModuleSource> = IndexSet::new();
     for entry_struct_name in entry_generic_struct_names {
         if let Some(sources) = all_generic_structs_with_sources.get(entry_struct_name) {
             // Find external modules that define this struct (not the entry module)
@@ -152,7 +150,7 @@ fn monomorphize_with_externals(
     }
 
     // Build generic structs map based on whether this is the entry module or not
-    let mut all_generic_structs: HashMap<String, TirStruct> = HashMap::new();
+    let mut all_generic_structs: IndexMap<String, TirStruct> = IndexMap::new();
 
     if is_entry_module {
         // Entry module: use its own structs + non-shadowed external structs
@@ -211,35 +209,35 @@ struct Monomorphizer {
     /// The entry module source for generated code
     entry_module_source: ModuleSource,
     /// Map from (`generic_name`, `type_args`) to mangled name for structs
-    instantiated: HashMap<InstantiationKey, String>,
+    instantiated: IndexMap<InstantiationKey, String>,
     /// Work queue of pending struct instantiations
     pending: Vec<InstantiationKey>,
     /// Map from `GenericInstance` `TypeId` to monomorphized Struct `TypeId`
-    type_substitutions: HashMap<TypeId, TypeId>,
+    type_substitutions: IndexMap<TypeId, TypeId>,
     /// Map from `GenericInstance` `TypeId` to mangled struct name
-    type_to_mangled_name: HashMap<TypeId, String>,
+    type_to_mangled_name: IndexMap<TypeId, String>,
     /// Map from (`generic_func_name`, `type_args`) to mangled function name
-    function_instantiated: HashMap<InstantiationKey, String>,
+    function_instantiated: IndexMap<InstantiationKey, String>,
     /// Work queue of pending function instantiations
     function_pending: Vec<InstantiationKey>,
     /// Reverse lookup: mangled struct name -> `InstantiationKey`
-    mangled_struct_to_key: HashMap<String, InstantiationKey>,
+    mangled_struct_to_key: IndexMap<String, InstantiationKey>,
     /// Reverse lookup: mangled function name -> `InstantiationKey`
-    mangled_func_to_key: HashMap<String, InstantiationKey>,
+    mangled_func_to_key: IndexMap<String, InstantiationKey>,
 }
 
 impl Monomorphizer {
     fn new(entry_module_source: ModuleSource) -> Self {
         Self {
             entry_module_source,
-            instantiated: HashMap::new(),
+            instantiated: IndexMap::new(),
             pending: Vec::new(),
-            type_substitutions: HashMap::new(),
-            type_to_mangled_name: HashMap::new(),
-            function_instantiated: HashMap::new(),
+            type_substitutions: IndexMap::new(),
+            type_to_mangled_name: IndexMap::new(),
+            function_instantiated: IndexMap::new(),
             function_pending: Vec::new(),
-            mangled_struct_to_key: HashMap::new(),
-            mangled_func_to_key: HashMap::new(),
+            mangled_struct_to_key: IndexMap::new(),
+            mangled_func_to_key: IndexMap::new(),
         }
     }
 
@@ -250,7 +248,7 @@ impl Monomorphizer {
         // ========================
 
         // Phase 1: Collect all generic struct definitions
-        let generic_structs: HashMap<String, TirStruct> = module
+        let generic_structs: IndexMap<String, TirStruct> = module
             .structs
             .iter()
             .filter(|s| !s.type_params.is_empty())
@@ -265,8 +263,7 @@ impl Monomorphizer {
         // may create new GenericInstance types in its fields (like BTreeNode<String,i32>)
         // that also need to be instantiated.
         // Build set of valid struct names for collection
-        let valid_struct_names: std::collections::HashSet<String> =
-            generic_structs.keys().cloned().collect();
+        let valid_struct_names: IndexSet<String> = generic_structs.keys().cloned().collect();
 
         let mut new_structs = Vec::new();
         loop {
@@ -310,7 +307,7 @@ impl Monomorphizer {
 
         // Phase 7: Collect all generic function definitions
         // Include both functions with method-level type params AND methods from generic impl blocks
-        let generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> = module
+        let generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> = module
             .functions
             .iter()
             .filter(|f| {
@@ -333,7 +330,7 @@ impl Monomorphizer {
         //
         // For transitive scanning, exclude bodyless functions (builtins like array_new,
         // array_set, etc.) which are codegen intrinsics and must not be re-monomorphized.
-        let scannable_generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> =
+        let scannable_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> =
             generic_functions
                 .iter()
                 .filter(|(_, f)| f.borrow().body.is_some())
@@ -421,8 +418,8 @@ impl Monomorphizer {
     fn monomorphize_with_externals(
         &mut self,
         mut module: TirModule,
-        external_generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
-        external_generic_structs: &HashMap<String, TirStruct>,
+        external_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
+        external_generic_structs: &IndexMap<String, TirStruct>,
     ) -> TirModule {
         // ========================
         // Struct Monomorphization
@@ -430,7 +427,7 @@ impl Monomorphizer {
 
         // Phase 1: Collect all generic struct definitions
         // Include both local structs AND external generic structs from other modules
-        let mut generic_structs: HashMap<String, TirStruct> = external_generic_structs.clone();
+        let mut generic_structs: IndexMap<String, TirStruct> = external_generic_structs.clone();
 
         // Local generic structs override external ones (allows module-local specialization)
         // This handles the case where user defines their own TreeMap that shadows prelude's
@@ -444,8 +441,7 @@ impl Monomorphizer {
         module.generic_structs = generic_structs.clone();
 
         // Build set of valid struct names for collection
-        let valid_struct_names: std::collections::HashSet<String> =
-            generic_structs.keys().cloned().collect();
+        let valid_struct_names: IndexSet<String> = generic_structs.keys().cloned().collect();
 
         // Phase 2-4: Collect and instantiate structs iteratively
         // This is done in a loop because instantiating a struct (like TreeMap<String,i32>)
@@ -492,7 +488,7 @@ impl Monomorphizer {
 
         // Phase 7: Collect all generic function definitions
         // Include both local functions AND external generic functions from other modules
-        let mut generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> =
+        let mut generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> =
             external_generic_functions.clone();
 
         // Local generic functions override external ones (allows module-local specialization)
@@ -516,7 +512,7 @@ impl Monomorphizer {
         //
         // For transitive scanning, exclude bodyless functions (builtins like array_new,
         // array_set, etc.) which are codegen intrinsics and must not be re-monomorphized.
-        let scannable_generic_functions: HashMap<String, Rc<RefCell<TirFunction>>> =
+        let scannable_generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>> =
             generic_functions
                 .iter()
                 .filter(|(_, f)| f.borrow().body.is_some())
@@ -983,7 +979,7 @@ impl Monomorphizer {
     fn collect_instantiation_sites(
         &mut self,
         type_table: &TypeTable,
-        valid_struct_names: &std::collections::HashSet<String>,
+        valid_struct_names: &IndexSet<String>,
     ) {
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance {
@@ -1076,7 +1072,7 @@ impl Monomorphizer {
         }
 
         // Build substitution map: type param index -> concrete type
-        let substitution: HashMap<u32, TypeId> = generic
+        let substitution: IndexMap<u32, TypeId> = generic
             .type_params
             .iter()
             .zip(key.type_args.iter())
@@ -1118,7 +1114,7 @@ impl Monomorphizer {
     fn substitute_type(
         &self,
         type_id: TypeId,
-        substitution: &HashMap<u32, TypeId>,
+        substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) -> TypeId {
         match type_table.get(type_id).clone() {
@@ -1258,7 +1254,7 @@ impl Monomorphizer {
     fn collect_function_instantiation_sites(
         &mut self,
         module: &TirModule,
-        generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
+        generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     ) {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
@@ -1282,7 +1278,7 @@ impl Monomorphizer {
     fn collect_func_instantiation_sites_in_block(
         &mut self,
         block: &TirBlock,
-        generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
+        generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
     ) {
         for stmt in &block.stmts {
@@ -1293,7 +1289,7 @@ impl Monomorphizer {
     fn collect_func_instantiation_sites_in_stmt(
         &mut self,
         stmt: &TirStmt,
-        generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
+        generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
     ) {
         match &stmt.kind {
@@ -1379,7 +1375,7 @@ impl Monomorphizer {
     fn collect_func_instantiation_sites_in_expr(
         &mut self,
         expr: &TirExpr,
-        generic_functions: &HashMap<String, Rc<RefCell<TirFunction>>>,
+        generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
     ) {
         match &expr.kind {
@@ -2008,7 +2004,7 @@ impl Monomorphizer {
 
         // Build substitution map: type param index -> concrete type
         // Include both method-level type params AND impl block type params
-        let mut substitution: HashMap<u32, TypeId> = HashMap::new();
+        let mut substitution: IndexMap<u32, TypeId> = IndexMap::new();
 
         // Add impl block type params first (e.g., T from impl Counter<T>)
         for (param, &arg) in generic.impl_type_params.iter().zip(key.type_args.iter()) {
@@ -2098,11 +2094,11 @@ impl Monomorphizer {
             local_count: generic.local_count,
             local_types,
             address_taken_locals: generic.address_taken_locals.clone(),
-            needed_copy_types: std::collections::HashSet::new(),
+            needed_copy_types: IndexSet::new(),
             // Scratch local fields - computed by lower phase (after monomorphization)
             scratch_locals: Vec::new(),
-            copy_source_types: std::collections::HashSet::new(),
-            indirect_call_counts: std::collections::HashMap::new(),
+            copy_source_types: IndexSet::new(),
+            indirect_call_counts: IndexMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
             cm_export_info: None,
@@ -2113,7 +2109,7 @@ impl Monomorphizer {
     fn substitute_types_in_block(
         &self,
         block: &mut TirBlock,
-        substitution: &HashMap<u32, TypeId>,
+        substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) {
         for stmt in &mut block.stmts {
@@ -2124,7 +2120,7 @@ impl Monomorphizer {
     fn substitute_types_in_stmt(
         &self,
         stmt: &mut TirStmt,
-        substitution: &HashMap<u32, TypeId>,
+        substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) {
         match &mut stmt.kind {
@@ -2181,7 +2177,7 @@ impl Monomorphizer {
     fn substitute_types_in_pattern(
         &self,
         pattern: &mut TirPattern,
-        substitution: &HashMap<u32, TypeId>,
+        substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) {
         match pattern {
@@ -2217,7 +2213,7 @@ impl Monomorphizer {
     fn substitute_types_in_expr(
         &self,
         expr: &mut TirExpr,
-        substitution: &HashMap<u32, TypeId>,
+        substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) {
         // Substitute the expression's own type
