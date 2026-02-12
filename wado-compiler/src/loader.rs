@@ -28,11 +28,15 @@ pub enum LoadError {
     ParseError {
         module_source: ModuleSource,
         message: String,
+        line: usize,
+        column: usize,
     },
     /// Lexer error
     LexError {
         module_source: ModuleSource,
         message: String,
+        line: usize,
+        column: usize,
     },
     /// Bind error (scope checking)
     BindError {
@@ -56,14 +60,24 @@ impl std::fmt::Display for LoadError {
             LoadError::ParseError {
                 module_source,
                 message,
+                line,
+                column,
             } => {
-                write!(f, "parse error in {module_source}: {message}")
+                write!(
+                    f,
+                    "parse error in {module_source}: line {line}, column {column}: {message}"
+                )
             }
             LoadError::LexError {
                 module_source,
                 message,
+                line,
+                column,
             } => {
-                write!(f, "lex error in {module_source}: {message}")
+                write!(
+                    f,
+                    "lex error in {module_source}: line {line}, column {column}: {message}"
+                )
             }
             LoadError::BindError {
                 module_source,
@@ -92,6 +106,63 @@ impl std::fmt::Display for LoadError {
 
 impl std::error::Error for LoadError {}
 
+impl From<LoadError> for crate::compiler_host::Diagnostic {
+    fn from(e: LoadError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        match e {
+            LoadError::LexError {
+                message,
+                line,
+                column,
+                ..
+            } => Self {
+                severity: Severity::Error,
+                code: Code::InvalidSyntax,
+                message: format!("lexer error: {message}"),
+                span: Some(DiagnosticSpan {
+                    file: String::new(),
+                    line,
+                    column,
+                    end_line: None,
+                    end_column: None,
+                }),
+            },
+            LoadError::ParseError {
+                message,
+                line,
+                column,
+                ..
+            } => Self {
+                severity: Severity::Error,
+                code: Code::InvalidSyntax,
+                message: format!("parse error: {message}"),
+                span: Some(DiagnosticSpan {
+                    file: String::new(),
+                    line,
+                    column,
+                    end_line: None,
+                    end_column: None,
+                }),
+            },
+            LoadError::BindError {
+                module_source,
+                message,
+            } => Self {
+                severity: Severity::Error,
+                code: Code::DuplicateDefinition,
+                message: format!("bind error in {module_source}: {message}"),
+                span: None,
+            },
+            ref other => Self {
+                severity: Severity::Error,
+                code: Code::ModuleNotFound,
+                message: other.to_string(),
+                span: None,
+            },
+        }
+    }
+}
+
 impl From<SourceError> for LoadError {
     fn from(err: SourceError) -> Self {
         match err {
@@ -110,6 +181,8 @@ pub struct LoadResult {
     pub modules: IndexMap<ModuleSource, Module>,
     /// The entry module source
     pub entry_module_source: ModuleSource,
+    /// Original (non-desugared) entry module AST, for tooling
+    pub entry_ast: Module,
     /// Modules that were implicitly loaded (not from user imports)
     pub implicit_modules: IndexSet<ModuleSource>,
 }
@@ -183,6 +256,8 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     host: &'a H,
     /// Log level for filtering messages
     log_level: LogLevel,
+    /// Logger for timing spans and diagnostics
+    logger: Logger<'a, H>,
     /// Cache of already parsed modules
     loaded: IndexMap<ModuleSource, Module>,
     /// Set of modules currently being loaded (for cycle detection during collection)
@@ -197,15 +272,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Self {
             host,
             log_level,
+            logger: Logger::new(host, log_level),
             loaded: IndexMap::new(),
             loading: IndexSet::new(),
             implicit_modules: IndexSet::new(),
         }
-    }
-
-    /// Create a logger for emitting diagnostics
-    fn logger(&self) -> Logger<'_, H> {
-        Logger::new(self.host, self.log_level)
     }
 
     /// Load all modules starting from the entry source
@@ -221,24 +292,38 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_source: &str,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
-        self.logger().span_start("load");
-
         // Parse, bind, and desugar entry module
         // Use "<stdin>" as synthetic filename when no filename is provided (e.g., REPL, embedded code)
         let entry_module_source =
             ModuleSource::entry_point_with_filename(entry_filename.unwrap_or("<stdin>"));
+
+        let entry_name = entry_module_source.to_string();
+        self.logger.span_start(&format!("load {entry_name}"));
+
         // Parse first to collect imports before binding
-        let entry_ast = self.parse_source(entry_source, &entry_module_source)?;
+        let entry_ast = {
+            let _span = self.logger.span(&format!("parse {entry_name}"));
+            self.parse_source(entry_source, &entry_module_source)?
+        };
 
         // Collect imports from entry module (before bind/desugar)
         let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
         self.collect_imports(&entry_ast, &entry_module_source, &mut pending)?;
 
-        // Bind and desugar, then store
-        self.bind_module(&entry_ast, &entry_module_source)?;
-        let desugared_entry = desugar_module(&entry_ast);
+        // Bind and desugar, then store (keep original AST for tooling)
+        {
+            let _span = self.logger.span(&format!("bind {entry_name}"));
+            self.bind_module(&entry_ast, &entry_module_source)?;
+        }
+        let desugared_entry = {
+            let _span = self.logger.span(&format!("desugar {entry_name}"));
+            desugar_module(&entry_ast)
+        };
         self.loaded
             .insert(entry_module_source.clone(), desugared_entry);
+        let entry_ast_original = entry_ast;
+
+        self.logger.span_end(&format!("load {entry_name}"));
 
         // Load all dependencies iteratively
         let core_cache = cached_core_stdlib();
@@ -253,8 +338,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 continue;
             }
 
+            let mod_name = module_source.to_string();
+
             // Use cached desugared module for core stdlib
             if let Some(cached) = core_cache.get(&module_source) {
+                let _span = self.logger.span(&format!("load {mod_name} (cached)"));
                 self.collect_imports(cached, &module_source, &mut pending)?;
                 self.loaded.insert(module_source, cached.clone());
                 continue;
@@ -263,28 +351,40 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             // Mark as loading
             self.loading.insert(module_source.clone());
 
+            self.logger.span_start(&format!("load {mod_name}"));
+
             // Load and parse the module
             let source = self.get_source(&module_source, &from_module_source).await?;
-            let ast = self.parse_source(&source, &module_source)?;
+            let ast = {
+                let _span = self.logger.span(&format!("parse {mod_name}"));
+                self.parse_source(&source, &module_source)?
+            };
 
             // Collect its imports (before bind/desugar)
             self.collect_imports(&ast, &module_source, &mut pending)?;
 
             // Bind, desugar, and store
-            self.bind_module(&ast, &module_source)?;
-            let desugared = desugar_module(&ast);
+            {
+                let _span = self.logger.span(&format!("bind {mod_name}"));
+                self.bind_module(&ast, &module_source)?;
+            }
+            let desugared = {
+                let _span = self.logger.span(&format!("desugar {mod_name}"));
+                desugar_module(&ast)
+            };
             self.loaded.insert(module_source.clone(), desugared);
             self.loading.swap_remove(&module_source);
+
+            self.logger.span_end(&format!("load {mod_name}"));
         }
 
         // Load implicit modules (for compiler-generated code)
         self.load_implicit_modules()?;
 
-        self.logger().span_end("load");
-
         Ok(LoadResult {
             modules: self.loaded,
             entry_module_source,
+            entry_ast: entry_ast_original,
             implicit_modules: self.implicit_modules,
         })
     }
@@ -472,20 +572,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().map_err(|e| LoadError::LexError {
             module_source: module_source.clone(),
-            message: format!(
-                "line {}, column {}: {}",
-                e.span.line, e.span.column, e.message
-            ),
+            message: e.message,
+            line: e.span.line,
+            column: e.span.column,
         })?;
         let (data_section, _comments, shebang) = lexer.into_parts();
 
         let mut parser = Parser::with_metadata(tokens, shebang, data_section);
         parser.parse().map_err(|e| LoadError::ParseError {
             module_source: module_source.clone(),
-            message: format!(
-                "line {}, column {}: {}",
-                e.span.line, e.span.column, e.message
-            ),
+            message: e.message,
+            line: e.span.line,
+            column: e.span.column,
         })
     }
 

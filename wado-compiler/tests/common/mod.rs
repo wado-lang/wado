@@ -99,7 +99,15 @@ impl CompilerHost for InMemoryHost {
 
 /// Convert a `Bail` + host diagnostics into a `CompileError` for test backward compat
 pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>) -> CompileError {
-    if let Some(d) = diagnostics.first() {
+    use wado_compiler::{Code, Severity};
+
+    // Filter to only error/fatal diagnostics (skip span tracking and debug messages)
+    let errors: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| matches!(d.severity, Severity::Error | Severity::Fatal))
+        .collect();
+
+    if let Some(d) = errors.first() {
         let fname = filename.map(String::from).or_else(|| {
             d.span.as_ref().and_then(|s| {
                 if s.file.is_empty() {
@@ -115,7 +123,6 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
         let column = d.span.as_ref().map_or(0, |s| s.column);
 
         // Map diagnostic code to CompileError variant
-        use wado_compiler::Code;
         if code == Code::InvalidSyntax && message.starts_with("lexer error:") {
             CompileError::Lexer {
                 message: message
@@ -138,7 +145,7 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
             }
         } else {
             // All other errors
-            let all_messages: Vec<String> = diagnostics.iter().map(|d| d.message.clone()).collect();
+            let all_messages: Vec<String> = errors.iter().map(|d| d.message.clone()).collect();
             CompileError::Analyzer {
                 message: all_messages.join("; "),
                 filename: fname,

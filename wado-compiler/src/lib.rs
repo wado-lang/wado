@@ -267,70 +267,58 @@ pub async fn compile_with_options<H: CompilerHost>(
         logger.set_file(f);
     }
 
-    // === Phase 1: Lexer (for original AST) ===
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().map_err(|e| {
-        let _ = logger.error(e);
-        Bail
-    })?;
-    let (data_section, _comments, shebang) = lexer.into_parts();
-
-    // === Phase 2: Parser (for original AST) ===
-    // Note: The AST is parsed here for early error detection, but the Loader
-    // will re-parse the entry module along with all dependencies.
-    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-    let ast = parser.parse().map_err(|e| {
-        let _ = logger.error(e);
-        Bail
-    })?;
-
-    // Note: Bind phase moved to Loader for all modules (including entry module)
-
-    // === Phase 3: Load all modules upfront ===
-    // Loader performs: parse → bind → desugar for each module
+    // === Phase 1: Load all modules ===
+    // Loader performs: lex → parse → bind → desugar for each module
+    // Also preserves the original (non-desugared) entry AST for tooling
     let load_result = {
         let module_loader = loader::ModuleLoader::new(host, compiler_host::LogLevel::default());
         module_loader
             .load_all(source, filename.as_deref())
             .await
             .map_err(|e| {
-                let _ = logger.error(compiler_host::Diagnostic {
-                    severity: compiler_host::Severity::Error,
-                    code: compiler_host::Code::ModuleNotFound,
-                    message: e.to_string(),
-                    span: None,
-                });
+                let _ = logger.error(e);
                 Bail
             })?
     };
 
-    // === Phase 5: Analyze all modules ===
-    let mut analyzer = Analyzer::new(&logger);
-    analyzer.analyze_loaded_modules(
-        &load_result.modules,
-        &load_result.entry_module_source,
-        load_result.implicit_modules.clone(),
-    )?;
-
-    let symbols = analyzer.into_symbols();
+    // === Phase 2: Analyze all modules ===
+    let symbols = {
+        let _span = logger.span("analyze");
+        let mut analyzer = Analyzer::new(&logger);
+        analyzer.analyze_loaded_modules(
+            &load_result.modules,
+            &load_result.entry_module_source,
+            load_result.implicit_modules.clone(),
+        )?;
+        analyzer.into_symbols()
+    };
 
     let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
     // === Phase 6: Resolve all modules to Project ===
-    let project = resolve_to_project(
-        symbols,
-        &load_result.modules,
-        load_result.entry_module_source.clone(),
-        load_result.implicit_modules.clone(),
-        module_name,
-        &logger,
-    )?;
+    let project = {
+        let _span = logger.span("resolve");
+        resolve_to_project(
+            symbols,
+            &load_result.modules,
+            load_result.entry_module_source.clone(),
+            load_result.implicit_modules.clone(),
+            module_name,
+            &logger,
+        )?
+    };
 
     // === Phase 7: Effect Check ===
-    check_effects(&project.tir_modules, &logger)?;
+    {
+        let _span = logger.span("effect-check");
+        check_effects(&project.tir_modules, &logger)?;
+    }
 
     // === Phase 8: Monomorphize (Project -> Project) ===
-    let mut project = monomorphize_project(project);
+    let mut project = {
+        let _span = logger.span("monomorphize");
+        monomorphize_project(project)
+    };
 
     // Apply target world from options
     // Convert WIT-style world specifier (e.g., "wasi:http/service") to internal name (e.g., "Service")
@@ -339,27 +327,42 @@ pub async fn compile_with_options<H: CompilerHost>(
     }
 
     // === Phase 9: Lower (Project -> Project) ===
-    let project = lower_project(project);
+    let project = {
+        let _span = logger.span("lower");
+        lower_project(project)
+    };
 
     // === Phase 10: Optimize (Project -> Project) ===
-    let project = optimize(project, options.opt_level);
+    let project = {
+        let _span = logger.span("optimize");
+        optimize(project, options.opt_level)
+    };
 
     // === Phase 11: Wasm Plan (Project -> Project) ===
-    let project = wasm_plan(project).map_err(|message| {
-        let _ = logger.error(compiler_host::Diagnostic {
-            severity: compiler_host::Severity::Error,
-            code: compiler_host::Code::UnsupportedFeature,
-            message,
-            span: None,
-        });
-        Bail
-    })?;
+    let project = {
+        let _span = logger.span("wasm-plan");
+        wasm_plan(project).map_err(|message| {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::UnsupportedFeature,
+                message,
+                span: None,
+            });
+            Bail
+        })?
+    };
 
     // === Phase 12: Codegen ===
-    let wasm = Codegen::generate_wasm(&project);
+    let wasm = {
+        let _span = logger.span("codegen");
+        Codegen::generate_wasm(&project)
+    };
 
-    // Return the original (non-desugared) AST for tooling
-    Ok(CompileResult { wasm, module: ast })
+    // Return the original (non-desugared) entry AST for tooling
+    Ok(CompileResult {
+        wasm,
+        module: load_result.entry_ast,
+    })
 }
 
 /// Dump compiler internal state (async version).
@@ -381,30 +384,43 @@ pub async fn dump_with_host<H: CompilerHost>(
     }
 
     // === Phase 1: Lexer ===
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().map_err(|e| {
-        let _ = logger.error(e);
-        Bail
-    })?;
-    let (data_section, comments, shebang) = lexer.into_parts();
+    let (tokens, tokens_for_dump, comments, data_section, shebang) = {
+        let _span = logger.span("lex");
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().map_err(|e| {
+            let _ = logger.error(e);
+            Bail
+        })?;
+        let (data_section, comments, shebang) = lexer.into_parts();
+        let tokens_for_dump = tokens.clone();
+        (tokens, tokens_for_dump, comments, data_section, shebang)
+    };
 
     // Build comment map
     let comment_map = comment::CommentMap::from_comments(comments, source);
 
     // === Phase 2: Parser ===
-    let tokens_for_dump = tokens.clone();
-    let mut parser = Parser::with_metadata(tokens, shebang, data_section);
-    let ast = parser.parse().map_err(|e| {
-        let _ = logger.error(e);
-        Bail
-    })?;
+    let ast = {
+        let _span = logger.span("parse");
+        let mut parser = Parser::with_metadata(tokens, shebang, data_section);
+        parser.parse().map_err(|e| {
+            let _ = logger.error(e);
+            Bail
+        })?
+    };
 
     // === Phase 3: Bind ===
-    let mut binder = Binder::new(&logger);
-    binder.bind_module(&ast)?;
+    {
+        let _span = logger.span("bind");
+        let mut binder = Binder::new(&logger);
+        binder.bind_module(&ast)?;
+    }
 
     // === Phase 4: Desugar ===
-    let desugared_ast = desugar::desugar_module(&ast);
+    let desugared_ast = {
+        let _span = logger.span("desugar");
+        desugar::desugar_module(&ast)
+    };
 
     // === Phase 5: Load all modules ===
     let load_result = {
@@ -413,83 +429,90 @@ pub async fn dump_with_host<H: CompilerHost>(
             .load_all(source, filename.as_deref())
             .await
             .map_err(|e| {
-                let _ = logger.error(compiler_host::Diagnostic {
-                    severity: compiler_host::Severity::Error,
-                    code: compiler_host::Code::ModuleNotFound,
-                    message: e.to_string(),
-                    span: None,
-                });
+                let _ = logger.error(e);
                 Bail
             })?
     };
 
     // === Phase 6: Analyze all modules ===
-    let mut analyzer = Analyzer::new(&logger);
-    analyzer.analyze_loaded_modules(
-        &load_result.modules,
-        &load_result.entry_module_source,
-        load_result.implicit_modules.clone(),
-    )?;
-
-    let symbols = analyzer.into_symbols();
+    let symbols = {
+        let _span = logger.span("analyze");
+        let mut analyzer = Analyzer::new(&logger);
+        analyzer.analyze_loaded_modules(
+            &load_result.modules,
+            &load_result.entry_module_source,
+            load_result.implicit_modules.clone(),
+        )?;
+        analyzer.into_symbols()
+    };
 
     // === Phase 7: Resolve all modules to TIR ===
-    let tir_modules = Resolver::resolve_all_modules(
-        &symbols,
-        &load_result.modules,
-        load_result.entry_module_source.clone(),
-        &logger,
-    )
-    .ok();
+    let tir_modules = {
+        let _span = logger.span("resolve");
+        Resolver::resolve_all_modules(
+            &symbols,
+            &load_result.modules,
+            load_result.entry_module_source.clone(),
+            &logger,
+        )
+        .ok()
+    };
 
     // TIR modules already use ModuleSource keys
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> = tir_modules.clone();
 
     // === Phase 8: Monomorphize all modules ===
     // Use monomorphize_modules_indexed for cross-module generic function support
-    let monomorphized_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+    let monomorphized_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> = {
+        let _span = logger.span("monomorphize");
         tir_modules_by_source
             .clone()
-            .map(monomorphize_modules_indexed);
+            .map(monomorphize_modules_indexed)
+    };
 
     // === Phase 9: Lower all modules ===
     // Apply string literal collection to monomorphized modules
     let entry_source = &load_result.entry_module_source;
-    let lowered_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
+    let lowered_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> = {
+        let _span = logger.span("lower");
         monomorphized_tir_modules_by_source
             .clone()
-            .map(|m| lower_modules_indexed(m, entry_source));
+            .map(|m| lower_modules_indexed(m, entry_source))
+    };
 
     // === Phase 10: Optimize ===
     // Build a Project from lowered modules if available
-    let optimized_project = lowered_tir_modules_by_source
-        .clone()
-        .and_then(|modules_by_source| {
-            let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
+    let optimized_project = {
+        let _span = logger.span("optimize");
+        lowered_tir_modules_by_source
+            .clone()
+            .and_then(|modules_by_source| {
+                let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-            let implicit_modules_by_source = load_result.implicit_modules.clone();
+                let implicit_modules_by_source = load_result.implicit_modules.clone();
 
-            let (wasi_registry, world_registry) =
-                component_model::WasiRegistry::build_from_stdlib();
+                let (wasi_registry, world_registry) =
+                    component_model::WasiRegistry::build_from_stdlib();
 
-            // Build builtin registry (uses a temporary type table for type resolution)
-            let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
-            let builtin_registry =
-                builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
+                // Build builtin registry (uses a temporary type table for type resolution)
+                let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
+                let builtin_registry =
+                    builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-            let project = Project::new(
-                load_result.entry_module_source.clone(),
-                modules_by_source,
-                symbols.clone(),
-                implicit_modules_by_source,
-                module_name,
-                wasi_registry,
-                world_registry,
-                builtin_registry,
-            );
-            let project = optimize(project, opt_level);
-            wasm_plan(project).ok()
-        });
+                let project = Project::new(
+                    load_result.entry_module_source.clone(),
+                    modules_by_source,
+                    symbols.clone(),
+                    implicit_modules_by_source,
+                    module_name,
+                    wasi_registry,
+                    world_registry,
+                    builtin_registry,
+                );
+                let project = optimize(project, opt_level);
+                wasm_plan(project).ok()
+            })
+    };
 
     Ok(DumpResult {
         source: source.to_string(),
