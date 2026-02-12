@@ -3,7 +3,7 @@
 //! This module collects world definitions from lib/wasi/*.wado
 //! and provides export signature information for code generation.
 
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 use crate::ast::{Type, WorldDecl, WorldExport};
 
@@ -84,7 +84,7 @@ impl WorldInfo {
 #[derive(Debug, Clone, Default)]
 pub struct WorldRegistry {
     /// `world_name` -> world info
-    worlds: HashMap<String, WorldInfo>,
+    worlds: IndexMap<String, WorldInfo>,
 }
 
 impl WorldRegistry {

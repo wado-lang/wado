@@ -24,7 +24,7 @@ use crate::project::Project;
 use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 /// Information about a reference binding that may be eliminable.
 /// Pattern: `let ref_var: &T = &local_var` or `let ref_var: &mut T = &mut local_var`
@@ -591,7 +591,7 @@ fn eliminate_refs_in_function(func: &mut TirFunction, _type_table: &TypeTable) -
 
     // Fourth pass: remove the now-dead Let statements
     // We need to handle nested blocks, so we do this recursively
-    let dead_locals: HashSet<u32> = eliminable_bindings.iter().map(|b| b.ref_local).collect();
+    let dead_locals: IndexSet<u32> = eliminable_bindings.iter().map(|b| b.ref_local).collect();
     remove_dead_ref_bindings(&mut body.stmts, &dead_locals);
     true
 }
@@ -797,7 +797,7 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
 }
 
 /// Remove Let statements for dead reference locals.
-fn remove_dead_ref_bindings(stmts: &mut Vec<TirStmt>, dead_locals: &HashSet<u32>) {
+fn remove_dead_ref_bindings(stmts: &mut Vec<TirStmt>, dead_locals: &IndexSet<u32>) {
     stmts.retain(|stmt| {
         if let TirStmtKind::Let { local_index, .. } = &stmt.kind {
             !dead_locals.contains(local_index)
@@ -813,7 +813,7 @@ fn remove_dead_ref_bindings(stmts: &mut Vec<TirStmt>, dead_locals: &HashSet<u32>
 }
 
 /// Remove dead ref bindings from nested blocks in a statement.
-fn remove_dead_ref_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u32>) {
+fn remove_dead_ref_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &IndexSet<u32>) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
             remove_dead_ref_bindings_in_expr(value, dead_locals);
@@ -868,7 +868,7 @@ fn remove_dead_ref_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &HashSet<u3
 }
 
 /// Remove dead ref bindings from nested blocks in an expression.
-fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &HashSet<u32>) {
+fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>) {
     match &mut expr.kind {
         TirExprKind::Block(block) => {
             remove_dead_ref_bindings(&mut block.stmts, dead_locals);

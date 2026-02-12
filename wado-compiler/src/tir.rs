@@ -10,10 +10,9 @@
 //! - No syntactic sugar (desugared before TIR)
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::component_model::CmCallConvention;
 use crate::name::{LocalMethodName, ModuleSource, TypeNameInfo, format_type_name};
@@ -79,13 +78,13 @@ pub struct SubstitutionContext {
     /// Maps type param index to concrete type (index is as stored in `TypeParam`)
     /// For impl params: indices 0, 1, 2, ...
     /// For method params: indices offset, offset+1, ... (where offset = `impl_params.len()`)
-    substitutions: HashMap<u32, TypeId>,
+    substitutions: IndexMap<u32, TypeId>,
 }
 
 impl SubstitutionContext {
     pub fn new() -> Self {
         Self {
-            substitutions: HashMap::new(),
+            substitutions: IndexMap::new(),
         }
     }
 
@@ -332,7 +331,7 @@ impl ResolvedType {
 #[derive(Debug, Clone)]
 pub struct TypeTable {
     types: IndexMap<TypeId, ResolvedType>,
-    intern_map: HashMap<ResolvedType, TypeId>,
+    intern_map: IndexMap<ResolvedType, TypeId>,
     next_id: u32,
 }
 
@@ -366,7 +365,7 @@ impl TypeTable {
     pub fn new() -> Self {
         let mut table = Self {
             types: IndexMap::new(),
-            intern_map: HashMap::new(),
+            intern_map: IndexMap::new(),
             next_id: 0,
         };
 
@@ -474,7 +473,7 @@ impl TypeTable {
         // Remove from both maps
         for id in to_remove {
             if let Some(ty) = self.types.shift_remove(&id) {
-                self.intern_map.remove(&ty);
+                self.intern_map.shift_remove(&ty);
             }
         }
     }
@@ -572,7 +571,7 @@ impl TypeTable {
         if let Some(old_ty) = self.types.get(&id).cloned() {
             // Only remove from intern_map if this TypeId was the canonical one
             if self.intern_map.get(&old_ty) == Some(&id) {
-                self.intern_map.remove(&old_ty);
+                self.intern_map.shift_remove(&old_ty);
             }
         }
         self.types.insert(id, new_ty);
@@ -1633,10 +1632,10 @@ pub struct TirFunction {
     pub local_types: Vec<TypeId>,
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
-    pub address_taken_locals: std::collections::HashSet<u32>,
+    pub address_taken_locals: IndexSet<u32>,
     /// Types that need value copy operations in this function.
     /// Populated by the optimizer after all transformations.
-    pub needed_copy_types: std::collections::HashSet<TypeId>,
+    pub needed_copy_types: IndexSet<TypeId>,
 
     // ========================================================================
     // Scratch local requirements (computed by lower phase)
@@ -1650,12 +1649,12 @@ pub struct TirFunction {
     /// Types needing copy source locals (expanded from `needed_copy_types`).
     /// Codegen creates nullable refs for these types and registers them
     /// in `CopyContext`. Computed by lower phase.
-    pub copy_source_types: std::collections::HashSet<TypeId>,
+    pub copy_source_types: IndexSet<TypeId>,
 
     /// Number of indirect call locals needed per closure struct type.
     /// Key is the closure's captured variable tuple type (or Unit for no captures).
     /// Codegen uses this to pre-allocate `__indirect_call_{type}_{id}` locals.
-    pub indirect_call_counts: std::collections::HashMap<TypeId, u32>,
+    pub indirect_call_counts: IndexMap<TypeId, u32>,
 
     /// Types for match scrutinee scratch locals.
     /// Codegen allocates `__match_scrutinee_{id}` locals in order.
@@ -1934,17 +1933,17 @@ pub struct TirModule {
     pub data_section: Option<String>,
     pub string_literals: Vec<String>,
     /// Map of function name to string literals it contains (for DCE)
-    pub function_strings: HashMap<String, Vec<String>>,
+    pub function_strings: IndexMap<String, Vec<String>>,
     /// Map of function name to its method info (for DCE), populated alongside `function_strings`
-    pub function_method_info: HashMap<String, Option<LocalMethodName>>,
+    pub function_method_info: IndexMap<String, Option<LocalMethodName>>,
     /// Generic struct definitions (before monomorphization)
     /// Key: struct name
-    pub generic_structs: HashMap<String, TirStruct>,
+    pub generic_structs: IndexMap<String, TirStruct>,
     /// Generic function definitions (before monomorphization)
     /// Key: function name
-    pub generic_functions: HashMap<String, Rc<RefCell<TirFunction>>>,
+    pub generic_functions: IndexMap<String, Rc<RefCell<TirFunction>>>,
     /// Requested instantiations (populated during resolution, processed in lower)
-    pub instantiation_requests: std::collections::HashSet<InstantiationKey>,
+    pub instantiation_requests: IndexSet<InstantiationKey>,
     /// Closure metadata for optimization (populated by lower phase).
     /// Maps closure ID to functor info including the `__call` method for inlining.
     pub closure_functors: Vec<ClosureFunctor>,
@@ -1968,11 +1967,11 @@ impl TirModule {
             globals: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
-            function_strings: HashMap::new(),
-            function_method_info: HashMap::new(),
-            generic_structs: HashMap::new(),
-            generic_functions: HashMap::new(),
-            instantiation_requests: std::collections::HashSet::new(),
+            function_strings: IndexMap::new(),
+            function_method_info: IndexMap::new(),
+            generic_structs: IndexMap::new(),
+            generic_functions: IndexMap::new(),
+            instantiation_requests: IndexSet::new(),
             closure_functors: Vec::new(),
         }
     }
@@ -1997,11 +1996,11 @@ impl TirModule {
             globals: Vec::new(),
             data_section: None,
             string_literals: Vec::new(),
-            function_strings: HashMap::new(),
-            function_method_info: HashMap::new(),
-            generic_structs: HashMap::new(),
-            generic_functions: HashMap::new(),
-            instantiation_requests: std::collections::HashSet::new(),
+            function_strings: IndexMap::new(),
+            function_method_info: IndexMap::new(),
+            generic_structs: IndexMap::new(),
+            generic_functions: IndexMap::new(),
+            instantiation_requests: IndexSet::new(),
             closure_functors: Vec::new(),
         }
     }

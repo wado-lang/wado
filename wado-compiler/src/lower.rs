@@ -10,7 +10,9 @@
 //! Monomorphization has been moved to a separate phase (see `monomorphize.rs`).
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
+
+use indexmap::IndexSet;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
@@ -50,7 +52,7 @@ pub fn lower(module: TirModule) -> TirModule {
 /// Run pre-boxing per-module lowering passes.
 fn lower_pre_boxing(
     module: &mut TirModule,
-    global_variant_map: &HashMap<String, Vec<(String, u32)>>,
+    global_variant_map: &IndexMap<String, Vec<(String, u32)>>,
 ) {
     // Phase 1: Lower i128/u128 match patterns to if-else chains
     lower_wide_int_match_patterns(module);
@@ -101,7 +103,7 @@ pub fn lower_modules_indexed(
 ) -> IndexMap<ModuleSource, TirModule> {
     // Build a global variant map from ALL modules so that cross-module pattern
     // matching works (e.g., `if let Greater = ord` where Ordering is from another module)
-    let mut global_variant_map: HashMap<String, Vec<(String, u32)>> = HashMap::new();
+    let mut global_variant_map: IndexMap<String, Vec<(String, u32)>> = IndexMap::new();
     for module in modules.values() {
         for variant in &module.variants {
             let cases: Vec<(String, u32)> = variant
@@ -855,11 +857,11 @@ fn match_to_switch(
 /// By lowering these patterns here, codegen doesn't need preallocate passes.
 fn lower_patterns(
     module: &mut TirModule,
-    global_variant_map: &HashMap<String, Vec<(String, u32)>>,
+    global_variant_map: &IndexMap<String, Vec<(String, u32)>>,
 ) {
     // Build a map from variant name to case info for quick lookup
     // Start with global variants from all modules (for cross-module pattern matching)
-    let mut variant_case_map: HashMap<String, Vec<(String, u32)>> = global_variant_map.clone();
+    let mut variant_case_map: IndexMap<String, Vec<(String, u32)>> = global_variant_map.clone();
 
     // Add module-defined variants (overrides globals for same-module variants)
     for variant in &module.variants {
@@ -897,14 +899,14 @@ struct PatternLowerer<'a> {
     local_types: Vec<TypeId>,
     temp_counter: u32,
     /// Map from variant name to list of (`case_name`, `case_index`) pairs
-    variant_case_map: &'a HashMap<String, Vec<(String, u32)>>,
+    variant_case_map: &'a IndexMap<String, Vec<(String, u32)>>,
 }
 
 impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
         local_types: Vec<TypeId>,
-        variant_case_map: &'a HashMap<String, Vec<(String, u32)>>,
+        variant_case_map: &'a IndexMap<String, Vec<(String, u32)>>,
     ) -> Self {
         Self {
             local_count,
@@ -2041,11 +2043,11 @@ fn lower_global_initializers(module: &mut TirModule) {
         span,
         local_count: 0,
         local_types: Vec::new(),
-        address_taken_locals: std::collections::HashSet::new(),
-        needed_copy_types: std::collections::HashSet::new(),
+        address_taken_locals: IndexSet::new(),
+        needed_copy_types: IndexSet::new(),
         scratch_locals: Vec::new(),
-        copy_source_types: std::collections::HashSet::new(),
-        indirect_call_counts: std::collections::HashMap::new(),
+        copy_source_types: IndexSet::new(),
+        indirect_call_counts: IndexMap::new(),
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
         cm_export_info: None,
@@ -2055,7 +2057,7 @@ fn lower_global_initializers(module: &mut TirModule) {
 }
 
 /// Collect global variable references from an expression
-fn collect_global_refs(expr: &TirExpr, refs: &mut HashSet<String>) {
+fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
     match &expr.kind {
         TirExprKind::GlobalVarGet { name, .. } => {
             refs.insert(name.clone());
@@ -2164,17 +2166,17 @@ fn topological_sort_global_inits(
     }
 
     // Build a map from global name to its index in lazy_inits
-    let name_to_idx: HashMap<String, usize> = lazy_inits
+    let name_to_idx: IndexMap<String, usize> = lazy_inits
         .iter()
         .enumerate()
         .map(|(i, (_, name, _, _, _))| (name.clone(), i))
         .collect();
 
     // Build dependency graph: deps[i] = set of indices that i depends on
-    let mut deps: Vec<HashSet<usize>> = vec![HashSet::new(); lazy_inits.len()];
+    let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::new(); lazy_inits.len()];
 
     for (i, (_, _, _, _, initializer)) in lazy_inits.iter().enumerate() {
-        let mut refs = HashSet::new();
+        let mut refs = IndexSet::new();
         collect_global_refs(initializer, &mut refs);
 
         for ref_name in refs {
@@ -2188,7 +2190,7 @@ fn topological_sort_global_inits(
     }
 
     // Kahn's algorithm for topological sort
-    let mut in_degree: Vec<usize> = deps.iter().map(HashSet::len).collect();
+    let mut in_degree: Vec<usize> = deps.iter().map(IndexSet::len).collect();
     let mut queue: VecDeque<usize> = in_degree
         .iter()
         .enumerate()
@@ -2368,11 +2370,11 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         span,
         local_count: 0,
         local_types: Vec::new(),
-        address_taken_locals: std::collections::HashSet::new(),
-        needed_copy_types: std::collections::HashSet::new(),
+        address_taken_locals: IndexSet::new(),
+        needed_copy_types: IndexSet::new(),
         scratch_locals: Vec::new(),
-        copy_source_types: std::collections::HashSet::new(),
-        indirect_call_counts: std::collections::HashMap::new(),
+        copy_source_types: IndexSet::new(),
+        indirect_call_counts: IndexMap::new(),
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
         cm_export_info: None,
@@ -2426,26 +2428,26 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
 struct BoxLowerer {
     /// Mapping from inner `TypeId` to Box<T> struct type ID.
     /// e.g., `TypeTable::I32` → `TypeId` for Struct("Box<i32>")
-    box_struct_types: HashMap<TypeId, TypeId>,
+    box_struct_types: IndexMap<TypeId, TypeId>,
     /// Set of all Box<T> struct type IDs (for fast lookup).
-    box_type_ids: HashSet<TypeId>,
+    box_type_ids: IndexSet<TypeId>,
     /// Generated Box<T> struct definitions to add to the module.
     generated_structs: Vec<TirStruct>,
     /// Module source for registering Box types in the type table.
     /// Must match the entry module source so codegen can find them.
     entry_module_source: ModuleSource,
     /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
-    struct_fields_map: HashMap<(String, ModuleSource), Vec<TirField>>,
+    struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
 }
 
 impl BoxLowerer {
     fn new(entry_module_source: ModuleSource) -> Self {
         Self {
-            box_struct_types: HashMap::new(),
-            box_type_ids: HashSet::new(),
+            box_struct_types: IndexMap::new(),
+            box_type_ids: IndexSet::new(),
             generated_structs: Vec::new(),
             entry_module_source,
-            struct_fields_map: HashMap::new(),
+            struct_fields_map: IndexMap::new(),
         }
     }
 
@@ -2776,7 +2778,7 @@ impl BoxLowerer {
         {
             let type_table = module.type_table.borrow();
             for global in &mut module.globals {
-                self.transform_expr(&mut global.initializer, &HashSet::new(), &type_table);
+                self.transform_expr(&mut global.initializer, &IndexSet::new(), &type_table);
             }
         }
 
@@ -2787,7 +2789,7 @@ impl BoxLowerer {
     /// Scan the type table to find which primitives need Box types.
     fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
         // Collect base primitive TypeIds that need boxing, plus newtypes.
-        let mut needs_box_base: HashSet<TypeId> = HashSet::new();
+        let mut needs_box_base: IndexSet<TypeId> = IndexSet::new();
         let mut newtype_pairs: Vec<(TypeId, TypeId)> = Vec::new(); // (alias, base)
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
@@ -2906,7 +2908,7 @@ impl BoxLowerer {
     fn transform_block(
         &self,
         block: &mut TirBlock,
-        address_taken: &HashSet<u32>,
+        address_taken: &IndexSet<u32>,
         type_table: &TypeTable,
     ) {
         for stmt in &mut block.stmts {
@@ -2918,7 +2920,7 @@ impl BoxLowerer {
     fn transform_stmt(
         &self,
         stmt: &mut TirStmt,
-        address_taken: &HashSet<u32>,
+        address_taken: &IndexSet<u32>,
         type_table: &TypeTable,
     ) {
         match &mut stmt.kind {
@@ -3025,7 +3027,7 @@ impl BoxLowerer {
     fn transform_expr(
         &self,
         expr: &mut TirExpr,
-        address_taken: &HashSet<u32>,
+        address_taken: &IndexSet<u32>,
         type_table: &TypeTable,
     ) {
         // Recursively transform sub-expressions first (bottom-up)
@@ -3520,16 +3522,16 @@ struct ClosureLowerer {
     /// These will be stored in `module.closure_functors` for the optimizer
     functor_infos: Vec<ClosureFunctor>,
     /// Map from local variable index to closure ID (for tracking closures stored in locals)
-    local_to_closure: HashMap<u32, u32>,
+    local_to_closure: IndexMap<u32, u32>,
     /// Closure IDs that can be specialized (stored in locals, called directly).
     /// Non-specializable closures use `ClosureToCanonical` for type-erased representation.
-    specializable: std::collections::HashSet<u32>,
+    specializable: IndexSet<u32>,
     /// Generated structs to add to module
     generated_structs: Vec<TirStruct>,
     /// Generated functions to add to module
     generated_functions: Vec<Rc<RefCell<TirFunction>>>,
     /// Map from fn-param spec key to specialized function name
-    fn_param_specializations: HashMap<FnParamSpecKey, String>,
+    fn_param_specializations: IndexMap<FnParamSpecKey, String>,
 }
 
 impl ClosureLowerer {
@@ -3539,11 +3541,11 @@ impl ClosureLowerer {
             module_source: module_source.clone(),
             collected_closures: Vec::new(),
             functor_infos: Vec::new(),
-            local_to_closure: HashMap::new(),
-            specializable: std::collections::HashSet::new(),
+            local_to_closure: IndexMap::new(),
+            specializable: IndexSet::new(),
             generated_structs: Vec::new(),
             generated_functions: Vec::new(),
-            fn_param_specializations: HashMap::new(),
+            fn_param_specializations: IndexMap::new(),
         }
     }
 
@@ -3953,7 +3955,7 @@ impl ClosureLowerer {
 
                 // If a closure appears directly as an argument, it's not safe to transform
                 if in_arg_position {
-                    self.specializable.remove(&closure_id);
+                    self.specializable.swap_remove(&closure_id);
                 }
 
                 // Recursively analyze the body
@@ -3962,7 +3964,7 @@ impl ClosureLowerer {
             TirExprKind::Local { index, .. } => {
                 // If a local that holds a closure is passed as an argument, mark it unsafe
                 if in_arg_position && let Some(closure_id) = self.local_to_closure.get(index) {
-                    self.specializable.remove(closure_id);
+                    self.specializable.swap_remove(closure_id);
                 }
             }
             TirExprKind::Call { args, .. }
@@ -4250,11 +4252,11 @@ impl ClosureLowerer {
                 span: collected.span,
                 local_count,
                 local_types,
-                address_taken_locals: std::collections::HashSet::new(),
-                needed_copy_types: std::collections::HashSet::new(),
+                address_taken_locals: IndexSet::new(),
+                needed_copy_types: IndexSet::new(),
                 scratch_locals: Vec::new(),
-                copy_source_types: std::collections::HashSet::new(),
-                indirect_call_counts: std::collections::HashMap::new(),
+                copy_source_types: IndexSet::new(),
+                indirect_call_counts: IndexMap::new(),
                 match_scrutinee_types: Vec::new(),
                 let_pattern_types: Vec::new(),
                 cm_export_info: None,
@@ -4997,7 +4999,7 @@ impl ClosureLowerer {
         type_table: &mut TypeTable,
     ) {
         // Build a map from function name to function for quick lookup
-        let mut func_by_name: HashMap<String, Rc<RefCell<TirFunction>>> = HashMap::new();
+        let mut func_by_name: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
         for func_rc in func_refs {
             let func = func_rc.borrow();
             func_by_name.insert(func.name.clone(), Rc::clone(func_rc));
@@ -5267,7 +5269,7 @@ impl ClosureLowerer {
     fn collect_fn_param_specs(
         &mut self,
         block: &TirBlock,
-        func_by_name: &HashMap<String, Rc<RefCell<TirFunction>>>,
+        func_by_name: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
         requests: &mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
     ) {
@@ -5279,7 +5281,7 @@ impl ClosureLowerer {
     fn collect_fn_param_specs_stmt(
         &mut self,
         stmt: &TirStmt,
-        func_by_name: &HashMap<String, Rc<RefCell<TirFunction>>>,
+        func_by_name: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
         requests: &mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
     ) {
@@ -5328,7 +5330,7 @@ impl ClosureLowerer {
     fn collect_fn_param_specs_expr(
         &mut self,
         expr: &TirExpr,
-        func_by_name: &HashMap<String, Rc<RefCell<TirFunction>>>,
+        func_by_name: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         type_table: &TypeTable,
         requests: &mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
     ) {
@@ -5748,7 +5750,7 @@ impl ClosureLowerer {
 
         // Build map from argument index to functor type
         // Note: key.functor_types contains argument indices (0 = first arg after receiver for methods)
-        let arg_to_functor: HashMap<u32, TypeId> = key.functor_types.iter().copied().collect();
+        let arg_to_functor: IndexMap<u32, TypeId> = key.functor_types.iter().copied().collect();
 
         // Determine if this is an instance method (has self parameter)
         // Note: static methods have method_info but no self parameter
@@ -5776,7 +5778,7 @@ impl ClosureLowerer {
 
         // Build a map from param/local index to functor type for body transformation
         // Inside the function body, locals are referenced by param index
-        let local_to_functor: HashMap<u32, TypeId> = arg_to_functor
+        let local_to_functor: IndexMap<u32, TypeId> = arg_to_functor
             .iter()
             .map(|(arg_idx, functor_type)| (arg_idx + param_offset, *functor_type))
             .collect();
@@ -5844,7 +5846,7 @@ impl ClosureLowerer {
     fn specialize_function_body(
         &self,
         block: &TirBlock,
-        param_to_functor: &HashMap<u32, TypeId>,
+        param_to_functor: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) -> TirBlock {
         TirBlock::new(
@@ -5860,7 +5862,7 @@ impl ClosureLowerer {
     fn specialize_stmt(
         &self,
         stmt: &TirStmt,
-        param_to_functor: &HashMap<u32, TypeId>,
+        param_to_functor: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) -> TirStmt {
         let kind = match &stmt.kind {
@@ -5948,7 +5950,7 @@ impl ClosureLowerer {
         &self,
         specialized_arg: TirExpr,
         original_type_id: TypeId,
-        param_to_functor: &HashMap<u32, TypeId>,
+        param_to_functor: &IndexMap<u32, TypeId>,
         type_table: &TypeTable,
     ) -> TirExpr {
         if let TirExprKind::Local { index, .. } = &specialized_arg.kind
@@ -5982,7 +5984,7 @@ impl ClosureLowerer {
     fn specialize_expr(
         &self,
         expr: &TirExpr,
-        param_to_functor: &HashMap<u32, TypeId>,
+        param_to_functor: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) -> TirExpr {
         match &expr.kind {
@@ -7218,9 +7220,9 @@ impl ClosureLowerer {
 struct StringCollector {
     strings: Vec<String>,
     /// Map of function name → strings in that function (for DCE filtering)
-    function_strings: HashMap<String, Vec<String>>,
+    function_strings: IndexMap<String, Vec<String>>,
     /// Map of function name → method info (for DCE to avoid parsing)
-    function_method_info: HashMap<String, Option<LocalMethodName>>,
+    function_method_info: IndexMap<String, Option<LocalMethodName>>,
     /// Current function being collected (for tracking)
     current_function: Option<String>,
 }
@@ -7229,8 +7231,8 @@ impl StringCollector {
     fn new() -> Self {
         Self {
             strings: Vec::new(),
-            function_strings: HashMap::new(),
-            function_method_info: HashMap::new(),
+            function_strings: IndexMap::new(),
+            function_method_info: IndexMap::new(),
             current_function: None,
         }
     }
@@ -7239,8 +7241,8 @@ impl StringCollector {
         self,
     ) -> (
         Vec<String>,
-        HashMap<String, Vec<String>>,
-        HashMap<String, Option<LocalMethodName>>,
+        IndexMap<String, Vec<String>>,
+        IndexMap<String, Option<LocalMethodName>>,
     ) {
         (
             self.strings,
@@ -7544,7 +7546,7 @@ fn analyze_scratch_locals_module(
 
 struct ScratchLocalAnalyzer<'a> {
     type_table: &'a TypeTable,
-    indirect_call_counts: HashMap<TypeId, u32>,
+    indirect_call_counts: IndexMap<TypeId, u32>,
     match_scrutinee_types: Vec<TypeId>,
     let_pattern_types: Vec<TypeId>,
 }
@@ -7553,7 +7555,7 @@ impl<'a> ScratchLocalAnalyzer<'a> {
     fn new(type_table: &'a TypeTable) -> Self {
         Self {
             type_table,
-            indirect_call_counts: HashMap::new(),
+            indirect_call_counts: IndexMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
         }
@@ -8197,7 +8199,7 @@ fn generate_enum_trait_impls(module: &mut TirModule) {
 
     // Check which trait methods already have user-provided implementations.
     // If the user wrote `impl Eq for Color { ... }`, skip generating Eq::eq.
-    let existing_trait_methods: HashSet<String> = module
+    let existing_trait_methods: IndexSet<String> = module
         .functions
         .iter()
         .filter_map(|f| {
@@ -8818,11 +8820,11 @@ fn make_synthetic_method(
         span,
         local_count,
         local_types,
-        address_taken_locals: HashSet::new(),
-        needed_copy_types: HashSet::new(),
+        address_taken_locals: IndexSet::new(),
+        needed_copy_types: IndexSet::new(),
         scratch_locals: Vec::new(),
-        copy_source_types: HashSet::new(),
-        indirect_call_counts: HashMap::new(),
+        copy_source_types: IndexSet::new(),
+        indirect_call_counts: IndexMap::new(),
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
         cm_export_info: None,

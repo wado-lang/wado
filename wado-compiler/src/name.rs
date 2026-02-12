@@ -1298,12 +1298,12 @@ mod tests {
 
     #[test]
     fn test_struct_name_hash_eq() {
-        use std::collections::HashSet;
+        use indexmap::IndexSet;
         let s1 = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
         let s2 = StructName::from_path_and_name(&["./geometry.wado".to_string()], "Point");
         let s3 = StructName::from_path_and_name(&["./other.wado".to_string()], "Point");
 
-        let mut set = HashSet::new();
+        let mut set = IndexSet::new();
         set.insert(s1.clone());
         assert!(set.contains(&s2));
         assert!(!set.contains(&s3));

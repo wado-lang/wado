@@ -7,9 +7,7 @@
 //! Effect checking runs after type resolution (TIR construction) and before
 //! lowering. It operates on the TIR and produces errors for any effect violations.
 
-use std::collections::HashSet;
-
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
@@ -75,7 +73,7 @@ struct EffectChecker<'a, H: CompilerHost> {
     modules: &'a IndexMap<ModuleSource, TirModule>,
     logger: &'a Logger<'a, H>,
     /// Current function's effects (set when entering a function)
-    current_effects: HashSet<String>,
+    current_effects: IndexSet<String>,
 }
 
 impl<'a, H: CompilerHost> EffectChecker<'a, H> {
@@ -83,7 +81,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
         Self {
             modules,
             logger,
-            current_effects: HashSet::new(),
+            current_effects: IndexSet::new(),
         }
     }
 

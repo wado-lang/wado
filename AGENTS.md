@@ -234,6 +234,7 @@ Wado is designed with the following Wasm features:
 - Do not use `#![allow(deprecated)]`; use newer alternatives instead.
 - Use `panic!("not yet implemented")` for things that are not yet implemented.
 - YAGNI. Do the simplest thing that could possibly work.
+- Do not use `HashMap` or `HashSet` from `std::collections`. Use `IndexMap` and `IndexSet` from the `indexmap` crate instead, to ensure deterministic iteration order.
 
 ### Rules for the Compiler Code Base
 

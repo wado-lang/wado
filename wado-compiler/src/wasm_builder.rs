@@ -3,7 +3,7 @@
 //! This module provides index-tracking wrappers around wasm-encoder types,
 //! eliminating hardcoded magic numbers in codegen.
 
-use std::collections::{HashMap, HashSet};
+use indexmap::{IndexMap, IndexSet};
 
 use wasm_encoder::{
     ArrayType, CompositeInnerType, CompositeType, ConstExpr, EntityType, ExportKind, ExportSection,
@@ -41,29 +41,29 @@ pub struct CoreModuleBuilder {
     names: NameSection,
 
     // Type tracking
-    type_names: HashMap<String, u32>,
+    type_names: IndexMap<String, u32>,
     next_type_idx: u32,
 
     // Function tracking
-    func_names: HashMap<String, u32>,
-    func_type_names: HashMap<String, String>,
-    type_has_return: HashMap<String, bool>,
-    type_return_type: HashMap<String, ValType>,
+    func_names: IndexMap<String, u32>,
+    func_type_names: IndexMap<String, String>,
+    type_has_return: IndexMap<String, bool>,
+    type_return_type: IndexMap<String, ValType>,
     next_func_idx: u32,
     /// Number of imported functions (for branch hint calculation)
     pub import_func_count: u32,
 
     // Global tracking
-    global_names: HashMap<String, u32>,
+    global_names: IndexMap<String, u32>,
     next_global_idx: u32,
     /// Globals that are initialized with null (need `ref.as_non_null` on access)
-    nullable_globals: HashSet<String>,
+    nullable_globals: IndexSet<String>,
 
     // Memory tracking
     pub has_memory: bool,
 
     // Access control: functions from core:internal (require explicit import)
-    pub internal_functions: HashSet<String>,
+    pub internal_functions: IndexSet<String>,
 }
 
 impl CoreModuleBuilder {
@@ -76,19 +76,19 @@ impl CoreModuleBuilder {
             globals: GlobalSection::new(),
             exports: ExportSection::new(),
             names: NameSection::new(),
-            type_names: HashMap::new(),
+            type_names: IndexMap::new(),
             next_type_idx: 0,
-            func_names: HashMap::new(),
-            func_type_names: HashMap::new(),
-            type_has_return: HashMap::new(),
-            type_return_type: HashMap::new(),
+            func_names: IndexMap::new(),
+            func_type_names: IndexMap::new(),
+            type_has_return: IndexMap::new(),
+            type_return_type: IndexMap::new(),
             next_func_idx: 0,
             import_func_count: 0,
-            global_names: HashMap::new(),
+            global_names: IndexMap::new(),
             next_global_idx: 0,
-            nullable_globals: HashSet::new(),
+            nullable_globals: IndexSet::new(),
             has_memory: false,
-            internal_functions: HashSet::new(),
+            internal_functions: IndexSet::new(),
         }
     }
 
@@ -462,30 +462,30 @@ impl Default for CoreModuleBuilder {
 /// Used alongside wasm-encoder's `ComponentBuilder` to eliminate magic numbers.
 pub struct ComponentModelContext {
     // Component type indices
-    type_names: HashMap<String, u32>,
+    type_names: IndexMap<String, u32>,
     next_type_idx: u32,
 
     // Component instance indices
-    instance_names: HashMap<String, u32>,
+    instance_names: IndexMap<String, u32>,
     next_instance_idx: u32,
 
     // Core function indices (at component level - aliased/lowered functions)
-    core_func_names: HashMap<String, u32>,
+    core_func_names: IndexMap<String, u32>,
     next_core_func_idx: u32,
 
     // Core memory index
     core_memory_idx: Option<u32>,
 
     // Component-level function indices (lifted functions)
-    comp_func_names: HashMap<String, u32>,
+    comp_func_names: IndexMap<String, u32>,
     next_comp_func_idx: u32,
 
     // Core module indices
-    core_module_names: HashMap<String, u32>,
+    core_module_names: IndexMap<String, u32>,
     next_core_module_idx: u32,
 
     // Core instance indices
-    core_instance_names: HashMap<String, u32>,
+    core_instance_names: IndexMap<String, u32>,
     next_core_instance_idx: u32,
 }
 
@@ -493,18 +493,18 @@ impl ComponentModelContext {
     /// Create a new context with all indices starting at 0
     pub fn new() -> Self {
         Self {
-            type_names: HashMap::new(),
+            type_names: IndexMap::new(),
             next_type_idx: 0,
-            instance_names: HashMap::new(),
+            instance_names: IndexMap::new(),
             next_instance_idx: 0,
-            core_func_names: HashMap::new(),
+            core_func_names: IndexMap::new(),
             next_core_func_idx: 0,
             core_memory_idx: None,
-            comp_func_names: HashMap::new(),
+            comp_func_names: IndexMap::new(),
             next_comp_func_idx: 0,
-            core_module_names: HashMap::new(),
+            core_module_names: IndexMap::new(),
             next_core_module_idx: 0,
-            core_instance_names: HashMap::new(),
+            core_instance_names: IndexMap::new(),
             next_core_instance_idx: 0,
         }
     }

@@ -288,11 +288,11 @@ pub trait CompilerHost: Send + Sync {
 
 /// A simple in-memory compiler host for testing
 ///
-/// This host stores sources in a `HashMap` and collects diagnostics in a Vec.
+/// This host stores sources in an `IndexMap` and collects diagnostics in a Vec.
 #[derive(Debug, Default)]
 pub struct InMemoryCompilerHost {
     /// Source files by path
-    sources: std::collections::HashMap<String, String>,
+    sources: indexmap::IndexMap<String, String>,
     /// Collected diagnostics
     diagnostics: std::sync::Mutex<Vec<Diagnostic>>,
 }

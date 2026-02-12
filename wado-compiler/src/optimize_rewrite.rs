@@ -21,7 +21,7 @@ use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TypeId, TypeTable,
 };
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 // =============================================================================
 // Select Lowering (If → builtin::select)
@@ -451,7 +451,7 @@ pub fn insert_moves(project: &mut Project) {
 fn collect_value_copy_types_in_block(
     block: &TirBlock,
     type_table: &TypeTable,
-    copy_types: &mut HashSet<TypeId>,
+    copy_types: &mut IndexSet<TypeId>,
 ) {
     for stmt in &block.stmts {
         collect_value_copy_types_in_stmt(stmt, type_table, copy_types);
@@ -462,7 +462,7 @@ fn collect_value_copy_types_in_block(
 fn collect_value_copy_types_in_stmt(
     stmt: &TirStmt,
     type_table: &TypeTable,
-    copy_types: &mut HashSet<TypeId>,
+    copy_types: &mut IndexSet<TypeId>,
 ) {
     match &stmt.kind {
         TirStmtKind::Let { type_id, value, .. } => {
@@ -537,7 +537,7 @@ fn collect_value_copy_types_in_stmt(
 fn collect_value_copy_types_in_expr(
     expr: &TirExpr,
     type_table: &TypeTable,
-    copy_types: &mut HashSet<TypeId>,
+    copy_types: &mut IndexSet<TypeId>,
 ) {
     match &expr.kind {
         TirExprKind::Binary { left, right, .. } => {
@@ -693,7 +693,7 @@ pub fn collect_value_copy_types(project: &mut Project) {
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
             // Collect into a temporary set first to avoid borrow conflicts
-            let mut copy_types = HashSet::new();
+            let mut copy_types = IndexSet::new();
             if let Some(ref body) = func.body {
                 collect_value_copy_types_in_block(body, &type_table, &mut copy_types);
             }

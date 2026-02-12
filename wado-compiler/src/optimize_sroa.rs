@@ -28,7 +28,8 @@ use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
     TypeTable,
 };
-use std::collections::{HashMap, HashSet};
+use indexmap::IndexMap;
+use indexmap::IndexSet;
 
 /// Information about a struct/tuple local that may be decomposable.
 struct SroaCandidate {
@@ -81,10 +82,10 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
 
     // Step 3: Allocate scalar locals for each field of each safe candidate.
     // Map: (original_local, field_index) → new_local_index
-    let mut field_local_map: HashMap<(u32, u32), u32> = HashMap::new();
+    let mut field_local_map: IndexMap<(u32, u32), u32> = IndexMap::new();
     // Map: (original_local, field_index) → (new_local_name, field_type)
-    let mut field_info_map: HashMap<(u32, u32), (String, TypeId)> = HashMap::new();
-    let safe_set: HashSet<u32> = safe.iter().map(|c| c.local_index).collect();
+    let mut field_info_map: IndexMap<(u32, u32), (String, TypeId)> = IndexMap::new();
+    let safe_set: IndexSet<u32> = safe.iter().map(|c| c.local_index).collect();
 
     for candidate in &safe {
         let base = func.local_count;
@@ -99,7 +100,7 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     }
 
     // Collect mutability info for safe candidates.
-    let mut candidate_mut: HashMap<u32, bool> = HashMap::new();
+    let mut candidate_mut: IndexMap<u32, bool> = IndexMap::new();
     for candidate in &safe {
         candidate_mut.insert(candidate.local_index, candidate.is_mut);
     }
@@ -277,20 +278,24 @@ fn collect_candidates_in_expr(
 }
 
 /// Escape analysis: find all candidate locals that escape (used in non-field-access positions).
-fn find_escaped_locals(body: &TirBlock, candidates: &[SroaCandidate]) -> HashSet<u32> {
-    let candidate_set: HashSet<u32> = candidates.iter().map(|c| c.local_index).collect();
-    let mut escaped = HashSet::new();
+fn find_escaped_locals(body: &TirBlock, candidates: &[SroaCandidate]) -> IndexSet<u32> {
+    let candidate_set: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
+    let mut escaped = IndexSet::new();
     check_escape_in_block(body, &candidate_set, &mut escaped);
     escaped
 }
 
-fn check_escape_in_block(block: &TirBlock, candidates: &HashSet<u32>, escaped: &mut HashSet<u32>) {
+fn check_escape_in_block(
+    block: &TirBlock,
+    candidates: &IndexSet<u32>,
+    escaped: &mut IndexSet<u32>,
+) {
     for stmt in &block.stmts {
         check_escape_in_stmt(stmt, candidates, escaped);
     }
 }
 
-fn check_escape_in_stmt(stmt: &TirStmt, candidates: &HashSet<u32>, escaped: &mut HashSet<u32>) {
+fn check_escape_in_stmt(stmt: &TirStmt, candidates: &IndexSet<u32>, escaped: &mut IndexSet<u32>) {
     match &stmt.kind {
         TirStmtKind::Let { value, .. } => {
             check_escape_in_expr(value, candidates, escaped);
@@ -352,7 +357,7 @@ fn check_escape_in_stmt(stmt: &TirStmt, candidates: &HashSet<u32>, escaped: &mut
 /// - `Assign { target: FieldAccess { expr: Local { .. }, .. }, .. }` (field write)
 ///
 /// Any other use of the local (passed to function, returned, address taken, etc.) is an escape.
-fn check_escape_in_expr(expr: &TirExpr, candidates: &HashSet<u32>, escaped: &mut HashSet<u32>) {
+fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mut IndexSet<u32>) {
     match &expr.kind {
         // FieldAccess on a candidate local is safe — don't mark the base local as escaped.
         // But do recurse into the non-base subexpressions.
@@ -540,7 +545,7 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &HashSet<u32>, escaped: &mut
 }
 
 /// Check if an expression is a `Local` node referencing a candidate.
-fn is_candidate_local(expr: &TirExpr, candidates: &HashSet<u32>) -> Option<u32> {
+fn is_candidate_local(expr: &TirExpr, candidates: &IndexSet<u32>) -> Option<u32> {
     if let TirExprKind::Local { index, .. } = &expr.kind
         && candidates.contains(index)
     {
@@ -552,10 +557,10 @@ fn is_candidate_local(expr: &TirExpr, candidates: &HashSet<u32>) -> Option<u32> 
 /// Rewrite a block: expand Let statements for candidates and replace field accesses.
 fn rewrite_block(
     block: &mut TirBlock,
-    safe_set: &HashSet<u32>,
-    field_map: &HashMap<(u32, u32), u32>,
-    info_map: &HashMap<(u32, u32), (String, TypeId)>,
-    candidate_mut: &HashMap<u32, bool>,
+    safe_set: &IndexSet<u32>,
+    field_map: &IndexMap<(u32, u32), u32>,
+    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
+    candidate_mut: &IndexMap<u32, bool>,
 ) {
     // Process statements, potentially expanding one statement into multiple.
     let old_stmts = std::mem::take(&mut block.stmts);
@@ -630,10 +635,10 @@ fn rewrite_block(
 
 fn rewrite_stmt(
     stmt: &mut TirStmt,
-    safe_set: &HashSet<u32>,
-    field_map: &HashMap<(u32, u32), u32>,
-    info_map: &HashMap<(u32, u32), (String, TypeId)>,
-    candidate_mut: &HashMap<u32, bool>,
+    safe_set: &IndexSet<u32>,
+    field_map: &IndexMap<(u32, u32), u32>,
+    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
+    candidate_mut: &IndexMap<u32, bool>,
 ) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
@@ -691,10 +696,10 @@ fn rewrite_stmt(
 /// Rewrite an expression: replace `s.field` with the corresponding scalar local.
 fn rewrite_expr(
     expr: &mut TirExpr,
-    safe_set: &HashSet<u32>,
-    field_map: &HashMap<(u32, u32), u32>,
-    info_map: &HashMap<(u32, u32), (String, TypeId)>,
-    candidate_mut: &HashMap<u32, bool>,
+    safe_set: &IndexSet<u32>,
+    field_map: &IndexMap<(u32, u32), u32>,
+    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
+    candidate_mut: &IndexMap<u32, bool>,
 ) {
     // Check for field access on a candidate local: s.field → scalar local
     if let TirExprKind::FieldAccess {

@@ -4,7 +4,9 @@
 //! - WASI import registry: collects WASI imports from effect definitions in lib/wasi/*.wado
 //! - Component Model ABI: type conversion and support checking for CM codegen
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
+
+use indexmap::{IndexMap, IndexSet};
 
 use heck::ToKebabCase;
 use wasm_encoder::ValType;
@@ -93,7 +95,7 @@ pub struct WasiInterfaceInfo {
 #[derive(Debug, Clone, Default)]
 pub struct WasiRegistry {
     /// `Effect::method` -> function info
-    effect_to_func: HashMap<String, WasiFunctionInfo>,
+    effect_to_func: IndexMap<String, WasiFunctionInfo>,
 
     /// Interface path -> list of functions
     /// Using `BTreeMap` for deterministic ordering
@@ -102,25 +104,25 @@ pub struct WasiRegistry {
     /// Local alias -> (`interface_path`, `wasi_func_name`)
     /// Key format: `wasi:{package}/{effect_name}::{method_name`}
     /// e.g., "`wasi:cli/Stdout::write_via_stream`"
-    local_aliases: HashMap<String, (String, String)>,
+    local_aliases: IndexMap<String, (String, String)>,
 
     /// Track which WASI function names are used to detect collisions
     used_names: BTreeSet<String>,
 
     /// Newtypes collected from WASI modules (e.g., Instant -> u64)
-    newtypes: HashMap<String, Type>,
+    newtypes: IndexMap<String, Type>,
 
     /// Resource types collected from WASI modules (e.g., `TerminalInput`, `TerminalOutput`)
     /// Maps resource name -> CM resource name (kebab-case)
-    resources: HashMap<String, String>,
+    resources: IndexMap<String, String>,
 
     /// Enum types collected from WASI modules (e.g., `ErrorCode`, `IpAddressFamily`)
     /// Maps Wado enum name -> (CM enum name kebab-case, variant names in kebab-case)
-    enums: HashMap<String, (String, Vec<String>)>,
+    enums: IndexMap<String, (String, Vec<String>)>,
 
     /// Variant types collected from WASI modules (e.g., `HeaderError`)
     /// Maps Wado variant name -> (CM variant name kebab-case, cases: Vec<(`case_cm_name`, `has_payload`)>)
-    variants: HashMap<String, (String, Vec<(String, bool)>)>,
+    variants: IndexMap<String, (String, Vec<(String, bool)>)>,
 }
 
 impl WasiRegistry {
@@ -281,7 +283,7 @@ impl WasiRegistry {
         }
 
         // Helper closure to resolve types through aliases
-        let resolve_type = |ty: &Type, aliases: &HashMap<String, Type>| -> Type {
+        let resolve_type = |ty: &Type, aliases: &IndexMap<String, Type>| -> Type {
             match ty {
                 Type::Named(named) => {
                     if let Some(resolved) = aliases.get(&named.name) {
@@ -393,7 +395,7 @@ impl WasiRegistry {
     }
 
     /// Get all newtypes
-    pub fn newtypes(&self) -> &HashMap<String, Type> {
+    pub fn newtypes(&self) -> &IndexMap<String, Type> {
         &self.newtypes
     }
 
@@ -490,8 +492,8 @@ impl WasiRegistry {
     /// all types in the function signature are supported.
     pub fn is_function_supported(&self, func: &WasiFunctionInfo) -> bool {
         // Build sets of known enum and resource names
-        let enums: HashSet<&str> = self.enums.keys().map(String::as_str).collect();
-        let resources: HashSet<&str> = self.resources.keys().map(String::as_str).collect();
+        let enums: IndexSet<&str> = self.enums.keys().map(String::as_str).collect();
+        let resources: IndexSet<&str> = self.resources.keys().map(String::as_str).collect();
 
         // Check all parameter types
         for (_, ty) in &func.params {
@@ -822,14 +824,14 @@ use wasm_encoder::{ComponentValType, InstanceType, PrimitiveValType, TypeBounds}
 /// hardcoded type indices with metadata-driven generation.
 pub struct CmInstanceTypeGen {
     next_idx: u32,
-    cache: HashMap<String, u32>,
+    cache: IndexMap<String, u32>,
 }
 
 impl CmInstanceTypeGen {
     pub fn new(start_idx: u32) -> Self {
         Self {
             next_idx: start_idx,
-            cache: HashMap::new(),
+            cache: IndexMap::new(),
         }
     }
 
@@ -974,7 +976,7 @@ impl CmInstanceTypeGen {
         ty: &Type,
         instance_type: &mut InstanceType,
         wasi_registry: &WasiRegistry,
-        resource_exports: &HashMap<&str, u32>,
+        resource_exports: &IndexMap<&str, u32>,
     ) -> ComponentValType {
         match ty {
             Type::Named(named) => match named.name.as_str() {
@@ -1214,8 +1216,8 @@ pub fn type_id_to_valtype(type_id: TypeId) -> ValType {
 /// The `enums` and `resources` sets contain known enum/resource type names.
 fn is_param_type_supported_with_types(
     ty: &Type,
-    enums: &HashSet<&str>,
-    resources: &HashSet<&str>,
+    enums: &IndexSet<&str>,
+    resources: &IndexSet<&str>,
 ) -> bool {
     match ty {
         Type::Named(named) => {
@@ -1252,8 +1254,8 @@ fn is_param_type_supported_with_types(
 /// The `enums` and `resources` sets contain known enum/resource type names.
 fn is_return_type_supported_with_types(
     ty: &Type,
-    enums: &HashSet<&str>,
-    resources: &HashSet<&str>,
+    enums: &IndexSet<&str>,
+    resources: &IndexSet<&str>,
 ) -> bool {
     match ty {
         Type::Named(named) => {
@@ -1319,8 +1321,8 @@ fn is_return_type_supported_with_types(
 /// Check if a type is a supported primitive type (for inner types of Array/Option/Tuple)
 fn is_primitive_type_supported_with_types(
     ty: &Type,
-    enums: &HashSet<&str>,
-    resources: &HashSet<&str>,
+    enums: &IndexSet<&str>,
+    resources: &IndexSet<&str>,
 ) -> bool {
     match ty {
         Type::Named(named) => {
@@ -1361,18 +1363,18 @@ fn is_primitive_type_supported_with_types(
 
 /// Check if a parameter type is supported (without enum/resource knowledge)
 pub fn is_param_type_supported(ty: &Type) -> bool {
-    is_param_type_supported_with_types(ty, &HashSet::new(), &HashSet::new())
+    is_param_type_supported_with_types(ty, &IndexSet::new(), &IndexSet::new())
 }
 
 /// Check if a return type is supported (without enum/resource knowledge)
 pub fn is_return_type_supported(ty: &Type) -> bool {
-    is_return_type_supported_with_types(ty, &HashSet::new(), &HashSet::new())
+    is_return_type_supported_with_types(ty, &IndexSet::new(), &IndexSet::new())
 }
 
 /// Check if a type is a supported primitive type (for inner types of Array/Option/Tuple)
 #[allow(dead_code)]
 fn is_primitive_type_supported(ty: &Type) -> bool {
-    is_primitive_type_supported_with_types(ty, &HashSet::new(), &HashSet::new())
+    is_primitive_type_supported_with_types(ty, &IndexSet::new(), &IndexSet::new())
 }
 
 /// Check if all types in a WASI function are supported for Component Model generation

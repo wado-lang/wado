@@ -9,10 +9,10 @@
 //! resolved types on every expression, making code generation mechanical.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::rc::Rc;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
@@ -375,7 +375,7 @@ struct LabeledBlockTarget {
 /// Function context during resolution with scope tracking
 struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
-    scopes: Vec<HashMap<String, LocalVar>>,
+    scopes: Vec<IndexMap<String, LocalVar>>,
     /// Next local index (Wasm locals are function-wide)
     next_local: u32,
     /// Return type of the function
@@ -384,13 +384,13 @@ struct FunctionContext {
     /// Local variable types in order (for Wasm local declarations)
     local_types: Vec<TypeId>,
     /// Local indices that have their address taken (&x or &mut x)
-    address_taken_locals: HashSet<u32>,
+    address_taken_locals: IndexSet<u32>,
     /// Outer context locals for closure capture detection (name -> `LocalVar` snapshot)
     /// Only set for closure contexts
-    outer_locals: HashMap<String, LocalVar>,
+    outer_locals: IndexMap<String, LocalVar>,
     /// Captured variables detected during resolution (name -> capture index)
     /// Only used for closure contexts
-    captured_vars: HashMap<String, u32>,
+    captured_vars: IndexMap<String, u32>,
     /// Stack of labeled block expression targets for tracking break types
     labeled_block_targets: Vec<LabeledBlockTarget>,
     /// Stack of all active labels (from labeled blocks and labeled block expressions)
@@ -402,13 +402,13 @@ struct FunctionContext {
 impl FunctionContext {
     fn new(return_type: TypeId, function_name: String) -> Self {
         Self {
-            scopes: vec![HashMap::new()], // Start with one scope for function parameters
+            scopes: vec![IndexMap::new()], // Start with one scope for function parameters
             next_local: 0,
             return_type,
             local_types: Vec::new(),
-            address_taken_locals: HashSet::new(),
-            outer_locals: HashMap::new(),
-            captured_vars: HashMap::new(),
+            address_taken_locals: IndexSet::new(),
+            outer_locals: IndexMap::new(),
+            captured_vars: IndexMap::new(),
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
@@ -418,7 +418,7 @@ impl FunctionContext {
     /// Create a closure context with outer scope access for capture detection
     fn new_closure(return_type: TypeId, outer_ctx: &FunctionContext) -> Self {
         // Snapshot all locals from outer context
-        let mut outer_locals = HashMap::new();
+        let mut outer_locals = IndexMap::new();
         for scope in &outer_ctx.scopes {
             for (name, local) in scope {
                 outer_locals.insert(name.clone(), local.clone());
@@ -429,13 +429,13 @@ impl FunctionContext {
         let function_name = format!("{}::{{closure}}", outer_ctx.function_name);
 
         Self {
-            scopes: vec![HashMap::new()],
+            scopes: vec![IndexMap::new()],
             next_local: 0,
             return_type,
             local_types: Vec::new(),
-            address_taken_locals: HashSet::new(),
+            address_taken_locals: IndexSet::new(),
             outer_locals,
-            captured_vars: HashMap::new(),
+            captured_vars: IndexMap::new(),
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
@@ -444,7 +444,7 @@ impl FunctionContext {
 
     /// Enter a new scope (for blocks, if/while/for/loop bodies)
     fn enter_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.scopes.push(IndexMap::new());
     }
 
     /// Exit the current scope
@@ -549,27 +549,27 @@ pub struct Resolver<'a, H: CompilerHost> {
     symbols: &'a SymbolTable,
     /// Loaded modules from analyzer
     #[allow(dead_code)]
-    loaded_modules: &'a HashMap<ModuleSource, Module>,
+    loaded_modules: &'a IndexMap<ModuleSource, Module>,
     /// Newtypes (name -> resolved type) - flat map for current module
-    newtypes: HashMap<String, TypeId>,
+    newtypes: IndexMap<String, TypeId>,
     /// Struct field info (struct name -> (`module_source`, fields)) - flat map for current module
-    struct_fields: HashMap<String, StructFieldInfo>,
+    struct_fields: IndexMap<String, StructFieldInfo>,
     /// Variant case info (variant name -> (`module_source`, `type_params`, cases)) - flat map for current module
-    variant_cases: HashMap<String, VariantInfo>,
+    variant_cases: IndexMap<String, VariantInfo>,
     /// Enum case info (enum name -> (`module_source`, cases)) - flat map for current module
-    enum_cases: HashMap<String, EnumInfo>,
+    enum_cases: IndexMap<String, EnumInfo>,
     /// Resource info (resource name -> module source and methods) - flat map for current module
-    resource_types: HashMap<String, ResourceInfo>,
+    resource_types: IndexMap<String, ResourceInfo>,
     /// Per-module nested maps for cross-module type resolution
-    all_newtypes: HashMap<ModuleSource, HashMap<String, TypeId>>,
-    all_struct_fields: HashMap<ModuleSource, HashMap<String, StructFieldInfo>>,
-    all_variant_cases: HashMap<ModuleSource, HashMap<String, VariantInfo>>,
-    all_enum_cases: HashMap<ModuleSource, HashMap<String, EnumInfo>>,
-    all_resource_types: HashMap<ModuleSource, HashMap<String, ResourceInfo>>,
+    all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>>,
+    all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
+    all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
+    all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
+    all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
     /// Function return types (name -> return type)
-    function_return_types: HashMap<String, TypeId>,
+    function_return_types: IndexMap<String, TypeId>,
     /// Imported function names for the current module
-    imported_functions: HashSet<String>,
+    imported_functions: IndexSet<String>,
     /// Logger for emitting diagnostics
     logger: &'a Logger<'a, H>,
     /// Current module source being resolved (for struct type `module_source`)
@@ -578,22 +578,22 @@ pub struct Resolver<'a, H: CompilerHost> {
     current_module_items: Vec<Item>,
     /// Type parameters currently in scope (name -> (index, `TypeId`))
     /// Set when resolving generic structs or functions
-    current_type_params: HashMap<String, (u32, TypeId)>,
+    current_type_params: IndexMap<String, (u32, TypeId)>,
     /// Trait bounds on type parameters in scope (name -> trait names)
     /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord)
-    current_type_param_bounds: HashMap<String, Vec<String>>,
+    current_type_param_bounds: IndexMap<String, Vec<String>>,
     /// Generic struct definitions (name -> type param count)
     /// Used to determine if a struct is generic
-    generic_struct_names: HashSet<String>,
+    generic_struct_names: IndexSet<String>,
     /// Generic function type parameters (`func_name` -> `type_params`)
     /// Used for substituting type parameters in return types
-    generic_function_params: HashMap<String, Vec<(String, TypeId)>>,
+    generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// Generic method type parameters (`mangled_name` -> `type_params`)
     /// Used for substituting type parameters in method return types
-    generic_method_params: HashMap<String, Vec<(String, TypeId)>>,
+    generic_method_params: IndexMap<String, Vec<(String, TypeId)>>,
     /// Current associated type bindings in scope (`Self::Name` -> resolved type)
     /// Set when resolving trait implementations
-    current_associated_type_bindings: HashMap<String, TypeId>,
+    current_associated_type_bindings: IndexMap<String, TypeId>,
     /// Current `Self` type in scope (the type being implemented in an impl block)
     current_self_type: Option<TypeId>,
     /// WASI registry for looking up effect return types
@@ -601,26 +601,26 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Builtin registry for looking up builtin function return types
     builtin_registry: &'a BuiltinRegistry,
     /// Global variables in the current module (name -> (type, `is_mutable`))
-    current_module_globals: HashMap<String, (TypeId, bool)>,
+    current_module_globals: IndexMap<String, (TypeId, bool)>,
     /// Imported globals (local name -> (source module, original name, type, `is_mutable`))
-    imported_globals: HashMap<String, (ModuleSource, String, TypeId, bool)>,
+    imported_globals: IndexMap<String, (ModuleSource, String, TypeId, bool)>,
     /// Associated constants from impl blocks ("`TypeName::CONST`" -> (type, expr))
     /// These are inlined at every use site during resolution.
-    associated_constants: HashMap<String, (ast::Type, ast::Expr)>,
+    associated_constants: IndexMap<String, (ast::Type, ast::Expr)>,
     /// Cache of per-module type maps for cross-module type resolution.
     /// Built lazily on first access per module. Avoids rebuilding `build_module_map`
     /// on every imported method call or field access.
-    module_type_maps_cache: HashMap<ModuleSource, ModuleTypeMaps>,
+    module_type_maps_cache: IndexMap<ModuleSource, ModuleTypeMaps>,
 }
 
 /// Cached per-module type maps for cross-module type resolution.
 /// These are the five flat maps that `build_module_map` produces.
 struct ModuleTypeMaps {
-    struct_fields: HashMap<String, StructFieldInfo>,
-    variant_cases: HashMap<String, VariantInfo>,
-    enum_cases: HashMap<String, EnumInfo>,
-    newtypes: HashMap<String, TypeId>,
-    resource_types: HashMap<String, ResourceInfo>,
+    struct_fields: IndexMap<String, StructFieldInfo>,
+    variant_cases: IndexMap<String, VariantInfo>,
+    enum_cases: IndexMap<String, EnumInfo>,
+    newtypes: IndexMap<String, TypeId>,
+    resource_types: IndexMap<String, ResourceInfo>,
 }
 
 /// Info about an Index trait implementation
@@ -685,7 +685,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Create a new resolver
     pub fn new(
         symbols: &'a SymbolTable,
-        loaded_modules: &'a HashMap<ModuleSource, Module>,
+        loaded_modules: &'a IndexMap<ModuleSource, Module>,
         builtin_registry: &'a BuiltinRegistry,
         logger: &'a Logger<'a, H>,
     ) -> Self {
@@ -695,34 +695,34 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             type_table,
             symbols,
             loaded_modules,
-            newtypes: HashMap::new(),
-            struct_fields: HashMap::new(),
-            variant_cases: HashMap::new(),
-            enum_cases: HashMap::new(),
-            resource_types: HashMap::new(),
-            all_newtypes: HashMap::new(),
-            all_struct_fields: HashMap::new(),
-            all_variant_cases: HashMap::new(),
-            all_enum_cases: HashMap::new(),
-            all_resource_types: HashMap::new(),
-            function_return_types: HashMap::new(),
-            imported_functions: HashSet::new(),
+            newtypes: IndexMap::new(),
+            struct_fields: IndexMap::new(),
+            variant_cases: IndexMap::new(),
+            enum_cases: IndexMap::new(),
+            resource_types: IndexMap::new(),
+            all_newtypes: IndexMap::new(),
+            all_struct_fields: IndexMap::new(),
+            all_variant_cases: IndexMap::new(),
+            all_enum_cases: IndexMap::new(),
+            all_resource_types: IndexMap::new(),
+            function_return_types: IndexMap::new(),
+            imported_functions: IndexSet::new(),
             logger,
             current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"),
             current_module_items: Vec::new(),
-            current_type_params: HashMap::new(),
-            current_type_param_bounds: HashMap::new(),
-            generic_struct_names: HashSet::new(),
-            generic_function_params: HashMap::new(),
-            generic_method_params: HashMap::new(),
-            current_associated_type_bindings: HashMap::new(),
+            current_type_params: IndexMap::new(),
+            current_type_param_bounds: IndexMap::new(),
+            generic_struct_names: IndexSet::new(),
+            generic_function_params: IndexMap::new(),
+            generic_method_params: IndexMap::new(),
+            current_associated_type_bindings: IndexMap::new(),
             current_self_type: None,
             wasi_registry,
             builtin_registry,
-            current_module_globals: HashMap::new(),
-            imported_globals: HashMap::new(),
-            associated_constants: HashMap::new(),
-            module_type_maps_cache: HashMap::new(),
+            current_module_globals: IndexMap::new(),
+            imported_globals: IndexMap::new(),
+            associated_constants: IndexMap::new(),
+            module_type_maps_cache: IndexMap::new(),
         }
     }
 
@@ -1010,7 +1010,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Modules are returned in topological order based on struct field dependencies.
     pub fn resolve_all_modules(
         symbols: &'a SymbolTable,
-        modules: &'a HashMap<ModuleSource, Module>,
+        modules: &'a IndexMap<ModuleSource, Module>,
         _entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
@@ -1018,14 +1018,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Create a shared type table wrapped in Rc<RefCell<>> for cross-module sharing
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let mut all_newtypes: HashMap<ModuleSource, HashMap<String, TypeId>> = HashMap::new();
-        let mut all_struct_fields: HashMap<ModuleSource, HashMap<String, StructFieldInfo>> =
-            HashMap::new();
-        let mut all_variant_cases: HashMap<ModuleSource, HashMap<String, VariantInfo>> =
-            HashMap::new();
-        let mut all_enum_cases: HashMap<ModuleSource, HashMap<String, EnumInfo>> = HashMap::new();
-        let mut all_resource_types: HashMap<ModuleSource, HashMap<String, ResourceInfo>> =
-            HashMap::new();
+        let mut all_newtypes: IndexMap<ModuleSource, IndexMap<String, TypeId>> = IndexMap::new();
+        let mut all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>> =
+            IndexMap::new();
+        let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> =
+            IndexMap::new();
+        let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> =
+            IndexMap::new();
+        let mut all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>> =
+            IndexMap::new();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -1312,7 +1313,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
             // Build function_return_types for this module only
             // (functions defined in this module)
-            let mut function_return_types = HashMap::new();
+            let mut function_return_types = IndexMap::new();
             for item in &module.items {
                 if let Item::Function(func) = item {
                     let return_type = if let Some(ret_ty) = &func.return_type {
@@ -1330,7 +1331,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
 
             // Collect imported function names from this module's use declarations
-            let mut imported_functions = HashSet::new();
+            let mut imported_functions = IndexSet::new();
             for item in &module.items {
                 if let Item::Use(use_decl) = item {
                     for use_item in &use_decl.items {
@@ -1375,19 +1376,19 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 logger,
                 current_module_source: ModuleSource::entry_point_with_filename("<uninitialized>"), // Set in resolve_module
                 current_module_items: Vec::new(), // Set in resolve_module
-                current_type_params: HashMap::new(),
-                current_type_param_bounds: HashMap::new(),
-                generic_struct_names: HashSet::new(),
-                generic_function_params: HashMap::new(),
-                generic_method_params: HashMap::new(),
-                current_associated_type_bindings: HashMap::new(),
+                current_type_params: IndexMap::new(),
+                current_type_param_bounds: IndexMap::new(),
+                generic_struct_names: IndexSet::new(),
+                generic_function_params: IndexMap::new(),
+                generic_method_params: IndexMap::new(),
+                current_associated_type_bindings: IndexMap::new(),
                 current_self_type: None,
                 wasi_registry,
                 builtin_registry: &builtin_registry,
-                current_module_globals: HashMap::new(),
-                imported_globals: HashMap::new(),
-                associated_constants: HashMap::new(),
-                module_type_maps_cache: HashMap::new(),
+                current_module_globals: IndexMap::new(),
+                imported_globals: IndexMap::new(),
+                associated_constants: IndexMap::new(),
+                module_type_maps_cache: IndexMap::new(),
             };
 
             // Errors are emitted to the logger; if resolve_module returns Bail,
@@ -1404,12 +1405,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ///
     /// Priority: current module > imported types > any available definition.
     fn build_module_map<V: Clone>(
-        per_module: &HashMap<ModuleSource, HashMap<String, V>>,
+        per_module: &IndexMap<ModuleSource, IndexMap<String, V>>,
         current_module: &ModuleSource,
-        imported_type_sources: &HashMap<String, ModuleSource>,
-        import_original_names: &HashMap<String, String>,
-    ) -> HashMap<String, V> {
-        let mut result = HashMap::new();
+        imported_type_sources: &IndexMap<String, ModuleSource>,
+        import_original_names: &IndexMap<String, String>,
+    ) -> IndexMap<String, V> {
+        let mut result = IndexMap::new();
         // First: add all entries from all modules (arbitrary winner for conflicts)
         for name_map in per_module.values() {
             for (name, value) in name_map {
@@ -1443,9 +1444,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn build_imported_type_sources(
         module: &Module,
         from_module: &ModuleSource,
-    ) -> (HashMap<String, ModuleSource>, HashMap<String, String>) {
-        let mut sources = HashMap::new();
-        let mut original_names = HashMap::new();
+    ) -> (IndexMap<String, ModuleSource>, IndexMap<String, String>) {
+        let mut sources = IndexMap::new();
+        let mut original_names = IndexMap::new();
         for item in &module.items {
             if let Item::Use(use_decl) = item {
                 let source = name::resolve_import(from_module, &use_decl.source);
@@ -1567,20 +1568,20 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// is a struct defined in B. This ensures that when we register struct types in
     /// codegen, dependency structs are registered before the structs that reference them.
     fn topological_sort_modules(
-        modules: &HashMap<ModuleSource, Module>,
-        all_struct_fields: &HashMap<ModuleSource, HashMap<String, StructFieldInfo>>,
+        modules: &IndexMap<ModuleSource, Module>,
+        all_struct_fields: &IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
         type_table: &TypeTable,
     ) -> Vec<ModuleSource> {
         // Collect and sort sources for deterministic ordering
         let mut sources: Vec<&ModuleSource> = modules.keys().collect();
         sources.sort_by_key(std::string::ToString::to_string);
-        let source_to_idx: HashMap<&ModuleSource, usize> =
+        let source_to_idx: IndexMap<&ModuleSource, usize> =
             sources.iter().enumerate().map(|(i, s)| (*s, i)).collect();
 
         // Track dependency counts directly (no need for full dependency sets)
         let mut dependency_count: Vec<usize> = vec![0; sources.len()];
         // Track which edges we've already added to avoid duplicates
-        let mut seen_edges: HashSet<(usize, usize)> = HashSet::new();
+        let mut seen_edges: IndexSet<(usize, usize)> = IndexSet::new();
         // Build reverse graph: dependents[i] = modules that depend on module i
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); sources.len()];
 
@@ -1632,9 +1633,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        // Cycle detection with warning (O(n) using HashSet)
+        // Cycle detection with warning (O(n) using IndexSet)
         if sorted_indices.len() < sources.len() {
-            let sorted_set: HashSet<usize> = sorted_indices.iter().copied().collect();
+            let sorted_set: IndexSet<usize> = sorted_indices.iter().copied().collect();
             let in_cycle: Vec<usize> = (0..sources.len())
                 .filter(|i| !sorted_set.contains(i))
                 .collect();
@@ -1655,8 +1656,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn resolve_type_static(
         ty: &Type,
         type_table: &mut TypeTable,
-        newtypes: &HashMap<String, TypeId>,
-        struct_fields: &HashMap<String, StructFieldInfo>,
+        newtypes: &IndexMap<String, TypeId>,
+        struct_fields: &IndexMap<String, StructFieldInfo>,
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
@@ -1754,8 +1755,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn resolve_type_static_with_params(
         ty: &Type,
         type_table: &mut TypeTable,
-        newtypes: &HashMap<String, TypeId>,
-        struct_fields: &HashMap<String, StructFieldInfo>,
+        newtypes: &IndexMap<String, TypeId>,
+        struct_fields: &IndexMap<String, StructFieldInfo>,
         type_params: &[String],
     ) -> TypeId {
         match ty {
@@ -2366,11 +2367,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
-            needed_copy_types: std::collections::HashSet::new(),
+            needed_copy_types: IndexSet::new(),
             // Scratch local fields - computed by lower phase
             scratch_locals: Vec::new(),
-            copy_source_types: std::collections::HashSet::new(),
-            indirect_call_counts: std::collections::HashMap::new(),
+            copy_source_types: IndexSet::new(),
+            indirect_call_counts: IndexMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
             cm_export_info: None,
@@ -2420,10 +2421,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
-            needed_copy_types: std::collections::HashSet::new(),
+            needed_copy_types: IndexSet::new(),
             scratch_locals: Vec::new(),
-            copy_source_types: std::collections::HashSet::new(),
-            indirect_call_counts: std::collections::HashMap::new(),
+            copy_source_types: IndexSet::new(),
+            indirect_call_counts: IndexMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
             cm_export_info: None,
@@ -2610,10 +2611,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
-            needed_copy_types: std::collections::HashSet::new(),
+            needed_copy_types: IndexSet::new(),
             scratch_locals: Vec::new(),
-            copy_source_types: std::collections::HashSet::new(),
-            indirect_call_counts: std::collections::HashMap::new(),
+            copy_source_types: IndexSet::new(),
+            indirect_call_counts: IndexMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
             cm_export_info: None,
@@ -5159,7 +5160,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 // callee's types, not the caller's (which may have same-named different types).
                 let callee_module_ast = self.loaded_modules.get(callee_module);
                 let (callee_imported, callee_original_names) = callee_module_ast.map_or_else(
-                    || (HashMap::new(), HashMap::new()),
+                    || (IndexMap::new(), IndexMap::new()),
                     |m| Self::build_imported_type_sources(m, callee_module),
                 );
                 let callee_newtypes = Self::build_module_map(
@@ -7135,7 +7136,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     // rebuilding maps from scratch on every call.
                                     let mut cached = self
                                         .module_type_maps_cache
-                                        .remove(module_source)
+                                        .shift_remove(module_source)
                                         .expect("cache populated by ensure_module_maps_cached");
                                     std::mem::swap(
                                         &mut self.struct_fields,
@@ -8198,7 +8199,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             for method in &methods {
                 if method.name == method_name {
                     // Set up associated type bindings
-                    let mut assoc_type_map: HashMap<String, TypeId> = HashMap::new();
+                    let mut assoc_type_map: IndexMap<String, TypeId> = IndexMap::new();
 
                     // Process associated types (e.g., `type Output = Self`)
                     for assoc in &associated_types {
@@ -8435,7 +8436,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
 
         // Build name → bounds map from impl block type params
-        let bounds_map: std::collections::HashMap<&str, &[String]> = impl_block
+        let bounds_map: IndexMap<&str, &[String]> = impl_block
             .type_params
             .iter()
             .filter(|p| !p.bounds.is_empty())
@@ -8778,8 +8779,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn build_type_param_mapping(
         impl_ty: &Type,
         concrete_type_args: &[TypeId],
-    ) -> HashMap<String, TypeId> {
-        let mut mapping = HashMap::new();
+    ) -> IndexMap<String, TypeId> {
+        let mut mapping = IndexMap::new();
 
         // Extract type parameter names from impl_ty
         let type_param_names: Vec<String> = match impl_ty {
@@ -8812,7 +8813,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn resolve_type_with_param_mapping(
         &mut self,
         ty: &Type,
-        type_param_mapping: &HashMap<String, TypeId>,
+        type_param_mapping: &IndexMap<String, TypeId>,
     ) -> TypeId {
         match ty {
             Type::Named(n) => {
@@ -9196,7 +9197,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Swap to source module's type context using cached maps (O(1))
         let mut cached = self
             .module_type_maps_cache
-            .remove(module_source)
+            .shift_remove(module_source)
             .expect("cache populated by ensure_module_maps_cached");
         std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
         std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
@@ -10969,7 +10970,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
 
         // Build a map from type param TypeId to concrete TypeId
-        let mut type_param_map: HashMap<TypeId, TypeId> = HashMap::new();
+        let mut type_param_map: IndexMap<TypeId, TypeId> = IndexMap::new();
 
         for (struct_field, (_, expected_type_id)) in fields.iter().zip(struct_info.fields.iter()) {
             let actual_type_id = struct_field.value.type_id;
@@ -11002,7 +11003,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         &self,
         expected: TypeId,
         actual: TypeId,
-        type_param_map: &mut HashMap<TypeId, TypeId>,
+        type_param_map: &mut IndexMap<TypeId, TypeId>,
     ) {
         let expected_type = self.type_table.borrow().get(expected).clone();
         let actual_type = self.type_table.borrow().get(actual).clone();
@@ -11430,7 +11431,7 @@ pub fn resolve_module<H: CompilerHost>(
     module: &Module,
     module_source: ModuleSource,
     symbols: &SymbolTable,
-    loaded_modules: &HashMap<ModuleSource, Module>,
+    loaded_modules: &IndexMap<ModuleSource, Module>,
     logger: &Logger<H>,
 ) -> Result<TirModule, Bail> {
     let type_table = std::cell::RefCell::new(crate::tir::TypeTable::new());
@@ -11445,9 +11446,9 @@ pub fn resolve_module<H: CompilerHost>(
 /// to TIR and packages them into a Project struct.
 pub fn resolve_to_project<H: CompilerHost>(
     symbols: SymbolTable,
-    modules: &HashMap<ModuleSource, Module>,
+    modules: &IndexMap<ModuleSource, Module>,
     entry_module_source: ModuleSource,
-    implicit_modules: HashSet<ModuleSource>,
+    implicit_modules: IndexSet<ModuleSource>,
     module_name: String,
     logger: &Logger<H>,
 ) -> Result<Project, Bail> {

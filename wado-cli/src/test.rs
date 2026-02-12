@@ -320,8 +320,8 @@ pub async fn run(opts: TestOptions) {
     let results = execute_tests_parallel(&modules, jobs, opts.jobs).await;
 
     // Group results by file for display
-    let mut results_by_file: std::collections::HashMap<String, Vec<&TestResult>> =
-        std::collections::HashMap::new();
+    let mut results_by_file: indexmap::IndexMap<String, Vec<&TestResult>> =
+        indexmap::IndexMap::new();
     for result in &results {
         results_by_file
             .entry(result.file_path.clone())
