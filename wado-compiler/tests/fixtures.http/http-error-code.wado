@@ -1,0 +1,18 @@
+// HTTP ErrorCode return test
+// Tests that returning Err(ErrorCode::InternalError) from the handler
+// results in an HTTP 500 response.
+
+use {
+    Request,
+    Response,
+    ErrorCode,
+} from "wasi:http";
+
+export fn handle(request: Request) -> Result<Response, ErrorCode> {
+    return Result::<Response, ErrorCode>::Err(
+        ErrorCode::InternalError(null)
+    );
+}
+
+__DATA__
+{"http_status": 500}

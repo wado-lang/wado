@@ -127,6 +127,10 @@ impl CmExportInfo {
                     name: "_user_trailers_tx".to_string(),
                     val_type: CmValType::I32,
                 },
+                CmScratchLocal {
+                    name: "_ec_disc".to_string(),
+                    val_type: CmValType::I32,
+                },
             ]);
         }
 

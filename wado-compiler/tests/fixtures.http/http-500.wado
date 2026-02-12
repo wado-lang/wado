@@ -7,7 +7,6 @@ use {
     ErrorCode,
     Fields,
     Trailers,
-    StatusCode,
 } from "wasi:http";
 
 export fn handle(request: Request) -> Result<Response, ErrorCode> {
@@ -15,7 +14,7 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> {
     let headers = Fields::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
 
-    response.set_status_code(500 as StatusCode);
+    response.set_status_code(500);
 
     return Result::<Response, ErrorCode>::Ok(response);
 }

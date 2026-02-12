@@ -9565,10 +9565,82 @@ impl Codegen<'_> {
 
                             func.instruction(&Instruction::Return);
 
-                            func.instruction(&Instruction::End); // end Ok if
+                            func.instruction(&Instruction::Else);
+
+                            // === Err case: extract ErrorCode discriminant and task-return Err ===
+                            let err_type_idx = result_info.cases[1].type_idx;
+
+                            // Get ErrorCode type from Result's type_args[1]
+                            let error_code_type_id = match type_table.get(result_type_id) {
+                                ResolvedType::GenericInstance { type_args, .. } => type_args[1],
+                                _ => panic!(
+                                    "expected GenericInstance for Result HTTP handler return"
+                                ),
+                            };
+                            let (ec_name, ec_module_source) =
+                                match type_table.get(error_code_type_id) {
+                                    ResolvedType::Variant {
+                                        name,
+                                        module_source,
+                                    } => (name.clone(), module_source.clone()),
+                                    other => panic!(
+                                        "expected Variant for ErrorCode, got: {other:?}"
+                                    ),
+                                };
+                            let ec_qualified_name = ec_module_source.qualify_name(&ec_name);
+                            let ec_info = self
+                                .variant_types
+                                .get(&ec_qualified_name)
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "ErrorCode variant not registered: {ec_qualified_name}"
+                                    )
+                                })
+                                .clone();
+                            let ec_base_type_idx = ec_info.base_type_idx;
+
+                            // Load Result and extract ErrorCode from Err variant
+                            func.instruction(&Instruction::LocalGet(result_local));
+                            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                                err_type_idx,
+                            )));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: err_type_idx,
+                                field_index: 1, // ErrorCode payload
+                            });
+
+                            // Cast to ErrorCode base type and read discriminant
+                            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                                ec_base_type_idx,
+                            )));
+                            func.instruction(&Instruction::StructGet {
+                                struct_type_index: ec_base_type_idx,
+                                field_index: 0, // discriminant
+                            });
+                            let ec_disc_local =
+                                ctx.alloc_local("_ec_disc", ValType::I32);
+                            func.instruction(&Instruction::LocalSet(ec_disc_local));
+
+                            // task-return Err(error-code) with discriminant only
+                            // (payload fields zeroed — correct for no-payload cases
+                            // and cases with None/null option payloads)
+                            func.instruction(&Instruction::I32Const(1)); // Err discriminant
+                            func.instruction(&Instruction::LocalGet(ec_disc_local));
+                            func.instruction(&Instruction::I32Const(0)); // payload
+                            func.instruction(&Instruction::I64Const(0)); // payload
+                            func.instruction(&Instruction::I32Const(0)); // payload
+                            func.instruction(&Instruction::I32Const(0)); // payload
+                            func.instruction(&Instruction::I32Const(0)); // payload
+                            func.instruction(&Instruction::I32Const(0)); // payload
+                            let task_ret_err = builder.func_idx("task-return");
+                            func.instruction(&Instruction::Call(task_ret_err));
+
+                            func.instruction(&Instruction::Return);
+
+                            func.instruction(&Instruction::End); // end Ok/Err if
                         }
 
-                        // Fallback: Err case or no return value.
+                        // Fallback: no return value (function without explicit return).
                         // Create a hard-coded HTTP 200 response with empty body.
                         // 1. Create headers
                         // 2. Create trailers future (rx, tx)

@@ -6,7 +6,7 @@
 mod common;
 
 use bytes::Bytes;
-use futures::{FutureExt, try_join};
+use futures::FutureExt;
 use http_body_util::{BodyExt, Empty};
 use serde::Deserialize;
 use std::path::Path;
@@ -121,51 +121,44 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
     // Add timeout wrapper
     let timeout_duration = Duration::from_secs(10);
 
-    // Run handler and response receiver in parallel
+    // Run handler, then receive response if Ok
     // Note: We don't await `io` because our handler doesn't consume request body
-    let result = tokio::time::timeout(timeout_duration, async {
-        let (handle_result, res) = try_join!(
-            async {
-                store
-                    .run_concurrent(async |store| {
-                        let (res, task) = match service.handle(store, req).await? {
-                            Ok(pair) => pair,
-                            Err(err) => return Ok(Err(Some(err))),
-                        };
-                        let _ =
-                            tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
-                        task.block(store).await;
-                        Ok(Ok(()))
-                    })
-                    .await?
-            },
-            async {
-                let res = rx.await?;
-                let (parts, body) = res.into_parts();
-                let body = body.collect().await?;
-                anyhow::Ok(http::Response::from_parts(parts, body))
-            }
-        )?;
-        // Drop io - we don't consume request body in our simple tests
-        drop(io);
-        anyhow::Ok((handle_result, res))
+    let handler_result = tokio::time::timeout(timeout_duration, async {
+        store
+            .run_concurrent(async |store| {
+                let (res, task) = match service.handle(store, req).await? {
+                    Ok(pair) => pair,
+                    Err(err) => return anyhow::Ok(Err(Some(err))),
+                };
+                let _ =
+                    tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
+                task.block(store).await;
+                Ok(Ok(()))
+            })
+            .await?
     })
     .await
     .map_err(|_| anyhow::anyhow!("HTTP handler timed out after {timeout_duration:?}"))??;
 
-    match result {
-        (Ok(()), res) => Ok(HttpTestResult {
-            status: res.status().as_u16(),
-            body: res.into_body().to_bytes().to_vec(),
-        }),
-        (Err(Some(error_code)), _) => {
+    drop(io);
+
+    match handler_result {
+        Ok(()) => {
+            let res = rx
+                .await
+                .map_err(|_| anyhow::anyhow!("response channel closed unexpectedly"))?;
+            let status = res.status().as_u16();
+            let body = res.into_body().collect().await?.to_bytes().to_vec();
+            Ok(HttpTestResult { status, body })
+        }
+        Err(Some(error_code)) => {
             // Handler returned error code - map to HTTP 500
             Ok(HttpTestResult {
                 status: 500,
                 body: format!("{error_code:?}").into_bytes(),
             })
         }
-        (Err(None), _) => Err(anyhow::anyhow!("Handler returned error without error code")),
+        Err(None) => Err(anyhow::anyhow!("Handler returned error without error code")),
     }
 }
 
@@ -337,6 +330,15 @@ async fn test_http_response_ops() {
     run_http_fixture_test(
         Path::new("tests/fixtures.http/http-response-ops.wado"),
         "http-response-ops.wado",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_http_error_code() {
+    run_http_fixture_test(
+        Path::new("tests/fixtures.http/http-error-code.wado"),
+        "http-error-code.wado",
     )
     .await;
 }
