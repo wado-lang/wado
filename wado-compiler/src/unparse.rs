@@ -666,8 +666,13 @@ impl<'a> Unparser<'a> {
             self.write_indent();
         }
 
+        if r.is_pub {
+            self.output.push_str("pub ");
+        }
+
         self.output.push_str("resource ");
         self.output.push_str(&r.name);
+        self.unparse_generic_params(&r.type_params);
 
         if r.methods.is_empty() {
             self.output.push_str(";\n");

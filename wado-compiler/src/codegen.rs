@@ -4219,6 +4219,17 @@ impl Codegen<'_> {
             {
                 // Check if this is a variant (has a declaration in any module)
                 if all_variant_decls.contains_key(name.as_str()) {
+                    // Skip instances that contain Unknown type parameters
+                    // (from unresolved generic resource method signatures)
+                    let has_unknown = type_args.iter().any(|&tid| {
+                        matches!(
+                            type_table.get(tid),
+                            ResolvedType::Unknown | ResolvedType::Error
+                        )
+                    });
+                    if has_unknown {
+                        continue;
+                    }
                     let mangled_name = type_table.mangle_type_name(type_id);
                     let qualified_mangled_name = module_source.qualify_name(&mangled_name);
                     // Skip if already registered
@@ -5967,7 +5978,7 @@ impl Codegen<'_> {
             }
             // Placeholder types (shouldn't appear in final TIR)
             ResolvedType::Unknown | ResolvedType::Error => {
-                panic!("unexpected Unknown/Error type in codegen")
+                panic!("unexpected Unknown/Error type in codegen: type_id={type_id:?}, type={:?}", type_table.get(type_id))
             }
 
             // Type parameters should be monomorphized before codegen
@@ -12530,6 +12541,46 @@ impl Codegen<'_> {
                     .unwrap_or_else(|| panic!("builtin {func_name} has no canonical name"));
                 let func_idx = builder.func_idx(canonical_name);
                 func.instruction(&Instruction::Call(func_idx));
+            }
+            // Future::new() / Stream::new() - create a handle pair [rx, tx] as a tuple
+            "builtin::future_create_pair" | "builtin::stream_create_pair" => {
+                // Determine which canonical intrinsic to call
+                let canonical_name = if builtin_name == "builtin::future_create_pair" {
+                    "future-new"
+                } else {
+                    "stream-new"
+                };
+
+                // Call canonical intrinsic (returns i64 with rx in low 32 bits, tx in high 32 bits)
+                let intrinsic_idx = builder.func_idx(canonical_name);
+                func.instruction(&Instruction::Call(intrinsic_idx));
+
+                // Store packed i64 (reuse pre-allocated scratch local)
+                let packed_local = ctx.alloc_local("__cm_i64_temp", ValType::I64);
+                func.instruction(&Instruction::LocalSet(packed_local));
+
+                // Extract rx (low 32 bits) — the readable handle
+                func.instruction(&Instruction::LocalGet(packed_local));
+                func.instruction(&Instruction::I32WrapI64);
+
+                // Extract tx (high 32 bits) — the writable handle
+                func.instruction(&Instruction::LocalGet(packed_local));
+                func.instruction(&Instruction::I64Const(32));
+                func.instruction(&Instruction::I64ShrU);
+                func.instruction(&Instruction::I32WrapI64);
+
+                // Create tuple struct [rx, tx] unless skip_tuple_wrap is set
+                if !ctx.skip_tuple_wrap {
+                    if let ResolvedType::Tuple(elem_type_ids) = type_table.get(expr.type_id) {
+                        if let Some(type_idx) = self.get_tuple_type_idx(elem_type_ids) {
+                            func.instruction(&Instruction::StructNew(type_idx));
+                        } else {
+                            panic!("tuple type not registered for future/stream create pair");
+                        }
+                    } else {
+                        panic!("expected tuple type for future/stream create pair");
+                    }
+                }
             }
             _ => panic!(
                 "unknown builtin function: {builtin_name}, which should be handled in Codegen::generate_builtin_call()"

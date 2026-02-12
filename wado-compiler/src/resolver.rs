@@ -1124,6 +1124,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 &imported_type_sources,
                 &import_original_names,
             );
+            let flat_resource_types = Self::build_module_map(
+                &all_resource_types,
+                module_source,
+                &imported_type_sources,
+                &import_original_names,
+            );
 
             for item in &module.items {
                 match item {
@@ -1144,6 +1150,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     &mut type_table.borrow_mut(),
                                     &flat_newtypes,
                                     &flat_struct_fields,
+                                    &flat_resource_types,
                                 )
                             } else {
                                 Self::resolve_type_static_with_params(
@@ -1151,6 +1158,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     &mut type_table.borrow_mut(),
                                     &flat_newtypes,
                                     &flat_struct_fields,
+                                    &flat_resource_types,
                                     &type_params,
                                 )
                             };
@@ -1182,6 +1190,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &mut type_table.borrow_mut(),
                             &flat_newtypes,
                             &flat_struct_fields,
+                            &flat_resource_types,
                         );
                         // Create a newtype wrapping the base type
                         let newtype_id = type_table.borrow_mut().make_newtype(
@@ -1215,6 +1224,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     &mut type_table.borrow_mut(),
                                     &flat_newtypes,
                                     &flat_struct_fields,
+                                    &flat_resource_types,
                                     &type_params,
                                 )
                             } else {
@@ -1322,6 +1332,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             &mut type_table.borrow_mut(),
                             &newtypes,
                             &struct_fields,
+                            &resource_types,
                         )
                     } else {
                         TypeTable::UNIT
@@ -1658,6 +1669,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         type_table: &mut TypeTable,
         newtypes: &IndexMap<String, TypeId>,
         struct_fields: &IndexMap<String, StructFieldInfo>,
+        resource_types: &IndexMap<String, ResourceInfo>,
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
@@ -1686,6 +1698,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         // Check if it's a struct type
                         if let Some(info) = struct_fields.get(&named.name) {
                             type_table.make_struct(named.name.clone(), info.module_source.clone())
+                        } else if let Some(info) = resource_types.get(&named.name) {
+                            type_table.make_resource(named.name.clone(), info.module_source.clone())
                         } else {
                             TypeTable::UNKNOWN
                         }
@@ -1699,6 +1713,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         type_table,
                         newtypes,
                         struct_fields,
+                        resource_types,
                     );
                     type_table.intern(ResolvedType::Option(inner))
                 }
@@ -1710,7 +1725,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .args
                             .iter()
                             .map(|arg| {
-                                Self::resolve_type_static(arg, type_table, newtypes, struct_fields)
+                                Self::resolve_type_static(
+                                    arg,
+                                    type_table,
+                                    newtypes,
+                                    struct_fields,
+                                    resource_types,
+                                )
                             })
                             .collect();
                         type_table.make_generic_instance(
@@ -1724,13 +1745,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             },
             Type::Reference(inner) => {
-                let inner_type =
-                    Self::resolve_type_static(inner, type_table, newtypes, struct_fields);
+                let inner_type = Self::resolve_type_static(
+                    inner,
+                    type_table,
+                    newtypes,
+                    struct_fields,
+                    resource_types,
+                );
                 type_table.make_ref(inner_type)
             }
             Type::MutReference(inner) => {
-                let inner_type =
-                    Self::resolve_type_static(inner, type_table, newtypes, struct_fields);
+                let inner_type = Self::resolve_type_static(
+                    inner,
+                    type_table,
+                    newtypes,
+                    struct_fields,
+                    resource_types,
+                );
                 type_table.make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => {
@@ -1739,8 +1770,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     && namespaced.name == "array"
                     && let Some(elem_ty) = namespaced.args.first()
                 {
-                    let elem =
-                        Self::resolve_type_static(elem_ty, type_table, newtypes, struct_fields);
+                    let elem = Self::resolve_type_static(
+                        elem_ty,
+                        type_table,
+                        newtypes,
+                        struct_fields,
+                        resource_types,
+                    );
                     return type_table.make_builtin_array(elem);
                 }
                 TypeTable::UNKNOWN
@@ -1757,6 +1793,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         type_table: &mut TypeTable,
         newtypes: &IndexMap<String, TypeId>,
         struct_fields: &IndexMap<String, StructFieldInfo>,
+        resource_types: &IndexMap<String, ResourceInfo>,
         type_params: &[String],
     ) -> TypeId {
         match ty {
@@ -1791,6 +1828,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         // Check if it's a struct type
                         if let Some(info) = struct_fields.get(&named.name) {
                             type_table.make_struct(named.name.clone(), info.module_source.clone())
+                        } else if let Some(info) = resource_types.get(&named.name) {
+                            type_table.make_resource(named.name.clone(), info.module_source.clone())
                         } else {
                             TypeTable::UNKNOWN
                         }
@@ -1804,6 +1843,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         type_table,
                         newtypes,
                         struct_fields,
+                        resource_types,
                         type_params,
                     );
                     type_table.intern(ResolvedType::Option(inner))
@@ -1821,6 +1861,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     type_table,
                                     newtypes,
                                     struct_fields,
+                                    resource_types,
                                     type_params,
                                 )
                             })
@@ -1841,6 +1882,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     type_table,
                     newtypes,
                     struct_fields,
+                    resource_types,
                     type_params,
                 );
                 type_table.make_ref(inner_type)
@@ -1851,6 +1893,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     type_table,
                     newtypes,
                     struct_fields,
+                    resource_types,
                     type_params,
                 );
                 type_table.make_mut_ref(inner_type)
@@ -1866,6 +1909,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         type_table,
                         newtypes,
                         struct_fields,
+                        resource_types,
                         type_params,
                     );
                     return type_table.make_builtin_array(elem);
@@ -6252,6 +6296,47 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
+        // Handle Future::<T>::new() and Stream::<T>::new()
+        // Creates a handle pair [Future<T>/Stream<T>, i32] (rx, tx)
+        {
+            let target_resolved = self.type_table.borrow().get(target_type_id).clone();
+            let pair_info = match &target_resolved {
+                ResolvedType::Future(_) if static_call.method == "new" && args.is_empty() => {
+                    Some(("future_create_pair", target_type_id))
+                }
+                ResolvedType::Stream(_) if static_call.method == "new" && args.is_empty() => {
+                    Some(("stream_create_pair", target_type_id))
+                }
+                _ => None,
+            };
+
+            if let Some((builtin_name, handle_type)) = pair_info {
+                let i32_type = self
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Primitive(PrimitiveType::I32));
+                let tuple_type = self
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Tuple(vec![handle_type, i32_type]));
+
+                return TirExpr::new(
+                    TirExprKind::Call {
+                        func: FunctionRef::External {
+                            module_source: ModuleSource::core("builtin"),
+                            name: builtin_name.to_string(),
+                            monomorph_info: None,
+                            method_info: None,
+                        },
+                        type_args: vec![],
+                        args: vec![],
+                    },
+                    tuple_type,
+                    static_call.span,
+                );
+            }
+        }
+
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
         if let ResolvedType::Variant {
             name,
@@ -6617,11 +6702,31 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
                             });
                         if method.name == method_name && !has_self {
-                            return method
+                            // Set up type parameters from resource declaration before resolving
+                            let old_type_params = std::mem::take(&mut self.current_type_params);
+
+                            for (i, param) in resource.type_params.iter().enumerate() {
+                                let name = &param.name;
+                                if !self.current_type_params.contains_key(name) {
+                                    let type_id = self
+                                        .type_table
+                                        .borrow_mut()
+                                        .make_type_param(name.clone(), i as u32);
+                                    self.current_type_params
+                                        .insert(name.clone(), (i as u32, type_id));
+                                }
+                            }
+
+                            let result = method
                                 .return_type
                                 .as_ref()
                                 .map(|t| self.resolve_type(t))
                                 .unwrap_or(TypeTable::UNIT);
+
+                            // Restore type parameters
+                            self.current_type_params = old_type_params;
+
+                            return result;
                         }
                     }
                 }
@@ -6695,11 +6800,31 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
                             });
                         if method.name == method_name && !has_self {
-                            return method
+                            // Set up type parameters from resource declaration before resolving
+                            let old_type_params = std::mem::take(&mut self.current_type_params);
+
+                            for (i, param) in resource.type_params.iter().enumerate() {
+                                let name = &param.name;
+                                if !self.current_type_params.contains_key(name) {
+                                    let type_id = self
+                                        .type_table
+                                        .borrow_mut()
+                                        .make_type_param(name.clone(), i as u32);
+                                    self.current_type_params
+                                        .insert(name.clone(), (i as u32, type_id));
+                                }
+                            }
+
+                            let result = method
                                 .return_type
                                 .as_ref()
                                 .map(|t| self.resolve_type(t))
                                 .unwrap_or(TypeTable::UNIT);
+
+                            // Restore type parameters
+                            self.current_type_params = old_type_params;
+
+                            return result;
                         }
                     }
                 }

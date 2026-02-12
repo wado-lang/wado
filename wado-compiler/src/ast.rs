@@ -181,10 +181,13 @@ impl WasiImport {
     }
 }
 
-/// Resource declaration like `resource Foo;` or `resource Foo { fn method(...); }`
+/// Resource declaration like `resource Foo;` or `resource Foo<T> { fn method(...); }`
 #[derive(Debug, Clone)]
 pub struct ResourceDecl {
     pub name: String,
+    pub is_pub: bool,
+    /// Generic type parameters: `resource Future<T> { ... }`
+    pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
     /// Methods declared within the resource block (reuses `EffectMethod` structure)
     pub methods: Vec<EffectMethod>,

@@ -12,14 +12,20 @@ pub variant Result<T, E> {
     Ok(T),
     Err(E),
 }
-/// Stream type - an async sequence of values (WASI Component Model primitive)
-/// This is an opaque handle managed by the runtime.
-pub struct Stream<T> {
-    handle: i32,
+/// Future type - readable end of an async value (WASI Component Model primitive).
+/// This is an opaque i32 handle managed by the runtime.
+///
+/// Use `Future::<T>::new()` to create a new future pair `[Future<T>, i32]`
+/// where the second element is the writable handle (tx).
+pub resource Future<T> {
+    fn new() -> [Future<T>, i32];
 }
 
-/// Future type - an async value that will resolve (WASI Component Model primitive)
-/// This is an opaque handle managed by the runtime.
-pub struct Future<T> {
-    handle: i32,
+/// Stream type - readable end of an async sequence (WASI Component Model primitive).
+/// This is an opaque i32 handle managed by the runtime.
+///
+/// Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, i32]`
+/// where the second element is the writable handle (tx).
+pub resource Stream<T> {
+    fn new() -> [Stream<T>, i32];
 }

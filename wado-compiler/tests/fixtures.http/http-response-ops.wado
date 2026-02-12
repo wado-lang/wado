@@ -1,0 +1,48 @@
+// HTTP Response operations E2E test
+// Tests Response::new(), set_status_code(), get_status_code()
+// using a user-created Future from Future::new().
+//
+// This test exercises:
+// - Future::<T>::new() - create a future pair [Future<T>, i32]
+// - Response::new(headers, body, trailers) - construct a Response
+// - response.set_status_code(code) - set the status code
+// - response.get_status_code() - read the status code back
+
+use {
+    Request,
+    Response,
+    ErrorCode,
+    Fields,
+    Trailers,
+    StatusCode,
+} from "wasi:http";
+
+export fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // 1. Create a trailers future pair
+    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+
+    // 2. Create headers
+    let headers = Fields::new();
+
+    // 3. Construct a Response
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    // 4. Get default status code (should be 200)
+    let default_status = response.get_status_code();
+    assert default_status == 200 as StatusCode;
+
+    // 5. Set status code to 404
+    let set_result = response.set_status_code(404 as StatusCode);
+
+    // 6. Read status code back (should be 404)
+    let new_status = response.get_status_code();
+    assert new_status == 404 as StatusCode;
+
+    // Return dummy (codegen always returns 200 with empty body)
+    return Result::<Response, ErrorCode>::Err(
+        ErrorCode::InternalError(null)
+    );
+}
+
+__DATA__
+{"TODO": true, "http_status": 200}
