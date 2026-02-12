@@ -5803,6 +5803,39 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return TirExpr::new(TirExprKind::Null, target_type, lit.span);
         }
 
+        // Handle string literal coercion to String newtypes (e.g., "foo" → FieldName)
+        if let Some(target_type) = expected_type
+            && let Expr::Literal(lit) = expr
+            && matches!(&lit.value, Literal::String(_))
+        {
+            let base_id = self.type_table.borrow().get_ultimate_base_type(target_type);
+            let is_string_newtype = matches!(
+                self.type_table.borrow().get(base_id),
+                ResolvedType::Struct { name, .. } if name == "String"
+            ) && target_type != base_id;
+            if is_string_newtype {
+                let mut resolved = self.resolve_expr(expr, ctx);
+                resolved.type_id = target_type;
+                return resolved;
+            }
+        }
+
+        // Handle template string coercion to String newtypes
+        if let Some(target_type) = expected_type
+            && let Expr::TemplateString(_) = expr
+        {
+            let base_id = self.type_table.borrow().get_ultimate_base_type(target_type);
+            let is_string_newtype = matches!(
+                self.type_table.borrow().get(base_id),
+                ResolvedType::Struct { name, .. } if name == "String"
+            ) && target_type != base_id;
+            if is_string_newtype {
+                let mut resolved = self.resolve_expr(expr, ctx);
+                resolved.type_id = target_type;
+                return resolved;
+            }
+        }
+
         // Handle tuple literal to array coercion
         let element_type_opt = expected_type.and_then(|t| self.type_table.borrow().as_array(t));
         if let Some(target_type) = expected_type

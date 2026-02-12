@@ -7334,7 +7334,39 @@ impl Codegen<'_> {
                                     )
                                     .to_string();
 
-                                    if let Some(idx) = builder.try_func_idx(&base_mangled) {
+                                    // Also try simple format without module path
+                                    let base_simple =
+                                        MethodName::format_local(&base_name, None, &method_name);
+                                    let base_simple_trait = MethodName::format_local(
+                                        &base_name,
+                                        trait_name.as_deref(),
+                                        &method_name,
+                                    );
+
+                                    let func_idx = builder
+                                        .try_func_idx(&base_mangled)
+                                        .or_else(|| builder.try_func_idx(&base_simple_trait))
+                                        .or_else(|| builder.try_func_idx(&base_simple))
+                                        .or_else(|| {
+                                            // Fallback: try method_func's own module source
+                                            // (e.g., Display::fmt for String is in format.wado,
+                                            // not string.wado)
+                                            if let Some(info) = method_func.method_info() {
+                                                let method_name_str = info.full_method_name();
+                                                let original = MethodName::new(
+                                                    method_func.module_source(),
+                                                    info.struct_name,
+                                                    info.trait_name,
+                                                    method_name_str,
+                                                )
+                                                .to_string();
+                                                builder.try_func_idx(&original)
+                                            } else {
+                                                None
+                                            }
+                                        });
+
+                                    if let Some(idx) = func_idx {
                                         self.generate_expr(
                                             func, receiver, type_table, ctx, builder,
                                         );
