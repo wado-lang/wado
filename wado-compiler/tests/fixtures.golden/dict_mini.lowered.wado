@@ -27,7 +27,7 @@ fn run() with Stdout {
     let __pattern_temp_0: Option<String> = move dict."MiniDict<String,String>::get"(move "name");
     if __is_not_null(__pattern_temp_0) {
         let name_val: String = __unwrap_option(__pattern_temp_0);
-        core::cli::println(__tmpl: {
+        "core::cli::println"(__tmpl: {
             let mut __r: String = __inline_String__with_capacity_1: {
                 break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(22), used: 0 };
             };
@@ -39,7 +39,7 @@ fn run() with Stdout {
     let __pattern_temp_1: Option<String> = move dict."MiniDict<String,String>::get"(move "type");
     if __is_not_null(__pattern_temp_1) {
         let type_val: String = __unwrap_option(__pattern_temp_1);
-        core::cli::println(__tmpl: {
+        "core::cli::println"(__tmpl: {
             let mut __r: String = __inline_String__with_capacity_2: {
                 break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(22), used: 0 };
             };
@@ -52,7 +52,7 @@ fn run() with Stdout {
     let __pattern_temp_2: Option<String> = move dict."MiniDict<String,String>::get"(move "name");
     if __is_not_null(__pattern_temp_2) {
         let updated_val: String = __unwrap_option(__pattern_temp_2);
-        core::cli::println(__tmpl: {
+        "core::cli::println"(__tmpl: {
             let mut __r: String = __inline_String__with_capacity_3: {
                 break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(30), used: 0 };
             };
@@ -61,7 +61,7 @@ fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_4: {
             break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(30), used: 0 };
         };
@@ -81,7 +81,7 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_7: {
             break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(31), used: 0 };
         };
@@ -101,7 +101,7 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_10: {
             break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(22), used: 0 };
         };
@@ -118,13 +118,13 @@ fn run() with Stdout {
                 };
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     let __pattern_temp_3: Option<String> = move dict."MiniDict<String,String>::get"(move "missing");
     if !__is_not_null(__pattern_temp_3) {
-        core::cli::println(move "missing key returned None");
+        "core::cli::println"(move "missing key returned None");
     }
 }
 
@@ -152,9 +152,9 @@ fn "MiniDict<String,String>::has"(self: &MiniDict<String,String>, key: String) -
 
 fn "Array<Tuple<String,String>>^IndexValue::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<[String, String]>(self.repr, index);
+    return "core::builtin::array_get"::<[String, String]>(self.repr, index);
 }
 
 fn "MiniDict<String,String>::get"(self: &MiniDict<String,String>, key: String) -> Option<String> {
@@ -203,24 +203,24 @@ fn "MiniDict<String,String>::set"(self: &mut MiniDict<String,String>, key: Strin
 
 pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>, value: [String, String]) {
     let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
+    let capacity: i32 = "core::builtin::array_len"(self.repr);
+    if "core::builtin::unlikely"((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<[String, String]> = core::builtin::array_new::<[String, String]>(new_capacity);
-        core::builtin::array_copy::<[String, String]>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<[String, String]> = "core::builtin::array_new"::<[String, String]>(new_capacity);
+        "core::builtin::array_copy"::<[String, String]>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    core::builtin::array_set::<[String, String]>(self.repr, used, value);
+    "core::builtin::array_set"::<[String, String]>(self.repr, used, value);
     self.used = (used + 1);
 }
 
 fn "Array<Tuple<String,String>>^IndexAssign::index_assign"(self: &mut Array<[String, String]>, index: i32, value: [String, String]) {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    core::builtin::array_set::<[String, String]>(self.repr, index, value);
+    "core::builtin::array_set"::<[String, String]>(self.repr, index, value);
 }
 

@@ -27,13 +27,13 @@ fn join_names(names: Array<String>) -> String {
 
 fn run() with Stdout {
     let result: String = move join_names(move ["Alice", "Bob"]);
-    core::cli::println(result);
+    "core::cli::println"(result);
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<String>(self.repr, index);
+    return "core::builtin::array_get"::<String>(self.repr, index);
 }
 

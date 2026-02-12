@@ -16,7 +16,7 @@
 fn run() with Stdout {
     let mut arr: Array<i32> = move [10, 20, 30];
     let __sroa_r_value: i32 = arr."Array<i32>^IndexValue::index_value"(1);
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(29), used: 0 };
         };
@@ -28,12 +28,12 @@ fn run() with Stdout {
         __inline_i32_Display__fmt_2: {
             let self: Box<i32> = move Box<i32> { value: __sroa_r_value };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     arr."Array<i32>^IndexAssign::index_assign"(1, 999);
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_3: {
             break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(24), used: 0 };
         };
@@ -45,11 +45,11 @@ fn run() with Stdout {
         __inline_i32_Display__fmt_5: {
             let self: Box<i32> = move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1) };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_6: {
             break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(27), used: 0 };
         };
@@ -61,7 +61,7 @@ fn run() with Stdout {
         __inline_i32_Display__fmt_8: {
             let self: Box<i32> = move Box<i32> { value: __sroa_r_value };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
@@ -69,15 +69,15 @@ fn run() with Stdout {
 
 fn "Array<i32>^IndexAssign::index_assign"(self: &mut Array<i32>, index: i32, value: i32) {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    core::builtin::array_set::<i32>(self.repr, index, value);
+    "core::builtin::array_set"::<i32>(self.repr, index, value);
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<i32>(self.repr, index);
+    return "core::builtin::array_get"::<i32>(self.repr, index);
 }
 

@@ -10,23 +10,23 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout, MonotonicClock {
-    let t1: Mark = MonotonicClock::now();
+    let t1: Mark = "MonotonicClock::now"();
     let ts: Timestamp = t1 as Timestamp;
     let evt: EventTime = t1 as EventTime;
     let t1_u64: u64 = t1 as u64;
     let ts_u64: u64 = ts as u64;
     let evt_u64: u64 = evt as u64;
     if ((t1_u64 == ts_u64) && (ts_u64 == evt_u64)) {
-        core::cli::println(move "all casts produce same u64 value");
+        "core::cli::println"(move "all casts produce same u64 value");
     } else {
-        core::cli::println(move "FAILED: values differ");
+        "core::cli::println"(move "FAILED: values differ");
     }
-    let t2: Mark = MonotonicClock::now();
+    let t2: Mark = "MonotonicClock::now"();
     let ts2: Timestamp = t2 as Timestamp;
     let diff: Timestamp = (ts2 - ts);
     if (diff >= 0) {
-        core::cli::println(move "timestamp arithmetic works");
+        "core::cli::println"(move "timestamp arithmetic works");
     }
-    core::cli::println(move "chained newtype tests passed");
+    "core::cli::println"(move "chained newtype tests passed");
 }
 

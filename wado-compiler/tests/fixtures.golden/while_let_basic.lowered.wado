@@ -30,7 +30,7 @@ fn run() with Stdout {
         let __pattern_temp_0: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
         if __is_not_null(__pattern_temp_0) {
             let x: i32 = __unwrap_option(__pattern_temp_0).value;
-            core::cli::println(__tmpl: {
+            "core::cli::println"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_2: {
                     break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(16), used: 0 };
                 };
@@ -41,7 +41,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_4: {
                     let self: Box<i32> = move Box<i32> { value: x };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 break __tmpl: __r;
             });
@@ -49,14 +49,14 @@ fn run() with Stdout {
             break;
         }
     }
-    core::cli::println(move "done");
+    "core::cli::println"(move "done");
 }
 
 fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
+    let item: i32 = "core::builtin::array_get"::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(Box<i32> { value: item });
 }

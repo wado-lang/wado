@@ -16,20 +16,20 @@
 fn run() with Stdout {
     let arr: Array<bool> = move "Array<bool>::filled"(3, true);
     if arr."Array<bool>^IndexValue::index_value"(0) {
-        core::cli::println(move "true");
+        "core::cli::println"(move "true");
     }
 }
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<bool>(self.repr, index);
+    return "core::builtin::array_get"::<bool>(self.repr, index);
 }
 
 pub fn "Array<bool>::filled"(n: i32, element: bool) -> Array<bool> {
-    let repr: builtin::array<bool> = core::builtin::array_new::<bool>(n);
-    core::builtin::array_fill::<bool>(repr, 0, element, n);
+    let repr: builtin::array<bool> = "core::builtin::array_new"::<bool>(n);
+    "core::builtin::array_fill"::<bool>(repr, 0, element, n);
     return Array<bool> { repr: repr, used: n };
 }
 

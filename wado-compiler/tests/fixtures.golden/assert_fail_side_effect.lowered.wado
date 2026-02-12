@@ -14,7 +14,7 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn get_value() -> i32 with Stdout {
-    core::cli::println(move "get_value called");
+    "core::cli::println"(move "get_value called");
     return 5;
 }
 
@@ -23,7 +23,7 @@ fn run() with Stdout, Stderr {
         let __v0: i32 = get_value();
         let __cond: bool = (__v0 > 10);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_0: {
                     break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(132), used: 0 };
                 };
@@ -39,7 +39,7 @@ fn run() with Stdout, Stderr {
                 __inline_i32_Display__fmt_2: {
                     let self: Box<i32> = move Box<i32> { value: 13 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\ncondition: get_value() > 10\n");
                 __r."String::append"(move "get_value(): ");
@@ -50,7 +50,7 @@ fn run() with Stdout, Stderr {
                 __inline_i32_Display__fmt_4: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;

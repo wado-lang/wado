@@ -30,7 +30,7 @@ fn run() with Stdout {
     __inline_Container_i32___add_3: {
         container.items."Array<i32>::append"(30);
     };
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_4: {
             break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(24), used: 0 };
         };
@@ -47,11 +47,11 @@ fn run() with Stdout {
                 };
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_8: {
             break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(23), used: 0 };
         };
@@ -65,11 +65,11 @@ fn run() with Stdout {
                 break __inline_Container_i32___get_11: container.items."Array<i32>^IndexValue::index_value"(0);
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_12: {
             break __inline_String__with_capacity_12: String { repr: "array_new<u8>"(24), used: 0 };
         };
@@ -83,11 +83,11 @@ fn run() with Stdout {
                 break __inline_Container_i32___get_15: container.items."Array<i32>^IndexValue::index_value"(1);
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_16: {
             break __inline_String__with_capacity_16: String { repr: "array_new<u8>"(23), used: 0 };
         };
@@ -101,7 +101,7 @@ fn run() with Stdout {
                 break __inline_Container_i32___get_19: container.items."Array<i32>^IndexValue::index_value"(2);
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
@@ -109,24 +109,24 @@ fn run() with Stdout {
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<i32>(self.repr, index);
+    return "core::builtin::array_get"::<i32>(self.repr, index);
 }
 
 pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
     let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
+    let capacity: i32 = "core::builtin::array_len"(self.repr);
+    if "core::builtin::unlikely"((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
-        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<i32> = "core::builtin::array_new"::<i32>(new_capacity);
+        "core::builtin::array_copy"::<i32>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    core::builtin::array_set::<i32>(self.repr, used, value);
+    "core::builtin::array_set"::<i32>(self.repr, used, value);
     self.used = (used + 1);
 }
 

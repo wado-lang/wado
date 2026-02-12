@@ -40,9 +40,9 @@ fn print_array(arr: &Array<i32>) with Stdout {
             }
             __for_0_body: {
                 if (i > 0) {
-                    core::cli::print(move " ");
+                    "core::cli::print"(move " ");
                 }
-                core::cli::print(__tmpl: {
+                "core::cli::print"(__tmpl: {
                     let mut __r: String = __inline_String__with_capacity_1: {
                         break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(16), used: 0 };
                     };
@@ -53,7 +53,7 @@ fn print_array(arr: &Array<i32>) with Stdout {
                     __inline_i32_Display__fmt_3: {
                         let self: Box<i32> = move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(i) };
                         let f: &mut Formatter = &mut __f;
-                        core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                     };
                     break __tmpl: __r;
                 });
@@ -61,7 +61,7 @@ fn print_array(arr: &Array<i32>) with Stdout {
             i = (i + 1);
         }
     }
-    core::cli::println(move "");
+    "core::cli::println"(move "");
 }
 
 fn run() with Stdout {
@@ -89,7 +89,7 @@ fn run() with Stdout {
         let self: &mut Array<i32> = &mut empty;
         self."Array<i32>::sort_by$__Closure_4"(&__Closure_4 {  });
     };
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_2: {
             break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(27), used: 0 };
         };
@@ -103,7 +103,7 @@ fn run() with Stdout {
                 break __inline_Array_i32___len_5: empty.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
@@ -126,8 +126,8 @@ fn run() with Stdout {
 
 pub fn "Array<i32>::sorted"(self: &Array<i32>) -> Array<i32> {
     let n: i32 = self.used;
-    let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(n);
-    core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, n);
+    let new_repr: builtin::array<i32> = "core::builtin::array_new"::<i32>(n);
+    "core::builtin::array_copy"::<i32>(new_repr, 0, self.repr, 0, n);
     let mut copy: Array<i32> = move Array<i32> { repr: new_repr, used: n };
     __inline_Array_i32___sort_0: {
         let self: &mut Array<i32> = &mut copy;
@@ -142,7 +142,7 @@ pub fn "Array<i32>::sort_by"(self: &mut Array<i32>, cmp: fn(Box<i32>, Box<i32>) 
         return;
     }
     let src: builtin::array<i32> = self.repr;
-    let buf: builtin::array<i32> = core::builtin::array_new::<i32>(n);
+    let buf: builtin::array<i32> = "core::builtin::array_new"::<i32>(n);
     let mut width: i32 = 1;
     __for_2: {
         loop {
@@ -174,29 +174,29 @@ pub fn "Array<i32>::sort_by"(self: &mut Array<i32>, cmp: fn(Box<i32>, Box<i32>) 
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
-                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let a: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, j) };
                                                     let __pattern_temp_0: Ordering = move cmp(a, b);
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
-                                                    core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, i));
+                                                    "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, i));
                                                     i = (i + 1);
                                                 }
                                             } else {
-                                                core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, j));
+                                                "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, j));
                                                 j = (j + 1);
                                             }
                                         }
                                         k = (k + 1);
                                     }
                                 }
-                                core::builtin::array_copy::<i32>(src, start, buf, start, (end - start));
+                                "core::builtin::array_copy"::<i32>(src, start, buf, start, (end - start));
                             }
                         }
                         start = (start + (width * 2));
@@ -210,9 +210,9 @@ pub fn "Array<i32>::sort_by"(self: &mut Array<i32>, cmp: fn(Box<i32>, Box<i32>) 
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<i32>(self.repr, index);
+    return "core::builtin::array_get"::<i32>(self.repr, index);
 }
 
 fn "__Closure_0::__call"(self: &__Closure_0, x: Box<i32>, y: Box<i32>) -> Ordering {
@@ -271,7 +271,7 @@ fn "Array<i32>::sort_by$__Closure_0"(self: &mut Array<i32>, cmp: &__Closure_0) {
         return;
     }
     let src: builtin::array<i32> = self.repr;
-    let buf: builtin::array<i32> = core::builtin::array_new::<i32>(n);
+    let buf: builtin::array<i32> = "core::builtin::array_new"::<i32>(n);
     let mut width: i32 = 1;
     __for_2: {
         loop {
@@ -303,29 +303,29 @@ fn "Array<i32>::sort_by$__Closure_0"(self: &mut Array<i32>, cmp: &__Closure_0) {
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
-                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let a: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, j) };
                                                     let __pattern_temp_0: Ordering = move cmp."__Closure_0::__call"(a, b);
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
-                                                    core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, i));
+                                                    "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, i));
                                                     i = (i + 1);
                                                 }
                                             } else {
-                                                core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, j));
+                                                "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, j));
                                                 j = (j + 1);
                                             }
                                         }
                                         k = (k + 1);
                                     }
                                 }
-                                core::builtin::array_copy::<i32>(src, start, buf, start, (end - start));
+                                "core::builtin::array_copy"::<i32>(src, start, buf, start, (end - start));
                             }
                         }
                         start = (start + (width * 2));
@@ -343,7 +343,7 @@ fn "Array<i32>::sort_by$__Closure_1"(self: &mut Array<i32>, cmp: &__Closure_1) {
         return;
     }
     let src: builtin::array<i32> = self.repr;
-    let buf: builtin::array<i32> = core::builtin::array_new::<i32>(n);
+    let buf: builtin::array<i32> = "core::builtin::array_new"::<i32>(n);
     let mut width: i32 = 1;
     __for_2: {
         loop {
@@ -375,29 +375,29 @@ fn "Array<i32>::sort_by$__Closure_1"(self: &mut Array<i32>, cmp: &__Closure_1) {
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
-                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let a: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, j) };
                                                     let __pattern_temp_0: Ordering = move cmp."__Closure_1::__call"(a, b);
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
-                                                    core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, i));
+                                                    "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, i));
                                                     i = (i + 1);
                                                 }
                                             } else {
-                                                core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, j));
+                                                "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, j));
                                                 j = (j + 1);
                                             }
                                         }
                                         k = (k + 1);
                                     }
                                 }
-                                core::builtin::array_copy::<i32>(src, start, buf, start, (end - start));
+                                "core::builtin::array_copy"::<i32>(src, start, buf, start, (end - start));
                             }
                         }
                         start = (start + (width * 2));
@@ -411,8 +411,8 @@ fn "Array<i32>::sort_by$__Closure_1"(self: &mut Array<i32>, cmp: &__Closure_1) {
 
 fn "Array<i32>::sorted_by$__Closure_2"(self: &Array<i32>, cmp: &__Closure_2) -> Array<i32> {
     let n: i32 = self.used;
-    let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(n);
-    core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, n);
+    let new_repr: builtin::array<i32> = "core::builtin::array_new"::<i32>(n);
+    "core::builtin::array_copy"::<i32>(new_repr, 0, self.repr, 0, n);
     let mut copy: Array<i32> = move Array<i32> { repr: new_repr, used: n };
     copy."Array<i32>::sort_by"(cmp);
     return copy;
@@ -424,7 +424,7 @@ fn "Array<i32>::sort_by$__Closure_3"(self: &mut Array<i32>, cmp: &__Closure_3) {
         return;
     }
     let src: builtin::array<i32> = self.repr;
-    let buf: builtin::array<i32> = core::builtin::array_new::<i32>(n);
+    let buf: builtin::array<i32> = "core::builtin::array_new"::<i32>(n);
     let mut width: i32 = 1;
     __for_2: {
         loop {
@@ -456,29 +456,29 @@ fn "Array<i32>::sort_by$__Closure_3"(self: &mut Array<i32>, cmp: &__Closure_3) {
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
-                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let a: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, j) };
                                                     let __pattern_temp_0: Ordering = move cmp."__Closure_3::__call"(a, b);
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
-                                                    core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, i));
+                                                    "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, i));
                                                     i = (i + 1);
                                                 }
                                             } else {
-                                                core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, j));
+                                                "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, j));
                                                 j = (j + 1);
                                             }
                                         }
                                         k = (k + 1);
                                     }
                                 }
-                                core::builtin::array_copy::<i32>(src, start, buf, start, (end - start));
+                                "core::builtin::array_copy"::<i32>(src, start, buf, start, (end - start));
                             }
                         }
                         start = (start + (width * 2));
@@ -496,7 +496,7 @@ fn "Array<i32>::sort_by$__Closure_4"(self: &mut Array<i32>, cmp: &__Closure_4) {
         return;
     }
     let src: builtin::array<i32> = self.repr;
-    let buf: builtin::array<i32> = core::builtin::array_new::<i32>(n);
+    let buf: builtin::array<i32> = "core::builtin::array_new"::<i32>(n);
     let mut width: i32 = 1;
     __for_2: {
         loop {
@@ -528,33 +528,33 @@ fn "Array<i32>::sort_by$__Closure_4"(self: &mut Array<i32>, cmp: &__Closure_4) {
                                         __for_4_body: {
                                             if (i < mid) {
                                                 if (j < end) {
-                                                    let a: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, i) };
-                                                    let b: Box<i32> = move Box<i32> { value: core::builtin::array_get::<i32>(src, j) };
+                                                    let a: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, i) };
+                                                    let b: Box<i32> = move Box<i32> { value: "core::builtin::array_get"::<i32>(src, j) };
                                                     let __pattern_temp_0: Ordering = __inline___Closure_4____call_0: {
                                                         let a: Box<i32> = a;
                                                         let b: Box<i32> = b;
                                                         break __inline___Closure_4____call_0: a."i32^Ord::cmp"(b);
                                                     };
                                                     if __variant_test(__pattern_temp_0, case=2, name=Greater) {
-                                                        core::builtin::array_set::<i32>(buf, k, b.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, b.value);
                                                         j = (j + 1);
                                                     } else {
-                                                        core::builtin::array_set::<i32>(buf, k, a.value);
+                                                        "core::builtin::array_set"::<i32>(buf, k, a.value);
                                                         i = (i + 1);
                                                     }
                                                 } else {
-                                                    core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, i));
+                                                    "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, i));
                                                     i = (i + 1);
                                                 }
                                             } else {
-                                                core::builtin::array_set::<i32>(buf, k, core::builtin::array_get::<i32>(src, j));
+                                                "core::builtin::array_set"::<i32>(buf, k, "core::builtin::array_get"::<i32>(src, j));
                                                 j = (j + 1);
                                             }
                                         }
                                         k = (k + 1);
                                     }
                                 }
-                                core::builtin::array_copy::<i32>(src, start, buf, start, (end - start));
+                                "core::builtin::array_copy"::<i32>(src, start, buf, start, (end - start));
                             }
                         }
                         start = (start + (width * 2));

@@ -26,7 +26,7 @@ struct "Tree<String>" {
 fn run() with Stdout {
     let tree: Tree<String> = move Tree<String> { root: Node<String> { keys: ["apple", "banana", "cherry", "date"], deleted: [false, true, false, false] }, max_keys: 5 };
     let result: i32 = tree."Tree<String>::check"();
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(24), used: 0 };
         };
@@ -38,7 +38,7 @@ fn run() with Stdout {
         __inline_i32_Display__fmt_2: {
             let self: Box<i32> = move Box<i32> { value: result };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
@@ -71,9 +71,9 @@ fn "Node<String>::find_index"(self: &Node<String>, key: &String) -> i32 {
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<String>(self.repr, index);
+    return "core::builtin::array_get"::<String>(self.repr, index);
 }
 
 fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
@@ -102,9 +102,9 @@ fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<bool>(self.repr, index);
+    return "core::builtin::array_get"::<bool>(self.repr, index);
 }
 
 fn "Node<String>::count_active"(self: &Node<String>) -> i32 {

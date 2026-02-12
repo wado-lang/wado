@@ -19,7 +19,7 @@ fn sum_array(arr: Array<i32>) -> i32 {
 
 fn run() with Stdout {
     let result: i32 = sum_array(move [10, 20, 30]);
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(16), used: 0 };
         };
@@ -30,7 +30,7 @@ fn run() with Stdout {
         __inline_i32_Display__fmt_2: {
             let self: Box<i32> = move Box<i32> { value: result };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
@@ -38,8 +38,8 @@ fn run() with Stdout {
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<i32>(self.repr, index);
+    return "core::builtin::array_get"::<i32>(self.repr, index);
 }
 

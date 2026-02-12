@@ -32,7 +32,7 @@ fn run() with Stdout {
             let __pattern_temp_0: Option<u32> = __iter_0."ArrayIter<u32>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
                 let x: u32 = __unwrap_option(__pattern_temp_0).value;
-                core::cli::println(__tmpl: {
+                "core::cli::println"(__tmpl: {
                     let mut __r: String = __inline_String__with_capacity_1: {
                         break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(16), used: 0 };
                     };
@@ -43,7 +43,7 @@ fn run() with Stdout {
                     __inline_u32_Display__fmt_3: {
                         let self: Box<u32> = move Box<u32> { value: x };
                         let f: &mut Formatter = &mut __f;
-                        core::prelude/primitives.wado::fmt_u32_decimal(self.value, f);
+                        "core::prelude/primitives.wado::fmt_u32_decimal"(self.value, f);
                     };
                     break __tmpl: __r;
                 });
@@ -58,24 +58,24 @@ fn "ArrayIter<u32>^Iterator::next"(self: &mut ArrayIter<u32>) -> Option<u32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: u32 = core::builtin::array_get::<u32>(self.repr, self.index);
+    let item: u32 = "core::builtin::array_get"::<u32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(Box<u32> { value: item });
 }
 
 pub fn "Array<u32>::append"(self: &mut Array<u32>, value: u32) {
     let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
+    let capacity: i32 = "core::builtin::array_len"(self.repr);
+    if "core::builtin::unlikely"((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<u32> = core::builtin::array_new::<u32>(new_capacity);
-        core::builtin::array_copy::<u32>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<u32> = "core::builtin::array_new"::<u32>(new_capacity);
+        "core::builtin::array_copy"::<u32>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    core::builtin::array_set::<u32>(self.repr, used, value);
+    "core::builtin::array_set"::<u32>(self.repr, used, value);
     self.used = (used + 1);
 }
 

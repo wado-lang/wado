@@ -20,7 +20,7 @@ struct "Node<String>" {
 }
 
 fn print_depth(depth: i32) with Stdout {
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(23), used: 0 };
         };
@@ -32,7 +32,7 @@ fn print_depth(depth: i32) with Stdout {
         __inline_i32_Display__fmt_2: {
             let self: Box<i32> = move Box<i32> { value: depth };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
@@ -66,9 +66,9 @@ fn "Node<String>::traverse"(self: &Node<String>, depth: i32) with Stdout {
 
 fn "Array<Node<String>>^IndexValue::index_value"(self: &Array<&mut Node<String>>, index: i32) -> &mut Node<String> {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<&mut Node<String>>(self.repr, index);
+    return "core::builtin::array_get"::<&mut Node<String>>(self.repr, index);
 }
 
 pub fn "Array<Node<String>>::len"(self: &Array<&mut Node<String>>) -> i32 {

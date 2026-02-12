@@ -15,7 +15,7 @@
 
 fn run() with Stdout {
     let names: Array<String> = move ["Hello", "World"];
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(33), used: 0 };
         };
@@ -28,8 +28,8 @@ fn run() with Stdout {
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<String>(self.repr, index);
+    return "core::builtin::array_get"::<String>(self.repr, index);
 }
 

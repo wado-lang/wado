@@ -22,7 +22,7 @@ pub struct "ArrayIter<Tuple<String,i32>>" {
 fn run() with Stdout {
     let h: Holder<String,i32> = move Holder<String,i32> { items: [["a", 1], ["b", 2]] };
     h."Holder<String,i32>::process"();
-    core::cli::println(move "ok");
+    "core::cli::println"(move "ok");
 }
 
 fn "Holder<String,i32>::process"(self: &Holder<String,i32>) {
@@ -46,7 +46,7 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
     if (self.index >= self.used) {
         return null;
     }
-    let item: [String, i32] = move core::builtin::array_get::<[String, i32]>(self.repr, self.index);
+    let item: [String, i32] = move "core::builtin::array_get"::<[String, i32]>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }

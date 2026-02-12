@@ -15,7 +15,7 @@
 
 fn run() with Stdout {
     let mut data: Array<u8> = __inline_Array_u8___with_capacity_0: {
-        break __inline_Array_u8___with_capacity_0: Array<u8> { repr: core::builtin::array_new::<u8>(200), used: 0 };
+        break __inline_Array_u8___with_capacity_0: Array<u8> { repr: "core::builtin::array_new"::<u8>(200), used: 0 };
     };
     __for_0: {
         let mut i: i32 = 0;
@@ -35,7 +35,7 @@ fn run() with Stdout {
         let __v0: u8 = raw_compressed."Array<u8>^IndexValue::index_value"(0);
         let __cond: bool = (__v0 != 120);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_1: {
                     break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(171), used: 0 };
                 };
@@ -51,7 +51,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 16 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "raw stream no zlib header");
@@ -64,7 +64,7 @@ fn run() with Stdout {
                 __inline_u8_Display__fmt_5: {
                     let self: Box<u8> = move Box<u8> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value as i32, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value as i32, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
@@ -73,7 +73,7 @@ fn run() with Stdout {
     }
     let raw_decompressed: Array<u8> = __inline_inflate_raw_6: {
         let input: &Array<u8> = &raw_compressed;
-        break __inline_inflate_raw_6: core::zlib::inflate_raw_from(input, 0, __inline_Array_u8___len_7: {
+        break __inline_inflate_raw_6: "core::zlib::inflate_raw_from"(input, 0, __inline_Array_u8___len_7: {
             break __inline_Array_u8___len_7: input.used;
         });
     };
@@ -83,7 +83,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_9: {
                     break __inline_String__with_capacity_9: String { repr: "array_new<u8>"(174), used: 0 };
                 };
@@ -99,7 +99,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_11: {
                     let self: Box<i32> = move Box<i32> { value: 18 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "raw format round-trip size");
@@ -112,14 +112,14 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_13: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "raw format ok");
+    "core::cli::println"(move "raw format ok");
     let is_raw: InflateStream = __inline_InflateStream__new_with_format_14: {
         let format: i32 = core::zlib::RAW_FORMAT;
         break __inline_InflateStream__new_with_format_14: InflateStream { dict: [], has_dict: false, format: format, buffer: [], total_in: 0, total_out: 0 };
@@ -131,7 +131,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_16: {
                     break __inline_String__with_capacity_16: String { repr: "array_new<u8>"(154), used: 0 };
                 };
@@ -147,7 +147,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_18: {
                     let self: Box<i32> = move Box<i32> { value: 24 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "raw inflate stream size");
@@ -160,21 +160,21 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_20: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "raw inflate stream ok");
+    "core::cli::println"(move "raw inflate stream ok");
     let mut ds_gz: DeflateStream = move "DeflateStream::new_with_format"(core::zlib::Z_DEFAULT_COMPRESSION, core::zlib::GZIP_FORMAT);
     let gz_compressed: Array<u8> = move ds_gz."DeflateStream::compress"(&data);
     __assert_3: {
         let __v0: u8 = gz_compressed."Array<u8>^IndexValue::index_value"(0);
         let __cond: bool = (__v0 == 31);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_21: {
                     break __inline_String__with_capacity_21: String { repr: "array_new<u8>"(169), used: 0 };
                 };
@@ -190,7 +190,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_23: {
                     let self: Box<i32> = move Box<i32> { value: 31 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "gzip magic 1");
@@ -203,7 +203,7 @@ fn run() with Stdout {
                 __inline_u8_Display__fmt_25: {
                     let self: Box<u8> = move Box<u8> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value as i32, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value as i32, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
@@ -214,7 +214,7 @@ fn run() with Stdout {
         let __v0: u8 = gz_compressed."Array<u8>^IndexValue::index_value"(1);
         let __cond: bool = (__v0 == 139);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_26: {
                     break __inline_String__with_capacity_26: String { repr: "array_new<u8>"(169), used: 0 };
                 };
@@ -230,7 +230,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_28: {
                     let self: Box<i32> = move Box<i32> { value: 32 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "gzip magic 2");
@@ -243,21 +243,21 @@ fn run() with Stdout {
                 __inline_u8_Display__fmt_30: {
                     let self: Box<u8> = move Box<u8> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value as i32, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value as i32, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    let gz_decompressed: Array<u8> = move core::zlib::inflate_gzip(&gz_compressed);
+    let gz_decompressed: Array<u8> = move "core::zlib::inflate_gzip"(&gz_compressed);
     __assert_5: {
         let __v0: i32 = __inline_Array_u8___len_31: {
             break __inline_Array_u8___len_31: gz_decompressed.used;
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_32: {
                     break __inline_String__with_capacity_32: String { repr: "array_new<u8>"(172), used: 0 };
                 };
@@ -273,7 +273,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_34: {
                     let self: Box<i32> = move Box<i32> { value: 34 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "gzip format round-trip size");
@@ -286,14 +286,14 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_36: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "gzip format ok");
+    "core::cli::println"(move "gzip format ok");
     let is_gz: InflateStream = __inline_InflateStream__new_with_format_37: {
         let format: i32 = core::zlib::GZIP_FORMAT;
         break __inline_InflateStream__new_with_format_37: InflateStream { dict: [], has_dict: false, format: format, buffer: [], total_in: 0, total_out: 0 };
@@ -305,7 +305,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_39: {
                     break __inline_String__with_capacity_39: String { repr: "array_new<u8>"(152), used: 0 };
                 };
@@ -321,7 +321,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_41: {
                     let self: Box<i32> = move Box<i32> { value: 40 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "gzip inflate stream size");
@@ -334,14 +334,14 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_43: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "gzip inflate stream ok");
+    "core::cli::println"(move "gzip inflate stream ok");
     let mut ds_zlib: DeflateStream = move "DeflateStream::new"(core::zlib::Z_DEFAULT_COMPRESSION);
     let zlib_compressed: Array<u8> = move ds_zlib."DeflateStream::compress"(&data);
     let is_auto_zlib: InflateStream = __inline_InflateStream__new_with_format_44: {
@@ -355,7 +355,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_46: {
                     break __inline_String__with_capacity_46: String { repr: "array_new<u8>"(156), used: 0 };
                 };
@@ -371,7 +371,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_48: {
                     let self: Box<i32> = move Box<i32> { value: 48 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "auto detect zlib size");
@@ -384,14 +384,14 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_50: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "auto detect zlib ok");
+    "core::cli::println"(move "auto detect zlib ok");
     let is_auto_gz: InflateStream = __inline_InflateStream__new_with_format_51: {
         let format: i32 = core::zlib::AUTO_FORMAT;
         break __inline_InflateStream__new_with_format_51: InflateStream { dict: [], has_dict: false, format: format, buffer: [], total_in: 0, total_out: 0 };
@@ -403,7 +403,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == 200);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_53: {
                     break __inline_String__with_capacity_53: String { repr: "array_new<u8>"(156), used: 0 };
                 };
@@ -419,7 +419,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_55: {
                     let self: Box<i32> = move Box<i32> { value: 54 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "auto detect gzip size");
@@ -432,14 +432,14 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_57: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "auto detect gzip ok");
+    "core::cli::println"(move "auto detect gzip ok");
     let mut ds_reset: DeflateStream = move "DeflateStream::new"(core::zlib::Z_DEFAULT_COMPRESSION);
     let c1: Array<u8> = move ds_reset."DeflateStream::compress"(&data);
     ds_reset."DeflateStream::reset"();
@@ -453,7 +453,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == __v1);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_60: {
                     break __inline_String__with_capacity_60: String { repr: "array_new<u8>"(178), used: 0 };
                 };
@@ -469,7 +469,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_62: {
                     let self: Box<i32> = move Box<i32> { value: 62 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "reset produces same-size output");
@@ -482,7 +482,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_64: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 __r."String::append"(move "c2.len(): ");
@@ -493,14 +493,14 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_66: {
                     let self: Box<i32> = move Box<i32> { value: __v1 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "stream reset ok");
+    "core::cli::println"(move "stream reset ok");
     let mut ds_copy: DeflateStream = move "DeflateStream::new"(core::zlib::Z_DEFAULT_COMPRESSION);
     ds_copy."DeflateStream::update"(&data);
     let ds_clone: DeflateStream = move ds_copy."DeflateStream::copy"();
@@ -515,7 +515,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 == __v1);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_69: {
                     break __inline_String__with_capacity_69: String { repr: "array_new<u8>"(178), used: 0 };
                 };
@@ -531,7 +531,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_71: {
                     let self: Box<i32> = move Box<i32> { value: 71 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "copy produces same-size output");
@@ -544,7 +544,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_73: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 __r."String::append"(move "f2.len(): ");
@@ -555,37 +555,37 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_75: {
                     let self: Box<i32> = move Box<i32> { value: __v1 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "stream copy ok");
-    core::cli::println(move "stream formats ok");
+    "core::cli::println"(move "stream copy ok");
+    "core::cli::println"(move "stream formats ok");
 }
 
 fn "Array<u8>^IndexValue::index_value"(self: &Array<u8>, index: i32) -> u8 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<u8>(self.repr, index);
+    return "core::builtin::array_get"::<u8>(self.repr, index);
 }
 
 pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
     let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
+    let capacity: i32 = "core::builtin::array_len"(self.repr);
+    if "core::builtin::unlikely"((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<u8> = core::builtin::array_new::<u8>(new_capacity);
-        core::builtin::array_copy::<u8>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<u8> = "core::builtin::array_new"::<u8>(new_capacity);
+        "core::builtin::array_copy"::<u8>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    core::builtin::array_set::<u8>(self.repr, used, value);
+    "core::builtin::array_set"::<u8>(self.repr, used, value);
     self.used = (used + 1);
 }
 

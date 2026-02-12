@@ -20,7 +20,7 @@ struct "Pair<i32,String>" {
 
 fn run() with Stdout {
     let pairs: Array<Pair<i32, String>> = move [Pair<i32,String> { first: 1, second: "one" }, Pair<i32,String> { first: 2, second: "two" }];
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_0: {
             break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(46), used: 0 };
         };
@@ -32,14 +32,14 @@ fn run() with Stdout {
         __inline_i32_Display__fmt_2: {
             let self: Box<i32> = move Box<i32> { value: pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).first };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move ", ");
         __r."String::append"(pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).second);
         __r."String::append"(move ")");
         break __tmpl: __r;
     });
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_3: {
             break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(46), used: 0 };
         };
@@ -51,7 +51,7 @@ fn run() with Stdout {
         __inline_i32_Display__fmt_5: {
             let self: Box<i32> = move Box<i32> { value: pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).first };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move ", ");
         __r."String::append"(pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).second);
@@ -62,8 +62,8 @@ fn run() with Stdout {
 
 fn "Array<Pair<i32,String>>^IndexValue::index_value"(self: &Array<Pair<i32, String>>, index: i32) -> Pair<i32,String> {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<Pair<i32, String>>(self.repr, index);
+    return "core::builtin::array_get"::<Pair<i32, String>>(self.repr, index);
 }
 

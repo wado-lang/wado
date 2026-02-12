@@ -43,12 +43,12 @@ fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
 
 fn run() with Stdout {
     let data: Array<u8> = move [72, 101, 108, 108, 111];
-    let compressed: Array<u8> = move core::zlib::zlib_compress_stored(&data);
-    let decompressed: Array<u8> = move core::zlib::inflate_zlib(&compressed);
+    let compressed: Array<u8> = move "core::zlib::zlib_compress_stored"(&data);
+    let decompressed: Array<u8> = move "core::zlib::inflate_zlib"(&compressed);
     __assert_0: {
         let __v0: bool = bytes_equal(&data, &decompressed);
         if !__v0 {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_0: {
                     break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(189), used: 0 };
                 };
@@ -64,7 +64,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_2: {
                     let self: Box<i32> = move Box<i32> { value: 21 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "stored block round-trip failed");
@@ -88,7 +88,7 @@ fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "stored block round-trip passed");
+    "core::cli::println"(move "stored block round-trip passed");
     let mut long_data: Array<u8> = move [];
     __for_1: {
         let mut i: i32 = 0;
@@ -102,12 +102,12 @@ fn run() with Stdout {
             i = (i + 1);
         }
     }
-    let compressed2: Array<u8> = move core::zlib::zlib_compress_stored(&long_data);
-    let decompressed2: Array<u8> = move core::zlib::inflate_zlib(&compressed2);
+    let compressed2: Array<u8> = move "core::zlib::zlib_compress_stored"(&long_data);
+    let decompressed2: Array<u8> = move "core::zlib::inflate_zlib"(&compressed2);
     __assert_1: {
         let __v0: bool = bytes_equal(&long_data, &decompressed2);
         if !__v0 {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_5: {
                     break __inline_String__with_capacity_5: String { repr: "array_new<u8>"(201), used: 0 };
                 };
@@ -123,7 +123,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_7: {
                     let self: Box<i32> = move Box<i32> { value: 31 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "long stored round-trip failed");
@@ -147,30 +147,30 @@ fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "long stored round-trip passed");
-    core::cli::println(move "ok");
+    "core::cli::println"(move "long stored round-trip passed");
+    "core::cli::println"(move "ok");
 }
 
 pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
     let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
+    let capacity: i32 = "core::builtin::array_len"(self.repr);
+    if "core::builtin::unlikely"((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<u8> = core::builtin::array_new::<u8>(new_capacity);
-        core::builtin::array_copy::<u8>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<u8> = "core::builtin::array_new"::<u8>(new_capacity);
+        "core::builtin::array_copy"::<u8>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    core::builtin::array_set::<u8>(self.repr, used, value);
+    "core::builtin::array_set"::<u8>(self.repr, used, value);
     self.used = (used + 1);
 }
 
 fn "Array<u8>^IndexValue::index_value"(self: &Array<u8>, index: i32) -> u8 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<u8>(self.repr, index);
+    return "core::builtin::array_get"::<u8>(self.repr, index);
 }
 

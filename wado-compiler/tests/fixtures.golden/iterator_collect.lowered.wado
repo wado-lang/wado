@@ -35,7 +35,7 @@ fn run() with Stdout {
             let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
             if __is_not_null(__pattern_temp_0) {
                 let x: i32 = __unwrap_option(__pattern_temp_0).value;
-                core::cli::println(__tmpl: {
+                "core::cli::println"(__tmpl: {
                     let mut __r: String = __inline_String__with_capacity_3: {
                         break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(16), used: 0 };
                     };
@@ -46,7 +46,7 @@ fn run() with Stdout {
                     __inline_i32_Display__fmt_5: {
                         let self: Box<i32> = move Box<i32> { value: x };
                         let f: &mut Formatter = &mut __f;
-                        core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                     };
                     break __tmpl: __r;
                 });
@@ -55,7 +55,7 @@ fn run() with Stdout {
             }
         }
     }
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_6: {
             break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(21), used: 0 };
         };
@@ -69,7 +69,7 @@ fn run() with Stdout {
                 break __inline_Array_i32___len_9: collected.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
@@ -79,14 +79,14 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     if (self.index >= self.used) {
         return null;
     }
-    let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
+    let item: i32 = "core::builtin::array_get"::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(Box<i32> { value: item });
 }
 
 pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
     let remaining: i32 = (self.used - self.index);
-    let mut repr: builtin::array<i32> = core::builtin::array_new::<i32>(remaining);
+    let mut repr: builtin::array<i32> = "core::builtin::array_new"::<i32>(remaining);
     let mut result_used: i32 = 0;
     __for_5: {
         let mut i: i32 = self.index;
@@ -97,8 +97,8 @@ pub fn "ArrayIter<i32>::collect"(self: &mut ArrayIter<i32>) -> Array<i32> {
                 break __for_5;
             }
             __for_5_body: {
-                let item: i32 = core::builtin::array_get::<i32>(_licm_repr, i);
-                core::builtin::array_set::<i32>(repr, result_used, item);
+                let item: i32 = "core::builtin::array_get"::<i32>(_licm_repr, i);
+                "core::builtin::array_set"::<i32>(repr, result_used, item);
                 result_used = (result_used + 1);
             }
             i = (i + 1);

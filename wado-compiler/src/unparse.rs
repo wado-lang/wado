@@ -2701,11 +2701,12 @@ impl<'a> TirUnparser<'a> {
             } => {
                 let module_path = func.module_path();
                 let func_name = func.name();
-                if !module_path.is_empty() {
-                    self.output.push_str(&module_path.join("::"));
-                    self.output.push_str("::");
-                }
-                self.output.push_str(&Self::quote_if_needed(&func_name));
+                let full_name = if module_path.is_empty() {
+                    func_name
+                } else {
+                    format!("{}::{func_name}", module_path.join("::"))
+                };
+                self.output.push_str(&Self::quote_if_needed(&full_name));
                 if !type_args.is_empty() {
                     self.output.push_str("::<");
                     for (i, type_arg) in type_args.iter().enumerate() {

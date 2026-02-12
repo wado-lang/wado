@@ -47,11 +47,11 @@ fn run() with Stdout {
         let input: &Array<u8> = &data;
         break __inline_zlib_compress_0: __inline_compress2_1: {
             let level: i32 = core::zlib::Z_DEFAULT_COMPRESSION;
-            let deflated: Array<u8> = move core::zlib::deflate_with_level(input, level, core::zlib::Z_DEFAULT_STRATEGY);
-            break __inline_compress2_1: core::zlib::zlib_wrap(input, &deflated, level);
+            let deflated: Array<u8> = move "core::zlib::deflate_with_level"(input, level, core::zlib::Z_DEFAULT_STRATEGY);
+            break __inline_compress2_1: "core::zlib::zlib_wrap"(input, &deflated, level);
         };
     };
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_2: {
             break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(60), used: 0 };
         };
@@ -65,7 +65,7 @@ fn run() with Stdout {
                 break __inline_Array_u8___len_5: data.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move " -> ");
         __f = __inline_Formatter__new_6: {
@@ -77,16 +77,16 @@ fn run() with Stdout {
                 break __inline_Array_u8___len_8: comp_hello.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move " bytes");
         break __tmpl: __r;
     });
-    let decomp_hello: Array<u8> = move core::zlib::inflate_zlib(&comp_hello);
+    let decomp_hello: Array<u8> = move "core::zlib::inflate_zlib"(&comp_hello);
     __assert_0: {
         let __v0: bool = bytes_equal(&data, &decomp_hello);
         if !__v0 {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_9: {
                     break __inline_String__with_capacity_9: String { repr: "array_new<u8>"(189), used: 0 };
                 };
@@ -102,7 +102,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_11: {
                     let self: Box<i32> = move Box<i32> { value: 22 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "Huffman round-trip Hello failed");
@@ -126,24 +126,24 @@ fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "Huffman Hello passed");
+    "core::cli::println"(move "Huffman Hello passed");
     let empty_data: Array<u8> = move [];
     let comp_empty: Array<u8> = __inline_zlib_compress_14: {
         let input: &Array<u8> = &empty_data;
         break __inline_zlib_compress_14: __inline_compress2_15: {
             let level: i32 = core::zlib::Z_DEFAULT_COMPRESSION;
-            let deflated: Array<u8> = move core::zlib::deflate_with_level(input, level, core::zlib::Z_DEFAULT_STRATEGY);
-            break __inline_compress2_15: core::zlib::zlib_wrap(input, &deflated, level);
+            let deflated: Array<u8> = move "core::zlib::deflate_with_level"(input, level, core::zlib::Z_DEFAULT_STRATEGY);
+            break __inline_compress2_15: "core::zlib::zlib_wrap"(input, &deflated, level);
         };
     };
-    let decomp_empty: Array<u8> = move core::zlib::inflate_zlib(&comp_empty);
+    let decomp_empty: Array<u8> = move "core::zlib::inflate_zlib"(&comp_empty);
     __assert_1: {
         let __v0: i32 = __inline_Array_u8___len_16: {
             break __inline_Array_u8___len_16: decomp_empty.used;
         };
         let __cond: bool = (__v0 == 0);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_17: {
                     break __inline_String__with_capacity_17: String { repr: "array_new<u8>"(164), used: 0 };
                 };
@@ -159,7 +159,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_19: {
                     let self: Box<i32> = move Box<i32> { value: 29 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "Huffman round-trip empty failed");
@@ -172,14 +172,14 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_21: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "Huffman empty passed");
+    "core::cli::println"(move "Huffman empty passed");
     let mut rep_data: Array<u8> = move [];
     __for_1: {
         let mut i: i32 = 0;
@@ -197,11 +197,11 @@ fn run() with Stdout {
         let input: &Array<u8> = &rep_data;
         break __inline_zlib_compress_22: __inline_compress2_23: {
             let level: i32 = core::zlib::Z_DEFAULT_COMPRESSION;
-            let deflated: Array<u8> = move core::zlib::deflate_with_level(input, level, core::zlib::Z_DEFAULT_STRATEGY);
-            break __inline_compress2_23: core::zlib::zlib_wrap(input, &deflated, level);
+            let deflated: Array<u8> = move "core::zlib::deflate_with_level"(input, level, core::zlib::Z_DEFAULT_STRATEGY);
+            break __inline_compress2_23: "core::zlib::zlib_wrap"(input, &deflated, level);
         };
     };
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_24: {
             break __inline_String__with_capacity_24: String { repr: "array_new<u8>"(61), used: 0 };
         };
@@ -215,7 +215,7 @@ fn run() with Stdout {
                 break __inline_Array_u8___len_27: rep_data.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move " -> ");
         __f = __inline_Formatter__new_28: {
@@ -227,7 +227,7 @@ fn run() with Stdout {
                 break __inline_Array_u8___len_30: comp_rep.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move " bytes");
         break __tmpl: __r;
@@ -241,7 +241,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 < __v1);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_33: {
                     break __inline_String__with_capacity_33: String { repr: "array_new<u8>"(201), used: 0 };
                 };
@@ -257,7 +257,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_35: {
                     let self: Box<i32> = move Box<i32> { value: 39 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "repetitive data should compress");
@@ -270,7 +270,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_37: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 __r."String::append"(move "rep_data.len(): ");
@@ -281,18 +281,18 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_39: {
                     let self: Box<i32> = move Box<i32> { value: __v1 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    let decomp_rep: Array<u8> = move core::zlib::inflate_zlib(&comp_rep);
+    let decomp_rep: Array<u8> = move "core::zlib::inflate_zlib"(&comp_rep);
     __assert_3: {
         let __v0: bool = bytes_equal(&rep_data, &decomp_rep);
         if !__v0 {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_40: {
                     break __inline_String__with_capacity_40: String { repr: "array_new<u8>"(193), used: 0 };
                 };
@@ -308,7 +308,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_42: {
                     let self: Box<i32> = move Box<i32> { value: 41 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "Huffman round-trip 1000xA failed");
@@ -332,7 +332,7 @@ fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "Huffman 1000xA passed");
+    "core::cli::println"(move "Huffman 1000xA passed");
     let mut mixed_data: Array<u8> = move [];
     __for_2: {
         let mut i: i32 = 0;
@@ -350,11 +350,11 @@ fn run() with Stdout {
         let input: &Array<u8> = &mixed_data;
         break __inline_zlib_compress_45: __inline_compress2_46: {
             let level: i32 = core::zlib::Z_DEFAULT_COMPRESSION;
-            let deflated: Array<u8> = move core::zlib::deflate_with_level(input, level, core::zlib::Z_DEFAULT_STRATEGY);
-            break __inline_compress2_46: core::zlib::zlib_wrap(input, &deflated, level);
+            let deflated: Array<u8> = move "core::zlib::deflate_with_level"(input, level, core::zlib::Z_DEFAULT_STRATEGY);
+            break __inline_compress2_46: "core::zlib::zlib_wrap"(input, &deflated, level);
         };
     };
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_47: {
             break __inline_String__with_capacity_47: String { repr: "array_new<u8>"(64), used: 0 };
         };
@@ -368,7 +368,7 @@ fn run() with Stdout {
                 break __inline_Array_u8___len_50: mixed_data.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move " -> ");
         __f = __inline_Formatter__new_51: {
@@ -380,16 +380,16 @@ fn run() with Stdout {
                 break __inline_Array_u8___len_53: comp_mixed.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move " bytes");
         break __tmpl: __r;
     });
-    let decomp_mixed: Array<u8> = move core::zlib::inflate_zlib(&comp_mixed);
+    let decomp_mixed: Array<u8> = move "core::zlib::inflate_zlib"(&comp_mixed);
     __assert_4: {
         let __v0: bool = bytes_equal(&mixed_data, &decomp_mixed);
         if !__v0 {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_54: {
                     break __inline_String__with_capacity_54: String { repr: "array_new<u8>"(201), used: 0 };
                 };
@@ -405,7 +405,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_56: {
                     let self: Box<i32> = move Box<i32> { value: 52 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "Huffman round-trip mixed failed");
@@ -429,7 +429,7 @@ fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "Huffman mixed passed");
+    "core::cli::println"(move "Huffman mixed passed");
     let mut hw_data: Array<u8> = move [];
     let hw_bytes: Array<u8> = move [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33, 32];
     __for_3: {
@@ -459,11 +459,11 @@ fn run() with Stdout {
         let input: &Array<u8> = &hw_data;
         break __inline_zlib_compress_59: __inline_compress2_60: {
             let level: i32 = core::zlib::Z_DEFAULT_COMPRESSION;
-            let deflated: Array<u8> = move core::zlib::deflate_with_level(input, level, core::zlib::Z_DEFAULT_STRATEGY);
-            break __inline_compress2_60: core::zlib::zlib_wrap(input, &deflated, level);
+            let deflated: Array<u8> = move "core::zlib::deflate_with_level"(input, level, core::zlib::Z_DEFAULT_STRATEGY);
+            break __inline_compress2_60: "core::zlib::zlib_wrap"(input, &deflated, level);
         };
     };
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_61: {
             break __inline_String__with_capacity_61: String { repr: "array_new<u8>"(61), used: 0 };
         };
@@ -477,7 +477,7 @@ fn run() with Stdout {
                 break __inline_Array_u8___len_64: hw_data.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move " -> ");
         __f = __inline_Formatter__new_65: {
@@ -489,7 +489,7 @@ fn run() with Stdout {
                 break __inline_Array_u8___len_67: comp_hw.used;
             } };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r."String::append"(move " bytes");
         break __tmpl: __r;
@@ -503,7 +503,7 @@ fn run() with Stdout {
         };
         let __cond: bool = (__v0 < __v1);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_70: {
                     break __inline_String__with_capacity_70: String { repr: "array_new<u8>"(197), used: 0 };
                 };
@@ -519,7 +519,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_72: {
                     let self: Box<i32> = move Box<i32> { value: 65 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "HW x20 should compress");
@@ -532,7 +532,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_74: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 __r."String::append"(move "hw_data.len(): ");
@@ -543,18 +543,18 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_76: {
                     let self: Box<i32> = move Box<i32> { value: __v1 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    let decomp_hw: Array<u8> = move core::zlib::inflate_zlib(&comp_hw);
+    let decomp_hw: Array<u8> = move "core::zlib::inflate_zlib"(&comp_hw);
     __assert_6: {
         let __v0: bool = bytes_equal(&hw_data, &decomp_hw);
         if !__v0 {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_77: {
                     break __inline_String__with_capacity_77: String { repr: "array_new<u8>"(189), used: 0 };
                 };
@@ -570,7 +570,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_79: {
                     let self: Box<i32> = move Box<i32> { value: 67 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "Huffman round-trip HW x20 failed");
@@ -594,30 +594,30 @@ fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "Huffman HW x20 passed");
-    core::cli::println(move "ok");
+    "core::cli::println"(move "Huffman HW x20 passed");
+    "core::cli::println"(move "ok");
 }
 
 pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
     let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
+    let capacity: i32 = "core::builtin::array_len"(self.repr);
+    if "core::builtin::unlikely"((used >= capacity)) {
         let mut new_capacity: i32 = (capacity * 2);
         if (capacity == 0) {
             new_capacity = 4;
         }
-        let new_repr: builtin::array<u8> = core::builtin::array_new::<u8>(new_capacity);
-        core::builtin::array_copy::<u8>(new_repr, 0, self.repr, 0, used);
+        let new_repr: builtin::array<u8> = "core::builtin::array_new"::<u8>(new_capacity);
+        "core::builtin::array_copy"::<u8>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
     }
-    core::builtin::array_set::<u8>(self.repr, used, value);
+    "core::builtin::array_set"::<u8>(self.repr, used, value);
     self.used = (used + 1);
 }
 
 fn "Array<u8>^IndexValue::index_value"(self: &Array<u8>, index: i32) -> u8 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        "core::internal::panic"(move "index out of bounds");
     }
-    return core::builtin::array_get::<u8>(self.repr, index);
+    return "core::builtin::array_get"::<u8>(self.repr, index);
 }
 

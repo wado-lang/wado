@@ -15,10 +15,10 @@
 
 fn run() with Stdout {
     let data: Array<u8> = move [72, 101, 108, 108, 111];
-    let checksum: u32 = core::zlib::adler32(__inline_adler32_init_0: {
+    let checksum: u32 = "core::zlib::adler32"(__inline_adler32_init_0: {
         break __inline_adler32_init_0: 1;
     }, &data, 0, 5);
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_1: {
             break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(35), used: 0 };
         };
@@ -30,14 +30,14 @@ fn run() with Stdout {
         __inline_u32_Display__fmt_3: {
             let self: Box<u32> = move Box<u32> { value: checksum };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_u32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_u32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     __assert_0: {
         let __cond: bool = (checksum == 93061621);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_4: {
                     break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(158), used: 0 };
                 };
@@ -53,7 +53,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_6: {
                     let self: Box<i32> = move Box<i32> { value: 9 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "adler32 mismatch");
@@ -66,17 +66,17 @@ fn run() with Stdout {
                 __inline_u32_Display__fmt_8: {
                     let self: Box<u32> = move Box<u32> { value: checksum };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_u32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_u32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    let crc: u32 = core::zlib::crc32(__inline_crc32_init_9: {
+    let crc: u32 = "core::zlib::crc32"(__inline_crc32_init_9: {
         break __inline_crc32_init_9: 0;
     }, &data, 0, 5);
-    core::cli::println(__tmpl: {
+    "core::cli::println"(__tmpl: {
         let mut __r: String = __inline_String__with_capacity_10: {
             break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(33), used: 0 };
         };
@@ -88,14 +88,14 @@ fn run() with Stdout {
         __inline_u32_Display__fmt_12: {
             let self: Box<u32> = move Box<u32> { value: crc };
             let f: &mut Formatter = &mut __f;
-            core::prelude/primitives.wado::fmt_u32_decimal(self.value, f);
+            "core::prelude/primitives.wado::fmt_u32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     __assert_1: {
         let __cond: bool = (crc == 4157704578);
         if !__cond {
-            core::internal::panic(__tmpl: {
+            "core::internal::panic"(__tmpl: {
                 let mut __r: String = __inline_String__with_capacity_13: {
                     break __inline_String__with_capacity_13: String { repr: "array_new<u8>"(150), used: 0 };
                 };
@@ -111,7 +111,7 @@ fn run() with Stdout {
                 __inline_i32_Display__fmt_15: {
                     let self: Box<i32> = move Box<i32> { value: 14 };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_i32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r."String::append"(move ": ");
                 __r."String::append"(move "crc32 mismatch");
@@ -124,13 +124,13 @@ fn run() with Stdout {
                 __inline_u32_Display__fmt_17: {
                     let self: Box<u32> = move Box<u32> { value: crc };
                     let f: &mut Formatter = &mut __f;
-                    core::prelude/primitives.wado::fmt_u32_decimal(self.value, f);
+                    "core::prelude/primitives.wado::fmt_u32_decimal"(self.value, f);
                 };
                 __r."String::append"(move "\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "ok");
+    "core::cli::println"(move "ok");
 }
 
