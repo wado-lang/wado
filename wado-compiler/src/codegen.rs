@@ -9474,15 +9474,16 @@ impl Codegen<'_> {
                             let result_type_id = expr.type_id;
                             let mangled_name = type_table.mangle_type_name(result_type_id);
                             let result_module_source = match type_table.get(result_type_id) {
-                                ResolvedType::GenericInstance {
-                                    module_source, ..
-                                } => module_source.clone(),
+                                ResolvedType::GenericInstance { module_source, .. } => {
+                                    module_source.clone()
+                                }
                                 other => {
-                                    panic!("Expected GenericInstance (Result) for HTTP handler return, got: {other:?}")
+                                    panic!(
+                                        "Expected GenericInstance (Result) for HTTP handler return, got: {other:?}"
+                                    )
                                 }
                             };
-                            let qualified_name =
-                                result_module_source.qualify_name(&mangled_name);
+                            let qualified_name = result_module_source.qualify_name(&mangled_name);
                             let result_info = self
                                 .variant_types
                                 .get(&qualified_name)
@@ -9494,37 +9495,36 @@ impl Codegen<'_> {
                             let ok_type_idx = result_info.cases[0].type_idx;
 
                             // Save the Result value to a pre-allocated anyref local
-                            let result_local =
-                                ctx.alloc_local("_http_result", ValType::I32 /* unused, pre-allocated as anyref */);
+                            let result_local = ctx.alloc_local(
+                                "_http_result",
+                                ValType::I32, /* unused, pre-allocated as anyref */
+                            );
                             func.instruction(&Instruction::LocalSet(result_local));
 
                             // Read discriminant: 0 = Ok, non-zero = Err
                             // Cast from anyref to concrete Result base type first
                             func.instruction(&Instruction::LocalGet(result_local));
-                            func.instruction(&Instruction::RefCastNonNull(
-                                HeapType::Concrete(base_type_idx),
-                            ));
+                            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                                base_type_idx,
+                            )));
                             func.instruction(&Instruction::StructGet {
                                 struct_type_index: base_type_idx,
                                 field_index: 0,
                             });
                             func.instruction(&Instruction::I32Eqz); // true if Ok
 
-                            func.instruction(&Instruction::If(
-                                wasm_encoder::BlockType::Empty,
-                            ));
+                            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
 
                             // === Ok case: extract Response handle and task-return ===
                             func.instruction(&Instruction::LocalGet(result_local));
-                            func.instruction(&Instruction::RefCastNonNull(
-                                HeapType::Concrete(ok_type_idx),
-                            ));
+                            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+                                ok_type_idx,
+                            )));
                             func.instruction(&Instruction::StructGet {
                                 struct_type_index: ok_type_idx,
                                 field_index: 1, // payload (Response handle)
                             });
-                            let user_response =
-                                ctx.alloc_local("_user_response", ValType::I32);
+                            let user_response = ctx.alloc_local("_user_response", ValType::I32);
                             func.instruction(&Instruction::LocalSet(user_response));
 
                             // task-return Ok(response)
@@ -9541,8 +9541,7 @@ impl Codegen<'_> {
 
                             // Post-return: resolve the user's trailers future by writing None.
                             // The tx handle was saved during Future::new() codegen.
-                            let user_tx =
-                                ctx.alloc_local("_user_trailers_tx", ValType::I32);
+                            let user_tx = ctx.alloc_local("_user_trailers_tx", ValType::I32);
                             // Write Result<Option<Trailers>, ErrorCode>::Ok(None) to memory
                             func.instruction(&Instruction::I32Const(256)); // offset for result disc
                             func.instruction(&Instruction::I32Const(0)); // Ok discriminant
