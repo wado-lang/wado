@@ -7617,8 +7617,49 @@ impl Codegen<'_> {
             } => {
                 let func_name = static_func.name();
 
-                // Generate arguments first
-                self.generate_args(func, args, type_table, ctx, builder);
+                // Check if this is a WASI static function to use CM ABI arg lowering.
+                // WASI functions need special argument handling (e.g., Option<T> is lowered
+                // to a (discriminant, payload) pair of i32 values instead of a GC nullref).
+                if let Some(func_info) = self.project.wasi_registry.get_function(&func_name) {
+                    for (i, arg) in args.iter().enumerate() {
+                        let param_type = &func_info.params[i].1;
+                        let resolved_type = self.project.wasi_registry.resolve_type(param_type);
+                        match &resolved_type {
+                            Type::Generic(g) if g.name == "Option" => {
+                                // Option<T> param: lower to (discriminant i32, payload i32)
+                                if matches!(arg.kind, TirExprKind::Null) {
+                                    // None: discriminant=0, payload=0
+                                    func.instruction(&Instruction::I32Const(0));
+                                    func.instruction(&Instruction::I32Const(0));
+                                } else {
+                                    // Some(value): discriminant=1, then the inner value
+                                    func.instruction(&Instruction::I32Const(1));
+                                    self.generate_expr(func, arg, type_table, ctx, builder);
+                                }
+                            }
+                            Type::Named(named) if named.name == "String" => {
+                                // String argument: lower to (ptr, len) pair
+                                self.generate_expr(func, arg, type_table, ctx, builder);
+                                let lower_idx = builder.func_idx("core/internal/cm_lower_string");
+                                func.instruction(&Instruction::Call(lower_idx));
+                                let temp = ctx.alloc_local("__cm_i64_temp", ValType::I64);
+                                func.instruction(&Instruction::LocalTee(temp));
+                                func.instruction(&Instruction::I32WrapI64);
+                                func.instruction(&Instruction::LocalGet(temp));
+                                func.instruction(&Instruction::I64Const(32));
+                                func.instruction(&Instruction::I64ShrU);
+                                func.instruction(&Instruction::I32WrapI64);
+                            }
+                            _ => {
+                                // Primitives, resource handles, Future<T>, Stream<T>, etc.
+                                self.generate_expr(func, arg, type_table, ctx, builder);
+                            }
+                        }
+                    }
+                } else {
+                    // Normal path: generate GC-level arguments
+                    self.generate_args(func, args, type_table, ctx, builder);
+                }
 
                 // Check if this is a monomorphized function using metadata
                 let base_struct_name = static_func.base_struct_name();
