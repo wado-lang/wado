@@ -1,22 +1,20 @@
 // HTTP 200 response test
 // This test verifies the HTTP server returns 200 OK with empty body.
-//
-// Note: The current codegen ignores the user's return value and always
-// generates HTTP 200 response with empty body. The return statement below
-// is intentionally Err to demonstrate this behavior.
 
 use {
     Request,
     Response,
     ErrorCode,
+    Fields,
+    Trailers,
 } from "wasi:http";
 
 export fn handle(request: Request) -> Result<Response, ErrorCode> {
-    // This return value is currently ignored by codegen.
-    // The handler always returns HTTP 200 with empty body.
-    return Result::<Response, ErrorCode>::Err(
-        ErrorCode::InternalError(null)
-    );
+    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    return Result::<Response, ErrorCode>::Ok(response);
 }
 
 __DATA__

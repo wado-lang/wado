@@ -136,7 +136,13 @@ pub fn analyze_project(project: &mut Project) {
             }
         }
     }
-    if needs_cm_lower_string {
+    // HTTP handler exports need cm_lower_string for ErrorCode payload lowering
+    // (ErrorCode variant cases can contain Option<String> payloads)
+    let has_http_handler_export_early = project
+        .world_registry
+        .get(&project.target_world)
+        .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
+    if needs_cm_lower_string || has_http_handler_export_early {
         let func = core_internal("cm_lower_string");
         reachable.extend(compute_reachable(&call_graph, &func));
     }

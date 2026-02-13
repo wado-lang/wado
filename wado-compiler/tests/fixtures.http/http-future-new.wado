@@ -10,6 +10,7 @@ use {
     Request,
     Response,
     ErrorCode,
+    Fields,
     Trailers,
 } from "wasi:http";
 
@@ -21,10 +22,11 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> {
     // The rx and tx handles are opaque i32 values managed by the runtime
     // We can't inspect them directly, but creating them should not trap
 
-    // Return dummy (codegen always returns 200 with empty body)
-    return Result::<Response, ErrorCode>::Err(
-        ErrorCode::InternalError(null)
-    );
+    // Return 200 OK
+    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    return Result::<Response, ErrorCode>::Ok(response);
 }
 
 __DATA__

@@ -16,6 +16,7 @@ use {
     FieldName,
     FieldValue,
     HeaderError,
+    Trailers,
 } from "wasi:http";
 
 export fn handle(request: Request) -> Result<Response, ErrorCode> {
@@ -57,10 +58,11 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> {
     let cloned_still_has = cloned.has("x-test" as FieldName);
     assert cloned_still_has;
 
-    // Return dummy (codegen always returns 200 with empty body)
-    return Result::<Response, ErrorCode>::Err(
-        ErrorCode::InternalError(null)
-    );
+    // Return 200 OK
+    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let response_headers = Fields::new();
+    let [response, _tx_future] = Response::new(response_headers, null, trailers_future);
+    return Result::<Response, ErrorCode>::Ok(response);
 }
 
 __DATA__

@@ -7,6 +7,7 @@
 // - Response::new(headers, body, trailers) - construct a Response
 // - response.set_status_code(code) - set the status code
 // - response.get_status_code() - read the status code back
+// - Returning Ok(response) from the handler
 
 use {
     Request,
@@ -14,7 +15,6 @@ use {
     ErrorCode,
     Fields,
     Trailers,
-    StatusCode,
 } from "wasi:http";
 
 export fn handle(request: Request) -> Result<Response, ErrorCode> {
@@ -29,20 +29,18 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // 4. Get default status code (should be 200)
     let default_status = response.get_status_code();
-    assert default_status == 200 as StatusCode;
+    assert default_status == 200;
 
     // 5. Set status code to 404
-    let set_result = response.set_status_code(404 as StatusCode);
+    let set_result = response.set_status_code(404);
 
     // 6. Read status code back (should be 404)
     let new_status = response.get_status_code();
-    assert new_status == 404 as StatusCode;
+    assert new_status == 404;
 
-    // Return dummy (codegen always returns 200 with empty body)
-    return Result::<Response, ErrorCode>::Err(
-        ErrorCode::InternalError(null)
-    );
+    // Return the response with status 404
+    return Result::<Response, ErrorCode>::Ok(response);
 }
 
 __DATA__
-{"TODO": true, "http_status": 200}
+{"http_status": 404}

@@ -115,6 +115,63 @@ impl CmExportInfo {
                     name: "_response_handle".to_string(),
                     val_type: CmValType::I32,
                 },
+                CmScratchLocal {
+                    name: "_http_result".to_string(),
+                    val_type: CmValType::AnyRef,
+                },
+                CmScratchLocal {
+                    name: "_user_response".to_string(),
+                    val_type: CmValType::I32,
+                },
+                CmScratchLocal {
+                    name: "_user_trailers_tx".to_string(),
+                    val_type: CmValType::I32,
+                },
+                CmScratchLocal {
+                    name: "_ec_disc".to_string(),
+                    val_type: CmValType::I32,
+                },
+                // ErrorCode payload lowering scratch locals
+                CmScratchLocal {
+                    name: "_ec_ref".to_string(),
+                    val_type: CmValType::AnyRef,
+                },
+                CmScratchLocal {
+                    name: "_ec_p2".to_string(),
+                    val_type: CmValType::I32,
+                },
+                CmScratchLocal {
+                    name: "_ec_p3".to_string(),
+                    val_type: CmValType::I64,
+                },
+                CmScratchLocal {
+                    name: "_ec_p4".to_string(),
+                    val_type: CmValType::I32,
+                },
+                CmScratchLocal {
+                    name: "_ec_p5".to_string(),
+                    val_type: CmValType::I32,
+                },
+                CmScratchLocal {
+                    name: "_ec_p6".to_string(),
+                    val_type: CmValType::I32,
+                },
+                CmScratchLocal {
+                    name: "_ec_p7".to_string(),
+                    val_type: CmValType::I32,
+                },
+                CmScratchLocal {
+                    name: "_ec_payload_ref".to_string(),
+                    val_type: CmValType::AnyRef,
+                },
+                CmScratchLocal {
+                    name: "_ec_field_ref".to_string(),
+                    val_type: CmValType::AnyRef,
+                },
+                CmScratchLocal {
+                    name: "_ec_i64_temp".to_string(),
+                    val_type: CmValType::I64,
+                },
             ]);
         }
 
