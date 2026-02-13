@@ -4,7 +4,6 @@
 
 // Imports
 // bundled::f64_to_buffer (f64_to_buffer)
-// bundled::f64_to_buffer_fixed (f64_to_buffer_fixed)
 // mem::realloc (realloc)
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
@@ -26,19 +25,31 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: 3.14159 }."f64^Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_2: {
+            let self: Box<f64> = move Box<f64> { value: 3.14159 };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_f64"(self.value, __inline_Formatter__precision_3: {
+                break __inline_Formatter__precision_3: f.precision;
+            }, f);
+        };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(26), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_4: {
+            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(26), used: 0 };
         };
         __r.String::append(move "negative: ");
-        let mut __f: Formatter = __inline_Formatter__new_3: {
+        let mut __f: Formatter = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: neg }."f64^Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_6: {
+            let self: Box<f64> = move Box<f64> { value: neg };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_f64"(self.value, __inline_Formatter__precision_7: {
+                break __inline_Formatter__precision_7: f.precision;
+            }, f);
+        };
         break __tmpl: __r;
     });
 }

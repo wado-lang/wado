@@ -4,7 +4,6 @@
 
 // Imports
 // bundled::f64_to_buffer (f64_to_buffer)
-// bundled::f64_to_buffer_fixed (f64_to_buffer_fixed)
 // mem::realloc (realloc)
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
@@ -28,22 +27,34 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: d }."f64^Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_3: {
+            let self: Box<f64> = move Box<f64> { value: d };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_f64"(self.value, __inline_Formatter__precision_4: {
+                break __inline_Formatter__precision_4: f.precision;
+            }, f);
+        };
         break __tmpl: __r;
     });
-    let r2: Radians = __inline_Degrees__to_radians_3: {
-        break __inline_Degrees__to_radians_3: ((90.0 * 3.14159) / 180.0) as Radians;
+    let r2: Radians = __inline_Degrees__to_radians_5: {
+        break __inline_Degrees__to_radians_5: ((90.0 * 3.14159) / 180.0) as Radians;
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_4: {
-            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(36), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_6: {
+            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(36), used: 0 };
         };
         __r.String::append(move "degrees to radians: ");
-        let mut __f: Formatter = __inline_Formatter__new_5: {
+        let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: r2 }."f64^Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_8: {
+            let self: Box<f64> = move Box<f64> { value: r2 };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_f64"(self.value, __inline_Formatter__precision_9: {
+                break __inline_Formatter__precision_9: f.precision;
+            }, f);
+        };
         break __tmpl: __r;
     });
 }

@@ -287,37 +287,21 @@ fn fmt_u64_decimal(value: u64, f: &mut Formatter) {
 }
 
 /// Write f32 to formatter using bundled float-to-string algorithm.
-/// (f32_to_buffer writes to linear memory — unavoidable for the bundled Wasm library.)
-fn fmt_f32_display(value: f32, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 24);
-    let len = builtin::f32_to_buffer(value, ptr);
-    f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 24, 1, 0);
-}
-
-/// Write f64 to formatter using bundled float-to-string algorithm.
-/// (f64_to_buffer writes to linear memory — unavoidable for the bundled Wasm library.)
-fn fmt_f64_display(value: f64, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 32);
-    let len = builtin::f64_to_buffer(value, ptr);
-    f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 32, 1, 0);
-}
-
-/// Write f32 with fixed-point precision.
-fn fmt_f32_fixed(value: f32, precision: i32, f: &mut Formatter) {
-    let buf_size = 64;
+/// precision < 0 = shortest, >= 0 = fixed-point with that many decimal places.
+fn fmt_f32(value: f32, precision: i32, f: &mut Formatter) {
+    let buf_size = if precision >= 0 { 64 } else { 24 };
     let ptr = builtin::realloc(0, 0, 1, buf_size);
-    let len = builtin::f32_to_buffer_fixed(value, precision, ptr);
+    let len = builtin::f32_to_buffer(value, precision, ptr);
     f.write_from_memory(ptr, len);
     builtin::realloc(ptr, buf_size, 1, 0);
 }
 
-/// Write f64 with fixed-point precision.
-fn fmt_f64_fixed(value: f64, precision: i32, f: &mut Formatter) {
-    let buf_size = 400;
+/// Write f64 to formatter using bundled float-to-string algorithm.
+/// precision < 0 = shortest, >= 0 = fixed-point with that many decimal places.
+fn fmt_f64(value: f64, precision: i32, f: &mut Formatter) {
+    let buf_size = if precision >= 0 { 400 } else { 32 };
     let ptr = builtin::realloc(0, 0, 1, buf_size);
-    let len = builtin::f64_to_buffer_fixed(value, precision, ptr);
+    let len = builtin::f64_to_buffer(value, precision, ptr);
     f.write_from_memory(ptr, len);
     builtin::realloc(ptr, buf_size, 1, 0);
 }
@@ -519,7 +503,7 @@ impl f32 {
     pub fn to_string(self) -> String {
         let mut buf = String::with_capacity(16);
         let mut f = Formatter::new(&mut buf);
-        fmt_f32_display(self, &mut f);
+        fmt_f32(self, -1, &mut f);
         return buf;
     }
 
@@ -646,7 +630,7 @@ impl f64 {
     pub fn to_string(self) -> String {
         let mut buf = String::with_capacity(24);
         let mut f = Formatter::new(&mut buf);
-        fmt_f64_display(self, &mut f);
+        fmt_f64(self, -1, &mut f);
         return buf;
     }
 
@@ -825,23 +809,13 @@ impl Display for u64 {
 
 impl Display for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        let prec = f.precision();
-        if prec >= 0 {
-            fmt_f32_fixed(*self, prec, f);
-        } else {
-            fmt_f32_display(*self, f);
-        }
+        fmt_f32(*self, f.precision(), f);
     }
 }
 
 impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        let prec = f.precision();
-        if prec >= 0 {
-            fmt_f64_fixed(*self, prec, f);
-        } else {
-            fmt_f64_display(*self, f);
-        }
+        fmt_f64(*self, f.precision(), f);
     }
 }
 

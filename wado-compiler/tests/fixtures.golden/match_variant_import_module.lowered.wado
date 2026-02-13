@@ -4,7 +4,6 @@
 
 // Imports
 // bundled::f64_to_buffer (f64_to_buffer)
-// bundled::f64_to_buffer_fixed (f64_to_buffer_fixed)
 // mem::realloc (realloc)
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
@@ -110,7 +109,12 @@ pub fn f64_to_string_fill(value: f64, width: i32, fill: char, align: Align) -> S
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: value }."f64^Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_2: {
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_f64"(value, __inline_Formatter__precision_3: {
+                break __inline_Formatter__precision_3: f.precision;
+            }, f);
+        };
         break __tmpl: __r;
     };
     let spec: FormatSpec = move FormatSpec { fill: fill, align: align, width: width };

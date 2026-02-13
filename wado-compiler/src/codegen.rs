@@ -12888,8 +12888,6 @@ impl Codegen<'_> {
             "builtin::realloc"
             | "builtin::f64_to_buffer"
             | "builtin::f32_to_buffer"
-            | "builtin::f64_to_buffer_fixed"
-            | "builtin::f32_to_buffer_fixed"
             | "builtin::f64_to_buffer_exp"
             | "builtin::f32_to_buffer_exp"
             | "builtin::stream_new"

@@ -4,7 +4,6 @@
 
 // Imports
 // bundled::f64_to_buffer (f64_to_buffer)
-// bundled::f64_to_buffer_fixed (f64_to_buffer_fixed)
 // mem::realloc (realloc)
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
@@ -45,7 +44,13 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: y }."f64^Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_6: {
+            let self: Box<f64> = move Box<f64> { value: y };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_f64"(self.value, __inline_Formatter__precision_7: {
+                break __inline_Formatter__precision_7: f.precision;
+            }, f);
+        };
         break __tmpl: __r;
     });
 }

@@ -4,9 +4,7 @@
 
 // Imports
 // bundled::f32_to_buffer (f32_to_buffer)
-// bundled::f32_to_buffer_fixed (f32_to_buffer_fixed)
 // bundled::f64_to_buffer (f64_to_buffer)
-// bundled::f64_to_buffer_fixed (f64_to_buffer_fixed)
 // mem::realloc (realloc)
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
@@ -164,20 +162,26 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        Box<f64> { value: back_to_pi }."f64^Display::fmt"(&mut __f);
+        __inline_f64_Display__fmt_26: {
+            let self: Box<f64> = move Box<f64> { value: back_to_pi };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_f64"(self.value, __inline_Formatter__precision_27: {
+                break __inline_Formatter__precision_27: f.precision;
+            }, f);
+        };
         break __tmpl: __r;
     });
     let zero_bits: i64 = core::builtin::i64_reinterpret_f64(0.0);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_26: {
-            break __inline_String__with_capacity_26: String { repr: "array_new<u8>"(31), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_28: {
+            break __inline_String__with_capacity_28: String { repr: "array_new<u8>"(31), used: 0 };
         };
         __r.String::append(move "f64 0.0 bits = ");
-        let mut __f: Formatter = __inline_Formatter__new_27: {
+        let mut __f: Formatter = __inline_Formatter__new_29: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_29: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i64_Display__fmt_28: {
+        __inline_i64_Display__fmt_30: {
             let self: Box<i64> = move Box<i64> { value: zero_bits };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i64_decimal"(self.value, f);
@@ -186,15 +190,15 @@ fn run() with Stdout {
     });
     let neg_zero_bits: i64 = core::builtin::i64_reinterpret_f64(-0.0);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_29: {
-            break __inline_String__with_capacity_29: String { repr: "array_new<u8>"(32), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_31: {
+            break __inline_String__with_capacity_31: String { repr: "array_new<u8>"(32), used: 0 };
         };
         __r.String::append(move "f64 -0.0 bits = ");
-        let mut __f: Formatter = __inline_Formatter__new_30: {
+        let mut __f: Formatter = __inline_Formatter__new_32: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_30: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_32: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i64_Display__fmt_31: {
+        __inline_i64_Display__fmt_33: {
             let self: Box<i64> = move Box<i64> { value: neg_zero_bits };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i64_decimal"(self.value, f);
@@ -204,15 +208,15 @@ fn run() with Stdout {
     let pi32: f32 = 3.14159265 as f32;
     let pi32_bits: i32 = core::builtin::i32_reinterpret_f32(pi32);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_32: {
-            break __inline_String__with_capacity_32: String { repr: "array_new<u8>"(30), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_34: {
+            break __inline_String__with_capacity_34: String { repr: "array_new<u8>"(30), used: 0 };
         };
         __r.String::append(move "f32 pi bits = ");
-        let mut __f: Formatter = __inline_Formatter__new_33: {
+        let mut __f: Formatter = __inline_Formatter__new_35: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_33: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_35: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_34: {
+        __inline_i32_Display__fmt_36: {
             let self: Box<i32> = move Box<i32> { value: pi32_bits };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -221,28 +225,34 @@ fn run() with Stdout {
     });
     let back_to_pi32: f32 = core::builtin::f32_reinterpret_i32(pi32_bits);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_35: {
-            break __inline_String__with_capacity_35: String { repr: "array_new<u8>"(33), used: 0 };
+        let mut __r: String = __inline_String__with_capacity_37: {
+            break __inline_String__with_capacity_37: String { repr: "array_new<u8>"(33), used: 0 };
         };
         __r.String::append(move "back to f32 pi = ");
-        let mut __f: Formatter = __inline_Formatter__new_36: {
-            let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_36: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        Box<f32> { value: back_to_pi32 }."f32^Display::fmt"(&mut __f);
-        break __tmpl: __r;
-    });
-    let zero32_bits: i32 = core::builtin::i32_reinterpret_f32(0.0 as f32);
-    core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_37: {
-            break __inline_String__with_capacity_37: String { repr: "array_new<u8>"(31), used: 0 };
-        };
-        __r.String::append(move "f32 0.0 bits = ");
         let mut __f: Formatter = __inline_Formatter__new_38: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_38: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_39: {
+        __inline_f32_Display__fmt_39: {
+            let self: Box<f32> = move Box<f32> { value: back_to_pi32 };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_f32"(self.value, __inline_Formatter__precision_40: {
+                break __inline_Formatter__precision_40: f.precision;
+            }, f);
+        };
+        break __tmpl: __r;
+    });
+    let zero32_bits: i32 = core::builtin::i32_reinterpret_f32(0.0 as f32);
+    core::cli::println(__tmpl: {
+        let mut __r: String = __inline_String__with_capacity_41: {
+            break __inline_String__with_capacity_41: String { repr: "array_new<u8>"(31), used: 0 };
+        };
+        __r.String::append(move "f32 0.0 bits = ");
+        let mut __f: Formatter = __inline_Formatter__new_42: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_42: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_i32_Display__fmt_43: {
             let self: Box<i32> = move Box<i32> { value: zero32_bits };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
