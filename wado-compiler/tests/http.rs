@@ -186,13 +186,20 @@ struct HttpTestSpec {
 // ============================================================================
 
 /// Run an HTTP fixture test, handling TODO tests properly
-async fn run_http_fixture_test(fixture_path: &Path, fixture_name: &str) {
-    // Read source and spec
-    let source = std::fs::read_to_string(fixture_path)
-        .unwrap_or_else(|e| panic!("[{fixture_name}] failed to read: {e}"));
-    let data_section = common::extract_data_section(&source)
+async fn run_http_fixture_test(
+    fixture_path: &Path,
+    content: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture_name = fixture_path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    // Parse spec from content
+    let data_section = common::extract_data_section(content)
         .unwrap_or_else(|| panic!("[{fixture_name}] missing __DATA__ section"));
-    let spec: HttpTestSpec = common::parse_data_section(data_section, fixture_name);
+    let spec: HttpTestSpec = common::parse_data_section(data_section, &fixture_name);
 
     // Handle TODO tests - they must fail
     if spec.todo {
@@ -200,7 +207,7 @@ async fn run_http_fixture_test(fixture_path: &Path, fixture_name: &str) {
 
         // Use catch_unwind to recover from panics (e.g., codegen validation failures)
         let test_result =
-            std::panic::AssertUnwindSafe(run_http_test_inner(fixture_path, fixture_name, &spec))
+            std::panic::AssertUnwindSafe(run_http_test_inner(fixture_path, &fixture_name, &spec))
                 .catch_unwind()
                 .await;
 
@@ -231,10 +238,12 @@ async fn run_http_fixture_test(fixture_path: &Path, fixture_name: &str) {
         }
     } else {
         // Normal test - run and expect success
-        run_http_test_inner(fixture_path, fixture_name, &spec)
+        run_http_test_inner(fixture_path, &fixture_name, &spec)
             .await
             .unwrap_or_else(|e| panic!("{e}"));
     }
+
+    Ok(())
 }
 
 /// Inner test logic that returns Result for TODO handling
@@ -279,74 +288,6 @@ async fn run_http_test_inner(
 // Tests
 // ============================================================================
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_http_200_response() {
-    run_http_fixture_test(
-        Path::new("tests/fixtures.http/http-200.wado"),
-        "http-200.wado",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_http_400_response() {
-    run_http_fixture_test(
-        Path::new("tests/fixtures.http/http-400.wado"),
-        "http-400.wado",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_http_500_response() {
-    run_http_fixture_test(
-        Path::new("tests/fixtures.http/http-500.wado"),
-        "http-500.wado",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_http_fields() {
-    run_http_fixture_test(
-        Path::new("tests/fixtures.http/http-fields.wado"),
-        "http-fields.wado",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_http_future_new() {
-    run_http_fixture_test(
-        Path::new("tests/fixtures.http/http-future-new.wado"),
-        "http-future-new.wado",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_http_response_ops() {
-    run_http_fixture_test(
-        Path::new("tests/fixtures.http/http-response-ops.wado"),
-        "http-response-ops.wado",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_http_error_code() {
-    run_http_fixture_test(
-        Path::new("tests/fixtures.http/http-error-code.wado"),
-        "http-error-code.wado",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_http_error_code_payload() {
-    run_http_fixture_test(
-        Path::new("tests/fixtures.http/http-error-code-payload.wado"),
-        "http-error-code-payload.wado",
-    )
-    .await;
+datatest_mini::harness! {
+    { test = run_http_fixture_test, root = "tests/fixtures.http", pattern = r"\.wado$", async, attr = r#"tokio::test(flavor = "multi_thread")"# },
 }
