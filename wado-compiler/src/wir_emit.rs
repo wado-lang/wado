@@ -113,27 +113,39 @@ pub fn emit_module(wir: &WirModule) -> Vec<u8> {
     let data_count = u32::from(!wir.data.is_empty());
     module.section(&DataCountSection { count: data_count });
 
-    // Branch hints section (must come before code section)
-    if !wir.branch_hints.is_empty() {
-        let mut hints = BranchHints::new();
-        for entry in &wir.branch_hints {
-            hints.function_hints(
-                entry.func_idx,
-                entry.hints.iter().map(|&(offset, taken)| BranchHint {
+    // Pre-emit function bodies and collect branch hints from BranchHint
+    // pseudo-instructions.  Branch hints section must come before code section,
+    // so we emit bodies first, gather hints, write the hints section, then write
+    // the code section.
+    let mut emitted_funcs: Vec<Function> = Vec::with_capacity(wir.bodies.len());
+    let mut all_hints = BranchHints::new();
+    let mut has_hints = false;
+    for (i, body) in wir.bodies.iter().enumerate() {
+        let mut func = Function::new(body.locals.clone());
+        let hints = emit_with_hints(&body.instrs, &mut func);
+        if !hints.is_empty() {
+            has_hints = true;
+            let func_idx = wir.import_func_count + i as u32;
+            all_hints.function_hints(
+                func_idx,
+                hints.into_iter().map(|(offset, taken)| BranchHint {
                     branch_func_offset: offset,
                     branch_hint_value: u32::from(taken),
                 }),
             );
         }
-        module.section(&hints);
+        emitted_funcs.push(func);
+    }
+
+    // Branch hints section (must come before code section)
+    if has_hints {
+        module.section(&all_hints);
     }
 
     // Code section
     let mut code = CodeSection::new();
-    for body in &wir.bodies {
-        let mut func = Function::new(body.locals.clone());
-        emit(&body.instrs, &mut func);
-        code.function(&func);
+    for func in &emitted_funcs {
+        code.function(func);
     }
     module.section(&code);
 
@@ -268,11 +280,18 @@ fn emit_const_expr(expr: &WirConstExpr) -> ConstExpr {
 // Function-level emission
 // ============================================================================
 
-/// Emit a slice of `WirInstr` into a `wasm_encoder::Function`.
-pub fn emit(instrs: &[WirInstr], func: &mut Function) {
+/// Emit a slice of `WirInstr` into a `wasm_encoder::Function`,
+/// extracting branch hints (byte offset, taken) from `BranchHint` pseudo-instructions.
+fn emit_with_hints(instrs: &[WirInstr], func: &mut Function) -> Vec<(u32, bool)> {
+    let mut hints = Vec::new();
     for instr in instrs {
-        emit_instr(instr, func);
+        if let WirInstr::BranchHint(taken) = *instr {
+            hints.push((func.byte_len() as u32, taken));
+        } else {
+            emit_instr(instr, func);
+        }
     }
+    hints
 }
 
 fn mem(m: &WirMemArg) -> wasm_encoder::MemArg {
@@ -838,5 +857,8 @@ fn emit_instr(instr: &WirInstr, func: &mut Function) {
         WirInstr::TypedSelect(vt) => {
             func.instruction(&Instruction::TypedSelect(vt));
         }
+
+        // Pseudo-instructions — handled by emit_with_hints, not here.
+        WirInstr::BranchHint(_) => {}
     }
 }

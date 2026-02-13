@@ -31,9 +31,7 @@ use crate::wasm_plan::{
     sort_types_topologically,
 };
 use crate::wasm_postprocess;
-use crate::wir::{
-    WirBranchHintEntry, WirConstExpr, WirFunction, WirFunctionBody, WirModule, WirRecGroupKind,
-};
+use crate::wir::{WirConstExpr, WirFunction, WirFunctionBody, WirModule, WirRecGroupKind};
 use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
 use indexmap::IndexMap;
@@ -186,8 +184,6 @@ struct FunctionContext {
     /// Pending branch hint from `builtin::likely()` or `builtin::unlikely()`
     /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
     pending_branch_hint: Option<bool>,
-    /// Collected branch hints for this function (offset, taken)
-    branch_hints: Vec<(u32, bool)>,
     /// Module source of the current function (for access control checks)
     current_module_source: ModuleSource,
     /// Stack of break targets for loops and labeled blocks.
@@ -237,7 +233,6 @@ impl FunctionContext {
             local_types: Vec::new(),
             return_type: None,
             pending_branch_hint: None,
-            branch_hints: Vec::new(),
             current_module_source: ModuleSource::entry_point_with_filename("<unknown>"),
             loop_info: Vec::new(),
             local_index_offset: 0,
@@ -263,7 +258,6 @@ impl FunctionContext {
             local_types: Vec::new(),
             return_type: None,
             pending_branch_hint: None,
-            branch_hints: Vec::new(),
             current_module_source: module_source,
             loop_info: Vec::new(),
             local_index_offset: 0,
@@ -316,10 +310,10 @@ impl FunctionContext {
         self.pending_branch_hint = Some(taken);
     }
 
-    /// Consume pending branch hint and record it at the given offset
-    fn consume_branch_hint(&mut self, offset: u32) {
+    /// Consume pending branch hint and emit it into the WIR instruction stream.
+    fn consume_branch_hint(&mut self, func: &mut WirFunction) {
         if let Some(taken) = self.pending_branch_hint.take() {
-            self.branch_hints.push((offset, taken));
+            func.branch_hint(taken);
         }
     }
 
@@ -1601,8 +1595,6 @@ impl Codegen<'_> {
         // Generate function bodies
         // ========================================
         let mut bodies: Vec<WirFunctionBody> = Vec::new();
-        let mut all_branch_hints: Vec<WirBranchHintEntry> = Vec::new();
-        let mut func_idx = builder.import_func_count;
         // Generate user-defined functions from entry TIR (excluding world exports which are handled specially)
         for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
@@ -1623,18 +1615,14 @@ impl Codegen<'_> {
                 let body = self.generate_run_function_body(&tir_func, type_table, &builder);
                 bodies.push(body);
             } else {
-                let (body, hints) = self.generate_function_body(
+                let body = self.generate_function_body(
                     &tir_func,
                     type_table,
                     &builder,
                     entry_module_source,
                 );
                 bodies.push(body);
-                if !hints.is_empty() {
-                    all_branch_hints.push(WirBranchHintEntry { func_idx, hints });
-                }
             }
-            func_idx += 1;
         }
 
         // Generate loaded module functions (TIR path)
@@ -1648,13 +1636,9 @@ impl Codegen<'_> {
                 continue;
             }
 
-            let (body, hints) =
+            let body =
                 self.generate_function_body(&tir_func, func_type_table, &builder, module_source);
             bodies.push(body);
-            if !hints.is_empty() {
-                all_branch_hints.push(WirBranchHintEntry { func_idx, hints });
-            }
-            func_idx += 1;
         }
 
         // Generate impl methods from loaded modules (TIR path)
@@ -1670,17 +1654,13 @@ impl Codegen<'_> {
                 continue;
             }
 
-            let (body, hints) = self.generate_function_body(
+            let body = self.generate_function_body(
                 &tir_method,
                 method_type_table,
                 &builder,
                 module_source,
             );
             bodies.push(body);
-            if !hints.is_empty() {
-                all_branch_hints.push(WirBranchHintEntry { func_idx, hints });
-            }
-            func_idx += 1;
         }
 
         // Generate world export functions (entry points with task.return wrapper)
@@ -1765,7 +1745,6 @@ impl Codegen<'_> {
             element_func_indices: closure_call_func_indices,
             data: string_data.to_vec(),
             bodies,
-            branch_hints: all_branch_hints,
             import_func_count: parts.import_func_count,
             names: if strip_names { None } else { Some(parts.names) },
             module_name: module_name.to_string(),
@@ -9940,8 +9919,8 @@ impl Codegen<'_> {
                 else_block,
             } => {
                 self.generate_expr(func, condition, type_table, ctx, builder);
-                // Record branch hint at the current offset (before emitting the if instruction)
-                ctx.consume_branch_hint(func.byte_len() as u32);
+                // Emit branch hint if pending (before the if instruction)
+                ctx.consume_branch_hint(func);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 // If creates a block level - increment extra depth if we're inside a loop
                 if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
@@ -11255,7 +11234,7 @@ impl Codegen<'_> {
         type_table: &TypeTable,
         builder: &CoreModuleBuilder,
         module_source: &ModuleSource,
-    ) -> (WirFunctionBody, Vec<(u32, bool)>) {
+    ) -> WirFunctionBody {
         // Create function context - TIR already has local count and types
         let mut func_ctx = FunctionContext::with_module_source(
             tir_func.params.len() as u32,
@@ -11326,9 +11305,7 @@ impl Codegen<'_> {
         }
         wasm_func.instruction(&Instruction::End);
 
-        // Return function body and collected branch hints
-        let branch_hints = func_ctx.branch_hints;
-        (wasm_func.into_body(), branch_hints)
+        wasm_func.into_body()
     }
 
     /// Generate the 'run' function body for TIR with task.return wrapper

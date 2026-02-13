@@ -9,7 +9,7 @@
 // stream as a flat list. Tree-structured IR is a future step (see WEP).
 
 use wasm_encoder::{
-    BlockType, Encode, ExportKind, FieldType, HeapType, Instruction, MemArg, StorageType, ValType,
+    BlockType, ExportKind, FieldType, HeapType, Instruction, MemArg, StorageType, ValType,
 };
 
 // ============================================================================
@@ -33,9 +33,7 @@ pub struct WirModule {
     pub data: Vec<u8>,
     /// One body per defined function (same order as `func_type_indices`).
     pub bodies: Vec<WirFunctionBody>,
-    /// Per-function branch hints.
-    pub branch_hints: Vec<WirBranchHintEntry>,
-    /// Number of imported functions (offset for branch hint func indices).
+    /// Number of imported functions (used to compute branch hint func indices).
     pub import_func_count: u32,
     /// Module name and debug names. `None` in strip-names mode.
     pub names: Option<WirNames>,
@@ -117,12 +115,6 @@ pub struct WirExport {
     pub name: String,
     pub kind: ExportKind,
     pub index: u32,
-}
-
-/// Branch hints for a single function.
-pub struct WirBranchHintEntry {
-    pub func_idx: u32,
-    pub hints: Vec<(u32, bool)>,
 }
 
 /// Debug names for the name section.
@@ -382,6 +374,12 @@ pub enum WirInstr {
     // ── Misc ───────────────────────────────────────────────────────────
     Drop,
     TypedSelect(ValType),
+
+    // ── Pseudo-instructions (not emitted as Wasm bytes) ────────────────
+    /// Branch hint for the next branch instruction.
+    /// `true` = likely taken, `false` = unlikely taken.
+    /// Emitter records the byte offset here and emits it in the branch hints section.
+    BranchHint(bool),
 }
 
 impl WirInstr {
@@ -630,38 +628,25 @@ impl WirInstr {
 pub struct WirFunction {
     local_decls: Vec<(u32, ValType)>,
     instrs: Vec<WirInstr>,
-    /// Cumulative encoded byte length (locals + instructions), used for
-    /// branch-hint offset computation without maintaining a full scratch encoder.
-    byte_offset: usize,
-    /// Reusable buffer for computing per-instruction encoded sizes.
-    encode_buf: Vec<u8>,
 }
 
 impl WirFunction {
     pub fn new(locals: Vec<(u32, ValType)>) -> Self {
-        // Compute initial byte_offset from locals encoding
-        let tmp = wasm_encoder::Function::new(locals.clone());
-        let byte_offset = tmp.byte_len();
         Self {
             local_decls: locals,
             instrs: Vec::new(),
-            byte_offset,
-            encode_buf: Vec::new(),
         }
     }
 
     /// Record one instruction.  Same signature as `wasm_encoder::Function::instruction`.
     pub fn instruction(&mut self, instr: &Instruction<'_>) -> &mut Self {
         self.instrs.push(WirInstr::from_instruction(instr));
-        self.encode_buf.clear();
-        instr.encode(&mut self.encode_buf);
-        self.byte_offset += self.encode_buf.len();
         self
     }
 
-    /// Current encoded byte length (used for branch-hint offset recording).
-    pub fn byte_len(&self) -> usize {
-        self.byte_offset
+    /// Record a branch hint for the next branch instruction.
+    pub fn branch_hint(&mut self, taken: bool) {
+        self.instrs.push(WirInstr::BranchHint(taken));
     }
 
     /// Consume self and produce a `WirFunctionBody` for inclusion in a `WirModule`.
