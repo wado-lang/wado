@@ -315,13 +315,10 @@ impl String {
     }
 
     /// Append a Unicode scalar value (char) to this string.
-    /// Panics if the char is not a valid Unicode scalar value (surrogates 0xD800-0xDFFF).
     pub fn append_char(&mut self, c: char) {
         let code = c as u32;
 
-        // Encode UTF-8, validating only where needed
         if code < 0x80 {
-            // ASCII: always valid
             let new_used = self.used + 1;
             if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
                 self.grow(new_used);
@@ -329,7 +326,6 @@ impl String {
             builtin::array_set_u8(self.repr, self.used, code);
             self.used = new_used;
         } else if code < 0x800 {
-            // 2-byte: always valid (surrogates start at 0xD800)
             let new_used = self.used + 2;
             if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
                 self.grow(new_used);
@@ -338,8 +334,6 @@ impl String {
             builtin::array_set_u8(self.repr, self.used + 1, 0x80 | (code & 0x3F));
             self.used = new_used;
         } else if code < 0x10000 {
-            // 3-byte: check for surrogates (0xD800-0xDFFF)
-            assert code < 0xD800 || code > 0xDFFF, "invalid Unicode scalar value: surrogate code point";
             let new_used = self.used + 3;
             if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
                 self.grow(new_used);
@@ -349,8 +343,6 @@ impl String {
             builtin::array_set_u8(self.repr, self.used + 2, 0x80 | (code & 0x3F));
             self.used = new_used;
         } else {
-            // 4-byte: check for valid range (max 0x10FFFF)
-            assert code <= 0x10FFFF, "invalid Unicode scalar value: out of range";
             let new_used = self.used + 4;
             if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
                 self.grow(new_used);
