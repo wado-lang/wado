@@ -7,25 +7,26 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Monomorphize → Lower → Optimize → Wasm Plan → Codegen
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Monomorphize → Lower → Optimize → Wasm Plan → Codegen → Emit
 ```
 
 ### Compilation Pipeline
 
-| Phase        | Input         | Output          | Description                                               |
-| ------------ | ------------- | --------------- | --------------------------------------------------------- |
-| Lexer        | Source        | Tokens          | Tokenize, extract `__DATA__` section                      |
-| Parser       | Tokens        | AST             | Build abstract syntax tree                                |
-| Bind         | AST           | AST (validated) | Local name resolution, scope/mutability checking          |
-| Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar    |
-| Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
-| Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
-| Effect Check | Project       | Errors          | Validate function effect requirements                     |
-| Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
-| Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
-| Optimize     | Project       | Project         | DCE, usage analysis, feature flags                        |
-| Wasm Plan    | Project       | Project         | Wasm pre-codegen planning, CM boundary analysis           |
-| Codegen      | Project       | Wasm bytes      | Generate Component Model Wasm                             |
+| Phase        | Input         | Output          | Description                                                 |
+| ------------ | ------------- | --------------- | ----------------------------------------------------------- |
+| Lexer        | Source        | Tokens          | Tokenize, extract `__DATA__` section                        |
+| Parser       | Tokens        | AST             | Build abstract syntax tree                                  |
+| Bind         | AST           | AST (validated) | Local name resolution, scope/mutability checking            |
+| Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar      |
+| Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                        |
+| Resolve      | AST + Symbols | Project         | Type resolution, produce Project                            |
+| Effect Check | Project       | Errors          | Validate function effect requirements                       |
+| Monomorphize | Project       | Project         | Instantiate generics with concrete types                    |
+| Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering   |
+| Optimize     | Project       | Project         | DCE, usage analysis, feature flags                          |
+| Wasm Plan    | Project       | Project         | Wasm pre-codegen planning, CM boundary analysis             |
+| Codegen      | Project       | WirModule       | Build WIR module (types, imports, globals, function bodies) |
+| Emit         | WirModule     | Wasm bytes      | Mechanical conversion of WirModule to Wasm binary           |
 
 **Note:** The Desugar phase is integrated into the Load phase. Each module goes through the same frontend pipeline: `lexer → parser → bind → desugar`.
 
@@ -64,8 +65,10 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | WasiRegistry     | `wasi_registry.rs`      | WASI import registry, WASI type resolution            |
 | BuiltinRegistry  | `builtin_registry.rs`   | Builtin function registry from `core:builtin`         |
 | WorldRegistry    | `world_registry.rs`     | World definitions registry for export signatures      |
-| WasmBuilder      | `wasm_builder.rs`       | Wasm index tracking utilities                         |
-| Codegen          | `codegen.rs`            | Generates Component Model Wasm via wasm-encoder       |
+| WIR              | `wir.rs`                | WIR (Wasm IR) data structures: WirModule, WirInstr    |
+| WirEmit          | `wir_emit.rs`           | Emits WirModule to Wasm binary via wasm-encoder       |
+| WasmBuilder      | `wasm_builder.rs`       | Collects WIR types and tracks Wasm indices            |
+| Codegen          | `codegen.rs`            | Builds WirModule for Component Model Wasm             |
 | Bundled          | `bundled.rs`            | Loads pre-compiled Wasm builtins (wado-bundled)       |
 | Postproc         | `wasm_postprocess.rs`   | Wasm binary transformations                           |
 

@@ -25,23 +25,23 @@ use crate::tir::{
     TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
+use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder};
 use crate::wasm_plan::{
     CmValType, TypeDecl, get_self_referential_field_types, get_type_dependencies,
     sort_types_topologically,
 };
 use crate::wasm_postprocess;
+use crate::wir::{WirConstExpr, WirFunction, WirFunctionBody, WirModule, WirRecGroupKind};
 use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 use wasm_encoder::{
-    AbstractHeapType, Alias, BlockType, BranchHint, BranchHints, CanonicalOption, CodeSection,
-    ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ConstExpr,
-    DataCountSection, DataSection, ElementSection, Elements, ExportKind, ExportSection, FieldType,
-    Function, FunctionSection, GlobalSection, GlobalType, HeapType, InstanceType, Instruction,
-    MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection, PrimitiveValType,
-    RefType, StorageType, TypeBounds, TypeSection, ValType,
+    AbstractHeapType, Alias, BlockType, CanonicalOption, CodeSection, ComponentBuilder,
+    ComponentExportKind, ComponentOuterAliasKind, ComponentValType, ExportKind, ExportSection,
+    FieldType, Function, FunctionSection, GlobalSection, GlobalType, HeapType, InstanceType,
+    Instruction, MemArg, MemorySection, MemoryType, Module, ModuleArg, NameMap, NameSection,
+    PrimitiveValType, RefType, StorageType, TypeBounds, TypeSection, ValType,
 };
 use wasmparser::{Validator, WasmFeatures};
 
@@ -184,8 +184,6 @@ struct FunctionContext {
     /// Pending branch hint from `builtin::likely()` or `builtin::unlikely()`
     /// None = no hint, Some(true) = likely taken, Some(false) = unlikely taken
     pending_branch_hint: Option<bool>,
-    /// Collected branch hints for this function (offset, taken)
-    branch_hints: Vec<(u32, bool)>,
     /// Module source of the current function (for access control checks)
     current_module_source: ModuleSource,
     /// Stack of break targets for loops and labeled blocks.
@@ -235,7 +233,6 @@ impl FunctionContext {
             local_types: Vec::new(),
             return_type: None,
             pending_branch_hint: None,
-            branch_hints: Vec::new(),
             current_module_source: ModuleSource::entry_point_with_filename("<unknown>"),
             loop_info: Vec::new(),
             local_index_offset: 0,
@@ -261,7 +258,6 @@ impl FunctionContext {
             local_types: Vec::new(),
             return_type: None,
             pending_branch_hint: None,
-            branch_hints: Vec::new(),
             current_module_source: module_source,
             loop_info: Vec::new(),
             local_index_offset: 0,
@@ -314,10 +310,10 @@ impl FunctionContext {
         self.pending_branch_hint = Some(taken);
     }
 
-    /// Consume pending branch hint and record it at the given offset
-    fn consume_branch_hint(&mut self, offset: u32) {
+    /// Consume pending branch hint and emit it into the WIR instruction stream.
+    fn consume_branch_hint(&mut self, func: &mut WirFunction) {
         if let Some(taken) = self.pending_branch_hint.take() {
-            self.branch_hints.push((offset, taken));
+            func.branch_hint(taken);
         }
     }
 
@@ -519,7 +515,7 @@ impl Codegen<'_> {
     }
 
     /// Build the main core Wasm module containing user-defined functions.
-    fn build_main_module(&mut self, params: BuildMainModuleParams<'_>) -> Vec<u8> {
+    fn build_main_module(&mut self, params: BuildMainModuleParams<'_>) -> WirModule {
         let BuildMainModuleParams {
             entry_tir,
             all_tir_modules,
@@ -531,7 +527,6 @@ impl Codegen<'_> {
         } = params;
         let strip_names = project.strip_names;
 
-        let mut module = Module::new();
         let mut builder = CoreModuleBuilder::new();
         let type_table = &*entry_tir.type_table.borrow();
         let entry_module_source = &entry_tir.module_source;
@@ -1362,8 +1357,7 @@ impl Codegen<'_> {
             }
         }
 
-        // Add types section to module
-        module.section(builder.types());
+        // Types are accumulated in builder — no section assembly here.
 
         // ========================================
         // Import section
@@ -1388,7 +1382,7 @@ impl Codegen<'_> {
         }
 
         builder.import_memory("mem", "memory", 1);
-        module.section(builder.imports());
+        // Imports are accumulated in builder — no section assembly here.
 
         // ========================================
         // Function section
@@ -1538,7 +1532,7 @@ impl Codegen<'_> {
             }
         }
 
-        module.section(builder.functions());
+        // Functions are accumulated in builder — no section assembly here.
 
         // ========================================
         // Global section
@@ -1577,10 +1571,7 @@ impl Codegen<'_> {
                 );
             }
         }
-        // Add globals section only if there are globals
-        if builder.has_globals() {
-            module.section(builder.globals());
-        }
+        // Globals are accumulated in builder — no section assembly here.
 
         // ========================================
         // Export section
@@ -1598,30 +1589,12 @@ impl Codegen<'_> {
         for test in &entry_tir.tests {
             builder.export_func(&test.function_name, &test.function_name);
         }
-        module.section(builder.exports());
+        // Exports are accumulated in builder — no section assembly here.
 
         // ========================================
-        // Element section (required for ref.func in closures)
+        // Generate function bodies
         // ========================================
-        if !closure_call_func_indices.is_empty() {
-            let mut elements = ElementSection::new();
-            // Create declarative element segment for ref.func usage
-            elements.declared(Elements::Functions(std::borrow::Cow::Borrowed(
-                &closure_call_func_indices,
-            )));
-            module.section(&elements);
-        }
-
-        // Data count section (required for array.new_data with GC)
-        let data_count = u32::from(!string_data.is_empty());
-        module.section(&DataCountSection { count: data_count });
-
-        // ========================================
-        // Code section
-        // ========================================
-        let mut code = CodeSection::new();
-        let mut all_branch_hints: Vec<(u32, Vec<(u32, bool)>)> = Vec::new();
-        let mut func_idx = builder.import_func_count;
+        let mut bodies: Vec<WirFunctionBody> = Vec::new();
         // Generate user-defined functions from entry TIR (excluding world exports which are handled specially)
         for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
@@ -1639,17 +1612,17 @@ impl Codegen<'_> {
             }
             // Test functions need task.return wrapper like run
             if tir_func.name.starts_with("__test_") {
-                let wasm_func = self.generate_run_function(&tir_func, type_table, &builder);
-                code.function(&wasm_func);
+                let body = self.generate_run_function_body(&tir_func, type_table, &builder);
+                bodies.push(body);
             } else {
-                let (wasm_func, hints) =
-                    self.generate_function(&tir_func, type_table, &builder, entry_module_source);
-                code.function(&wasm_func);
-                if !hints.is_empty() {
-                    all_branch_hints.push((func_idx, hints));
-                }
+                let body = self.generate_function_body(
+                    &tir_func,
+                    type_table,
+                    &builder,
+                    entry_module_source,
+                );
+                bodies.push(body);
             }
-            func_idx += 1;
         }
 
         // Generate loaded module functions (TIR path)
@@ -1663,13 +1636,9 @@ impl Codegen<'_> {
                 continue;
             }
 
-            let (wasm_func, hints) =
-                self.generate_function(&tir_func, func_type_table, &builder, module_source);
-            code.function(&wasm_func);
-            if !hints.is_empty() {
-                all_branch_hints.push((func_idx, hints));
-            }
-            func_idx += 1;
+            let body =
+                self.generate_function_body(&tir_func, func_type_table, &builder, module_source);
+            bodies.push(body);
         }
 
         // Generate impl methods from loaded modules (TIR path)
@@ -1685,13 +1654,13 @@ impl Codegen<'_> {
                 continue;
             }
 
-            let (wasm_func, hints) =
-                self.generate_function(&tir_method, method_type_table, &builder, module_source);
-            code.function(&wasm_func);
-            if !hints.is_empty() {
-                all_branch_hints.push((func_idx, hints));
-            }
-            func_idx += 1;
+            let body = self.generate_function_body(
+                &tir_method,
+                method_type_table,
+                &builder,
+                module_source,
+            );
+            bodies.push(body);
         }
 
         // Generate world export functions (entry points with task.return wrapper)
@@ -1701,35 +1670,35 @@ impl Codegen<'_> {
                 .iter()
                 .find(|f| f.borrow().name == *export_name);
 
-            let export_wasm_func = if let Some(tir_rc) = export_tir_rc {
+            let body = if let Some(tir_rc) = export_tir_rc {
                 // Generate function body using the TIR function body generation
                 let tir_func = tir_rc.borrow();
-                self.generate_run_function(&tir_func, type_table, &builder)
+                self.generate_run_function_body(&tir_func, type_table, &builder)
             } else {
                 // No matching function - create empty entry point
-                let mut func = Function::new(vec![]);
+                let mut wir_func = WirFunction::new(vec![]);
                 let task_return_idx = builder.func_idx("task-return");
                 if self.project.has_http_handler_export {
                     // Service world: result<own<response>, error-code> with complex payloads
                     // Flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
-                    func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                    func.instruction(&Instruction::I32Const(38)); // internal-error
-                    func.instruction(&Instruction::I32Const(1)); // option<string> has Some
-                    func.instruction(&Instruction::I64Const(0)); // u64 padding
-                    func.instruction(&Instruction::I32Const(0)); // string ptr
-                    func.instruction(&Instruction::I32Const(37)); // string len
-                    func.instruction(&Instruction::I32Const(0)); // padding
-                    func.instruction(&Instruction::I32Const(0)); // padding
+                    wir_func.instruction(&Instruction::I32Const(1)); // Err discriminant
+                    wir_func.instruction(&Instruction::I32Const(38)); // internal-error
+                    wir_func.instruction(&Instruction::I32Const(1)); // option<string> has Some
+                    wir_func.instruction(&Instruction::I64Const(0)); // u64 padding
+                    wir_func.instruction(&Instruction::I32Const(0)); // string ptr
+                    wir_func.instruction(&Instruction::I32Const(37)); // string len
+                    wir_func.instruction(&Instruction::I32Const(0)); // padding
+                    wir_func.instruction(&Instruction::I32Const(0)); // padding
                 } else {
                     // Command world: result<_, _> needs just (i32)
-                    func.instruction(&Instruction::I32Const(0)); // Ok discriminant
+                    wir_func.instruction(&Instruction::I32Const(0)); // Ok discriminant
                 }
-                func.instruction(&Instruction::Call(task_return_idx));
-                func.instruction(&Instruction::End);
-                func
+                wir_func.instruction(&Instruction::Call(task_return_idx));
+                wir_func.instruction(&Instruction::End);
+                wir_func.into_body()
             };
 
-            code.function(&export_wasm_func);
+            bodies.push(body);
         }
 
         // Generate canonical wrapper function bodies for closure __call methods
@@ -1743,63 +1712,44 @@ impl Codegen<'_> {
                 continue;
             }
 
-            let mut wrapper_func = Function::new(vec![]);
+            let mut wir_func = WirFunction::new(vec![]);
 
             // Cast first param (ref struct) to specific functor type
-            wrapper_func.instruction(&Instruction::LocalGet(0)); // env param
-            wrapper_func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
+            wir_func.instruction(&Instruction::LocalGet(0)); // env param
+            wir_func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
                 wrapper_info.functor_type_idx,
             )));
 
             // Pass through all other params
             for i in 0..wrapper_info.param_type_ids.len() {
-                wrapper_func.instruction(&Instruction::LocalGet((i + 1) as u32));
+                wir_func.instruction(&Instruction::LocalGet((i + 1) as u32));
             }
 
             // Call the original __call method
-            wrapper_func.instruction(&Instruction::Call(wrapper_info.call_func_idx));
+            wir_func.instruction(&Instruction::Call(wrapper_info.call_func_idx));
 
-            wrapper_func.instruction(&Instruction::End);
-            code.function(&wrapper_func);
+            wir_func.instruction(&Instruction::End);
+            bodies.push(wir_func.into_body());
         }
 
-        // Branch hints section (emit before code section for proper placement)
-        if !all_branch_hints.is_empty() {
-            let mut hints = BranchHints::new();
-            for (func_idx, func_hints) in all_branch_hints {
-                hints.function_hints(
-                    func_idx,
-                    func_hints.into_iter().map(|(offset, taken)| BranchHint {
-                        branch_func_offset: offset,
-                        branch_hint_value: u32::from(taken),
-                    }),
-                );
-            }
-            module.section(&hints);
+        // ========================================
+        // Assemble WirModule
+        // ========================================
+        let parts = builder.into_parts();
+        WirModule {
+            types: parts.types,
+            imports: parts.imports,
+            func_type_indices: parts.func_type_indices,
+            globals: parts.globals,
+            exports: parts.exports,
+            element_func_indices: closure_call_func_indices,
+            data: string_data.to_vec(),
+            bodies,
+            import_func_count: parts.import_func_count,
+            names: if strip_names { None } else { Some(parts.names) },
+            module_name: module_name.to_string(),
+            has_memory: parts.has_memory,
         }
-
-        module.section(&code);
-
-        // Data section
-        if !string_data.is_empty() {
-            let mut data = DataSection::new();
-            data.passive(string_data.iter().copied());
-            module.section(&data);
-        }
-
-        // Name section (skip in size-optimized builds)
-        if !strip_names {
-            let names = builder.build_name_section(module_name);
-            module.section(&names);
-        }
-
-        // Producers section (skip in size-optimized builds)
-        if !strip_names {
-            let producers = CoreModuleBuilder::build_producers_section();
-            module.section(&producers);
-        }
-
-        module.finish()
     }
 
     /// Generate component from TIR for WASI P3
@@ -2134,7 +2084,7 @@ impl Codegen<'_> {
         // ========================================
         // Main core module
         // ========================================
-        let main_module = self.build_main_module(BuildMainModuleParams {
+        let wir_module = self.build_main_module(BuildMainModuleParams {
             entry_tir,
             all_tir_modules,
             symbols,
@@ -2143,6 +2093,7 @@ impl Codegen<'_> {
             module_name,
             available_wasi_funcs: &available_wasi_funcs,
         });
+        let main_module = crate::wir_emit::emit_module(&wir_module);
         // Validate main module before embedding
         {
             let mut validator = Validator::new_with_features(WasmFeatures::all());
@@ -3871,7 +3822,7 @@ impl Codegen<'_> {
         // Plus the main struct type itself
 
         let base_idx = builder.peek_next_type_idx();
-        let mut rec_types: Vec<(String, RecTypeKind)> = Vec::new();
+        let mut rec_types: Vec<(String, WirRecGroupKind)> = Vec::new();
         let mut array_type_mappings: Vec<(TypeId, u32, u32)> = Vec::new(); // (element_type_id, raw_array_idx, array_struct_idx)
 
         // First, add the raw GC array types and Array struct types for self-referential fields
@@ -3906,7 +3857,7 @@ impl Codegen<'_> {
                 }));
                 rec_types.push((
                     raw_array_name.clone(),
-                    RecTypeKind::Array(FieldType {
+                    WirRecGroupKind::Array(FieldType {
                         element_type: element_storage,
                         mutable: true,
                     }),
@@ -3928,7 +3879,10 @@ impl Codegen<'_> {
                         mutable: true,
                     },
                 ];
-                rec_types.push((array_struct_name, RecTypeKind::Struct(array_struct_fields)));
+                rec_types.push((
+                    array_struct_name,
+                    WirRecGroupKind::Struct(array_struct_fields),
+                ));
 
                 array_type_mappings.push((element_type_id, raw_array_idx, array_struct_idx));
             }
@@ -3988,7 +3942,10 @@ impl Codegen<'_> {
             });
         }
 
-        rec_types.push((struct_name.name.clone(), RecTypeKind::Struct(struct_fields)));
+        rec_types.push((
+            struct_name.name.clone(),
+            WirRecGroupKind::Struct(struct_fields),
+        ));
 
         // Define the rec group
         let indices = builder.define_rec_group(&rec_types);
@@ -4474,7 +4431,7 @@ impl Codegen<'_> {
     /// Assumes the source value is on the stack. Leaves the copied value on the stack.
     fn generate_value_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         type_id: TypeId,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -4596,7 +4553,7 @@ impl Codegen<'_> {
     /// Leaves the copied struct reference on the stack.
     fn generate_struct_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         type_idx: u32,
         field_count: usize,
         ctx: &mut FunctionContext,
@@ -4640,7 +4597,7 @@ impl Codegen<'_> {
     /// 4. Create a new instance of the same case type
     fn generate_variant_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         base_type_idx: u32,
         cases: &[VariantCaseInfo],
         ctx: &mut FunctionContext,
@@ -4760,7 +4717,7 @@ impl Codegen<'_> {
     /// `is_packed` should be true for arrays with packed storage (e.g., i8/i16 for strings).
     fn generate_array_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         array_type_idx: u32,
         is_packed: bool,
         ctx: &mut FunctionContext,
@@ -4894,7 +4851,7 @@ impl Codegen<'_> {
     /// Leaves the copied option value on the stack.
     fn generate_option_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         inner_type_id: TypeId,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -5690,9 +5647,7 @@ impl Codegen<'_> {
 
     /// Convert a global variable initializer to a Wasm constant expression
     /// Only supports constant expressions (literals, null)
-    fn global_init_to_const_expr(init: &TirExpr, type_table: &TypeTable) -> ConstExpr {
-        use wasm_encoder::{Ieee32, Ieee64};
-
+    fn global_init_to_const_expr(init: &TirExpr, type_table: &TypeTable) -> WirConstExpr {
         match &init.kind {
             TirExprKind::IntLiteral { value, .. } => {
                 // Determine the right type of constant based on the expression type
@@ -5705,16 +5660,14 @@ impl Codegen<'_> {
                         | PrimitiveType::I32
                         | PrimitiveType::U8
                         | PrimitiveType::U16
-                        | PrimitiveType::U32 => ConstExpr::i32_const(*value as i32),
-                        PrimitiveType::I64 | PrimitiveType::U64 => {
-                            ConstExpr::i64_const(*value as i64)
-                        }
+                        | PrimitiveType::U32 => WirConstExpr::I32(*value as i32),
+                        PrimitiveType::I64 | PrimitiveType::U64 => WirConstExpr::I64(*value as i64),
                         _ => panic!(
                             "unexpected primitive type for int literal: {:?}",
                             type_table.get(init.type_id)
                         ),
                     },
-                    _ => ConstExpr::i32_const(*value as i32), // Default to i32
+                    _ => WirConstExpr::I32(*value as i32), // Default to i32
                 }
             }
             TirExprKind::FloatLiteral { value, .. } => {
@@ -5722,26 +5675,26 @@ impl Codegen<'_> {
                 let base_type = type_table.get_ultimate_base_type(init.type_id);
                 match type_table.get(base_type) {
                     ResolvedType::Primitive(PrimitiveType::F32) => {
-                        ConstExpr::f32_const(Ieee32::from(*value as f32))
+                        WirConstExpr::F32((*value as f32).to_bits())
                     }
                     ResolvedType::Primitive(PrimitiveType::F64) => {
-                        ConstExpr::f64_const(Ieee64::from(*value))
+                        WirConstExpr::F64(value.to_bits())
                     }
-                    _ => ConstExpr::f64_const(Ieee64::from(*value)), // Default to f64
+                    _ => WirConstExpr::F64(value.to_bits()), // Default to f64
                 }
             }
-            TirExprKind::BoolLiteral(b) => ConstExpr::i32_const(i32::from(*b)),
+            TirExprKind::BoolLiteral(b) => WirConstExpr::I32(i32::from(*b)),
             TirExprKind::Null => {
                 // For null, we need a ref.null of the appropriate type
                 // For Option<T>, null means None
-                ConstExpr::ref_null(HeapType::Abstract {
+                WirConstExpr::RefNull(HeapType::Abstract {
                     shared: false,
                     ty: AbstractHeapType::None,
                 })
             }
             TirExprKind::Unit => {
                 // Unit type - use 0
-                ConstExpr::i32_const(0)
+                WirConstExpr::I32(0)
             }
             TirExprKind::Cast { expr: inner, .. } => {
                 // For casts, evaluate the inner expression with the cast's target type
@@ -5752,7 +5705,7 @@ impl Codegen<'_> {
             _ => {
                 // For non-constant initializers, use null as placeholder
                 // The actual initialization happens in __initialize_globals
-                ConstExpr::ref_null(HeapType::Abstract {
+                WirConstExpr::RefNull(HeapType::Abstract {
                     shared: false,
                     ty: AbstractHeapType::None,
                 })
@@ -6086,7 +6039,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR expression
     fn generate_expr(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         expr: &TirExpr,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -8580,7 +8533,7 @@ impl Codegen<'_> {
     /// Generate code for multiple arguments (convenience wrapper)
     fn generate_args(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         args: &[TirExpr],
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -8625,7 +8578,7 @@ impl Codegen<'_> {
     /// This optimizes assignment expressions to avoid the drop-tee pattern.
     fn generate_expr_as_stmt(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         expr: &TirExpr,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -8648,7 +8601,7 @@ impl Codegen<'_> {
     /// This avoids the drop-tee pattern where we use local.tee then immediately drop.
     fn generate_assignment_as_stmt(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         target: &TirExpr,
         value: &TirExpr,
         type_table: &TypeTable,
@@ -8754,7 +8707,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR binary operation
     fn generate_binary_op(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         op: TirBinaryOp,
         operand_type: TypeId,
         type_table: &TypeTable,
@@ -8970,7 +8923,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR unary operation
     fn generate_unary_op(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         op: TirUnaryOp,
         operand_type: TypeId,
         type_table: &TypeTable,
@@ -9032,7 +8985,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR type cast
     fn generate_cast(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         from_type: TypeId,
         to_type: TypeId,
         type_table: &TypeTable,
@@ -9263,7 +9216,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR block
     fn generate_block(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         block: &TirBlock,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -9277,7 +9230,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR block as an expression (keeps last expression value on stack)
     fn generate_block_as_expr(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         block: &TirBlock,
         result_type: TypeId,
         type_table: &TypeTable,
@@ -9351,7 +9304,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR statement
     fn generate_stmt(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         stmt: &TirStmt,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -9966,8 +9919,8 @@ impl Codegen<'_> {
                 else_block,
             } => {
                 self.generate_expr(func, condition, type_table, ctx, builder);
-                // Record branch hint at the current offset (before emitting the if instruction)
-                ctx.consume_branch_hint(func.byte_len() as u32);
+                // Emit branch hint if pending (before the if instruction)
+                ctx.consume_branch_hint(func);
                 func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                 // If creates a block level - increment extra depth if we're inside a loop
                 if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
@@ -10110,7 +10063,7 @@ impl Codegen<'_> {
     /// The tuple value should already be on the stack
     fn generate_let_pattern_binding(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         pattern: &TirPattern,
         tuple_type_id: TypeId,
         type_table: &TypeTable,
@@ -10247,7 +10200,7 @@ impl Codegen<'_> {
     /// Returns `true` if the optimization was applied, `false` otherwise.
     fn try_generate_multivalue_builtin_destructure(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         pattern: &TirPattern,
         value: &TirExpr,
         type_table: &TypeTable,
@@ -10487,7 +10440,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments, clippy::cast_sign_loss)]
     fn generate_match_br_table(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee_local: u32,
         arms: &[TirMatchArm],
         analysis: BrTableAnalysis,
@@ -10629,7 +10582,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_match_expr(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee: &TirExpr,
         arms: &[TirMatchArm],
         result_type_id: TypeId,
@@ -10684,7 +10637,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_match_arms(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee_local: u32,
         scrutinee_type_id: TypeId,
         arms: &[TirMatchArm],
@@ -10860,7 +10813,7 @@ impl Codegen<'_> {
     /// Returns true if condition was generated, false if pattern is unsupported
     fn generate_match_pattern_check(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee_type: &ResolvedType,
         pattern: &TirPattern,
         _type_table: &TypeTable,
@@ -11079,7 +11032,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_match_pattern_binding(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee_local: u32,
         scrutinee_type_id: TypeId,
         pattern: &TirPattern,
@@ -11275,13 +11228,13 @@ impl Codegen<'_> {
     /// Generate a Wasm function from TIR function
     ///
     /// Returns the generated function and any branch hints collected during generation.
-    fn generate_function(
+    fn generate_function_body(
         &self,
         tir_func: &TirFunction,
         type_table: &TypeTable,
         builder: &CoreModuleBuilder,
         module_source: &ModuleSource,
-    ) -> (Function, Vec<(u32, bool)>) {
+    ) -> WirFunctionBody {
         // Create function context - TIR already has local count and types
         let mut func_ctx = FunctionContext::with_module_source(
             tir_func.params.len() as u32,
@@ -11334,7 +11287,7 @@ impl Codegen<'_> {
         }
 
         // Generate the function code
-        let mut wasm_func = Function::new(func_ctx.get_local_decls());
+        let mut wasm_func = WirFunction::new(func_ctx.get_local_decls());
 
         // Generate body
         if let Some(body) = &tir_func.body {
@@ -11352,21 +11305,19 @@ impl Codegen<'_> {
         }
         wasm_func.instruction(&Instruction::End);
 
-        // Return function and collected branch hints
-        let branch_hints = func_ctx.branch_hints;
-        (wasm_func, branch_hints)
+        wasm_func.into_body()
     }
 
-    /// Generate the 'run' function for TIR with task.return wrapper
+    /// Generate the 'run' function body for TIR with task.return wrapper
     ///
     /// This is a special case of function generation for the WASI CLI entry point.
     /// It generates the function body and appends task.return before End.
-    fn generate_run_function(
+    fn generate_run_function_body(
         &self,
         tir_func: &TirFunction,
         type_table: &TypeTable,
         builder: &CoreModuleBuilder,
-    ) -> Function {
+    ) -> WirFunctionBody {
         // Create function context
         let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
 
@@ -11419,7 +11370,7 @@ impl Codegen<'_> {
             self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
         }
 
-        let mut wasm_func = Function::new(func_ctx.get_local_decls());
+        let mut wasm_func = WirFunction::new(func_ctx.get_local_decls());
 
         // Generate body
         if let Some(body) = &tir_func.body {
@@ -11449,7 +11400,7 @@ impl Codegen<'_> {
         }
         wasm_func.instruction(&Instruction::End);
 
-        wasm_func
+        wasm_func.into_body()
     }
 
     // ========================================================================
@@ -12060,7 +12011,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_cm_effect_call(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
         type_table: &TypeTable,
@@ -12221,7 +12172,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_cm_resource_method_call(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
         type_table: &TypeTable,
@@ -12473,7 +12424,7 @@ impl Codegen<'_> {
     /// It waits for the subtask started by write-via-stream to complete.
     fn generate_effect_wait(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         ctx: &FunctionContext,
         builder: &CoreModuleBuilder,
     ) {
@@ -12529,7 +12480,7 @@ impl Codegen<'_> {
         builtin_name: &str,
         args: &[TirExpr],
         expr: &TirExpr,
-        func: &mut Function,
+        func: &mut WirFunction,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
@@ -13027,7 +12978,7 @@ impl Codegen<'_> {
         &self,
         func_name: &str,
         args: &[TirExpr],
-        func: &mut Function,
+        func: &mut WirFunction,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
@@ -13397,7 +13348,7 @@ impl Codegen<'_> {
                 mutable: true,
                 shared: false,
             },
-            &ConstExpr::i32_const(1024),
+            &wasm_encoder::ConstExpr::i32_const(1024),
         );
         module.section(&globals);
 
@@ -13473,7 +13424,7 @@ impl Codegen<'_> {
     /// Emit lowering for Option<String> payload.
     /// Layout: p2=disc, p3=ptr(i64), p4=len
     fn emit_option_string_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         p2: u32,
         p3: u32,
@@ -13514,7 +13465,7 @@ impl Codegen<'_> {
     /// Emit lowering for Option<u64> payload (nullable Box<u64>).
     /// Layout: p2=disc, p3=value(i64)
     fn emit_option_box_u64_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         p2: u32,
         p3: u32,
@@ -13542,7 +13493,7 @@ impl Codegen<'_> {
     /// (nullable Box with i32-valued field).
     /// Layout: p2=disc, p3=value(i64, extended from i32)
     fn emit_option_box_i32_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         p2: u32,
         p3: u32,
@@ -13572,7 +13523,7 @@ impl Codegen<'_> {
     /// Layout: `p2=name_disc`, `p3=name_ptr(i64)`, `p4=name_len`, `p5=size_disc`, `p6=size_val`
     #[allow(clippy::too_many_arguments)]
     fn emit_field_size_payload_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         field_ref: u32,
         p2: u32,
@@ -13641,7 +13592,7 @@ impl Codegen<'_> {
     ///         `p6=size_disc`, `p7=size_val`
     #[allow(clippy::too_many_arguments)]
     fn emit_option_field_size_payload_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         field_ref: u32,
         p2: u32,
@@ -13736,7 +13687,7 @@ impl Codegen<'_> {
     ///         `p5=info_disc`, `p6=info_val`
     #[allow(clippy::too_many_arguments)]
     fn emit_dns_error_payload_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         field_ref: u32,
         p2: u32,
@@ -13804,7 +13755,7 @@ impl Codegen<'_> {
     /// Layout: `p2=id_disc`, `p3=id_val(i64)`, `p4=msg_disc`, `p5=msg_ptr`, `p6=msg_len`
     #[allow(clippy::too_many_arguments)]
     fn emit_tls_alert_payload_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         field_ref: u32,
         p2: u32,
