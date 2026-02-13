@@ -118,7 +118,7 @@ fn fmt_shortest(buf: &mut [u8], d: u64, p: i32, nd: i32) -> usize {
     } else {
         let neg_p = (-p) as usize;
         if exp >= 0 {
-            // Mixed integer and fractional: e.g., (123, -2) → "1.23"
+            // Mixed integer and fractional: e.g., (123, -2) -> "1.23"
             let int_digits = nd_usize - neg_p;
             write_digits(buf, d, nd_usize);
             // Shift fractional part right by 1 to insert decimal point
@@ -130,7 +130,7 @@ fn fmt_shortest(buf: &mut [u8], d: u64, p: i32, nd: i32) -> usize {
             buf[int_digits] = b'.';
             nd_usize + 1
         } else {
-            // Pure fraction: e.g., (1, -1) → "0.1", (35, -3) → "0.035"
+            // Pure fraction: e.g., (1, -1) -> "0.1", (35, -3) -> "0.035"
             let leading_zeros = neg_p - nd_usize;
             buf[0] = b'0';
             buf[1] = b'.';
@@ -148,7 +148,7 @@ fn fmt_shortest(buf: &mut [u8], d: u64, p: i32, nd: i32) -> usize {
 /// Find shortest decimal representation `(d, p)` that round-trips through f32.
 ///
 /// Uses fpfmt's f64 `fixed_width` with increasing digit counts, verifying
-/// each candidate via `parse` → `as f32` round-trip.
+/// each candidate via `parse` -> `as f32` round-trip.
 /// f32 needs at most 9 significant digits for unique identification.
 #[allow(clippy::cast_possible_truncation)]
 fn f32_short(f: f32) -> (u64, i32) {
@@ -168,35 +168,36 @@ fn f32_short(f: f32) -> (u64, i32) {
     fpfmt::fixed_width(f64_val, 9)
 }
 
-/// Format an f64 value using shortest representation to the provided buffer.
-///
-/// # Safety
-/// The buffer must be at least 32 bytes.
-#[unsafe(no_mangle)]
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-pub extern "C" fn f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 {
-    let mut buf = [0u8; 32];
+// ============================================================================
+// Internal formatting functions
+// ============================================================================
+// These functions contain the core formatting logic, independent of Wasm
+// linear memory. The extern "C" API functions are thin wrappers that copy
+// the result to a Wasm buffer pointer.
 
-    // Handle special cases
+/// Format an f64 using shortest representation into `buf`.
+///
+/// Returns number of bytes written. Buffer must be at least 32 bytes.
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+fn f64_fmt_shortest(value: f64, buf: &mut [u8]) -> usize {
     if value != value {
-        // NaN
-        unsafe { copy_to_ptr(buffer_ptr, b"NaN") };
+        buf[..3].copy_from_slice(b"NaN");
         return 3;
     }
     if value == f64::INFINITY {
-        unsafe { copy_to_ptr(buffer_ptr, b"inf") };
+        buf[..3].copy_from_slice(b"inf");
         return 3;
     }
     if value == f64::NEG_INFINITY {
-        unsafe { copy_to_ptr(buffer_ptr, b"-inf") };
+        buf[..4].copy_from_slice(b"-inf");
         return 4;
     }
     if value == 0.0 {
         if value.to_bits() >> 63 != 0 {
-            unsafe { copy_to_ptr(buffer_ptr, b"-0.0") };
+            buf[..4].copy_from_slice(b"-0.0");
             return 4;
         }
-        unsafe { copy_to_ptr(buffer_ptr, b"0.0") };
+        buf[..3].copy_from_slice(b"0.0");
         return 3;
     }
 
@@ -212,51 +213,32 @@ pub extern "C" fn f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 {
     let (d, p) = fpfmt::short(f);
     let nd = fpfmt::digits(d);
     let len = fmt_shortest(&mut buf[pos..], d, p, nd);
-    let total = pos + len;
-
-    unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
-    total as i32
+    pos + len
 }
 
-/// Format an f64 value with fixed-point precision to the provided buffer.
+/// Format an f32 using shortest representation into `buf`.
 ///
-/// # Safety
-/// The buffer must be at least 400 bytes.
-#[unsafe(no_mangle)]
+/// Returns number of bytes written. Buffer must be at least 24 bytes.
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-pub extern "C" fn f64_to_buffer_fixed(value: f64, precision: i32, buffer_ptr: i32) -> i32 {
-    f64_to_buffer_fixed_impl(value, precision, buffer_ptr)
-}
-
-/// Format an f32 value using shortest representation to the provided buffer.
-///
-/// # Safety
-/// The buffer must be at least 24 bytes.
-#[unsafe(no_mangle)]
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-pub extern "C" fn f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 {
-    let mut buf = [0u8; 24];
-
-    // Handle special cases
+fn f32_fmt_shortest(value: f32, buf: &mut [u8]) -> usize {
     if value != value {
-        // NaN
-        unsafe { copy_to_ptr(buffer_ptr, b"NaN") };
+        buf[..3].copy_from_slice(b"NaN");
         return 3;
     }
     if value == f32::INFINITY {
-        unsafe { copy_to_ptr(buffer_ptr, b"inf") };
+        buf[..3].copy_from_slice(b"inf");
         return 3;
     }
     if value == f32::NEG_INFINITY {
-        unsafe { copy_to_ptr(buffer_ptr, b"-inf") };
+        buf[..4].copy_from_slice(b"-inf");
         return 4;
     }
     if value == 0.0 {
         if value.to_bits() >> 31 != 0 {
-            unsafe { copy_to_ptr(buffer_ptr, b"-0.0") };
+            buf[..4].copy_from_slice(b"-0.0");
             return 4;
         }
-        unsafe { copy_to_ptr(buffer_ptr, b"0.0") };
+        buf[..3].copy_from_slice(b"0.0");
         return 3;
     }
 
@@ -272,10 +254,196 @@ pub extern "C" fn f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 {
     let (d, p) = f32_short(f);
     let nd = fpfmt::digits(d);
     let len = fmt_shortest(&mut buf[pos..], d, p, nd);
-    let total = pos + len;
+    pos + len
+}
 
-    unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
-    total as i32
+/// Format an f64 with exactly `precision` decimal places into `buf`.
+///
+/// Returns number of bytes written. Buffer must be at least 400 bytes.
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+fn f64_fmt_fixed(value: f64, precision: i32, buf: &mut [u8]) -> usize {
+    if value != value {
+        buf[..3].copy_from_slice(b"NaN");
+        return 3;
+    }
+    if value == f64::INFINITY {
+        buf[..3].copy_from_slice(b"inf");
+        return 3;
+    }
+    if value == f64::NEG_INFINITY {
+        buf[..4].copy_from_slice(b"-inf");
+        return 4;
+    }
+    if value == 0.0 {
+        let mut pos = 0;
+        if value.to_bits() >> 63 != 0 {
+            buf[0] = b'-';
+            pos = 1;
+        }
+        buf[pos] = b'0';
+        buf[pos + 1] = b'.';
+        let prec = precision as usize;
+        let mut i = 0;
+        while i < prec {
+            buf[pos + 2 + i] = b'0';
+            i += 1;
+        }
+        return pos + 2 + prec;
+    }
+
+    let mut pos = 0;
+    let f = if value < 0.0 {
+        buf[0] = b'-';
+        pos = 1;
+        -value
+    } else {
+        value
+    };
+
+    // Get the shortest representation to determine magnitude
+    let (d_short, p_short) = fpfmt::short(f);
+    let nd_short = fpfmt::digits(d_short);
+    let int_len = nd_short + p_short; // number of integer digits
+
+    // Compute how many significant digits we need
+    let nd_needed = if int_len <= 0 {
+        let needed = precision + (-int_len);
+        if needed <= 0 { 1 } else { needed.min(18) }
+    } else {
+        let needed = int_len + precision;
+        needed.min(18)
+    };
+
+    let nd_needed = nd_needed.max(1);
+
+    let (d, p) = if nd_needed <= nd_short {
+        fpfmt::fixed_width(f, nd_needed)
+    } else if nd_needed > 17 {
+        fpfmt::fixed_width(f, 17.min(nd_needed))
+    } else {
+        fpfmt::fixed_width(f, nd_needed)
+    };
+    let nd = fpfmt::digits(d);
+
+    let len = fmt_fixed(&mut buf[pos..], d, p, nd, precision);
+    pos + len
+}
+
+/// Format an f64 in exponential notation into `buf`.
+///
+/// If `precision < 0`, use shortest representation.
+/// If `precision >= 0`, use `precision + 1` significant digits.
+///
+/// Returns number of bytes written. Buffer must be at least 32 bytes.
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+fn f64_fmt_exp(value: f64, precision: i32, buf: &mut [u8]) -> usize {
+    if value != value {
+        buf[..3].copy_from_slice(b"NaN");
+        return 3;
+    }
+    if value == f64::INFINITY {
+        buf[..3].copy_from_slice(b"inf");
+        return 3;
+    }
+    if value == f64::NEG_INFINITY {
+        buf[..4].copy_from_slice(b"-inf");
+        return 4;
+    }
+    if value == 0.0 {
+        let mut pos = 0;
+        if value.to_bits() >> 63 != 0 {
+            buf[0] = b'-';
+            pos = 1;
+        }
+        if precision < 0 {
+            buf[pos] = b'0';
+            buf[pos + 1] = b'e';
+            buf[pos + 2] = b'0';
+            return pos + 3;
+        }
+        buf[pos] = b'0';
+        if precision > 0 {
+            buf[pos + 1] = b'.';
+            let prec = precision as usize;
+            let mut i = 0;
+            while i < prec {
+                buf[pos + 2 + i] = b'0';
+                i += 1;
+            }
+            buf[pos + 2 + prec] = b'e';
+            buf[pos + 3 + prec] = b'0';
+            return pos + 4 + prec;
+        }
+        // precision == 0: "0e0"
+        buf[pos] = b'0';
+        buf[pos + 1] = b'e';
+        buf[pos + 2] = b'0';
+        return pos + 3;
+    }
+
+    let mut pos = 0;
+    let f = if value < 0.0 {
+        buf[0] = b'-';
+        pos = 1;
+        -value
+    } else {
+        value
+    };
+
+    let (d, p, nd) = if precision < 0 {
+        let (d, p) = fpfmt::short(f);
+        let nd = fpfmt::digits(d);
+        (d, p, nd)
+    } else {
+        let n = (precision + 1).min(18).max(1);
+        let (d, p) = fpfmt::fixed_width(f, n);
+        let nd = fpfmt::digits(d);
+        (d, p, nd)
+    };
+
+    let len = fmt_exp(&mut buf[pos..], d, p, nd);
+    pos + len
+}
+
+// ============================================================================
+// Extern "C" API (Wasm linear memory interface)
+// ============================================================================
+
+/// Format an f64 value using shortest representation to the provided buffer.
+///
+/// # Safety
+/// The buffer must be at least 32 bytes.
+#[unsafe(no_mangle)]
+pub extern "C" fn f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 {
+    let mut buf = [0u8; 32];
+    let len = f64_fmt_shortest(value, &mut buf);
+    unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
+    len as i32
+}
+
+/// Format an f32 value using shortest representation to the provided buffer.
+///
+/// # Safety
+/// The buffer must be at least 24 bytes.
+#[unsafe(no_mangle)]
+pub extern "C" fn f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 {
+    let mut buf = [0u8; 24];
+    let len = f32_fmt_shortest(value, &mut buf);
+    unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
+    len as i32
+}
+
+/// Format an f64 value with fixed-point precision to the provided buffer.
+///
+/// # Safety
+/// The buffer must be at least 400 bytes.
+#[unsafe(no_mangle)]
+#[allow(clippy::cast_possible_wrap)]
+pub extern "C" fn f64_to_buffer_fixed(value: f64, precision: i32, buffer_ptr: i32) -> i32 {
+    let mut buf = [0u8; 400];
+    let len = f64_fmt_fixed(value, precision, &mut buf);
+    unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
+    len as i32
 }
 
 /// Format an f32 value with fixed-point precision to the provided buffer.
@@ -283,10 +451,38 @@ pub extern "C" fn f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 {
 /// # Safety
 /// The buffer must be at least 64 bytes.
 #[unsafe(no_mangle)]
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+#[allow(clippy::cast_possible_wrap)]
 pub extern "C" fn f32_to_buffer_fixed(value: f32, precision: i32, buffer_ptr: i32) -> i32 {
-    // Promote to f64 and format (exact conversion)
-    f64_to_buffer_fixed_impl(f64::from(value), precision, buffer_ptr)
+    let mut buf = [0u8; 400];
+    let len = f64_fmt_fixed(f64::from(value), precision, &mut buf);
+    unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
+    len as i32
+}
+
+/// Format an f64 value in exponential notation to the provided buffer.
+///
+/// # Safety
+/// The buffer must be at least 32 bytes.
+#[unsafe(no_mangle)]
+#[allow(clippy::cast_possible_wrap)]
+pub extern "C" fn f64_to_buffer_exp(value: f64, precision: i32, buffer_ptr: i32) -> i32 {
+    let mut buf = [0u8; 32];
+    let len = f64_fmt_exp(value, precision, &mut buf);
+    unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
+    len as i32
+}
+
+/// Format an f32 value in exponential notation to the provided buffer.
+///
+/// # Safety
+/// The buffer must be at least 24 bytes.
+#[unsafe(no_mangle)]
+#[allow(clippy::cast_possible_wrap)]
+pub extern "C" fn f32_to_buffer_exp(value: f32, precision: i32, buffer_ptr: i32) -> i32 {
+    let mut buf = [0u8; 32];
+    let len = f64_fmt_exp(f64::from(value), precision, &mut buf);
+    unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
+    len as i32
 }
 
 // ============================================================================
@@ -331,7 +527,6 @@ fn fmt_fixed(buf: &mut [u8], d: u64, p: i32, nd: i32, precision: i32) -> usize {
         let digits_to_write = if nd_usize < avail { nd_usize } else { avail };
         write_digits(&mut buf[2 + leading_zeros..], d, digits_to_write);
 
-        // If we used fewer digits than d has, that's fine (truncated; rounding handled by caller)
         // Fill remaining with zeros
         let mut i = leading_zeros + digits_to_write;
         while i < prec {
@@ -389,203 +584,6 @@ fn fmt_fixed(buf: &mut [u8], d: u64, p: i32, nd: i32, precision: i32) -> usize {
     }
 }
 
-/// Format an f64 value with exactly `precision` decimal places.
-///
-/// # Safety
-/// The buffer must be large enough (recommend 400 bytes for arbitrary f64 + precision).
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-fn f64_to_buffer_fixed_impl(value: f64, precision: i32, buffer_ptr: i32) -> i32 {
-    let mut buf = [0u8; 400];
-
-    // Handle special cases
-    if value != value {
-        unsafe { copy_to_ptr(buffer_ptr, b"NaN") };
-        return 3;
-    }
-    if value == f64::INFINITY {
-        unsafe { copy_to_ptr(buffer_ptr, b"inf") };
-        return 3;
-    }
-    if value == f64::NEG_INFINITY {
-        unsafe { copy_to_ptr(buffer_ptr, b"-inf") };
-        return 4;
-    }
-    if value == 0.0 {
-        // "0.000..." with precision zeros
-        let mut pos = 0;
-        if value.to_bits() >> 63 != 0 {
-            buf[0] = b'-';
-            pos = 1;
-        }
-        buf[pos] = b'0';
-        buf[pos + 1] = b'.';
-        let mut i = 0;
-        let prec = precision as usize;
-        while i < prec {
-            buf[pos + 2 + i] = b'0';
-            i += 1;
-        }
-        let total = pos + 2 + prec;
-        unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
-        return total as i32;
-    }
-
-    let mut pos = 0;
-    let f = if value < 0.0 {
-        buf[0] = b'-';
-        pos = 1;
-        -value
-    } else {
-        value
-    };
-
-    // Get the shortest representation to determine magnitude
-    let (d_short, p_short) = fpfmt::short(f);
-    let nd_short = fpfmt::digits(d_short);
-    let int_len = nd_short + p_short; // number of integer digits
-
-    // Compute how many significant digits we need
-    let nd_needed = if int_len <= 0 {
-        // Pure fraction: we need enough digits to cover the precision
-        // after leading zeros. We need digits from position (|int_len|) onward.
-        let needed = precision + (-int_len);
-        // But we can only get at most 18 from fixed_width
-        if needed <= 0 { 1 } else { needed.min(18) }
-    } else {
-        // Has integer part
-        let needed = int_len + precision;
-        needed.min(18)
-    };
-
-    let nd_needed = nd_needed.max(1);
-
-    let (d, p) = if nd_needed <= nd_short {
-        // We already have enough digits from short; re-round with fixed_width
-        fpfmt::fixed_width(f, nd_needed)
-    } else if nd_needed > 17 {
-        // For very large integers, use 17 digits (max meaningful for f64)
-        fpfmt::fixed_width(f, 17.min(nd_needed))
-    } else {
-        fpfmt::fixed_width(f, nd_needed)
-    };
-    let nd = fpfmt::digits(d);
-
-    let len = fmt_fixed(&mut buf[pos..], d, p, nd, precision);
-    let total = pos + len;
-
-    unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
-    total as i32
-}
-
-// ============================================================================
-// Exponential formatting (for LowerExp/UpperExp traits)
-// ============================================================================
-
-/// Format an f64 value in exponential notation.
-///
-/// If `precision < 0`, use shortest representation.
-/// If `precision >= 0`, use `precision + 1` significant digits.
-///
-/// # Safety
-/// The buffer must be at least 32 bytes.
-#[unsafe(no_mangle)]
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-pub extern "C" fn f64_to_buffer_exp(value: f64, precision: i32, buffer_ptr: i32) -> i32 {
-    let mut buf = [0u8; 32];
-
-    // Handle special cases
-    if value != value {
-        unsafe { copy_to_ptr(buffer_ptr, b"NaN") };
-        return 3;
-    }
-    if value == f64::INFINITY {
-        unsafe { copy_to_ptr(buffer_ptr, b"inf") };
-        return 3;
-    }
-    if value == f64::NEG_INFINITY {
-        unsafe { copy_to_ptr(buffer_ptr, b"-inf") };
-        return 4;
-    }
-    if value == 0.0 {
-        let mut pos = 0;
-        if value.to_bits() >> 63 != 0 {
-            buf[0] = b'-';
-            pos = 1;
-        }
-        if precision < 0 {
-            // "0e0"
-            buf[pos] = b'0';
-            buf[pos + 1] = b'e';
-            buf[pos + 2] = b'0';
-            let total = pos + 3;
-            unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
-            return total as i32;
-        }
-        // "0.000...e0"
-        buf[pos] = b'0';
-        if precision > 0 {
-            buf[pos + 1] = b'.';
-            let prec = precision as usize;
-            let mut i = 0;
-            while i < prec {
-                buf[pos + 2 + i] = b'0';
-                i += 1;
-            }
-            buf[pos + 2 + prec] = b'e';
-            buf[pos + 3 + prec] = b'0';
-            let total = pos + 4 + prec;
-            unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
-            return total as i32;
-        }
-        // precision == 0: "0e0"
-        buf[pos] = b'0';
-        buf[pos + 1] = b'e';
-        buf[pos + 2] = b'0';
-        let total = pos + 3;
-        unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
-        return total as i32;
-    }
-
-    let mut pos = 0;
-    let f = if value < 0.0 {
-        buf[0] = b'-';
-        pos = 1;
-        -value
-    } else {
-        value
-    };
-
-    let (d, p, nd) = if precision < 0 {
-        // Shortest
-        let (d, p) = fpfmt::short(f);
-        let nd = fpfmt::digits(d);
-        (d, p, nd)
-    } else {
-        // precision + 1 significant digits (precision is # of digits after decimal)
-        let n = (precision + 1).min(18).max(1);
-        let (d, p) = fpfmt::fixed_width(f, n);
-        let nd = fpfmt::digits(d);
-        (d, p, nd)
-    };
-
-    let len = fmt_exp(&mut buf[pos..], d, p, nd);
-    let total = pos + len;
-
-    unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
-    total as i32
-}
-
-/// Format an f32 value in exponential notation.
-///
-/// # Safety
-/// The buffer must be at least 24 bytes.
-#[unsafe(no_mangle)]
-#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-pub extern "C" fn f32_to_buffer_exp(value: f32, precision: i32, buffer_ptr: i32) -> i32 {
-    // Promote to f64 and format
-    f64_to_buffer_exp(f64::from(value), precision, buffer_ptr)
-}
-
 #[cfg(target_arch = "wasm32")]
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -596,76 +594,32 @@ fn panic(_info: &PanicInfo) -> ! {
 mod tests {
     use super::*;
 
-    /// Format an f64 using the shortest representation (same logic as `f64_to_buffer`).
     fn format_f64(value: f64) -> String {
-        if value != value {
-            return "NaN".into();
-        }
-        if value == f64::INFINITY {
-            return "inf".into();
-        }
-        if value == f64::NEG_INFINITY {
-            return "-inf".into();
-        }
-        if value == 0.0 {
-            return if value.to_bits() >> 63 != 0 {
-                "-0.0"
-            } else {
-                "0.0"
-            }
-            .into();
-        }
         let mut buf = [0u8; 32];
-        let mut pos = 0;
-        let f = if value < 0.0 {
-            buf[0] = b'-';
-            pos = 1;
-            -value
-        } else {
-            value
-        };
-        let (d, p) = fpfmt::short(f);
-        let nd = fpfmt::digits(d);
-        let len = fmt_shortest(&mut buf[pos..], d, p, nd);
-        String::from_utf8(buf[..pos + len].to_vec()).unwrap()
+        let len = f64_fmt_shortest(value, &mut buf);
+        String::from_utf8(buf[..len].to_vec()).unwrap()
     }
 
-    /// Format an f32 using the shortest representation (same logic as `f32_to_buffer`).
     fn format_f32(value: f32) -> String {
-        if value != value {
-            return "NaN".into();
-        }
-        if value == f32::INFINITY {
-            return "inf".into();
-        }
-        if value == f32::NEG_INFINITY {
-            return "-inf".into();
-        }
-        if value == 0.0 {
-            return if value.to_bits() >> 31 != 0 {
-                "-0.0"
-            } else {
-                "0.0"
-            }
-            .into();
-        }
         let mut buf = [0u8; 24];
-        let mut pos = 0;
-        let f = if value < 0.0 {
-            buf[0] = b'-';
-            pos = 1;
-            -value
-        } else {
-            value
-        };
-        let (d, p) = f32_short(f);
-        let nd = fpfmt::digits(d);
-        let len = fmt_shortest(&mut buf[pos..], d, p, nd);
-        String::from_utf8(buf[..pos + len].to_vec()).unwrap()
+        let len = f32_fmt_shortest(value, &mut buf);
+        String::from_utf8(buf[..len].to_vec()).unwrap()
+    }
+
+    fn format_f64_fixed(value: f64, precision: i32) -> String {
+        let mut buf = [0u8; 400];
+        let len = f64_fmt_fixed(value, precision, &mut buf);
+        String::from_utf8(buf[..len].to_vec()).unwrap()
+    }
+
+    fn format_f64_exp(value: f64, precision: i32) -> String {
+        let mut buf = [0u8; 32];
+        let len = f64_fmt_exp(value, precision, &mut buf);
+        String::from_utf8(buf[..len].to_vec()).unwrap()
     }
 
     #[test]
-    fn test_f64_display_matches_expected() {
+    fn test_f64_shortest() {
         let cases: &[(f64, &str)] = &[
             (1.23, "1.23"),
             (3.14159, "3.14159"),
@@ -691,7 +645,9 @@ mod tests {
             (0.7853981633974483, "0.7853981633974483"),
             (f64::INFINITY, "inf"),
             (f64::NEG_INFINITY, "-inf"),
+            (f64::NAN, "NaN"),
             (0.0, "0.0"),
+            (-0.0, "-0.0"),
             (-6.0, "-6.0"),
             (7.5, "7.5"),
             (10.5, "10.5"),
@@ -716,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn test_f32_display_matches_expected() {
+    fn test_f32_shortest() {
         let cases: &[(f32, &str)] = &[
             (3.14_f32, "3.14"),
             (2.718_f32, "2.718"),
@@ -732,7 +688,9 @@ mod tests {
             (100.0_f32, "100.0"),
             (f32::INFINITY, "inf"),
             (f32::NEG_INFINITY, "-inf"),
+            (f32::NAN, "NaN"),
             (0.0_f32, "0.0"),
+            (-0.0_f32, "-0.0"),
         ];
         for &(val, expected) in cases {
             assert_eq!(
@@ -743,6 +701,25 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn test_f64_fixed() {
+        assert_eq!(format_f64_fixed(3.14159, 2), "3.14");
+        assert_eq!(format_f64_fixed(3.14159, 4), "3.1416");
+        assert_eq!(format_f64_fixed(1.0, 3), "1.000");
+        assert_eq!(format_f64_fixed(0.0, 2), "0.00");
+        assert_eq!(format_f64_fixed(-2.5, 1), "-2.5");
+        assert_eq!(format_f64_fixed(f64::INFINITY, 2), "inf");
+        assert_eq!(format_f64_fixed(f64::NEG_INFINITY, 2), "-inf");
+    }
+
+    #[test]
+    fn test_f64_exp() {
+        assert_eq!(format_f64_exp(0.0, -1), "0e0");
+        assert_eq!(format_f64_exp(0.0, 2), "0.00e0");
+        assert_eq!(format_f64_exp(f64::INFINITY, -1), "inf");
+        assert_eq!(format_f64_exp(f64::NEG_INFINITY, -1), "-inf");
     }
 }
 
