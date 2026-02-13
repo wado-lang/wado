@@ -31,6 +31,7 @@ use crate::wasm_plan::{
     sort_types_topologically,
 };
 use crate::wasm_postprocess;
+use crate::wir::WirFunction;
 use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
 use indexmap::IndexMap;
@@ -4474,7 +4475,7 @@ impl Codegen<'_> {
     /// Assumes the source value is on the stack. Leaves the copied value on the stack.
     fn generate_value_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         type_id: TypeId,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -4596,7 +4597,7 @@ impl Codegen<'_> {
     /// Leaves the copied struct reference on the stack.
     fn generate_struct_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         type_idx: u32,
         field_count: usize,
         ctx: &mut FunctionContext,
@@ -4640,7 +4641,7 @@ impl Codegen<'_> {
     /// 4. Create a new instance of the same case type
     fn generate_variant_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         base_type_idx: u32,
         cases: &[VariantCaseInfo],
         ctx: &mut FunctionContext,
@@ -4760,7 +4761,7 @@ impl Codegen<'_> {
     /// `is_packed` should be true for arrays with packed storage (e.g., i8/i16 for strings).
     fn generate_array_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         array_type_idx: u32,
         is_packed: bool,
         ctx: &mut FunctionContext,
@@ -4894,7 +4895,7 @@ impl Codegen<'_> {
     /// Leaves the copied option value on the stack.
     fn generate_option_copy(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         inner_type_id: TypeId,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -6086,7 +6087,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR expression
     fn generate_expr(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         expr: &TirExpr,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -8580,7 +8581,7 @@ impl Codegen<'_> {
     /// Generate code for multiple arguments (convenience wrapper)
     fn generate_args(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         args: &[TirExpr],
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -8625,7 +8626,7 @@ impl Codegen<'_> {
     /// This optimizes assignment expressions to avoid the drop-tee pattern.
     fn generate_expr_as_stmt(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         expr: &TirExpr,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -8648,7 +8649,7 @@ impl Codegen<'_> {
     /// This avoids the drop-tee pattern where we use local.tee then immediately drop.
     fn generate_assignment_as_stmt(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         target: &TirExpr,
         value: &TirExpr,
         type_table: &TypeTable,
@@ -8754,7 +8755,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR binary operation
     fn generate_binary_op(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         op: TirBinaryOp,
         operand_type: TypeId,
         type_table: &TypeTable,
@@ -8970,7 +8971,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR unary operation
     fn generate_unary_op(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         op: TirUnaryOp,
         operand_type: TypeId,
         type_table: &TypeTable,
@@ -9032,7 +9033,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR type cast
     fn generate_cast(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         from_type: TypeId,
         to_type: TypeId,
         type_table: &TypeTable,
@@ -9263,7 +9264,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR block
     fn generate_block(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         block: &TirBlock,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -9277,7 +9278,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR block as an expression (keeps last expression value on stack)
     fn generate_block_as_expr(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         block: &TirBlock,
         result_type: TypeId,
         type_table: &TypeTable,
@@ -9351,7 +9352,7 @@ impl Codegen<'_> {
     /// Generate code for a TIR statement
     fn generate_stmt(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         stmt: &TirStmt,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -10110,7 +10111,7 @@ impl Codegen<'_> {
     /// The tuple value should already be on the stack
     fn generate_let_pattern_binding(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         pattern: &TirPattern,
         tuple_type_id: TypeId,
         type_table: &TypeTable,
@@ -10247,7 +10248,7 @@ impl Codegen<'_> {
     /// Returns `true` if the optimization was applied, `false` otherwise.
     fn try_generate_multivalue_builtin_destructure(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         pattern: &TirPattern,
         value: &TirExpr,
         type_table: &TypeTable,
@@ -10487,7 +10488,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments, clippy::cast_sign_loss)]
     fn generate_match_br_table(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee_local: u32,
         arms: &[TirMatchArm],
         analysis: BrTableAnalysis,
@@ -10629,7 +10630,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_match_expr(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee: &TirExpr,
         arms: &[TirMatchArm],
         result_type_id: TypeId,
@@ -10684,7 +10685,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_match_arms(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee_local: u32,
         scrutinee_type_id: TypeId,
         arms: &[TirMatchArm],
@@ -10860,7 +10861,7 @@ impl Codegen<'_> {
     /// Returns true if condition was generated, false if pattern is unsupported
     fn generate_match_pattern_check(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee_type: &ResolvedType,
         pattern: &TirPattern,
         _type_table: &TypeTable,
@@ -11079,7 +11080,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_match_pattern_binding(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         scrutinee_local: u32,
         scrutinee_type_id: TypeId,
         pattern: &TirPattern,
@@ -11334,7 +11335,7 @@ impl Codegen<'_> {
         }
 
         // Generate the function code
-        let mut wasm_func = Function::new(func_ctx.get_local_decls());
+        let mut wasm_func = WirFunction::new(func_ctx.get_local_decls());
 
         // Generate body
         if let Some(body) = &tir_func.body {
@@ -11354,7 +11355,7 @@ impl Codegen<'_> {
 
         // Return function and collected branch hints
         let branch_hints = func_ctx.branch_hints;
-        (wasm_func, branch_hints)
+        (wasm_func.emit(), branch_hints)
     }
 
     /// Generate the 'run' function for TIR with task.return wrapper
@@ -11419,7 +11420,7 @@ impl Codegen<'_> {
             self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
         }
 
-        let mut wasm_func = Function::new(func_ctx.get_local_decls());
+        let mut wasm_func = WirFunction::new(func_ctx.get_local_decls());
 
         // Generate body
         if let Some(body) = &tir_func.body {
@@ -11449,7 +11450,7 @@ impl Codegen<'_> {
         }
         wasm_func.instruction(&Instruction::End);
 
-        wasm_func
+        wasm_func.emit()
     }
 
     // ========================================================================
@@ -12060,7 +12061,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_cm_effect_call(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
         type_table: &TypeTable,
@@ -12221,7 +12222,7 @@ impl Codegen<'_> {
     #[allow(clippy::too_many_arguments)]
     fn generate_cm_resource_method_call(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
         type_table: &TypeTable,
@@ -12473,7 +12474,7 @@ impl Codegen<'_> {
     /// It waits for the subtask started by write-via-stream to complete.
     fn generate_effect_wait(
         &self,
-        func: &mut Function,
+        func: &mut WirFunction,
         ctx: &FunctionContext,
         builder: &CoreModuleBuilder,
     ) {
@@ -12529,7 +12530,7 @@ impl Codegen<'_> {
         builtin_name: &str,
         args: &[TirExpr],
         expr: &TirExpr,
-        func: &mut Function,
+        func: &mut WirFunction,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
@@ -13027,7 +13028,7 @@ impl Codegen<'_> {
         &self,
         func_name: &str,
         args: &[TirExpr],
-        func: &mut Function,
+        func: &mut WirFunction,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
         builder: &CoreModuleBuilder,
@@ -13473,7 +13474,7 @@ impl Codegen<'_> {
     /// Emit lowering for Option<String> payload.
     /// Layout: p2=disc, p3=ptr(i64), p4=len
     fn emit_option_string_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         p2: u32,
         p3: u32,
@@ -13514,7 +13515,7 @@ impl Codegen<'_> {
     /// Emit lowering for Option<u64> payload (nullable Box<u64>).
     /// Layout: p2=disc, p3=value(i64)
     fn emit_option_box_u64_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         p2: u32,
         p3: u32,
@@ -13542,7 +13543,7 @@ impl Codegen<'_> {
     /// (nullable Box with i32-valued field).
     /// Layout: p2=disc, p3=value(i64, extended from i32)
     fn emit_option_box_i32_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         p2: u32,
         p3: u32,
@@ -13572,7 +13573,7 @@ impl Codegen<'_> {
     /// Layout: `p2=name_disc`, `p3=name_ptr(i64)`, `p4=name_len`, `p5=size_disc`, `p6=size_val`
     #[allow(clippy::too_many_arguments)]
     fn emit_field_size_payload_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         field_ref: u32,
         p2: u32,
@@ -13641,7 +13642,7 @@ impl Codegen<'_> {
     ///         `p6=size_disc`, `p7=size_val`
     #[allow(clippy::too_many_arguments)]
     fn emit_option_field_size_payload_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         field_ref: u32,
         p2: u32,
@@ -13736,7 +13737,7 @@ impl Codegen<'_> {
     ///         `p5=info_disc`, `p6=info_val`
     #[allow(clippy::too_many_arguments)]
     fn emit_dns_error_payload_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         field_ref: u32,
         p2: u32,
@@ -13804,7 +13805,7 @@ impl Codegen<'_> {
     /// Layout: `p2=id_disc`, `p3=id_val(i64)`, `p4=msg_disc`, `p5=msg_ptr`, `p6=msg_len`
     #[allow(clippy::too_many_arguments)]
     fn emit_tls_alert_payload_lowering(
-        func: &mut Function,
+        func: &mut WirFunction,
         payload_ref: u32,
         field_ref: u32,
         p2: u32,
