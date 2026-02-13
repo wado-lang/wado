@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use crate::ast::Type;
 use crate::builtin_registry::BuiltinFunctionInfo;
-use crate::bundled::wado_bundled_wasm;
+use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{
     CmInstanceTypeGen, CmPrimitiveType, WasiFunctionInfo, WasiInterfaceInfo,
     build_local_alias_name, flatten_wasi_param_type, return_type_requires_outptr,
@@ -1828,35 +1828,49 @@ impl Codegen<'_> {
         );
 
         // ========================================
-        // Wado-bundled module (float-to-string and libm, conditionally included)
+        // Wado-bundled modules (FTS and libm, conditionally included)
         // ========================================
-        // Bundled functions are determined by ComponentPlan
+        // Bundled functions are determined by ComponentPlan.
+        // They are split into two separate modules (FTS and libm) so that
+        // each module has its own data segment and DCE works effectively.
         let component_plan = project
             .component_plan
             .as_ref()
             .expect("component_plan should be set by wasm_plan phase");
         let bundled_functions = &component_plan.bundled_functions;
-        if !bundled_functions.is_empty() {
-            // Convert memory to import
-            let bundled_module =
-                wasm_postprocess::convert_memory_to_import(wado_bundled_wasm(), "env", "memory")
-                    .expect("Failed to process wado-bundled module");
 
-            // Apply Wasm-level DCE to keep only used bundled functions
-            let keep_exports: IndexSet<_> = bundled_functions.iter().cloned().collect();
-            let final_module =
-                wasm_postprocess::eliminate_dead_code(&bundled_module, &keep_exports);
+        // Partition bundled functions into FTS and libm groups
+        let fts_functions: Vec<_> = bundled_functions
+            .iter()
+            .filter(|f| is_fts_function(f))
+            .cloned()
+            .collect();
+        let libm_functions: Vec<_> = bundled_functions
+            .iter()
+            .filter(|f| !is_fts_function(f))
+            .cloned()
+            .collect();
+
+        // Include FTS module if needed
+        if !fts_functions.is_empty() {
+            let fts_module = wasm_postprocess::convert_memory_to_import(
+                wado_bundled_fts_wasm(),
+                "env",
+                "memory",
+            )
+            .expect("Failed to process wado-bundled-fts module");
+
+            let keep_exports: IndexSet<_> = fts_functions.iter().cloned().collect();
+            let final_module = wasm_postprocess::eliminate_dead_code(&fts_module, &keep_exports);
 
             ctx.register_core_module("fts-mod");
             builder.core_module_raw(Some("fts-mod"), &final_module);
 
-            // Create env instance for bundled module (just memory)
             ctx.register_core_instance("fts-env");
             let fts_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
             let fts_env_instance =
                 builder.core_instantiate_exports(Some("fts-env-instance"), fts_env_exports);
 
-            // Instantiate bundled module with memory
             ctx.register_core_instance("fts");
             builder.core_instantiate(
                 Some("fts"),
@@ -1864,12 +1878,49 @@ impl Codegen<'_> {
                 [("env", ModuleArg::Instance(fts_env_instance))],
             );
 
-            // Alias bundled exports (float-to-string and libm)
-            for func_name in bundled_functions {
+            for func_name in &fts_functions {
                 ctx.register_core_func(func_name);
                 builder.core_alias_export(
                     Some(func_name),
                     ctx.core_instance_idx("fts"),
+                    func_name,
+                    ExportKind::Func,
+                );
+            }
+        }
+
+        // Include libm module if needed
+        if !libm_functions.is_empty() {
+            let libm_module = wasm_postprocess::convert_memory_to_import(
+                wado_bundled_libm_wasm(),
+                "env",
+                "memory",
+            )
+            .expect("Failed to process wado-bundled-libm module");
+
+            let keep_exports: IndexSet<_> = libm_functions.iter().cloned().collect();
+            let final_module = wasm_postprocess::eliminate_dead_code(&libm_module, &keep_exports);
+
+            ctx.register_core_module("libm-mod");
+            builder.core_module_raw(Some("libm-mod"), &final_module);
+
+            ctx.register_core_instance("libm-env");
+            let libm_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
+            let libm_env_instance =
+                builder.core_instantiate_exports(Some("libm-env-instance"), libm_env_exports);
+
+            ctx.register_core_instance("libm");
+            builder.core_instantiate(
+                Some("libm"),
+                ctx.core_module_idx("libm-mod"),
+                [("env", ModuleArg::Instance(libm_env_instance))],
+            );
+
+            for func_name in &libm_functions {
+                ctx.register_core_func(func_name);
+                builder.core_alias_export(
+                    Some(func_name),
+                    ctx.core_instance_idx("libm"),
                     func_name,
                     ExportKind::Func,
                 );
