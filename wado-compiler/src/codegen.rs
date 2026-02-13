@@ -25,13 +25,15 @@ use crate::tir::{
     TirLiteralPattern, TirMatchArm, TirModule, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
+use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder};
 use crate::wasm_plan::{
     CmValType, TypeDecl, get_self_referential_field_types, get_type_dependencies,
     sort_types_topologically,
 };
 use crate::wasm_postprocess;
-use crate::wir::{WirBranchHintEntry, WirConstExpr, WirFunction, WirFunctionBody, WirModule};
+use crate::wir::{
+    WirBranchHintEntry, WirConstExpr, WirFunction, WirFunctionBody, WirModule, WirRecGroupKind,
+};
 use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
 use indexmap::IndexMap;
@@ -3841,7 +3843,7 @@ impl Codegen<'_> {
         // Plus the main struct type itself
 
         let base_idx = builder.peek_next_type_idx();
-        let mut rec_types: Vec<(String, RecTypeKind)> = Vec::new();
+        let mut rec_types: Vec<(String, WirRecGroupKind)> = Vec::new();
         let mut array_type_mappings: Vec<(TypeId, u32, u32)> = Vec::new(); // (element_type_id, raw_array_idx, array_struct_idx)
 
         // First, add the raw GC array types and Array struct types for self-referential fields
@@ -3876,7 +3878,7 @@ impl Codegen<'_> {
                 }));
                 rec_types.push((
                     raw_array_name.clone(),
-                    RecTypeKind::Array(FieldType {
+                    WirRecGroupKind::Array(FieldType {
                         element_type: element_storage,
                         mutable: true,
                     }),
@@ -3898,7 +3900,10 @@ impl Codegen<'_> {
                         mutable: true,
                     },
                 ];
-                rec_types.push((array_struct_name, RecTypeKind::Struct(array_struct_fields)));
+                rec_types.push((
+                    array_struct_name,
+                    WirRecGroupKind::Struct(array_struct_fields),
+                ));
 
                 array_type_mappings.push((element_type_id, raw_array_idx, array_struct_idx));
             }
@@ -3958,7 +3963,10 @@ impl Codegen<'_> {
             });
         }
 
-        rec_types.push((struct_name.name.clone(), RecTypeKind::Struct(struct_fields)));
+        rec_types.push((
+            struct_name.name.clone(),
+            WirRecGroupKind::Struct(struct_fields),
+        ));
 
         // Define the rec group
         let indices = builder.define_rec_group(&rec_types);

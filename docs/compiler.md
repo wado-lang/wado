@@ -12,21 +12,21 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 
 ### Compilation Pipeline
 
-| Phase        | Input         | Output          | Description                                               |
-| ------------ | ------------- | --------------- | --------------------------------------------------------- |
-| Lexer        | Source        | Tokens          | Tokenize, extract `__DATA__` section                      |
-| Parser       | Tokens        | AST             | Build abstract syntax tree                                |
-| Bind         | AST           | AST (validated) | Local name resolution, scope/mutability checking          |
-| Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar    |
-| Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
-| Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
-| Effect Check | Project       | Errors          | Validate function effect requirements                     |
-| Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
-| Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
-| Optimize     | Project       | Project         | DCE, usage analysis, feature flags                        |
-| Wasm Plan    | Project       | Project         | Wasm pre-codegen planning, CM boundary analysis           |
+| Phase        | Input         | Output          | Description                                                 |
+| ------------ | ------------- | --------------- | ----------------------------------------------------------- |
+| Lexer        | Source        | Tokens          | Tokenize, extract `__DATA__` section                        |
+| Parser       | Tokens        | AST             | Build abstract syntax tree                                  |
+| Bind         | AST           | AST (validated) | Local name resolution, scope/mutability checking            |
+| Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar      |
+| Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                        |
+| Resolve      | AST + Symbols | Project         | Type resolution, produce Project                            |
+| Effect Check | Project       | Errors          | Validate function effect requirements                       |
+| Monomorphize | Project       | Project         | Instantiate generics with concrete types                    |
+| Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering   |
+| Optimize     | Project       | Project         | DCE, usage analysis, feature flags                          |
+| Wasm Plan    | Project       | Project         | Wasm pre-codegen planning, CM boundary analysis             |
 | Codegen      | Project       | WirModule       | Build WIR module (types, imports, globals, function bodies) |
-| Emit         | WirModule     | Wasm bytes      | Mechanical conversion of WirModule to Wasm binary         |
+| Emit         | WirModule     | Wasm bytes      | Mechanical conversion of WirModule to Wasm binary           |
 
 **Note:** The Desugar phase is integrated into the Load phase. Each module goes through the same frontend pipeline: `lexer → parser → bind → desugar`.
 

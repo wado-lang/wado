@@ -9,10 +9,8 @@
 // stream as a flat list. Tree-structured IR is a future step (see WEP).
 
 use wasm_encoder::{
-    BlockType, ExportKind, FieldType, HeapType, Instruction, MemArg, StorageType, ValType,
+    BlockType, Encode, ExportKind, FieldType, HeapType, Instruction, MemArg, StorageType, ValType,
 };
-
-use crate::wir_emit;
 
 // ============================================================================
 // Module-level WIR types
@@ -77,6 +75,7 @@ pub struct WirRecGroupEntry {
 }
 
 /// Kind of type within a rec group.
+#[derive(Debug, Clone)]
 pub enum WirRecGroupKind {
     Struct(Vec<FieldType>),
     Array(FieldType),
@@ -631,38 +630,38 @@ impl WirInstr {
 pub struct WirFunction {
     local_decls: Vec<(u32, ValType)>,
     instrs: Vec<WirInstr>,
-    /// Scratch function used only for `byte_len()` (branch-hint offsets).
-    scratch: wasm_encoder::Function,
+    /// Cumulative encoded byte length (locals + instructions), used for
+    /// branch-hint offset computation without maintaining a full scratch encoder.
+    byte_offset: usize,
+    /// Reusable buffer for computing per-instruction encoded sizes.
+    encode_buf: Vec<u8>,
 }
 
 impl WirFunction {
     pub fn new(locals: Vec<(u32, ValType)>) -> Self {
-        let scratch = wasm_encoder::Function::new(locals.clone());
+        // Compute initial byte_offset from locals encoding
+        let tmp = wasm_encoder::Function::new(locals.clone());
+        let byte_offset = tmp.byte_len();
         Self {
             local_decls: locals,
             instrs: Vec::new(),
-            scratch,
+            byte_offset,
+            encode_buf: Vec::new(),
         }
     }
 
     /// Record one instruction.  Same signature as `wasm_encoder::Function::instruction`.
     pub fn instruction(&mut self, instr: &Instruction<'_>) -> &mut Self {
         self.instrs.push(WirInstr::from_instruction(instr));
-        self.scratch.instruction(instr);
+        self.encode_buf.clear();
+        instr.encode(&mut self.encode_buf);
+        self.byte_offset += self.encode_buf.len();
         self
     }
 
     /// Current encoded byte length (used for branch-hint offset recording).
     pub fn byte_len(&self) -> usize {
-        self.scratch.byte_len()
-    }
-
-    /// Consume self and produce a `wasm_encoder::Function` by replaying the
-    /// `WirInstr` stream through `wir_emit`.
-    pub fn emit(self) -> wasm_encoder::Function {
-        let mut func = wasm_encoder::Function::new(self.local_decls);
-        wir_emit::emit(&self.instrs, &mut func);
-        func
+        self.byte_offset
     }
 
     /// Consume self and produce a `WirFunctionBody` for inclusion in a `WirModule`.

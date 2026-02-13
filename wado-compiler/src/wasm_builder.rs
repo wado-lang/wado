@@ -15,19 +15,6 @@ use crate::wir::{
 };
 
 // ============================================================================
-// Rec Group Types (used by codegen to specify rec group entries)
-// ============================================================================
-
-/// Kind of type within a rec group (for mutually recursive types)
-#[derive(Debug, Clone)]
-pub enum RecTypeKind {
-    /// Struct type with fields
-    Struct(Vec<FieldType>),
-    /// Array type with element type
-    Array(FieldType),
-}
-
-// ============================================================================
 // WirModuleParts — extracted data from CoreModuleBuilder
 // ============================================================================
 
@@ -183,10 +170,7 @@ impl CoreModuleBuilder {
 
     /// Define a rec group containing multiple mutually recursive types.
     /// Types within the rec group can forward-reference each other.
-    ///
-    /// Each element in `types` is (name, `RecTypeKind`) where `RecTypeKind` specifies
-    /// whether it's a struct or array type.
-    pub fn define_rec_group(&mut self, types: &[(String, RecTypeKind)]) -> Vec<u32> {
+    pub fn define_rec_group(&mut self, types: &[(String, WirRecGroupKind)]) -> Vec<u32> {
         let base_idx = self.next_type_idx;
         let mut indices = Vec::with_capacity(types.len());
 
@@ -200,12 +184,7 @@ impl CoreModuleBuilder {
         // Build WIR rec group entries
         let entries: Vec<WirRecGroupEntry> = types
             .iter()
-            .map(|(_, kind)| WirRecGroupEntry {
-                kind: match kind {
-                    RecTypeKind::Struct(fields) => WirRecGroupKind::Struct(fields.clone()),
-                    RecTypeKind::Array(field_type) => WirRecGroupKind::Array(*field_type),
-                },
-            })
+            .map(|(_, kind)| WirRecGroupEntry { kind: kind.clone() })
             .collect();
 
         self.types.push(WirTypeDef::RecGroup(entries));
