@@ -1861,8 +1861,7 @@ impl Codegen<'_> {
             .expect("Failed to process wado-bundled-fts module");
 
             let keep_exports: IndexSet<_> = fts_functions.iter().cloned().collect();
-            let final_module =
-                wasm_postprocess::eliminate_dead_code(&fts_module, &keep_exports);
+            let final_module = wasm_postprocess::eliminate_dead_code(&fts_module, &keep_exports);
 
             ctx.register_core_module("fts-mod");
             builder.core_module_raw(Some("fts-mod"), &final_module);
@@ -1900,8 +1899,7 @@ impl Codegen<'_> {
             .expect("Failed to process wado-bundled-libm module");
 
             let keep_exports: IndexSet<_> = libm_functions.iter().cloned().collect();
-            let final_module =
-                wasm_postprocess::eliminate_dead_code(&libm_module, &keep_exports);
+            let final_module = wasm_postprocess::eliminate_dead_code(&libm_module, &keep_exports);
 
             ctx.register_core_module("libm-mod");
             builder.core_module_raw(Some("libm-mod"), &final_module);
