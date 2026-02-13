@@ -10224,37 +10224,22 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         idx
                     };
 
-                    // Determine module source for trait impl
-                    let base_type_id = self.get_ultimate_base_type(resolved.type_id);
-                    let (receiver_type_name, impl_module_source) = self
-                        .resolve_display_impl_source(base_type_id, resolved.type_id, trait_name);
-
-                    // expr.fmt(&mut __f)
-                    // Display::fmt takes &self, so auto-ref the receiver
-                    let receiver_expr = {
+                    // Check if this is a float type with precision → call
+                    // fmt_f64_fixed/fmt_f32_fixed directly to avoid pulling in
+                    // the fixed-point bundled code when only shortest is needed.
+                    let float_fixed_func = if trait_name == "Display"
+                        && parsed.as_ref().is_some_and(|pf| pf.precision.is_some())
+                    {
                         let resolved_type = self.type_table.borrow().get(resolved.type_id).clone();
                         match resolved_type {
-                            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-                                // Already a reference, use as-is
-                                resolved
-                            }
-                            _ => {
-                                // Value type, wrap in & to match &self parameter
-                                let ref_type =
-                                    self.type_table.borrow_mut().make_ref(resolved.type_id);
-                                TirExpr::new(
-                                    TirExprKind::Unary {
-                                        op: TirUnaryOp::Ref,
-                                        expr: Box::new(resolved),
-                                    },
-                                    ref_type,
-                                    span,
-                                )
-                            }
+                            ResolvedType::Primitive(PrimitiveType::F64) => Some("fmt_f64_fixed"),
+                            ResolvedType::Primitive(PrimitiveType::F32) => Some("fmt_f32_fixed"),
+                            _ => None,
                         }
+                    } else {
+                        None
                     };
-                    let mangled_name =
-                        MethodName::format_local(&receiver_type_name, Some(trait_name), "fmt");
+
                     let fmt_mut_ref = TirExpr::new(
                         TirExprKind::Unary {
                             op: TirUnaryOp::MutRef,
@@ -10270,26 +10255,84 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         mut_ref_formatter,
                         span,
                     );
-                    let fmt_call = TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(receiver_expr),
-                            func: FunctionRef::External {
-                                module_source: impl_module_source,
-                                name: mangled_name,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    receiver_type_name,
-                                    Some(trait_name.to_string()),
-                                    "fmt".to_string(),
-                                )),
+
+                    if let Some(func_name) = float_fixed_func {
+                        // Direct call: fmt_f64_fixed(value, precision, &mut __f)
+                        let precision_value = parsed.as_ref().unwrap().precision.unwrap();
+                        let precision_expr = TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: precision_value as u64,
+                                repr: precision_value.to_string(),
                             },
-                            type_args: vec![],
-                            args: vec![fmt_mut_ref],
-                        },
-                        TypeTable::UNIT,
-                        span,
-                    );
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(fmt_call), span));
+                            TypeTable::I32,
+                            span,
+                        );
+                        let fmt_call = TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("prelude/primitives.wado"),
+                                    name: func_name.to_string(),
+                                    monomorph_info: None,
+                                    method_info: None,
+                                },
+                                args: vec![resolved, precision_expr, fmt_mut_ref],
+                            },
+                            TypeTable::UNIT,
+                            span,
+                        );
+                        stmts.push(TirStmt::new(TirStmtKind::Expr(fmt_call), span));
+                    } else {
+                        // Standard path: receiver.fmt(&mut __f)
+                        let base_type_id = self.get_ultimate_base_type(resolved.type_id);
+                        let (receiver_type_name, impl_module_source) = self
+                            .resolve_display_impl_source(
+                                base_type_id,
+                                resolved.type_id,
+                                trait_name,
+                            );
+
+                        let receiver_expr = {
+                            let resolved_type =
+                                self.type_table.borrow().get(resolved.type_id).clone();
+                            match resolved_type {
+                                ResolvedType::Ref(_) | ResolvedType::MutRef(_) => resolved,
+                                _ => {
+                                    let ref_type =
+                                        self.type_table.borrow_mut().make_ref(resolved.type_id);
+                                    TirExpr::new(
+                                        TirExprKind::Unary {
+                                            op: TirUnaryOp::Ref,
+                                            expr: Box::new(resolved),
+                                        },
+                                        ref_type,
+                                        span,
+                                    )
+                                }
+                            }
+                        };
+                        let mangled_name =
+                            MethodName::format_local(&receiver_type_name, Some(trait_name), "fmt");
+                        let fmt_call = TirExpr::new(
+                            TirExprKind::MethodCall {
+                                receiver: Box::new(receiver_expr),
+                                func: FunctionRef::External {
+                                    module_source: impl_module_source,
+                                    name: mangled_name,
+                                    monomorph_info: None,
+                                    method_info: Some(LocalMethodName::new(
+                                        receiver_type_name,
+                                        Some(trait_name.to_string()),
+                                        "fmt".to_string(),
+                                    )),
+                                },
+                                type_args: vec![],
+                                args: vec![fmt_mut_ref],
+                            },
+                            TypeTable::UNIT,
+                            span,
+                        );
+                        stmts.push(TirStmt::new(TirStmtKind::Expr(fmt_call), span));
+                    }
                 }
             }
         }

@@ -112,17 +112,25 @@ fn memory_load8_u(addr: i32) -> i32;
 /// Standard WASI realloc signature
 #[canonical("mem", "realloc")]
 fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
-/// Convert f64 to string bytes in linear memory buffer.
-/// If precision < 0, uses shortest representation. If >= 0, uses fixed-point.
+/// Convert f64 to shortest decimal string in linear memory buffer.
 /// Returns the number of bytes written.
 #[canonical("bundled", "f64_to_buffer")]
-fn f64_to_buffer(value: f64, precision: i32, ptr: i32) -> i32;
+fn f64_to_buffer(value: f64, ptr: i32) -> i32;
 
-/// Convert f32 to string bytes in linear memory buffer.
-/// If precision < 0, uses shortest representation. If >= 0, uses fixed-point.
+/// Convert f64 to fixed-point string with given precision in linear memory buffer.
+/// Returns the number of bytes written.
+#[canonical("bundled", "f64_to_buffer_fixed")]
+fn f64_to_buffer_fixed(value: f64, precision: i32, ptr: i32) -> i32;
+
+/// Convert f32 to shortest decimal string in linear memory buffer.
 /// Returns the number of bytes written.
 #[canonical("bundled", "f32_to_buffer")]
-fn f32_to_buffer(value: f32, precision: i32, ptr: i32) -> i32;
+fn f32_to_buffer(value: f32, ptr: i32) -> i32;
+
+/// Convert f32 to fixed-point string with given precision in linear memory buffer.
+/// Returns the number of bytes written.
+#[canonical("bundled", "f32_to_buffer_fixed")]
+fn f32_to_buffer_fixed(value: f32, precision: i32, ptr: i32) -> i32;
 
 /// Convert f64 to exponential notation string
 /// If precision < 0, uses shortest representation.

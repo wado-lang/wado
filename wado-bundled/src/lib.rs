@@ -168,20 +168,13 @@ fn f32_short(f: f32) -> (u64, i32) {
     fpfmt::fixed_width(f64_val, 9)
 }
 
-/// Format an f64 value to the provided buffer.
-///
-/// If `precision < 0`, uses shortest representation (needs 32-byte buffer).
-/// If `precision >= 0`, uses fixed-point with that many decimal places (needs 400-byte buffer).
+/// Format an f64 value using shortest representation to the provided buffer.
 ///
 /// # Safety
-/// The buffer must be large enough for the chosen mode.
+/// The buffer must be at least 32 bytes.
 #[unsafe(no_mangle)]
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-pub extern "C" fn f64_to_buffer(value: f64, precision: i32, buffer_ptr: i32) -> i32 {
-    if precision >= 0 {
-        return f64_to_buffer_fixed_impl(value, precision, buffer_ptr);
-    }
-
+pub extern "C" fn f64_to_buffer(value: f64, buffer_ptr: i32) -> i32 {
     let mut buf = [0u8; 32];
 
     // Handle special cases
@@ -225,21 +218,23 @@ pub extern "C" fn f64_to_buffer(value: f64, precision: i32, buffer_ptr: i32) -> 
     total as i32
 }
 
-/// Format an f32 value to the provided buffer.
-///
-/// If `precision < 0`, uses shortest representation (needs 24-byte buffer).
-/// If `precision >= 0`, uses fixed-point with that many decimal places (needs 64-byte buffer).
+/// Format an f64 value with fixed-point precision to the provided buffer.
 ///
 /// # Safety
-/// The buffer must be large enough for the chosen mode.
+/// The buffer must be at least 400 bytes.
 #[unsafe(no_mangle)]
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-pub extern "C" fn f32_to_buffer(value: f32, precision: i32, buffer_ptr: i32) -> i32 {
-    if precision >= 0 {
-        // Promote to f64 and format (exact conversion)
-        return f64_to_buffer_fixed_impl(f64::from(value), precision, buffer_ptr);
-    }
+pub extern "C" fn f64_to_buffer_fixed(value: f64, precision: i32, buffer_ptr: i32) -> i32 {
+    f64_to_buffer_fixed_impl(value, precision, buffer_ptr)
+}
 
+/// Format an f32 value using shortest representation to the provided buffer.
+///
+/// # Safety
+/// The buffer must be at least 24 bytes.
+#[unsafe(no_mangle)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+pub extern "C" fn f32_to_buffer(value: f32, buffer_ptr: i32) -> i32 {
     let mut buf = [0u8; 24];
 
     // Handle special cases
@@ -281,6 +276,17 @@ pub extern "C" fn f32_to_buffer(value: f32, precision: i32, buffer_ptr: i32) -> 
 
     unsafe { copy_to_ptr(buffer_ptr, &buf[..total]) };
     total as i32
+}
+
+/// Format an f32 value with fixed-point precision to the provided buffer.
+///
+/// # Safety
+/// The buffer must be at least 64 bytes.
+#[unsafe(no_mangle)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+pub extern "C" fn f32_to_buffer_fixed(value: f32, precision: i32, buffer_ptr: i32) -> i32 {
+    // Promote to f64 and format (exact conversion)
+    f64_to_buffer_fixed_impl(f64::from(value), precision, buffer_ptr)
 }
 
 // ============================================================================

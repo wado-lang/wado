@@ -22,11 +22,17 @@ pub fn wado_bundled_wasm() -> &'static [u8] {
 
 /// Constants for the float-to-string module exports
 pub mod float_to_string {
-    /// Function name for f64 to buffer conversion (shortest or fixed-point)
+    /// Function name for f64 to buffer conversion (shortest representation)
     pub const F64_TO_BUFFER: &str = "f64_to_buffer";
 
-    /// Function name for f32 to buffer conversion (shortest or fixed-point)
+    /// Function name for f64 to buffer conversion (fixed-point with precision)
+    pub const F64_TO_BUFFER_FIXED: &str = "f64_to_buffer_fixed";
+
+    /// Function name for f32 to buffer conversion (shortest representation)
     pub const F32_TO_BUFFER: &str = "f32_to_buffer";
+
+    /// Function name for f32 to buffer conversion (fixed-point with precision)
+    pub const F32_TO_BUFFER_FIXED: &str = "f32_to_buffer_fixed";
 
     /// Function name for f64 to buffer in exponential notation
     pub const F64_TO_BUFFER_EXP: &str = "f64_to_buffer_exp";
@@ -64,8 +70,16 @@ mod tests {
             "Missing f64_to_buffer export"
         );
         assert!(
+            found_exports.contains(&float_to_string::F64_TO_BUFFER_FIXED.to_string()),
+            "Missing f64_to_buffer_fixed export"
+        );
+        assert!(
             found_exports.contains(&float_to_string::F32_TO_BUFFER.to_string()),
             "Missing f32_to_buffer export"
+        );
+        assert!(
+            found_exports.contains(&float_to_string::F32_TO_BUFFER_FIXED.to_string()),
+            "Missing f32_to_buffer_fixed export"
         );
         assert!(
             found_exports.contains(&float_to_string::F64_TO_BUFFER_EXP.to_string()),
