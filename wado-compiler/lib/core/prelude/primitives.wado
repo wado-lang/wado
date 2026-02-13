@@ -289,19 +289,89 @@ fn fmt_u64_decimal(value: u64, f: &mut Formatter) {
 /// Write f32 to formatter using bundled float-to-string algorithm.
 /// (f32_to_buffer writes to linear memory — unavoidable for the bundled Wasm library.)
 fn fmt_f32_display(value: f32, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 16);
+    let ptr = builtin::realloc(0, 0, 1, 24);
     let len = builtin::f32_to_buffer(value, ptr);
     f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 16, 1, 0);
+    builtin::realloc(ptr, 24, 1, 0);
 }
 
 /// Write f64 to formatter using bundled float-to-string algorithm.
 /// (f64_to_buffer writes to linear memory — unavoidable for the bundled Wasm library.)
 fn fmt_f64_display(value: f64, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 24);
+    let ptr = builtin::realloc(0, 0, 1, 32);
     let len = builtin::f64_to_buffer(value, ptr);
     f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 24, 1, 0);
+    builtin::realloc(ptr, 32, 1, 0);
+}
+
+/// Write f32 with fixed-point precision.
+fn fmt_f32_fixed(value: f32, precision: i32, f: &mut Formatter) {
+    let buf_size = 64;
+    let ptr = builtin::realloc(0, 0, 1, buf_size);
+    let len = builtin::f32_to_buffer_fixed(value, precision, ptr);
+    f.write_from_memory(ptr, len);
+    builtin::realloc(ptr, buf_size, 1, 0);
+}
+
+/// Write f64 with fixed-point precision.
+fn fmt_f64_fixed(value: f64, precision: i32, f: &mut Formatter) {
+    let buf_size = 400;
+    let ptr = builtin::realloc(0, 0, 1, buf_size);
+    let len = builtin::f64_to_buffer_fixed(value, precision, ptr);
+    f.write_from_memory(ptr, len);
+    builtin::realloc(ptr, buf_size, 1, 0);
+}
+
+/// Write f32 in exponential notation (lowercase 'e').
+fn fmt_f32_exp(value: f32, precision: i32, f: &mut Formatter) {
+    let ptr = builtin::realloc(0, 0, 1, 32);
+    let len = builtin::f32_to_buffer_exp(value, precision, ptr);
+    f.write_from_memory(ptr, len);
+    builtin::realloc(ptr, 32, 1, 0);
+}
+
+/// Write f64 in exponential notation (lowercase 'e').
+fn fmt_f64_exp(value: f64, precision: i32, f: &mut Formatter) {
+    let ptr = builtin::realloc(0, 0, 1, 32);
+    let len = builtin::f64_to_buffer_exp(value, precision, ptr);
+    f.write_from_memory(ptr, len);
+    builtin::realloc(ptr, 32, 1, 0);
+}
+
+/// Write f32 in uppercase exponential notation.
+/// Formats using lowercase 'e', then replaces with 'E' in the output buffer.
+fn fmt_f32_upper_exp(value: f32, precision: i32, f: &mut Formatter) {
+    // Format with lowercase first, then uppercase the 'e' in the String
+    let mut tmp = String::with_capacity(32);
+    let mut tmp_fmt = Formatter::new(&mut tmp);
+    fmt_f32_exp(value, precision, &mut tmp_fmt);
+    // Replace 'e' with 'E' by scanning and rewriting bytes
+    let len = tmp.len();
+    for let mut i = 0; i < len; i += 1 {
+        let b = tmp.get_byte(i);
+        if b == 101 {
+            tmp.set_byte(i, 69);
+        }
+    }
+    f.write_str(tmp);
+}
+
+/// Write f64 in uppercase exponential notation.
+/// Formats using lowercase 'e', then replaces with 'E' in the output buffer.
+fn fmt_f64_upper_exp(value: f64, precision: i32, f: &mut Formatter) {
+    // Format with lowercase first, then uppercase the 'e' in the String
+    let mut tmp = String::with_capacity(32);
+    let mut tmp_fmt = Formatter::new(&mut tmp);
+    fmt_f64_exp(value, precision, &mut tmp_fmt);
+    // Replace 'e' with 'E' by scanning and rewriting bytes
+    let len = tmp.len();
+    for let mut i = 0; i < len; i += 1 {
+        let b = tmp.get_byte(i);
+        if b == 101 {
+            tmp.set_byte(i, 69);
+        }
+    }
+    f.write_str(tmp);
 }
 
 /// Write an integer (as i64 absolute value) in the given base (2, 8, or 16)
@@ -755,19 +825,23 @@ impl Display for u64 {
 
 impl Display for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        if f.precision() >= 0 {
-            panic("TODO: precision for f32 Display");
+        let prec = f.precision();
+        if prec >= 0 {
+            fmt_f32_fixed(*self, prec, f);
+        } else {
+            fmt_f32_display(*self, f);
         }
-        fmt_f32_display(*self, f);
     }
 }
 
 impl Display for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        if f.precision() >= 0 {
-            panic("TODO: precision for f64 Display");
+        let prec = f.precision();
+        if prec >= 0 {
+            fmt_f64_fixed(*self, prec, f);
+        } else {
+            fmt_f64_display(*self, f);
         }
-        fmt_f64_display(*self, f);
     }
 }
 
@@ -777,25 +851,25 @@ impl Display for f64 {
 
 impl LowerExp for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        panic("TODO: LowerExp for f32");
+        fmt_f32_exp(*self, f.precision(), f);
     }
 }
 
 impl UpperExp for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        panic("TODO: UpperExp for f32");
+        fmt_f32_upper_exp(*self, f.precision(), f);
     }
 }
 
 impl LowerExp for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        panic("TODO: LowerExp for f64");
+        fmt_f64_exp(*self, f.precision(), f);
     }
 }
 
 impl UpperExp for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        panic("TODO: UpperExp for f64");
+        fmt_f64_upper_exp(*self, f.precision(), f);
     }
 }
 

@@ -121,6 +121,29 @@ fn f64_to_buffer(value: f64, ptr: i32) -> i32;
 /// Returns the number of bytes written
 #[canonical("bundled", "f32_to_buffer")]
 fn f32_to_buffer(value: f32, ptr: i32) -> i32;
+
+/// Convert f64 to fixed-point string with given precision (decimal places)
+/// Returns the number of bytes written
+#[canonical("bundled", "f64_to_buffer_fixed")]
+fn f64_to_buffer_fixed(value: f64, precision: i32, ptr: i32) -> i32;
+
+/// Convert f32 to fixed-point string with given precision (decimal places)
+/// Returns the number of bytes written
+#[canonical("bundled", "f32_to_buffer_fixed")]
+fn f32_to_buffer_fixed(value: f32, precision: i32, ptr: i32) -> i32;
+
+/// Convert f64 to exponential notation string
+/// If precision < 0, uses shortest representation.
+/// If precision >= 0, uses precision+1 significant digits.
+/// Returns the number of bytes written (lowercase 'e')
+#[canonical("bundled", "f64_to_buffer_exp")]
+fn f64_to_buffer_exp(value: f64, precision: i32, ptr: i32) -> i32;
+
+/// Convert f32 to exponential notation string
+/// Returns the number of bytes written (lowercase 'e')
+#[canonical("bundled", "f32_to_buffer_exp")]
+fn f32_to_buffer_exp(value: f32, precision: i32, ptr: i32) -> i32;
+
 /// Sine of x (in radians)
 #[canonical("bundled", "libm_sin")]
 fn f64_sin(x: f64) -> f64;

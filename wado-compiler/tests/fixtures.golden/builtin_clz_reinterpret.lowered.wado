@@ -4,7 +4,9 @@
 
 // Imports
 // bundled::f32_to_buffer (f32_to_buffer)
+// bundled::f32_to_buffer_fixed (f32_to_buffer_fixed)
 // bundled::f64_to_buffer (f64_to_buffer)
+// bundled::f64_to_buffer_fixed (f64_to_buffer_fixed)
 // mem::realloc (realloc)
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
@@ -162,16 +164,7 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_f64_Display__fmt_0: {
-            let self: Box<f64> = move Box<f64> { value: back_to_pi };
-            let f: &mut Formatter = &mut __f;
-            if (__inline_Formatter__precision_0: {
-                break __inline_Formatter__precision_0: f.precision;
-            } >= 0) {
-                core::internal::panic(move "TODO: precision for f64 Display");
-            }
-            "core::prelude/primitives.wado::fmt_f64_display"(self.value, f);
-        };
+        Box<f64> { value: back_to_pi }."f64^Display::fmt"(&mut __f);
         break __tmpl: __r;
     });
     let zero_bits: i64 = core::builtin::i64_reinterpret_f64(0.0);
@@ -236,16 +229,7 @@ fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_36: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_f32_Display__fmt_1: {
-            let self: Box<f32> = move Box<f32> { value: back_to_pi32 };
-            let f: &mut Formatter = &mut __f;
-            if (__inline_Formatter__precision_0: {
-                break __inline_Formatter__precision_0: f.precision;
-            } >= 0) {
-                core::internal::panic(move "TODO: precision for f32 Display");
-            }
-            "core::prelude/primitives.wado::fmt_f32_display"(self.value, f);
-        };
+        Box<f32> { value: back_to_pi32 }."f32^Display::fmt"(&mut __f);
         break __tmpl: __r;
     });
     let zero32_bits: i32 = core::builtin::i32_reinterpret_f32(0.0 as f32);
