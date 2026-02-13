@@ -1081,6 +1081,44 @@ let a = '\u0041';         // 'A' (BMP)
 let smiley = '\u{1F600}'; // '😀' (non-BMP)
 ```
 
+##### char Casting and Conversion
+
+`char` can be cast to any integer type to extract the Unicode scalar value (possibly truncated for smaller types):
+
+```wado
+let c = 'A';
+let code = c as i32;    // 65
+let ucode = c as u32;   // 65
+let byte = c as u8;     // 65 (truncated to low byte)
+```
+
+Casting from integers to `char` is **prohibited** because not all integer values are valid Unicode scalar values (surrogates `0xD800..0xDFFF` and values `> 0x10FFFF` are invalid):
+
+```wado
+let x: i32 = 65;
+let c = x as char;  // compile error
+```
+
+Use checked conversion functions instead:
+
+```wado
+let c = char::from_u32(65 as u32);  // Option<char>: Some('A')
+let c = char::from_i32(65);         // Option<char>: Some('A')
+
+// Invalid values return null (None)
+char::from_u32(0xD800 as u32);      // null (surrogate)
+char::from_u32(0x110000 as u32);    // null (out of range)
+char::from_i32(-1);                 // null (negative)
+```
+
+Casting `char` to non-integer types is a compile error:
+
+```wado
+let c = 'A';
+let f = c as f64;     // compile error: char can only be cast to integer types
+let s = c as String;  // compile error: char can only be cast to integer types
+```
+
 #### Integer Literals
 
 ```wado

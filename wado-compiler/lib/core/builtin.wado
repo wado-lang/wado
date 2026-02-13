@@ -68,6 +68,11 @@ fn subtask_drop(subtask: i32);
 
 /// Wait for all pending effects to complete
 fn effect_wait();
+/// Reinterpret an i32 value as a char (no validation, no-op at Wasm level).
+/// Used internally by the stdlib for trusted conversions (e.g., UTF-8 decoding).
+/// User code should use char::from_u32() or char::from_i32() instead.
+fn i32_as_char(value: i32) -> char;
+
 /// Bitwise AND of two i32 values
 fn i32_and(a: i32, b: i32) -> i32;
 

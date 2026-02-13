@@ -1,0 +1,24 @@
+// Test valid char casts: char -> i32 and char -> u32
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let c = 'A';
+
+    // char -> i32
+    let code_i32 = c as i32;
+    assert code_i32 == 65;
+
+    // char -> u32
+    let code_u32 = c as u32;
+    assert code_u32 as i32 == 65;
+
+    // Unicode character -> i32
+    let emoji = '😀';
+    let emoji_code = emoji as i32;
+    assert emoji_code == 0x1F600;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

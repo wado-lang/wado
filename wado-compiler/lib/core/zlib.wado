@@ -3173,7 +3173,7 @@ fn bytes_to_string(buf: &Array<u8>, offset: i32, len: i32) -> String {
     let mut s = String::with_capacity(len);
     for let mut i = 0; i < len; i += 1 {
         // Append single-byte characters as strings via template
-        s.append(`{buf[offset + i] as char}`);
+        s.append(`{builtin::i32_as_char(buf[offset + i] as i32)}`);
     }
     return s;
 }

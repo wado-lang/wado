@@ -9204,6 +9204,20 @@ impl Codegen<'_> {
             ) => {
                 // No instruction needed
             }
+            // char -> i32 (no-op, char is stored as i32)
+            (
+                ResolvedType::Primitive(PrimitiveType::Char),
+                ResolvedType::Primitive(PrimitiveType::I32),
+            ) => {
+                // No instruction needed
+            }
+            // char -> u32 (no-op, char values are always valid u32)
+            (
+                ResolvedType::Primitive(PrimitiveType::Char),
+                ResolvedType::Primitive(PrimitiveType::U32),
+            ) => {
+                // No instruction needed
+            }
             // Same type - no conversion needed
             _ if from_type == to_type => {}
             // Other conversions - placeholder
@@ -12666,6 +12680,10 @@ impl Codegen<'_> {
                         panic!("array_fill first argument must be builtin::array<T>");
                     }
                 }
+            }
+            "builtin::i32_as_char" => {
+                // No-op: char is stored as i32 at Wasm level
+                self.generate_args(func, args, type_table, ctx, builder);
             }
             "builtin::i32_and" => {
                 self.generate_args(func, args, type_table, ctx, builder);

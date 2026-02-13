@@ -159,6 +159,14 @@ pub enum TypeError {
 
     /// Invalid pattern in context
     InvalidPattern { message: String, span: Span },
+
+    /// Invalid type cast
+    InvalidCast {
+        from: String,
+        to: String,
+        hint: String,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for TypeError {
@@ -250,6 +258,18 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, message
                 )
             }
+            TypeError::InvalidCast {
+                from,
+                to,
+                hint,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: cannot cast '{}' to '{}': {}",
+                    span.line, span.column, from, to, hint
+                )
+            }
         }
     }
 }
@@ -328,6 +348,16 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             TypeError::InvalidPattern { message, span } => (
                 Code::InvalidSyntax,
                 format!("invalid pattern: {message}"),
+                *span,
+            ),
+            TypeError::InvalidCast {
+                from,
+                to,
+                hint,
+                span,
+            } => (
+                Code::InvalidCast,
+                format!("cannot cast '{from}' to '{to}': {hint}"),
                 *span,
             ),
         };
@@ -10878,6 +10908,33 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Normal cast
         let expr = self.resolve_expr(&cast.expr, ctx);
+        let source_type = expr.type_id;
+
+        // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
+        let source_base = self.type_table.borrow().get_ultimate_base_type(source_type);
+        let target_base = self.type_table.borrow().get_ultimate_base_type(target_type);
+        if target_base == TypeTable::CHAR && source_base != TypeTable::CHAR {
+            let from_name = self.type_table.borrow().type_name(source_type);
+            let _ = self.logger.error(TypeError::InvalidCast {
+                from: from_name,
+                to: "char".to_string(),
+                hint: "use char::from_u32() or char::from_i32() for checked conversion".to_string(),
+                span: cast.span,
+            });
+        }
+        // char -> non-integer is invalid (char -> integer extracts code point)
+        if source_base == TypeTable::CHAR
+            && target_base != TypeTable::CHAR
+            && !self.type_table.borrow().is_integer(target_base)
+        {
+            let to_name = self.type_table.borrow().type_name(target_type);
+            let _ = self.logger.error(TypeError::InvalidCast {
+                from: "char".to_string(),
+                to: to_name,
+                hint: "char can only be cast to integer types".to_string(),
+                span: cast.span,
+            });
+        }
 
         TirExpr::new(
             TirExprKind::Cast {

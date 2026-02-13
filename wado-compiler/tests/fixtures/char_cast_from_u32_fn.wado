@@ -1,0 +1,87 @@
+// Test char::from_u32() and char::from_i32() checked conversion
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Valid ASCII
+    if let Some(c) = char::from_u32(65 as u32) {
+        assert c == 'A';
+    } else {
+        panic("expected Some");
+    }
+
+    // Valid emoji
+    if let Some(c) = char::from_u32(0x1F600 as u32) {
+        assert c as i32 == 0x1F600;
+    } else {
+        panic("expected Some");
+    }
+
+    // char::from_i32 valid
+    if let Some(c) = char::from_i32(65) {
+        assert c == 'A';
+    } else {
+        panic("expected Some");
+    }
+
+    // Invalid: surrogate (0xD800)
+    if let None = char::from_u32(0xD800 as u32) {
+        // expected
+    } else {
+        panic("expected None for surrogate");
+    }
+
+    // Invalid: surrogate (0xDFFF)
+    if let None = char::from_u32(0xDFFF as u32) {
+        // expected
+    } else {
+        panic("expected None for surrogate");
+    }
+
+    // Invalid: too large (> 0x10FFFF)
+    if let None = char::from_u32(0x110000 as u32) {
+        // expected
+    } else {
+        panic("expected None for too large");
+    }
+
+    // Invalid: negative i32
+    if let None = char::from_i32(-1) {
+        // expected
+    } else {
+        panic("expected None for negative");
+    }
+
+    // Edge cases: boundaries of valid ranges
+    // U+0000 (null char)
+    if let Some(c) = char::from_u32(0 as u32) {
+        assert c as i32 == 0;
+    } else {
+        panic("expected Some for U+0000");
+    }
+
+    // U+D7FF (just before surrogates)
+    if let Some(c) = char::from_u32(0xD7FF as u32) {
+        assert c as i32 == 0xD7FF;
+    } else {
+        panic("expected Some for U+D7FF");
+    }
+
+    // U+E000 (just after surrogates)
+    if let Some(c) = char::from_u32(0xE000 as u32) {
+        assert c as i32 == 0xE000;
+    } else {
+        panic("expected Some for U+E000");
+    }
+
+    // U+10FFFF (max valid)
+    if let Some(c) = char::from_u32(0x10FFFF as u32) {
+        assert c as i32 == 0x10FFFF;
+    } else {
+        panic("expected Some for U+10FFFF");
+    }
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
