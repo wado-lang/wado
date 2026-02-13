@@ -1128,6 +1128,9 @@ let code = 'A' as i32;              // 65
 let ucode = 'A' as u32;            // 65
 let byte = 'A' as u8;              // 65
 
+// u8 -> char is always valid (all u8 values are valid Unicode)
+let c = (65 as u8) as char;         // 'A'
+
 // integer -> char: use checked conversion (as char is a compile error)
 let c = char::from_u32(65 as u32);  // Option<char>: Some('A')
 let c = char::from_i32(65);         // Option<char>: Some('A')
@@ -1136,6 +1139,9 @@ let c = char::from_i32(65);         // Option<char>: Some('A')
 char::from_u32(0xD800 as u32);      // null (surrogate)
 char::from_u32(0x110000 as u32);    // null (out of range)
 char::from_i32(-1);                 // null (negative)
+
+// Unchecked conversion (caller must ensure validity)
+let c = char::from_u32_unchecked(65 as u32);  // 'A'
 ```
 
 ### Math Functions

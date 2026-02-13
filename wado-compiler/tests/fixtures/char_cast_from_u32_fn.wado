@@ -80,6 +80,13 @@ export fn run() with Stdout {
         panic("expected Some for U+10FFFF");
     }
 
+    // char::from_u32_unchecked
+    let uc = char::from_u32_unchecked(65 as u32);
+    assert uc == 'A';
+
+    let uc2 = char::from_u32_unchecked(0x1F600 as u32);
+    assert uc2 as i32 == 0x1F600;
+
     println("ok");
 }
 

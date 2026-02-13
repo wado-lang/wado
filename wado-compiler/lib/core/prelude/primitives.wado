@@ -381,7 +381,7 @@ impl char {
         if value >= 0xD800 && value <= 0xDFFF {
             return null;
         }
-        return Option::<char>::Some(builtin::i32_as_char(value as i32));
+        return Option::<char>::Some(char::from_u32_unchecked(value));
     }
 
     /// Converts a signed integer to a char.
@@ -391,6 +391,15 @@ impl char {
             return null;
         }
         return char::from_u32(value as u32);
+    }
+
+    /// Converts a u32 to a char without validation.
+    /// The caller must ensure the value is a valid Unicode scalar value
+    /// (0..=0xD7FF or 0xE000..=0x10FFFF). Passing an invalid value
+    /// results in an invalid char, which may cause incorrect behavior
+    /// in string operations.
+    pub fn from_u32_unchecked(value: u32) -> char {
+        return builtin::i32_as_char(value as i32);
     }
 
     pub fn to_string(self) -> String {

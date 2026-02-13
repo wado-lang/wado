@@ -263,7 +263,7 @@ impl Iterator for StrCharIter {
 
         // Single byte (ASCII): 0xxxxxxx
         if b0 < 0x80 {
-            return Option::<char>::Some(builtin::i32_as_char(b0));
+            return Option::<char>::Some(char::from_u32_unchecked(b0 as u32));
         }
 
         // Two bytes: 110xxxxx 10xxxxxx
@@ -271,7 +271,7 @@ impl Iterator for StrCharIter {
             let b1 = builtin::array_get_u8(self.repr, self.byte_index);
             self.byte_index += 1;
             let code = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
-            return Option::<char>::Some(builtin::i32_as_char(code));
+            return Option::<char>::Some(char::from_u32_unchecked(code as u32));
         }
 
         // Three bytes: 1110xxxx 10xxxxxx 10xxxxxx
@@ -280,7 +280,7 @@ impl Iterator for StrCharIter {
             let b2 = builtin::array_get_u8(self.repr, self.byte_index + 1);
             self.byte_index += 2;
             let code = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
-            return Option::<char>::Some(builtin::i32_as_char(code));
+            return Option::<char>::Some(char::from_u32_unchecked(code as u32));
         }
 
         // Four bytes: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
@@ -289,7 +289,7 @@ impl Iterator for StrCharIter {
         let b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
         self.byte_index += 3;
         let code = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
-        return Option::<char>::Some(builtin::i32_as_char(code));
+        return Option::<char>::Some(char::from_u32_unchecked(code as u32));
     }
 }
 

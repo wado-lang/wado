@@ -10911,9 +10911,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let source_type = expr.type_id;
 
         // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
+        // Exception: u8 -> char is always valid (0..255 are valid Unicode scalar values)
         let source_base = self.type_table.borrow().get_ultimate_base_type(source_type);
         let target_base = self.type_table.borrow().get_ultimate_base_type(target_type);
-        if target_base == TypeTable::CHAR && source_base != TypeTable::CHAR {
+        if target_base == TypeTable::CHAR
+            && source_base != TypeTable::CHAR
+            && source_base != TypeTable::U8
+        {
             let from_name = self.type_table.borrow().type_name(source_type);
             let _ = self.logger.error(TypeError::InvalidCast {
                 from: from_name,

@@ -1092,11 +1092,21 @@ let ucode = c as u32;   // 65
 let byte = c as u8;     // 65 (truncated to low byte)
 ```
 
-Casting from integers to `char` is **prohibited** because not all integer values are valid Unicode scalar values (surrogates `0xD800..0xDFFF` and values `> 0x10FFFF` are invalid):
+`u8 as char` is allowed because all `u8` values (0..255) are valid Unicode scalar values:
+
+```wado
+let byte: u8 = 65;
+let c = byte as char;  // 'A'
+```
+
+All other integer-to-char casts are **prohibited** because not all values are valid Unicode scalar values (surrogates `0xD800..0xDFFF` and values `> 0x10FFFF` are invalid):
 
 ```wado
 let x: i32 = 65;
 let c = x as char;  // compile error
+
+let y: i8 = 65;
+let c = y as char;  // compile error (i8 can be negative)
 ```
 
 Use checked conversion functions instead:
@@ -1109,6 +1119,12 @@ let c = char::from_i32(65);         // Option<char>: Some('A')
 char::from_u32(0xD800 as u32);      // null (surrogate)
 char::from_u32(0x110000 as u32);    // null (out of range)
 char::from_i32(-1);                 // null (negative)
+```
+
+For performance-critical code where validity is already guaranteed, use `from_u32_unchecked`:
+
+```wado
+let c = char::from_u32_unchecked(65 as u32);  // 'A' (no validation)
 ```
 
 Casting `char` to non-integer types is a compile error:
