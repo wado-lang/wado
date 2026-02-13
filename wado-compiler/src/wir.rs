@@ -1,12 +1,140 @@
 // WIR (Wasm IR) — an interposition layer between codegen and wasm_encoder.
 //
-// WirFunction captures the instruction stream as WirInstr values, then
-// emits them to a wasm_encoder::Function via wir_emit.  This proves the
-// WIR representation can round-trip every instruction the codegen produces.
+// Module-level types (`WirModule`, `WirTypeDef`, etc.) capture the complete
+// core Wasm module in inspectable form. The `emit_module` function in
+// `wir_emit.rs` converts a `WirModule` to Wasm bytes — the only place
+// that touches `wasm_encoder` sections.
+//
+// Function-level types (`WirFunction`, `WirInstr`) capture the instruction
+// stream as a flat list. Tree-structured IR is a future step (see WEP).
 
-use wasm_encoder::{BlockType, HeapType, Instruction, MemArg, ValType};
+use wasm_encoder::{
+    BlockType, ExportKind, FieldType, HeapType, Instruction, MemArg, StorageType, ValType,
+};
 
 use crate::wir_emit;
+
+// ============================================================================
+// Module-level WIR types
+// ============================================================================
+
+/// Complete core Wasm module in inspectable form.
+///
+/// All indices are resolved. `emit_module` converts this to `Vec<u8>` purely
+/// mechanically — no decisions, no lookups.
+pub struct WirModule {
+    pub types: Vec<WirTypeDef>,
+    pub imports: Vec<WirImport>,
+    /// Function section: one type index per defined function.
+    pub func_type_indices: Vec<u32>,
+    pub globals: Vec<WirGlobal>,
+    pub exports: Vec<WirExport>,
+    /// Function indices for the declarative element segment (required for `ref.func`).
+    pub element_func_indices: Vec<u32>,
+    /// Passive data segment bytes (concatenated string literals).
+    pub data: Vec<u8>,
+    /// One body per defined function (same order as `func_type_indices`).
+    pub bodies: Vec<WirFunctionBody>,
+    /// Per-function branch hints.
+    pub branch_hints: Vec<WirBranchHintEntry>,
+    /// Number of imported functions (offset for branch hint func indices).
+    pub import_func_count: u32,
+    /// Module name and debug names. `None` in strip-names mode.
+    pub names: Option<WirNames>,
+    pub module_name: String,
+    /// Whether a memory import exists (used to emit the memory import flag).
+    pub has_memory: bool,
+}
+
+/// A single function body: local declarations + flat instruction stream.
+pub struct WirFunctionBody {
+    pub locals: Vec<(u32, ValType)>,
+    pub instrs: Vec<WirInstr>,
+}
+
+/// Type definition in the type section.
+pub enum WirTypeDef {
+    /// `(func (param ...) (result ...))`.
+    Func {
+        params: Vec<ValType>,
+        results: Vec<ValType>,
+    },
+    /// `(array (field ...))`.
+    GcArray { element: StorageType, mutable: bool },
+    /// `(struct (field ...) ...)`.
+    GcStruct {
+        fields: Vec<FieldType>,
+        is_final: bool,
+        supertype_idx: Option<u32>,
+    },
+    /// `(rec ...)` containing mutually recursive types.
+    RecGroup(Vec<WirRecGroupEntry>),
+}
+
+/// One entry inside a `WirTypeDef::RecGroup`.
+pub struct WirRecGroupEntry {
+    pub kind: WirRecGroupKind,
+}
+
+/// Kind of type within a rec group.
+pub enum WirRecGroupKind {
+    Struct(Vec<FieldType>),
+    Array(FieldType),
+}
+
+/// Import entry.
+pub enum WirImport {
+    Func {
+        module: String,
+        name: String,
+        type_idx: u32,
+    },
+    Memory {
+        module: String,
+        name: String,
+        min: u64,
+    },
+}
+
+/// Global variable definition.
+pub struct WirGlobal {
+    pub name: String,
+    pub val_type: ValType,
+    pub mutable: bool,
+    pub init: WirConstExpr,
+}
+
+/// Constant expression for global initializers.
+pub enum WirConstExpr {
+    I32(i32),
+    I64(i64),
+    F32(u32),
+    F64(u64),
+    RefNull(HeapType),
+}
+
+/// Export entry.
+pub struct WirExport {
+    pub name: String,
+    pub kind: ExportKind,
+    pub index: u32,
+}
+
+/// Branch hints for a single function.
+pub struct WirBranchHintEntry {
+    pub func_idx: u32,
+    pub hints: Vec<(u32, bool)>,
+}
+
+/// Debug names for the name section.
+pub struct WirNames {
+    pub func_names: Vec<(u32, String)>,
+    pub type_names: Vec<(u32, String)>,
+}
+
+// ============================================================================
+// Instruction-level WIR types
+// ============================================================================
 
 /// Owned memory-access argument (mirrors `wasm_encoder::MemArg`).
 #[derive(Clone, Copy, Debug)]
@@ -535,5 +663,13 @@ impl WirFunction {
         let mut func = wasm_encoder::Function::new(self.local_decls);
         wir_emit::emit(&self.instrs, &mut func);
         func
+    }
+
+    /// Consume self and produce a `WirFunctionBody` for inclusion in a `WirModule`.
+    pub fn into_body(self) -> WirFunctionBody {
+        WirFunctionBody {
+            locals: self.local_decls,
+            instrs: self.instrs,
+        }
     }
 }

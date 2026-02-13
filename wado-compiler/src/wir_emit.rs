@@ -1,8 +1,272 @@
-// WIR emitter — converts a WirInstr stream into wasm_encoder::Function instructions.
+// WIR emitter — converts WIR to wasm_encoder types.
+//
+// `emit_module` converts a `WirModule` to Wasm bytes. This is the ONLY place
+// that creates `wasm_encoder` sections — codegen never touches them directly.
+//
+// `emit` (function-level) replays a `WirInstr` stream into a
+// `wasm_encoder::Function`.
 
-use wasm_encoder::{Function, Instruction};
+use wasm_encoder::{
+    ArrayType, BranchHint, BranchHints, CodeSection, CompositeInnerType, CompositeType, ConstExpr,
+    DataCountSection, DataSection, ElementSection, Elements, ExportSection, FieldType, Function,
+    FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, MemoryType, Module,
+    NameMap, NameSection, ProducersField, ProducersSection, SubType, TypeSection,
+};
 
-use crate::wir::{WirInstr, WirMemArg};
+use crate::wir::{
+    WirConstExpr, WirImport, WirInstr, WirMemArg, WirModule, WirRecGroupKind, WirTypeDef,
+};
+
+// ============================================================================
+// Module-level emission
+// ============================================================================
+
+/// Convert a `WirModule` to Wasm binary bytes.
+///
+/// This is purely mechanical — no decisions, no lookups, no TIR access.
+pub fn emit_module(wir: &WirModule) -> Vec<u8> {
+    let mut module = Module::new();
+
+    // Type section
+    let mut types = TypeSection::new();
+    for typedef in &wir.types {
+        emit_typedef(&mut types, typedef);
+    }
+    module.section(&types);
+
+    // Import section
+    if !wir.imports.is_empty() {
+        let mut imports = ImportSection::new();
+        for import in &wir.imports {
+            match import {
+                WirImport::Func {
+                    module: m,
+                    name,
+                    type_idx,
+                } => {
+                    imports.import(m, name, wasm_encoder::EntityType::Function(*type_idx));
+                }
+                WirImport::Memory {
+                    module: m,
+                    name,
+                    min,
+                } => {
+                    imports.import(
+                        m,
+                        name,
+                        wasm_encoder::EntityType::Memory(MemoryType {
+                            minimum: *min,
+                            maximum: None,
+                            memory64: false,
+                            shared: false,
+                            page_size_log2: None,
+                        }),
+                    );
+                }
+            }
+        }
+        module.section(&imports);
+    }
+
+    // Function section
+    if !wir.func_type_indices.is_empty() {
+        let mut functions = FunctionSection::new();
+        for &type_idx in &wir.func_type_indices {
+            functions.function(type_idx);
+        }
+        module.section(&functions);
+    }
+
+    // Global section
+    if !wir.globals.is_empty() {
+        let mut globals = GlobalSection::new();
+        for global in &wir.globals {
+            let global_type = GlobalType {
+                val_type: global.val_type,
+                mutable: global.mutable,
+                shared: false,
+            };
+            globals.global(global_type, &emit_const_expr(&global.init));
+        }
+        module.section(&globals);
+    }
+
+    // Export section
+    if !wir.exports.is_empty() {
+        let mut exports = ExportSection::new();
+        for export in &wir.exports {
+            exports.export(&export.name, export.kind, export.index);
+        }
+        module.section(&exports);
+    }
+
+    // Element section (declarative, for ref.func)
+    if !wir.element_func_indices.is_empty() {
+        let mut elements = ElementSection::new();
+        elements.declared(Elements::Functions(std::borrow::Cow::Borrowed(
+            &wir.element_func_indices,
+        )));
+        module.section(&elements);
+    }
+
+    // Data count section (required for array.new_data with GC)
+    let data_count = u32::from(!wir.data.is_empty());
+    module.section(&DataCountSection { count: data_count });
+
+    // Branch hints section (must come before code section)
+    if !wir.branch_hints.is_empty() {
+        let mut hints = BranchHints::new();
+        for entry in &wir.branch_hints {
+            hints.function_hints(
+                entry.func_idx,
+                entry.hints.iter().map(|&(offset, taken)| BranchHint {
+                    branch_func_offset: offset,
+                    branch_hint_value: u32::from(taken),
+                }),
+            );
+        }
+        module.section(&hints);
+    }
+
+    // Code section
+    let mut code = CodeSection::new();
+    for body in &wir.bodies {
+        let mut func = Function::new(body.locals.clone());
+        emit(&body.instrs, &mut func);
+        code.function(&func);
+    }
+    module.section(&code);
+
+    // Data section
+    if !wir.data.is_empty() {
+        let mut data = DataSection::new();
+        data.passive(wir.data.iter().copied());
+        module.section(&data);
+    }
+
+    // Name section
+    if let Some(names) = &wir.names {
+        let mut name_section = NameSection::new();
+        name_section.module(&wir.module_name);
+
+        let mut func_names = NameMap::new();
+        for (idx, name) in &names.func_names {
+            func_names.append(*idx, name);
+        }
+        name_section.functions(&func_names);
+
+        let mut type_names = NameMap::new();
+        for (idx, name) in &names.type_names {
+            type_names.append(*idx, name);
+        }
+        name_section.types(&type_names);
+
+        module.section(&name_section);
+    }
+
+    // Producers section
+    if wir.names.is_some() {
+        let mut language = ProducersField::new();
+        language.value("Wado", "");
+        let mut processed_by = ProducersField::new();
+        processed_by.value(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        let mut producers = ProducersSection::new();
+        producers.field("language", &language);
+        producers.field("processed-by", &processed_by);
+        module.section(&producers);
+    }
+
+    module.finish()
+}
+
+/// Emit a single type definition into the type section.
+fn emit_typedef(types: &mut TypeSection, typedef: &WirTypeDef) {
+    match typedef {
+        WirTypeDef::Func { params, results } => {
+            types
+                .ty()
+                .function(params.iter().copied(), results.iter().copied());
+        }
+        WirTypeDef::GcArray { element, mutable } => {
+            types.ty().subtype(&SubType {
+                is_final: true,
+                supertype_idx: None,
+                composite_type: CompositeType {
+                    inner: CompositeInnerType::Array(ArrayType(FieldType {
+                        element_type: *element,
+                        mutable: *mutable,
+                    })),
+                    shared: false,
+                    descriptor: None,
+                    describes: None,
+                },
+            });
+        }
+        WirTypeDef::GcStruct {
+            fields,
+            is_final,
+            supertype_idx,
+        } => {
+            types.ty().subtype(&SubType {
+                is_final: *is_final,
+                supertype_idx: *supertype_idx,
+                composite_type: CompositeType {
+                    inner: CompositeInnerType::Struct(wasm_encoder::StructType {
+                        fields: fields.clone().into_boxed_slice(),
+                    }),
+                    shared: false,
+                    descriptor: None,
+                    describes: None,
+                },
+            });
+        }
+        WirTypeDef::RecGroup(entries) => {
+            let subtypes: Vec<SubType> = entries
+                .iter()
+                .map(|entry| match &entry.kind {
+                    WirRecGroupKind::Struct(fields) => SubType {
+                        is_final: false,
+                        supertype_idx: None,
+                        composite_type: CompositeType {
+                            inner: CompositeInnerType::Struct(wasm_encoder::StructType {
+                                fields: fields.clone().into_boxed_slice(),
+                            }),
+                            shared: false,
+                            descriptor: None,
+                            describes: None,
+                        },
+                    },
+                    WirRecGroupKind::Array(field_type) => SubType {
+                        is_final: true,
+                        supertype_idx: None,
+                        composite_type: CompositeType {
+                            inner: CompositeInnerType::Array(ArrayType(*field_type)),
+                            shared: false,
+                            descriptor: None,
+                            describes: None,
+                        },
+                    },
+                })
+                .collect();
+            types.ty().rec(subtypes);
+        }
+    }
+}
+
+/// Convert a `WirConstExpr` to a `wasm_encoder::ConstExpr`.
+fn emit_const_expr(expr: &WirConstExpr) -> ConstExpr {
+    match *expr {
+        WirConstExpr::I32(v) => ConstExpr::i32_const(v),
+        WirConstExpr::I64(v) => ConstExpr::i64_const(v),
+        WirConstExpr::F32(bits) => ConstExpr::f32_const(wasm_encoder::Ieee32::new(bits)),
+        WirConstExpr::F64(bits) => ConstExpr::f64_const(wasm_encoder::Ieee64::new(bits)),
+        WirConstExpr::RefNull(ht) => ConstExpr::ref_null(ht),
+    }
+}
+
+// ============================================================================
+// Function-level emission
+// ============================================================================
 
 /// Emit a slice of `WirInstr` into a `wasm_encoder::Function`.
 pub fn emit(instrs: &[WirInstr], func: &mut Function) {
