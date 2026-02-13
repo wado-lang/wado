@@ -130,8 +130,7 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
                     Ok(pair) => pair,
                     Err(err) => return anyhow::Ok(Err(Some(err))),
                 };
-                let _ =
-                    tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
+                let _ = tx.send(store.with(|store| res.into_http(store, async { Ok(()) }))?);
                 task.block(store).await;
                 Ok(Ok(()))
             })
@@ -339,6 +338,15 @@ async fn test_http_error_code() {
     run_http_fixture_test(
         Path::new("tests/fixtures.http/http-error-code.wado"),
         "http-error-code.wado",
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_http_error_code_payload() {
+    run_http_fixture_test(
+        Path::new("tests/fixtures.http/http-error-code-payload.wado"),
+        "http-error-code-payload.wado",
     )
     .await;
 }
