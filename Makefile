@@ -19,7 +19,7 @@ on-task-started:
 	fi
 
 .PHONY: build
-build: wado-compiler/lib/builtins/wado-bundled.wat
+build: wado-compiler/lib/builtins/wado-bundled-fts.wat wado-compiler/lib/builtins/wado-bundled-libm.wat
 	cargo build
 	cargo check -p wado-compiler --target wasm32-unknown-unknown
 
@@ -142,13 +142,18 @@ update-stdlib-wasi:
 		--output-dir wado-compiler/lib/wasi
 	rm -rf wado-compiler/lib/wasi/wasi-http.wado # a file for bindgen
 
-wado-compiler/lib/builtins/wado-bundled.wat: Cargo.toml Cargo.lock wado-bundled/Cargo.toml wado-bundled/src/lib.rs
+wado-compiler/lib/builtins/wado-bundled-fts.wat: Cargo.toml Cargo.lock wado-bundled-fts/Cargo.toml wado-bundled-fts/src/lib.rs
+	make update-bundled
+
+wado-compiler/lib/builtins/wado-bundled-libm.wat: Cargo.toml Cargo.lock wado-bundled-libm/Cargo.toml wado-bundled-libm/src/lib.rs
 	make update-bundled
 
 .PHONY: update-bundled
 update-bundled:
-	cd wado-bundled && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release
-	wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled.wasm > wado-compiler/lib/builtins/wado-bundled.wat
+	cd wado-bundled-fts && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release
+	cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release
+	wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled_fts.wasm > wado-compiler/lib/builtins/wado-bundled-fts.wat
+	wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
 
 .PHONY: benchmark-count-prime
 benchmark-count-prime:

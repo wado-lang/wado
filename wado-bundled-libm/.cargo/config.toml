@@ -1,0 +1,9 @@
+# This crate must be built for wasm32-unknown-unknown
+[build]
+target = "wasm32-unknown-unknown"
+
+# Place data after FTS module's data (which ends around 1049384) to avoid
+# overlap when both modules share the same linear memory.
+# Default global-base is 1048576 (= stack-size with --stack-first).
+[target.wasm32-unknown-unknown]
+rustflags = ["-Clink-arg=--global-base=1052672"]
