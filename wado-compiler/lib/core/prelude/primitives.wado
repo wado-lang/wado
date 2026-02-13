@@ -318,56 +318,22 @@ fn fmt_f64_fixed(value: f64, precision: i32, f: &mut Formatter) {
     builtin::realloc(ptr, 400, 1, 0);
 }
 
-/// Write f32 in exponential notation (lowercase 'e').
-fn fmt_f32_exp(value: f32, precision: i32, f: &mut Formatter) {
+/// Write f32 in exponential notation.
+/// If `upper` is true, uses 'E' instead of 'e'.
+fn fmt_f32_exp(value: f32, precision: i32, upper: i32, f: &mut Formatter) {
     let ptr = builtin::realloc(0, 0, 1, 32);
-    let len = builtin::f32_to_buffer_exp(value, precision, ptr);
+    let len = builtin::f32_to_buffer_exp(value, precision, upper, ptr);
     f.write_from_memory(ptr, len);
     builtin::realloc(ptr, 32, 1, 0);
 }
 
-/// Write f64 in exponential notation (lowercase 'e').
-fn fmt_f64_exp(value: f64, precision: i32, f: &mut Formatter) {
+/// Write f64 in exponential notation.
+/// If `upper` is true, uses 'E' instead of 'e'.
+fn fmt_f64_exp(value: f64, precision: i32, upper: i32, f: &mut Formatter) {
     let ptr = builtin::realloc(0, 0, 1, 32);
-    let len = builtin::f64_to_buffer_exp(value, precision, ptr);
+    let len = builtin::f64_to_buffer_exp(value, precision, upper, ptr);
     f.write_from_memory(ptr, len);
     builtin::realloc(ptr, 32, 1, 0);
-}
-
-/// Write f32 in uppercase exponential notation.
-/// Formats using lowercase 'e', then replaces with 'E' in the output buffer.
-fn fmt_f32_upper_exp(value: f32, precision: i32, f: &mut Formatter) {
-    // Format with lowercase first, then uppercase the 'e' in the String
-    let mut tmp = String::with_capacity(32);
-    let mut tmp_fmt = Formatter::new(&mut tmp);
-    fmt_f32_exp(value, precision, &mut tmp_fmt);
-    // Replace 'e' with 'E' by scanning and rewriting bytes
-    let len = tmp.len();
-    for let mut i = 0; i < len; i += 1 {
-        let b = tmp.get_byte(i);
-        if b == 101 {
-            tmp.set_byte(i, 69);
-        }
-    }
-    f.write_str(tmp);
-}
-
-/// Write f64 in uppercase exponential notation.
-/// Formats using lowercase 'e', then replaces with 'E' in the output buffer.
-fn fmt_f64_upper_exp(value: f64, precision: i32, f: &mut Formatter) {
-    // Format with lowercase first, then uppercase the 'e' in the String
-    let mut tmp = String::with_capacity(32);
-    let mut tmp_fmt = Formatter::new(&mut tmp);
-    fmt_f64_exp(value, precision, &mut tmp_fmt);
-    // Replace 'e' with 'E' by scanning and rewriting bytes
-    let len = tmp.len();
-    for let mut i = 0; i < len; i += 1 {
-        let b = tmp.get_byte(i);
-        if b == 101 {
-            tmp.set_byte(i, 69);
-        }
-    }
-    f.write_str(tmp);
 }
 
 /// Write an integer (as i64 absolute value) in the given base (2, 8, or 16)
@@ -837,25 +803,25 @@ impl Display for f64 {
 
 impl LowerExp for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_f32_exp(*self, f.precision(), f);
+        fmt_f32_exp(*self, f.precision(), 0, f);
     }
 }
 
 impl UpperExp for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_f32_upper_exp(*self, f.precision(), f);
+        fmt_f32_exp(*self, f.precision(), 1, f);
     }
 }
 
 impl LowerExp for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_f64_exp(*self, f.precision(), f);
+        fmt_f64_exp(*self, f.precision(), 0, f);
     }
 }
 
 impl UpperExp for f64 {
     pub fn fmt(&self, f: &mut Formatter) {
-        fmt_f64_upper_exp(*self, f.precision(), f);
+        fmt_f64_exp(*self, f.precision(), 1, f);
     }
 }
 

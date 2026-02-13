@@ -35,10 +35,11 @@ fn write_digits(buf: &mut [u8], mut d: u64, nd: usize) {
     }
 }
 
-/// Format `(d, p)` in exponential notation: `d.ddde[-]ee`
+/// Format `(d, p)` in exponential notation: `d.ddde[-]ee` or `d.dddE[-]ee`
 ///
+/// `exp_char` is the exponent character (b'e' or b'E').
 /// Returns number of bytes written.
-fn fmt_exp(buf: &mut [u8], d: u64, p: i32, nd: i32) -> usize {
+fn fmt_exp(buf: &mut [u8], d: u64, p: i32, nd: i32, exp_char: u8) -> usize {
     let nd = nd as usize;
     let exp = nd as i32 + p - 1;
 
@@ -60,7 +61,7 @@ fn fmt_exp(buf: &mut [u8], d: u64, p: i32, nd: i32) -> usize {
     }
 
     // Write exponent
-    buf[pos] = b'e';
+    buf[pos] = exp_char;
     pos += 1;
 
     let abs_exp = if exp < 0 {
@@ -98,7 +99,7 @@ fn fmt_shortest(buf: &mut [u8], d: u64, p: i32, nd: i32) -> usize {
 
     // Use exponential for very large or very small values
     if !(-4..=15).contains(&exp) {
-        return fmt_exp(buf, d, p, nd);
+        return fmt_exp(buf, d, p, nd, b'e');
     }
 
     let nd_usize = nd as usize;
@@ -333,10 +334,11 @@ fn f64_fmt_fixed(value: f64, precision: i32, buf: &mut [u8]) -> usize {
 ///
 /// If `precision < 0`, use shortest representation.
 /// If `precision >= 0`, use `precision + 1` significant digits.
+/// If `upper` is nonzero, use 'E' instead of 'e'.
 ///
 /// Returns number of bytes written. Buffer must be at least 32 bytes.
 #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-fn f64_fmt_exp(value: f64, precision: i32, buf: &mut [u8]) -> usize {
+fn f64_fmt_exp(value: f64, precision: i32, upper: bool, buf: &mut [u8]) -> usize {
     if value != value {
         buf[..3].copy_from_slice(b"NaN");
         return 3;
@@ -349,6 +351,8 @@ fn f64_fmt_exp(value: f64, precision: i32, buf: &mut [u8]) -> usize {
         buf[..4].copy_from_slice(b"-inf");
         return 4;
     }
+    let ec = if upper { b'E' } else { b'e' };
+
     if value == 0.0 {
         let mut pos = 0;
         if value.to_bits() >> 63 != 0 {
@@ -357,7 +361,7 @@ fn f64_fmt_exp(value: f64, precision: i32, buf: &mut [u8]) -> usize {
         }
         if precision < 0 {
             buf[pos] = b'0';
-            buf[pos + 1] = b'e';
+            buf[pos + 1] = ec;
             buf[pos + 2] = b'0';
             return pos + 3;
         }
@@ -370,13 +374,13 @@ fn f64_fmt_exp(value: f64, precision: i32, buf: &mut [u8]) -> usize {
                 buf[pos + 2 + i] = b'0';
                 i += 1;
             }
-            buf[pos + 2 + prec] = b'e';
+            buf[pos + 2 + prec] = ec;
             buf[pos + 3 + prec] = b'0';
             return pos + 4 + prec;
         }
         // precision == 0: "0e0"
         buf[pos] = b'0';
-        buf[pos + 1] = b'e';
+        buf[pos + 1] = ec;
         buf[pos + 2] = b'0';
         return pos + 3;
     }
@@ -401,7 +405,7 @@ fn f64_fmt_exp(value: f64, precision: i32, buf: &mut [u8]) -> usize {
         (d, p, nd)
     };
 
-    let len = fmt_exp(&mut buf[pos..], d, p, nd);
+    let len = fmt_exp(&mut buf[pos..], d, p, nd, ec);
     pos + len
 }
 
@@ -461,26 +465,40 @@ pub extern "C" fn f32_to_buffer_fixed(value: f32, precision: i32, buffer_ptr: i3
 
 /// Format an f64 value in exponential notation to the provided buffer.
 ///
+/// If `upper` is nonzero, use 'E' instead of 'e'.
+///
 /// # Safety
 /// The buffer must be at least 32 bytes.
 #[unsafe(no_mangle)]
 #[allow(clippy::cast_possible_wrap)]
-pub extern "C" fn f64_to_buffer_exp(value: f64, precision: i32, buffer_ptr: i32) -> i32 {
+pub extern "C" fn f64_to_buffer_exp(
+    value: f64,
+    precision: i32,
+    upper: i32,
+    buffer_ptr: i32,
+) -> i32 {
     let mut buf = [0u8; 32];
-    let len = f64_fmt_exp(value, precision, &mut buf);
+    let len = f64_fmt_exp(value, precision, upper != 0, &mut buf);
     unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
     len as i32
 }
 
 /// Format an f32 value in exponential notation to the provided buffer.
 ///
+/// If `upper` is nonzero, use 'E' instead of 'e'.
+///
 /// # Safety
 /// The buffer must be at least 24 bytes.
 #[unsafe(no_mangle)]
 #[allow(clippy::cast_possible_wrap)]
-pub extern "C" fn f32_to_buffer_exp(value: f32, precision: i32, buffer_ptr: i32) -> i32 {
+pub extern "C" fn f32_to_buffer_exp(
+    value: f32,
+    precision: i32,
+    upper: i32,
+    buffer_ptr: i32,
+) -> i32 {
     let mut buf = [0u8; 32];
-    let len = f64_fmt_exp(f64::from(value), precision, &mut buf);
+    let len = f64_fmt_exp(f64::from(value), precision, upper != 0, &mut buf);
     unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
     len as i32
 }
@@ -612,9 +630,9 @@ mod tests {
         String::from_utf8(buf[..len].to_vec()).unwrap()
     }
 
-    fn format_f64_exp(value: f64, precision: i32) -> String {
+    fn format_f64_exp(value: f64, precision: i32, upper: bool) -> String {
         let mut buf = [0u8; 32];
-        let len = f64_fmt_exp(value, precision, &mut buf);
+        let len = f64_fmt_exp(value, precision, upper, &mut buf);
         String::from_utf8(buf[..len].to_vec()).unwrap()
     }
 
@@ -716,10 +734,17 @@ mod tests {
 
     #[test]
     fn test_f64_exp() {
-        assert_eq!(format_f64_exp(0.0, -1), "0e0");
-        assert_eq!(format_f64_exp(0.0, 2), "0.00e0");
-        assert_eq!(format_f64_exp(f64::INFINITY, -1), "inf");
-        assert_eq!(format_f64_exp(f64::NEG_INFINITY, -1), "-inf");
+        assert_eq!(format_f64_exp(0.0, -1, false), "0e0");
+        assert_eq!(format_f64_exp(0.0, 2, false), "0.00e0");
+        assert_eq!(format_f64_exp(f64::INFINITY, -1, false), "inf");
+        assert_eq!(format_f64_exp(f64::NEG_INFINITY, -1, false), "-inf");
+        // Upper case
+        assert_eq!(format_f64_exp(0.0, -1, true), "0E0");
+        assert_eq!(format_f64_exp(0.0, 2, true), "0.00E0");
+        assert_eq!(format_f64_exp(3.14, -1, false), "3.14e0");
+        assert_eq!(format_f64_exp(3.14, -1, true), "3.14E0");
+        assert_eq!(format_f64_exp(6.022e23, -1, false), "6.022e23");
+        assert_eq!(format_f64_exp(6.022e23, -1, true), "6.022E23");
     }
 }
 
