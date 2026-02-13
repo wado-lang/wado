@@ -1,0 +1,154 @@
+// Test: Float format specifiers in template strings
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let pi = 3.14159;
+    let neg = -2.71828;
+
+    // ============================================================
+    // Default display (shortest representation)
+    // ============================================================
+    assert `{pi}` == "3.14159";
+    assert `{neg}` == "-2.71828";
+    assert `{0.0}` == "0.0";
+    assert `{1.0}` == "1.0";
+    assert `{0.5}` == "0.5";
+    assert `{-0.5}` == "-0.5";
+    assert `{100.0}` == "100.0";
+
+    // ============================================================
+    // Fixed-point precision (:.N)
+    // ============================================================
+    assert `{pi:.1}` == "3.1";
+    assert `{pi:.2}` == "3.14";
+    assert `{pi:.3}` == "3.142";
+    assert `{pi:.4}` == "3.1416";
+    assert `{pi:.5}` == "3.14159";
+    assert `{pi:.6}` == "3.141590";
+
+    // Negative with precision
+    assert `{neg:.2}` == "-2.72";
+    assert `{neg:.4}` == "-2.7183";
+
+    // Zero with precision
+    assert `{0.0:.2}` == "0.00";
+
+    // Whole number with precision
+    assert `{100.0:.2}` == "100.00";
+
+    // ============================================================
+    // Exponential notation - lowercase (:e)
+    // ============================================================
+    assert `{pi:e}` == "3.14159e0";
+    assert `{neg:e}` == "-2.71828e0";
+    assert `{0.0:e}` == "0e0";
+    assert `{1.0:e}` == "1e0";
+    assert `{100.0:e}` == "1e2";
+
+    // Large numbers
+    let big = 1.23e15;
+    assert `{big:e}` == "1.23e15";
+
+    // Small numbers
+    let small = 1.5e-10;
+    assert `{small:e}` == "1.5e-10";
+
+    // ============================================================
+    // Exponential notation - uppercase (:E)
+    // ============================================================
+    assert `{pi:E}` == "3.14159E0";
+    assert `{neg:E}` == "-2.71828E0";
+    assert `{0.0:E}` == "0E0";
+    assert `{big:E}` == "1.23E15";
+    assert `{small:E}` == "1.5E-10";
+
+    // ============================================================
+    // Exponential with precision (:.Ne, :.NE)
+    // ============================================================
+    assert `{pi:.1e}` == "3.1e0";
+    assert `{pi:.2e}` == "3.14e0";
+    assert `{pi:.4e}` == "3.1416e0";
+
+    assert `{pi:.1E}` == "3.1E0";
+    assert `{pi:.2E}` == "3.14E0";
+
+    assert `{neg:.2e}` == "-2.72e0";
+
+    assert `{big:.1e}` == "1.2e15";
+    assert `{big:.2e}` == "1.23e15";
+
+    assert `{small:.3e}` == "1.500e-10";
+
+    assert `{0.0:.2e}` == "0.00e0";
+
+    // ============================================================
+    // Large value exponential
+    // ============================================================
+    let large = 123456.789;
+    assert `{large:e}` == "1.23456789e5";
+    assert `{large:.1e}` == "1.2e5";
+    assert `{large:.4e}` == "1.2346e5";
+
+    // ============================================================
+    // Width and alignment with float precision
+    // ============================================================
+    // Right-aligned (default)
+    assert `{pi:10.2}` == "      3.14";
+    // Left-aligned
+    assert `{pi:<10.2}` == "3.14      ";
+    // Center-aligned
+    assert `{pi:^10.2}` == "   3.14   ";
+    // Custom fill
+    assert `{pi:*>10.2}` == "******3.14";
+    assert `{pi:*<10.2}` == "3.14******";
+    assert `{pi:*^10.2}` == "***3.14***";
+
+    // Width with default display (no precision)
+    assert `{pi:>15}` == "        3.14159";
+    assert `{pi:<15}` == "3.14159        ";
+
+    // Width with exponential
+    assert `{pi:>15e}` == "      3.14159e0";
+    assert `{pi:<15e}` == "3.14159e0      ";
+
+    // Width with negative
+    assert `{neg:>15e}` == "     -2.71828e0";
+    assert `{neg:<15e}` == "-2.71828e0     ";
+
+    // ============================================================
+    // f32 formatting
+    // ============================================================
+    let f: f32 = 3.14 as f32;
+    assert `{f:.2}` == "3.14";
+    assert `{f:.4}` == "3.1400";
+
+    let f2: f32 = 2.5 as f32;
+    assert `{f2:.1}` == "2.5";
+    assert `{f2:.3}` == "2.500";
+    assert `{f2:.1e}` == "2.5e0";
+    assert `{f2:.1E}` == "2.5E0";
+    assert `{f2:e}` == "2.5e0";
+
+    // f32 zero
+    let fz: f32 = 0.0 as f32;
+    assert `{fz:.2}` == "0.00";
+    assert `{fz:e}` == "0e0";
+
+    // ============================================================
+    // Edge cases
+    // ============================================================
+    // Zero precision with exponential
+    assert `{pi:.0e}` == "3e0";
+    assert `{large:.0e}` == "1e5";
+
+    // Negative zero
+    assert `{-0.0:.2}` == "-0.00";
+
+    // Large precision
+    assert `{1.0:.10}` == "1.0000000000";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

@@ -147,7 +147,7 @@ wado-compiler/lib/builtins/wado-bundled.wat: Cargo.toml Cargo.lock wado-bundled/
 
 .PHONY: update-bundled
 update-bundled:
-	cd wado-bundled && CARGO_PROFILE_RELEASE_OPT_LEVEL=s cargo build --release
+	cd wado-bundled && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true cargo build --release
 	wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled.wasm > wado-compiler/lib/builtins/wado-bundled.wat
 
 .PHONY: benchmark-count-prime
