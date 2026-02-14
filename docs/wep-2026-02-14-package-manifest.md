@@ -53,24 +53,7 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 
 #### Name and Namespace Validation
 
-Both `namespace` and `name` follow the same rules:
-
-- Must match `[a-z0-9]+(-[a-z0-9]+)*` (lowercase with hyphens)
-- Only lowercase letters (`a-z`), digits (`0-9`), and hyphens (`-`)
-- Minimum 1 character, maximum 64 characters
-- No consecutive hyphens, no leading/trailing hyphens
-- Numbers-only names are allowed (more lenient than language identifiers)
-
-```
-"my-app"      # OK
-"myorg"       # OK
-"my-app-v2"   # OK
-"123"         # OK (numbers-only allowed)
-"My-App"      # ERROR: uppercase not allowed
-"my_app"      # ERROR: underscores not allowed
-"my--app"     # ERROR: consecutive hyphens
-"-app"        # ERROR: leading hyphen
-```
+Both `namespace` and `name` must match `[a-zA-Z0-9_-]+` (minimum 1 character, maximum 64 characters).
 
 Dependency keys in `[dependencies]` follow the same rules. This ensures they are valid TOML bare keys and unambiguous in import paths.
 
@@ -733,7 +716,7 @@ This enables seamless local development while ensuring published packages are se
 - `namespace` absence naturally indicates non-publishable packages — no extra `publish = false` flag needed
 - Path deps with dual source (`path` + `registry`) enable seamless dev-to-publish workflow
 - Workspace support enables multi-package development with shared lock files and dependency declarations
-- Name/namespace validation (lowercase alphanumeric + hyphens) prevents ambiguity in lock files and import paths
+- Name/namespace validation (`[a-zA-Z0-9_-]+`) ensures valid TOML bare keys and unambiguous import paths
 
 ### Negative
 
