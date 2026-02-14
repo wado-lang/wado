@@ -2,7 +2,14 @@
 
 ## Context
 
-Wado compiles to WebAssembly Component Model (CM), where a **world** defines the contract between a component and its runtime environment. Currently, Wado has:
+Wado compiles to WebAssembly Component Model (CM), where a **world** defines the contract between a component and its runtime environment.
+
+Worlds fall into two categories (Wado terminology; the CM treats all worlds uniformly):
+
+- **Hosted world**: A world that a runtime knows how to instantiate and drive (e.g., `wasi:cli/command`, `wasi:http/service`). The runtime provides all imports and invokes exports according to a defined lifecycle.
+- **Library world**: A world that defines a component's public API for composition with other components, rather than for direct execution by a runtime.
+
+Currently, Wado has:
 
 1. **`pub` keyword**: Controls visibility between Wado modules (internal to Wado)
 2. **Implicit world mapping**: The `run()` function is automatically mapped to `wasi:cli/Command::run`

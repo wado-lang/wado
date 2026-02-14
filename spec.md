@@ -3154,6 +3154,13 @@ A **world** in Wado corresponds directly to the Component Model's `world` concep
 
 Worlds are the contract between a Wasm component and its runtime environment.
 
+Worlds are classified into two categories:
+
+- **Hosted world**: A world that a runtime knows how to instantiate and drive. The runtime provides all imports and invokes the exports according to a defined lifecycle. Examples: `wasi:cli/command` (executed by `wado run`), `wasi:http/service` (executed by `wado serve`). Informally called a "well-known world."
+- **Library world**: A world that defines a component's public API for composition. It is not directly executed by a runtime; instead, other components import its exports. Example: a `json` library that exports parsing functions.
+
+This distinction is not part of the Component Model specification — the CM treats all worlds uniformly. In Wado, the distinction matters for tooling: `wado run` and `wado serve` select a hosted world, while `wado.toml`'s `lib` field defines a library world.
+
 ### World Declaration
 
 ```wado
@@ -3418,3 +3425,5 @@ Component Model interop: The compiler automatically converts between Wado conven
 - effect interface: the declaration (`effect Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
 - operation: a function in an effect interface; synonym: "effect operation"
 - handler: provides implementations for operations
+- hosted world: a world that a runtime knows how to instantiate and drive (e.g., `wasi:cli/command` for `wado run`, `wasi:http/service` for `wado serve`); informally called "well-known world"
+- library world: a world that defines a component's public API for composition with other components, rather than for direct execution by a runtime

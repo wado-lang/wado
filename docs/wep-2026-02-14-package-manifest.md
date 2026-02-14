@@ -61,13 +61,13 @@ At least one of `command`, `service`, or `lib` should be specified. A package ca
 
 ### Entry Points and Worlds
 
-Each entry point field corresponds to a WASI world or a library interface:
+Each entry point field corresponds to a hosted world or a library world:
 
-| Field     | WASI World          | CLI Command  | Required Export                           |
-| --------- | ------------------- | ------------ | ----------------------------------------- |
-| `command` | `wasi:cli/command`  | `wado run`   | `export fn run()`                         |
-| `service` | `wasi:http/service` | `wado serve` | `export fn handle(request: Request) -> …` |
-| `lib`     | (none — interface)  | (none)       | `export` items become the public API      |
+| Field     | Category      | WASI World          | CLI Command  | Required Export                           |
+| --------- | ------------- | ------------------- | ------------ | ----------------------------------------- |
+| `command` | hosted world  | `wasi:cli/command`  | `wado run`   | `export fn run()`                         |
+| `service` | hosted world  | `wasi:http/service` | `wado serve` | `export fn handle(request: Request) -> …` |
+| `lib`     | library world | (none — interface)  | (none)       | `export` items become the public API      |
 
 ```toml
 # CLI tool with library
