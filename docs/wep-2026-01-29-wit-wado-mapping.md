@@ -60,11 +60,11 @@ In CM/WIT, an `interface` is a collection of related types and functions that fo
 
 In most source languages, this concept is implicit:
 
-| Language | What serves as "interface" | Mechanism |
-| -------- | -------------------------- | --------- |
-| C | Header file (`.h`) | Declares types and function signatures; consumers `#include` the header |
-| Zig | Module's `pub` declarations | File = module; public symbols form the API surface |
-| Rust | Crate's public API surface | `pub` items in the crate root; no explicit "interface" keyword |
+| Language | What serves as "interface"  | Mechanism                                                               |
+| -------- | --------------------------- | ----------------------------------------------------------------------- |
+| C        | Header file (`.h`)          | Declares types and function signatures; consumers `#include` the header |
+| Zig      | Module's `pub` declarations | File = module; public symbols form the API surface                      |
+| Rust     | Crate's public API surface  | `pub` items in the crate root; no explicit "interface" keyword          |
 
 In all three cases, the "interface" is simply **whatever you made public**. There is no separate syntax to declare it. CM differs because components need machine-readable contracts for language-agnostic interop.
 
@@ -74,10 +74,10 @@ Wado's `interface` block exists **solely for CM purposes**: it is a grouping syn
 
 Both `interface` and `effect` map to WIT `interface`, but they serve different roles in Wado:
 
-| Wado        | WIT         | Direction | Wado semantics |
-| ----------- | ----------- | --------- | -------------- |
+| Wado        | WIT         | Direction | Wado semantics                                                       |
+| ----------- | ----------- | --------- | -------------------------------------------------------------------- |
 | `effect`    | `interface` | import    | Defines capability requirements; functions require `with` annotation |
-| `interface` | `interface` | export    | Groups items for CM export; no Wado-level semantics |
+| `interface` | `interface` | export    | Groups items for CM export; no Wado-level semantics                  |
 
 An `effect` has deep Wado meaning: it participates in effect tracking and constrains function signatures. An `interface` is purely organizational — it tells the CM layer how to package exports.
 

@@ -3368,10 +3368,10 @@ Entry points are integrated in World system.
 
 Each hosted world defines its entry point. Currently supported:
 
-| Hosted World          | Entry Point                                               | CLI Command  |
-| --------------------- | --------------------------------------------------------- | ------------ |
-| `wasi:cli/command`    | `export fn run()`                                         | `wado run`   |
-| `wasi:http/service`   | `export fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
+| Hosted World        | Entry Point                                                         | CLI Command  |
+| ------------------- | ------------------------------------------------------------------- | ------------ |
+| `wasi:cli/command`  | `export fn run()`                                                   | `wado run`   |
+| `wasi:http/service` | `export fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
 
 When no explicit `contract` declaration is present, the runtime determines the expected world (e.g., `wado run` expects `wasi:cli/command`).
 
