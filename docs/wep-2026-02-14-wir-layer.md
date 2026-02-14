@@ -55,7 +55,7 @@ WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with 
 ### What WIR Is Not
 
 - **Not a CFG**: WIR preserves Wasm's structured control flow (block/loop/if), not a control-flow graph.
-- **Not an optimization target**: WIR is a lowering target. Optimizations happen on TIR before WIR generation.
+- **Not a semantic optimization target**: Semantic optimizations (inlining, SROA, reference elimination) happen on TIR where richer type information is available. WIR may host low-level Wasm optimizations (constant folding, LICM, peephole) in the future.
 - **Not an abstraction over Wasm versions**: WIR targets specific Wasm features (GC, Component Model). It does not abstract away Wasm details.
 
 ## WIR Data Structures
@@ -852,6 +852,16 @@ At this point, `wasm_plan` and `tir_to_wir` are doing related work. Consolidate:
 - [ ] **Step 5b**: The pipeline becomes: `optimize → wir_gen → wir_emit`.
 - [ ] **Step 5c**: Delete the separate `wasm_plan` phase. Its analysis functions (topological sort, etc.) move into `wir_gen` or stay as utilities.
 
+### Phase 6 (Future): Optimizer Migration
+
+After WIR is stable, migrate low-level optimizations from TIR to WIR:
+
+- [ ] **Step 6a**: Move constant folding to `wir_optimize`. Pattern: `I32Add(I32Const, I32Const)` → `I32Const`. No TIR dependency.
+- [ ] **Step 6b**: Move LICM to `wir_optimize`. Pattern: `Loop` + `StructGet` on non-modified locals. No TIR dependency.
+- [ ] **Step 6c**: Move ValueCopy analysis from `optimize_rewrite.rs` to `wir_gen`. Fresh value detection and copy type resolution happen during WIR generation instead of as a post-optimization rewrite. Remove `needed_copy_types`, `copy_source_types`, and `Move` from `TirFunction`.
+- [ ] **Step 6d**: Move `CopyContext` (scratch local pre-allocation) from codegen to `wir_emit`. WIR uses named locals, so pre-allocation is purely an emission concern.
+- [ ] **Step 6e**: Add peephole optimizations in `wir_optimize` (redundant `LocalSet`/`LocalGet` elimination, dead `Drop` removal, etc.).
+
 ### Final State
 
 ```
@@ -860,10 +870,23 @@ lower → optimize → wir_gen → wir_emit → wasm binary
                   WirModule (inspectable via dump --wir)
 ```
 
-- `wir_gen` (~5000 lines): TIR + Project → WirModule. All analysis, type layout, function translation.
-- `wir_emit` (~2000 lines): WirModule → Wasm binary. Mechanical translation, index allocation, `wasm_encoder` calls.
+- `wir_gen` (~5000 lines): TIR + Project → WirModule. All analysis, type layout, function translation, ValueCopy insertion.
+- `wir_emit` (~2000 lines): WirModule → Wasm binary. Mechanical translation, index allocation, `wasm_encoder` calls, CopyContext local pre-allocation.
 - `wir.rs` (~500 lines): Data structure definitions.
 - `wir_unparse.rs` (~500 lines): WIR → pseudo-Wado for debugging.
+
+#### Future State (with optimizer migration)
+
+```
+lower → tir_optimize → wir_gen → wir_optimize → wir_emit → wasm binary
+                           ↓
+                       WirModule (inspectable via dump --wir)
+```
+
+- `tir_optimize`: Semantic optimizations (inlining, DCE, SROA, ref-elim, copy-prop). Operates on TIR with full TypeTable access.
+- `wir_gen`: TIR → WirModule. Includes ValueCopy insertion (freshness analysis + copy type resolution).
+- `wir_optimize`: Wasm-level optimizations (constant folding, LICM, peephole). Operates on WIR where types are embedded in instruction names.
+- `wir_emit`: WirModule → Wasm binary. CopyContext, index allocation, `wasm_encoder` calls.
 
 ## Design Rationale
 
@@ -946,11 +969,53 @@ WIR carries metadata (module source, spans, attributes, generic origin, newtype 
 
 The metadata is lightweight (references and optional fields) and does not affect WIR→Wasm correctness.
 
-### Why Not a Separate Optimization Pass on WIR?
+### Future: Optimizer on WIR
 
-WIR is intentionally a thin layer. Optimizations belong on TIR where semantic information is richer. WIR's purpose is debuggability and separation of concerns, not optimization.
+The current optimizer runs entirely on TIR. The long-term plan is to split optimizations into two levels:
 
-If Wasm-level optimizations become needed (peephole, etc.), they can be added as a `wir_opt` pass later without changing the architecture.
+```
+Current:  lower → optimize → wir_gen → wir_emit
+Future:   lower → tir_optimize → wir_gen → wir_optimize → wir_emit
+```
+
+#### Responsibility Split
+
+**`tir_optimize` (semantic optimizations)** — remains on TIR where richer type information is available:
+
+- Inlining: requires purity analysis (`effects.is_empty()`), return type checks (`ResolvedType::Never`), nested generics detection (`has_nested_generics()`), expression counting
+- SROA: requires `Let` + `StructLiteral` pattern matching, `is_mut` on let bindings, escape analysis
+- Reference elimination: requires `Let` + `Ref(Local)` pattern, `address_taken_locals`, field access tracking
+- Copy propagation: requires `Let` + `Local/Literal` pattern, `is_mut`, use counting
+- DCE: works on both TIR and WIR, but entry point analysis uses TIR metadata
+
+**`wir_optimize` (Wasm-level optimizations)** — operates on WIR where types are embedded in instructions:
+
+- Constant folding: `I32Add(I32Const(1), I32Const(2))` → `I32Const(3)`. Type is encoded in instruction names — no TypeTable needed.
+- LICM: `Loop { body }` + `StructGet` hoisting. Modified locals detectable from `LocalSet`. Loop structure is explicit.
+- Peephole: redundant `LocalSet`/`LocalGet` pairs, dead `Drop`, etc.
+
+#### Why This Split Works
+
+WIR does not need to carry `is_mut`, `address_taken_locals`, or `TypeTable` — those are only needed by semantic optimizations that stay on TIR. WIR-level optimizations rely on information already embedded in instruction names and structure.
+
+#### ValueCopy Belongs in `wir_gen`, Not the Optimizer
+
+The current `optimize_rewrite.rs` performs three tasks that are not optimizations:
+
+1. **Fresh value detection** (`is_fresh_value()`): classifies whether an expression produces a new value (literal, call result, constructor) vs. referencing an existing value (local, field access)
+2. **Copy type collection** (`collect_value_copy_types_in_*()`): determines which types need deep copy operations
+3. **Move insertion** (`insert_moves_in_*()`): wraps fresh values in `Move { expr }` to suppress unnecessary copies
+
+These are **lowering concerns** — they implement Wasm GC value semantics, not performance optimizations. They are placed in the optimizer solely because they must run after inlining stabilizes function bodies.
+
+In the future pipeline, these move into `wir_gen`:
+
+- `wir_gen` emits `ValueCopy { type_name, source_type, expr }` for non-fresh assignments to value types
+- `wir_gen` omits `ValueCopy` for fresh values (the TIR `Move` wrapper or WIR-level freshness analysis)
+- The `ValueCopy` compound instruction carries its own `WirCopyType`, which `wir_emit` lowers to copy instructions
+- `CopyContext` (scratch local pre-allocation) moves entirely into `wir_emit`, since WIR uses named locals and index allocation is an emission concern
+
+This eliminates the current coupling between the optimizer and codegen via `needed_copy_types` / `copy_source_types` / `Move` on `TirFunction`.
 
 ## Consequences
 
@@ -967,7 +1032,7 @@ If Wasm-level optimizations become needed (peephole, etc.), they can be added as
 - **Additional IR**: One more representation to maintain. Mitigated by WIR being close to Wasm (not a novel abstraction).
 - **Memory**: WIR trees allocate more than flat instruction streams. Acceptable since Wado programs are not extremely large.
 - **Migration effort**: Incremental migration spans multiple steps. Each step is independently shippable.
-- **No Wasm-level optimization**: Intentional. TIR optimization is sufficient for now.
+- **No Wasm-level optimization yet**: TIR optimization is sufficient for now. A `wir_optimize` pass can be added later without architectural changes.
 
 ### Risks
 
