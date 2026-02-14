@@ -45,8 +45,8 @@ The `wasm_plan` phase is expanded to produce a `WirModule` — a complete descri
 WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with these ergonomic improvements over raw Wasm:
 
 1. **Named locals**: Variables are referenced by name, not pre-allocated indices. Locals can be declared inline (no pre-allocation pass needed).
-2. **Named types**: Struct, enum, and variant types retain their source-level names and field/case names.
-3. **Wado-level primitive types**: WIR uses `Bool`, `Char`, `I8`, `U8`, `I16`, `U16`, etc. instead of Wasm's `i32`-for-everything. The emit phase lowers to Wasm `ValType`/`StorageType`. This avoids the `ValType`/`StorageType` split at the WIR level and provides better debug output.
+2. **Named types**: Struct, variant, enum, and flags types retain their source-level names and field/case names. These are Wado-level type definitions, not Wasm type section entries — the emit phase expands them (e.g., a variant becomes N+1 Wasm struct types).
+3. **Wado-level value types**: WIR uses `Bool`, `Char`, `I8`, `U8`, `I16`, `U16`, `Enum { type_name }`, `Flags { type_name }`, etc. instead of Wasm's `i32`-for-everything. The emit phase lowers to Wasm `ValType`/`StorageType`. This avoids the `ValType`/`StorageType` split at the WIR level and provides better debug output.
 4. **Structured control flow**: Blocks, loops, if/else are tree nodes (not flat instruction sequences with labels).
 5. **Explicit value copy**: Copy operations are explicit WIR nodes rather than inline instruction sequences.
 6. **TIR metadata preserved**: Module source, source spans, attributes, generic instantiation info, and newtype origin are carried through for debugging and unparse. Newtypes are resolved (a `Meters` is `f64` at the WIR level), but their origin is recorded.
@@ -66,7 +66,14 @@ WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with 
 /// A complete Wasm module in WIR form.
 /// Contains all information needed to emit a valid Wasm binary.
 pub struct WirModule {
-    /// Type section: all Wasm GC types (structs, arrays, function types)
+    /// Type definitions: Wado-level types (struct, variant, enum, flags, array, func).
+    /// Not a 1:1 mapping to the Wasm type section — the emit phase expands these:
+    ///   Struct → 1 Wasm struct type
+    ///   Variant → N+1 Wasm struct types (base + case subtypes)
+    ///   Enum → none (i32 discriminant)
+    ///   Flags → none (i32 bitfield)
+    ///   Array → 1 Wasm array type
+    ///   Func → 1 Wasm func type
     pub types: Vec<WirTypeDef>,
     /// Rec groups: which types form recursive groups
     pub rec_groups: Vec<WirRecGroup>,
@@ -125,26 +132,41 @@ pub struct WirNewtypeOrigin {
 
 ### Type Definitions
 
+WIR type definitions are at the Wado source level, not the Wasm type section level. The emit phase expands them into actual Wasm type section entries.
+
 ```rust
-/// A Wasm GC type definition.
+/// A Wado-level type definition.
+/// The emit phase expands these into Wasm type section entries:
+///   Struct → 1 Wasm struct type
+///   Variant → N+1 Wasm struct types (base with discriminant field + case subtypes)
+///   Enum → none (represented as i32)
+///   Flags → none (represented as i32 bitfield)
+///   Array → 1 Wasm array type
+///   Func → 1 Wasm func type
 pub enum WirTypeDef {
     /// Struct type with named fields
     Struct(WirStructType),
+    /// Variant type (sum type with payloads)
+    Variant(WirVariantType),
+    /// Enum type (discriminated values without payloads)
+    Enum(WirEnumType),
+    /// Flags type (bitfield)
+    Flags(WirFlagsType),
     /// Array type
     Array(WirArrayType),
     /// Function type
     Func(WirFuncType),
 }
+```
 
+#### Struct
+
+```rust
 pub struct WirStructType {
     /// Source-level name (e.g., "Point", "Array<i32>", "__Closure_3")
     pub name: String,
     /// Fields with names and types
     pub fields: Vec<WirField>,
-    /// Supertype index (for variant subtypes)
-    pub supertype: Option<WirTypeRef>,
-    /// Whether this is a final type (no further subtypes allowed)
-    pub is_final: bool,
     /// Metadata (module source, span, attributes)
     pub meta: WirMeta,
     /// Generic instantiation origin (None for non-generic types)
@@ -154,14 +176,100 @@ pub struct WirStructType {
 }
 
 pub struct WirField {
-    /// Source-level field name (e.g., "x", "repr", "tag")
+    /// Source-level field name (e.g., "x", "repr", "discriminant")
     pub name: String,
     /// WIR type (uses Wado-level primitives, not Wasm ValType)
     pub ty: WirType,
     /// Whether this field is mutable
     pub mutable: bool,
 }
+```
 
+#### Variant
+
+Variants are sum types with payloads. At the Wasm level, they expand to a subtype hierarchy: a base struct with a `discriminant` field, and per-case subtypes that add payload fields.
+
+```rust
+pub struct WirVariantType {
+    /// Source-level name (e.g., "Shape", "Result<i32, String>")
+    pub name: String,
+    /// Cases with names and optional payload types
+    pub cases: Vec<WirVariantCase>,
+    /// Metadata (module source, span, attributes)
+    pub meta: WirMeta,
+    /// Generic instantiation origin (None for non-generic types)
+    pub generic_origin: Option<WirGenericOrigin>,
+    /// If this type was a newtype in the source (resolved by WIR phase)
+    pub newtype_origin: Option<WirNewtypeOrigin>,
+}
+
+pub struct WirVariantCase {
+    /// Case name (e.g., "Circle", "Ok")
+    pub name: String,
+    /// Case index (discriminant value)
+    pub index: u32,
+    /// Payload field types (empty for unit cases like "Point" or "None")
+    pub payload: Vec<WirType>,
+}
+```
+
+The emit phase generates:
+
+- Base struct: `(type $Shape (struct (field $discriminant i32)))`
+- Case subtypes: `(type $Shape::Circle (sub $Shape (struct (field $discriminant i32) (field $0 f64))))`
+- Unit case subtypes: `(type $Shape::Point (sub $Shape (struct (field $discriminant i32))))`
+
+For NullableRef variants (2 cases, 1 unit, payload is non-nullable ref), the emit phase may use a nullable reference instead of a subtype hierarchy.
+
+#### Enum
+
+Enums are discriminated values without payloads. They have no Wasm type section entry — values are i32 discriminants.
+
+```rust
+pub struct WirEnumType {
+    /// Source-level name (e.g., "Color", "Ordering")
+    pub name: String,
+    /// Cases with names and discriminant values
+    pub cases: Vec<WirEnumCase>,
+    /// Metadata (module source, span, attributes)
+    pub meta: WirMeta,
+    /// Generic instantiation origin (None for non-generic types)
+    pub generic_origin: Option<WirGenericOrigin>,
+}
+
+pub struct WirEnumCase {
+    /// Case name (e.g., "Red", "Less")
+    pub name: String,
+    /// Discriminant value
+    pub discriminant: i32,
+}
+```
+
+#### Flags
+
+Flags are bitfield types. Like enums, they have no Wasm type section entry — values are i32 bitfields.
+
+```rust
+pub struct WirFlagsType {
+    /// Source-level name
+    pub name: String,
+    /// Flag bits with names and positions
+    pub bits: Vec<WirFlagBit>,
+    /// Metadata (module source, span, attributes)
+    pub meta: WirMeta,
+}
+
+pub struct WirFlagBit {
+    /// Flag name
+    pub name: String,
+    /// Bit position (0-indexed)
+    pub position: u32,
+}
+```
+
+#### Array and Func
+
+```rust
 pub struct WirArrayType {
     pub name: String,
     pub element_type: WirType,
@@ -194,6 +302,7 @@ WIR uses **Wado-level primitive types**, not Wasm's `ValType`/`StorageType` spli
 ///   - I64/U64 → i64
 ///   - F32 → f32
 ///   - F64 → f64
+///   - Enum/Flags → i32
 pub enum WirType {
     // Signed integers
     I8,
@@ -213,6 +322,10 @@ pub enum WirType {
     Char,
     // Unit (no Wasm representation; zero-size)
     Unit,
+    /// Named enum type (i32 at Wasm level)
+    Enum { type_name: String },
+    /// Named flags type (i32 at Wasm level)
+    Flags { type_name: String },
     /// Reference to a named GC type
     Ref { type_name: String, nullable: bool },
     /// Abstract reference type (anyref, funcref, etc.)
@@ -562,13 +675,27 @@ pub struct WirFuncRef(pub String);
 
 ## Unparse Format
 
-WIR supports `--unparse` to output pseudo-Wado/WAT hybrid for debugging:
+WIR supports `--unparse` to output pseudo-Wado for debugging. The unparse output should look as close to Wado source as possible, using named field access and Wado-level type definitions rather than raw Wasm instructions.
 
 ```
-// Type definitions with metadata
-type Point = struct { x: i32, y: i32 }  // from ./geometry.wado
+// Struct definition
+struct Point { x: i32, y: i32 }  // from ./geometry.wado
+
+// Variant definition (source-level, not expanded to Wasm struct hierarchy)
+variant Shape {  // from ./shapes.wado
+    Circle(f64),
+    Rectangle(f64, f64),
+    Point,
+}
+
+// Enum definition (no Wasm type — i32 discriminant)
+enum Color { Red = 0, Green = 1, Blue = 2 }  // from ./colors.wado
+
+// Newtype (resolved to base type, origin recorded)
 type Meters = f64  // newtype from ./physics.wado
-type Array<i32> = struct { repr: array<i32>, used: i32 }  // Array<T> with T=i32
+
+// Generic instantiation
+struct Array<i32> { repr: array<i32>, used: i32 }  // Array<T> with T=i32
 
 // Function with module source and effects
 fn "example"(a: i32, b: i32) -> i32 {  // from <entry>
@@ -582,11 +709,22 @@ fn "is_ascii"(c: char) -> bool {  // from ./utils.wado
     return i32.lt_u(c, 128);
 }
 
-// GC operations shown with type names
+// Named field access (Wado-style, not struct.get)
 fn "Point::sum"(self: ref Point) -> i32 {  // from ./geometry.wado
-    return i32.add(
-        struct.get Point.x(self),
-        struct.get Point.y(self),
+    return i32.add(self.x, self.y);
+}
+
+// Named field assignment (Wado-style, not struct.set)
+fn "Point::reset"(self: ref mut Point) {  // from ./geometry.wado
+    self.x = 0;
+    self.y = 0;
+}
+
+// Enum type in signatures
+fn "Color::is_primary"(self: Color) -> bool {  // from ./colors.wado
+    return i32.or(
+        i32.eq(self, 0),  // Red
+        i32.eq(self, 2),  // Blue
     );
 }
 
@@ -595,6 +733,15 @@ fn "copy_array"(src: ref Array<i32>) -> ref Array<i32> {
     return value_copy Array<i32>(src);
 }
 ```
+
+### Unparse Principles
+
+- **Type definitions**: Use Wado syntax (`struct`, `variant`, `enum`) not Wasm GC syntax
+- **Field access**: Use `self.x` not `struct.get Point.x(self)`
+- **Field assignment**: Use `self.x = value` not `struct.set Point.x(self, value)`
+- **Enum/flags values**: Show discriminant as i32 constant (since the Wasm level is i32)
+- **Variant construction**: Show `Shape::Circle(5.0)` or `struct.new Shape::Circle(0, 5.0)` depending on context
+- **Instructions**: Use WAT-style mnemonics for arithmetic (`i32.add`, `f64.mul`, etc.)
 
 ## Migration Plan
 
@@ -629,8 +776,8 @@ The core migration: replace TIR expression codegen with WIR generation.
 
 ### Phase 3: WIR Emission for Type Section
 
-- [ ] **Step 3a**: Move type layout decisions into WIR generation. The 15+ type registration phases produce `Vec<WirTypeDef>` instead of calling `wasm_encoder` directly.
-- [ ] **Step 3b**: `wir_emit` translates `WirTypeDef` → `wasm_encoder` type section entries.
+- [ ] **Step 3a**: Move type layout decisions into WIR generation. The 15+ type registration phases produce `Vec<WirTypeDef>` (structs, variants, enums, flags, arrays, func types) instead of calling `wasm_encoder` directly.
+- [ ] **Step 3b**: `wir_emit` translates `WirTypeDef` → Wasm type section entries. This includes expanding `WirVariantType` into base struct + subtype structs, and skipping `WirEnumType`/`WirFlagsType` (no Wasm type section entry needed).
 - [ ] **Step 3c**: Delete the old type registration code in codegen.
 
 ### Phase 4: WIR Emission for Module Structure
@@ -669,9 +816,12 @@ Wasm is a stack machine, but flat instruction sequences are hard to inspect and 
 ```rust
 // WIR (tree): readable, inspectable
 I32Add(
-    StructGet { type_name: "Point", field_name: "x", expr: LocalGet("self") },
-    StructGet { type_name: "Point", field_name: "y", expr: LocalGet("self") },
+    StructGet { type_name: "Point", field_name: "x", field_index: 0, expr: LocalGet("self") },
+    StructGet { type_name: "Point", field_name: "y", field_index: 1, expr: LocalGet("self") },
 )
+
+// Unparse: Wado-style field access
+// i32.add(self.x, self.y)
 
 // Wasm (flat): requires mental stack tracking
 // local.get $self
@@ -695,32 +845,34 @@ The cost is a name→index lookup during emission, which is O(1) with `IndexMap`
 
 ### Why `ValueCopy` as a Compound Instruction?
 
-Value copy involves complex dispatching (struct copy, array loop, variant tag check, etc.). Keeping it as a single WIR node:
+Value copy involves complex dispatching (struct copy, array loop, variant discriminant check, etc.). Keeping it as a single WIR node:
 
 - Preserves the semantic intent ("copy this value")
 - Allows the emitter to choose the most efficient lowering strategy
 - Keeps `tir_to_wir` focused on semantics, not emission details
 
-### Why Wado-Level Primitives (Not Wasm ValType)?
+### Why Wado-Level Value Types (Not Wasm ValType)?
 
-Wasm has only 4 numeric types: `i32`, `i64`, `f32`, `f64`. Wado has `bool`, `char`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`. In the current codegen, all the small types and `bool`/`char` are collapsed to `i32` early, losing semantic information.
+Wasm has only 4 numeric types: `i32`, `i64`, `f32`, `f64`. Wado has `bool`, `char`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, plus enum and flags types — all of which collapse to `i32` at the Wasm level. In the current codegen, this collapse happens early, losing semantic information.
 
 WIR keeps the Wado types and lets the emit phase lower them:
 
-| WIR Type | As Wasm local (ValType) | As struct field (StorageType) |
-| -------- | ----------------------- | ----------------------------- |
-| Bool     | i32                     | i8                            |
-| Char     | i32                     | i32                           |
-| I8       | i32                     | i8                            |
-| U8       | i32                     | i8                            |
-| I16      | i32                     | i16                           |
-| U16      | i32                     | i16                           |
-| I32, U32 | i32                     | i32                           |
-| I64, U64 | i64                     | i64                           |
-| F32      | f32                     | f32                           |
-| F64      | f64                     | f64                           |
+| WIR Type      | As Wasm local (ValType) | As struct field (StorageType) |
+| ------------- | ----------------------- | ----------------------------- |
+| Bool          | i32                     | i8                            |
+| Char          | i32                     | i32                           |
+| I8            | i32                     | i8                            |
+| U8            | i32                     | i8                            |
+| I16           | i32                     | i16                           |
+| U16           | i32                     | i16                           |
+| I32, U32      | i32                     | i32                           |
+| I64, U64      | i64                     | i64                           |
+| F32           | f32                     | f32                           |
+| F64           | f64                     | f64                           |
+| Enum { .. }   | i32                     | i32                           |
+| Flags { .. }  | i32                     | i32                           |
 
-This eliminates the `ValType`/`StorageType` split at the WIR level — there is just `WirType`. The emit phase knows the context (local vs. struct field) and picks the right Wasm encoding. It also makes unparse output more readable: `bool` instead of `i32`, `char` instead of `i32`.
+This eliminates the `ValType`/`StorageType` split at the WIR level — there is just `WirType`. The emit phase knows the context (local vs. struct field) and picks the right Wasm encoding. It also makes unparse output more readable: `bool` instead of `i32`, `Color` instead of `i32`.
 
 ### Why Preserve TIR Metadata?
 
