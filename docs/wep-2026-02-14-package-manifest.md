@@ -30,8 +30,8 @@ lib = "src/lib.wado"
 wa = "https://wa.dev"
 
 [dependencies]
-router = { git = "https://github.com/user/router.git", ref = "v1.0.0" }
-regex = { registry = "wa", package = "docs:regex", version = "0.1.0" }
+router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
+regex = { registry = "wa", package = "docs:regex", version = "^0.1.0" }
 shared = { path = "../shared" }
 logger = { url = "https://example.com/logger-0.2.0/wado.toml" }
 
@@ -155,27 +155,33 @@ Exactly one source type must be specified per dependency.
 #### Git
 
 ```toml
+# Semver on git tags
+router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
+
+# Exact git ref (tag, branch, or SHA)
 router = { git = "https://github.com/user/router.git", ref = "v1.0.0" }
+router = { git = "https://github.com/user/router.git", ref = "main" }
 ```
 
-| Field | Required | Description                                   |
-| ----- | -------- | --------------------------------------------- |
-| `git` | Yes      | Full git URL (any host: GitHub, GitLab, etc.) |
-| `ref` | Yes      | Git ref (tag, branch, or commit SHA)          |
+| Field     | Required | Description                                   |
+| --------- | -------- | --------------------------------------------- |
+| `git`     | Yes      | Full git URL (any host: GitHub, GitLab, etc.) |
+| `version` | XOR      | Semver range on git tags (e.g., `"^1.0.0"`)  |
+| `ref`     | XOR      | Exact git ref (tag, branch, or commit SHA)    |
 
-`ref` is always required. Use explicit branch names (e.g., `"main"`) rather than implicit defaults.
+Exactly one of `version` or `ref` must be specified. `version` resolves against semver-tagged releases in the repository. `ref` pins to an exact git ref — use explicit branch names (e.g., `"main"`) rather than implicit defaults.
 
 #### Registry
 
 ```toml
-regex = { registry = "wa", package = "docs:regex", version = "0.1.0" }
+regex = { registry = "wa", package = "docs:regex", version = "^0.1.0" }
 ```
 
 | Field      | Required | Description                                    |
 | ---------- | -------- | ---------------------------------------------- |
 | `registry` | Yes      | Registry alias (defined in `[registries]`)     |
 | `package`  | Yes      | Package identity in `namespace:name` format    |
-| `version`  | Yes      | Semver version requirement (e.g., `"0.1.0"`)  |
+| `version`  | Yes      | Semver version range (e.g., `"^0.1.0"`)       |
 
 #### Local Path
 
@@ -262,17 +268,28 @@ PubGrub provides:
 
 The Rust crate `pubgrub` provides a ready-made implementation.
 
-#### Semver Compatibility and Version Ranges
+#### Version Specifiers
 
-Version requirements use caret syntax (`^`), following the same semantics as Cargo:
+The `version` field requires an explicit range operator — bare versions are errors.
 
-| Requirement | Range |
-| ----------- | ----- |
-| `^1.2.3` | `>=1.2.3, <2.0.0` |
-| `^0.2.3` | `>=0.2.3, <0.3.0` |
-| `^0.0.3` | `>=0.0.3, <0.0.4` |
+| Prefix | Meaning | Example | Range |
+| ------ | ------- | ------- | ----- |
+| `^` | Caret (compatible) | `^1.2.3` | `>=1.2.3, <2.0.0` |
+| `^` | Caret (pre-1.0) | `^0.2.3` | `>=0.2.3, <0.3.0` |
+| `~` | Tilde (patch-only) | `~1.2.3` | `>=1.2.3, <1.3.0` |
+| `=` | Exact | `=1.2.3` | `=1.2.3` |
+| (none) | **Error** | `1.2.3` | compile error |
 
-When `version` is specified without `^`, it is treated as `^version` (caret is the default).
+```
+version = "^1.0.0"   # OK: caret range
+version = "~1.0.0"   # OK: tilde range
+version = "=1.0.0"   # OK: exact pin
+version = "1.0.0"    # ERROR: bare version requires explicit prefix
+```
+
+Requiring an explicit prefix eliminates ambiguity — the user always knows exactly what range semantics are in effect. This applies uniformly to registry dependencies and git dependencies with `version`.
+
+#### Semver Compatibility
 
 Two requirements are **semver-compatible** if they share the same compatibility range (same major version for `>=1.0.0`, same major.minor for `0.x`). Within a compatibility range, the resolver selects **exactly one version** — the highest that satisfies all constraints.
 
@@ -300,8 +317,8 @@ Within a single `wado.toml`, a user can also explicitly depend on multiple major
 
 ```toml
 [dependencies]
-http-v1 = { registry = "wa", package = "std:http", version = "1.0.0" }
-http-v2 = { registry = "wa", package = "std:http", version = "2.0.0" }
+http-v1 = { registry = "wa", package = "std:http", version = "^1.0.0" }
+http-v2 = { registry = "wa", package = "std:http", version = "^2.0.0" }
 ```
 
 #### Transitive Version Isolation
@@ -352,7 +369,7 @@ version = 1
 key = "router"
 source = "git"
 git = "https://github.com/user/router.git"
-ref = "v1.0.0"
+version = "1.0.2"
 resolved-ref = "abc1234def5678901234567890abcdef12345678"
 
 [[package]]
@@ -377,7 +394,7 @@ integrity = "sha256:f6e5d4c3b2a1..."
 | `key`          | Import key. `>` separates transitive dependency chains (e.g., `regex>utils` means utils as required by regex) |
 | `source`       | Source type: `git`, `registry`, `url`                  |
 | `resolved-ref` | For git: exact commit SHA (40 hex chars)               |
-| `version`      | For registry: exact resolved version                   |
+| `version`      | Exact resolved version (registry and git with `version`)|
 | `integrity`    | Content hash with algorithm prefix (see below)         |
 
 Properties:
@@ -432,7 +449,7 @@ A workspace groups multiple packages for co-development. The workspace root has 
 members = ["packages/*"]
 
 [workspace.dependencies]
-json = { registry = "wa", package = "std:json", version = "1.0.0" }
+json = { registry = "wa", package = "std:json", version = "^1.0.0" }
 ```
 
 ```toml
@@ -490,8 +507,8 @@ When no `wado.toml` exists, the compiler operates in single-file mode:
 
 ```sh
 wado init                          # create wado.toml interactively
-wado add router --git https://github.com/user/router.git --ref v1.0.0
-wado add regex --registry wa --package docs:regex --version 0.1.0
+wado add router --git https://github.com/user/router.git --version "^1.0.0"
+wado add regex --registry wa --package docs:regex --version "^0.1.0"
 wado remove router
 wado update                        # update wado.lock
 wado update regex                  # update specific dependency
@@ -532,7 +549,7 @@ wado exec <dep-name> [args...]     # pass arguments to the dependency
 
 - Single `.wado` files continue to work without any project file
 - Git dependencies work with any hosting provider (not GitHub-specific)
-- `ref` is always explicit — no implicit branch resolution
+- Git deps support both semver (`version`) and exact pinning (`ref`) — XOR ensures clarity
 - `dev-dependencies` keep test-only code out of production builds
 - Registry aliases avoid URL repetition and enable easy migration
 - Bare name imports are short and ergonomic (`"router"` not `"dep:router"`)
@@ -557,7 +574,8 @@ wado exec <dep-name> [args...]     # pass arguments to the dependency
 ### Trade-offs
 
 - **PubGrub over MVS**: PubGrub selects the highest compatible version (users get security patches automatically) at the cost of needing a lock file for reproducibility. MVS would give O(n) resolution and reproducibility without a lock file, but users would be stuck on old versions unless every library author proactively bumps minimums. For an ecosystem that values security and freshness, PubGrub is the better default.
-- **`ref` required for git**: more verbose but prevents silent breakage when upstream branches change.
+- **`version` XOR `ref` for git**: `version` enables semver resolution on tags (like Go/Swift PM), `ref` pins to an exact ref. XOR ensures the intent is always unambiguous — no implicit defaults.
+- **Bare version = error**: more verbose than Cargo's implicit caret, but eliminates a source of confusion ("does `1.0.0` mean exact or `^1.0.0`?"). Every `version` field is self-documenting.
 - **Registry names per-project**: avoids global configuration but requires repetition across projects. A future `~/.wado/config.toml` could provide user-level defaults.
 - **Bare name resolution**: requires `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
