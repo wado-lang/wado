@@ -371,6 +371,37 @@ impl bool {
 }
 
 impl char {
+    /// Converts a Unicode scalar value (u32) to a char.
+    /// Returns null if the value is not a valid Unicode scalar value
+    /// (i.e., surrogates 0xD800..0xDFFF or values > 0x10FFFF).
+    pub fn from_u32(value: u32) -> Option<char> {
+        if value > 0x10FFFF {
+            return null;
+        }
+        if value >= 0xD800 && value <= 0xDFFF {
+            return null;
+        }
+        return Option::<char>::Some(char::from_u32_unchecked(value));
+    }
+
+    /// Converts a signed integer to a char.
+    /// Returns null if the value is negative or not a valid Unicode scalar value.
+    pub fn from_i32(value: i32) -> Option<char> {
+        if value < 0 {
+            return null;
+        }
+        return char::from_u32(value as u32);
+    }
+
+    /// Converts a u32 to a char without validation.
+    /// The caller must ensure the value is a valid Unicode scalar value
+    /// (0..=0xD7FF or 0xE000..=0x10FFFF). Passing an invalid value
+    /// results in an invalid char, which may cause incorrect behavior
+    /// in string operations.
+    pub fn from_u32_unchecked(value: u32) -> char {
+        return builtin::i32_as_char(value as i32);
+    }
+
     pub fn to_string(self) -> String {
         let mut buf = String::with_capacity(4);
         buf.append_char(self);

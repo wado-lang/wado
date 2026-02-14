@@ -934,6 +934,9 @@ a == b == c     // same as: a == b && b == c
 
 // Type cast
 42 as f64
+'A' as i32              // char -> i32: 65
+'A' as u32              // char -> u32: 65
+// 65 as char            // compile error: use char::from_i32()
 
 // Pattern testing (returns bool)
 opt matches { Some(_) }
@@ -1115,6 +1118,30 @@ map["key2"] = 100;
 if let Some(v) = map["key"] { ... }  // index access returns Option<V>
 let keys = map.keys();    // keys in insertion order
 map.remove("key");
+```
+
+### char Conversion
+
+```wado
+// char -> integer (extracts code point, truncated for smaller types)
+let code = 'A' as i32;              // 65
+let ucode = 'A' as u32;            // 65
+let byte = 'A' as u8;              // 65
+
+// u8 -> char is always valid (all u8 values are valid Unicode)
+let c = (65 as u8) as char;         // 'A'
+
+// integer -> char: use checked conversion (as char is a compile error)
+let c = char::from_u32(65 as u32);  // Option<char>: Some('A')
+let c = char::from_i32(65);         // Option<char>: Some('A')
+
+// Invalid values return null
+char::from_u32(0xD800 as u32);      // null (surrogate)
+char::from_u32(0x110000 as u32);    // null (out of range)
+char::from_i32(-1);                 // null (negative)
+
+// Unchecked conversion (caller must ensure validity)
+let c = char::from_u32_unchecked(65 as u32);  // 'A'
 ```
 
 ### Math Functions
