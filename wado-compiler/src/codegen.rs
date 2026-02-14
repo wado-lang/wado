@@ -3506,6 +3506,10 @@ impl Codegen<'_> {
     ///
     /// This handles interfaces like terminal-stdin, terminal-stdout, terminal-stderr
     /// that export a resource type and have functions returning `Option<Own<Resource>>`.
+    ///
+    /// Resource-defining interfaces (e.g., terminal-input, terminal-output) must be
+    /// imported first by `import_resource_defining_interfaces`, so that function
+    /// interfaces can alias their resource types via `Alias::Outer`.
     fn import_interface_with_resource(
         &self,
         builder: &mut ComponentBuilder,
@@ -3514,7 +3518,7 @@ impl Codegen<'_> {
         project: &Project,
     ) {
         // Get resource type info
-        let Some((_, resource_cm_name)) = &interface_info.resource_type else {
+        let Some((_resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {
             return;
         };
 
@@ -3537,6 +3541,11 @@ impl Codegen<'_> {
             return;
         }
 
+        // Check if this resource comes from a different (already-imported) interface
+        // e.g., terminal-stderr uses terminal-output's resource
+        let outer_resource_type_name = format!("resource:{resource_cm_name}");
+        let has_outer_resource = ctx.has_type(&outer_resource_type_name);
+
         // Build the instance type name from interface name
         let instance_type_name = format!("{}-instance-type", interface_info.interface);
         let instance_type_idx = ctx.register_type(&instance_type_name);
@@ -3544,11 +3553,23 @@ impl Codegen<'_> {
             let (_, enc) = builder.ty(Some(&instance_type_name));
             let mut instance_type = InstanceType::new();
 
-            // Type 0: resource (SubResource for imported resource)
-            instance_type.export(
-                resource_cm_name,
-                wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
-            );
+            if has_outer_resource {
+                // Resource is defined in another interface - alias it via Alias::Outer
+                let outer_type_idx = ctx.type_idx(&outer_resource_type_name);
+                instance_type.alias(Alias::Outer {
+                    kind: ComponentOuterAliasKind::Type,
+                    count: 1,
+                    index: outer_type_idx,
+                });
+                // Type 0: aliased resource type (from outer scope)
+            } else {
+                // Resource is defined here - use SubResource
+                instance_type.export(
+                    resource_cm_name,
+                    wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+                );
+                // Type 0: resource (SubResource for imported resource)
+            }
 
             // Type 1: own<resource>
             instance_type.ty().defined_type().own(0);
@@ -3591,19 +3612,112 @@ impl Codegen<'_> {
 
     /// Import all interfaces with resource types from the registry.
     ///
-    /// This replaces the hardcoded terminal-stdin/stdout/stderr import functions
-    /// with a data-driven approach that iterates over the registry.
+    /// This handles resource type sharing across interfaces following the CM spec:
+    /// 1. First, import resource-defining interfaces (e.g., terminal-input, terminal-output)
+    ///    and alias their resource types at the component level
+    /// 2. Then, import function interfaces (e.g., terminal-stdin, terminal-stderr) that
+    ///    reference those resources via `Alias::Outer`
     fn import_interfaces_with_resources(
         &self,
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
         project: &Project,
     ) {
-        for interface_info in self.project.wasi_registry.interfaces() {
-            // Only handle interfaces that have a resource type
-            if interface_info.resource_type.is_some() {
-                self.import_interface_with_resource(builder, ctx, &interface_info, project);
+        // Collect function interfaces with resource types (from the interfaces iterator)
+        let interfaces_with_resources: Vec<_> = self
+            .project
+            .wasi_registry
+            .interfaces()
+            .filter(|info| info.resource_type.is_some() && info.package != "http")
+            .collect();
+
+        // Phase 1: Import resource-defining interfaces
+        // Resource-defining interfaces (e.g., terminal-input, terminal-output) are resource-only
+        // (no functions), so they don't appear in the interfaces() iterator. We discover them
+        // from the source interface path stored in the resources map.
+        //
+        // Collect unique source interfaces needed by the function interfaces
+        let mut imported_source_interfaces: IndexSet<String> = IndexSet::new();
+        for interface_info in &interfaces_with_resources {
+            let Some((resource_wado_name, _resource_cm_name)) = &interface_info.resource_type
+            else {
+                continue;
+            };
+
+            // Check if this resource's source interface is different from this interface
+            let Some(source_path) = self
+                .project
+                .wasi_registry
+                .get_resource_source_interface(resource_wado_name)
+            else {
+                continue;
+            };
+
+            // If source interface is the same as this interface, it defines its own resource
+            if source_path == interface_info.path {
+                continue;
             }
+
+            // Check if the function interface is actually needed (DCE check)
+            let is_needed = interface_info.functions.first().is_some_and(|f| {
+                project.has_effect(&f.effect_name) && !ctx.has_comp_func(&f.local_alias_name())
+            });
+            if !is_needed {
+                continue;
+            }
+
+            // Import the resource-defining interface if not already imported
+            if imported_source_interfaces.contains(source_path) {
+                continue;
+            }
+            imported_source_interfaces.insert(source_path.to_string());
+
+            // Get the resource CM name
+            let Some(resource_cm_name) = self
+                .project
+                .wasi_registry
+                .get_resource_cm_name(resource_wado_name)
+            else {
+                continue;
+            };
+
+            // Parse the source interface path to get interface name
+            let Some(wasi_import) = crate::ast::WasiImport::parse(source_path) else {
+                continue;
+            };
+
+            // Import the resource-defining interface as an instance with SubResource
+            let instance_type_name = format!("{}-instance-type", wasi_import.interface);
+            let instance_type_idx = ctx.register_type(&instance_type_name);
+            {
+                let (_, enc) = builder.ty(Some(&instance_type_name));
+                let mut instance_type = InstanceType::new();
+                instance_type.export(
+                    resource_cm_name,
+                    wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+                );
+                enc.instance(&instance_type);
+            }
+
+            ctx.register_instance(&wasi_import.interface);
+            builder.import(
+                source_path,
+                wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+            );
+
+            // Alias the resource type at the component level
+            let resource_type_name = format!("resource:{resource_cm_name}");
+            ctx.register_type(&resource_type_name);
+            builder.alias_export(
+                ctx.instance_idx(&wasi_import.interface),
+                resource_cm_name,
+                ComponentExportKind::Type,
+            );
+        }
+
+        // Phase 2: Import function interfaces that use those resources
+        for interface_info in &interfaces_with_resources {
+            self.import_interface_with_resource(builder, ctx, interface_info, project);
         }
     }
 
@@ -12209,20 +12323,41 @@ impl Codegen<'_> {
                 panic!("tuple type {type_ids:?} not registered for CM return conversion");
             }
         } else if conv.option_resource_return {
-            // option<own<resource>> - box the i32 handle if Some
+            // option<own<resource>> - CM ABI layout at outptr:
+            //   offset 0: discriminant (u8, 0=none, 1=some)
+            //   offset 4: handle (i32, valid when discriminant=1)
+            // Result is (ref null $Box<i32>): null for None, struct.new for Some
             let outptr_local = ctx.get_local("__cm_outptr").expect(
                 "__cm_outptr should be pre-allocated for functions with option<resource> returns",
             );
-            // Load the discriminant/handle value
+            let box_type_idx = self
+                .get_box_struct_type_idx(&PrimitiveType::I32, type_table)
+                .expect("Box<i32> type should be registered for option<resource> returns");
+            let result_type = ValType::Ref(RefType {
+                nullable: true,
+                heap_type: HeapType::Concrete(box_type_idx),
+            });
+            // Load discriminant byte from outptr
+            func.instruction(&Instruction::LocalGet(outptr_local));
+            func.instruction(&Instruction::I32Load8U(wasm_encoder::MemArg {
+                offset: 0,
+                align: 0,
+                memory_index: 0,
+            }));
+            // Branch: discriminant != 0 → Some(handle), else → None
+            func.instruction(&Instruction::If(BlockType::Result(result_type)));
+            // Some: load handle from outptr + 4, wrap in Box<i32>
             func.instruction(&Instruction::LocalGet(outptr_local));
             func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                offset: 0,
+                offset: 4,
                 align: 2,
                 memory_index: 0,
             }));
-            // Box it as Option<i32>: 0 = None, non-zero = Some(value as i32 box)
-            let box_i32_idx = builder.func_idx("core/internal/box_i32_for_option");
-            func.instruction(&Instruction::Call(box_i32_idx));
+            func.instruction(&Instruction::StructNew(box_type_idx));
+            func.instruction(&Instruction::Else);
+            // None: null reference
+            func.instruction(&Instruction::RefNull(HeapType::Concrete(box_type_idx)));
+            func.instruction(&Instruction::End);
         }
 
         true

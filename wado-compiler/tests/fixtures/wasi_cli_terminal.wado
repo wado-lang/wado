@@ -1,37 +1,22 @@
 // Test for wasi:cli Terminal effects
-// These require a real terminal environment and are not supported in test harnesses
-// TODO: wasmtime test environment doesn't provide terminal interfaces
+// Terminal functions return None in non-terminal environments (e.g., test harnesses)
 
 use { println, Stdout } from "core:cli";
 use { TerminalStdin, TerminalStdout, TerminalStderr } from "wasi:cli";
 
 export fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
-    // Test TerminalStdin::get_terminal_stdin() - returns None in non-terminal context
+    // In non-terminal context, all terminal functions return None
     let stdin_terminal = TerminalStdin::get_terminal_stdin();
-    if let Some(_) = stdin_terminal {
-        println("test: TerminalStdin::get_terminal_stdin = Some");
-    } else {
-        println("test: TerminalStdin::get_terminal_stdin = None");
-    }
+    assert stdin_terminal matches { None }, "stdin terminal should be None";
 
-    // Test TerminalStdout::get_terminal_stdout() - returns None in non-terminal context
     let stdout_terminal = TerminalStdout::get_terminal_stdout();
-    if let Some(_) = stdout_terminal {
-        println("test: TerminalStdout::get_terminal_stdout = Some");
-    } else {
-        println("test: TerminalStdout::get_terminal_stdout = None");
-    }
+    assert stdout_terminal matches { None }, "stdout terminal should be None";
 
-    // Test TerminalStderr::get_terminal_stderr() - returns None in non-terminal context
     let stderr_terminal = TerminalStderr::get_terminal_stderr();
-    if let Some(_) = stderr_terminal {
-        println("test: TerminalStderr::get_terminal_stderr = Some");
-    } else {
-        println("test: TerminalStderr::get_terminal_stderr = None");
-    }
+    assert stderr_terminal matches { None }, "stderr terminal should be None";
 
     println("all terminal tests passed");
 }
 
 __DATA__
-{"TODO": true, "stdout_contains": ["test: TerminalStdin::get_terminal_stdin = None", "test: TerminalStdout::get_terminal_stdout = None", "test: TerminalStderr::get_terminal_stderr = None", "all terminal tests passed"]}
+{"stdout": "all terminal tests passed\n"}
