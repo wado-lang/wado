@@ -14,6 +14,8 @@ on-task-started:
 		echo "mise is already installed."; \
 		echo "Installing project tools..."; \
 		mise install; \
+		echo "Installing optional tools..."; \
+		mise install github:cli/cli@latest 2>&1 || echo "  [skip] github:cli/cli (install failed, non-fatal)"; \
 		echo ""; \
 		echo "Development environment ready."; \
 	fi
