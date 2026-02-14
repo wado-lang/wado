@@ -305,6 +305,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Variant-Independent Types](./docs/wep-2026-02-09-variant-independent-types.md)
 - [Compile-Time Tuple Enumeration](./docs/wep-2026-02-10-compile-time-tuple-enumeration.md)
 - [WIR (Wasm IR) Layer](./docs/wep-2026-02-10-wir-layer.md)
+- [Project File (`wado.toml`)](./docs/wep-2026-02-14-project-file.md)
 
 ### Structure
 
