@@ -1,56 +1,48 @@
-//! Wasm building utilities for code generation.
+//! Wasm building utilities for code generation
 //!
-//! `CoreModuleBuilder` collects WIR types (not `wasm_encoder` sections) and
-//! provides name→index mapping during code generation. After planning and
-//! codegen, call `into_parts()` to extract accumulated WIR data for
-//! `WirModule` construction.
+//! This module provides index-tracking wrappers around wasm-encoder types,
+//! eliminating hardcoded magic numbers in codegen.
 
 use indexmap::{IndexMap, IndexSet};
 
-use wasm_encoder::{ExportKind, FieldType, StorageType, ValType};
-
-use crate::wir::{
-    WirConstExpr, WirExport, WirGlobal, WirImport, WirNames, WirRecGroupEntry, WirRecGroupKind,
-    WirTypeDef,
+use wasm_encoder::{
+    ArrayType, CompositeInnerType, CompositeType, ConstExpr, EntityType, ExportKind, ExportSection,
+    FieldType, FunctionSection, GlobalSection, GlobalType, ImportSection, MemoryType, NameMap,
+    NameSection, ProducersField, ProducersSection, StorageType, SubType, TypeSection, ValType,
 };
 
 // ============================================================================
-// WirModuleParts — extracted data from CoreModuleBuilder
+// Rec Group Types
 // ============================================================================
 
-/// Accumulated WIR data extracted from `CoreModuleBuilder` for `WirModule` construction.
-pub struct WirModuleParts {
-    pub types: Vec<WirTypeDef>,
-    pub imports: Vec<WirImport>,
-    pub func_type_indices: Vec<u32>,
-    pub globals: Vec<WirGlobal>,
-    pub exports: Vec<WirExport>,
-    pub import_func_count: u32,
-    pub has_memory: bool,
-    pub names: WirNames,
+/// Kind of type within a rec group (for mutually recursive types)
+#[derive(Debug, Clone)]
+pub enum RecTypeKind {
+    /// Struct type with fields
+    Struct(Vec<FieldType>),
+    /// Array type with element type
+    Array(FieldType),
 }
 
 // ============================================================================
-// CoreModuleBuilder — collects WIR types with name→index mapping
+// CoreModuleBuilder - Builder for Wasm core modules with dynamic index allocation
 // ============================================================================
 
 /// Builder for Wasm core modules with dynamic index allocation.
-///
-/// Collects WIR types and provides name→index mapping during code generation.
-/// Does not touch `wasm_encoder` sections — that's `emit_module`'s job.
+/// Eliminates hardcoded type/function indices by tracking them by name.
 pub struct CoreModuleBuilder {
-    // Accumulated WIR data
-    types: Vec<WirTypeDef>,
-    imports: Vec<WirImport>,
-    func_type_indices: Vec<u32>,
-    globals: Vec<WirGlobal>,
-    exports: Vec<WirExport>,
+    // Wasm sections
+    types: TypeSection,
+    imports: ImportSection,
+    functions: FunctionSection,
+    globals: GlobalSection,
+    exports: ExportSection,
 
-    // Type tracking (name → index)
+    // Type tracking
     type_names: IndexMap<String, u32>,
     next_type_idx: u32,
 
-    // Function tracking (name → index)
+    // Function tracking
     func_names: IndexMap<String, u32>,
     func_type_names: IndexMap<String, String>,
     type_has_return: IndexMap<String, bool>,
@@ -59,7 +51,7 @@ pub struct CoreModuleBuilder {
     /// Number of imported functions (for branch hint calculation)
     pub import_func_count: u32,
 
-    // Global tracking (name → index)
+    // Global tracking
     global_names: IndexMap<String, u32>,
     next_global_idx: u32,
     /// Globals that are initialized with null (need `ref.as_non_null` on access)
@@ -76,11 +68,11 @@ impl CoreModuleBuilder {
     /// Create a new builder with all indices starting at 0
     pub fn new() -> Self {
         Self {
-            types: Vec::new(),
-            imports: Vec::new(),
-            func_type_indices: Vec::new(),
-            globals: Vec::new(),
-            exports: Vec::new(),
+            types: TypeSection::new(),
+            imports: ImportSection::new(),
+            functions: FunctionSection::new(),
+            globals: GlobalSection::new(),
+            exports: ExportSection::new(),
             type_names: IndexMap::new(),
             next_type_idx: 0,
             func_names: IndexMap::new(),
@@ -105,10 +97,9 @@ impl CoreModuleBuilder {
     /// Define a function type and return its index
     pub fn define_func_type(&mut self, name: &str, params: &[ValType], results: &[ValType]) -> u32 {
         let idx = self.next_type_idx;
-        self.types.push(WirTypeDef::Func {
-            params: params.to_vec(),
-            results: results.to_vec(),
-        });
+        self.types
+            .ty()
+            .function(params.iter().copied(), results.iter().copied());
         self.type_names.insert(name.to_string(), idx);
         self.type_has_return
             .insert(name.to_string(), !results.is_empty());
@@ -122,7 +113,19 @@ impl CoreModuleBuilder {
     /// Define a GC array type and return its index
     pub fn define_gc_array_type(&mut self, name: &str, element: StorageType, mutable: bool) -> u32 {
         let idx = self.next_type_idx;
-        self.types.push(WirTypeDef::GcArray { element, mutable });
+        self.types.ty().subtype(&SubType {
+            is_final: true,
+            supertype_idx: None,
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Array(ArrayType(FieldType {
+                    element_type: element,
+                    mutable,
+                })),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
+        });
         self.type_names.insert(name.to_string(), idx);
         self.next_type_idx += 1;
         idx
@@ -131,11 +134,19 @@ impl CoreModuleBuilder {
     /// Define a GC struct type and return its index.
     /// Uses `is_final: false` to allow more flexible subtyping with exact types.
     pub fn define_gc_struct_type(&mut self, name: &str, fields: &[FieldType]) -> u32 {
+        use wasm_encoder::StructType;
         let idx = self.next_type_idx;
-        self.types.push(WirTypeDef::GcStruct {
-            fields: fields.to_vec(),
+        self.types.ty().subtype(&SubType {
             is_final: false, // Non-final allows (ref (exact $T)) to be subtype of (ref $T)
             supertype_idx: None,
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Struct(StructType {
+                    fields: fields.to_vec().into_boxed_slice(),
+                }),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
         });
         self.type_names.insert(name.to_string(), idx);
         self.next_type_idx += 1;
@@ -150,11 +161,19 @@ impl CoreModuleBuilder {
         supertype_idx: u32,
         fields: &[FieldType],
     ) -> u32 {
+        use wasm_encoder::StructType;
         let idx = self.next_type_idx;
-        self.types.push(WirTypeDef::GcStruct {
-            fields: fields.to_vec(),
+        self.types.ty().subtype(&SubType {
             is_final: true, // Subtypes are final (no further subtyping)
             supertype_idx: Some(supertype_idx),
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Struct(StructType {
+                    fields: fields.to_vec().into_boxed_slice(),
+                }),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
         });
         self.type_names.insert(name.to_string(), idx);
         self.next_type_idx += 1;
@@ -170,7 +189,12 @@ impl CoreModuleBuilder {
 
     /// Define a rec group containing multiple mutually recursive types.
     /// Types within the rec group can forward-reference each other.
-    pub fn define_rec_group(&mut self, types: &[(String, WirRecGroupKind)]) -> Vec<u32> {
+    ///
+    /// Each element in `types` is (name, `RecTypeKind`) where `RecTypeKind` specifies
+    /// whether it's a struct or array type.
+    pub fn define_rec_group(&mut self, types: &[(String, RecTypeKind)]) -> Vec<u32> {
+        use wasm_encoder::StructType;
+
         let base_idx = self.next_type_idx;
         let mut indices = Vec::with_capacity(types.len());
 
@@ -181,13 +205,38 @@ impl CoreModuleBuilder {
             indices.push(idx);
         }
 
-        // Build WIR rec group entries
-        let entries: Vec<WirRecGroupEntry> = types
+        // Build SubType list for rec group
+        let subtypes: Vec<SubType> = types
             .iter()
-            .map(|(_, kind)| WirRecGroupEntry { kind: kind.clone() })
+            .map(|(_, kind)| match kind {
+                RecTypeKind::Struct(fields) => SubType {
+                    is_final: false,
+                    supertype_idx: None,
+                    composite_type: CompositeType {
+                        inner: CompositeInnerType::Struct(StructType {
+                            fields: fields.clone().into_boxed_slice(),
+                        }),
+                        shared: false,
+                        descriptor: None,
+                        describes: None,
+                    },
+                },
+                RecTypeKind::Array(field_type) => SubType {
+                    is_final: true,
+                    supertype_idx: None,
+                    composite_type: CompositeType {
+                        inner: CompositeInnerType::Array(ArrayType(*field_type)),
+                        shared: false,
+                        descriptor: None,
+                        describes: None,
+                    },
+                },
+            })
             .collect();
 
-        self.types.push(WirTypeDef::RecGroup(entries));
+        // Emit the rec group
+        self.types.ty().rec(subtypes);
+
         self.next_type_idx += types.len() as u32;
         indices
     }
@@ -201,11 +250,8 @@ impl CoreModuleBuilder {
     /// The function type is looked up by name (import name == type name).
     pub fn import_func(&mut self, module: &str, name: &str) -> u32 {
         let type_idx = self.type_idx(name);
-        self.imports.push(WirImport::Func {
-            module: module.to_string(),
-            name: name.to_string(),
-            type_idx,
-        });
+        self.imports
+            .import(module, name, EntityType::Function(type_idx));
         let func_idx = self.next_func_idx;
         self.func_names.insert(name.to_string(), func_idx);
         self.func_type_names
@@ -217,18 +263,24 @@ impl CoreModuleBuilder {
 
     /// Import memory
     pub fn import_memory(&mut self, module: &str, name: &str, min: u64) {
-        self.imports.push(WirImport::Memory {
-            module: module.to_string(),
-            name: name.to_string(),
-            min,
-        });
+        self.imports.import(
+            module,
+            name,
+            EntityType::Memory(MemoryType {
+                minimum: min,
+                maximum: None,
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            }),
+        );
         self.has_memory = true;
     }
 
     /// Define a function (adds to function section) and return its index
     pub fn define_func(&mut self, name: &str, type_name: &str) -> u32 {
         let type_idx = self.type_idx(type_name);
-        self.func_type_indices.push(type_idx);
+        self.functions.function(type_idx);
         let func_idx = self.next_func_idx;
         self.func_names.insert(name.to_string(), func_idx);
         self.func_type_names
@@ -245,11 +297,7 @@ impl CoreModuleBuilder {
     /// Export a function
     pub fn export_func(&mut self, export_name: &str, func_name: &str) {
         let func_idx = self.func_idx(func_name);
-        self.exports.push(WirExport {
-            name: export_name.to_string(),
-            kind: ExportKind::Func,
-            index: func_idx,
-        });
+        self.exports.export(export_name, ExportKind::Func, func_idx);
     }
 
     /// Get type index by name
@@ -287,16 +335,16 @@ impl CoreModuleBuilder {
         name: &str,
         val_type: ValType,
         mutable: bool,
-        init: WirConstExpr,
+        init: ConstExpr,
         is_nullable: bool,
     ) -> u32 {
         let idx = self.next_global_idx;
-        self.globals.push(WirGlobal {
-            name: name.to_string(),
+        let global_type = GlobalType {
             val_type,
             mutable,
-            init,
-        });
+            shared: false,
+        };
+        self.globals.global(global_type, &init);
         self.global_names.insert(name.to_string(), idx);
         if is_nullable {
             self.nullable_globals.insert(name.to_string());
@@ -323,53 +371,77 @@ impl CoreModuleBuilder {
         self.global_names.get(name).copied()
     }
 
+    /// Get the types section (for module building)
+    pub fn types(&self) -> &TypeSection {
+        &self.types
+    }
+
+    /// Get the imports section (for module building)
+    pub fn imports(&self) -> &ImportSection {
+        &self.imports
+    }
+
+    /// Get the functions section (for module building)
+    pub fn functions(&self) -> &FunctionSection {
+        &self.functions
+    }
+
+    /// Get the globals section (for module building)
+    pub fn globals(&self) -> &GlobalSection {
+        &self.globals
+    }
+
     /// Check if any globals have been defined
     pub fn has_globals(&self) -> bool {
         self.next_global_idx > 0
     }
 
-    /// Check if a function type has a return value
-    pub fn type_has_return(&self, type_name: &str) -> Option<bool> {
-        self.type_has_return.get(type_name).copied()
+    /// Get the exports section (for module building)
+    pub fn exports(&self) -> &ExportSection {
+        &self.exports
     }
 
-    /// Get the return type of a function type
-    pub fn type_return_type(&self, type_name: &str) -> Option<ValType> {
-        self.type_return_type.get(type_name).copied()
-    }
+    /// Build the name section from tracked type and function names
+    pub fn build_name_section(&self, module_name: &str) -> NameSection {
+        let mut names = NameSection::new();
 
-    /// Get the type name for a function
-    pub fn func_type_name(&self, func_name: &str) -> Option<&str> {
-        self.func_type_names.get(func_name).map(String::as_str)
-    }
+        // Module name (must come first according to spec)
+        names.module(module_name);
 
-    /// Extract accumulated WIR data for `WirModule` construction.
-    ///
-    /// Consumes the builder. After this call, use the returned `WirModuleParts`
-    /// to construct a `WirModule` together with function bodies.
-    pub fn into_parts(self) -> WirModuleParts {
-        let names = WirNames {
-            func_names: self
-                .func_names
-                .into_iter()
-                .map(|(name, idx)| (idx, name))
-                .collect(),
-            type_names: self
-                .type_names
-                .into_iter()
-                .map(|(name, idx)| (idx, name))
-                .collect(),
-        };
-        WirModuleParts {
-            types: self.types,
-            imports: self.imports,
-            func_type_indices: self.func_type_indices,
-            globals: self.globals,
-            exports: self.exports,
-            import_func_count: self.import_func_count,
-            has_memory: self.has_memory,
-            names,
+        // Function names
+        let mut func_names = NameMap::new();
+        for (name, &idx) in &self.func_names {
+            func_names.append(idx, name);
         }
+        names.functions(&func_names);
+
+        // Type names (must come after functions according to spec)
+        let mut type_names = NameMap::new();
+        for (name, &idx) in &self.type_names {
+            type_names.append(idx, name);
+        }
+        names.types(&type_names);
+
+        names
+    }
+
+    /// Build the producers section with language and compiler metadata
+    ///
+    /// This is a standard custom section that records toolchain information.
+    /// See: <https://github.com/WebAssembly/tool-conventions/blob/main/ProducersSection.md>
+    #[must_use]
+    pub fn build_producers_section() -> ProducersSection {
+        let mut language = ProducersField::new();
+        language.value("Wado", "");
+
+        let mut processed_by = ProducersField::new();
+        processed_by.value(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
+        let mut producers = ProducersSection::new();
+        producers.field("language", &language);
+        producers.field("processed-by", &processed_by);
+
+        producers
     }
 }
 
