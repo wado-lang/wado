@@ -219,6 +219,16 @@ fn fixture_test_o2(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
+/// Test function for O1 (development optimization)
+/// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
+fn fixture_test_o1(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var("CI").is_err() && std::env::var("WADO_FULL_TEST").is_err() {
+        return Ok(()); // Skip locally by default
+    }
+    run_fixture_test_with_opt(path, content, OptLevel::O1);
+    Ok(())
+}
+
 /// Test function for O3 (aggressive optimization)
 /// Skipped by default locally. Runs in CI or when WADO_FULL_TEST=1 is set.
 fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -243,6 +253,7 @@ datatest_mini::harness! {
     // Pattern matches .wado files directly in fixtures/ but not in subdirectories
     // (subdirectories contain helper modules that are imported, not run as tests)
     { test = fixture_test_o0, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
+    { test = fixture_test_o1, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
     { test = fixture_test_o2, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
     { test = fixture_test_o3, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
     { test = fixture_test_os, root = "tests/fixtures", pattern = r"^[^/]+\.wado$" },
