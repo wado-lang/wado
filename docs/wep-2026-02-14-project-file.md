@@ -19,30 +19,116 @@ The design must preserve Wado's simplicity: a single `.wado` file without `wado.
 The project manifest is `wado.toml`, placed at the project root.
 
 ```toml
-[project]
+[package]
 namespace = "myorg"
 name = "my-app"
 version = "0.1.0"
+command = "src/main.wado"
+lib = "src/lib.wado"
+
 [registries]
 wa = "https://wa.dev"
+
 [dependencies]
 router = { git = "https://github.com/user/router.git", ref = "v1.0.0" }
 regex = { registry = "wa", package = "docs:regex", version = "0.1.0" }
 shared = { path = "../shared" }
 logger = { url = "https://example.com/logger-0.2.0/wado.toml" }
+
 [dev-dependencies]
 bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 ```
 
-### `[project]`
+### `[package]`
 
 | Field       | Type     | Required | Description                                        |
 | ----------- | -------- | -------- | -------------------------------------------------- |
 | `namespace` | `string` | Yes      | Organization or user namespace (e.g., `"myorg"`)   |
 | `name`      | `string` | Yes      | Package name (e.g., `"my-app"`)                    |
 | `version`   | `string` | Yes      | Semver version (e.g., `"0.1.0"`)                   |
+| `command`   | `string` | No       | Entry point for `wasi:cli/command` world            |
+| `service`   | `string` | No       | Entry point for `wasi:http/service` world           |
+| `lib`       | `string` | No       | Library interface file                              |
 
 `namespace` and `name` are used for registry publishing. The registry identity is `namespace:name` (e.g., `myorg:my-app`).
+
+At least one of `command`, `service`, or `lib` should be specified. A package can have multiple entry points (e.g., both `command` and `lib`).
+
+### Entry Points and Worlds
+
+Each entry point field corresponds to a WASI world or a library interface:
+
+| Field     | WASI World           | CLI Command    | Required Export                           |
+| --------- | -------------------- | -------------- | ----------------------------------------- |
+| `command` | `wasi:cli/command`   | `wado run`     | `export fn run()`                         |
+| `service` | `wasi:http/service`  | `wado serve`   | `export fn handle(request: Request) -> …` |
+| `lib`     | (none — interface)   | (none)         | `export` items become the public API      |
+
+```toml
+# CLI tool with library
+[package]
+name = "markdown"
+command = "src/cli.wado"
+lib = "src/lib.wado"
+
+# HTTP service only
+[package]
+name = "my-api"
+service = "src/server.wado"
+
+# Development tool with CLI + Web UI
+[package]
+name = "devtool"
+command = "src/cli.wado"
+service = "src/dashboard.wado"
+lib = "src/lib.wado"
+
+# Library only
+[package]
+name = "json"
+lib = "src/lib.wado"
+```
+
+### Visibility and Component Boundary
+
+The `export` keyword defines what is visible at the **Component Model boundary** — the package's public API. This is distinct from `pub`, which is project-internal visibility.
+
+| Modifier | Scope | Use |
+| -------- | ----- | --- |
+| (none)   | Module-private | Implementation details |
+| `pub`    | Project-internal | Shared across modules within the same project |
+| `export` | CM boundary | Package's public API, visible to consumers |
+
+```wado
+// src/lib.wado (in the "markdown" package)
+fn tokenize(input: String) -> Array<Token> { ... }       // private
+pub fn build_ast(tokens: Array<Token>) -> Document { ... } // project-internal
+export fn parse(input: String) -> Document { ... }         // public API
+```
+
+When another project depends on `"markdown"`, only `export` items from the `lib` entry point are visible:
+
+```wado
+// In a consuming project
+use { parse } from "markdown";        // OK: exported from lib
+// use { build_ast } from "markdown";  // ERROR: pub but not exported
+// use { tokenize } from "markdown";   // ERROR: private
+```
+
+When published as a `.wasm` component (e.g., to wa.dev), only `export` items appear in the component's interface.
+
+### Wado-to-Wado Optimization
+
+Semantically, cross-package references always go through the CM boundary (`export` items only). However, when both producer and consumer are Wado, the compiler can skip the CM canonical ABI (lifting/lowering) and share Wasm GC types directly.
+
+| Consumer → Producer | Path |
+| ------------------- | ---- |
+| Wado → Wado (source dependency) | CM adapter skipped; GC types shared directly |
+| Wado → Wado (`.wasm` with Wado provider metadata) | Provider detected; GC types shared directly |
+| Wado → arbitrary `.wasm` | CM canonical ABI (lifting/lowering) |
+| Arbitrary → Wado `.wasm` | CM canonical ABI |
+
+This optimization is transparent to the developer. The visible API is always determined by `export`, and the semantics are always CM boundary semantics. The optimization only affects performance — cross-package calls between Wado projects have no overhead compared to project-internal calls.
 
 ### `[registries]`
 
@@ -334,6 +420,8 @@ When no `wado.toml` exists, the compiler operates in single-file mode:
 
 ### CLI Integration
 
+#### Project Commands
+
 ```sh
 wado init                          # create wado.toml interactively
 wado add router --git https://github.com/user/router.git --ref v1.0.0
@@ -344,6 +432,33 @@ wado update regex                  # update specific dependency
 ```
 
 These are future CLI commands. The initial implementation focuses on `wado.toml` parsing and module resolution.
+
+#### Entry Point and CLI Commands
+
+When `wado.toml` is present, the existing CLI commands use the entry point fields:
+
+```sh
+# Without wado.toml (single-file mode, unchanged)
+wado run file.wado
+wado serve file.wado
+
+# With wado.toml (entry point auto-discovered)
+wado run                           # uses [package].command
+wado serve                         # uses [package].service
+wado compile -o out.wasm           # compiles the command entry point
+wado compile --lib -o out.wasm     # compiles the lib entry point
+```
+
+When a file argument is provided, it overrides the entry point from `wado.toml`.
+
+#### `wado exec` for Dependency Entry Points
+
+```sh
+wado exec <dep-name>               # run dependency's command entry point
+wado exec <dep-name> [args...]     # pass arguments to the dependency
+```
+
+`wado exec` looks up `<dep-name>` in `[dependencies]`, finds the dependency's `wado.toml`, and runs its `command` entry point. This enables tool packages (formatters, linters, generators) to be installed as dependencies and executed directly.
 
 ## Consequences
 
@@ -360,6 +475,9 @@ These are future CLI commands. The initial implementation focuses on `wado.toml`
 - Multiple semver-incompatible versions coexist naturally, matching Wasm Component Model's type isolation
 - Lock file with `integrity` ensures reproducible and tamper-evident builds
 - Compiler remains agnostic to dependency resolution — `CompilerHost` handles all mapping
+- Entry point fields (`command`, `service`, `lib`) map directly to WASI worlds and CLI commands
+- `export` as CM boundary gives clear, consistent public API semantics across all consumption modes
+- Wado-to-Wado optimization eliminates CM overhead for same-language dependencies without changing semantics
 
 ### Negative
 
@@ -375,3 +493,4 @@ These are future CLI commands. The initial implementation focuses on `wado.toml`
 - **Registry names per-project**: avoids global configuration but requires repetition across projects. A future `~/.wado/config.toml` could provide user-level defaults.
 - **Bare name resolution**: requires `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
+- **`command` over `bin`/`cli`**: `command` matches the WASI world name (`wasi:cli/command`) directly, making the mapping explicit. `bin` (Cargo's term) describes artifact format, which is less meaningful in the Wasm world. `cli` describes the interface but doesn't match the world name.
