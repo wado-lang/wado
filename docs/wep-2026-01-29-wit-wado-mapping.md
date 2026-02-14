@@ -52,133 +52,243 @@ export type ID = String;               // type alias
 export interface MyApi { ... }         // interface (see below)
 ```
 
-## Interface and Effect
+## Interface Block
 
-Wado introduces explicit `interface` blocks for grouping exports, complementing the existing `effect` for imports.
+### Design Rationale
 
-### Interface vs Effect
+In CM/WIT, an `interface` is a collection of related types and functions that forms a reusable unit of API surface. It is not a behavioral abstraction (like Java interfaces or Rust traits) — it is an **API boundary** that groups a coherent set of functionality for cross-component interop.
 
-| Wado        | WIT         | Direction        | Has Side Effects |
-| ----------- | ----------- | ---------------- | ---------------- |
-| `interface` | `interface` | export (primary) | No (pure)        |
-| `effect`    | `interface` | import (primary) | Yes              |
+In most source languages, this concept is implicit:
 
-Both `interface` and `effect` map to WIT `interface`. The distinction exists in Wado's type system:
+| Language | What serves as "interface"  | Mechanism                                                               |
+| -------- | --------------------------- | ----------------------------------------------------------------------- |
+| C        | Header file (`.h`)          | Declares types and function signatures; consumers `#include` the header |
+| Zig      | Module's `pub` declarations | File = module; public symbols form the API surface                      |
+| Rust     | Crate's public API surface  | `pub` items in the crate root; no explicit "interface" keyword          |
 
-- **`effect`**: Represents interfaces that modify global state or perform I/O. Functions from effects require `with` annotations for effect tracking.
-- **`interface`**: Represents pure interfaces without side effects. Functions can be called without effect annotations.
+In all three cases, the "interface" is simply **whatever you made public**. There is no separate syntax to declare it. CM differs because components need machine-readable contracts for language-agnostic interop.
 
-### WIT Lacks Purity Annotations
+Wado's `interface` block exists **solely for CM purposes**: it is a grouping syntax that declares which items form a named CM interface. It has no semantic meaning within Wado's type system — no namespace, no purity guarantee, no behavioral contract. Items are defined normally in Wado; the `interface` block references them by name.
 
-WIT currently has no way to express whether an interface is pure or effectful. This is a known limitation:
+### Relationship with `effect`
 
-- [Component Model Issue #321: Add `pure` annotation to WIT](https://github.com/WebAssembly/component-model/issues/321)
+Both `interface` and `effect` map to WIT `interface`, but they serve different roles in Wado:
 
-Wado's `effect` vs `interface` distinction is a Wado-side concept. When generating WIT, both become `interface`:
+| Wado        | WIT         | Direction | Wado semantics                                                       |
+| ----------- | ----------- | --------- | -------------------------------------------------------------------- |
+| `effect`    | `interface` | import    | Defines capability requirements; functions require `with` annotation |
+| `interface` | `interface` | export    | Groups items for CM export; no Wado-level semantics                  |
+
+An `effect` has deep Wado meaning: it participates in effect tracking and constrains function signatures. An `interface` is purely organizational — it tells the CM layer how to package exports.
+
+When generating WIT, both become `interface`:
 
 ```wado
-// Wado source
+// effect = import-side interface (Wado semantics: effect tracking)
 effect Stdout {
     fn print(s: String);
 }
 
-interface Calculator {
-    fn add(a: i32, b: i32) -> i32;
+// interface = export-side grouping (Wado semantics: none)
+struct Point { x: i32, y: i32 }
+fn distance(p1: &Point, p2: &Point) -> f64 { ... }
+
+export interface Geometry {
+    Point,
+    distance,
 }
 ```
 
 ```wit
-// Generated WIT (no distinction)
+// Generated WIT
 interface stdout {
     print: func(s: string);
 }
 
-interface calculator {
-    add: func(a: s32, b: s32) -> s32;
-}
-```
-
-### Effect Tracking
-
-```wado
-use {print} from Stdout;       // from effect → requires `with`
-use {add} from Calculator;     // from interface → no `with` needed
-
-fn pure_function() -> i32 {
-    return add(1, 2);          // OK: Calculator is pure
-}
-
-fn effectful_function() with Stdout {
-    print("hello");            // OK: Stdout effect declared
-}
-
-fn error_function() {
-    print("hello");            // ERROR: missing `with Stdout`
-}
-```
-
-## Interface Syntax
-
-### Explicit Interface (for grouping)
-
-```wado
-export interface MyApi {
-    struct Point { x: i32, y: i32 }
-    fn add(a: i32, b: i32) -> i32;
-    fn distance(p1: Point, p2: Point) -> f64;
-}
-```
-
-```wit
-// Generated WIT
-interface my-api {
+interface geometry {
     record point { x: s32, y: s32 }
-    add: func(a: s32, b: s32) -> s32;
-    distance: func(p1: point, p2: point) -> f64;
-}
-
-world my-app {
-    export my-api;
+    distance: func(p1: borrow<point>, p2: borrow<point>) -> f64;
 }
 ```
 
-### Implicit Interface (top-level exports)
+### Default Interface (Implicit Grouping)
 
-For simple cases, top-level `export` declarations are collected into an implicit interface:
+Bare `export` declarations (not inside an explicit `interface` block) are automatically collected into a **default interface**. The default interface is named after `[package].name` from `wado.toml`, or derived from the entry file name in single-file mode.
 
 ```wado
+// [package].name = "geometry"
 export struct Point { x: i32, y: i32 }
+export fn distance(p1: &Point, p2: &Point) -> f64 { ... }
 export fn origin() -> Point { ... }
 ```
 
 ```wit
-// Generated WIT
-interface exports {
+// Generated WIT — default interface named "geometry"
+interface geometry {
     record point { x: s32, y: s32 }
+    distance: func(p1: borrow<point>, p2: borrow<point>) -> f64;
     origin: func() -> point;
 }
 
-world my-app {
-    export exports;
+world geometry {
+    export geometry;
 }
 ```
 
-### Functions Without Types (direct world export)
-
-When only functions are exported (no types), they can be exported directly in the world:
+When only functions are exported (no types), they become direct world exports instead of forming an interface, since CM allows this and it is more idiomatic:
 
 ```wado
 export fn run() { ... }
-export fn add(a: i32, b: i32) -> i32 { ... }
 ```
 
 ```wit
-// Generated WIT (no interface needed)
 world my-app {
     export run: func();
-    export add: func(a: s32, b: s32) -> s32;
 }
 ```
+
+This also applies to world-conformance entry points like `export fn run()` (wasi:cli/command) and `export fn handle(...)` (wasi:http/service), which are always direct world exports regardless of other exports.
+
+### Explicit Interface (Fine-Grained Control)
+
+When a component needs to export multiple interfaces, or when the default grouping is not sufficient, use explicit `interface` blocks. The block **lists names** of items defined elsewhere — it does not contain definitions:
+
+```wado
+// Define items normally
+struct Point { x: i32, y: i32 }
+struct Color { r: u8, g: u8, b: u8 }
+fn distance(p1: &Point, p2: &Point) -> f64 { ... }
+fn blend(a: &Color, b: &Color) -> Color { ... }
+fn origin() -> Point { ... }
+
+// Group into separate CM interfaces
+export interface Geometry {
+    Point,
+    distance,
+    origin,
+}
+
+export interface Colors {
+    Color,
+    blend,
+}
+```
+
+```wit
+interface geometry {
+    record point { x: s32, y: s32 }
+    distance: func(p1: borrow<point>, p2: borrow<point>) -> f64;
+    origin: func() -> point;
+}
+
+interface colors {
+    record color { r: u8, g: u8, b: u8 }
+    blend: func(a: borrow<color>, b: borrow<color>) -> color;
+}
+
+world my-app {
+    export geometry;
+    export colors;
+}
+```
+
+Items listed in an `export interface` are exported through that interface regardless of their original visibility. They do not need the `export` keyword individually.
+
+### `#![no_default_interface]`
+
+By default, bare `export` items form a default interface. The `#![no_default_interface]` attribute disables this, requiring all exports to be placed in explicit `interface` blocks:
+
+```wado
+#![no_default_interface]
+
+// World-conformance entry points remain direct world exports
+export fn run() with Stdout { ... }
+
+// Other items must be explicitly grouped
+struct Point { x: i32, y: i32 }
+fn distance(p1: &Point, p2: &Point) -> f64 { ... }
+
+export interface Geometry {
+    Point,
+    distance,
+}
+```
+
+```wit
+world my-app {
+    import wasi:cli/stdout@0.3.0;
+    export run: func();
+    export geometry;
+}
+
+interface geometry {
+    record point { x: s32, y: s32 }
+    distance: func(p1: borrow<point>, p2: borrow<point>) -> f64;
+}
+```
+
+With `#![no_default_interface]`, a bare `export struct Point` (not in any interface block) is a compile error. This ensures the developer is explicit about which CM interface each item belongs to.
+
+### Exporting Effects
+
+An `effect` with the `export` keyword becomes an exported CM interface. This is for components that **provide** a capability for other components to consume:
+
+```wado
+// Producer component: provides logging capability
+export effect Logger {
+    log,
+    set_level,
+}
+
+fn log(message: String) {
+    // implementation
+}
+
+fn set_level(level: i32) {
+    // implementation
+}
+```
+
+```wit
+// Generated WIT
+interface logger {
+    log: func(message: string);
+    set-level: func(level: s32);
+}
+
+world logging-service {
+    export logger;
+}
+```
+
+The consumer imports this as a regular `effect`:
+
+```wado
+// Consumer component
+use { log } from "wasi:logging";  // or whatever the import path is
+
+fn do_work() with Logger {
+    log("processing...");
+}
+```
+
+The `effect` keyword (rather than plain `interface`) signals to the consumer that these functions have side effects and require `with` annotations. This distinction is a Wado-level concept — WIT has no purity annotation (see [Component Model Issue #321](https://github.com/WebAssembly/component-model/issues/321)).
+
+### Transitive Type Inclusion
+
+Types referenced in exported function signatures are automatically included in the interface, even if not explicitly listed:
+
+```wado
+struct Point { x: i32, y: i32 }
+fn origin() -> Point { return Point { x: 0, y: 0 }; }
+
+export interface Geometry {
+    origin,
+    // Point is automatically included because origin() returns it
+}
+```
+
+This avoids forcing developers to manually list every type dependency.
 
 ## WIT to Wado Type Mapping
 
@@ -300,11 +410,11 @@ When no explicit world is declared, generate one from:
 
 ## Package Naming
 
-Options:
+Derived from `wado.toml` when present:
 
-- `wado:{module-name}` - fixed namespace (default)
-- `{user}:{module-name}` - user-configurable namespace
-- From project manifest (future `wado.toml`)
+- WIT package: `{namespace}:{name}@{version}` (e.g., `myorg:geometry@1.0.0`)
+- Without `namespace`: `local:{name}@{version}` (non-publishable packages)
+- Without `wado.toml` (single-file mode): `local:{filename}` (e.g., `local:hello` for `hello.wado`)
 
 ## Implementation Plan
 
@@ -320,14 +430,23 @@ Options:
 - [ ] Support `export struct/variant/enum/type`
 - [ ] Collect transitive type dependencies
 - [ ] Generate WIT record/variant/enum definitions
+- [ ] Default interface generation (named after `[package].name`)
 
 ### Phase 3: Interface Syntax
 
-- [ ] Parse `export interface Name { ... }` blocks
+- [ ] Parse `export interface Name { item, ... }` blocks (name-listing syntax)
+- [ ] Validate listed names resolve to defined items
 - [ ] Generate named interfaces in WIT
 - [ ] Support multiple interfaces per module
+- [ ] `#![no_default_interface]` attribute
 
-### Phase 4: CLI Integration
+### Phase 4: Export Effect
+
+- [ ] Parse `export effect Name { item, ... }` blocks
+- [ ] Generate exported interfaces from effects
+- [ ] Ensure consumer-side effect tracking works across package boundaries
+
+### Phase 5: CLI Integration
 
 - [ ] Add `--emit-wit` flag to output WIT text
 - [ ] Add `--no-wit-embed` flag to disable embedding
@@ -342,12 +461,22 @@ Options:
 - Enables component composition
 - Registry-ready artifacts
 - Clear separation between internal (`pub`) and external (`export`) visibility
+- `interface` as CM-only grouping keeps Wado's type system simple (no second namespace mechanism)
+- Default interface from bare `export` covers the common case with zero syntax overhead
+- Name-listing syntax makes the `interface` block a clear manifest of what's exported
+- `export effect` reuses the existing effect concept for exported capabilities
 
 ### Negative
 
 - Slightly larger binary size (custom section)
 - Additional dependency (`wit-component`)
 - Must keep WIT generation in sync with codegen
+
+### Trade-offs
+
+- `interface` has no Wado-level semantics (no namespace, no purity). This is simpler but means `interface` is purely a CM concept that Wado developers only encounter when thinking about component boundaries. This is acceptable because most languages do not have an explicit "interface" concept either — it is an emergent property of public declarations.
+- Default interface naming depends on `[package].name`, creating a coupling between the manifest and generated WIT. This is intentional — the package name is the natural identity for a component's API surface.
+- `#![no_default_interface]` is opt-in strictness. The default behavior (implicit grouping) is convenient for simple components; the attribute is for advanced use cases with multiple interfaces.
 
 ## References
 
@@ -356,3 +485,4 @@ Options:
 - [Component Model Issue #321: Pure annotation](https://github.com/WebAssembly/component-model/issues/321)
 - [WEP: World Conformance](./wep-2026-01-16-world-conformance-and-export.md)
 - [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md)
+- [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md)

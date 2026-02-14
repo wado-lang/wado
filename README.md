@@ -16,8 +16,8 @@ The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, 
 #!/usr/bin/env wado run
 use { println, Stdout } from "core:cli";
 
-// run() is the entry point of the wasi:cli's Command world
-fn run() with Stdout {
+// run() is the entry point of the wasi:cli/command hosted world
+export fn run() with Stdout {
     println("Hello, world!");
 }
 ```

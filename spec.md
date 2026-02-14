@@ -3147,12 +3147,17 @@ fn main() {
 
 ### What is a World?
 
-A **world** in Wado corresponds directly to the Component Model's `world` concept. A world defines:
+A **world** in Wado corresponds directly to the Component Model's `world` concept. A world defines the contract between a Wasm component and its environment:
 
-1. **Imports**: Which effects and their functions the component requires from the host
-2. **Exports**: Which functions the component provides to the host
+1. **Imports**: Which capabilities the component requires (provided by the host or by other components)
+2. **Exports**: Which functions and types the component provides
 
-Worlds are the contract between a Wasm component and its runtime environment.
+Worlds are classified into two categories:
+
+- **Hosted world**: A world that a runtime knows how to instantiate and drive. The runtime provides all imports and invokes the exports according to a defined lifecycle. Examples: `wasi:cli/command` (executed by `wado run`), `wasi:http/service` (executed by `wado serve`). Informally called a "well-known world."
+- **Library world**: A world that defines a component's public API for composition. It is not directly executed by a runtime; instead, other components import its exports. Example: a `json` library that exports parsing functions.
+
+This distinction is not part of the Component Model specification — the CM treats all worlds uniformly. In Wado, the distinction matters for tooling: `wado run` and `wado serve` select a hosted world, while `wado.toml`'s `lib` field defines a library world.
 
 ### World Declaration
 
@@ -3231,13 +3236,12 @@ world Command {
     export async fn run() -> Result<(), ()>;
 }
 
-// Declare this component implements the CLI command world
-#![world(CliCommand)]
+// Declare conformance to the Command hosted world
+contract Command;
 
-// Implementation
-pub fn run() -> Result<(), ()> {
+// Implementation — `export` exposes it at the CM boundary
+export fn run() with Stdout {
     println("Hello, WASI world!");
-    return Ok(());
 }
 ```
 
@@ -3263,8 +3267,8 @@ world CliApp {
     export fn run() -> Result<(), ()>;
 }
 
-// Select world at compile time
-#![world(CliApp)]  // or BrowserApp
+// Declare conformance — select world at compile time
+contract CliApp;  // or: contract BrowserApp;
 ```
 
 ### Design Notes
@@ -3362,9 +3366,14 @@ Wado effects map to WASI P3 interfaces:
 
 Entry points are integrated in World system.
 
-Currently, `run` is the only entry point, which confirms the `Command` world defined in wasi:cli.
+Each hosted world defines its entry point. Currently supported:
 
-TBD.
+| Hosted World        | Entry Point                                                         | CLI Command  |
+| ------------------- | ------------------------------------------------------------------- | ------------ |
+| `wasi:cli/command`  | `export fn run()`                                                   | `wado run`   |
+| `wasi:http/service` | `export fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
+
+When no explicit `contract` declaration is present, the runtime determines the expected world (e.g., `wado run` expects `wasi:cli/command`).
 
 ### Attribute Syntax for WASI Linking
 
@@ -3418,3 +3427,5 @@ Component Model interop: The compiler automatically converts between Wado conven
 - effect interface: the declaration (`effect Stdout { ... }`); synonyms in literature: "effect signature", "effect type"
 - operation: a function in an effect interface; synonym: "effect operation"
 - handler: provides implementations for operations
+- hosted world: a world that a runtime knows how to instantiate and drive (e.g., `wasi:cli/command` for `wado run`, `wasi:http/service` for `wado serve`); informally called "well-known world"
+- library world: a world that defines a component's public API for composition with other components, rather than for direct execution by a runtime
