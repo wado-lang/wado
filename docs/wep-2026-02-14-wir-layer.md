@@ -350,12 +350,12 @@ pub enum WirAbstractHeapType {
 pub struct WirFunction {
     /// Function name (for name section and local references)
     pub name: String,
-    /// Type reference (function signature)
+    /// Type reference (function signature — param types and result types)
     pub type_ref: WirTypeRef,
-    /// Parameters (named)
-    pub params: Vec<WirLocal>,
+    /// Parameter names (types come from the referenced WirFuncType)
+    pub param_names: Vec<String>,
     /// Body (None for imported functions)
-    pub body: Option<WirBody>,
+    pub body: Option<Vec<WirInstr>>,
     /// Metadata (module source, span, attributes)
     pub meta: WirMeta,
     /// Generic instantiation origin
@@ -363,20 +363,9 @@ pub struct WirFunction {
     /// Effect requirements (for unparse display)
     pub effects: Vec<String>,
 }
-
-pub struct WirBody {
-    /// Locals declared in the body (in declaration order)
-    /// Unlike raw Wasm, locals can be declared inline at first use.
-    pub locals: Vec<WirLocal>,
-    /// Function body instructions
-    pub code: Vec<WirInstr>,
-}
-
-pub struct WirLocal {
-    pub name: String,
-    pub ty: WirType,
-}
 ```
+
+Locals are declared via `DeclareLocal` instructions in the body. There is no separate locals list — the emit phase collects all `DeclareLocal`s and pre-allocates them as Wasm locals.
 
 ### Instructions
 
@@ -395,8 +384,8 @@ pub enum WirInstr {
     LocalTee { name: String, value: Box<WirInstr> },
 
     // === Globals ===
-    GlobalGet { index: u32 },
-    GlobalSet { index: u32, value: Box<WirInstr> },
+    GlobalGet { name: String },
+    GlobalSet { name: String, value: Box<WirInstr> },
 
     // === Constants ===
     I32Const(i32),
@@ -536,10 +525,10 @@ pub enum WirInstr {
     // === GC: Struct ===
     /// struct.new with named type
     StructNew { type_name: String, fields: Vec<WirInstr> },
-    /// struct.get with named type and field
-    StructGet { type_name: String, field_name: String, field_index: u32, expr: Box<WirInstr> },
-    /// struct.set with named type and field
-    StructSet { type_name: String, field_name: String, field_index: u32, expr: Box<WirInstr>, value: Box<WirInstr> },
+    /// struct.get with named type and field (field index resolved by emitter)
+    StructGet { type_name: String, field_name: String, expr: Box<WirInstr> },
+    /// struct.set with named type and field (field index resolved by emitter)
+    StructSet { type_name: String, field_name: String, expr: Box<WirInstr>, value: Box<WirInstr> },
 
     // === GC: Array ===
     ArrayNew { type_name: String, init: Box<WirInstr>, len: Box<WirInstr> },
@@ -663,7 +652,15 @@ pub struct WirComponent {
 
 ### Names and References
 
-WIR uses **string names** for type and function references, not numeric indices. During emission, names are resolved to indices via lookup tables built during the emission pass. This keeps WIR readable and decoupled from index allocation order.
+WIR uses **string names** for all references, not numeric indices. During emission, names are resolved to indices via lookup tables built during the emission pass. This keeps WIR readable and decoupled from index allocation order.
+
+All named references in WIR:
+
+- **Types**: `WirTypeRef(String)` — struct, variant, array, func type names
+- **Functions**: `WirFuncRef(String)` — function names in `Call`, `RefFunc`
+- **Locals**: `String` — local variable names in `LocalGet`, `LocalSet`, `DeclareLocal`
+- **Globals**: `String` — global variable names in `GlobalGet`, `GlobalSet`
+- **Fields**: `String` — struct field names in `StructGet`, `StructSet` (resolved to field index by emitter)
 
 ```rust
 /// Type references use the type's name
@@ -816,18 +813,18 @@ Wasm is a stack machine, but flat instruction sequences are hard to inspect and 
 ```rust
 // WIR (tree): readable, inspectable
 I32Add(
-    StructGet { type_name: "Point", field_name: "x", field_index: 0, expr: LocalGet("self") },
-    StructGet { type_name: "Point", field_name: "y", field_index: 1, expr: LocalGet("self") },
+    StructGet { type_name: "Point", field_name: "x", expr: LocalGet("self") },
+    StructGet { type_name: "Point", field_name: "y", expr: LocalGet("self") },
 )
 
 // Unparse: Wado-style field access
 // i32.add(self.x, self.y)
 
-// Wasm (flat): requires mental stack tracking
+// Wasm (emitted): field indices resolved from type definition
 // local.get $self
-// struct.get $Point 0
+// struct.get $Point 0   ;; "x" → index 0
 // local.get $self
-// struct.get $Point 1
+// struct.get $Point 1   ;; "y" → index 1
 // i32.add
 ```
 
@@ -835,10 +832,12 @@ Flattening trees to stack-machine instructions is trivial (post-order traversal)
 
 ### Why Named References (Not Indices)?
 
-Using names keeps WIR independent of emission order:
+Using names **uniformly** for all references keeps WIR independent of emission order and self-documenting:
 
+- Types, functions, globals, locals, struct fields — all referenced by name
 - Type registration order can change without invalidating WIR
-- Functions can be reordered freely
+- Functions and globals can be reordered freely
+- Struct field indices are resolved from type definitions during emission
 - WIR is self-documenting (no need for a separate name section to read it)
 
 The cost is a name→index lookup during emission, which is O(1) with `IndexMap`.
