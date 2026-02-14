@@ -26,7 +26,7 @@ struct OptConfig {
 }
 use crate::optimize_licm::apply_licm;
 use crate::optimize_ref_elim::eliminate_unnecessary_refs;
-use crate::optimize_rewrite::{collect_value_copy_types, insert_moves, simplify_labeled_blocks};
+use crate::optimize_rewrite;
 use crate::optimize_sroa::scalar_replace_aggregates;
 use crate::project::Project;
 
@@ -123,22 +123,9 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
         }
     }
 
-    // Simplify trivial labeled blocks left by inlining (e.g., `L: { break L: expr; }` → `expr`).
-    // Runs after the main optimization loop to avoid interfering with SROA/copy propagation.
-    simplify_labeled_blocks(&mut project);
-
-    // Insert move optimization for all optimization levels (after inlining)
-    // This eliminates unnecessary copies for fresh values
-    insert_moves(&mut project);
-
-    // Collect value copy types for all functions
-    // This populates needed_copy_types for codegen to pre-allocate scratch locals
-    collect_value_copy_types(&mut project);
-
-    // Expand copy source types for all functions
-    // This creates the expanded set of types that need copy source locals,
-    // including nested types (e.g., Option<Variant> expands to include the Variant type)
-    expand_copy_source_types(&mut project);
+    // Post-optimization rewrites: simplify labeled blocks, insert moves,
+    // collect value copy types, and expand copy source types in a single pass.
+    optimize_rewrite::rewrite(&mut project);
 
     // Analyze scratch local requirements for all functions
     // This must run AFTER inlining since the function body may change.
@@ -175,22 +162,3 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
     }
 }
 
-/// Expand copy source types for all functions in the project.
-///
-/// This takes the `needed_copy_types` set (computed by `collect_value_copy_types`)
-/// and expands it to include all nested types that also need copy source locals.
-/// For example, `Option<Variant>` expands to include both Option and Variant types.
-fn expand_copy_source_types(project: &mut Project) {
-    use crate::copy_context::CopyContext;
-
-    for module in project.tir_modules.values() {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if !func.needed_copy_types.is_empty() {
-                func.copy_source_types =
-                    CopyContext::expand_copy_types(&func.needed_copy_types, &type_table);
-            }
-        }
-    }
-}

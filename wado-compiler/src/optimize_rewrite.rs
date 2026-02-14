@@ -21,7 +21,7 @@
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt,
+    FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
     TirStmtKind, TypeId, TypeTable,
 };
 use indexmap::IndexSet;
@@ -30,26 +30,45 @@ use indexmap::IndexSet;
 // Labeled Block Simplification
 // =============================================================================
 
-/// Simplify trivial labeled block expressions in all functions.
+/// Run all post-optimization TIR rewrites in a single pass over all functions.
 ///
-/// After inlining, patterns like `label: { break label: expr; }` are common.
-/// This rewrites them to just `expr`, eliminating the redundant block+break.
-pub fn simplify_labeled_blocks(project: &mut Project) -> bool {
-    let mut changed = false;
+/// For each function, this performs (in order):
+/// 1. Labeled block simplification (`L: { break L: expr; }` -> `expr`)
+/// 2. Move insertion (wrap fresh values in `Move` to avoid copies)
+/// 3. Value copy type collection (populate `needed_copy_types` for codegen)
+/// 4. Copy source type expansion (expand nested types for scratch locals)
+pub fn rewrite(project: &mut Project) {
+    use crate::copy_context::CopyContext;
+
     for module in project.tir_modules.values_mut() {
+        let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
-            changed |= simplify_labeled_blocks_in_function(&mut func);
+
+            // 1. Simplify trivial labeled blocks
+            if let Some(ref mut body) = func.body {
+                simplify_labeled_blocks_in_block(body);
+            }
+
+            // 2. Insert moves for fresh values
+            if let Some(ref mut body) = func.body {
+                insert_moves_in_block(body, &type_table);
+            }
+
+            // 3. Collect value copy types
+            let mut copy_types = IndexSet::new();
+            if let Some(ref body) = func.body {
+                collect_value_copy_types_in_block(body, &type_table, &mut copy_types);
+            }
+            func.needed_copy_types.extend(copy_types);
+
+            // 4. Expand copy source types
+            if !func.needed_copy_types.is_empty() {
+                func.copy_source_types =
+                    CopyContext::expand_copy_types(&func.needed_copy_types, &type_table);
+            }
         }
     }
-    changed
-}
-
-fn simplify_labeled_blocks_in_function(func: &mut TirFunction) -> bool {
-    let Some(body) = &mut func.body else {
-        return false;
-    };
-    simplify_labeled_blocks_in_block(body)
 }
 
 fn simplify_labeled_blocks_in_block(block: &mut TirBlock) -> bool {
@@ -660,19 +679,6 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
     }
 }
 
-/// Insert move optimization for all functions in the project.
-pub fn insert_moves(project: &mut Project) {
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(ref mut body) = func.body {
-                insert_moves_in_block(body, &type_table);
-            }
-        }
-    }
-}
-
 // =============================================================================
 // Value Copy Type Collection
 // =============================================================================
@@ -916,19 +922,3 @@ fn collect_value_copy_types_in_expr(
     }
 }
 
-/// Collect value copy types for all functions in the project.
-/// This populates `needed_copy_types` which codegen uses to pre-allocate scratch locals.
-pub fn collect_value_copy_types(project: &mut Project) {
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            // Collect into a temporary set first to avoid borrow conflicts
-            let mut copy_types = IndexSet::new();
-            if let Some(ref body) = func.body {
-                collect_value_copy_types_in_block(body, &type_table, &mut copy_types);
-            }
-            func.needed_copy_types.extend(copy_types);
-        }
-    }
-}
