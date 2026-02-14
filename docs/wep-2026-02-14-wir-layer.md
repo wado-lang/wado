@@ -46,9 +46,11 @@ WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with 
 
 1. **Named locals**: Variables are referenced by name, not pre-allocated indices. Locals can be declared inline (no pre-allocation pass needed).
 2. **Named types**: Struct, enum, and variant types retain their source-level names and field/case names.
-3. **Structured control flow**: Blocks, loops, if/else are tree nodes (not flat instruction sequences with labels).
-4. **Explicit value copy**: Copy operations are explicit WIR nodes rather than inline instruction sequences.
-5. **Unparse support**: WIR can be rendered as pseudo-Wado for inspection via `wado dump --wir --unparse`.
+3. **Wado-level primitive types**: WIR uses `Bool`, `Char`, `I8`, `U8`, `I16`, `U16`, etc. instead of Wasm's `i32`-for-everything. The emit phase lowers to Wasm `ValType`/`StorageType`. This avoids the `ValType`/`StorageType` split at the WIR level and provides better debug output.
+4. **Structured control flow**: Blocks, loops, if/else are tree nodes (not flat instruction sequences with labels).
+5. **Explicit value copy**: Copy operations are explicit WIR nodes rather than inline instruction sequences.
+6. **TIR metadata preserved**: Module source, source spans, attributes, generic instantiation info, and newtype origin are carried through for debugging and unparse. Newtypes are resolved (a `Meters` is `f64` at the WIR level), but their origin is recorded.
+7. **Unparse support**: WIR can be rendered as pseudo-Wado for inspection via `wado dump --wir --unparse`.
 
 ### What WIR Is Not
 
@@ -89,6 +91,38 @@ pub struct WirModule {
 }
 ```
 
+### Metadata
+
+WIR preserves TIR metadata for debugging and unparse output, even when not needed for code emission.
+
+```rust
+/// Source location and origin metadata, carried through from TIR.
+pub struct WirMeta {
+    /// Which module this entity was defined in
+    pub module_source: Option<ModuleSource>,
+    /// Source span in the original Wado source
+    pub span: Option<Span>,
+    /// Attributes (e.g., #[hidden])
+    pub attributes: Vec<WirAttribute>,
+}
+
+/// Generic instantiation origin (e.g., Array<i32> from Array<T>)
+pub struct WirGenericOrigin {
+    /// Base generic name (e.g., "Array", "Box")
+    pub base_name: String,
+    /// Type arguments used for instantiation (e.g., ["i32"])
+    pub type_args: Vec<String>,
+}
+
+/// Newtype origin — when a type was originally a newtype alias
+pub struct WirNewtypeOrigin {
+    /// Newtype name (e.g., "Meters")
+    pub name: String,
+    /// Module where the newtype was defined
+    pub module_source: ModuleSource,
+}
+```
+
 ### Type Definitions
 
 ```rust
@@ -111,52 +145,78 @@ pub struct WirStructType {
     pub supertype: Option<WirTypeRef>,
     /// Whether this is a final type (no further subtypes allowed)
     pub is_final: bool,
+    /// Metadata (module source, span, attributes)
+    pub meta: WirMeta,
+    /// Generic instantiation origin (None for non-generic types)
+    pub generic_origin: Option<WirGenericOrigin>,
+    /// If this type was a newtype in the source (resolved by WIR phase)
+    pub newtype_origin: Option<WirNewtypeOrigin>,
 }
 
 pub struct WirField {
     /// Source-level field name (e.g., "x", "repr", "tag")
     pub name: String,
-    /// Wasm storage type
-    pub storage_type: WirStorageType,
+    /// WIR type (uses Wado-level primitives, not Wasm ValType)
+    pub ty: WirType,
     /// Whether this field is mutable
     pub mutable: bool,
 }
 
 pub struct WirArrayType {
     pub name: String,
-    pub element_type: WirStorageType,
+    pub element_type: WirType,
     pub mutable: bool,
+    pub meta: WirMeta,
+    pub generic_origin: Option<WirGenericOrigin>,
 }
 
 pub struct WirFuncType {
     pub name: String,
-    pub params: Vec<WirValType>,
-    pub results: Vec<WirValType>,
+    pub params: Vec<WirType>,
+    pub results: Vec<WirType>,
 }
 
 /// Reference to a type by name (resolved to index during emission)
 pub struct WirTypeRef(pub String);
 ```
 
-### Value Types
+### WIR Type System
+
+WIR uses **Wado-level primitive types**, not Wasm's `ValType`/`StorageType` split. This preserves semantic information for debugging and simplifies the type representation. The emit phase lowers `WirType` to the appropriate Wasm `ValType` or `StorageType` depending on context (local vs. struct field).
 
 ```rust
-/// Wasm value type — mirrors wasm_encoder::ValType but with named type refs.
-pub enum WirValType {
+/// WIR type — Wado-level primitives + GC references.
+///
+/// Unlike Wasm's ValType (i32/i64/f32/f64 only), WIR preserves the full
+/// Wado type distinctions. The emit phase lowers these:
+///   - I8/I16/U8/U16/Bool/Char → i32 (locals) or i8/i16 (packed struct fields)
+///   - I32/U32 → i32
+///   - I64/U64 → i64
+///   - F32 → f32
+///   - F64 → f64
+pub enum WirType {
+    // Signed integers
+    I8,
+    I16,
     I32,
     I64,
+    // Unsigned integers
+    U8,
+    U16,
+    U32,
+    U64,
+    // Floats
     F32,
     F64,
+    // Other primitives
+    Bool,
+    Char,
+    // Unit (no Wasm representation; zero-size)
+    Unit,
     /// Reference to a named GC type
     Ref { type_name: String, nullable: bool },
     /// Abstract reference type (anyref, funcref, etc.)
     AbstractRef { heap_type: WirAbstractHeapType, nullable: bool },
-}
-
-pub enum WirStorageType {
-    Val(WirValType),
-    I8,
-    I16,
 }
 
 pub enum WirAbstractHeapType {
@@ -183,6 +243,12 @@ pub struct WirFunction {
     pub params: Vec<WirLocal>,
     /// Body (None for imported functions)
     pub body: Option<WirBody>,
+    /// Metadata (module source, span, attributes)
+    pub meta: WirMeta,
+    /// Generic instantiation origin
+    pub generic_origin: Option<WirGenericOrigin>,
+    /// Effect requirements (for unparse display)
+    pub effects: Vec<String>,
 }
 
 pub struct WirBody {
@@ -195,7 +261,7 @@ pub struct WirBody {
 
 pub struct WirLocal {
     pub name: String,
-    pub ty: WirValType,
+    pub ty: WirType,
 }
 ```
 
@@ -207,7 +273,7 @@ WIR instructions are tree-structured where operands are child nodes, not stack v
 pub enum WirInstr {
     // === Locals ===
     /// Declare a new local variable inline (not in Wasm; lowered to pre-allocated local)
-    DeclareLocal { name: String, ty: WirValType },
+    DeclareLocal { name: String, ty: WirType },
     /// local.get by name
     LocalGet { name: String },
     /// local.set by name
@@ -390,11 +456,11 @@ pub enum WirInstr {
 
     // === Control Flow ===
     /// Block with optional label and result type
-    Block { label: Option<String>, result: Option<WirValType>, body: Vec<WirInstr> },
+    Block { label: Option<String>, result: Option<WirType>, body: Vec<WirInstr> },
     /// Loop with optional label
     Loop { label: Option<String>, body: Vec<WirInstr> },
     /// If/else with optional result type
-    If { condition: Box<WirInstr>, result: Option<WirValType>, then_body: Vec<WirInstr>, else_body: Option<Vec<WirInstr>> },
+    If { condition: Box<WirInstr>, result: Option<WirType>, then_body: Vec<WirInstr>, else_body: Option<Vec<WirInstr>> },
     /// Branch to label
     Br { depth: u32 },
     /// Conditional branch
@@ -410,7 +476,7 @@ pub enum WirInstr {
     /// Drop a value
     Drop(Box<WirInstr>),
     /// Select between two values
-    Select { condition: Box<WirInstr>, if_true: Box<WirInstr>, if_false: Box<WirInstr>, ty: Option<WirValType> },
+    Select { condition: Box<WirInstr>, if_true: Box<WirInstr>, if_false: Box<WirInstr>, ty: Option<WirType> },
 
     // === Calls ===
     Call { func_name: String, args: Vec<WirInstr> },
@@ -499,19 +565,25 @@ pub struct WirFuncRef(pub String);
 WIR supports `--unparse` to output pseudo-Wado/WAT hybrid for debugging:
 
 ```
-// Type definitions
-type Point = struct { x: i32, y: i32 }
-type Array<i32> = struct { repr: array<i32>, used: i32 }
+// Type definitions with metadata
+type Point = struct { x: i32, y: i32 }  // from ./geometry.wado
+type Meters = f64  // newtype from ./physics.wado
+type Array<i32> = struct { repr: array<i32>, used: i32 }  // Array<T> with T=i32
 
-// Function
-fn "example"(a: i32, b: i32) -> i32 {
+// Function with module source and effects
+fn "example"(a: i32, b: i32) -> i32 {  // from <entry>
     let result: i32;
     result = i32.add(a, b);
     return result;
 }
 
+// Wado-level types in signatures (bool, char, u8 etc.)
+fn "is_ascii"(c: char) -> bool {  // from ./utils.wado
+    return i32.lt_u(c, 128);
+}
+
 // GC operations shown with type names
-fn "Point::sum"(self: ref Point) -> i32 {
+fn "Point::sum"(self: ref Point) -> i32 {  // from ./geometry.wado
     return i32.add(
         struct.get Point.x(self),
         struct.get Point.y(self),
@@ -628,6 +700,38 @@ Value copy involves complex dispatching (struct copy, array loop, variant tag ch
 - Preserves the semantic intent ("copy this value")
 - Allows the emitter to choose the most efficient lowering strategy
 - Keeps `tir_to_wir` focused on semantics, not emission details
+
+### Why Wado-Level Primitives (Not Wasm ValType)?
+
+Wasm has only 4 numeric types: `i32`, `i64`, `f32`, `f64`. Wado has `bool`, `char`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`. In the current codegen, all the small types and `bool`/`char` are collapsed to `i32` early, losing semantic information.
+
+WIR keeps the Wado types and lets the emit phase lower them:
+
+| WIR Type | As Wasm local (ValType) | As struct field (StorageType) |
+| -------- | ----------------------- | ----------------------------- |
+| Bool     | i32                     | i8                            |
+| Char     | i32                     | i32                           |
+| I8       | i32                     | i8                            |
+| U8       | i32                     | i8                            |
+| I16      | i32                     | i16                           |
+| U16      | i32                     | i16                           |
+| I32, U32 | i32                     | i32                           |
+| I64, U64 | i64                     | i64                           |
+| F32      | f32                     | f32                           |
+| F64      | f64                     | f64                           |
+
+This eliminates the `ValType`/`StorageType` split at the WIR level — there is just `WirType`. The emit phase knows the context (local vs. struct field) and picks the right Wasm encoding. It also makes unparse output more readable: `bool` instead of `i32`, `char` instead of `i32`.
+
+### Why Preserve TIR Metadata?
+
+WIR carries metadata (module source, spans, attributes, generic origin, newtype origin) even though the emit phase does not need most of it. This is intentional:
+
+- **Unparse**: `wado dump --wir --unparse` can show `// from ./geometry.wado` comments, display newtype origins, and annotate generic instantiations.
+- **Error messages**: If the emit phase detects a problem, it can report source locations.
+- **Debugging**: When investigating codegen issues, knowing where a type or function came from is critical.
+- **Newtypes**: Resolved by the WIR phase (a `Meters` field is `F64` in WIR), but `newtype_origin` records that it was `Meters` from `./physics.wado`. This avoids polluting the emit phase with newtype logic while keeping debug info.
+
+The metadata is lightweight (references and optional fields) and does not affect WIR→Wasm correctness.
 
 ### Why Not a Separate Optimization Pass on WIR?
 
