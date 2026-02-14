@@ -27,34 +27,24 @@ struct "Box<Array<i32>>" {
 
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3];
-    let boxed_arr: Box<Array<i32>> = __inline_Box_Array_i32____new_0: {
-        break __inline_Box_Array_i32____new_0: Box<Array<i32>> { value: arr };
-    };
-    let inner: Array<i32> = __inline_Box_Array_i32____get_1: {
-        break __inline_Box_Array_i32____get_1: boxed_arr.value;
-    };
+    let boxed_arr: Box<Array<i32>> = move Box<Array<i32>> { value: arr };
+    let inner: Array<i32> = boxed_arr.value;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(27), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
         __r.String::append(move "inner len: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_i32___len_5: {
-                break __inline_Array_i32___len_5: inner.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: inner.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_6: {
-            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(26), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "inner[0]: ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
@@ -67,28 +57,18 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let inner_box: Box<i32> = __inline_Box_i32___new_9: {
-        break __inline_Box_i32___new_9: Box<i32> { value: 42 };
-    };
-    let outer_box: Box<Box<i32>> = __inline_Box_Box_i32____new_10: {
-        break __inline_Box_Box_i32____new_10: Box<Box<i32>> { value: inner_box };
-    };
-    let unwrapped: Box<i32> = __inline_Box_Box_i32____get_11: {
-        break __inline_Box_Box_i32____get_11: outer_box.value;
-    };
+    let inner_box: Box<i32> = move Box<i32> { value: 42 };
+    let outer_box: Box<Box<i32>> = move Box<Box<i32>> { value: inner_box };
+    let unwrapped: Box<i32> = outer_box.value;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_12: {
-            break __inline_String__with_capacity_12: String { repr: "array_new<u8>"(33), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
         __r.String::append(move "unwrapped value: ");
         let mut __f: Formatter = __inline_Formatter__new_13: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_14: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Box_i32___get_15: {
-                break __inline_Box_i32___get_15: unwrapped.value;
-            } };
+            let self: Box<i32> = move Box<i32> { value: unwrapped.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

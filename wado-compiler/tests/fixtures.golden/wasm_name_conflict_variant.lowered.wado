@@ -10,48 +10,36 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let a: Status = __inline_make_active_0: {
-        break __inline_make_active_0: Status::Active;
-    };
+    let a: Status = move Status::Active;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_1: {
-            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(19), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(19), used: 0 };
         __r.String::append(move "a: ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: __inline_status_a_name_4: {
-                break __inline_status_a_name_4: match a {
-                    Active => 1,
-                    Inactive => 0,
-                };
+            let self: Box<i32> = move Box<i32> { value: match a {
+                Active => 1,
+                Inactive => 0,
             } };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let b: Status = __inline_make_ok_5: {
-        break __inline_make_ok_5: Status::Ok(99);
-    };
+    let b: Status = move Status::Ok(99);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_6: {
-            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(19), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(19), used: 0 };
         __r.String::append(move "b: ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_8: {
-            let self: Box<i32> = move Box<i32> { value: __inline_status_b_value_9: {
-                break __inline_status_b_value_9: match b {
-                    Ok(v) => v,
-                    Error => -1,
-                };
+            let self: Box<i32> = move Box<i32> { value: match b {
+                Ok(v) => v,
+                Error => -1,
             } };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

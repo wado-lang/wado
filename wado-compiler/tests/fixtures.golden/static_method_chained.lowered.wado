@@ -28,73 +28,51 @@ struct "Pair<i32,i64>" {
 }
 
 fn run() with Stdout {
-    let p: Pair<i32,i64> = __inline_Pair_i32_i64___create_0: {
-        break __inline_Pair_i32_i64___create_0: Pair<i32,i64> { first: 10, second: 20 };
-    };
+    let p: Pair<i32,i64> = move Pair<i32,i64> { first: 10, second: 20 };
     let boxed: Box<i32> = __inline_Box_i32___new_2: {
-        let value: i32 = __inline_Pair_i32_i64___get_first_1: {
-            break __inline_Pair_i32_i64___get_first_1: p.first;
-        };
+        let value: i32 = p.first;
         break __inline_Box_i32___new_2: Box<i32> { value: value };
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_3: {
-            break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(29), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
         __r.String::append(move "boxed first: ");
         let mut __f: Formatter = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_5: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Box_i32___get_6: {
-                break __inline_Box_i32___get_6: boxed.value;
-            } };
+            let self: Box<i32> = move Box<i32> { value: boxed.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let pair: Pair<i32,i32> = __inline_Pair_i32_i32___create_7: {
-        break __inline_Pair_i32_i32___create_7: Pair<i32,i32> { first: 100, second: 200 };
-    };
-    let boxed_pair: Box<Pair<i32,i32>> = __inline_Box_Pair_i32_i32____new_8: {
-        break __inline_Box_Pair_i32_i32____new_8: Box<Pair<i32,i32>> { value: pair };
-    };
-    let inner_pair: Pair<i32,i32> = __inline_Box_Pair_i32_i32____get_9: {
-        break __inline_Box_Pair_i32_i32____get_9: boxed_pair.value;
-    };
+    let pair: Pair<i32,i32> = move Pair<i32,i32> { first: 100, second: 200 };
+    let boxed_pair: Box<Pair<i32,i32>> = move Box<Pair<i32,i32>> { value: pair };
+    let inner_pair: Pair<i32,i32> = boxed_pair.value;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_10: {
-            break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(29), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
         __r.String::append(move "inner first: ");
         let mut __f: Formatter = __inline_Formatter__new_11: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_12: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Pair_i32_i32___get_first_13: {
-                break __inline_Pair_i32_i32___get_first_13: inner_pair.first;
-            } };
+            let self: Box<i32> = move Box<i32> { value: inner_pair.first };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_14: {
-            break __inline_String__with_capacity_14: String { repr: "array_new<u8>"(30), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "inner second: ");
         let mut __f: Formatter = __inline_Formatter__new_15: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_16: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Pair_i32_i32___get_second_17: {
-                break __inline_Pair_i32_i32___get_second_17: inner_pair.second;
-            } };
+            let self: Box<i32> = move Box<i32> { value: inner_pair.second };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -103,9 +81,7 @@ fn run() with Stdout {
     let val: i32 = __inline_Box_i32___get_18: {
         let self: &Box<i32> = &__inline_Box_i32___new_21: {
             let value: i32 = __inline_Pair_i32_i32___get_second_20: {
-                let self: &Pair<i32,i32> = &__inline_Pair_i32_i32___create_19: {
-                    break __inline_Pair_i32_i32___create_19: Pair<i32,i32> { first: 5, second: 10 };
-                };
+                let self: &Pair<i32,i32> = &Pair<i32,i32> { first: 5, second: 10 };
                 break __inline_Pair_i32_i32___get_second_20: self.second;
             };
             break __inline_Box_i32___new_21: Box<i32> { value: value };
@@ -113,9 +89,7 @@ fn run() with Stdout {
         break __inline_Box_i32___get_18: self.value;
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_22: {
-            break __inline_String__with_capacity_22: String { repr: "array_new<u8>"(32), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(32), used: 0 };
         __r.String::append(move "chained result: ");
         let mut __f: Formatter = __inline_Formatter__new_23: {
             let buf: &mut String = &mut __r;

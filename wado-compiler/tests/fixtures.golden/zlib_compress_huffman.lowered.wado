@@ -14,20 +14,14 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
-    if (__inline_Array_u8___len_0: {
-        break __inline_Array_u8___len_0: a.used;
-    } != __inline_Array_u8___len_1: {
-        break __inline_Array_u8___len_1: b.used;
-    }) {
+    if (a.used != b.used) {
         return false;
     }
     __for_0: {
         let mut i: i32 = 0;
         let _licm_used: i32 = a.used;
         loop {
-            if !(i < __inline_Array_u8___len_2: {
-                break __inline_Array_u8___len_2: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             __for_0_body: {
@@ -52,18 +46,14 @@ fn run() with Stdout {
         };
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(60), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(60), used: 0 };
         __r.String::append(move "compressed Hello: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_u8___len_5: {
-                break __inline_Array_u8___len_5: data.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: data.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -73,9 +63,7 @@ fn run() with Stdout {
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_7: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_u8___len_8: {
-                break __inline_Array_u8___len_8: comp_hello.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: comp_hello.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -87,9 +75,7 @@ fn run() with Stdout {
         let __v0: bool = bytes_equal(&data, &decomp_hello);
         if !__v0 {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_9: {
-                    break __inline_String__with_capacity_9: String { repr: "array_new<u8>"(189), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(189), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -138,15 +124,11 @@ fn run() with Stdout {
     };
     let decomp_empty: Array<u8> = move core::zlib::inflate_zlib(&comp_empty);
     __assert_1: {
-        let __v0: i32 = __inline_Array_u8___len_16: {
-            break __inline_Array_u8___len_16: decomp_empty.used;
-        };
+        let __v0: i32 = decomp_empty.used;
         let __cond: bool = (__v0 == 0);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_17: {
-                    break __inline_String__with_capacity_17: String { repr: "array_new<u8>"(164), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(164), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -202,18 +184,14 @@ fn run() with Stdout {
         };
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_24: {
-            break __inline_String__with_capacity_24: String { repr: "array_new<u8>"(61), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(61), used: 0 };
         __r.String::append(move "compressed 1000xA: ");
         let mut __f: Formatter = __inline_Formatter__new_25: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_26: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_u8___len_27: {
-                break __inline_Array_u8___len_27: rep_data.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: rep_data.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -223,9 +201,7 @@ fn run() with Stdout {
             break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_29: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_u8___len_30: {
-                break __inline_Array_u8___len_30: comp_rep.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: comp_rep.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -233,18 +209,12 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     __assert_2: {
-        let __v0: i32 = __inline_Array_u8___len_31: {
-            break __inline_Array_u8___len_31: comp_rep.used;
-        };
-        let __v1: i32 = __inline_Array_u8___len_32: {
-            break __inline_Array_u8___len_32: rep_data.used;
-        };
+        let __v0: i32 = comp_rep.used;
+        let __v1: i32 = rep_data.used;
         let __cond: bool = (__v0 < __v1);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_33: {
-                    break __inline_String__with_capacity_33: String { repr: "array_new<u8>"(201), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(201), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -293,9 +263,7 @@ fn run() with Stdout {
         let __v0: bool = bytes_equal(&rep_data, &decomp_rep);
         if !__v0 {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_40: {
-                    break __inline_String__with_capacity_40: String { repr: "array_new<u8>"(193), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(193), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -355,18 +323,14 @@ fn run() with Stdout {
         };
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_47: {
-            break __inline_String__with_capacity_47: String { repr: "array_new<u8>"(64), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(64), used: 0 };
         __r.String::append(move "compressed mixed 500: ");
         let mut __f: Formatter = __inline_Formatter__new_48: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_48: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_49: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_u8___len_50: {
-                break __inline_Array_u8___len_50: mixed_data.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: mixed_data.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -376,9 +340,7 @@ fn run() with Stdout {
             break __inline_Formatter__new_51: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_52: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_u8___len_53: {
-                break __inline_Array_u8___len_53: comp_mixed.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: comp_mixed.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -390,9 +352,7 @@ fn run() with Stdout {
         let __v0: bool = bytes_equal(&mixed_data, &decomp_mixed);
         if !__v0 {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_54: {
-                    break __inline_String__with_capacity_54: String { repr: "array_new<u8>"(201), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(201), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -464,18 +424,14 @@ fn run() with Stdout {
         };
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_61: {
-            break __inline_String__with_capacity_61: String { repr: "array_new<u8>"(61), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(61), used: 0 };
         __r.String::append(move "compressed HW x20: ");
         let mut __f: Formatter = __inline_Formatter__new_62: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_62: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_63: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_u8___len_64: {
-                break __inline_Array_u8___len_64: hw_data.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: hw_data.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -485,9 +441,7 @@ fn run() with Stdout {
             break __inline_Formatter__new_65: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_66: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_u8___len_67: {
-                break __inline_Array_u8___len_67: comp_hw.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: comp_hw.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -495,18 +449,12 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     __assert_5: {
-        let __v0: i32 = __inline_Array_u8___len_68: {
-            break __inline_Array_u8___len_68: comp_hw.used;
-        };
-        let __v1: i32 = __inline_Array_u8___len_69: {
-            break __inline_Array_u8___len_69: hw_data.used;
-        };
+        let __v0: i32 = comp_hw.used;
+        let __v1: i32 = hw_data.used;
         let __cond: bool = (__v0 < __v1);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_70: {
-                    break __inline_String__with_capacity_70: String { repr: "array_new<u8>"(197), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(197), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -555,9 +503,7 @@ fn run() with Stdout {
         let __v0: bool = bytes_equal(&hw_data, &decomp_hw);
         if !__v0 {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_77: {
-                    break __inline_String__with_capacity_77: String { repr: "array_new<u8>"(189), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(189), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");

@@ -24,9 +24,7 @@ fn run() with Stdout {
     let idx: i32 = c."Container<String,i32>::find_key_index"(&"cherry");
     let full: bool = c."Container<String,i32>::is_full"(5);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(47), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(47), used: 0 };
         __r.String::append(move "index: ");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
@@ -63,9 +61,7 @@ fn "Container<String,i32>::is_full"(self: &Container<String,i32>, max_keys: i32)
         let _licm_deleted: Array<bool> = self.deleted;
         let _licm_used: i32 = _licm_keys.used;
         loop {
-            if !(i < __inline_Array_String___len_0: {
-                break __inline_Array_String___len_0: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             __for_0_body: {
@@ -91,9 +87,7 @@ fn "Container<String,i32>::find_key_index"(self: &Container<String,i32>, key: &S
     let _licm_keys: Array<String> = self.keys;
     let _licm_used: i32 = _licm_keys.used;
     loop {
-        if !((i < __inline_Array_String___len_0: {
-            break __inline_Array_String___len_0: _licm_used;
-        }) && (_licm_keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
+        if !((i < _licm_used) && (_licm_keys."Array<String>^IndexValue::index_value"(i)."String^Ord::cmp"(&*key) == Ordering::Less)) {
             break;
         }
         i = (i + 1);

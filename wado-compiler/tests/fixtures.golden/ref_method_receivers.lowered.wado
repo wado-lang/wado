@@ -14,22 +14,16 @@ struct Counter {
 }
 
 fn run() with Stdout {
-    let mut c: Counter = __inline_Counter__new_0: {
-        break __inline_Counter__new_0: Counter { value: 0 };
-    };
+    let mut c: Counter = move Counter { value: 0 };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_1: {
-            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(21), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
         __r.String::append(move "get: ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Counter__get_4: {
-                break __inline_Counter__get_4: c.value;
-            } };
+            let self: Box<i32> = move Box<i32> { value: c.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -45,18 +39,14 @@ fn run() with Stdout {
         c.value = (c.value + 1);
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_8: {
-            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(33), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
         __r.String::append(move "after increment: ");
         let mut __f: Formatter = __inline_Formatter__new_9: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_10: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Counter__get_11: {
-                break __inline_Counter__get_11: c.value;
-            } };
+            let self: Box<i32> = move Box<i32> { value: c.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -67,9 +57,7 @@ fn run() with Stdout {
         break __inline_Counter__into_value_12: self.value;
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_13: {
-            break __inline_String__with_capacity_13: String { repr: "array_new<u8>"(28), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(28), used: 0 };
         __r.String::append(move "into_value: ");
         let mut __f: Formatter = __inline_Formatter__new_14: {
             let buf: &mut String = &mut __r;
@@ -83,18 +71,14 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_16: {
-            break __inline_String__with_capacity_16: String { repr: "array_new<u8>"(30), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "still usable: ");
         let mut __f: Formatter = __inline_Formatter__new_17: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_18: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Counter__get_19: {
-                break __inline_Counter__get_19: c.value;
-            } };
+            let self: Box<i32> = move Box<i32> { value: c.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

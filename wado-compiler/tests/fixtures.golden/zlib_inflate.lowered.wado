@@ -14,20 +14,14 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
-    if (__inline_Array_u8___len_0: {
-        break __inline_Array_u8___len_0: a.used;
-    } != __inline_Array_u8___len_1: {
-        break __inline_Array_u8___len_1: b.used;
-    }) {
+    if (a.used != b.used) {
         return false;
     }
     __for_0: {
         let mut i: i32 = 0;
         let _licm_used: i32 = a.used;
         loop {
-            if !(i < __inline_Array_u8___len_2: {
-                break __inline_Array_u8___len_2: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             __for_0_body: {
@@ -49,9 +43,7 @@ fn run() with Stdout {
         let __v0: bool = bytes_equal(&expected_hello, &result);
         if !__v0 {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_0: {
-                    break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(197), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(197), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -92,15 +84,11 @@ fn run() with Stdout {
     let zlib_1000a: Array<u8> = move [120, 156, 115, 116, 28, 5, 163, 96, 20, 12, 119, 0, 0, 137, 12, 253, 233];
     let result_1000a: Array<u8> = move core::zlib::inflate_zlib(&zlib_1000a);
     __assert_1: {
-        let __v0: i32 = __inline_Array_u8___len_5: {
-            break __inline_Array_u8___len_5: result_1000a.used;
-        };
+        let __v0: i32 = result_1000a.used;
         let __cond: bool = (__v0 == 1000);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_6: {
-                    break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(167), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(167), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -152,9 +140,7 @@ fn run() with Stdout {
     __assert_2: {
         if !all_a {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_11: {
-                    break __inline_String__with_capacity_11: String { repr: "array_new<u8>"(133), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(133), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -195,15 +181,11 @@ fn run() with Stdout {
     let zlib_hw20: Array<u8> = move [120, 156, 243, 72, 205, 201, 201, 215, 81, 8, 207, 47, 202, 73, 81, 84, 240, 24, 229, 65, 121, 0, 245, 131, 90, 181];
     let result_hw20: Array<u8> = move core::zlib::inflate_zlib(&zlib_hw20);
     __assert_3: {
-        let __v0: i32 = __inline_Array_u8___len_16: {
-            break __inline_Array_u8___len_16: result_hw20.used;
-        };
+        let __v0: i32 = result_hw20.used;
         let __cond: bool = (__v0 == 280);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_17: {
-                    break __inline_String__with_capacity_17: String { repr: "array_new<u8>"(164), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(164), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -250,9 +232,7 @@ fn run() with Stdout {
                     let __cond: bool = (__v0 == __v1);
                     if !__cond {
                         core::internal::panic(__tmpl: {
-                            let mut __r: String = __inline_String__with_capacity_22: {
-                                break __inline_String__with_capacity_22: String { repr: "array_new<u8>"(202), used: 0 };
-                            };
+                            let mut __r: String = move String { repr: "array_new<u8>"(202), used: 0 };
                             __r.String::append(move "Assertion failed in ");
                             __r.String::append(move "run");
                             __r.String::append(move " at ");
@@ -304,15 +284,11 @@ fn run() with Stdout {
     let zlib_256: Array<u8> = move [120, 156, 1, 0, 1, 255, 254, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 173, 246, 127, 129];
     let result_256: Array<u8> = move core::zlib::inflate_zlib(&zlib_256);
     __assert_5: {
-        let __v0: i32 = __inline_Array_u8___len_29: {
-            break __inline_Array_u8___len_29: result_256.used;
-        };
+        let __v0: i32 = result_256.used;
         let __cond: bool = (__v0 == 256);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_30: {
-                    break __inline_String__with_capacity_30: String { repr: "array_new<u8>"(162), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(162), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -357,9 +333,7 @@ fn run() with Stdout {
                     let __cond: bool = (__v0 == i as u8);
                     if !__cond {
                         core::internal::panic(__tmpl: {
-                            let mut __r: String = __inline_String__with_capacity_35: {
-                                break __inline_String__with_capacity_35: String { repr: "array_new<u8>"(160), used: 0 };
-                            };
+                            let mut __r: String = move String { repr: "array_new<u8>"(160), used: 0 };
                             __r.String::append(move "Assertion failed in ");
                             __r.String::append(move "run");
                             __r.String::append(move " at ");
@@ -400,15 +374,11 @@ fn run() with Stdout {
     let zlib_empty: Array<u8> = move [120, 156, 3, 0, 0, 0, 0, 1];
     let result_empty: Array<u8> = move core::zlib::inflate_zlib(&zlib_empty);
     __assert_7: {
-        let __v0: i32 = __inline_Array_u8___len_40: {
-            break __inline_Array_u8___len_40: result_empty.used;
-        };
+        let __v0: i32 = result_empty.used;
         let __cond: bool = (__v0 == 0);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_41: {
-                    break __inline_String__with_capacity_41: String { repr: "array_new<u8>"(164), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(164), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");

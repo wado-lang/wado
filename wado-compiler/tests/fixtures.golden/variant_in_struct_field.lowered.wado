@@ -15,9 +15,7 @@ struct ParseResult {
 }
 
 fn run() with Stdout {
-    let result: ParseResult = __inline_parse_0: {
-        break __inline_parse_0: ParseResult { ok: true, value: JsonValue::Number(42) };
-    };
+    let result: ParseResult = move ParseResult { ok: true, value: JsonValue::Number(42) };
     core::cli::println(move "variant in struct field works");
 }
 

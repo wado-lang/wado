@@ -14,17 +14,11 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    let a: u128 = __inline_u128__from_u64_0: {
-        break __inline_u128__from_u64_0: u128 { low: 65280, high: 0 };
-    };
-    let b: u128 = __inline_u128__from_u64_1: {
-        break __inline_u128__from_u64_1: u128 { low: 4080, high: 0 };
-    };
+    let a: u128 = move u128 { low: 65280, high: 0 };
+    let b: u128 = move u128 { low: 4080, high: 0 };
     let and_result: u128 = move a."u128^BitAnd::bitand"(&b);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(26), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "u128 AND: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
@@ -41,9 +35,7 @@ fn run() with Stdout {
     });
     let or_result: u128 = move a."u128^BitOr::bitor"(&b);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_6: {
-            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(25), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
         __r.String::append(move "u128 OR: ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
@@ -60,9 +52,7 @@ fn run() with Stdout {
     });
     let xor_result: u128 = move a."u128^BitXor::bitxor"(&b);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_10: {
-            break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(26), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "u128 XOR: ");
         let mut __f: Formatter = __inline_Formatter__new_11: {
             let buf: &mut String = &mut __r;
@@ -78,13 +68,9 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     let not_a: u128 = move a."u128^BitNot::bitnot"();
-    let not_masked: u128 = move not_a."u128^BitAnd::bitand"(&__inline_u128__from_u64_14: {
-        break __inline_u128__from_u64_14: u128 { low: 65535, high: 0 };
-    });
+    let not_masked: u128 = move not_a."u128^BitAnd::bitand"(&u128 { low: 65535, high: 0 });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_15: {
-            break __inline_String__with_capacity_15: String { repr: "array_new<u8>"(33), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
         __r.String::append(move "u128 NOT masked: ");
         let mut __f: Formatter = __inline_Formatter__new_16: {
             let buf: &mut String = &mut __r;
@@ -99,13 +85,9 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let shl_result: u128 = move __inline_u128__from_u64_19: {
-        break __inline_u128__from_u64_19: u128 { low: 1, high: 0 };
-    }."u128^Shl::shl"(4);
+    let shl_result: u128 = move u128 { low: 1, high: 0 }."u128^Shl::shl"(4);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_20: {
-            break __inline_String__with_capacity_20: String { repr: "array_new<u8>"(26), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "u128 SHL: ");
         let mut __f: Formatter = __inline_Formatter__new_21: {
             let buf: &mut String = &mut __r;
@@ -120,13 +102,9 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let shr_result: u128 = move __inline_u128__from_u64_24: {
-        break __inline_u128__from_u64_24: u128 { low: 256, high: 0 };
-    }."u128^Shr::shr"(4);
+    let shr_result: u128 = move u128 { low: 256, high: 0 }."u128^Shr::shr"(4);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_25: {
-            break __inline_String__with_capacity_25: String { repr: "array_new<u8>"(26), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "u128 SHR: ");
         let mut __f: Formatter = __inline_Formatter__new_26: {
             let buf: &mut String = &mut __r;
@@ -145,9 +123,7 @@ fn run() with Stdout {
     let y: i128 = move i128::from_i64(4080);
     let i_and: i128 = move x."i128^BitAnd::bitand"(&y);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_29: {
-            break __inline_String__with_capacity_29: String { repr: "array_new<u8>"(26), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "i128 AND: ");
         let mut __f: Formatter = __inline_Formatter__new_30: {
             let buf: &mut String = &mut __r;
@@ -164,9 +140,7 @@ fn run() with Stdout {
     });
     let i_shl: i128 = move i128::from_i64(1)."i128^Shl::shl"(8);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_33: {
-            break __inline_String__with_capacity_33: String { repr: "array_new<u8>"(26), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "i128 SHL: ");
         let mut __f: Formatter = __inline_Formatter__new_34: {
             let buf: &mut String = &mut __r;
@@ -184,9 +158,7 @@ fn run() with Stdout {
     let neg: i128 = move i128::from_i64(-256);
     let neg_shr: i128 = move neg."i128^Shr::shr"(4);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_37: {
-            break __inline_String__with_capacity_37: String { repr: "array_new<u8>"(35), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(35), used: 0 };
         __r.String::append(move "i128 SHR negative: ");
         let mut __f: Formatter = __inline_Formatter__new_38: {
             let buf: &mut String = &mut __r;

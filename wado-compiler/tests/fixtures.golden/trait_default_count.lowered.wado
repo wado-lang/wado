@@ -17,17 +17,11 @@ pub struct "ArrayIter<i32>" {
 
 fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5];
-    let mut iter: ArrayIter<i32> = __inline_Array_i32___iter_0: {
-        break __inline_Array_i32___iter_0: __inline_Array_i32__IntoIterator__into_iter_1: {
-            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
-        };
-    };
+    let mut iter: ArrayIter<i32> = move ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
     iter."ArrayIter<i32>^Iterator::next"();
     let remaining: i32 = iter."ArrayIter<i32>^Iterator::count"();
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(16), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };

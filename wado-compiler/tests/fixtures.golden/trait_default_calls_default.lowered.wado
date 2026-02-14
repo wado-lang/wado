@@ -15,13 +15,9 @@ struct Item {
 
 pub fn "Item^Describable::short_desc"(self: &Item) -> String {
     return __tmpl: {
-        let mut __r: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(18), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(18), used: 0 };
         __r.String::append(move "[");
-        __r.String::append(__inline_Item_Describable__label_1: {
-            break __inline_Item_Describable__label_1: self.name;
-        });
+        __r.String::append(self.name);
         __r.String::append(move "]");
         break __tmpl: __r;
     };
@@ -29,16 +25,12 @@ pub fn "Item^Describable::short_desc"(self: &Item) -> String {
 
 fn run() with Stdout {
     let item: Item = move Item { name: "Widget" };
-    core::cli::println(__inline_Item_Describable__label_0: {
-        break __inline_Item_Describable__label_0: item.name;
-    });
+    core::cli::println(item.name);
     core::cli::println(move item."Item^Describable::short_desc"());
     core::cli::println(__inline_Item_Describable__full_desc_0: {
         let self: &Item = &item;
         break __inline_Item_Describable__full_desc_0: __tmpl: {
-            let mut __r: String = __inline_String__with_capacity_0: {
-                break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(29), used: 0 };
-            };
+            let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
             __r.String::append(move "Description: ");
             __r.String::append(move self."Item^Describable::short_desc"());
             break __tmpl: __r;

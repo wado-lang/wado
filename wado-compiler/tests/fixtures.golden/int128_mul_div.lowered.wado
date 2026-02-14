@@ -14,17 +14,11 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    let a: u128 = __inline_u128__from_u64_0: {
-        break __inline_u128__from_u64_0: u128 { low: 100, high: 0 };
-    };
-    let b: u128 = __inline_u128__from_u64_1: {
-        break __inline_u128__from_u64_1: u128 { low: 200, high: 0 };
-    };
+    let a: u128 = move u128 { low: 100, high: 0 };
+    let b: u128 = move u128 { low: 200, high: 0 };
     let mul_result: u128 = move a."u128^Mul::mul"(&b);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(33), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
         __r.String::append(move "u128 100 * 200 = ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
@@ -39,17 +33,11 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let c: u128 = __inline_u128__from_u64_6: {
-        break __inline_u128__from_u64_6: u128 { low: 1000000, high: 0 };
-    };
-    let d: u128 = __inline_u128__from_u64_7: {
-        break __inline_u128__from_u64_7: u128 { low: 1000000, high: 0 };
-    };
+    let c: u128 = move u128 { low: 1000000, high: 0 };
+    let d: u128 = move u128 { low: 1000000, high: 0 };
     let large_mul: u128 = move c."u128^Mul::mul"(&d);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_8: {
-            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(31), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(31), used: 0 };
         __r.String::append(move "u128 1M * 1M = ");
         let mut __f: Formatter = __inline_Formatter__new_9: {
             let buf: &mut String = &mut __r;
@@ -66,9 +54,7 @@ fn run() with Stdout {
     });
     let div_result: u128 = move mul_result."u128^Div::div"(&a);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_12: {
-            break __inline_String__with_capacity_12: String { repr: "array_new<u8>"(35), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(35), used: 0 };
         __r.String::append(move "u128 20000 / 100 = ");
         let mut __f: Formatter = __inline_Formatter__new_13: {
             let buf: &mut String = &mut __r;
@@ -83,17 +69,11 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let e: u128 = __inline_u128__from_u64_16: {
-        break __inline_u128__from_u64_16: u128 { low: 17, high: 0 };
-    };
-    let f: u128 = __inline_u128__from_u64_17: {
-        break __inline_u128__from_u64_17: u128 { low: 5, high: 0 };
-    };
+    let e: u128 = move u128 { low: 17, high: 0 };
+    let f: u128 = move u128 { low: 5, high: 0 };
     let rem_result: u128 = move e."u128^Rem::rem"(&f);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_18: {
-            break __inline_String__with_capacity_18: String { repr: "array_new<u8>"(30), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "u128 17 % 5 = ");
         let mut __f: Formatter = __inline_Formatter__new_19: {
             let buf: &mut String = &mut __r;
@@ -112,9 +92,7 @@ fn run() with Stdout {
     let y: i128 = move i128::from_i64(-20);
     let i_mul: i128 = move x."i128^Mul::mul"(&y);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_22: {
-            break __inline_String__with_capacity_22: String { repr: "array_new<u8>"(35), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(35), used: 0 };
         __r.String::append(move "i128 100 * (-20) = ");
         let mut __f: Formatter = __inline_Formatter__new_23: {
             let buf: &mut String = &mut __r;
@@ -131,9 +109,7 @@ fn run() with Stdout {
     });
     let i_div: i128 = move i_mul."i128^Div::div"(&x);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_26: {
-            break __inline_String__with_capacity_26: String { repr: "array_new<u8>"(37), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(37), used: 0 };
         __r.String::append(move "i128 (-2000) / 100 = ");
         let mut __f: Formatter = __inline_Formatter__new_27: {
             let buf: &mut String = &mut __r;
@@ -152,9 +128,7 @@ fn run() with Stdout {
     let pos5: i128 = move i128::from_i64(5);
     let i_rem: i128 = move neg17."i128^Rem::rem"(&pos5);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_30: {
-            break __inline_String__with_capacity_30: String { repr: "array_new<u8>"(33), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
         __r.String::append(move "i128 (-17) % 5 = ");
         let mut __f: Formatter = __inline_Formatter__new_31: {
             let buf: &mut String = &mut __r;

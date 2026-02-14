@@ -14,13 +14,9 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout {
-    let a: Array<i32> = __inline_get_numbers_0: {
-        break __inline_get_numbers_0: [1, 2, 3];
-    };
+    let a: Array<i32> = move [1, 2, 3];
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_1: {
-            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(52), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(52), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };

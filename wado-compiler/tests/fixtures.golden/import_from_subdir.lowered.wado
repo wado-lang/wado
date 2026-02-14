@@ -10,16 +10,10 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let x: i32 = __inline_get_magic_0: {
-        break __inline_get_magic_0: 42;
-    };
-    let y: i32 = __inline_double_1: {
-        break __inline_double_1: (x * 2);
-    };
+    let x: i32 = 42;
+    let y: i32 = (x * 2);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(50), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(50), used: 0 };
         __r.String::append(move "magic: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;

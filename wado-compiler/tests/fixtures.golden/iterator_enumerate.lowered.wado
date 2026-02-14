@@ -25,11 +25,7 @@ pub struct "ArrayIter<String>" {
 fn run() with Stdout {
     let arr: Array<String> = move ["a", "b", "c"];
     let mut iter: EnumerateIter<String> = __inline_ArrayIter_String___enumerate_0: {
-        let self: &ArrayIter<String> = &__inline_Array_String___iter_1: {
-            break __inline_Array_String___iter_1: __inline_Array_String__IntoIterator__into_iter_0: {
-                break __inline_Array_String__IntoIterator__into_iter_0: ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
-            };
-        };
+        let self: &ArrayIter<String> = &ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
         break __inline_ArrayIter_String___enumerate_0: EnumerateIter<String> { repr: self.repr, used: self.used, index: self.index, count: 0 };
     };
     loop {
@@ -39,9 +35,7 @@ fn run() with Stdout {
             let idx: i32 = pair.0;
             let val: String = pair.1;
             core::cli::println(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_2: {
-                    break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(34), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
                 let mut __f: Formatter = __inline_Formatter__new_3: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };

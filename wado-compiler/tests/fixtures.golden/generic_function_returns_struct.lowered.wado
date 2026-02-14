@@ -18,16 +18,10 @@ struct "Box<i32>" {
 }
 
 fn run() with Stdout {
-    let b1: Box<i32> = __inline_make_box_i32_0: {
-        break __inline_make_box_i32_0: Box<i32> { value: 42 };
-    };
-    let b2: Box<i64> = __inline_make_box_i64_1: {
-        break __inline_make_box_i64_1: Box<i64> { value: 100 };
-    };
+    let b1: Box<i32> = move Box<i32> { value: 42 };
+    let b2: Box<i64> = move Box<i64> { value: 100 };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(20), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(20), used: 0 };
         __r.String::append(move "b1: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
@@ -41,9 +35,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_5: {
-            break __inline_String__with_capacity_5: String { repr: "array_new<u8>"(20), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(20), used: 0 };
         __r.String::append(move "b2: ");
         let mut __f: Formatter = __inline_Formatter__new_6: {
             let buf: &mut String = &mut __r;

@@ -10,16 +10,10 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout {
-    let ca: ContainerA = __inline_ContainerA__make_0: {
-        break __inline_ContainerA__make_0: ContainerA { config: Config { value: 42 } };
-    };
-    let cfg_a: Config = __inline_ContainerA__get_config_1: {
-        break __inline_ContainerA__get_config_1: ca.config;
-    };
+    let ca: ContainerA = move ContainerA { config: Config { value: 42 } };
+    let cfg_a: Config = ca.config;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(19), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(19), used: 0 };
         __r.String::append(move "a: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
@@ -36,13 +30,9 @@ fn run() with Stdout {
         let n: String = move "hello";
         break __inline_ContainerB__make_5: ContainerB { config: Config { name: n, count: 7 } };
     };
-    let cfg_b: Config = __inline_ContainerB__get_config_6: {
-        break __inline_ContainerB__get_config_6: cb.config;
-    };
+    let cfg_b: Config = cb.config;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_7: {
-            break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(36), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(36), used: 0 };
         __r.String::append(move "b: ");
         __r.String::append(cfg_b.name);
         __r.String::append(move " ");

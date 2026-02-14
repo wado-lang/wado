@@ -15,18 +15,14 @@
 
 fn run() with Stdout {
     let result: i32 = outer: {
-        let x: i32 = inner: {
-            break inner: 10;
-        };
+        let x: i32 = 10;
         break outer: (x * 2);
     };
     __assert_0: {
         let __cond: bool = (result == 20);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_0: {
-                    break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(123), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(123), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");

@@ -20,26 +20,14 @@ struct "Container<String>" {
 
 fn run() with Stdout {
     let c: Container<String> = move Container<String> { items: ["apple", "banana", "cherry"], markers: [true, false, true] };
-    let item0: String = __inline_Container_String___get_item_0: {
-        break __inline_Container_String___get_item_0: c.items."Array<String>^IndexValue::index_value"(0);
-    };
-    let item1: String = __inline_Container_String___get_item_1: {
-        break __inline_Container_String___get_item_1: c.items."Array<String>^IndexValue::index_value"(1);
-    };
-    let item2: String = __inline_Container_String___get_item_2: {
-        break __inline_Container_String___get_item_2: c.items."Array<String>^IndexValue::index_value"(2);
-    };
-    let flag0: bool = __inline_Container_String___is_flagged_3: {
-        break __inline_Container_String___is_flagged_3: c.markers."Array<bool>^IndexValue::index_value"(0);
-    };
-    let flag1: bool = __inline_Container_String___is_flagged_4: {
-        break __inline_Container_String___is_flagged_4: c.markers."Array<bool>^IndexValue::index_value"(1);
-    };
+    let item0: String = move c.items."Array<String>^IndexValue::index_value"(0);
+    let item1: String = move c.items."Array<String>^IndexValue::index_value"(1);
+    let item2: String = move c.items."Array<String>^IndexValue::index_value"(2);
+    let flag0: bool = c.markers."Array<bool>^IndexValue::index_value"(0);
+    let flag1: bool = c.markers."Array<bool>^IndexValue::index_value"(1);
     let count: i32 = c."Container<String>::count_flagged"();
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_5: {
-            break __inline_String__with_capacity_5: String { repr: "array_new<u8>"(59), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(59), used: 0 };
         __r.String::append(move "items: ");
         __r.String::append(item0);
         __r.String::append(move ", ");
@@ -49,9 +37,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_6: {
-            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(41), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(41), used: 0 };
         __r.String::append(move "flags: ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
@@ -83,9 +69,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_11: {
-            break __inline_String__with_capacity_11: String { repr: "array_new<u8>"(23), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "count: ");
         let mut __f: Formatter = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
@@ -107,9 +91,7 @@ fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
         let _licm_markers: Array<bool> = self.markers;
         let _licm_used: i32 = _licm_markers.used;
         loop {
-            if !(i < __inline_Array_bool___len_0: {
-                break __inline_Array_bool___len_0: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             __for_0_body: {
