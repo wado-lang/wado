@@ -107,8 +107,6 @@ pub mod unparse;
 pub mod wasm_builder;
 pub mod wasm_plan;
 pub mod wasm_postprocess;
-pub mod wir;
-pub mod wir_emit;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
