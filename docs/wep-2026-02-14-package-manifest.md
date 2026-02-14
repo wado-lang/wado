@@ -1,4 +1,4 @@
-# WEP: Project File (`wado.toml`)
+# WEP: Package Manifest (`wado.toml`)
 
 ## Context
 
@@ -43,14 +43,14 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 
 | Field       | Type     | Required | Description                                        |
 | ----------- | -------- | -------- | -------------------------------------------------- |
-| `namespace` | `string` | Yes      | Organization or user namespace (e.g., `"myorg"`)   |
+| `namespace` | `string` | No       | Organization or user namespace (e.g., `"myorg"`)   |
 | `name`      | `string` | Yes      | Package name (e.g., `"my-app"`)                    |
 | `version`   | `string` | Yes      | Semver version (e.g., `"0.1.0"`)                   |
 | `command`   | `string` | No       | Entry point for `wasi:cli/command` world            |
 | `service`   | `string` | No       | Entry point for `wasi:http/service` world           |
 | `lib`       | `string` | No       | Library interface file                              |
 
-`namespace` and `name` are used for registry publishing. The registry identity is `namespace:name` (e.g., `myorg:my-app`).
+`namespace` and `name` together form the registry identity (`namespace:name`, e.g., `myorg:my-app`). Without `namespace`, the package cannot be published to a registry — this is the natural state for closed-source applications and internal tools.
 
 At least one of `command`, `service`, or `lib` should be specified. A package can have multiple entry points (e.g., both `command` and `lib`).
 
@@ -410,6 +410,72 @@ For registry packages, the hash input is the **downloaded archive bytes** (not i
 
 The initial algorithm is SHA-256. The resolver verifies integrity on every install: if the computed hash does not match `integrity`, the install fails with an error.
 
+### Conceptual Model
+
+```
+wado.toml            = project manifest (the file)
+[package]            = CM package (the distributable unit)
+[workspace]          = package group (multi-package development)
+[dependencies]       = package dependencies (shipped with the package)
+[dev-dependencies]   = project dependencies (development only, not shipped)
+```
+
+The file itself represents the project. `[package]` describes the distributable unit within it — its identity, entry points, and public API. A package without `namespace` is not publishable, which is the natural state for closed-source applications.
+
+### `[workspace]`
+
+A workspace groups multiple packages for co-development. The workspace root has a `wado.toml` with a `[workspace]` section:
+
+```toml
+# workspace root: wado.toml
+[workspace]
+members = ["packages/*"]
+
+[workspace.dependencies]
+json = { registry = "wa", package = "std:json", version = "1.0.0" }
+```
+
+```toml
+# packages/core/wado.toml
+[package]
+namespace = "myorg"
+name = "core"
+version = "0.1.0"
+lib = "src/lib.wado"
+```
+
+```toml
+# packages/cli/wado.toml
+[package]
+name = "my-tool"
+version = "0.1.0"
+command = "src/main.wado"
+
+[dependencies]
+core = { path = "../core" }
+```
+
+| Field      | Type       | Required | Description                                             |
+| ---------- | ---------- | -------- | ------------------------------------------------------- |
+| `members`  | `string[]` | Yes      | Glob patterns for member package directories             |
+
+`[workspace.dependencies]` declares shared dependency versions. Member packages reference them without repeating version information:
+
+```toml
+# In a workspace member's wado.toml
+[dependencies]
+json = { workspace = true }  # inherits from [workspace.dependencies]
+```
+
+A workspace root `wado.toml` can have both `[workspace]` and `[package]` — the root itself is both a workspace and a package (like Cargo).
+
+Properties:
+
+- All member packages share one `wado.lock` at the workspace root
+- `wado` commands run from any member directory discover the workspace root automatically
+- Each member has its own `[package]` with independent `name`, `version`, and entry points
+- Members can depend on each other via `path` dependencies
+
 ### Single-File Mode
 
 When no `wado.toml` exists, the compiler operates in single-file mode:
@@ -478,6 +544,8 @@ wado exec <dep-name> [args...]     # pass arguments to the dependency
 - Entry point fields (`command`, `service`, `lib`) map directly to WASI worlds and CLI commands
 - `export` as CM boundary gives clear, consistent public API semantics across all consumption modes
 - Wado-to-Wado optimization eliminates CM overhead for same-language dependencies without changing semantics
+- `namespace` absence naturally indicates non-publishable packages — no extra `publish = false` flag needed
+- Workspace support enables multi-package development with shared lock files and dependency declarations
 
 ### Negative
 
@@ -494,3 +562,4 @@ wado exec <dep-name> [args...]     # pass arguments to the dependency
 - **Bare name resolution**: requires `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
 - **`command` over `bin`/`cli`**: `command` matches the WASI world name (`wasi:cli/command`) directly, making the mapping explicit. `bin` (Cargo's term) describes artifact format, which is less meaningful in the Wasm world. `cli` describes the interface but doesn't match the world name.
+- **`[package]` over `[project]`**: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
