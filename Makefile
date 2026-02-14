@@ -36,7 +36,7 @@ hello-run:
 
 .PHONY: hello-run-wasmtime
 hello-run-wasmtime: hello
-	wasmtime run -S p3=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' example/hello.wasm
+	wasmtime run -S p3=y -W component-model=y -W component-model-gc=y -W component-model-async=y -W component-model-async-builtins=y -W component-model-async-stackful=y -W gc=y -W function-references=y -W simd=y -W wide-arithmetic=y -W threads=y --invoke 'run()' example/hello.wasm
 
 .PHONY: test
 test:
