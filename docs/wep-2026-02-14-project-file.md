@@ -156,42 +156,103 @@ pub enum ModuleSource {
 
 When a dependency itself has a `wado.toml` with dependencies, those are transitive dependencies.
 
-#### Resolution Strategy
+#### Resolution Algorithm: PubGrub
 
-Wado uses **maximal version unification** within semver-compatible ranges:
+Wado uses the **PubGrub** algorithm for dependency resolution. PubGrub is a conflict-driven nogood learning (CDCL) solver, originally designed for Dart's `pub` and adopted by `uv` (Python), Swift Package Manager, and others.
 
-- For a given package (identified by `registry + package` or `git + repo`), all semver-compatible version requirements are unified to the highest version satisfying all constraints.
-- Semver-incompatible versions (different major version, or different `0.x` minor version) are treated as **separate modules** and can coexist.
+Why PubGrub over alternatives:
 
-Example:
+| Approach | Pros | Cons |
+| -------- | ---- | ---- |
+| Go MVS (minimum version) | O(n), deterministic without lock file | Users get old/buggy versions; no upper bounds |
+| Cargo-style backtracking | Proven at scale | Weaker conflict learning; less informative errors |
+| PubGrub (CDCL) | Best error messages; efficient pruning; state of the art | NP-hard worst case (acceptable in practice) |
+
+PubGrub provides:
+
+- **Conflict-driven learning**: when a conflict is found, the solver derives a precise incompatibility that explains *why* this combination fails and never re-explores it
+- **Human-readable error messages**: each resolution failure comes with a derivation chain (e.g., "because A requires utils ^1.0 and B requires utils ^2.0, and your project requires both A and B, version solving failed")
+- **Efficient pruning**: near-polynomial performance in practice despite NP-hard worst case
+
+The Rust crate `pubgrub` provides a ready-made implementation.
+
+#### Semver Compatibility and Version Ranges
+
+Version requirements use caret syntax (`^`), following the same semantics as Cargo:
+
+| Requirement | Range |
+| ----------- | ----- |
+| `^1.2.3` | `>=1.2.3, <2.0.0` |
+| `^0.2.3` | `>=0.2.3, <0.3.0` |
+| `^0.0.3` | `>=0.0.3, <0.0.4` |
+
+When `version` is specified without `^`, it is treated as `^version` (caret is the default).
+
+Two requirements are **semver-compatible** if they share the same compatibility range (same major version for `>=1.0.0`, same major.minor for `0.x`). Within a compatibility range, the resolver selects **exactly one version** — the highest that satisfies all constraints.
+
+#### Multiple Version Coexistence
+
+Semver-incompatible versions of the same package can coexist in the dependency tree as separate module instances. This matches Wasm Component Model's type isolation — types from different component instances are inherently distinct.
 
 ```
 my-app
 ├── router 1.2.0 (depends on utils ^1.0)
 └── auth 0.5.0 (depends on utils ^1.1)
 
-Resolved: utils 1.1.x (satisfies both ^1.0 and ^1.1)
+Resolved: utils 1.1.x (one instance, satisfies both)
 ```
-
-Example with multiple major versions:
 
 ```
 my-app
-├── legacy-lib (depends on http 1.x)
-└── new-lib (depends on http 2.x)
+├── legacy-lib (depends on http ^1.0)
+└── new-lib (depends on http ^2.0)
 
-Resolved: http 1.x AND http 2.x coexist as separate modules
+Resolved: http 1.x AND http 2.x (two separate instances)
 ```
 
-Each major version is a distinct `ModuleSource::Dependency` with a distinct import path. The dependent libraries each see their own version.
+Within a single `wado.toml`, a user can also explicitly depend on multiple major versions by using different import names:
+
+```toml
+[dependencies]
+http-v1 = { registry = "wa", package = "std:http", version = "1.0.0" }
+http-v2 = { registry = "wa", package = "std:http", version = "2.0.0" }
+```
+
+#### Transitive Version Isolation
+
+The resolver runs on the **full dependency graph** and produces a flat resolution map. Each resolved package is identified by `(package identity, compatibility range)`:
+
+```
+package identity = registry URL + namespace:name  (for registry deps)
+                 = git URL + repo                  (for git deps)
+
+resolution key   = (package identity, major version)
+                   e.g., (wa/std:http, 1) and (wa/std:http, 2)
+```
+
+When two transitive dependencies require semver-incompatible versions of the same package, they each get their own resolved instance. The compiler does not need to know about this — it simply receives module sources from `CompilerHost`. The resolver (in the CLI) handles mapping:
+
+```
+CompilerHost::load_source("router/utils")
+  → CLI looks up "utils" as required by "router"
+  → resolves to utils@1.1.5
+  → returns the source for utils@1.1.5
+
+CompilerHost::load_source("auth/utils")
+  → CLI looks up "utils" as required by "auth"
+  → resolves to utils@1.1.5 (same instance if compatible)
+  → OR resolves to utils@2.0.1 (different instance if incompatible)
+```
+
+The compiler sees distinct `ModuleSource::Dependency` values and compiles each independently. Type isolation is natural — two separately compiled modules never share types.
 
 #### Diamond Dependency Handling
 
 When two dependencies require the same transitive dependency:
 
-- **Compatible versions**: unified to one resolved version (highest compatible)
-- **Incompatible versions**: both coexist; each dependent sees its own version
-- **Conflict**: if constraints within the same major version are unsatisfiable (e.g., `=1.2.0` vs `=1.3.0`), the resolver emits an error
+- **Compatible versions**: unified to one resolved instance (highest compatible). PubGrub finds this automatically.
+- **Incompatible versions**: coexist as separate instances. Each dependent sees its own version. Types do not cross boundaries.
+- **Unsatisfiable**: if constraints within a compatibility range conflict (e.g., `=1.2.0` and `=1.3.0`), PubGrub reports a precise error with derivation chain.
 
 ### Lock File (`wado.lock`)
 
@@ -206,7 +267,7 @@ key = "router"
 source = "git"
 git = "https://github.com/user/router.git"
 ref = "v1.0.0"
-resolved-ref = "abc1234def5678..."
+resolved-ref = "abc1234def5678901234567890abcdef12345678"
 
 [[package]]
 key = "regex"
@@ -214,33 +275,54 @@ source = "registry"
 registry = "https://wa.dev"
 package = "docs:regex"
 version = "0.1.2"
-checksum = "sha256:..."
+integrity = "sha256:a1b2c3d4e5f6..."
 
 [[package]]
-key = "regex/utils"
+key = "regex>utils"
 source = "registry"
 registry = "https://wa.dev"
 package = "docs:regex-utils"
 version = "0.3.0"
-checksum = "sha256:..."
-dependents = ["regex"]
+integrity = "sha256:f6e5d4c3b2a1..."
 ```
 
 | Field          | Description                                            |
 | -------------- | ------------------------------------------------------ |
-| `key`          | Import key (top-level or `parent/transitive`)          |
-| `source`       | Source type: `git`, `registry`, `path`, `url`          |
-| `resolved-ref` | For git: exact commit SHA                              |
+| `key`          | Import key. `>` separates transitive dependency chains (e.g., `regex>utils` means utils as required by regex) |
+| `source`       | Source type: `git`, `registry`, `url`                  |
+| `resolved-ref` | For git: exact commit SHA (40 hex chars)               |
 | `version`      | For registry: exact resolved version                   |
-| `checksum`     | Integrity hash of the package contents                 |
-| `dependents`   | Which packages depend on this (for transitive deps)    |
+| `integrity`    | Content hash with algorithm prefix (see below)         |
 
 Properties:
 
-- Deterministic: entries sorted by key, fields in consistent order
+- Deterministic: entries sorted by `key` lexicographically, fields in declaration order
 - Human-readable TOML
 - Committed to version control
-- `path` dependencies are not locked (always resolved fresh)
+- `path` dependencies are not locked (always resolved fresh, not listed)
+
+### Integrity Verification
+
+The `integrity` field uses a prefixed format: `algorithm:hex-encoded-hash`.
+
+```
+integrity = "sha256:a1b2c3d4e5f6..."
+```
+
+The prefix makes the format extensible — if SHA-256 is ever deprecated, a new algorithm can be introduced without changing the lock file schema.
+
+#### Calculation Method
+
+| Source | Integrity |
+| ------ | --------- |
+| Registry | Hash of the archive as downloaded from the registry. The registry defines the canonical archive format. |
+| Git | `resolved-ref` (commit SHA) serves as integrity. Git's content-addressable storage already guarantees integrity. No separate `integrity` field needed. |
+| Remote URL | Hash of the downloaded content (the `.wado` file or `wado.toml` + referenced sources). |
+| Local path | No integrity check. Always resolved fresh. |
+
+For registry packages, the hash input is the **downloaded archive bytes** (not individual source files concatenated). This matches how registries distribute packages and avoids ambiguity about file ordering or line endings.
+
+The initial algorithm is SHA-256. The resolver verifies integrity on every install: if the computed hash does not match `integrity`, the install fails with an error.
 
 ### Single-File Mode
 
@@ -274,17 +356,22 @@ These are future CLI commands. The initial implementation focuses on `wado.toml`
 - Registry aliases avoid URL repetition and enable easy migration
 - Bare name imports are short and ergonomic (`"router"` not `"dep:router"`)
 - No reserved namespaces — `core:` and `wasi:` are resolved by scheme syntax, not by name reservation
-- Multiple major versions can coexist, matching Wasm Component Model's type isolation
-- Lock file ensures reproducible builds
+- PubGrub provides best-in-class error messages for resolution failures
+- Multiple semver-incompatible versions coexist naturally, matching Wasm Component Model's type isolation
+- Lock file with `integrity` ensures reproducible and tamper-evident builds
+- Compiler remains agnostic to dependency resolution — `CompilerHost` handles all mapping
 
 ### Negative
 
 - Adding `wado.toml` introduces project-level concepts to a language that started as single-file
-- Transitive dependency resolution adds complexity to the compiler/CLI
-- Lock file merge conflicts are a known pain point (mitigated by deterministic ordering)
+- PubGrub is NP-hard worst case (acceptable in practice — pathological cases are rare in real ecosystems)
+- Multiple coexisting versions increase binary size (mitigated by Wasm's tree-shaking-friendly module system)
+- Lock file merge conflicts are a known pain point (mitigated by deterministic ordering and simple TOML structure)
 
 ### Trade-offs
 
-- `ref` is required for git dependencies (no implicit `main`/`HEAD`). This is more verbose but prevents silent breakage when upstream branches change.
-- Registry names are per-project, not global. Each project must declare its registries. This avoids global configuration but requires repetition across projects.
-- Bare name resolution requires `wado.toml` lookup at compile time. The compiler must locate and parse the project file during module resolution.
+- **PubGrub over MVS**: PubGrub selects the highest compatible version (users get security patches automatically) at the cost of needing a lock file for reproducibility. MVS would give O(n) resolution and reproducibility without a lock file, but users would be stuck on old versions unless every library author proactively bumps minimums. For an ecosystem that values security and freshness, PubGrub is the better default.
+- **`ref` required for git**: more verbose but prevents silent breakage when upstream branches change.
+- **Registry names per-project**: avoids global configuration but requires repetition across projects. A future `~/.wado/config.toml` could provide user-level defaults.
+- **Bare name resolution**: requires `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
+- **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
