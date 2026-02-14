@@ -371,6 +371,16 @@ If this is your first time running mise in this repository, you may need to trus
 mise trust
 ```
 
+### Syncing Vendor Submodules
+
+Run the following to sync all vendor submodules:
+
+```sh
+mise run sync-vendor
+```
+
+This syncs `vendor/wasmtime` to the exact version in `Cargo.lock` (required for WASI P3 compatibility), and updates other vendor submodules (`vendor/wasm`, `vendor/wasi`, `vendor/wasm-tools`) to their latest remote HEAD.
+
 ### When Completing a Task
 
 When you have completed a task, make sure everything is up-to-date and tested:
