@@ -14,16 +14,10 @@ struct "Wrapper<i32>" {
 }
 
 fn run() with Stdout {
-    let w: Wrapper<i32> = __inline_Wrapper_i32___new_0: {
-        break __inline_Wrapper_i32___new_0: Wrapper<i32> { value: 42 };
-    };
-    let v: i32 = __inline_Wrapper_i32___get_1: {
-        break __inline_Wrapper_i32___get_1: w.value;
-    };
+    let w: Wrapper<i32> = move Wrapper<i32> { value: 42 };
+    let v: i32 = w.value;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(21), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
         __r.String::append(move "get: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
@@ -37,18 +31,12 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     let pair: [i32, i32] = __inline_Wrapper_i32___get_twice_5: {
-        let a: i32 = __inline_Wrapper_i32___get_6: {
-            break __inline_Wrapper_i32___get_6: w.value;
-        };
-        let b: i32 = __inline_Wrapper_i32___get_7: {
-            break __inline_Wrapper_i32___get_7: w.value;
-        };
+        let a: i32 = w.value;
+        let b: i32 = w.value;
         break __inline_Wrapper_i32___get_twice_5: [a, b];
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_8: {
-            break __inline_String__with_capacity_8: String { repr: "array_new<u8>"(45), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(45), used: 0 };
         __r.String::append(move "get_twice: ");
         let mut __f: Formatter = __inline_Formatter__new_9: {
             let buf: &mut String = &mut __r;

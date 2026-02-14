@@ -28,16 +28,12 @@ fn "IntStore^IndexValue::index_value"(self: &IntStore, index: i32) -> i32 {
 }
 
 fn run() with Stdout {
-    let store: IntStore = __inline_IntStore__new_0: {
-        break __inline_IntStore__new_0: IntStore { a: 10, b: 20, c: 30 };
-    };
+    let store: IntStore = move IntStore { a: 10, b: 20, c: 30 };
     let first: i32 = store."IntStore^IndexValue::index_value"(0);
     let second: i32 = store."IntStore^IndexValue::index_value"(1);
     let third: i32 = store."IntStore^IndexValue::index_value"(2);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_1: {
-            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(23), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "first: ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
@@ -51,9 +47,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_4: {
-            break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(24), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
         __r.String::append(move "second: ");
         let mut __f: Formatter = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
@@ -67,9 +61,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_7: {
-            break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(23), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "third: ");
         let mut __f: Formatter = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;
@@ -84,9 +76,7 @@ fn run() with Stdout {
     });
     let sum: i32 = ((store."IntStore^IndexValue::index_value"(0) + store."IntStore^IndexValue::index_value"(1)) + store."IntStore^IndexValue::index_value"(2));
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_10: {
-            break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(21), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
         __r.String::append(move "sum: ");
         let mut __f: Formatter = __inline_Formatter__new_11: {
             let buf: &mut String = &mut __r;

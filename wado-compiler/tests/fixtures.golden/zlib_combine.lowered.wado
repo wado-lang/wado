@@ -21,15 +21,11 @@ fn run() with Stdout {
         let _licm_used: i32 = msg1.used;
         let _licm_repr: builtin::array<u8> = msg1.repr;
         loop {
-            if !(i < __inline_String__len_0: {
-                break __inline_String__len_0: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             __for_0_body: {
-                seg1."Array<u8>::append"(__inline_String__get_byte_1: {
-                    break __inline_String__get_byte_1: core::builtin::array_get_u8(_licm_repr, i);
-                });
+                seg1."Array<u8>::append"(core::builtin::array_get_u8(_licm_repr, i));
             }
             i = (i + 1);
         }
@@ -41,15 +37,11 @@ fn run() with Stdout {
         let _licm_used: i32 = msg2.used;
         let _licm_repr: builtin::array<u8> = msg2.repr;
         loop {
-            if !(i < __inline_String__len_2: {
-                break __inline_String__len_2: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_1;
             }
             __for_1_body: {
-                seg2."Array<u8>::append"(__inline_String__get_byte_3: {
-                    break __inline_String__get_byte_3: core::builtin::array_get_u8(_licm_repr, i);
-                });
+                seg2."Array<u8>::append"(core::builtin::array_get_u8(_licm_repr, i));
             }
             i = (i + 1);
         }
@@ -59,9 +51,7 @@ fn run() with Stdout {
         let mut i: i32 = 0;
         let _licm_used: i32 = seg1.used;
         loop {
-            if !(i < __inline_Array_u8___len_4: {
-                break __inline_Array_u8___len_4: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_2;
             }
             __for_2_body: {
@@ -74,9 +64,7 @@ fn run() with Stdout {
         let mut i: i32 = 0;
         let _licm_used: i32 = seg2.used;
         loop {
-            if !(i < __inline_Array_u8___len_5: {
-                break __inline_Array_u8___len_5: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_3;
             }
             __for_3_body: {
@@ -85,28 +73,12 @@ fn run() with Stdout {
             i = (i + 1);
         }
     }
-    let a1: u32 = core::zlib::adler32(__inline_adler32_init_6: {
-        break __inline_adler32_init_6: 1;
-    }, &seg1, 0, __inline_Array_u8___len_7: {
-        break __inline_Array_u8___len_7: seg1.used;
-    });
-    let a2: u32 = core::zlib::adler32(__inline_adler32_init_8: {
-        break __inline_adler32_init_8: 1;
-    }, &seg2, 0, __inline_Array_u8___len_9: {
-        break __inline_Array_u8___len_9: seg2.used;
-    });
-    let a_combined: u32 = core::zlib::adler32(__inline_adler32_init_10: {
-        break __inline_adler32_init_10: 1;
-    }, &combined, 0, __inline_Array_u8___len_11: {
-        break __inline_Array_u8___len_11: combined.used;
-    });
-    let a_joined: u32 = core::zlib::adler32_combine(a1, a2, __inline_Array_u8___len_12: {
-        break __inline_Array_u8___len_12: seg2.used;
-    });
+    let a1: u32 = core::zlib::adler32(1, &seg1, 0, seg1.used);
+    let a2: u32 = core::zlib::adler32(1, &seg2, 0, seg2.used);
+    let a_combined: u32 = core::zlib::adler32(1, &combined, 0, combined.used);
+    let a_joined: u32 = core::zlib::adler32_combine(a1, a2, seg2.used);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_13: {
-            break __inline_String__with_capacity_13: String { repr: "array_new<u8>"(30), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "adler32 seg1: ");
         let mut __f: Formatter = __inline_Formatter__new_14: {
             let buf: &mut String = &mut __r;
@@ -120,9 +92,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_16: {
-            break __inline_String__with_capacity_16: String { repr: "array_new<u8>"(30), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "adler32 seg2: ");
         let mut __f: Formatter = __inline_Formatter__new_17: {
             let buf: &mut String = &mut __r;
@@ -136,9 +106,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_19: {
-            break __inline_String__with_capacity_19: String { repr: "array_new<u8>"(34), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
         __r.String::append(move "adler32 combined: ");
         let mut __f: Formatter = __inline_Formatter__new_20: {
             let buf: &mut String = &mut __r;
@@ -152,9 +120,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_22: {
-            break __inline_String__with_capacity_22: String { repr: "array_new<u8>"(32), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(32), used: 0 };
         __r.String::append(move "adler32 joined: ");
         let mut __f: Formatter = __inline_Formatter__new_23: {
             let buf: &mut String = &mut __r;
@@ -167,28 +133,12 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let c1: u32 = core::zlib::crc32(__inline_crc32_init_25: {
-        break __inline_crc32_init_25: 0;
-    }, &seg1, 0, __inline_Array_u8___len_26: {
-        break __inline_Array_u8___len_26: seg1.used;
-    });
-    let c2: u32 = core::zlib::crc32(__inline_crc32_init_27: {
-        break __inline_crc32_init_27: 0;
-    }, &seg2, 0, __inline_Array_u8___len_28: {
-        break __inline_Array_u8___len_28: seg2.used;
-    });
-    let c_combined: u32 = core::zlib::crc32(__inline_crc32_init_29: {
-        break __inline_crc32_init_29: 0;
-    }, &combined, 0, __inline_Array_u8___len_30: {
-        break __inline_Array_u8___len_30: combined.used;
-    });
-    let c_joined: u32 = core::zlib::crc32_combine(c1, c2, __inline_Array_u8___len_31: {
-        break __inline_Array_u8___len_31: seg2.used;
-    });
+    let c1: u32 = core::zlib::crc32(0, &seg1, 0, seg1.used);
+    let c2: u32 = core::zlib::crc32(0, &seg2, 0, seg2.used);
+    let c_combined: u32 = core::zlib::crc32(0, &combined, 0, combined.used);
+    let c_joined: u32 = core::zlib::crc32_combine(c1, c2, seg2.used);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_32: {
-            break __inline_String__with_capacity_32: String { repr: "array_new<u8>"(32), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(32), used: 0 };
         __r.String::append(move "crc32 combined: ");
         let mut __f: Formatter = __inline_Formatter__new_33: {
             let buf: &mut String = &mut __r;
@@ -202,9 +152,7 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_35: {
-            break __inline_String__with_capacity_35: String { repr: "array_new<u8>"(30), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "crc32 joined: ");
         let mut __f: Formatter = __inline_Formatter__new_36: {
             let buf: &mut String = &mut __r;
@@ -221,9 +169,7 @@ fn run() with Stdout {
         let __cond: bool = (c_combined == c_joined);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_38: {
-                    break __inline_String__with_capacity_38: String { repr: "array_new<u8>"(182), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(182), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");

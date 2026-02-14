@@ -18,18 +18,10 @@ struct Container {
 }
 
 fn run() with Stdout {
-    let mut c: Container = __inline_Container__new_0: {
-        break __inline_Container__new_0: Container { item: __inline_Value__new_0: {
-            break __inline_Value__new_0: Value { n: 10 };
-        } };
-    };
-    let v: Value = *__inline_Container_Index__index_1: {
-        break __inline_Container_Index__index_1: &c.item;
-    };
+    let mut c: Container = move Container { item: Value { n: 10 } };
+    let v: Value = *&c.item;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(25), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
         __r.String::append(move "Initial: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
@@ -43,15 +35,11 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     __inline_Value__double_5: {
-        let self: &mut Value = __inline_Container_IndexMut__index_mut_6: {
-            break __inline_Container_IndexMut__index_mut_6: &mut c.item;
-        };
+        let self: &mut Value = &mut c.item;
         self.n = (self.n * 2);
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_7: {
-            break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(30), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "After double: ");
         let mut __f: Formatter = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;
@@ -65,15 +53,11 @@ fn run() with Stdout {
         break __tmpl: __r;
     });
     __inline_Container_IndexAssign__index_assign_10: {
-        let value: Value = __inline_Value__new_11: {
-            break __inline_Value__new_11: Value { n: 100 };
-        };
+        let value: Value = move Value { n: 100 };
         c.item = value;
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_12: {
-            break __inline_String__with_capacity_12: String { repr: "array_new<u8>"(30), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "After assign: ");
         let mut __f: Formatter = __inline_Formatter__new_13: {
             let buf: &mut String = &mut __r;

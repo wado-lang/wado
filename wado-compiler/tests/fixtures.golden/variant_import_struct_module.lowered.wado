@@ -18,17 +18,11 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
     if (opts.width <= 0) {
         return s;
     }
-    if (__inline_String__len_0: {
-        break __inline_String__len_0: s.used;
-    } >= opts.width) {
+    if (s.used >= opts.width) {
         return s;
     }
-    let pad_len: i32 = (opts.width - __inline_String__len_1: {
-        break __inline_String__len_1: s.used;
-    });
-    let mut pad: String = __inline_String__with_capacity_2: {
-        break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(pad_len), used: 0 };
-    };
+    let pad_len: i32 = (opts.width - s.used);
+    let mut pad: String = move String { repr: "array_new<u8>"(pad_len), used: 0 };
     __for_0: {
         let mut i: i32 = 0;
         loop {
@@ -47,12 +41,8 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
         Center => {
             let left: i32 = (pad_len / 2);
             let right: i32 = (pad_len - left);
-            let mut lpad: String = __inline_String__with_capacity_3: {
-                break __inline_String__with_capacity_3: String { repr: "array_new<u8>"(left), used: 0 };
-            };
-            let mut rpad: String = __inline_String__with_capacity_4: {
-                break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(right), used: 0 };
-            };
+            let mut lpad: String = move String { repr: "array_new<u8>"(left), used: 0 };
+            let mut rpad: String = move String { repr: "array_new<u8>"(right), used: 0 };
             __for_0: {
                 let mut i: i32 = 0;
                 loop {
@@ -83,9 +73,7 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
 }
 
 fn run() with Stdout {
-    let opts: Options = __inline_Options__default_0: {
-        break __inline_Options__default_0: Options { align: Align::Right, width: 0 };
-    };
+    let opts: Options = move Options { align: Align::Right, width: 0 };
     let s: String = move format_with_opts(move "test", opts);
     core::cli::println(s);
 }

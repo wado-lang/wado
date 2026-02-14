@@ -14,43 +14,31 @@ struct Counter {
 }
 
 fn run() with Stdout {
-    let counter: Counter = __inline_Counter__new_0: {
-        break __inline_Counter__new_0: Counter { value: 0 };
-    };
+    let counter: Counter = move Counter { value: 0 };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_1: {
-            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(23), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "value: ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_u64_Display__fmt_3: {
-            let self: Box<u64> = move Box<u64> { value: __inline_Counter__get_4: {
-                break __inline_Counter__get_4: counter.value;
-            } };
+            let self: Box<u64> = move Box<u64> { value: counter.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_u64_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let counter2: Counter = __inline_Counter__new_5: {
-        break __inline_Counter__new_5: Counter { value: 42 };
-    };
+    let counter2: Counter = move Counter { value: 42 };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_6: {
-            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(23), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "value: ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_u64_Display__fmt_8: {
-            let self: Box<u64> = move Box<u64> { value: __inline_Counter__get_9: {
-                break __inline_Counter__get_9: counter2.value;
-            } };
+            let self: Box<u64> = move Box<u64> { value: counter2.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_u64_decimal"(self.value, f);
         };

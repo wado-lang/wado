@@ -58,9 +58,7 @@ fn print_array(arr: &Array<i32>) with Stdout {
         let mut i: i32 = 0;
         let _licm_used: i32 = arr.used;
         loop {
-            if !(i < __inline_Array_i32___len_0: {
-                break __inline_Array_i32___len_0: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_1;
             }
             __for_1_body: {
@@ -68,9 +66,7 @@ fn print_array(arr: &Array<i32>) with Stdout {
                     core::cli::print(move " ");
                 }
                 core::cli::print(__tmpl: {
-                    let mut __r: String = __inline_String__with_capacity_1: {
-                        break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(16), used: 0 };
-                    };
+                    let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_2: {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -91,13 +87,9 @@ fn print_array(arr: &Array<i32>) with Stdout {
 
 fn run() with Stdout {
     let mut arr: Array<i32> = move [5, 3, 8, 1, 9, 2, 7, 4, 6];
-    "quicksort$__Closure_0"(&mut arr, 0, (__inline_Array_i32___len_0: {
-        break __inline_Array_i32___len_0: arr.used;
-    } - 1), &__Closure_0 {  });
+    "quicksort$__Closure_0"(&mut arr, 0, (arr.used - 1), &__Closure_0 {  });
     print_array(&arr);
-    "quicksort$__Closure_1"(&mut arr, 0, (__inline_Array_i32___len_1: {
-        break __inline_Array_i32___len_1: arr.used;
-    } - 1), &__Closure_1 {  });
+    "quicksort$__Closure_1"(&mut arr, 0, (arr.used - 1), &__Closure_1 {  });
     print_array(&arr);
 }
 

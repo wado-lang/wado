@@ -16,25 +16,19 @@ struct SimpleArray {
 }
 
 fn run() with Stdout {
-    let mut arr: SimpleArray = __inline_SimpleArray__new_0: {
-        break __inline_SimpleArray__new_0: SimpleArray { a: 0, b: 0, c: 0 };
-    };
+    let mut arr: SimpleArray = move SimpleArray { a: 0, b: 0, c: 0 };
     __inline_SimpleArray_IndexAssign__index_assign_1: {
         arr.a = 42;
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(25), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
         __r.String::append(move "arr[0] = ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: __inline_SimpleArray_Index__index_5: {
-                break __inline_SimpleArray_Index__index_5: Box<i32> { value: arr.a };
-            }.value };
+            let self: Box<i32> = move Box<i32> { value: Box<i32> { value: arr.a }.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

@@ -15,16 +15,10 @@ struct Point {
 }
 
 fn run() with Stdout {
-    let p: Point = __inline_create_point_0: {
-        break __inline_create_point_0: Point { x: 17, y: 25 };
-    };
-    let sum: i32 = __inline_point_sum_1: {
-        break __inline_point_sum_1: (p.x + p.y);
-    };
+    let p: Point = move Point { x: 17, y: 25 };
+    let sum: i32 = (p.x + p.y);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(21), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
         __r.String::append(move "sum: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;

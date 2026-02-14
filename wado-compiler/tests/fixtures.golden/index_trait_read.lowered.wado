@@ -14,13 +14,9 @@ struct ReadOnlyBox {
 }
 
 fn run() with Stdout {
-    let x: i32 = __inline_ReadOnlyBox_Index__index_0: {
-        break __inline_ReadOnlyBox_Index__index_0: Box<i32> { value: 42 };
-    }.value;
+    let x: i32 = Box<i32> { value: 42 }.value;
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_1: {
-            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(23), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "Value: ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;

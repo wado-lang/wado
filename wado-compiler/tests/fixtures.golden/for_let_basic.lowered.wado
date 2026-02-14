@@ -17,11 +17,7 @@ pub struct "ArrayIter<i32>" {
 
 fn run() with Stdout {
     let items: Array<i32> = move [10, 20, 30];
-    let mut iter: ArrayIter<i32> = __inline_Array_i32___iter_0: {
-        break __inline_Array_i32___iter_0: __inline_Array_i32__IntoIterator__into_iter_1: {
-            break __inline_Array_i32__IntoIterator__into_iter_1: ArrayIter<i32> { repr: items.repr, used: items.used, index: 0 };
-        };
-    };
+    let mut iter: ArrayIter<i32> = move ArrayIter<i32> { repr: items.repr, used: items.used, index: 0 };
     let mut count: i32 = 0;
     __for_0: {
         loop {
@@ -30,9 +26,7 @@ fn run() with Stdout {
                 let x: i32 = __unwrap_option(__pattern_temp_0).value;
                 __for_0_body: {
                     core::cli::println(__tmpl: {
-                        let mut __r: String = __inline_String__with_capacity_2: {
-                            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(39), used: 0 };
-                        };
+                        let mut __r: String = move String { repr: "array_new<u8>"(39), used: 0 };
                         __r.String::append(move "item ");
                         let mut __f: Formatter = __inline_Formatter__new_3: {
                             let buf: &mut String = &mut __r;
@@ -63,9 +57,7 @@ fn run() with Stdout {
         }
     }
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_7: {
-            break __inline_String__with_capacity_7: String { repr: "array_new<u8>"(23), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "total: ");
         let mut __f: Formatter = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;

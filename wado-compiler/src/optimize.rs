@@ -26,7 +26,7 @@ struct OptConfig {
 }
 use crate::optimize_licm::apply_licm;
 use crate::optimize_ref_elim::eliminate_unnecessary_refs;
-use crate::optimize_rewrite::{collect_value_copy_types, insert_moves};
+use crate::optimize_rewrite::{collect_value_copy_types, insert_moves, simplify_labeled_blocks};
 use crate::optimize_sroa::scalar_replace_aggregates;
 use crate::project::Project;
 
@@ -122,6 +122,10 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             remove_unreachable_types(&mut project);
         }
     }
+
+    // Simplify trivial labeled blocks left by inlining (e.g., `L: { break L: expr; }` → `expr`).
+    // Runs after the main optimization loop to avoid interfering with SROA/copy propagation.
+    simplify_labeled_blocks(&mut project);
 
     // Insert move optimization for all optimization levels (after inlining)
     // This eliminates unnecessary copies for fresh values

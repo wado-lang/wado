@@ -15,9 +15,7 @@
 
 fn side_effect(msg: String, result: bool) -> bool with Stdout {
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(36), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(36), used: 0 };
         __r.String::append(move "side_effect called: ");
         __r.String::append(msg);
         break __tmpl: __r;
@@ -47,15 +45,11 @@ fn run() with Stdout {
     let mut i: i32 = 0;
     let _licm_used: i32 = arr.used;
     loop {
-        if !((i < __inline_Array_i32___len_0: {
-            break __inline_Array_i32___len_0: _licm_used;
-        }) && (arr."Array<i32>^IndexValue::index_value"(i) < 100)) {
+        if !((i < _licm_used) && (arr."Array<i32>^IndexValue::index_value"(i) < 100)) {
             break;
         }
         core::cli::println(__tmpl: {
-            let mut __r: String = __inline_String__with_capacity_1: {
-                break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(40), used: 0 };
-            };
+            let mut __r: String = move String { repr: "array_new<u8>"(40), used: 0 };
             __r.String::append(move "arr[");
             let mut __f: Formatter = __inline_Formatter__new_2: {
                 let buf: &mut String = &mut __r;
@@ -81,9 +75,7 @@ fn run() with Stdout {
         i = (i + 1);
     }
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_6: {
-            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(34), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
         __r.String::append(move "Loop ended at i = ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;

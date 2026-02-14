@@ -15,13 +15,9 @@
 
 fn run() with Stdout {
     let data: Array<u8> = move [72, 101, 108, 108, 111];
-    let checksum: u32 = core::zlib::adler32(__inline_adler32_init_0: {
-        break __inline_adler32_init_0: 1;
-    }, &data, 0, 5);
+    let checksum: u32 = core::zlib::adler32(1, &data, 0, 5);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_1: {
-            break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(35), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(35), used: 0 };
         __r.String::append(move "adler32(\"Hello\") = ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
@@ -38,9 +34,7 @@ fn run() with Stdout {
         let __cond: bool = (checksum == 93061621);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_4: {
-                    break __inline_String__with_capacity_4: String { repr: "array_new<u8>"(158), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(158), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -73,13 +67,9 @@ fn run() with Stdout {
             });
         }
     }
-    let crc: u32 = core::zlib::crc32(__inline_crc32_init_9: {
-        break __inline_crc32_init_9: 0;
-    }, &data, 0, 5);
+    let crc: u32 = core::zlib::crc32(0, &data, 0, 5);
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_10: {
-            break __inline_String__with_capacity_10: String { repr: "array_new<u8>"(33), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
         __r.String::append(move "crc32(\"Hello\") = ");
         let mut __f: Formatter = __inline_Formatter__new_11: {
             let buf: &mut String = &mut __r;
@@ -96,9 +86,7 @@ fn run() with Stdout {
         let __cond: bool = (crc == 4157704578);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = __inline_String__with_capacity_13: {
-                    break __inline_String__with_capacity_13: String { repr: "array_new<u8>"(150), used: 0 };
-                };
+                let mut __r: String = move String { repr: "array_new<u8>"(150), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");

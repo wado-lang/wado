@@ -33,9 +33,7 @@ fn print_array(arr: &Array<i32>) with Stdout {
         let mut i: i32 = 0;
         let _licm_used: i32 = arr.used;
         loop {
-            if !(i < __inline_Array_i32___len_0: {
-                break __inline_Array_i32___len_0: _licm_used;
-            }) {
+            if !(i < _licm_used) {
                 break __for_0;
             }
             __for_0_body: {
@@ -43,9 +41,7 @@ fn print_array(arr: &Array<i32>) with Stdout {
                     core::cli::print(move " ");
                 }
                 core::cli::print(__tmpl: {
-                    let mut __r: String = __inline_String__with_capacity_1: {
-                        break __inline_String__with_capacity_1: String { repr: "array_new<u8>"(16), used: 0 };
-                    };
+                    let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_2: {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -90,18 +86,14 @@ fn run() with Stdout {
         self."Array<i32>::sort_by$__Closure_4"(&__Closure_4 {  });
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(27), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
         __r.String::append(move "empty len: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_i32___len_5: {
-                break __inline_Array_i32___len_5: empty.used;
-            } };
+            let self: Box<i32> = move Box<i32> { value: empty.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

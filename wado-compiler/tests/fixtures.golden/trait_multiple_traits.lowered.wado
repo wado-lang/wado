@@ -19,41 +19,29 @@ fn run() with Stdout {
     let __sroa_p_name: String = move "Alice";
     let __sroa_p_city: String = move "Tokyo";
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_0: {
-            break __inline_String__with_capacity_0: String { repr: "array_new<u8>"(22), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(22), used: 0 };
         __r.String::append(move "Name: ");
-        __r.String::append(__inline_Person_Named__name_1: {
-            break __inline_Person_Named__name_1: __sroa_p_name;
-        });
+        __r.String::append(__sroa_p_name);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_2: {
-            break __inline_String__with_capacity_2: String { repr: "array_new<u8>"(21), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
         __r.String::append(move "Age: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Person_Aged__age_5: {
-                break __inline_Person_Aged__age_5: 30;
-            } };
+            let self: Box<i32> = move Box<i32> { value: 30 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = __inline_String__with_capacity_6: {
-            break __inline_String__with_capacity_6: String { repr: "array_new<u8>"(26), used: 0 };
-        };
+        let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "Location: ");
-        __r.String::append(__inline_Person_Located__location_7: {
-            break __inline_Person_Located__location_7: __sroa_p_city;
-        });
+        __r.String::append(__sroa_p_city);
         break __tmpl: __r;
     });
 }
