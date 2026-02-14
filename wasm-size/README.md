@@ -27,7 +27,7 @@ Compares WebAssembly binary sizes across different languages.
 | c              |        2,122 |
 | zig            |        4,449 |
 | assemblyscript |        6,913 |
-| moonbit        |       22,884 |
+| moonbit        |       21,103 |
 | rust           |       42,587 |
 | tinygo         |      161,350 |
 
@@ -39,7 +39,7 @@ Compares WebAssembly binary sizes across different languages.
 | zig            |       10,608 |
 | assemblyscript |       11,372 |
 | c              |       14,151 |
-| moonbit        |       32,940 |
+| moonbit        |       31,133 |
 | rust           |       62,952 |
 | tinygo         |      186,022 |
 
@@ -70,7 +70,7 @@ All languages are compiled with size optimization and symbol stripping enabled:
 | Zig            | Preview 1    | `-O ReleaseSmall`                                                             | Built-in size optimization mode              |
 | TinyGo         | Preview 1    | `-opt=z -no-debug`                                                            | Size opt + strip debug info                  |
 | AssemblyScript | Preview 1    | `--optimizeLevel 3 --shrinkLevel 2`                                           | Via @assemblyscript/wasi-shim                |
-| Moonbit        | Preview 1    | `--strip`                                                                     | Via peter-jerry-ye/wasi                      |
+| Moonbit        | Preview 1    | `--release --strip`                                                           | Release mode + strip symbols                 |
 | Wado           | Preview 3    | `-Os`                                                                         | Component model                              |
 
 ## Requirements

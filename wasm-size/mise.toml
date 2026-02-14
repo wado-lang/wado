@@ -109,10 +109,10 @@ mkdir -p "$OUT_DIR"
 
 if command -v moon >/dev/null 2>&1; then
     echo "Building Moonbit..."
-    (cd moonbit/hello_world && moon build --target wasm --strip)
-    (cd moonbit/pi_approx && moon build --target wasm --strip)
-    cp moonbit/hello_world/target/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
-    cp moonbit/pi_approx/target/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
+    (cd moonbit/hello_world && moon build --target wasm --release --strip)
+    (cd moonbit/pi_approx && moon build --target wasm --release --strip)
+    cp moonbit/hello_world/_build/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
+    cp moonbit/pi_approx/_build/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
 else
     echo "SKIP: Moonbit (not installed)"
 fi
@@ -191,7 +191,7 @@ run = """
 #!/usr/bin/env bash
 rm -rf "$OUT_DIR"
 rm -rf rust/hello_world/target rust/pi_approx/target
-rm -rf moonbit/hello_world/target moonbit/pi_approx/target
+rm -rf moonbit/hello_world/_build moonbit/pi_approx/_build
 rm -rf assemblyscript/node_modules
 """
 
