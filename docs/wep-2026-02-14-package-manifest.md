@@ -52,6 +52,29 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 
 `namespace` and `name` together form the registry identity (`namespace:name`, e.g., `myorg:my-app`). Without `namespace`, the package cannot be published to a registry — this is the natural state for closed-source applications and internal tools.
 
+#### Name and Namespace Validation
+
+Both `namespace` and `name` follow the same rules:
+
+- Must match `[a-z0-9]+(-[a-z0-9]+)*` (lowercase with hyphens)
+- Only lowercase letters (`a-z`), digits (`0-9`), and hyphens (`-`)
+- Minimum 1 character, maximum 64 characters
+- No consecutive hyphens, no leading/trailing hyphens
+- Numbers-only names are allowed (more lenient than language identifiers)
+
+```
+"my-app"      # OK
+"myorg"       # OK
+"my-app-v2"   # OK
+"123"         # OK (numbers-only allowed)
+"My-App"      # ERROR: uppercase not allowed
+"my_app"      # ERROR: underscores not allowed
+"my--app"     # ERROR: consecutive hyphens
+"-app"        # ERROR: leading hyphen
+```
+
+Dependency keys in `[dependencies]` follow the same rules. This ensures they are valid TOML bare keys and unambiguous in import paths.
+
 At least one of `command`, `service`, or `lib` should be specified. A package can have multiple entry points (e.g., both `command` and `lib`).
 
 ### Entry Points and Worlds
@@ -150,7 +173,7 @@ Each key is the **import name** used in Wado source code. Values are inline tabl
 
 ### Dependency Source Types
 
-Exactly one source type must be specified per dependency.
+Each dependency must have exactly one primary source type (`git`, `registry`, `path`, or `url`). The exception is `path`, which can be combined with `registry` or `git` for publishing (see Publishing).
 
 #### Git
 
@@ -193,7 +216,14 @@ shared = { path = "../shared" }
 | ------ | -------- | ------------------------------------------ |
 | `path` | Yes      | Relative path to a directory or `.wado` file |
 
-Local path dependencies are not published. They are resolved relative to the `wado.toml` location.
+Local path dependencies are resolved relative to the `wado.toml` location. They are not locked (always resolved fresh).
+
+For publishing, `path` can be combined with a registry or git source. During development, the `path` is used; when publishing, the `path` is stripped and the accompanying source is used:
+
+```toml
+shared = { path = "../shared", registry = "wa", package = "myorg:shared", version = "^0.1.0" }
+shared = { path = "../shared", git = "https://github.com/org/shared.git", version = "^0.1.0" }
+```
 
 #### Remote URL
 
@@ -223,7 +253,6 @@ use { println } from "core:cli";           // scheme → built-in
 use { Request } from "wasi:http";           // scheme → built-in
 use { helper } from "./utils.wado";         // relative → local file
 use { Router } from "router";              // bare → wado.toml dependency
-use { Middleware } from "router/middleware"; // bare → sub-module of dep
 ```
 
 Dependency keys must not contain `:` (TOML bare keys naturally enforce this). This makes scheme-based and bare name resolution structurally unambiguous.
@@ -240,7 +269,7 @@ pub enum ModuleSource {
     Remote { url: String },
     EntryPoint { filename: Option<String> },
     // New:
-    Dependency { key: String, subpath: Option<String> },
+    Dependency { key: String },
 }
 ```
 
@@ -288,6 +317,18 @@ version = "1.0.0"    # ERROR: bare version requires explicit prefix
 ```
 
 Requiring an explicit prefix eliminates ambiguity — the user always knows exactly what range semantics are in effect. This applies uniformly to registry dependencies and git dependencies with `version`.
+
+#### Git Tag Format
+
+When resolving `version` for git dependencies, the resolver scans git tags and strips an optional letter prefix to extract the semver version:
+
+```
+v1.0.0    → 1.0.0    (strip "v")
+release1.2.3 → 1.2.3 (strip "release")
+1.0.0     → 1.0.0    (no prefix)
+```
+
+The rule: ignore the first `[a-zA-Z]+` prefix if present. Tags that do not contain a valid semver after stripping are silently ignored. This matches the convention used by most ecosystems (Go, npm, Cargo) where `v` prefix is common.
 
 #### Semver Compatibility
 
@@ -339,12 +380,12 @@ The existing `resolve_import(from_module_source, import_source)` signature alrea
 
 ```
 resolve_import(from=EntryPoint, "foo")
-  → CompilerHost looks up my-app's wado.toml → foo@2.0.0
-  → returns ModuleSource::Dependency { key: "foo", ... }
+  → CompilerHost looks up my-app's wado.toml → "myns:foo" version 2.0.0
+  → returns ModuleSource::Dependency { key: "myns:foo@2.0.0" }
 
-resolve_import(from=Dependency{key="router"}, "foo")
-  → CompilerHost looks up router's wado.toml → foo@1.0.0
-  → returns ModuleSource::Dependency { key: "router>foo", ... }
+resolve_import(from=Dependency{key="user:router@1.0.0"}, "foo")
+  → CompilerHost looks up router's wado.toml → "myns:foo" version 1.0.0
+  → returns ModuleSource::Dependency { key: "myns:foo@1.0.0" }
 ```
 
 The compiler sees distinct `ModuleSource::Dependency` values (different `key`) and compiles each independently. No changes to the compiler are needed — the `CompilerHost` implementation in the CLI handles all version-aware routing. Type isolation is natural — two separately compiled modules never share types.
@@ -357,6 +398,19 @@ When two dependencies require the same transitive dependency:
 - **Incompatible versions**: coexist as separate instances. Each dependent sees its own version. Types do not cross boundaries.
 - **Unsatisfiable**: if constraints within a compatibility range conflict (e.g., `=1.2.0` and `=1.3.0`), PubGrub reports a precise error with derivation chain.
 
+#### Cyclic Dependency Detection
+
+The resolver detects cycles in the dependency graph and reports a clear error:
+
+```
+error: cyclic dependency detected
+  → my-app depends on auth ^1.0
+  → auth 1.2.0 depends on core ^0.5
+  → core 0.5.1 depends on my-app ^0.1
+```
+
+Cyclic dependencies are always an error. Unlike some ecosystems that allow weak/optional cycles, Wado prohibits them — each package must form a directed acyclic graph (DAG). This is consistent with Wasm Component Model's instantiation order requirements.
+
 ### Lock File (`wado.lock`)
 
 The lock file captures the complete dependency graph with exact resolved versions. It is self-sufficient — when the lock file exists, the build system does not need to read each dependency's `wado.toml`.
@@ -366,70 +420,75 @@ The lock file captures the complete dependency graph with exact resolved version
 version = 1
 
 [[package]]
-key = "router"
-source = "git"
-git = "https://github.com/user/router.git"
+name = "user:router"
 version = "1.0.2"
+source = "git+https://github.com/user/router.git"
 resolved-ref = "abc1234def5678901234567890abcdef12345678"
 lib = "src/lib.wado"
-deps = ["router>utils", "router>json"]
+deps = ["tools:utils@0.5.1", "std:json@1.2.0"]
 
 [[package]]
-key = "router>utils"
-source = "registry"
-registry = "https://wa.dev"
-package = "tools:utils"
-version = "0.5.1"
-integrity = "sha256:b2c3d4e5f6a1..."
+name = "docs:regex"
+version = "0.1.2"
+source = "registry+https://wa.dev"
+integrity = "sha256:a1b2c3d4e5f6..."
+lib = "src/lib.wado"
+deps = ["docs:regex-utils@0.3.0"]
+
+[[package]]
+name = "docs:regex-utils"
+version = "0.3.0"
+source = "registry+https://wa.dev"
+integrity = "sha256:f6e5d4c3b2a1..."
 lib = "src/lib.wado"
 deps = []
 
 [[package]]
-key = "router>json"
-source = "registry"
-registry = "https://wa.dev"
-package = "std:json"
+name = "std:json"
 version = "1.2.0"
+source = "registry+https://wa.dev"
 integrity = "sha256:c3d4e5f6a1b2..."
 lib = "src/lib.wado"
 deps = []
 
 [[package]]
-key = "regex"
-source = "registry"
-registry = "https://wa.dev"
-package = "docs:regex"
-version = "0.1.2"
-integrity = "sha256:a1b2c3d4e5f6..."
+name = "tools:utils"
+version = "0.5.1"
+source = "registry+https://wa.dev"
+integrity = "sha256:b2c3d4e5f6a1..."
 lib = "src/lib.wado"
-deps = ["regex>utils"]
+deps = []
 
 [[package]]
-key = "regex>utils"
-source = "registry"
-registry = "https://wa.dev"
-package = "docs:regex-utils"
-version = "0.3.0"
-integrity = "sha256:f6e5d4c3b2a1..."
-lib = "src/lib.wado"
+name = "bench-tool"
+version = "0.1.0"
+source = "git+https://gitlab.com/user/bench.git"
+resolved-ref = "def5678901234567890abcdef12345678abc1234d"
+dev = true
+command = "src/main.wado"
 deps = []
 ```
 
+Each `[[package]]` entry is uniquely identified by `(name, version)`. The `name` field is the package identity (`namespace:name`) from the dependency's own `wado.toml`. The `deps` array references other entries using `name@version` format.
+
 #### Fields
 
-| Field          | Description                                            |
-| -------------- | ------------------------------------------------------ |
-| `key`          | Import key. `>` separates transitive dependency chains (e.g., `regex>utils` means utils as required by regex) |
-| `source`       | Source type: `git`, `registry`, `url`                  |
-| `resolved-ref` | For git: exact commit SHA (40 hex chars)               |
-| `version`      | Exact resolved version (registry and git with `version`)|
-| `integrity`    | Content hash with algorithm prefix (see below)         |
-| `command`      | Entry point for `wasi:cli/command` (from dependency's `wado.toml`) |
-| `service`      | Entry point for `wasi:http/service` (from dependency's `wado.toml`) |
-| `lib`          | Library entry point (from dependency's `wado.toml`)    |
-| `deps`         | Array of keys referencing other `[[package]]` entries in this lock file |
+| Field          | Applies to     | Description                                                 |
+| -------------- | -------------- | ----------------------------------------------------------- |
+| `name`         | all            | Package identity (`namespace:name` or `name`) from the dependency's `wado.toml` |
+| `version`      | all            | Exact resolved version                                      |
+| `source`       | all            | Source with URL: `registry+URL`, `git+URL`, or `url+URL`   |
+| `resolved-ref` | git only       | Exact commit SHA (40 hex chars)                             |
+| `integrity`    | registry only  | Content hash with algorithm prefix (see below)              |
+| `dev`          | dev-deps only  | `true` for dev-only packages (excluded from production)     |
+| `command`      | optional       | Entry point for `wasi:cli/command` (from dependency's `wado.toml`) |
+| `service`      | optional       | Entry point for `wasi:http/service` (from dependency's `wado.toml`) |
+| `lib`          | optional       | Library entry point (from dependency's `wado.toml`)         |
+| `deps`         | all            | Array of `name@version` strings referencing other entries    |
 
 Entry point fields (`command`, `service`, `lib`) are copied from the dependency's `wado.toml` at resolution time. This makes the lock file self-sufficient — the `CompilerHost` can resolve all imports and locate all source files using only the root `wado.toml` and `wado.lock`.
+
+`path` dependencies are not locked (always resolved fresh). `url` dependencies are not locked (content is mutable; use git or registry for reproducibility).
 
 #### Build Flow
 
@@ -442,11 +501,25 @@ When the lock file exists, the resolver is skipped entirely. The dependency grap
 
 #### Properties
 
-- Deterministic: entries sorted by `key` lexicographically, fields in declaration order
+- Deterministic: entries sorted by `name` then `version` lexicographically
 - Human-readable TOML
 - Committed to version control
-- `path` dependencies are not locked (always resolved fresh, not listed)
+- `path` and `url` dependencies are not locked (always resolved fresh, not listed)
 - Self-sufficient: contains the full dependency graph and entry points
+
+#### Lock File Freshness
+
+When `wado.toml` changes (dependency added, removed, or version constraint changed), the lock file may become stale. The behavior depends on context:
+
+```sh
+wado run                               # auto re-resolves if wado.toml changed
+wado compile -o out.wasm               # auto re-resolves if wado.toml changed
+wado compile --locked -o out.wasm      # ERROR if lock file is stale
+```
+
+`--locked` is intended for CI environments where reproducibility is critical. When `--locked` is specified, the build fails with an error if `wado.toml` has changed since the last `wado update`, rather than silently re-resolving.
+
+Auto re-resolution detects staleness by hashing the `[dependencies]` and `[dev-dependencies]` sections of `wado.toml` and storing the hash in the lock file header. If the hash changes, the resolver runs again and updates the lock file.
 
 ### Integrity Verification
 
@@ -464,8 +537,8 @@ The prefix makes the format extensible — if SHA-256 is ever deprecated, a new 
 | ------ | --------- |
 | Registry | Hash of the archive as downloaded from the registry. The registry defines the canonical archive format. |
 | Git | `resolved-ref` (commit SHA) serves as integrity. Git's content-addressable storage already guarantees integrity. No separate `integrity` field needed. |
-| Remote URL | Hash of the downloaded content (the `.wado` file or `wado.toml` + referenced sources). |
-| Local path | No integrity check. Always resolved fresh. |
+| Local path | Not locked. Always resolved fresh. |
+| Remote URL | Not locked. Content is mutable and cannot be reliably verified. Use git or registry deps for reproducible builds. |
 
 For registry packages, the hash input is the **downloaded archive bytes** (not individual source files concatenated). This matches how registries distribute packages and avoids ambiguity about file ordering or line endings.
 
@@ -545,6 +618,31 @@ When no `wado.toml` exists, the compiler operates in single-file mode:
 - Bare name imports produce a clear error: `unknown module "foo" (no wado.toml found)`
 - No behavioral change from current behavior
 
+`path` dependencies can point to a single `.wado` file (not just directories). The referenced file is implicitly treated as `lib = <that file>` — only `export` items are visible at the CM boundary:
+
+```toml
+shared = { path = "../shared.wado" }    # treated as lib = "shared.wado"
+utils  = { path = "../utils" }          # reads ../utils/wado.toml for entry points
+```
+
+Remote URL dependencies pointing to a single `.wado` file operate differently: they have **no CM boundary**. All `pub` items in the file are accessible to the importer, the same as a project-internal module. This is because a remote `.wado` file has no `wado.toml` and therefore no package boundary:
+
+```toml
+logger = { url = "https://example.com/logger.wado" }
+```
+
+```wado
+// In my code:
+use { log, set_level } from "logger";  // any pub item is accessible
+```
+
+| Dependency type | Boundary | Visible items |
+| --------------- | -------- | ------------- |
+| Registry / Git (with `wado.toml`) | CM boundary | `export` items only |
+| Path to directory (with `wado.toml`) | CM boundary | `export` items only |
+| Path to single `.wado` file | CM boundary | `export` items only (implicit `lib`) |
+| Remote URL to `.wado` file | No boundary | All `pub` and `export` items |
+
 ### CLI Integration
 
 #### Project Commands
@@ -585,7 +683,38 @@ wado exec <dep-name>               # run dependency's command entry point
 wado exec <dep-name> [args...]     # pass arguments to the dependency
 ```
 
-`wado exec` looks up `<dep-name>` in `[dependencies]`, finds the dependency's `wado.toml`, and runs its `command` entry point. This enables tool packages (formatters, linters, generators) to be installed as dependencies and executed directly.
+`wado exec` looks up `<dep-name>` in `[dependencies]`, resolves the dependency (using `wado.lock` if present), and runs its `command` entry point. This enables tool packages (formatters, linters, generators) to be installed as dependencies and executed directly.
+
+The lock file's `command` field for the dependency determines which source file to compile and run. If the dependency has no `command` entry point, `wado exec` reports an error.
+
+### Publishing
+
+When publishing a package to a registry (`wado publish`), the following validations apply:
+
+- `namespace` and `name` must be present
+- `version` must be present and valid semver
+- All `path` dependencies must have accompanying registry or git source information
+
+#### Path Dependency Replacement
+
+`path` dependencies that also specify a registry or git source are automatically replaced with the non-path source when publishing, similar to Cargo:
+
+```toml
+[dependencies]
+# During development: resolved via path (fast, local edits)
+# When published: resolved via registry (self-contained)
+shared = { path = "../shared", registry = "wa", package = "myorg:shared", version = "^0.1.0" }
+```
+
+Path dependencies without a registry or git fallback are errors:
+
+```
+error: cannot publish with path-only dependency
+  → utils = { path = "../utils" }
+  help: add registry or git source: utils = { path = "../utils", registry = "wa", package = "myorg:utils", version = "^0.1.0" }
+```
+
+This enables seamless local development while ensuring published packages are self-contained.
 
 ## Consequences
 
@@ -594,20 +723,26 @@ wado exec <dep-name> [args...]     # pass arguments to the dependency
 - Single `.wado` files continue to work without any project file
 - Git dependencies work with any hosting provider (not GitHub-specific)
 - Git deps support both semver (`version`) and exact pinning (`ref`) — XOR ensures clarity
-- `dev-dependencies` keep test-only code out of production builds
+- `dev-dependencies` keep test-only code out of production builds, tracked in lock file with `dev = true`
 - Registry aliases avoid URL repetition and enable easy migration
 - Bare name imports are short and ergonomic (`"router"` not `"dep:router"`)
 - No reserved namespaces — `core:` and `wasi:` are resolved by scheme syntax, not by name reservation
 - PubGrub provides best-in-class error messages for resolution failures
+- Cyclic dependencies are detected early with clear error messages
 - Multiple semver-incompatible versions coexist naturally, matching Wasm Component Model's type isolation
 - Lock file is self-sufficient — contains full dependency graph and entry points, eliminating per-dependency `wado.toml` reads during builds
-- Lock file with `integrity` ensures reproducible and tamper-evident builds
+- Lock file entries identified by `name@version` — clear and decoupled from dependency chains
+- Lock file with `integrity` ensures reproducible and tamper-evident builds for registry deps
+- Auto re-resolve keeps lock file fresh; `--locked` ensures CI reproducibility
 - Compiler remains agnostic to dependency resolution — `CompilerHost` handles all mapping
 - Entry point fields (`command`, `service`, `lib`) map directly to WASI worlds and CLI commands
 - `export` as CM boundary gives clear, consistent public API semantics across all consumption modes
+- Remote URL `.wado` files bypass CM boundary, giving lightweight access to all `pub` items
 - Wado-to-Wado optimization eliminates CM overhead for same-language dependencies without changing semantics
 - `namespace` absence naturally indicates non-publishable packages — no extra `publish = false` flag needed
+- Path deps with dual source (`path` + `registry`) enable seamless dev-to-publish workflow
 - Workspace support enables multi-package development with shared lock files and dependency declarations
+- Name/namespace validation (lowercase alphanumeric + hyphens) prevents ambiguity in lock files and import paths
 
 ### Negative
 
@@ -615,6 +750,7 @@ wado exec <dep-name> [args...]     # pass arguments to the dependency
 - PubGrub is NP-hard worst case (acceptable in practice — pathological cases are rare in real ecosystems)
 - Multiple coexisting versions increase binary size (mitigated by Wasm's tree-shaking-friendly module system)
 - Lock file merge conflicts are a known pain point (mitigated by deterministic ordering and simple TOML structure)
+- `url` dependencies are not locked — reproducibility requires git or registry deps
 
 ### Trade-offs
 
@@ -627,3 +763,5 @@ wado exec <dep-name> [args...]     # pass arguments to the dependency
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
 - **`command` over `bin`/`cli`**: `command` matches the WASI world name (`wasi:cli/command`) directly, making the mapping explicit. `bin` (Cargo's term) describes artifact format, which is less meaningful in the Wasm world. `cli` describes the interface but doesn't match the world name.
 - **`[package]` over `[project]`**: `[package]` aligns with CM's "package" concept (`package ns:name@version` in WIT). The file itself represents the project; `[package]` describes the distributable unit within it. `[workspace]` > `[package]` hierarchy is natural, whereas `[workspace]` > `[project]` would be confusing.
+- **Remote URL without CM boundary**: remote `.wado` files expose all `pub` items (not just `export`). This trades encapsulation for convenience — these are lightweight dependencies without package structure. For proper encapsulation, use registry or git deps.
+- **`path` + `registry` dual source**: adds complexity to the dependency spec but eliminates the "path deps can't be published" problem. The alternative (Cargo's separate `[patch]` section) is more complex and harder to maintain.
