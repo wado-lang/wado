@@ -417,7 +417,7 @@ pub fn api_function() -> i32 {
     return 42;
 }
 
-// World export (exposed at CM boundary)
+// Component export (public API at CM boundary)
 export fn run() { ... }
 ```
 
@@ -425,21 +425,24 @@ A function must have `return` if it returns a value. This is applied to methods 
 
 ## Visibility
 
-Wado has two kinds of "public":
+Wado has three levels of visibility:
 
-| Keyword  | Term          | Scope                    |
-| -------- | ------------- | ------------------------ |
-| `pub`    | module public | Other Wado modules       |
-| `export` | world export  | Component Model boundary |
+| Keyword  | Term             | Scope                                 |
+| -------- | ---------------- | ------------------------------------- |
+| (none)   | private          | Within the module                     |
+| `pub`    | module public    | Other modules within the same project |
+| `export` | component export | CM boundary (package's public API)    |
 
 ```wado
 fn private_fn() { }           // module-private (default)
-pub fn public_fn() { }        // module public
-export fn entry() { }         // world export
-pub export fn both() { }      // both
+pub fn public_fn() { }        // project-internal (other modules in same project)
+export fn run() { }           // component export (visible to consumers)
+pub export fn both() { }      // both project-internal and component export
 ```
 
 All entity definitions can have `pub` visibility.
+
+`export` defines what is visible when the package is consumed as a dependency or published as a `.wasm` component. `pub` items are accessible within the project but hidden from external consumers.
 
 ## Methods
 
