@@ -152,6 +152,8 @@ WIR preserves TIR metadata for debugging and unparse output, even when not neede
 ```rust
 /// Source location and origin metadata, carried through from TIR.
 pub struct WirMeta {
+    /// Which module this entity was defined in
+    pub module_source: Option<ModuleSource>,
     /// Source span in the original Wado source
     pub span: Option<Span>,
     /// Attributes (e.g., #[hidden])
@@ -159,7 +161,7 @@ pub struct WirMeta {
 }
 ```
 
-Note: `module_source` is not in `WirMeta`. It is part of `WirName.fq` — the entity's own name carries its module origin. This avoids duplicating module information.
+`module_source` is also encoded in `WirName.fq`, but kept as a separate `ModuleSource` value for programmatic use (e.g., `is_core()`, `is_wasi()`, grouping by module). Parsing `fq` strings to extract module origin would violate name.rs conventions.
 
 ```rust
 /// Generic instantiation origin (e.g., Array<i32> from Array<T>)
@@ -216,7 +218,7 @@ pub struct WirStructType {
     pub name: WirName,
     /// Fields with names and types
     pub fields: Vec<WirField>,
-    /// Metadata (span, attributes)
+    /// Metadata (module source, span, attributes)
     pub meta: WirMeta,
     /// Generic instantiation origin (None for non-generic types)
     pub generic_origin: Option<WirGenericOrigin>,
@@ -244,7 +246,7 @@ pub struct WirVariantType {
     pub name: WirName,
     /// Cases with names and optional payload types
     pub cases: Vec<WirVariantCase>,
-    /// Metadata (span, attributes)
+    /// Metadata (module source, span, attributes)
     pub meta: WirMeta,
     /// Generic instantiation origin (None for non-generic types)
     pub generic_origin: Option<WirGenericOrigin>,
@@ -280,7 +282,7 @@ pub struct WirEnumType {
     pub name: WirName,
     /// Cases with names and discriminant values
     pub cases: Vec<WirEnumCase>,
-    /// Metadata (span, attributes)
+    /// Metadata (module source, span, attributes)
     pub meta: WirMeta,
     /// Generic instantiation origin (None for non-generic types)
     pub generic_origin: Option<WirGenericOrigin>,
@@ -304,7 +306,7 @@ pub struct WirFlagsType {
     pub name: WirName,
     /// Flag bits with names and positions
     pub bits: Vec<WirFlagBit>,
-    /// Metadata (span, attributes)
+    /// Metadata (module source, span, attributes)
     pub meta: WirMeta,
 }
 
@@ -935,11 +937,11 @@ This eliminates the `ValType`/`StorageType` split at the WIR level — there is 
 
 ### Why Preserve TIR Metadata?
 
-WIR carries metadata (spans, attributes, generic origin, newtype origin) even though the emit phase does not need most of it. This is intentional:
+WIR carries metadata (module source, spans, attributes, generic origin, newtype origin) even though the emit phase does not need most of it. This is intentional:
 
-- **Unparse**: `wado dump --wir --unparse` can show `// from ./geometry.wado` comments (derived from `WirName.fq`), display newtype origins, and annotate generic instantiations.
+- **Unparse**: `wado dump --wir --unparse` can show `// from ./geometry.wado` comments (from `WirMeta.module_source`), display newtype origins, and annotate generic instantiations.
 - **Error messages**: If the emit phase detects a problem, it can report source locations via `WirMeta.span`.
-- **Debugging**: When investigating codegen issues, knowing where a type or function came from is critical. `WirName.fq` carries the module origin; `WirMeta.span` carries the source location.
+- **Debugging**: When investigating codegen issues, knowing where a type or function came from is critical. `WirMeta.module_source` provides structured access (`is_core()`, `is_wasi()`, etc.); `WirName.fq` provides the serialized identity.
 - **Newtypes**: Resolved by the WIR phase (a `Meters` field is `F64` in WIR), but `newtype_origin` records that it was `Meters` from `./physics.wado`. This avoids polluting the emit phase with newtype logic while keeping debug info.
 
 The metadata is lightweight (references and optional fields) and does not affect WIR→Wasm correctness.
