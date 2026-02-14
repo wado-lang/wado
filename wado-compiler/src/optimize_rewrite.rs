@@ -21,8 +21,8 @@
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt,
-    TirStmtKind, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
+    TypeId, TypeTable,
 };
 use indexmap::IndexSet;
 
@@ -921,4 +921,3 @@ fn collect_value_copy_types_in_expr(
         | TirExprKind::EnumConstruct { .. } => {}
     }
 }
-

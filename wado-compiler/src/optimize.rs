@@ -161,4 +161,3 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         }
     }
 }
-
