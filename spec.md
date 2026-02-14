@@ -3147,12 +3147,10 @@ fn main() {
 
 ### What is a World?
 
-A **world** in Wado corresponds directly to the Component Model's `world` concept. A world defines:
+A **world** in Wado corresponds directly to the Component Model's `world` concept. A world defines the contract between a Wasm component and its environment:
 
-1. **Imports**: Which effects and their functions the component requires from the host
-2. **Exports**: Which functions the component provides to the host
-
-Worlds are the contract between a Wasm component and its runtime environment.
+1. **Imports**: Which capabilities the component requires (provided by the host or by other components)
+2. **Exports**: Which functions and types the component provides
 
 Worlds are classified into two categories:
 
@@ -3238,13 +3236,12 @@ world Command {
     export async fn run() -> Result<(), ()>;
 }
 
-// Declare this component implements the CLI command world
-#![world(CliCommand)]
+// Declare conformance to the Command hosted world
+contract Command;
 
-// Implementation
-pub fn run() -> Result<(), ()> {
+// Implementation — `export` exposes it at the CM boundary
+export fn run() with Stdout {
     println("Hello, WASI world!");
-    return Ok(());
 }
 ```
 
@@ -3270,8 +3267,8 @@ world CliApp {
     export fn run() -> Result<(), ()>;
 }
 
-// Select world at compile time
-#![world(CliApp)]  // or BrowserApp
+// Declare conformance — select world at compile time
+contract CliApp;  // or: contract BrowserApp;
 ```
 
 ### Design Notes
@@ -3369,9 +3366,14 @@ Wado effects map to WASI P3 interfaces:
 
 Entry points are integrated in World system.
 
-Currently, `run` is the only entry point, which confirms the `Command` world defined in wasi:cli.
+Each hosted world defines its entry point. Currently supported:
 
-TBD.
+| Hosted World          | Entry Point                                               | CLI Command  |
+| --------------------- | --------------------------------------------------------- | ------------ |
+| `wasi:cli/command`    | `export fn run()`                                         | `wado run`   |
+| `wasi:http/service`   | `export fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
+
+When no explicit `contract` declaration is present, the runtime determines the expected world (e.g., `wado run` expects `wasi:cli/command`).
 
 ### Attribute Syntax for WASI Linking
 

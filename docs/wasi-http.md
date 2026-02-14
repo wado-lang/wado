@@ -1,6 +1,6 @@
 # WASI HTTP Implementation Notes
 
-This document tracks the implementation of `wasi:http/service` world support in Wado.
+This document tracks the implementation of the `wasi:http/service` hosted world in Wado.
 
 ## Current Status
 
@@ -126,7 +126,7 @@ task-return(1, error_case, has_payload, padding, payload_fields...)
 ### Files Modified
 
 - `wado-compiler/src/codegen.rs` - HTTP response codegen, task-return handling
-- `wado-compiler/src/optimize_dce.rs` - Future intrinsics for Service world
+- `wado-compiler/src/optimize_dce.rs` - Future intrinsics for `wasi:http/service` world
 - `wado-compiler/lib/wasi/http.wado` - WASI HTTP type definitions
 
 ## TODO

@@ -1191,9 +1191,9 @@ The compiler:
 
 **Execution Context:**
 
-The compiler generates different code depending on the target world:
+The compiler generates different code depending on the target hosted world:
 
-CLI World (Synchronous):
+CLI hosted world (`wasi:cli/command` — synchronous):
 
 - Updates propagate immediately at each mutation site
 - Effect closures are called inline, synchronously
@@ -1206,7 +1206,7 @@ CLI World (Synchronous):
 ;; Next statement executes after effect completes
 ```
 
-Event-looped World (Browser/GUI):
+Event-looped hosted world (Browser/GUI — future):
 
 - Updates may be batched within an event handler
 - Compiler generates a scheduler that collects mutations and flushes at end of event
