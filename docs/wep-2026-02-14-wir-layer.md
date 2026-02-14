@@ -98,6 +98,53 @@ pub struct WirModule {
 }
 ```
 
+### Names
+
+WIR entities at global scope (types, functions, globals) use `WirName` to carry both a short display name and a fully-qualified identity name. Local-scope names (locals, struct fields, enum/variant cases) remain plain `String`.
+
+```rust
+/// A globally-scoped name in WIR.
+///
+/// Carries both forms needed by different consumers:
+/// - `display`: short name for unparse and error messages
+/// - `fq`: module-qualified name for unique identity
+///
+/// The `tir_to_wir` phase constructs WirNames from name.rs objects
+/// (StructName, FunctionId, etc.). WIR itself does not import name.rs types.
+pub struct WirName {
+    /// Short display name (e.g., "Point", "Array<i32>", "Point::sum")
+    /// Used by unparse and error messages.
+    pub display: String,
+    /// Fully-qualified name (e.g., "core:prelude//Point", "./geometry.wado/Point::sum")
+    /// Used as the unique identity key for name→index resolution during emission.
+    pub fq: String,
+}
+```
+
+Examples:
+
+| Entity | `display` | `fq` |
+| ------ | --------- | ---- |
+| Struct Point from entry | `Point` | `<entry>//Point` |
+| Array<i32> from prelude | `Array<i32>` | `core:prelude//Array<i32>` |
+| Method Point::sum | `Point::sum` | `./geometry.wado/Point::sum` |
+| Global counter | `counter` | `<entry>//counter` |
+| Enum Ordering from prelude | `Ordering` | `core:prelude//Ordering` |
+
+`WirName` is used in:
+
+- **Type definitions**: `WirStructType.name`, `WirVariantType.name`, `WirEnumType.name`, etc.
+- **Type references**: `WirTypeRef(WirName)`
+- **Function definitions**: `WirFunction.name`
+- **Function references**: `Call { func_name: WirName }`, `RefFunc { func_name: WirName }`
+- **Global definitions and references**: `WirGlobal.name`, `GlobalGet { name: WirName }`
+
+Not used for local-scope names (no module qualification needed):
+
+- Struct field names, enum/variant case names
+- Local variable names (`DeclareLocal`, `LocalGet`, `LocalSet`)
+- Block labels
+
 ### Metadata
 
 WIR preserves TIR metadata for debugging and unparse output, even when not needed for code emission.
@@ -105,14 +152,16 @@ WIR preserves TIR metadata for debugging and unparse output, even when not neede
 ```rust
 /// Source location and origin metadata, carried through from TIR.
 pub struct WirMeta {
-    /// Which module this entity was defined in
-    pub module_source: Option<ModuleSource>,
     /// Source span in the original Wado source
     pub span: Option<Span>,
     /// Attributes (e.g., #[hidden])
     pub attributes: Vec<WirAttribute>,
 }
+```
 
+Note: `module_source` is not in `WirMeta`. It is part of `WirName.fq` — the entity's own name carries its module origin. This avoids duplicating module information.
+
+```rust
 /// Generic instantiation origin (e.g., Array<i32> from Array<T>)
 pub struct WirGenericOrigin {
     /// Base generic name (e.g., "Array", "Box")
@@ -163,11 +212,11 @@ pub enum WirTypeDef {
 
 ```rust
 pub struct WirStructType {
-    /// Source-level name (e.g., "Point", "Array<i32>", "__Closure_3")
-    pub name: String,
+    /// Name (display: "Point", fq: "core:prelude//Point")
+    pub name: WirName,
     /// Fields with names and types
     pub fields: Vec<WirField>,
-    /// Metadata (module source, span, attributes)
+    /// Metadata (span, attributes)
     pub meta: WirMeta,
     /// Generic instantiation origin (None for non-generic types)
     pub generic_origin: Option<WirGenericOrigin>,
@@ -191,11 +240,11 @@ Variants are sum types with payloads. At the Wasm level, they expand to a subtyp
 
 ```rust
 pub struct WirVariantType {
-    /// Source-level name (e.g., "Shape", "Result<i32, String>")
-    pub name: String,
+    /// Name (display: "Shape", fq: "./shapes.wado//Shape")
+    pub name: WirName,
     /// Cases with names and optional payload types
     pub cases: Vec<WirVariantCase>,
-    /// Metadata (module source, span, attributes)
+    /// Metadata (span, attributes)
     pub meta: WirMeta,
     /// Generic instantiation origin (None for non-generic types)
     pub generic_origin: Option<WirGenericOrigin>,
@@ -227,11 +276,11 @@ Enums are discriminated values without payloads. They have no Wasm type section 
 
 ```rust
 pub struct WirEnumType {
-    /// Source-level name (e.g., "Color", "Ordering")
-    pub name: String,
+    /// Name (display: "Color", fq: "./colors.wado//Color")
+    pub name: WirName,
     /// Cases with names and discriminant values
     pub cases: Vec<WirEnumCase>,
-    /// Metadata (module source, span, attributes)
+    /// Metadata (span, attributes)
     pub meta: WirMeta,
     /// Generic instantiation origin (None for non-generic types)
     pub generic_origin: Option<WirGenericOrigin>,
@@ -251,11 +300,11 @@ Flags are bitfield types. Like enums, they have no Wasm type section entry — v
 
 ```rust
 pub struct WirFlagsType {
-    /// Source-level name
-    pub name: String,
+    /// Name (display: "Permissions", fq: "./perms.wado//Permissions")
+    pub name: WirName,
     /// Flag bits with names and positions
     pub bits: Vec<WirFlagBit>,
-    /// Metadata (module source, span, attributes)
+    /// Metadata (span, attributes)
     pub meta: WirMeta,
 }
 
@@ -271,7 +320,7 @@ pub struct WirFlagBit {
 
 ```rust
 pub struct WirArrayType {
-    pub name: String,
+    pub name: WirName,
     pub element_type: WirType,
     pub mutable: bool,
     pub meta: WirMeta,
@@ -279,13 +328,13 @@ pub struct WirArrayType {
 }
 
 pub struct WirFuncType {
-    pub name: String,
+    pub name: WirName,
     pub params: Vec<WirType>,
     pub results: Vec<WirType>,
 }
 
-/// Reference to a type by name (resolved to index during emission)
-pub struct WirTypeRef(pub String);
+/// Reference to a type (resolved to index during emission via fq name)
+pub struct WirTypeRef(pub WirName);
 ```
 
 ### WIR Type System
@@ -323,11 +372,11 @@ pub enum WirType {
     // Unit (no Wasm representation; zero-size)
     Unit,
     /// Named enum type (i32 at Wasm level)
-    Enum { type_name: String },
+    Enum { type_name: WirName },
     /// Named flags type (i32 at Wasm level)
-    Flags { type_name: String },
+    Flags { type_name: WirName },
     /// Reference to a named GC type
-    Ref { type_name: String, nullable: bool },
+    Ref { type_name: WirName, nullable: bool },
     /// Abstract reference type (anyref, funcref, etc.)
     AbstractRef { heap_type: WirAbstractHeapType, nullable: bool },
 }
@@ -348,8 +397,8 @@ pub enum WirAbstractHeapType {
 
 ```rust
 pub struct WirFunction {
-    /// Function name (for name section and local references)
-    pub name: String,
+    /// Function name (display: "Point::sum", fq: "./geometry.wado/Point::sum")
+    pub name: WirName,
     /// Type reference (function signature — param types and result types)
     pub type_ref: WirTypeRef,
     /// Parameter names (types come from the referenced WirFuncType)
@@ -384,8 +433,8 @@ pub enum WirInstr {
     LocalTee { name: String, value: Box<WirInstr> },
 
     // === Globals ===
-    GlobalGet { name: String },
-    GlobalSet { name: String, value: Box<WirInstr> },
+    GlobalGet { name: WirName },
+    GlobalSet { name: WirName, value: Box<WirInstr> },
 
     // === Constants ===
     I32Const(i32),
@@ -524,31 +573,31 @@ pub enum WirInstr {
 
     // === GC: Struct ===
     /// struct.new with named type
-    StructNew { type_name: String, fields: Vec<WirInstr> },
+    StructNew { type_name: WirName, fields: Vec<WirInstr> },
     /// struct.get with named type and field (field index resolved by emitter)
-    StructGet { type_name: String, field_name: String, expr: Box<WirInstr> },
+    StructGet { type_name: WirName, field_name: String, expr: Box<WirInstr> },
     /// struct.set with named type and field (field index resolved by emitter)
-    StructSet { type_name: String, field_name: String, expr: Box<WirInstr>, value: Box<WirInstr> },
+    StructSet { type_name: WirName, field_name: String, expr: Box<WirInstr>, value: Box<WirInstr> },
 
     // === GC: Array ===
-    ArrayNew { type_name: String, init: Box<WirInstr>, len: Box<WirInstr> },
-    ArrayNewDefault { type_name: String, len: Box<WirInstr> },
-    ArrayNewData { type_name: String, data_index: u32, offset: Box<WirInstr>, len: Box<WirInstr> },
-    ArrayNewFixed { type_name: String, elements: Vec<WirInstr> },
-    ArrayGet { type_name: String, array: Box<WirInstr>, index: Box<WirInstr> },
-    ArrayGetS { type_name: String, array: Box<WirInstr>, index: Box<WirInstr> },
-    ArrayGetU { type_name: String, array: Box<WirInstr>, index: Box<WirInstr> },
-    ArraySet { type_name: String, array: Box<WirInstr>, index: Box<WirInstr>, value: Box<WirInstr> },
+    ArrayNew { type_name: WirName, init: Box<WirInstr>, len: Box<WirInstr> },
+    ArrayNewDefault { type_name: WirName, len: Box<WirInstr> },
+    ArrayNewData { type_name: WirName, data_index: u32, offset: Box<WirInstr>, len: Box<WirInstr> },
+    ArrayNewFixed { type_name: WirName, elements: Vec<WirInstr> },
+    ArrayGet { type_name: WirName, array: Box<WirInstr>, index: Box<WirInstr> },
+    ArrayGetS { type_name: WirName, array: Box<WirInstr>, index: Box<WirInstr> },
+    ArrayGetU { type_name: WirName, array: Box<WirInstr>, index: Box<WirInstr> },
+    ArraySet { type_name: WirName, array: Box<WirInstr>, index: Box<WirInstr>, value: Box<WirInstr> },
     ArrayLen(Box<WirInstr>),
-    ArrayCopy { dest_type: String, src_type: String, dest: Box<WirInstr>, dest_offset: Box<WirInstr>, src: Box<WirInstr>, src_offset: Box<WirInstr>, len: Box<WirInstr> },
-    ArrayFill { type_name: String, array: Box<WirInstr>, offset: Box<WirInstr>, value: Box<WirInstr>, len: Box<WirInstr> },
+    ArrayCopy { dest_type: WirName, src_type: WirName, dest: Box<WirInstr>, dest_offset: Box<WirInstr>, src: Box<WirInstr>, src_offset: Box<WirInstr>, len: Box<WirInstr> },
+    ArrayFill { type_name: WirName, array: Box<WirInstr>, offset: Box<WirInstr>, value: Box<WirInstr>, len: Box<WirInstr> },
 
     // === GC: Reference ===
     RefNull { heap_type: WirAbstractHeapType },
     RefIsNull(Box<WirInstr>),
     RefAsNonNull(Box<WirInstr>),
-    RefCast { type_name: String, nullable: bool, expr: Box<WirInstr> },
-    RefTest { type_name: String, nullable: bool, expr: Box<WirInstr> },
+    RefCast { type_name: WirName, nullable: bool, expr: Box<WirInstr> },
+    RefTest { type_name: WirName, nullable: bool, expr: Box<WirInstr> },
     RefEq(Box<WirInstr>, Box<WirInstr>),
     RefI31(Box<WirInstr>),
     I31GetS(Box<WirInstr>),
@@ -581,10 +630,10 @@ pub enum WirInstr {
     Select { condition: Box<WirInstr>, if_true: Box<WirInstr>, if_false: Box<WirInstr>, ty: Option<WirType> },
 
     // === Calls ===
-    Call { func_name: String, args: Vec<WirInstr> },
-    CallIndirect { type_name: String, table: u32, index: Box<WirInstr>, args: Vec<WirInstr> },
-    CallRef { type_name: String, func_ref: Box<WirInstr>, args: Vec<WirInstr> },
-    RefFunc { func_name: String },
+    Call { func_name: WirName, args: Vec<WirInstr> },
+    CallIndirect { type_name: WirName, table: u32, index: Box<WirInstr>, args: Vec<WirInstr> },
+    CallRef { type_name: WirName, func_ref: Box<WirInstr>, args: Vec<WirInstr> },
+    RefFunc { func_name: WirName },
 
     // === Memory ===
     MemorySize,
@@ -602,7 +651,7 @@ pub enum WirInstr {
 
     /// Deep copy of a value type (struct, array, variant, option, tuple).
     /// Lowered to field-by-field copy, array loop, etc. during emission.
-    ValueCopy { type_name: String, source_type: WirCopyType, expr: Box<WirInstr> },
+    ValueCopy { type_name: WirName, source_type: WirCopyType, expr: Box<WirInstr> },
 
     /// Sequence of instructions (for statement blocks)
     Seq(Vec<WirInstr>),
@@ -652,22 +701,32 @@ pub struct WirComponent {
 
 ### Names and References
 
-WIR uses **string names** for all references, not numeric indices. During emission, names are resolved to indices via lookup tables built during the emission pass. This keeps WIR readable and decoupled from index allocation order.
+WIR uses `WirName` for globally-scoped references and plain `String` for local-scope references. During emission, `WirName.fq` is resolved to indices via lookup tables. For unparse, `WirName.display` provides human-readable names.
 
-All named references in WIR:
+| Scope | Reference type | Identity key | Display |
+| ----- | -------------- | ------------ | ------- |
+| Global | `WirName` | `fq` | `display` |
+| Local | `String` | name itself | name itself |
 
-- **Types**: `WirTypeRef(String)` — struct, variant, array, func type names
-- **Functions**: `WirFuncRef(String)` — function names in `Call`, `RefFunc`
-- **Locals**: `String` — local variable names in `LocalGet`, `LocalSet`, `DeclareLocal`
-- **Globals**: `String` — global variable names in `GlobalGet`, `GlobalSet`
-- **Fields**: `String` — struct field names in `StructGet`, `StructSet` (resolved to field index by emitter)
+Global-scope references (use `WirName`):
+
+- **Types**: `WirTypeRef(WirName)` — in function signatures, instructions
+- **Functions**: `WirName` — in `Call`, `RefFunc`, `WirFunction.name`
+- **Globals**: `WirName` — in `GlobalGet`, `GlobalSet`
+
+Local-scope references (use `String`):
+
+- **Locals**: in `LocalGet`, `LocalSet`, `DeclareLocal`
+- **Fields**: in `StructGet`, `StructSet` (resolved to field index by emitter)
+- **Labels**: in `Block`, `Loop`
+- **Enum/variant cases**: in `WirEnumCase`, `WirVariantCase`
 
 ```rust
-/// Type references use the type's name
-pub struct WirTypeRef(pub String);
+/// Type references carry both display and fq names
+pub struct WirTypeRef(pub WirName);
 
-/// Function references use the function's name
-pub struct WirFuncRef(pub String);
+/// Function references carry both display and fq names
+pub struct WirFuncRef(pub WirName);
 ```
 
 ## Unparse Format
@@ -832,15 +891,16 @@ Flattening trees to stack-machine instructions is trivial (post-order traversal)
 
 ### Why Named References (Not Indices)?
 
-Using names **uniformly** for all references keeps WIR independent of emission order and self-documenting:
+Using names for all references keeps WIR independent of emission order and self-documenting:
 
-- Types, functions, globals, locals, struct fields — all referenced by name
+- Global-scope names use `WirName` with both `display` (for unparse) and `fq` (for identity)
+- Local-scope names (locals, fields, labels) use plain `String`
 - Type registration order can change without invalidating WIR
 - Functions and globals can be reordered freely
 - Struct field indices are resolved from type definitions during emission
-- WIR is self-documenting (no need for a separate name section to read it)
+- Unparse uses `display` names — no need to parse FQ names for readability
 
-The cost is a name→index lookup during emission, which is O(1) with `IndexMap`.
+The cost is a `fq`→index lookup during emission, which is O(1) with `IndexMap`.
 
 ### Why `ValueCopy` as a Compound Instruction?
 
@@ -875,11 +935,11 @@ This eliminates the `ValType`/`StorageType` split at the WIR level — there is 
 
 ### Why Preserve TIR Metadata?
 
-WIR carries metadata (module source, spans, attributes, generic origin, newtype origin) even though the emit phase does not need most of it. This is intentional:
+WIR carries metadata (spans, attributes, generic origin, newtype origin) even though the emit phase does not need most of it. This is intentional:
 
-- **Unparse**: `wado dump --wir --unparse` can show `// from ./geometry.wado` comments, display newtype origins, and annotate generic instantiations.
-- **Error messages**: If the emit phase detects a problem, it can report source locations.
-- **Debugging**: When investigating codegen issues, knowing where a type or function came from is critical.
+- **Unparse**: `wado dump --wir --unparse` can show `// from ./geometry.wado` comments (derived from `WirName.fq`), display newtype origins, and annotate generic instantiations.
+- **Error messages**: If the emit phase detects a problem, it can report source locations via `WirMeta.span`.
+- **Debugging**: When investigating codegen issues, knowing where a type or function came from is critical. `WirName.fq` carries the module origin; `WirMeta.span` carries the source location.
 - **Newtypes**: Resolved by the WIR phase (a `Meters` field is `F64` in WIR), but `newtype_origin` records that it was `Meters` from `./physics.wado`. This avoids polluting the emit phase with newtype logic while keeping debug info.
 
 The metadata is lightweight (references and optional fields) and does not affect WIR→Wasm correctness.
