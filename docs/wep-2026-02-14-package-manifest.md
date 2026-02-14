@@ -27,11 +27,11 @@ command = "src/main.wado"
 lib = "src/lib.wado"
 
 [registries]
-wa = "https://wa.dev"
+default = "https://wa.dev"
 
 [dependencies]
 router = { git = "https://github.com/user/router.git", version = "^1.0.0" }
-regex = { registry = "wa", package = "docs:regex", version = "^0.1.0" }
+regex = { package = "docs:regex", version = "^0.1.0" }
 shared = { path = "../shared" }
 
 [dev-dependencies]
@@ -137,15 +137,21 @@ This optimization is transparent to the developer. The visible API is always det
 
 ### `[registries]`
 
-Named registry aliases. Keys are short names; values are registry URLs.
+Named registry aliases. Keys are short names; values are registry URLs. The special key `default` sets the default registry — dependencies with `package` but no `registry` use it automatically.
 
 ```toml
 [registries]
-wa = "https://wa.dev"
+default = "https://wa.dev"
 custom = "https://registry.example.com"
 ```
 
-These names are referenced by the `registry` field in dependency entries.
+```toml
+[dependencies]
+regex = { package = "docs:regex", version = "^0.1.0" }              # uses default registry
+special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }  # uses named registry
+```
+
+A dependency with `package` and `version` but no `registry` requires `default` to be set. If `default` is not defined and `registry` is omitted, it is an error.
 
 ### `[dependencies]` and `[dev-dependencies]`
 
@@ -179,14 +185,15 @@ Exactly one of `version` or `ref` must be specified. `version` resolves against 
 #### Registry
 
 ```toml
-regex = { registry = "wa", package = "docs:regex", version = "^0.1.0" }
+regex = { package = "docs:regex", version = "^0.1.0" }                      # uses default registry
+special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }   # uses named registry
 ```
 
-| Field      | Required | Description                                    |
-| ---------- | -------- | ---------------------------------------------- |
-| `registry` | Yes      | Registry alias (defined in `[registries]`)     |
-| `package`  | Yes      | Package identity in `namespace:name` format    |
-| `version`  | Yes      | Semver version range (e.g., `"^0.1.0"`)       |
+| Field      | Required | Description                                                |
+| ---------- | -------- | ---------------------------------------------------------- |
+| `registry` | No       | Registry alias (defined in `[registries]`). Defaults to `default`. |
+| `package`  | Yes      | Package identity in `namespace:name` format                |
+| `version`  | Yes      | Semver version range (e.g., `"^0.1.0"`)                   |
 
 #### Local Path
 
@@ -203,7 +210,7 @@ Local path dependencies are resolved relative to the `wado.toml` location. They 
 For publishing, `path` can be combined with a registry or git source. When publishing (`wado publish`), the `path` is stripped and the accompanying source is used in the published package manifest:
 
 ```toml
-shared = { path = "../shared", registry = "wa", package = "myorg:shared", version = "^0.1.0" }
+shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
 shared = { path = "../shared", git = "https://github.com/org/shared.git", version = "^0.1.0" }
 ```
 
@@ -330,8 +337,8 @@ Within a single `wado.toml`, a user can also explicitly depend on multiple major
 
 ```toml
 [dependencies]
-http-v1 = { registry = "wa", package = "std:http", version = "^1.0.0" }
-http-v2 = { registry = "wa", package = "std:http", version = "^2.0.0" }
+http-v1 = { package = "std:http", version = "^1.0.0" }
+http-v2 = { package = "std:http", version = "^2.0.0" }
 ```
 
 #### Transitive Version Isolation
@@ -538,7 +545,7 @@ A workspace groups multiple packages for co-development. The workspace root has 
 members = ["packages/*"]
 
 [workspace.dependencies]
-json = { registry = "wa", package = "std:json", version = "^1.0.0" }
+json = { package = "std:json", version = "^1.0.0" }
 
 [workspace.dev-dependencies]
 bench = { git = "https://gitlab.com/user/bench.git", version = "^0.1.0" }
@@ -618,7 +625,7 @@ utils  = { path = "../utils" }          # reads ../utils/wado.toml for entry poi
 ```sh
 wado init                          # create wado.toml interactively
 wado add router --git https://github.com/user/router.git --version "^1.0.0"
-wado add regex --registry wa --package docs:regex --version "^0.1.0"
+wado add regex --package docs:regex --version "^0.1.0"
 wado remove router
 wado update                        # update wado.lock
 wado update regex                  # update specific dependency
@@ -671,7 +678,7 @@ When publishing a package to a registry (`wado publish`), the following validati
 [dependencies]
 # During development: resolved via path (fast, local edits)
 # When published: resolved via registry (self-contained)
-shared = { path = "../shared", registry = "wa", package = "myorg:shared", version = "^0.1.0" }
+shared = { path = "../shared", package = "myorg:shared", version = "^0.1.0" }
 ```
 
 Path dependencies without a registry or git fallback are errors:
@@ -679,7 +686,7 @@ Path dependencies without a registry or git fallback are errors:
 ```
 error: cannot publish with path-only dependency
   → utils = { path = "../utils" }
-  help: add registry or git source: utils = { path = "../utils", registry = "wa", package = "myorg:utils", version = "^0.1.0" }
+  help: add registry or git source: utils = { path = "../utils", package = "myorg:utils", version = "^0.1.0" }
 ```
 
 This enables seamless local development while ensuring published packages are self-contained.
@@ -723,7 +730,7 @@ This enables seamless local development while ensuring published packages are se
 - **PubGrub over MVS**: PubGrub selects the highest compatible version (users get security patches automatically) at the cost of needing a lock file for reproducibility. MVS would give O(n) resolution and reproducibility without a lock file, but users would be stuck on old versions unless every library author proactively bumps minimums. For an ecosystem that values security and freshness, PubGrub is the better default.
 - **`version` XOR `ref` for git**: `version` enables semver resolution on tags (like Go/Swift PM), `ref` pins to an exact ref. XOR ensures the intent is always unambiguous — no implicit defaults.
 - **Bare version = error**: more verbose than Cargo's implicit caret, but eliminates a source of confusion ("does `1.0.0` mean exact or `^1.0.0`?"). Every `version` field is self-documenting.
-- **Registry names per-project**: avoids global configuration but requires repetition across projects. A future `~/.wado/config.toml` could provide user-level defaults.
+- **Registry names per-project**: avoids global configuration but requires repetition across projects. The `default` registry mitigates this for the common case. A future `~/.wado/config.toml` could provide user-level defaults.
 - **Bare name resolution**: requires `wado.toml` lookup at compile time, adding a project-discovery step. The compiler itself is not affected — only `CompilerHost` implementations need to handle this.
 - **Self-sufficient lock file**: duplicates entry points and dependency edges from each package's `wado.toml`. This makes the lock file larger and introduces a potential staleness risk (if a dependency's `wado.toml` changes entry points without version bump). The trade-off is worth it — builds skip all transitive manifest I/O, and staleness is caught by `wado update` or integrity mismatch.
 - **Archive-level integrity** (not source-level): simpler and unambiguous, but means the hash depends on the registry's archive format. If a registry changes its packaging format, hashes change even if sources are identical.
