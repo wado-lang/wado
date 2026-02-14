@@ -16,8 +16,8 @@ wasmtime = "41"
 
 # Node.js - required for VS Code extension development
 node = "24"
-# GitHub CLI
-"github:cli/cli" = "latest"
+# GitHub CLI (use github backend; aqua backend's signer_workflow check fails)
+"github:cli/cli" = "2.86.0"
 
 [settings]
 # Automatically install missing tools when entering the directory
@@ -25,11 +25,6 @@ auto_install = true
 
 # Use verbose output for debugging (can be set to false for quieter operation)
 verbose = false
-
-# Disable GitHub attestations for the github backend (cli/cli attestation check
-# fails in some CI environments due to HTTP errors)
-[settings.github]
-github_attestations = false
 
 [tasks.sync-vendor]
 description = "Sync vendor submodules (wasmtime pinned to Cargo.lock, others to latest)"
