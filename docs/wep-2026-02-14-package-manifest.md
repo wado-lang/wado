@@ -14,7 +14,7 @@ The design must preserve Wado's simplicity: a single `.wado` file without `wado.
 
 ## Decision
 
-### Project File Format
+### Package Manifest Format
 
 The project manifest is `wado.toml`, placed at the project root.
 
@@ -688,7 +688,7 @@ This enables seamless local development while ensuring published packages are se
 
 ### Positive
 
-- Single `.wado` files continue to work without any project file
+- Single `.wado` files continue to work without a package manifest
 - Git dependencies work with any hosting provider (not GitHub-specific)
 - Git deps support both semver (`version`) and exact pinning (`ref`) — XOR ensures clarity
 - `dev-dependencies` keep test-only code out of production builds, tracked in lock file with `dev = true`
