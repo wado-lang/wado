@@ -393,56 +393,50 @@ version = 1
 deps-hash = "sha256:9f8e7d6c5b4a..."
 
 [[package]]
-name = "bench-tool"
+id = "git+https://gitlab.com/user/bench.git/bench-tool"
 version = "0.1.0"
-source = "git+https://gitlab.com/user/bench.git"
 resolved-ref = "def5678901234567890abcdef12345678abc1234d"
 dev = true
 command = "src/main.wado"
 deps = []
 
 [[package]]
-name = "docs:regex"
+id = "registry+https://wa.dev/docs:regex"
 version = "0.1.2"
-source = "registry+https://wa.dev"
 integrity = "sha256:a1b2c3d4e5f6..."
 lib = "src/lib.wado"
-deps = ["docs:regex-utils@0.3.0"]
+deps = ["registry+https://wa.dev/docs:regex-utils@0.3.0"]
 
 [[package]]
-name = "docs:regex-utils"
+id = "registry+https://wa.dev/docs:regex-utils"
 version = "0.3.0"
-source = "registry+https://wa.dev"
 integrity = "sha256:f6e5d4c3b2a1..."
 lib = "src/lib.wado"
 deps = []
 
 [[package]]
-name = "std:json"
+id = "registry+https://wa.dev/std:json"
 version = "1.2.0"
-source = "registry+https://wa.dev"
 integrity = "sha256:c3d4e5f6a1b2..."
 lib = "src/lib.wado"
 deps = []
 
 [[package]]
-name = "tools:utils"
+id = "registry+https://wa.dev/tools:utils"
 version = "0.5.1"
-source = "registry+https://wa.dev"
 integrity = "sha256:b2c3d4e5f6a1..."
 lib = "src/lib.wado"
 deps = []
 
 [[package]]
-name = "user:router"
+id = "git+https://github.com/user/router.git/user:router"
 version = "1.0.2"
-source = "git+https://github.com/user/router.git"
 resolved-ref = "abc1234def5678901234567890abcdef12345678"
 lib = "src/lib.wado"
-deps = ["tools:utils@0.5.1", "std:json@1.2.0"]
+deps = ["registry+https://wa.dev/tools:utils@0.5.1", "registry+https://wa.dev/std:json@1.2.0"]
 ```
 
-Each `[[package]]` entry is uniquely identified by `(name, version)`. The `name` field is the package identity (`namespace:name`) from the dependency's own `wado.toml`. The `deps` array references other entries using `name@version` format.
+Each `[[package]]` entry is uniquely identified by `(id, version)`. The `id` field is the resolved package id — the source prefix combined with the package identity (e.g., `registry+https://wa.dev/docs:regex` or `git+https://github.com/user/router.git/user:router`). The `deps` array references other entries using `id@version` format.
 
 #### Header Fields
 
@@ -455,16 +449,15 @@ Each `[[package]]` entry is uniquely identified by `(name, version)`. The `name`
 
 | Field          | Applies to     | Description                                                 |
 | -------------- | -------------- | ----------------------------------------------------------- |
-| `name`         | all            | Package identity (`namespace:name` or `name`) from the dependency's `wado.toml` |
+| `id`           | all            | Resolved package id: `source/package-identity` (e.g., `registry+URL/ns:name`, `git+URL/ns:name`) |
 | `version`      | all            | Exact resolved version                                      |
-| `source`       | all            | Source with URL: `registry+URL` or `git+URL`                |
 | `resolved-ref` | git only       | Exact commit SHA (40 hex chars)                             |
 | `integrity`    | registry only  | Content hash with algorithm prefix (see below)              |
 | `dev`          | dev-deps only  | `true` for dev-only packages (excluded from production)     |
 | `command`      | optional       | Entry point for `wasi:cli/command` (from dependency's `wado.toml`) |
 | `service`      | optional       | Entry point for `wasi:http/service` (from dependency's `wado.toml`) |
 | `lib`          | optional       | Library entry point (from dependency's `wado.toml`)         |
-| `deps`         | all            | Array of `name@version` strings referencing other entries    |
+| `deps`         | all            | Array of `id@version` strings referencing other entries      |
 
 Entry point fields (`command`, `service`, `lib`) are copied from the dependency's `wado.toml` at resolution time. This makes the lock file self-sufficient — the `CompilerHost` can resolve all imports and locate all source files using only the root `wado.toml` and `wado.lock`.
 
@@ -481,7 +474,7 @@ When the lock file exists, the resolver is skipped entirely. The dependency grap
 
 #### Properties
 
-- Deterministic: entries sorted by `name` then `version` lexicographically
+- Deterministic: entries sorted by `id` then `version` lexicographically
 - Human-readable TOML
 - Committed to version control
 - `path` dependencies are not locked (always resolved fresh, not listed)
@@ -706,7 +699,7 @@ This enables seamless local development while ensuring published packages are se
 - Cyclic dependencies are detected early with clear error messages
 - Multiple semver-incompatible versions coexist naturally, matching Wasm Component Model's type isolation
 - Lock file is self-sufficient — contains full dependency graph and entry points, eliminating per-dependency `wado.toml` reads during builds
-- Lock file entries identified by `name@version` — clear and decoupled from dependency chains
+- Lock file entries identified by `id@version` (resolved package id) — globally unique and decoupled from dependency chains
 - Lock file with `integrity` ensures reproducible and tamper-evident builds for registry deps
 - Auto re-resolve keeps lock file fresh; `--locked` ensures CI reproducibility
 - Compiler remains agnostic to dependency resolution — `CompilerHost` handles all mapping
