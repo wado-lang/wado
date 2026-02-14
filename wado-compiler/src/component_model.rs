@@ -113,8 +113,9 @@ pub struct WasiRegistry {
     newtypes: IndexMap<String, Type>,
 
     /// Resource types collected from WASI modules (e.g., `TerminalInput`, `TerminalOutput`)
-    /// Maps resource name -> CM resource name (kebab-case)
-    resources: IndexMap<String, String>,
+    /// Maps resource name -> (CM resource name kebab-case, source interface path)
+    /// e.g., "`TerminalInput`" -> ("terminal-input", "wasi:cli/terminal-input@0.3.0-rc-2026-01-06")
+    resources: IndexMap<String, (String, String)>,
 
     /// Enum types collected from WASI modules (e.g., `ErrorCode`, `IpAddressFamily`)
     /// Maps Wado enum name -> (CM enum name kebab-case, variant names in kebab-case)
@@ -212,7 +213,18 @@ impl WasiRegistry {
             if let Item::Resource(resource) = item {
                 // Convert PascalCase to kebab-case for CM
                 let cm_name = to_kebab_case(&resource.name);
-                self.resources.insert(resource.name.clone(), cm_name);
+                // Extract source interface path from #[wasi] attribute
+                // Format: #[wasi("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
+                let source_interface = resource
+                    .attrs
+                    .iter()
+                    .find(|a| a.name == "wasi")
+                    .and_then(|a| a.args.first())
+                    .and_then(|s| s.split('#').next())
+                    .unwrap_or("")
+                    .to_string();
+                self.resources
+                    .insert(resource.name.clone(), (cm_name, source_interface));
             }
         }
 
@@ -377,7 +389,16 @@ impl WasiRegistry {
         for item in &module.items {
             if let Item::Resource(resource) = item {
                 let cm_name = to_kebab_case(&resource.name);
-                self.resources.insert(resource.name.clone(), cm_name);
+                let source_interface = resource
+                    .attrs
+                    .iter()
+                    .find(|a| a.name == "wasi")
+                    .and_then(|a| a.args.first())
+                    .and_then(|s| s.split('#').next())
+                    .unwrap_or("")
+                    .to_string();
+                self.resources
+                    .insert(resource.name.clone(), (cm_name, source_interface));
             }
         }
 
@@ -406,7 +427,18 @@ impl WasiRegistry {
 
     /// Get the CM kebab-case name for a resource
     pub fn get_resource_cm_name(&self, name: &str) -> Option<&str> {
-        self.resources.get(name).map(String::as_str)
+        self.resources
+            .get(name)
+            .map(|(cm_name, _)| cm_name.as_str())
+    }
+
+    /// Get the source interface path for a resource
+    /// e.g., "`TerminalInput`" -> "wasi:cli/terminal-input@0.3.0-rc-2026-01-06"
+    pub fn get_resource_source_interface(&self, name: &str) -> Option<&str> {
+        self.resources
+            .get(name)
+            .map(|(_, path)| path.as_str())
+            .filter(|p| !p.is_empty())
     }
 
     /// Check if a type name is a registered enum
@@ -478,7 +510,7 @@ impl WasiRegistry {
             && g.name == "Option"
             && g.args.len() == 1
             && let Type::Named(inner) = &g.args[0]
-            && let Some(cm_name) = self.resources.get(&inner.name)
+            && let Some((cm_name, _)) = self.resources.get(&inner.name)
         {
             return Some((inner.name.clone(), cm_name.clone()));
         }
@@ -1487,8 +1519,6 @@ pub struct CmCallConvention {
     pub result_converter: Option<String>,
     /// For tuple returns: element types for struct creation
     pub tuple_return: Option<Vec<CmPrimitiveType>>,
-    /// For option<own<resource>>: true if needs boxing to Option<i32>
-    pub option_resource_return: bool,
     /// For result<T, E> returns: `Some((ok_is_resource`, `err_is_enum`))
     /// `ok_is_resource`: if true, Ok payload is a resource handle (i32)
     /// `err_is_enum`: if true, Err payload is an enum (i32)
@@ -1589,7 +1619,6 @@ impl CmCallConvention {
             outptr_alloc: Some((8, 4)), // ptr + count
             result_converter: converter,
             tuple_return: None,
-            option_resource_return: false,
             result_return: None,
         }
     }
@@ -1605,20 +1634,21 @@ impl CmCallConvention {
                 outptr_alloc: Some((12, 4)),
                 result_converter: Some("core/internal/cm_option_string_to_option".to_string()),
                 tuple_return: None,
-                option_resource_return: false,
                 result_return: None,
             },
 
-            // option<own<resource>> -> outptr (4 bytes: 0=none, non-zero=handle)
+            // option<own<resource>> -> outptr (8 bytes: discriminant u8 at +0, handle i32 at +4)
+            // CM ABI: 1-byte discriminant (0=none, 1=some) + 3-byte padding + 4-byte handle
             // This covers TerminalInput, TerminalOutput, etc.
             Type::Generic(g) if g.name == "Own" => Self {
                 is_async: false,
                 needs_memory: true,
                 needs_realloc: true,
-                outptr_alloc: Some((4, 4)),
-                result_converter: None,
+                outptr_alloc: Some((8, 4)),
+                result_converter: Some(
+                    "core/internal/cm_option_own_resource_to_option".to_string(),
+                ),
                 tuple_return: None,
-                option_resource_return: true,
                 result_return: None,
             },
 
@@ -1628,15 +1658,17 @@ impl CmCallConvention {
                     "i32" | "u32" | "f32" | "bool" | "char" => 4,
                     "i64" | "u64" | "f64" => 8,
                     // Unknown type - assume resource handle
+                    // CM ABI: 1-byte discriminant + 3-byte padding + 4-byte handle = 8 bytes
                     _ => {
                         return Self {
                             is_async: false,
                             needs_memory: true,
                             needs_realloc: true,
-                            outptr_alloc: Some((4, 4)),
-                            result_converter: None,
+                            outptr_alloc: Some((8, 4)),
+                            result_converter: Some(
+                                "core/internal/cm_option_own_resource_to_option".to_string(),
+                            ),
                             tuple_return: None,
-                            option_resource_return: true,
                             result_return: None,
                         };
                     }
@@ -1651,7 +1683,6 @@ impl CmCallConvention {
                     outptr_alloc: Some((size, align)),
                     result_converter: None,
                     tuple_return: None,
-                    option_resource_return: false,
                     result_return: None,
                 }
             }
@@ -1694,7 +1725,6 @@ impl CmCallConvention {
             outptr_alloc: Some((total_size, max_align)),
             result_converter: None,
             tuple_return: Some(primitives),
-            option_resource_return: false,
             result_return: None,
         }
     }
@@ -1734,7 +1764,6 @@ impl CmCallConvention {
             outptr_alloc: Some((8, 4)), // discriminant + payload
             result_converter: None,
             tuple_return: None,
-            option_resource_return: false,
             result_return: Some((ok_is_resource, err_is_enum)),
         }
     }
