@@ -49,8 +49,10 @@ The optimizer runs after lowering and before Wasm plan/codegen:
    4. Constant Folding
    5. Loop-Invariant Code Motion (LICM)
 2. DCE Analysis and removal of unreachable functions/types (all levels)
-3. Post-optimization rewrites (select lowering, move insertion)
-4. Value copy type collection for codegen
+3. Post-optimization rewrites (select lowering, move insertion, all levels)
+4. Value copy type collection for codegen (all levels)
+
+Note: Steps 3-4 are codegen prerequisites that currently live in the optimizer. They should ideally be a separate pre-codegen phase.
 
 ## Implemented Optimizations
 
