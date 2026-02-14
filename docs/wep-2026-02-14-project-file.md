@@ -230,21 +230,21 @@ resolution key   = (package identity, major version)
                    e.g., (wa/std:http, 1) and (wa/std:http, 2)
 ```
 
-When two transitive dependencies require semver-incompatible versions of the same package, they each get their own resolved instance. The compiler does not need to know about this — it simply receives module sources from `CompilerHost`. The resolver (in the CLI) handles mapping:
+When two transitive dependencies require semver-incompatible versions of the same package, they each get their own resolved instance. The compiler does not need to know about this — it simply receives module sources from `CompilerHost`. The resolver (in the CLI) handles mapping.
+
+The existing `resolve_import(from_module_source, import_source)` signature already provides the necessary context. The `from_module_source` tells the `CompilerHost` *which package is doing the importing*, so the same bare name `"foo"` resolves to different packages depending on the caller:
 
 ```
-CompilerHost::load_source("router/utils")
-  → CLI looks up "utils" as required by "router"
-  → resolves to utils@1.1.5
-  → returns the source for utils@1.1.5
+resolve_import(from=EntryPoint, "foo")
+  → CompilerHost looks up my-app's wado.toml → foo@2.0.0
+  → returns ModuleSource::Dependency { key: "foo", ... }
 
-CompilerHost::load_source("auth/utils")
-  → CLI looks up "utils" as required by "auth"
-  → resolves to utils@1.1.5 (same instance if compatible)
-  → OR resolves to utils@2.0.1 (different instance if incompatible)
+resolve_import(from=Dependency{key="router"}, "foo")
+  → CompilerHost looks up router's wado.toml → foo@1.0.0
+  → returns ModuleSource::Dependency { key: "router>foo", ... }
 ```
 
-The compiler sees distinct `ModuleSource::Dependency` values and compiles each independently. Type isolation is natural — two separately compiled modules never share types.
+The compiler sees distinct `ModuleSource::Dependency` values (different `key`) and compiles each independently. No changes to the compiler are needed — the `CompilerHost` implementation in the CLI handles all version-aware routing. Type isolation is natural — two separately compiled modules never share types.
 
 #### Diamond Dependency Handling
 
