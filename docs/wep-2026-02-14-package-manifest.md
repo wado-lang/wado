@@ -40,14 +40,14 @@ bench = { git = "https://gitlab.com/user/bench.git", ref = "main" }
 
 ### `[package]`
 
-| Field       | Type     | Required | Description                                        |
-| ----------- | -------- | -------- | -------------------------------------------------- |
-| `namespace` | `string` | No       | Organization or user namespace (e.g., `"myorg"`)   |
-| `name`      | `string` | Yes      | Package name (e.g., `"my-app"`)                    |
-| `version`   | `string` | Yes      | Semver version (e.g., `"0.1.0"`)                   |
-| `command`   | `string` | No       | Entry point for `wasi:cli/command` world            |
-| `service`   | `string` | No       | Entry point for `wasi:http/service` world           |
-| `lib`       | `string` | No       | Library interface file                              |
+| Field       | Type     | Required | Description                                      |
+| ----------- | -------- | -------- | ------------------------------------------------ |
+| `namespace` | `string` | No       | Organization or user namespace (e.g., `"myorg"`) |
+| `name`      | `string` | Yes      | Package name (e.g., `"my-app"`)                  |
+| `version`   | `string` | Yes      | Semver version (e.g., `"0.1.0"`)                 |
+| `command`   | `string` | No       | Entry point for `wasi:cli/command` world         |
+| `service`   | `string` | No       | Entry point for `wasi:http/service` world        |
+| `lib`       | `string` | No       | Library interface file                           |
 
 `namespace` and `name` together form the registry identity (`namespace:name`, e.g., `myorg:my-app`). Without `namespace`, the package cannot be published to a registry — this is the natural state for closed-source applications and internal tools.
 
@@ -63,11 +63,11 @@ At least one of `command`, `service`, or `lib` should be specified. A package ca
 
 Each entry point field corresponds to a WASI world or a library interface:
 
-| Field     | WASI World           | CLI Command    | Required Export                           |
-| --------- | -------------------- | -------------- | ----------------------------------------- |
-| `command` | `wasi:cli/command`   | `wado run`     | `export fn run()`                         |
-| `service` | `wasi:http/service`  | `wado serve`   | `export fn handle(request: Request) -> …` |
-| `lib`     | (none — interface)   | (none)         | `export` items become the public API      |
+| Field     | WASI World          | CLI Command  | Required Export                           |
+| --------- | ------------------- | ------------ | ----------------------------------------- |
+| `command` | `wasi:cli/command`  | `wado run`   | `export fn run()`                         |
+| `service` | `wasi:http/service` | `wado serve` | `export fn handle(request: Request) -> …` |
+| `lib`     | (none — interface)  | (none)       | `export` items become the public API      |
 
 ```toml
 # CLI tool with library
@@ -98,11 +98,11 @@ lib = "src/lib.wado"
 
 The `export` keyword defines what is visible at the **Component Model boundary** — the package's public API. This is distinct from `pub`, which is project-internal visibility.
 
-| Modifier | Scope | Use |
-| -------- | ----- | --- |
-| (none)   | Module-private | Implementation details |
+| Modifier | Scope            | Use                                           |
+| -------- | ---------------- | --------------------------------------------- |
+| (none)   | Module-private   | Implementation details                        |
 | `pub`    | Project-internal | Shared across modules within the same project |
-| `export` | CM boundary | Package's public API, visible to consumers |
+| `export` | CM boundary      | Package's public API, visible to consumers    |
 
 ```wado
 // src/lib.wado (in the "markdown" package)
@@ -126,12 +126,12 @@ When published as a `.wasm` component (e.g., to wa.dev), only `export` items app
 
 Semantically, cross-package references always go through the CM boundary (`export` items only). However, when both producer and consumer are Wado, the compiler can skip the CM canonical ABI (lifting/lowering) and share Wasm GC types directly.
 
-| Consumer → Producer | Path |
-| ------------------- | ---- |
-| Wado → Wado (source dependency) | CM adapter skipped; GC types shared directly |
-| Wado → Wado (`.wasm` with Wado provider metadata) | Provider detected; GC types shared directly |
-| Wado → arbitrary `.wasm` | CM canonical ABI (lifting/lowering) |
-| Arbitrary → Wado `.wasm` | CM canonical ABI |
+| Consumer → Producer                               | Path                                         |
+| ------------------------------------------------- | -------------------------------------------- |
+| Wado → Wado (source dependency)                   | CM adapter skipped; GC types shared directly |
+| Wado → Wado (`.wasm` with Wado provider metadata) | Provider detected; GC types shared directly  |
+| Wado → arbitrary `.wasm`                          | CM canonical ABI (lifting/lowering)          |
+| Arbitrary → Wado `.wasm`                          | CM canonical ABI                             |
 
 This optimization is transparent to the developer. The visible API is always determined by `export`, and the semantics are always CM boundary semantics. The optimization only affects performance — cross-package calls between Wado projects have no overhead compared to project-internal calls.
 
@@ -177,7 +177,7 @@ router = { git = "https://github.com/user/router.git", ref = "main" }
 | Field     | Required | Description                                   |
 | --------- | -------- | --------------------------------------------- |
 | `git`     | Yes      | Full git URL (any host: GitHub, GitLab, etc.) |
-| `version` | XOR      | Semver range on git tags (e.g., `"^1.0.0"`)  |
+| `version` | XOR      | Semver range on git tags (e.g., `"^1.0.0"`)   |
 | `ref`     | XOR      | Exact git ref (tag, branch, or commit SHA)    |
 
 Exactly one of `version` or `ref` must be specified. `version` resolves against semver-tagged releases in the repository. `ref` pins to an exact git ref — use explicit branch names (e.g., `"main"`) rather than implicit defaults.
@@ -189,11 +189,11 @@ regex = { package = "docs:regex", version = "^0.1.0" }                      # us
 special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }   # uses named registry
 ```
 
-| Field      | Required | Description                                                |
-| ---------- | -------- | ---------------------------------------------------------- |
+| Field      | Required | Description                                                        |
+| ---------- | -------- | ------------------------------------------------------------------ |
 | `registry` | No       | Registry alias (defined in `[registries]`). Defaults to `default`. |
-| `package`  | Yes      | Package identity in `namespace:name` format                |
-| `version`  | Yes      | Semver version range (e.g., `"^0.1.0"`)                   |
+| `package`  | Yes      | Package identity in `namespace:name` format                        |
+| `version`  | Yes      | Semver version range (e.g., `"^0.1.0"`)                            |
 
 #### Local Path
 
@@ -201,8 +201,8 @@ special = { registry = "custom", package = "ns:lib", version = "^1.0.0" }   # us
 shared = { path = "../shared" }
 ```
 
-| Field  | Required | Description                                |
-| ------ | -------- | ------------------------------------------ |
+| Field  | Required | Description                                  |
+| ------ | -------- | -------------------------------------------- |
 | `path` | Yes      | Relative path to a directory or `.wado` file |
 
 Local path dependencies are resolved relative to the `wado.toml` location. They are not locked (always resolved fresh). During development, only the `path` is used — any accompanying `registry` or `git` source is ignored entirely.
@@ -262,15 +262,15 @@ Wado uses the **PubGrub** algorithm for dependency resolution. PubGrub is a conf
 
 Why PubGrub over alternatives:
 
-| Approach | Pros | Cons |
-| -------- | ---- | ---- |
-| Go MVS (minimum version) | O(n), deterministic without lock file | Users get old/buggy versions; no upper bounds |
-| Cargo-style backtracking | Proven at scale | Weaker conflict learning; less informative errors |
-| PubGrub (CDCL) | Best error messages; efficient pruning; state of the art | NP-hard worst case (acceptable in practice) |
+| Approach                 | Pros                                                     | Cons                                              |
+| ------------------------ | -------------------------------------------------------- | ------------------------------------------------- |
+| Go MVS (minimum version) | O(n), deterministic without lock file                    | Users get old/buggy versions; no upper bounds     |
+| Cargo-style backtracking | Proven at scale                                          | Weaker conflict learning; less informative errors |
+| PubGrub (CDCL)           | Best error messages; efficient pruning; state of the art | NP-hard worst case (acceptable in practice)       |
 
 PubGrub provides:
 
-- **Conflict-driven learning**: when a conflict is found, the solver derives a precise incompatibility that explains *why* this combination fails and never re-explores it
+- **Conflict-driven learning**: when a conflict is found, the solver derives a precise incompatibility that explains _why_ this combination fails and never re-explores it
 - **Human-readable error messages**: each resolution failure comes with a derivation chain (e.g., "because A requires utils ^1.0 and B requires utils ^2.0, and your project requires both A and B, version solving failed")
 - **Efficient pruning**: near-polynomial performance in practice despite NP-hard worst case
 
@@ -280,13 +280,13 @@ The Rust crate `pubgrub` provides a ready-made implementation.
 
 The `version` field requires an explicit range operator — bare versions are errors.
 
-| Prefix | Meaning | Example | Range |
-| ------ | ------- | ------- | ----- |
-| `^` | Caret (compatible) | `^1.2.3` | `>=1.2.3, <2.0.0` |
-| `^` | Caret (pre-1.0) | `^0.2.3` | `>=0.2.3, <0.3.0` |
-| `~` | Tilde (patch-only) | `~1.2.3` | `>=1.2.3, <1.3.0` |
-| `=` | Exact | `=1.2.3` | `=1.2.3` |
-| (none) | **Error** | `1.2.3` | compile error |
+| Prefix | Meaning            | Example  | Range             |
+| ------ | ------------------ | -------- | ----------------- |
+| `^`    | Caret (compatible) | `^1.2.3` | `>=1.2.3, <2.0.0` |
+| `^`    | Caret (pre-1.0)    | `^0.2.3` | `>=0.2.3, <0.3.0` |
+| `~`    | Tilde (patch-only) | `~1.2.3` | `>=1.2.3, <1.3.0` |
+| `=`    | Exact              | `=1.2.3` | `=1.2.3`          |
+| (none) | **Error**          | `1.2.3`  | compile error     |
 
 ```
 version = "^1.0.0"   # OK: caret range
@@ -355,7 +355,7 @@ resolution key   = (package identity, major version)
 
 When two transitive dependencies require semver-incompatible versions of the same package, they each get their own resolved instance. The compiler does not need to know about this — it simply receives module sources from `CompilerHost`. The resolver (in the CLI) handles mapping.
 
-The existing `resolve_import(from_module_source, import_source)` signature already provides the necessary context. The `from_module_source` tells the `CompilerHost` *which package is doing the importing*, so the same bare name `"foo"` resolves to different packages depending on the caller:
+The existing `resolve_import(from_module_source, import_source)` signature already provides the necessary context. The `from_module_source` tells the `CompilerHost` _which package is doing the importing_, so the same bare name `"foo"` resolves to different packages depending on the caller:
 
 ```
 resolve_import(from=EntryPoint, "foo")
@@ -447,24 +447,24 @@ Each `[[package]]` entry is uniquely identified by `(id, version)`. The `id` fie
 
 #### Header Fields
 
-| Field       | Description                                                              |
-| ----------- | ------------------------------------------------------------------------ |
-| `version`   | Lock file format version                                                 |
+| Field       | Description                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`   | Lock file format version                                                                                                             |
 | `deps-hash` | Hash of `[dependencies]` and `[dev-dependencies]` sections from `wado.toml`. Used for staleness detection (see Lock File Freshness). |
 
 #### Package Fields
 
-| Field          | Applies to     | Description                                                 |
-| -------------- | -------------- | ----------------------------------------------------------- |
-| `id`           | all            | Resolved package id: `source/package-identity` (e.g., `registry+URL/ns:name`, `git+URL/ns:name`) |
-| `version`      | all            | Exact resolved version                                      |
-| `resolved-ref` | git only       | Exact commit SHA (40 hex chars)                             |
-| `integrity`    | registry only  | Content hash with algorithm prefix (see below)              |
-| `dev`          | dev-deps only  | `true` for dev-only packages (excluded from production)     |
-| `command`      | optional       | Entry point for `wasi:cli/command` (from dependency's `wado.toml`) |
-| `service`      | optional       | Entry point for `wasi:http/service` (from dependency's `wado.toml`) |
-| `lib`          | optional       | Library entry point (from dependency's `wado.toml`)         |
-| `deps`         | all            | Array of `id@version` strings referencing other entries      |
+| Field          | Applies to    | Description                                                                                      |
+| -------------- | ------------- | ------------------------------------------------------------------------------------------------ |
+| `id`           | all           | Resolved package id: `source/package-identity` (e.g., `registry+URL/ns:name`, `git+URL/ns:name`) |
+| `version`      | all           | Exact resolved version                                                                           |
+| `resolved-ref` | git only      | Exact commit SHA (40 hex chars)                                                                  |
+| `integrity`    | registry only | Content hash with algorithm prefix (see below)                                                   |
+| `dev`          | dev-deps only | `true` for dev-only packages (excluded from production)                                          |
+| `command`      | optional      | Entry point for `wasi:cli/command` (from dependency's `wado.toml`)                               |
+| `service`      | optional      | Entry point for `wasi:http/service` (from dependency's `wado.toml`)                              |
+| `lib`          | optional      | Library entry point (from dependency's `wado.toml`)                                              |
+| `deps`         | all           | Array of `id@version` strings referencing other entries                                          |
 
 Entry point fields (`command`, `service`, `lib`) are copied from the dependency's `wado.toml` at resolution time. This makes the lock file self-sufficient — the `CompilerHost` can resolve all imports and locate all source files using only the root `wado.toml` and `wado.lock`.
 
@@ -513,11 +513,11 @@ The prefix makes the format extensible — if SHA-256 is ever deprecated, a new 
 
 #### Calculation Method
 
-| Source | Integrity |
-| ------ | --------- |
-| Registry | Hash of the archive as downloaded from the registry. The registry defines the canonical archive format. |
-| Git | `resolved-ref` (commit SHA) serves as integrity. Git's content-addressable storage already guarantees integrity. No separate `integrity` field needed. |
-| Local path | Not locked. Always resolved fresh. |
+| Source     | Integrity                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Registry   | Hash of the archive as downloaded from the registry. The registry defines the canonical archive format.                                                |
+| Git        | `resolved-ref` (commit SHA) serves as integrity. Git's content-addressable storage already guarantees integrity. No separate `integrity` field needed. |
+| Local path | Not locked. Always resolved fresh.                                                                                                                     |
 
 For registry packages, the hash input is the **downloaded archive bytes** (not individual source files concatenated). This matches how registries distribute packages and avoids ambiguity about file ordering or line endings.
 
@@ -571,9 +571,9 @@ command = "src/main.wado"
 core = { path = "../core" }
 ```
 
-| Field      | Type       | Required | Description                                             |
-| ---------- | ---------- | -------- | ------------------------------------------------------- |
-| `members`  | `string[]` | Yes      | Glob patterns for member package directories             |
+| Field     | Type       | Required | Description                                  |
+| --------- | ---------- | -------- | -------------------------------------------- |
+| `members` | `string[]` | Yes      | Glob patterns for member package directories |
 
 `[workspace.dependencies]` and `[workspace.dev-dependencies]` declare shared dependency versions. Member packages reference them without repeating version information:
 
@@ -612,11 +612,11 @@ shared = { path = "../shared.wado" }    # treated as lib = "shared.wado"
 utils  = { path = "../utils" }          # reads ../utils/wado.toml for entry points
 ```
 
-| Dependency type | Boundary | Visible items |
-| --------------- | -------- | ------------- |
-| Registry / Git (with `wado.toml`) | CM boundary | `export` items only |
-| Path to directory (with `wado.toml`) | CM boundary | `export` items only |
-| Path to single `.wado` file | CM boundary | `export` items only (implicit `lib`) |
+| Dependency type                      | Boundary    | Visible items                        |
+| ------------------------------------ | ----------- | ------------------------------------ |
+| Registry / Git (with `wado.toml`)    | CM boundary | `export` items only                  |
+| Path to directory (with `wado.toml`) | CM boundary | `export` items only                  |
+| Path to single `.wado` file          | CM boundary | `export` items only (implicit `lib`) |
 
 ### CLI Integration
 

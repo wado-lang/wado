@@ -427,11 +427,11 @@ A function must have `return` if it returns a value. This is applied to methods 
 
 Wado has three levels of visibility:
 
-| Keyword  | Term             | Scope                                       |
-| -------- | ---------------- | ------------------------------------------- |
-| (none)   | private          | Within the module                            |
-| `pub`    | module public    | Other modules within the same project        |
-| `export` | component export | CM boundary (package's public API)           |
+| Keyword  | Term             | Scope                                 |
+| -------- | ---------------- | ------------------------------------- |
+| (none)   | private          | Within the module                     |
+| `pub`    | module public    | Other modules within the same project |
+| `export` | component export | CM boundary (package's public API)    |
 
 ```wado
 fn private_fn() { }           // module-private (default)
