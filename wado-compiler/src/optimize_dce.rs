@@ -184,14 +184,6 @@ pub fn analyze_project(project: &mut Project) {
             // Legacy format: name starts with "builtin::"
             || f.name.starts_with("builtin::")
     };
-    let is_builtin_stream = |f: &FreeFunctionName| {
-        if is_builtin_func(f) {
-            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-            name.starts_with("stream_")
-        } else {
-            false
-        }
-    };
     let is_builtin_call_indirect_stdout = |f: &FreeFunctionName| {
         if is_builtin_func(f) {
             let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
@@ -208,16 +200,6 @@ pub fn analyze_project(project: &mut Project) {
             false
         }
     };
-
-    let uses_stream_builtins = reachable.iter().any(|func_id| {
-        if let FunctionId::Free(f) = func_id {
-            is_builtin_stream(f)
-                || is_builtin_call_indirect_stdout(f)
-                || is_builtin_call_indirect_stderr(f)
-        } else {
-            false
-        }
-    });
 
     // Also mark WASI functions as used if indirect calls are present (for ambient logging)
     if reachable
@@ -282,13 +264,16 @@ pub fn analyze_project(project: &mut Project) {
         add_import_by_name(&mut imports, "f32_to_buffer");
     }
 
-    // Effect usage requires TaskReturn for async entry point
-    // But waitable-set builtins are only needed when effect_wait is actually called
+    // Async exports require task-return and potentially other canonical intrinsics
+    let has_async_export = project
+        .world_registry
+        .get(&project.target_world)
+        .is_some_and(super::world_registry::WorldInfo::has_async_export);
     let has_http_handler_export = project
         .world_registry
         .get(&project.target_world)
         .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
-    if !used_wasi_functions.is_empty() || uses_stream_builtins || has_http_handler_export {
+    if has_async_export {
         // TaskReturn is always needed for async exports
         add_import_by_name(&mut imports, "task_return");
 
@@ -322,7 +307,6 @@ pub fn analyze_project(project: &mut Project) {
 
     // Apply results to project
     project.reachable_functions = reachable.clone();
-    project.all_reachable = false;
     project.used_wasi_functions = used_wasi_functions;
 
     // Filter string literals in each module to only include strings from reachable functions
@@ -386,207 +370,6 @@ pub fn analyze_project(project: &mut Project) {
         }
 
         module.string_literals = reachable_strings;
-    }
-}
-
-/// Populate project with all features enabled (no DCE, for O0 mode).
-pub fn populate_all_features(project: &mut Project) {
-    project.reachable_functions = IndexSet::new();
-    project.all_reachable = true;
-    // Standard WASI functions + any non-standard WASI functions used in entry module
-    project.used_wasi_functions = project
-        .wasi_registry
-        .standard_function_names()
-        .map(std::string::ToString::to_string)
-        .collect();
-
-    // Scan entry module for non-standard WASI function usage (e.g., TcpSocket, UdpSocket)
-    // This ensures O0 mode discovers WASI resource methods without full DCE analysis.
-    if let Some(entry_module) = project.tir_modules.get(&project.entry_module_source) {
-        let extra = scan_wasi_usage(entry_module);
-        project.used_wasi_functions.extend(extra);
-    }
-
-    // Build all imports from the builtin registry
-    let has_http_handler_export = project
-        .world_registry
-        .get(&project.target_world)
-        .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
-
-    let mut imports: Vec<TirImport> = Vec::new();
-    for info in project.builtin_registry.imported_builtins() {
-        if let Some(canonical_name) = &info.canonical_name {
-            // Skip future intrinsics unless HTTP handler export needs them
-            if canonical_name.starts_with("future-") && !has_http_handler_export {
-                continue;
-            }
-            imports.push(TirImport {
-                namespace: info.namespace.clone(),
-                canonical_name: canonical_name.clone(),
-                func_name: info.name.clone(),
-                params: info.params.iter().map(|(_, ty)| *ty).collect(),
-                return_type: info.return_type,
-            });
-        }
-    }
-
-    // Sort imports for deterministic output
-    imports.sort_by(|a, b| a.canonical_name.cmp(&b.canonical_name));
-
-    // Store imports in the entry module
-    if let Some(entry_module) = project.tir_modules.get_mut(&project.entry_module_source) {
-        entry_module.imports = imports;
-    }
-}
-
-/// Scan a module for WASI function usage without full DCE analysis.
-/// Returns WASI function names in "`Effect::method`" format (e.g., "`TcpSocket::static_tcp_socket_create`").
-fn scan_wasi_usage(module: &TirModule) -> IndexSet<String> {
-    let mut wasi_funcs = IndexSet::new();
-    for func_rc in &module.functions {
-        let func = func_rc.borrow();
-        if let Some(body) = &func.body {
-            scan_wasi_block(body, &mut wasi_funcs);
-        }
-    }
-    wasi_funcs
-}
-
-fn scan_wasi_block(block: &TirBlock, wasi_funcs: &mut IndexSet<String>) {
-    for stmt in &block.stmts {
-        scan_wasi_stmt(stmt, wasi_funcs);
-    }
-}
-
-fn scan_wasi_stmt(stmt: &crate::tir::TirStmt, wasi_funcs: &mut IndexSet<String>) {
-    match &stmt.kind {
-        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-            scan_wasi_expr(value, wasi_funcs);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(expr) = value {
-                scan_wasi_expr(expr, wasi_funcs);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        }
-        | TirStmtKind::IfPattern {
-            scrutinee: condition,
-            then_block,
-            else_block,
-            ..
-        } => {
-            scan_wasi_expr(condition, wasi_funcs);
-            scan_wasi_block(then_block, wasi_funcs);
-            if let Some(else_block) = else_block {
-                scan_wasi_block(else_block, wasi_funcs);
-            }
-        }
-        TirStmtKind::Loop { body } => {
-            scan_wasi_block(body, wasi_funcs);
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            scan_wasi_block(block, wasi_funcs);
-        }
-        TirStmtKind::LetPattern { value, .. } => {
-            scan_wasi_expr(value, wasi_funcs);
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(expr) = value {
-                scan_wasi_expr(expr, wasi_funcs);
-            }
-        }
-        TirStmtKind::Continue => {}
-    }
-}
-
-fn scan_wasi_expr(expr: &TirExpr, wasi_funcs: &mut IndexSet<String>) {
-    match &expr.kind {
-        TirExprKind::StaticCall { func, args } => {
-            let module_path = func.module_path();
-            if module_path.len() >= 2 && module_path[0] == "wasi" {
-                let func_name = func.name();
-                if let Some(pos) = func_name.find("::") {
-                    let resource_name = &func_name[..pos];
-                    let method_name = &func_name[pos + 2..];
-                    wasi_funcs.insert(format!("{resource_name}::{method_name}"));
-                }
-            }
-            for arg in args {
-                scan_wasi_expr(arg, wasi_funcs);
-            }
-        }
-        TirExprKind::EffectCall {
-            effect_name,
-            op_name,
-            args,
-            ..
-        } => {
-            wasi_funcs.insert(format!("{effect_name}::{op_name}"));
-            for arg in args {
-                scan_wasi_expr(arg, wasi_funcs);
-            }
-        }
-        TirExprKind::Call { args, .. } | TirExprKind::MethodCall { args, .. } => {
-            for arg in args {
-                scan_wasi_expr(arg, wasi_funcs);
-            }
-        }
-        TirExprKind::Binary { left, right, .. } => {
-            scan_wasi_expr(left, wasi_funcs);
-            scan_wasi_expr(right, wasi_funcs);
-        }
-        TirExprKind::Unary { expr, .. }
-        | TirExprKind::Cast { expr, .. }
-        | TirExprKind::FieldAccess { expr, .. } => {
-            scan_wasi_expr(expr, wasi_funcs);
-        }
-        TirExprKind::Assign { target, value }
-        | TirExprKind::Index {
-            expr: target,
-            index: value,
-        } => {
-            scan_wasi_expr(target, wasi_funcs);
-            scan_wasi_expr(value, wasi_funcs);
-        }
-        TirExprKind::Block(block) => {
-            scan_wasi_block(block, wasi_funcs);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            scan_wasi_expr(condition, wasi_funcs);
-            scan_wasi_block(then_branch, wasi_funcs);
-            if let Some(else_branch) = else_branch {
-                scan_wasi_block(else_branch, wasi_funcs);
-            }
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                scan_wasi_expr(&field.value, wasi_funcs);
-            }
-        }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                scan_wasi_expr(elem, wasi_funcs);
-            }
-        }
-        TirExprKind::Match { expr, arms } => {
-            scan_wasi_expr(expr, wasi_funcs);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    scan_wasi_expr(guard, wasi_funcs);
-                }
-                scan_wasi_expr(&arm.body, wasi_funcs);
-            }
-        }
-        _ => {}
     }
 }
 
@@ -1322,11 +1105,6 @@ fn compute_reachable(
 /// This physically removes functions that are not in `reachable_functions`
 /// from the TIR, so codegen doesn't need to filter them.
 pub fn remove_unreachable_functions(project: &mut Project) {
-    // Skip if all functions are reachable (no DCE)
-    if project.all_reachable {
-        return;
-    }
-
     for (module_source, module) in &mut project.tir_modules {
         // Retain only reachable functions
         module.functions.retain(|func_rc| {
@@ -1985,11 +1763,6 @@ fn collect_type_dependencies(
 /// Remove unreachable types from the project's `TypeTable` and module definitions.
 /// This should be called after function DCE.
 pub fn remove_unreachable_types(project: &mut Project) {
-    // Skip if all functions are reachable (no DCE)
-    if project.all_reachable {
-        return;
-    }
-
     let reachable_types = compute_reachable_types(project);
 
     // Remove unreachable struct/variant/enum definitions from each module

@@ -67,6 +67,11 @@ pub struct WorldInfo {
 }
 
 impl WorldInfo {
+    /// Check if this world has any async export.
+    pub fn has_async_export(&self) -> bool {
+        self.exports.iter().any(|e| e.is_async)
+    }
+
     /// Check if this world has an HTTP handler export.
     ///
     /// Returns true if any export returns `Result<Response, ErrorCode>`.

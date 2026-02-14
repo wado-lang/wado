@@ -13,7 +13,7 @@
 use crate::optimize_const_fold::fold_constants;
 use crate::optimize_copy_prop::propagate_copies;
 use crate::optimize_dce::{
-    analyze_project, populate_all_features, remove_unreachable_functions, remove_unreachable_types,
+    analyze_project, remove_unreachable_functions, remove_unreachable_types,
 };
 use crate::optimize_inline::inline_functions;
 
@@ -32,27 +32,27 @@ use crate::project::Project;
 
 /// Optimization level for the compiler.
 ///
-/// The levels are designed for different use cases:
-/// - O0: Debugging - no optimizations
-/// - O1: Development - fast compilation, all optimizations except DCE
-/// - O2: Production - full optimizations with moderate iteration count (default)
-/// - O3: Production - full optimizations with aggressive iteration count
+/// All levels run DCE (Dead Code Elimination) to remove unreachable code.
+/// The levels differ in what optimization passes are run:
+/// - O0: DCE only - no optimization passes
+/// - O1: Development - fast compilation with basic optimization passes
+/// - O2: Production - full optimization passes (default)
+/// - O3: Production - aggressive optimization passes
 /// - Os: Frontend - O2 + name section stripping for smaller binaries
 ///
 /// Configuration for each level:
 /// | Level | DCE | Iterations | Inline Threshold |
 /// |-------|-----|------------|------------------|
-/// | O0    | No  | 0          | N/A              |
-/// | O1    | No  | 2          | 10               |
+/// | O0    | Yes | 0          | N/A              |
+/// | O1    | Yes | 2          | 10               |
 /// | O2    | Yes | 10         | 10               |
 /// | O3    | Yes | 100        | 20               |
 /// | Os    | Yes | 10         | 10               |
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OptLevel {
-    /// No optimizations. Used for debugging.
+    /// No optimization passes. DCE only.
     O0,
-    /// Development optimizations. All passes except DCE.
-    /// Keeps dead code for debugging while improving runtime performance.
+    /// Development optimizations. All passes with fast iteration count.
     /// Iterations: 2, Inline threshold: 10.
     O1,
     /// Production optimizations. All passes including DCE.
@@ -72,27 +72,33 @@ pub enum OptLevel {
 /// This is the main entry point for the optimizer. Based on the optimization
 /// level, it applies different optimization strategies:
 ///
-/// - O0: No optimizations, just populate all features for codegen
-/// - O1: All optimizations except DCE (keeps dead code for debugging)
-/// - O2: Full optimizations including DCE (default)
-/// - O3: Full optimizations with aggressive iteration count
+/// - O0: DCE only (no optimization passes)
+/// - O1: Basic optimization passes + DCE
+/// - O2: Full optimization passes + DCE (default)
+/// - O3: Aggressive optimization passes + DCE
 /// - Os: Same as O2 plus name section stripping
+///
+/// All levels run DCE to remove unreachable functions and types, which
+/// significantly reduces codegen work.
 pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
     match opt_level {
         OptLevel::O0 => {
-            // No optimizations - enable all features
-            populate_all_features(&mut project);
+            // No optimizations, but still run DCE to reduce codegen work
+            analyze_project(&mut project);
+            remove_unreachable_functions(&mut project);
+            remove_unreachable_types(&mut project);
         }
         OptLevel::O1 => {
-            // Development mode: all optimizations except DCE
-            // This keeps dead code visible for debugging while improving runtime
+            // Development mode: all optimizations including DCE
             let config = OptConfig {
                 iterations: 2,
                 inline_threshold: 10,
             };
             run_optimization_passes(&mut project, &config);
-            // Still need to populate features without removing unreachable code
-            populate_all_features(&mut project);
+            // DCE: analyze and remove unreachable functions and types
+            analyze_project(&mut project);
+            remove_unreachable_functions(&mut project);
+            remove_unreachable_types(&mut project);
         }
         OptLevel::O2 | OptLevel::Os => {
             // Production mode: full optimizations with DCE
