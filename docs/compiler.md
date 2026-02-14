@@ -225,7 +225,6 @@ For `-O2` and `-Os`:
 | Field                 | Type                               | Description                                 |
 | --------------------- | ---------------------------------- | ------------------------------------------- |
 | `reachable_functions` | `HashSet<FunctionId>`              | Functions reachable from entry point (DCE)  |
-| `all_reachable`       | `bool`                             | When true, DCE is disabled                  |
 | `used_effects`        | `HashSet<WasiEffect>`              | WASI effects used (Stdout, Stderr, etc.)    |
 | `used_wasi_functions` | `HashSet<String>`                  | WASI functions called                       |
 | `used_builtins`       | `HashSet<CanonBuiltin>`            | Canonical builtins used (stream ops, etc.)  |
@@ -237,8 +236,8 @@ For `-O2` and `-Os`:
 
 | Flag  | Effect                                                      |
 | ----- | ----------------------------------------------------------- |
-| `-O0` | No optimizations, includes all functions/features           |
-| `-O1` | All passes except TIR-level DCE, keeps debug names          |
+| `-O0` | DCE only, no optimization passes                            |
+| `-O1` | All passes with fast iteration + DCE                        |
 | `-O2` | Full optimizations (inline, ref-elim, copy-prop, LICM, DCE) |
 | `-O3` | Aggressive optimizations (100 iterations, higher inline)    |
 | `-Os` | Full optimizations + strips debug name sections             |

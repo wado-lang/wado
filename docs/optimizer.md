@@ -26,27 +26,29 @@ See [WebAssembly-Native Instruction Opportunities](#webassembly-native-instructi
 
 ## Optimization Levels
 
+All levels run DCE (Dead Code Elimination) to remove unreachable functions and types, which significantly reduces codegen work.
+
 | Flag            | DCE | Iterations | Inline Threshold |
 | --------------- | --- | ---------- | ---------------- |
-| `-O0`           | No  | 0          | N/A              |
-| `-O1`           | No  | 2          | 10               |
+| `-O0`           | Yes | 0          | N/A              |
+| `-O1`           | Yes | 2          | 10               |
 | `-O2` (default) | Yes | 10         | 10               |
 | `-O3`           | Yes | 100        | 20               |
 | `-Os`           | Yes | 10         | 10               |
 
-`-Os` additionally strips the Wasm name section. All passes (except DCE) run in a fixed-point loop with early exit on convergence.
+`-Os` additionally strips the Wasm name section. Optimization passes (inlining, ref-elim, etc.) run in a fixed-point loop with early exit on convergence.
 
 ## Optimization Pipeline
 
-The optimizer runs after lowering and before Wasm plan/codegen. For `-O2` and `-Os`:
+The optimizer runs after lowering and before Wasm plan/codegen:
 
-1. Fixed-point iteration loop:
+1. Fixed-point iteration loop (skipped for `-O0`):
    1. Function Inlining
    2. Reference Elimination
    3. Copy Propagation
    4. Constant Folding
    5. Loop-Invariant Code Motion (LICM)
-2. DCE Analysis and removal of unreachable functions/types
+2. DCE Analysis and removal of unreachable functions/types (all levels)
 3. Post-optimization rewrites (select lowering, move insertion)
 4. Value copy type collection for codegen
 
