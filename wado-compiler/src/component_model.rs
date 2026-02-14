@@ -1519,8 +1519,6 @@ pub struct CmCallConvention {
     pub result_converter: Option<String>,
     /// For tuple returns: element types for struct creation
     pub tuple_return: Option<Vec<CmPrimitiveType>>,
-    /// For option<own<resource>>: true if needs boxing to Option<i32>
-    pub option_resource_return: bool,
     /// For result<T, E> returns: `Some((ok_is_resource`, `err_is_enum`))
     /// `ok_is_resource`: if true, Ok payload is a resource handle (i32)
     /// `err_is_enum`: if true, Err payload is an enum (i32)
@@ -1621,7 +1619,6 @@ impl CmCallConvention {
             outptr_alloc: Some((8, 4)), // ptr + count
             result_converter: converter,
             tuple_return: None,
-            option_resource_return: false,
             result_return: None,
         }
     }
@@ -1637,7 +1634,6 @@ impl CmCallConvention {
                 outptr_alloc: Some((12, 4)),
                 result_converter: Some("core/internal/cm_option_string_to_option".to_string()),
                 tuple_return: None,
-                option_resource_return: false,
                 result_return: None,
             },
 
@@ -1649,9 +1645,10 @@ impl CmCallConvention {
                 needs_memory: true,
                 needs_realloc: true,
                 outptr_alloc: Some((8, 4)),
-                result_converter: None,
+                result_converter: Some(
+                    "core/internal/cm_option_own_resource_to_option".to_string(),
+                ),
                 tuple_return: None,
-                option_resource_return: true,
                 result_return: None,
             },
 
@@ -1668,9 +1665,10 @@ impl CmCallConvention {
                             needs_memory: true,
                             needs_realloc: true,
                             outptr_alloc: Some((8, 4)),
-                            result_converter: None,
+                            result_converter: Some(
+                                "core/internal/cm_option_own_resource_to_option".to_string(),
+                            ),
                             tuple_return: None,
-                            option_resource_return: true,
                             result_return: None,
                         };
                     }
@@ -1685,7 +1683,6 @@ impl CmCallConvention {
                     outptr_alloc: Some((size, align)),
                     result_converter: None,
                     tuple_return: None,
-                    option_resource_return: false,
                     result_return: None,
                 }
             }
@@ -1728,7 +1725,6 @@ impl CmCallConvention {
             outptr_alloc: Some((total_size, max_align)),
             result_converter: None,
             tuple_return: Some(primitives),
-            option_resource_return: false,
             result_return: None,
         }
     }
@@ -1768,7 +1764,6 @@ impl CmCallConvention {
             outptr_alloc: Some((8, 4)), // discriminant + payload
             result_converter: None,
             tuple_return: None,
-            option_resource_return: false,
             result_return: Some((ok_is_resource, err_is_enum)),
         }
     }

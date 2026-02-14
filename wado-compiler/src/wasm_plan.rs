@@ -238,11 +238,14 @@ pub fn get_cm_converter_for_type(return_type: &Type) -> Option<&'static str> {
             None
         }
         // Option<String> -> cm_option_string_to_option
-        Type::Generic(g) if g.name == "Option" && g.args.len() == 1 => {
-            if matches!(&g.args[0], Type::Named(n) if n.name == "String") {
-                return Some("cm_option_string_to_option");
-            }
-            None
+        // Note: Option<ResourceName> is handled via CmCallConvention::result_converter,
+        // not by type analysis, since detecting resources requires registry access.
+        Type::Generic(g)
+            if g.name == "Option"
+                && g.args.len() == 1
+                && matches!(&g.args[0], Type::Named(n) if n.name == "String") =>
+        {
+            Some("cm_option_string_to_option")
         }
         _ => None,
     }
@@ -259,6 +262,8 @@ pub enum CmConverterKind {
     ListTupleString,
     /// `cm_option_string_to_option` converter
     OptionString,
+    /// `cm_option_own_resource_to_option` converter
+    OptionOwnResource,
 }
 
 /// Information about what CM converters are needed for a set of WASI functions.
@@ -281,6 +286,21 @@ impl CmConverterRequirements {
             };
             self.needed.insert(kind);
         }
+    }
+
+    /// Analyze a converter path (from `CmCallConvention::result_converter`) and update requirements.
+    pub fn analyze_converter(&mut self, converter_path: &str) {
+        // Extract the function name from the full path (e.g., "core/internal/cm_option_own_resource_to_option")
+        let func_name = converter_path.rsplit('/').next().unwrap_or(converter_path);
+        let kind = match func_name {
+            "cm_list_string_to_array" => CmConverterKind::ListString,
+            "cm_list_u8_to_array" => CmConverterKind::ListU8,
+            "cm_list_tuple_string_string_to_array" => CmConverterKind::ListTupleString,
+            "cm_option_string_to_option" => CmConverterKind::OptionString,
+            "cm_option_own_resource_to_option" => CmConverterKind::OptionOwnResource,
+            _ => return,
+        };
+        self.needed.insert(kind);
     }
 
     /// Check if any converters are needed.

@@ -116,6 +116,21 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
 
     return String::internal_from_utf8_raw(arr, str_len);
 }
+
+/// Convert a Component Model option<own<resource>> to a GC Option<i32>
+/// The outptr points to the CM option representation in linear memory:
+///   outptr[0]: discriminant (0 = none, 1 = some)
+///   outptr[4..7]: handle (i32, if some)
+pub fn cm_option_own_resource_to_option(outptr: i32) -> Option<i32> {
+    let discriminant = builtin::memory_load8_u(outptr);
+
+    if discriminant == 0 {
+        return null;
+    }
+
+    let handle = builtin::memory_load32(outptr + 4);
+    return Option::<i32>::Some(handle);
+}
 pub fn panic(message: String) -> ! {
     log_stderr(message);
     builtin::unreachable();

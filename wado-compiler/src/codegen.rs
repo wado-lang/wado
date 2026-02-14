@@ -7120,11 +7120,15 @@ impl Codegen<'_> {
                     self.generate_builtin_call(
                         &builtin, args, expr, func, type_table, ctx, builder,
                     );
-                } else if callee_module.is_entry_point()
-                    && self.generate_variant_constructor(
-                        &func_name, args, func, type_table, ctx, builder,
-                    )
-                {
+                } else if self.generate_variant_constructor(
+                    &func_name,
+                    args,
+                    expr.type_id,
+                    func,
+                    type_table,
+                    ctx,
+                    builder,
+                ) {
                     // Variant constructor was handled
                 } else if callee_module.is_effect_like()
                     && self.generate_cm_effect_call(
@@ -12322,42 +12326,6 @@ impl Codegen<'_> {
             } else {
                 panic!("tuple type {type_ids:?} not registered for CM return conversion");
             }
-        } else if conv.option_resource_return {
-            // option<own<resource>> - CM ABI layout at outptr:
-            //   offset 0: discriminant (u8, 0=none, 1=some)
-            //   offset 4: handle (i32, valid when discriminant=1)
-            // Result is (ref null $Box<i32>): null for None, struct.new for Some
-            let outptr_local = ctx.get_local("__cm_outptr").expect(
-                "__cm_outptr should be pre-allocated for functions with option<resource> returns",
-            );
-            let box_type_idx = self
-                .get_box_struct_type_idx(&PrimitiveType::I32, type_table)
-                .expect("Box<i32> type should be registered for option<resource> returns");
-            let result_type = ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(box_type_idx),
-            });
-            // Load discriminant byte from outptr
-            func.instruction(&Instruction::LocalGet(outptr_local));
-            func.instruction(&Instruction::I32Load8U(wasm_encoder::MemArg {
-                offset: 0,
-                align: 0,
-                memory_index: 0,
-            }));
-            // Branch: discriminant != 0 → Some(handle), else → None
-            func.instruction(&Instruction::If(BlockType::Result(result_type)));
-            // Some: load handle from outptr + 4, wrap in Box<i32>
-            func.instruction(&Instruction::LocalGet(outptr_local));
-            func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                offset: 4,
-                align: 2,
-                memory_index: 0,
-            }));
-            func.instruction(&Instruction::StructNew(box_type_idx));
-            func.instruction(&Instruction::Else);
-            // None: null reference
-            func.instruction(&Instruction::RefNull(HeapType::Concrete(box_type_idx)));
-            func.instruction(&Instruction::End);
         }
 
         true
@@ -13186,6 +13154,7 @@ impl Codegen<'_> {
         &self,
         func_name: &str,
         args: &[TirExpr],
+        result_type_id: TypeId,
         func: &mut WirFunction,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -13214,6 +13183,16 @@ impl Codegen<'_> {
             }
             "Some" => {
                 self.generate_args(func, args, type_table, ctx, builder);
+                // Option<primitive> uses (ref null $Box<T>) representation.
+                // The arg is a raw primitive on the stack; wrap it in Box<T>.
+                if let ResolvedType::Option(inner_type_id) = type_table.get(result_type_id) {
+                    let ultimate = type_table.get_ultimate_base_type(*inner_type_id);
+                    if let ResolvedType::Primitive(prim) = type_table.get(ultimate)
+                        && let Some(box_idx) = self.get_box_struct_type_idx(prim, type_table)
+                    {
+                        func.instruction(&Instruction::StructNew(box_idx));
+                    }
+                }
                 true
             }
             "None" => {

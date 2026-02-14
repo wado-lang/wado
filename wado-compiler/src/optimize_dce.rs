@@ -98,17 +98,21 @@ pub fn analyze_project(project: &mut Project) {
     let needs_f64_to_buffer = reachable.contains(&core_internal("f64_to_string"));
     let needs_f32_to_buffer = reachable.contains(&core_internal("f32_to_string"));
 
-    // Add CM converter functions based on WASI function return types
+    // Add CM converter functions based on WASI function call conventions
     // These conversion functions are called from codegen, not Wado code
-    // We need to compute transitive closure to include all functions they call
-    // Analysis is centralized in wasm_plan::CmConverterRequirements
+    // We use CmCallConvention::result_converter as the single source of truth
     let mut cm_requirements = CmConverterRequirements::default();
 
     for func_name in &used_wasi_functions {
-        if let Some(func_info) = project.wasi_registry.get_function(func_name)
-            && let Some(return_type) = &func_info.return_type
-        {
-            cm_requirements.analyze_type(return_type);
+        if let Some(func_info) = project.wasi_registry.get_function(func_name) {
+            if let Some(return_type) = &func_info.return_type {
+                cm_requirements.analyze_type(return_type);
+            }
+            // Also check CmCallConvention for converters not detectable from type alone
+            // (e.g., Option<ResourceName> where ResourceName is a WASI resource)
+            if let Some(converter) = &func_info.call_convention.result_converter {
+                cm_requirements.analyze_converter(converter);
+            }
         }
     }
 
@@ -169,6 +173,10 @@ pub fn analyze_project(project: &mut Project) {
         let copy_string_func = core_internal("copy_string_from_linear");
         reachable.extend(compute_reachable(&call_graph, &cm_option_func));
         reachable.extend(compute_reachable(&call_graph, &copy_string_func));
+    }
+    if cm_requirements.needs(CmConverterKind::OptionOwnResource) {
+        let cm_option_func = core_internal("cm_option_own_resource_to_option");
+        reachable.extend(compute_reachable(&call_graph, &cm_option_func));
     }
 
     // Note: array_copy_string is tracked via call graph analysis
