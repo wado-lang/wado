@@ -4093,10 +4093,7 @@ impl Codegen<'_> {
                         mutable: true,
                     },
                 ];
-                rec_types.push((
-                    array_struct_name,
-                    RecTypeKind::Struct(array_struct_fields),
-                ));
+                rec_types.push((array_struct_name, RecTypeKind::Struct(array_struct_fields)));
 
                 array_type_mappings.push((element_type_id, raw_array_idx, array_struct_idx));
             }
@@ -4156,10 +4153,7 @@ impl Codegen<'_> {
             });
         }
 
-        rec_types.push((
-            struct_name.name.clone(),
-            RecTypeKind::Struct(struct_fields),
-        ));
+        rec_types.push((struct_name.name.clone(), RecTypeKind::Struct(struct_fields)));
 
         // Define the rec group
         let indices = builder.define_rec_group(&rec_types);
