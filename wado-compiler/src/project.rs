@@ -53,8 +53,6 @@ pub struct Project {
     // ========================================
     /// Set of reachable functions (from DCE analysis)
     pub reachable_functions: IndexSet<FunctionId>,
-    /// When true, all functions are considered reachable (DCE disabled)
-    pub all_reachable: bool,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,
     // ========================================
@@ -103,7 +101,6 @@ impl Project {
             builtin_registry,
             // Usage analysis fields default to empty/false
             reachable_functions: IndexSet::new(),
-            all_reachable: false,
             used_wasi_functions: IndexSet::new(),
             // Codegen options
             strip_names: false,
@@ -124,7 +121,7 @@ impl Project {
 
     /// Check if a function is reachable (should be included in the binary)
     pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
-        self.all_reachable || self.reachable_functions.contains(func_id)
+        self.reachable_functions.contains(func_id)
     }
 
     /// Check if any function from the given WASI effect is used.
