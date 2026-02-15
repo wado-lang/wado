@@ -1,11 +1,9 @@
 // Test eprintln followed by trap in same function
 
-use { Stderr } from "wasi:cli";
-use { eprintln } from "core:cli";
+use { log_stderr } from "core:internal";
 
-export fn run() with Stderr {
-    eprintln("error message");
-    builtin::effect_wait();
+export fn run() {
+    log_stderr("error message");
     builtin::unreachable();
 }
 

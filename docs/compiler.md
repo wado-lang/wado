@@ -399,7 +399,6 @@ fn i32_and(a: i32, b: i32) -> i32;
 | `array_set_u8`        | `array.set $type`        | Array       |
 | `memory_store8`       | `i32.store8`             | Memory      |
 | `memory_load8_u`      | `i32.load8_u`            | Memory      |
-| `effect_wait`         | (effect synchronization) | Effects     |
 | `unreachable`         | `unreachable`            | Control     |
 | `f32_abs`             | `f32.abs`                | Float math  |
 | `f64_abs`             | `f64.abs`                | Float math  |
@@ -866,9 +865,6 @@ builtin::waitable_set_new() -> i32
 builtin::waitable_join(set: i32, subtask: i32)
 builtin::waitable_set_wait(set: i32, outptr: i32) -> i32
 builtin::subtask_drop(subtask: i32)
-
-// Effect synchronization
-builtin::effect_wait()                // Wait for all pending effects to complete
 
 // Branch hinting (Wasm branch hinting proposal)
 builtin::likely(cond: bool) -> bool    // Hint: branch is usually taken

@@ -45,6 +45,18 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
     builtin::stream_drop_writable(tx);
 }
 
+/// Wait for a pending async subtask to complete.
+/// If the subtask is still pending (status bit 0 == 0), creates a waitable set,
+/// joins the subtask, waits for completion, and drops the subtask handle.
+pub fn effect_wait(subtask: i32) {
+    if builtin::i32_eqz(builtin::i32_and(subtask, 1)) {
+        let ws = builtin::waitable_set_new();
+        builtin::waitable_join(ws, subtask);
+        builtin::waitable_set_wait(ws, 2048);
+        builtin::subtask_drop(subtask);
+    }
+}
+
 /// Best-effort logging to stdout (ambient, no effect required)
 /// Writes message with newline to stdout. Waits for completion.
 pub fn log_stdout(message: String) {
@@ -52,9 +64,9 @@ pub fn log_stdout(message: String) {
     let rx = handles as i32;
     let tx = (handles >> 32) as i32;
 
-    builtin::call_indirect_stdout_write_via_stream(rx);
+    let subtask = builtin::call_indirect_stdout_write_via_stream(rx);
     write_string_to_stream(tx, message, true);
-    builtin::effect_wait();
+    effect_wait(subtask);
 }
 
 /// Best-effort logging to stderr (ambient, no effect required)
@@ -64,9 +76,9 @@ pub fn log_stderr(message: String) {
     let rx = handles as i32;
     let tx = (handles >> 32) as i32;
 
-    builtin::call_indirect_stderr_write_via_stream(rx);
+    let subtask = builtin::call_indirect_stderr_write_via_stream(rx);
     write_string_to_stream(tx, message, true);
-    builtin::effect_wait();
+    effect_wait(subtask);
 }
 
 /// Convert a Component Model list<string> to a GC Array<String>
