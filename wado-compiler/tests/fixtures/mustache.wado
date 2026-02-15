@@ -1,0 +1,167 @@
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+/// Trim leading and trailing whitespace using chars iterator
+fn trim(s: String) -> String {
+    let chars: Array<char> = s.chars().collect();
+    let len = chars.len();
+
+    // Find start (skip leading whitespace)
+    let mut start = 0;
+    while start < len {
+        let c = chars[start];
+        if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+            break;
+        }
+        start += 1;
+    }
+
+    // Find end (skip trailing whitespace)
+    let mut end = len;
+    while end > start {
+        let c = chars[end - 1];
+        if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+            break;
+        }
+        end -= 1;
+    }
+
+    // Build result char by char
+    let mut result = String::with_capacity(end - start);
+    for let mut i = start; i < end; i += 1 {
+        result.append_char(chars[i]);
+    }
+    return result;
+}
+
+/// Render a Mustache template with variable interpolation.
+///
+/// Supported tags:
+///   {{name}}           - variable interpolation (trimmed)
+///   {{! comment }}     - comment (ignored)
+///
+/// Missing variables are rendered as empty string.
+/// All scanning is done via chars() iterator for UTF-8 safety.
+fn render(template: String, context: &TreeMap<String, String>) -> String {
+    let mut result = String::with_capacity(template.len());
+    let mut tag = String::with_capacity(32);
+    let mut in_tag = false;
+    let mut seen_open_brace = false;
+    let mut seen_close_brace = false;
+
+    let mut iter = template.chars();
+    while let Some(c) = iter.next() {
+        if in_tag {
+            if seen_close_brace {
+                if c == '}' {
+                    // Found closing `}}`
+                    let key = trim(tag);
+                    if !key.is_empty() {
+                        // Check first char to distinguish comments
+                        let mut check = key.chars();
+                        if let Some(fc) = check.next() {
+                            if fc != '!' {
+                                // Variable interpolation
+                                if let Some(value) = context[key] {
+                                    result.append(value);
+                                }
+                            }
+                        }
+                    }
+                    tag = String::with_capacity(32);
+                    in_tag = false;
+                    seen_close_brace = false;
+                } else {
+                    // Single `}` inside tag — not a closing delimiter
+                    tag.append_char('}');
+                    tag.append_char(c);
+                    seen_close_brace = false;
+                }
+            } else if c == '}' {
+                seen_close_brace = true;
+            } else {
+                tag.append_char(c);
+            }
+        } else {
+            if seen_open_brace {
+                if c == '{' {
+                    // Found opening `{{`
+                    in_tag = true;
+                    seen_open_brace = false;
+                } else {
+                    // Single `{` — not a tag, emit both chars
+                    result.append_char('{');
+                    result.append_char(c);
+                    seen_open_brace = false;
+                }
+            } else if c == '{' {
+                seen_open_brace = true;
+            } else {
+                result.append_char(c);
+            }
+        }
+    }
+
+    // Handle trailing single `{`
+    if seen_open_brace {
+        result.append_char('{');
+    }
+
+    return result;
+}
+
+export fn run() with Stdout {
+    let mut ctx = TreeMap::<String, String>::new();
+    ctx["name"] = "World";
+    ctx["greeting"] = "Hello";
+
+    // Basic variable interpolation
+    let t1 = render("{{greeting}}, {{name}}!", &ctx);
+    assert t1 == "Hello, World!";
+    println(t1);
+
+    // Whitespace inside tags is trimmed
+    let t2 = render("{{ greeting }}, {{ name }}!", &ctx);
+    assert t2 == "Hello, World!";
+
+    // Missing variable renders as empty
+    let t3 = render("Hi, {{missing}}!", &ctx);
+    assert t3 == "Hi, !";
+    println(t3);
+
+    // Comment tag is ignored
+    let t4 = render("Hello{{! this is a comment }}, World!", &ctx);
+    assert t4 == "Hello, World!";
+    println(t4);
+
+    // Plain text (no tags)
+    let t5 = render("No tags here", &ctx);
+    assert t5 == "No tags here";
+
+    // Single brace is not a tag
+    let t6 = render("Not a {tag}", &ctx);
+    assert t6 == "Not a {tag}";
+
+    // Empty template
+    let t7 = render("", &ctx);
+    assert t7 == "";
+
+    // UTF-8 keys and values
+    ctx["名前"] = "太郎";
+    let t8 = render("こんにちは、{{名前}}さん！", &ctx);
+    assert t8 == "こんにちは、太郎さん！";
+    println(t8);
+
+    // Multiple variables in sequence
+    let t9 = render("{{greeting}} {{name}} {{greeting}}", &ctx);
+    assert t9 == "Hello World Hello";
+
+    // Trailing single brace preserved
+    let t10 = render("end{", &ctx);
+    assert t10 == "end{";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "Hello, World!\nHi, !\nHello, World!\nこんにちは、太郎さん！\nok\n"}
