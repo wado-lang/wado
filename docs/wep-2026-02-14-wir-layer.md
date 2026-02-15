@@ -331,8 +331,6 @@ pub struct WirEnumType {
     pub cases: Vec<WirEnumCase>,
     /// Metadata (module source, span, attributes)
     pub meta: WirMeta,
-    /// Generic instantiation origin (None for non-generic types)
-    pub generic_origin: Option<WirGenericOrigin>,
 }
 
 pub struct WirEnumCase {
