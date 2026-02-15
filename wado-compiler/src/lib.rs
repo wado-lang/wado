@@ -73,6 +73,7 @@ pub mod ast;
 pub mod bind;
 pub mod builtin_registry;
 pub mod bundled;
+pub mod cm_abi;
 pub mod codegen;
 pub mod comment;
 pub mod compiler_host;
