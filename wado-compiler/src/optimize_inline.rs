@@ -154,6 +154,12 @@ fn is_inline_eligible(
         return false;
     };
 
+    // Don't inline CM adapter functions - they are ABI bridges between
+    // Wado GC types and CM linear memory that must remain as separate functions
+    if func.is_cm_adapter {
+        return false;
+    }
+
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if matches!(type_table.get(func.return_type), ResolvedType::Never) {
@@ -2172,8 +2178,6 @@ fn remap_expr(
             effect_name,
             op_name,
             args,
-            cm_convention,
-            cm_local_name,
         } => TirExprKind::EffectCall {
             effect_name: effect_name.clone(),
             op_name: op_name.clone(),
@@ -2181,8 +2185,6 @@ fn remap_expr(
                 .iter()
                 .map(|a| remap_expr(a, param_to_local, local_offset, param_count, source_module))
                 .collect(),
-            cm_convention: cm_convention.clone(),
-            cm_local_name: cm_local_name.clone(),
         },
         TirExprKind::CmRawCall { local_name, args } => TirExprKind::CmRawCall {
             local_name: local_name.clone(),

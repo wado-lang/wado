@@ -55,6 +55,10 @@ fn run() with Stdout {
     });
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data: i32) {
+    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
 fn __Closure_0::__call(self: &__Closure_0, a: i32, b: i32, c: i32) -> i32 {
     let max_ab: i32 = core::builtin::select::<i32>((a > b), a, b);
     let result: i32 = core::builtin::select::<i32>((max_ab > c), max_ab, c);

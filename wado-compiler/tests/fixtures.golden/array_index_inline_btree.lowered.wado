@@ -42,6 +42,10 @@ fn run() with Stdout {
     });
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data: i32) {
+    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
 fn "Tree<String>::check"(self: &Tree<String>) -> i32 {
     let active: i32 = self.root."Node<String>::count_active"();
     let full: bool = self.root."Node<String>::is_full"(self.max_keys);

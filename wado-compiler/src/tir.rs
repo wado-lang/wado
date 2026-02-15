@@ -14,7 +14,6 @@ use std::rc::Rc;
 
 use indexmap::{IndexMap, IndexSet};
 
-use crate::component_model::CmCallConvention;
 use crate::name::{LocalMethodName, ModuleSource, TypeNameInfo, format_type_name};
 use crate::token::Span;
 use crate::wasm_plan::CmExportInfo;
@@ -548,6 +547,32 @@ impl TypeTable {
             base_name: None,
         };
         self.intern_map.get(&key).copied()
+    }
+
+    /// Find a variant type by name (scanning all types).
+    /// Returns the first matching `ResolvedType::Variant` with the given name.
+    pub fn find_variant_type_by_name(&self, name: &str) -> Option<TypeId> {
+        for (&type_id, resolved) in &self.types {
+            if let ResolvedType::Variant { name: vname, .. } = resolved
+                && vname == name
+            {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
+    /// Find an enum type by name (scanning all types).
+    /// Returns the first matching `ResolvedType::Enum` with the given name.
+    pub fn find_enum_type_by_name(&self, name: &str) -> Option<TypeId> {
+        for (&type_id, resolved) in &self.types {
+            if let ResolvedType::Enum { name: ename, .. } = resolved
+                && ename == name
+            {
+                return Some(type_id);
+            }
+        }
+        None
     }
 
     pub fn make_enum(&mut self, name: String, module_source: ModuleSource) -> TypeId {
@@ -1166,11 +1191,6 @@ pub enum TirExprKind {
         effect_name: String,
         op_name: String,
         args: Vec<TirExpr>,
-        /// Component Model call convention (if this is a CM effect call)
-        /// Contains all ABI information for codegen - no WASI-specific knowledge needed
-        cm_convention: Option<CmCallConvention>,
-        /// Full local alias name for CM call (e.g., "`wasi:cli/Environment::get_arguments`")
-        cm_local_name: Option<String>,
     },
     /// Raw Component Model call to a lowered WASI import.
     ///

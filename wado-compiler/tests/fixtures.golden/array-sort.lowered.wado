@@ -116,6 +116,10 @@ fn run() with Stdout {
     print_array(&g);
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data: i32) {
+    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
 pub fn "Array<i32>::sorted"(self: &Array<i32>) -> Array<i32> {
     let n: i32 = self.used;
     let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(n);

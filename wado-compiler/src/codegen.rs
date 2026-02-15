@@ -2138,7 +2138,6 @@ impl Codegen<'_> {
 
         // ========================================
         // Lower all WASI functions using registry data
-        // Canonical options are derived from CmCallConvention
         // ========================================
         self.lower_wasi_functions(&mut builder, &mut ctx);
 
@@ -3772,18 +3771,14 @@ impl Codegen<'_> {
 
     /// Generate `canon lower` calls for all registered WASI functions.
     ///
-    /// This method iterates over all functions in the WASI registry and generates
-    /// the appropriate `canon lower` calls based on their `CmCallConvention`.
-    /// The canonical options are derived from the convention:
+    /// Derives canonical options directly from `WasiFunctionInfo` fields:
     /// - `is_async` → `CanonicalOption::Async`
-    /// - `needs_memory` → `CanonicalOption::Memory`
-    /// - `needs_realloc` → `CanonicalOption::Realloc`
+    /// - Has string/list params or returns → `Memory` + `Realloc`
     fn lower_wasi_functions(
         &self,
         builder: &mut ComponentBuilder,
         ctx: &mut ComponentModelContext,
     ) {
-        // Iterate over all interfaces and their functions
         for interface_info in self.project.wasi_registry.interfaces() {
             for func in &interface_info.functions {
                 let local_name = func.local_alias_name();
@@ -3803,17 +3798,21 @@ impl Codegen<'_> {
                 // Register the core function with the same name
                 ctx.register_core_func(&local_name);
 
-                // Build canonical options based on call convention
-                let conv = &func.call_convention;
+                // Derive canonical options from function signature
                 let mut options: Vec<CanonicalOption> = Vec::new();
 
-                if conv.is_async {
+                if func.is_async {
                     options.push(CanonicalOption::Async);
                 }
-                if conv.needs_memory {
+
+                // Determine if memory/realloc are needed from the function signature
+                let needs_memory = func.needs_memory();
+                let needs_realloc = func.needs_realloc();
+
+                if needs_memory {
                     options.push(CanonicalOption::Memory(ctx.memory_idx()));
                 }
-                if conv.needs_realloc {
+                if needs_realloc {
                     options.push(CanonicalOption::Realloc(ctx.core_func_idx("realloc")));
                 }
 
@@ -7200,18 +7199,6 @@ impl Codegen<'_> {
                     builder,
                 ) {
                     // Variant constructor was handled
-                } else if callee_module.is_effect_like()
-                    && self.generate_cm_effect_call(
-                        func,
-                        ctx,
-                        builder,
-                        type_table,
-                        &callee_module.effect_name().unwrap_or_default(),
-                        &func_name,
-                        args,
-                    )
-                {
-                    // CM effect call handled via convention
                 } else {
                     // Save and clear skip_scalarized_wrap so it doesn't propagate
                     // to nested scalarized calls in arguments
@@ -7249,35 +7236,16 @@ impl Codegen<'_> {
             }
 
             // === Effect Operation Call ===
-            // Note: Effect calls are typically represented as TirExprKind::Call in the TIR,
-            // so this branch handles cases where EffectCall is explicitly constructed.
+            // All WASI effect calls are rewritten to adapter function Calls
+            // by cm_adapter_gen. No EffectCall nodes should reach codegen.
             TirExprKind::EffectCall {
                 effect_name,
                 op_name,
-                args,
                 ..
             } => {
-                // Try to handle via CM convention
-                if self.generate_cm_effect_call(
-                    func,
-                    ctx,
-                    builder,
-                    type_table,
-                    effect_name,
-                    op_name,
-                    args,
-                ) {
-                    // CM effect call handled via convention
-                } else {
-                    // Fallback for unknown effect calls
-                    self.generate_args(func, args, type_table, ctx, builder);
-                    let full_name = format!("{effect_name}::{op_name}");
-                    if let Some(func_idx) = builder.try_func_idx(&full_name) {
-                        func.instruction(&Instruction::Call(func_idx));
-                    } else {
-                        panic!("unknown effect operation: {full_name}");
-                    }
-                }
+                panic!(
+                    "EffectCall {effect_name}::{op_name} should have been rewritten to a CM adapter call"
+                );
             }
 
             // === Raw CM Call (used inside synthesized adapter functions) ===
@@ -7462,25 +7430,12 @@ impl Codegen<'_> {
                         }
                     }
 
-                    // WASI Resource method calls (e.g., Fields::has, Fields::append)
+                    // WASI Resource method calls should have been rewritten to
+                    // adapter function calls by cm_adapter_gen
                     ResolvedType::Resource { name, .. } => {
                         let func_name = format!("{name}::{method_name}");
-                        let func_info = self
-                            .project
-                            .wasi_registry
-                            .get_function(&func_name)
-                            .unwrap_or_else(|| panic!("Unknown resource method: {func_name}"))
-                            .clone();
-
-                        self.generate_cm_resource_method_call(
-                            func,
-                            ctx,
-                            builder,
-                            type_table,
-                            &func_info,
-                            receiver,
-                            args,
-                            expr.type_id,
+                        panic!(
+                            "Resource method call {func_name} should have been rewritten to a CM adapter call"
                         );
                     }
 
@@ -8047,15 +8002,32 @@ impl Codegen<'_> {
                         }
                     }
 
-                    // Try WASI function resolution for resource methods
-                    // Resource methods like TcpSocket::static_tcp_socket_create are registered
-                    // in wasi_registry under "TcpSocket::static_tcp_socket_create"
+                    // Try WASI function resolution for resource static methods
+                    // Resource methods like Response::new are registered
+                    // in wasi_registry under "Response::new"
                     if let Some(func_info) = self.project.wasi_registry.get_function(&func_name) {
-                        let conv = &func_info.call_convention;
                         let local_name = func_info.local_alias_name();
 
+                        // Compute ABI properties from return type
+                        let outptr_alloc = func_info.return_type.as_ref().and_then(|rt| {
+                            let flat = crate::cm_abi::cm_flat_types(rt);
+                            if flat.len() > 1 {
+                                Some((crate::cm_abi::cm_size(rt), crate::cm_abi::cm_align(rt)))
+                            } else {
+                                None
+                            }
+                        });
+                        let tuple_return = func_info
+                            .return_type
+                            .as_ref()
+                            .and_then(crate::cm_abi::cm_tuple_primitive_types);
+                        let result_return = func_info
+                            .return_type
+                            .as_ref()
+                            .and_then(crate::cm_abi::cm_result_return_info);
+
                         // Handle outptr allocation for Result returns
-                        if let Some((size, align)) = conv.outptr_alloc {
+                        if let Some((size, align)) = outptr_alloc {
                             // Allocate outptr using realloc
                             func.instruction(&Instruction::I32Const(0)); // old_ptr
                             func.instruction(&Instruction::I32Const(0)); // old_size
@@ -8076,7 +8048,7 @@ impl Codegen<'_> {
                         func.instruction(&Instruction::Call(func_idx));
 
                         // Handle tuple return conversion (e.g., Response::new -> [Response, Future])
-                        if let Some(ref elements) = conv.tuple_return {
+                        if let Some(ref elements) = tuple_return {
                             let outptr_local = ctx.get_local("__cm_outptr").expect(
                                 "__cm_outptr should be pre-allocated for functions with tuple returns",
                             );
@@ -8137,7 +8109,7 @@ impl Codegen<'_> {
                             func.instruction(&Instruction::StructNew(type_idx));
 
                             // Free the outptr linear memory
-                            if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
+                            if let Some((alloc_size, alloc_align)) = outptr_alloc {
                                 let temp = ctx
                                     .get_local("__cm_result_temp")
                                     .expect("__cm_result_temp should be pre-allocated");
@@ -8154,7 +8126,7 @@ impl Codegen<'_> {
                                     HeapType::Concrete(type_idx),
                                 ));
                             }
-                        } else if let Some((ok_is_resource, _err_is_enum)) = conv.result_return {
+                        } else if let Some((ok_is_resource, _err_is_enum)) = result_return {
                             let outptr_local = ctx
                                 .get_local("__cm_outptr")
                                 .expect("__cm_outptr should be pre-allocated for Result returns");
@@ -8304,7 +8276,7 @@ impl Codegen<'_> {
                             func.instruction(&Instruction::End);
 
                             // Free the outptr linear memory
-                            if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
+                            if let Some((alloc_size, alloc_align)) = outptr_alloc {
                                 let temp = ctx
                                     .get_local("__cm_result_temp")
                                     .expect("__cm_result_temp should be pre-allocated");
@@ -12329,444 +12301,6 @@ impl Codegen<'_> {
             format!("{callee_module}::{func_name}")
         };
         panic!("unknown function: {full_name}");
-    }
-
-    /// Generate a CM effect call using the convention from `WasiRegistry`
-    ///
-    /// This method handles all the CM ABI details:
-    /// - Outptr allocation for complex return types
-    /// - Calling the WASI function
-    /// - Result conversion (list to array, tuple struct creation, etc.)
-    /// - Async operation handling (subtask storage)
-    ///
-    /// Returns true if the call was handled, false if it's not a known WASI function.
-    #[allow(clippy::too_many_arguments)]
-    fn generate_cm_effect_call(
-        &self,
-        func: &mut Function,
-        ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
-        type_table: &TypeTable,
-        effect_name: &str,
-        op_name: &str,
-        args: &[TirExpr],
-    ) -> bool {
-        let qualified_name = format!("{effect_name}::{op_name}");
-        let Some(func_info) = self.project.wasi_registry.get_function(&qualified_name) else {
-            return false;
-        };
-
-        let conv = &func_info.call_convention;
-        let local_name = func_info.local_alias_name();
-
-        // Generate arguments first
-        self.generate_args(func, args, type_table, ctx, builder);
-
-        // Handle async operations (need extra outptr argument)
-        // For async functions, the outptr is always 2048 - we don't use outptr_alloc
-        if conv.is_async {
-            func.instruction(&Instruction::I32Const(2048)); // outptr for async result
-        } else if let Some((size, align)) = conv.outptr_alloc {
-            // Handle outptr allocation for complex return types (sync functions only)
-            // Allocate outptr using realloc
-            func.instruction(&Instruction::I32Const(0)); // old_ptr
-            func.instruction(&Instruction::I32Const(0)); // old_size
-            func.instruction(&Instruction::I32Const(align as i32)); // align
-            func.instruction(&Instruction::I32Const(size as i32)); // new_size
-            let realloc_idx = builder.func_idx("realloc");
-            func.instruction(&Instruction::Call(realloc_idx));
-
-            // Store outptr for later use
-            let outptr_local = ctx.get_local("__cm_outptr").expect(
-                "__cm_outptr should be pre-allocated for functions with CM complex returns",
-            );
-            func.instruction(&Instruction::LocalTee(outptr_local));
-        }
-
-        // Call the WASI function
-        let func_idx = builder.func_idx(&local_name);
-        func.instruction(&Instruction::Call(func_idx));
-
-        // Handle async operation result (store subtask handle)
-        if conv.is_async {
-            let subtask_local = ctx
-                .get_local("__subtask")
-                .expect("__subtask should be pre-allocated for functions with async effects");
-            func.instruction(&Instruction::LocalSet(subtask_local));
-            return true;
-        }
-
-        // Handle result conversion
-        if let Some(converter) = conv.result_converter {
-            let outptr_local = ctx.get_local("__cm_outptr").expect(
-                "__cm_outptr should be pre-allocated for functions with CM complex returns",
-            );
-            func.instruction(&Instruction::LocalGet(outptr_local));
-            let conv_idx = builder.func_idx(converter.codegen_path());
-            func.instruction(&Instruction::Call(conv_idx));
-        } else if let Some(ref elements) = conv.tuple_return {
-            // Create tuple struct from outptr values
-            // Pattern: Load all values onto stack, then StructNew consumes them all
-            let outptr_local = ctx
-                .get_local("__cm_outptr")
-                .expect("__cm_outptr should be pre-allocated for functions with tuple returns");
-
-            // Convert CmPrimitiveType to TypeId for tuple type lookup
-            let type_ids: Vec<TypeId> = elements
-                .iter()
-                .map(|p| match p {
-                    CmPrimitiveType::I32 => TypeTable::I32,
-                    CmPrimitiveType::I64 => TypeTable::I64,
-                    CmPrimitiveType::U32 => TypeTable::U32,
-                    CmPrimitiveType::U64 => TypeTable::U64,
-                    CmPrimitiveType::F32 => TypeTable::F32,
-                    CmPrimitiveType::F64 => TypeTable::F64,
-                })
-                .collect();
-
-            // Load all values from outptr onto the stack
-            let mut offset: u32 = 0;
-            for prim in elements {
-                // Align offset
-                let align = prim.align();
-                if !offset.is_multiple_of(align) {
-                    offset += align - (offset % align);
-                }
-
-                // Load value from outptr
-                func.instruction(&Instruction::LocalGet(outptr_local));
-                match prim {
-                    CmPrimitiveType::I32 | CmPrimitiveType::U32 => {
-                        func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                            offset: u64::from(offset),
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                    CmPrimitiveType::I64 | CmPrimitiveType::U64 => {
-                        func.instruction(&Instruction::I64Load(wasm_encoder::MemArg {
-                            offset: u64::from(offset),
-                            align: 3,
-                            memory_index: 0,
-                        }));
-                    }
-                    CmPrimitiveType::F32 => {
-                        func.instruction(&Instruction::F32Load(wasm_encoder::MemArg {
-                            offset: u64::from(offset),
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                    CmPrimitiveType::F64 => {
-                        func.instruction(&Instruction::F64Load(wasm_encoder::MemArg {
-                            offset: u64::from(offset),
-                            align: 3,
-                            memory_index: 0,
-                        }));
-                    }
-                }
-
-                offset += prim.size();
-            }
-
-            // Create tuple struct - consumes all values on stack
-            if let Some(type_idx) = self.get_tuple_type_idx(&type_ids) {
-                func.instruction(&Instruction::StructNew(type_idx));
-
-                // Free the outptr linear memory
-                if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
-                    let temp = ctx
-                        .get_local("__cm_result_temp")
-                        .expect("__cm_result_temp should be pre-allocated");
-                    func.instruction(&Instruction::LocalSet(temp));
-                    func.instruction(&Instruction::LocalGet(outptr_local));
-                    func.instruction(&Instruction::I32Const(alloc_size as i32));
-                    func.instruction(&Instruction::I32Const(alloc_align as i32));
-                    func.instruction(&Instruction::I32Const(0));
-                    let realloc_idx = builder.func_idx("realloc");
-                    func.instruction(&Instruction::Call(realloc_idx));
-                    func.instruction(&Instruction::Drop);
-                    func.instruction(&Instruction::LocalGet(temp));
-                    func.instruction(&Instruction::RefCastNullable(HeapType::Concrete(type_idx)));
-                }
-            } else {
-                panic!("tuple type {type_ids:?} not registered for CM return conversion");
-            }
-        }
-
-        true
-    }
-
-    /// Generate code for a Component Model resource method call.
-    ///
-    /// Resource methods (e.g., `Fields::has`, `Fields::append`) need special handling:
-    /// - Receiver is a resource handle (i32) representing borrow<resource>
-    /// - String/Array parameters must be lowered to linear memory (ptr, len) pairs
-    /// - Result return types are read from an outptr
-    #[allow(clippy::too_many_arguments)]
-    fn generate_cm_resource_method_call(
-        &self,
-        func: &mut Function,
-        ctx: &mut FunctionContext,
-        builder: &CoreModuleBuilder,
-        type_table: &TypeTable,
-        func_info: &WasiFunctionInfo,
-        receiver: &TirExpr,
-        args: &[TirExpr],
-        result_type_id: TypeId,
-    ) {
-        let conv = &func_info.call_convention;
-        let local_name = func_info.local_alias_name();
-
-        // Step 1: Generate receiver (resource handle as i32)
-        // For resource methods, self: &Resource maps to borrow<resource> (i32)
-        self.generate_expr(func, receiver, type_table, ctx, builder);
-
-        // Step 2: Generate and convert each argument for CM ABI
-        // Skip the self parameter (params[0]) since we handle receiver above
-        for (i, arg) in args.iter().enumerate() {
-            let param_idx = i + 1; // +1 to skip self parameter
-            let param_type = &func_info.params[param_idx].1;
-            let resolved_type = self.project.wasi_registry.resolve_type(param_type);
-
-            match &resolved_type {
-                Type::Named(named) if named.name == "String" => {
-                    // String argument: lower to (ptr, len) pair in linear memory
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                    let lower_idx = builder.func_idx("core/internal/cm_lower_string");
-                    func.instruction(&Instruction::Call(lower_idx));
-                    // Split i64 (ptr | (len << 32)) into two i32s
-                    let temp = ctx.alloc_local("__cm_i64_temp", ValType::I64);
-                    func.instruction(&Instruction::LocalTee(temp));
-                    func.instruction(&Instruction::I32WrapI64); // ptr (low 32 bits)
-                    func.instruction(&Instruction::LocalGet(temp));
-                    func.instruction(&Instruction::I64Const(32));
-                    func.instruction(&Instruction::I64ShrU);
-                    func.instruction(&Instruction::I32WrapI64); // len (high 32 bits)
-                }
-                Type::Generic(generic)
-                    if generic.name == "Array"
-                        && generic.args.len() == 1
-                        && matches!(&generic.args[0], Type::Named(n) if n.name == "u8") =>
-                {
-                    // Array<u8> argument (e.g., FieldValue): lower to (ptr, len)
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                    let lower_idx = builder.func_idx("core/internal/cm_lower_array_u8");
-                    func.instruction(&Instruction::Call(lower_idx));
-                    // Split i64 (ptr | (len << 32)) into two i32s
-                    let temp = ctx.alloc_local("__cm_i64_temp", ValType::I64);
-                    func.instruction(&Instruction::LocalTee(temp));
-                    func.instruction(&Instruction::I32WrapI64); // ptr (low 32 bits)
-                    func.instruction(&Instruction::LocalGet(temp));
-                    func.instruction(&Instruction::I64Const(32));
-                    func.instruction(&Instruction::I64ShrU);
-                    func.instruction(&Instruction::I32WrapI64); // len (high 32 bits)
-                }
-                _ => {
-                    // Primitive types (bool, i32, resource handles, etc.): pass directly
-                    self.generate_expr(func, arg, type_table, ctx, builder);
-                }
-            }
-        }
-
-        // Step 3: Handle outptr allocation for Result/complex returns
-        if let Some((size, align)) = conv.outptr_alloc {
-            func.instruction(&Instruction::I32Const(0)); // old_ptr
-            func.instruction(&Instruction::I32Const(0)); // old_size
-            func.instruction(&Instruction::I32Const(align as i32)); // align
-            func.instruction(&Instruction::I32Const(size as i32)); // new_size
-            let realloc_idx = builder.func_idx("realloc");
-            func.instruction(&Instruction::Call(realloc_idx));
-
-            let outptr_local = ctx.get_local("__cm_outptr").expect(
-                "__cm_outptr should be pre-allocated for functions with CM complex returns",
-            );
-            func.instruction(&Instruction::LocalTee(outptr_local));
-        }
-
-        // Step 4: Call the WASI function
-        let func_idx = builder.func_idx(&local_name);
-        func.instruction(&Instruction::Call(func_idx));
-
-        // Step 5: Handle return conversion
-        if let Some((ok_is_resource, _err_is_enum)) = conv.result_return {
-            // Get Result type info for Ok and Err subtypes
-            let mangled_name = type_table.mangle_type_name(result_type_id);
-            let result_module_source = match type_table.get(result_type_id) {
-                ResolvedType::GenericInstance { module_source, .. } => module_source.clone(),
-                other => {
-                    panic!("Expected GenericInstance (Result), got: {other:?}")
-                }
-            };
-            let qualified_mangled_name = result_module_source.qualify_name(&mangled_name);
-            let variant_types = &self.variant_types;
-            let result_info = variant_types
-                .get(&qualified_mangled_name)
-                .unwrap_or_else(|| panic!("Result type not registered: {qualified_mangled_name}"));
-            // Result has cases [Ok (0), Err (1)]
-            let ok_type_idx = result_info.cases[0].type_idx;
-            let err_type_idx = result_info.cases[1].type_idx;
-            let base_type_idx = result_info.base_type_idx;
-            let ok_has_payload = result_info.cases[0].payload_type.is_some();
-
-            // Result type for block result
-            let result_ref_type = ValType::Ref(RefType {
-                nullable: true,
-                heap_type: HeapType::Concrete(base_type_idx),
-            });
-
-            if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
-                // Result with outptr: discriminant and payload are in linear memory
-                let outptr_local = ctx
-                    .get_local("__cm_outptr")
-                    .expect("__cm_outptr should be pre-allocated for Result returns");
-
-                // Read discriminant from outptr
-                func.instruction(&Instruction::LocalGet(outptr_local));
-                func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                    offset: 0,
-                    align: 2,
-                    memory_index: 0,
-                }));
-
-                // Branch based on discriminant: 0 = Ok, non-zero = Err
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                    result_ref_type,
-                )));
-
-                // Err case (discriminant != 0)
-                let err_is_enum = _err_is_enum;
-                func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                let mut emitted_err_dispatch = false;
-                if err_is_enum
-                    && let Some(ValType::Ref(ref_type)) = &result_info.cases[1].payload_type
-                    && let HeapType::Concrete(error_base_idx) = ref_type.heap_type
-                {
-                    let error_variant_info = self
-                        .variant_types
-                        .values()
-                        .find(|v| v.base_type_idx == error_base_idx);
-
-                    if let Some(variant_info) = error_variant_info {
-                        func.instruction(&Instruction::LocalGet(outptr_local));
-                        func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                            offset: 4,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                        let err_disc_local = ctx.alloc_local("__cm_err_disc", ValType::I32);
-                        func.instruction(&Instruction::LocalSet(err_disc_local));
-
-                        let error_ref_type = ValType::Ref(RefType {
-                            nullable: true,
-                            heap_type: HeapType::Concrete(error_base_idx),
-                        });
-
-                        let num_cases = variant_info.cases.len();
-
-                        func.instruction(&Instruction::Block(wasm_encoder::BlockType::Result(
-                            error_ref_type,
-                        )));
-                        for _ in 0..num_cases {
-                            func.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
-                        }
-                        func.instruction(&Instruction::LocalGet(err_disc_local));
-                        let labels: Vec<u32> = (0..num_cases as u32).collect();
-                        func.instruction(&Instruction::BrTable(labels.into(), 0));
-
-                        for i in 0..num_cases {
-                            func.instruction(&Instruction::End);
-                            func.instruction(&Instruction::I32Const(i as i32));
-                            func.instruction(&Instruction::StructNew(
-                                variant_info.cases[i].type_idx,
-                            ));
-                            if i < num_cases - 1 {
-                                func.instruction(&Instruction::Br((num_cases - 1 - i) as u32));
-                            }
-                        }
-                        func.instruction(&Instruction::End);
-                        emitted_err_dispatch = true;
-                    }
-                }
-                if !emitted_err_dispatch {
-                    func.instruction(&Instruction::LocalGet(outptr_local));
-                    func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                        offset: 4,
-                        align: 2,
-                        memory_index: 0,
-                    }));
-                }
-                func.instruction(&Instruction::StructNew(err_type_idx));
-
-                func.instruction(&Instruction::Else);
-
-                // Ok case (discriminant == 0)
-                func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                if ok_has_payload {
-                    func.instruction(&Instruction::LocalGet(outptr_local));
-                    if ok_is_resource {
-                        func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                            offset: 4,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    } else {
-                        func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                            offset: 4,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                }
-                func.instruction(&Instruction::StructNew(ok_type_idx));
-
-                func.instruction(&Instruction::End);
-
-                // Free the outptr linear memory
-                let temp = ctx
-                    .get_local("__cm_result_temp")
-                    .expect("__cm_result_temp should be pre-allocated");
-                func.instruction(&Instruction::LocalSet(temp));
-                func.instruction(&Instruction::LocalGet(outptr_local));
-                func.instruction(&Instruction::I32Const(alloc_size as i32));
-                func.instruction(&Instruction::I32Const(alloc_align as i32));
-                func.instruction(&Instruction::I32Const(0));
-                let realloc_idx = builder.func_idx("realloc");
-                func.instruction(&Instruction::Call(realloc_idx));
-                func.instruction(&Instruction::Drop);
-                func.instruction(&Instruction::LocalGet(temp));
-                func.instruction(&Instruction::RefCastNullable(HeapType::Concrete(
-                    base_type_idx,
-                )));
-            } else {
-                // Result without outptr (e.g., Result<(), ()>): discriminant returned directly
-                // on the stack as i32 (0 = Ok, non-zero = Err)
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                    result_ref_type,
-                )));
-
-                // Err case (discriminant != 0)
-                func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                func.instruction(&Instruction::StructNew(err_type_idx));
-
-                func.instruction(&Instruction::Else);
-
-                // Ok case (discriminant == 0)
-                func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                func.instruction(&Instruction::StructNew(ok_type_idx));
-
-                func.instruction(&Instruction::End);
-            }
-        } else if let Some(converter) = conv.result_converter {
-            // Complex return with converter function (e.g., list<string> -> Array<String>)
-            let outptr_local = ctx.get_local("__cm_outptr").expect(
-                "__cm_outptr should be pre-allocated for functions with CM complex returns",
-            );
-            func.instruction(&Instruction::LocalGet(outptr_local));
-            let conv_idx = builder.func_idx(converter.codegen_path());
-            func.instruction(&Instruction::Call(conv_idx));
-        }
-        // If no conversion needed, the raw return value (bool, resource handle) stays on stack
     }
 
     /// Generate code for a builtin function call.

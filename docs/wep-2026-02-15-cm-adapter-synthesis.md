@@ -390,33 +390,35 @@ This replaces the ad-hoc size/align constants scattered throughout `CmCallConven
 
 After cm_adapter_gen is complete:
 
-| Location           | Code                                    | Lines | Fate                                                      |
-| ------------------ | --------------------------------------- | ----- | --------------------------------------------------------- |
-| codegen.rs         | `generate_cm_effect_call`               | ~140  | Deleted — adapter handles CM calls                        |
-| codegen.rs         | `generate_cm_resource_method_call`      | ~250  | Deleted — adapter handles resource calls                  |
-| codegen.rs         | `emit_option_string_lowering`           | ~40   | Deleted — adapter generates inline                        |
-| codegen.rs         | `emit_field_size_payload_lowering`      | ~65   | Deleted — adapter generates inline                        |
-| codegen.rs         | `wado_type_to_cm_val_type`              | ~50   | Moved to cm_abi.rs                                        |
-| component_model.rs | `CmCallConvention` + `from_return_type` | ~350  | Deleted — type-driven synthesis replaces pattern matching |
-| internal.wado      | `cm_list_string_to_array`               | ~20   | Deleted — adapter generates inline                        |
-| internal.wado      | `cm_option_string_to_option`            | ~15   | Deleted — adapter generates inline                        |
-| internal.wado      | `cm_option_own_resource_to_option`      | ~10   | Deleted — adapter generates inline                        |
-| internal.wado      | `cm_list_tuple_string_string_to_array`  | ~25   | Deleted — adapter generates inline                        |
-| Total removed      |                                         | ~965  |                                                           |
+| Location           | Code                                   | Lines | Fate                                                          |
+| ------------------ | -------------------------------------- | ----- | ------------------------------------------------------------- |
+| codegen.rs         | `generate_cm_effect_call`              | ~155  | **Deleted** — adapter handles CM calls                        |
+| codegen.rs         | `generate_cm_resource_method_call`     | ~264  | **Deleted** — adapter handles resource calls                  |
+| codegen.rs         | `emit_option_string_lowering`          | ~40   | Deleted — adapter generates inline                            |
+| codegen.rs         | `emit_field_size_payload_lowering`     | ~65   | Deleted — adapter generates inline                            |
+| codegen.rs         | `wado_type_to_cm_val_type`             | ~50   | Moved to cm_abi.rs                                            |
+| component_model.rs | `CmCallConvention` struct + impl       | ~360  | **Deleted** — type-driven synthesis replaces pattern matching |
+| component_model.rs | `CmConverterKind` enum + impl          | ~50   | **Deleted** — call graph analysis replaces converter tracking |
+| wasm_plan.rs       | `CmConverterRequirements` + tests      | ~110  | **Deleted** — call graph analysis replaces converter tracking |
+| internal.wado      | `cm_option_string_to_option`           | ~26   | **Deleted** — adapter generates inline                        |
+| internal.wado      | `cm_option_own_resource_to_option`     | ~16   | **Deleted** — adapter generates inline                        |
+| internal.wado      | `cm_list_string_to_array`              | ~30   | Pending — used by adapter `result_converter` pattern          |
+| internal.wado      | `cm_list_tuple_string_string_to_array` | ~38   | Pending — used by adapter `result_converter` pattern          |
+| Total removed      |                                        | ~1021 | (bold = deleted in Phase 2)                                   |
 
-New code (actual for Phases 1–2, estimated for Phases 3–4):
+New code (actual for Phases 1–2):
 
 | Module                    | Purpose                          | Lines |
 | ------------------------- | -------------------------------- | ----- |
-| cm_abi.rs                 | Canonical ABI layout computation | 719   |
-| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 1664  |
+| cm_abi.rs                 | Canonical ABI layout computation | 813   |
+| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 2826  |
 | builtin.wado additions    | Memory load/store builtins       | ~50   |
 | CmRawCall visitor changes | Match arms across 14 files       | ~160  |
-| Total added               |                                  | ~1600 |
+| Total added               |                                  | ~3849 |
 
-The actual code is larger than the original ~750 line estimate, mainly because `cm_abi.rs` is more thorough than expected (719 lines with 37 tests covering all type shapes, consistency checks, and edge cases like nested options/results). The adapter gen module will grow further as composite type lift/lower is added.
+The adapter gen module grew significantly in Phase 2 (from 1664 to 2826 lines) as resource method adapter synthesis was added, including variant/enum lifting with discriminant dispatch, nested struct lifting (`FieldSizePayload`, `DnsErrorPayload`, `TlsAlertReceivedPayload`), and `Option<own<resource>>` lifting.
 
-Net line change will depend on how much codegen/component_model CM logic is deleted in Phases 3–4.
+Net impact: ~3849 lines added, ~1021 lines removed (with ~68 lines still pending removal). The new code is more general and eliminates per-type hand-coding.
 
 ### What Stays
 
@@ -450,10 +452,19 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 - [x] Handle both `TirExprKind::EffectCall` and `TirExprKind::Call` nodes in effect call collection and rewriting. Async WASI calls use `EffectCall`, sync calls like `Environment::get_arguments` use `Call`.
 - [x] Fix DCE integration: adapter module remapping (`ADAPTER_PREFIX` check in `optimize_dce.rs`) and `CmRawCall` WASI function tracking.
 - [x] Implement type fixup during call rewriting: adapter placeholder `TypeId`s are corrected from actual call site types.
-- [ ] Implement `synthesize_lift` and `synthesize_lower` for `list<T>`, `option<T>`, `result<T, E>`.
-- [ ] Migrate `wasi:http/types` resource methods. This replaces `generate_cm_resource_method_call`.
-- [ ] Migrate remaining WASI interfaces.
-- [ ] Delete `CmCallConvention` and per-type converters in `internal.wado`.
+- [x] Rewrite `synthesize_adapter` to derive ABI directly from `WasiFunctionInfo` types (async detection, params, return type) instead of pattern-matching on convention kinds. This makes the synthesizer data-driven.
+- [x] Implement `synthesize_lift` for resource method results: variant/enum lifting with discriminant dispatch, `Option<own<resource>>` lifting, `FieldSizePayload`/`DnsErrorPayload` struct lifting.
+- [x] Migrate resource method calls: `Fields::get`, `Fields::has`, `Fields::set`, `Fields::delete`, `Fields::get_and_delete`, `Fields::append`, `Fields::copy_all`, `Fields::clone`, `Response::get_status_code`, `Response::set_status_code`, `Response::get_headers`.
+- [x] Delete `generate_cm_effect_call` (~155 lines) and `generate_cm_resource_method_call` (~264 lines) from codegen.rs. EffectCall and resource method call codegen paths now panic.
+- [x] Delete `CmCallConvention` struct and impl (~360 lines) from component_model.rs.
+- [x] Delete `CmConverterKind` enum and impl (~50 lines) from component_model.rs.
+- [x] Remove `call_convention` field from `WasiFunctionInfo`; add `needs_memory()` and `needs_realloc()` methods derived from function signatures.
+- [x] Remove `cm_convention` and `cm_local_name` fields from `TirExprKind::EffectCall`.
+- [x] Delete `CmConverterRequirements` struct and `get_cm_converter_for_type` from wasm_plan.rs.
+- [x] Simplify DCE converter tracking: rely on call graph analysis instead of `CmConverterRequirements`.
+- [x] Delete unused per-type converters from internal.wado: `cm_option_string_to_option`, `cm_option_own_resource_to_option`.
+- [ ] Implement `synthesize_lift` and `synthesize_lower` for `list<T>`, `option<T>`, `result<T, E>` generically — currently uses per-type `result_converter` functions for complex list types like `list<list<u8>>`.
+- [ ] Migrate remaining WASI interfaces not yet covered by adapter synthesis (e.g., `wasi:clocks`).
 
 ### Phase 3: Export Adapters
 
@@ -462,12 +473,13 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 - [ ] Delete `CmExportInfo` scratch local logic — adapters declare their own locals.
 - [ ] Delete export-related CM glue from codegen.
 
-### Phase 4: Cleanup
+### Phase 4: Cleanup (partially done)
 
 - [ ] Remove `TirExprKind::EffectCall` — all effect calls are now ordinary `Call`s to adapters.
-- [ ] Remove `cm_convention` and `cm_local_name` fields from TIR.
-- [ ] Inline or remove `CmCallConvention`.
-- [ ] Verify all E2E tests pass, including HTTP serve tests.
+- [x] Remove `cm_convention` and `cm_local_name` fields from TIR.
+- [x] Delete `CmCallConvention`, `CmConverterKind`, and `CmConverterRequirements`.
+- [x] Delete unused per-type converter functions from `internal.wado`.
+- [x] Verify all E2E tests (3425), HTTP tests (8), and unit tests (229) pass.
 
 ## Implementation Notes
 
@@ -526,6 +538,10 @@ The original WEP placed cm_adapter_gen "between resolve and lower". The actual p
 - **TIR growth**: The synthesized adapter functions add to the TIR function count. Mitigated by dead code elimination (unused adapters are removed) and by adapter functions being small.
 - **Builtin surface area**: More builtins (`builtin::i32_load`, etc.) increase the builtin dispatch table. These are trivial 1:1 mappings to Wasm instructions.
 - **Two-phase migration**: During migration, some WASI calls use adapters while others still use the old `generate_cm_effect_call` path. Each interface is migrated independently, so the codebase is always in a working state.
+
+### Known Limitations
+
+- **Array method calls in synthesized adapters**: The adapter synthesizer currently cannot call `Array<T>` methods (e.g., `Array::<T>::with_capacity()`, `arr.append()`) in synthesized TIR because these methods require monomorphized generic resolution that happens after adapter synthesis. The workaround is to delegate list lifting to pre-written `result_converter` functions in `internal.wado` (e.g., `cm_list_string_to_array`). This must be resolved in the next phase to enable fully generic `list<T>` lifting/lowering without per-type converters.
 
 ### Risks
 

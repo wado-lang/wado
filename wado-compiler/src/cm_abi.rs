@@ -235,6 +235,31 @@ pub enum CmValType {
     F64,
 }
 
+impl CmValType {
+    /// Join two value types for union flattening (Canonical ABI `join` operation).
+    /// When one side is absent, uses the other. When both present, picks the larger type.
+    fn join(a: Option<Self>, b: Option<Self>) -> Self {
+        match (a, b) {
+            (Some(a), None) | (None, Some(a)) => a,
+            (None, None) => Self::I32,
+            (Some(a), Some(b)) => {
+                if a.size() >= b.size() {
+                    a
+                } else {
+                    b
+                }
+            }
+        }
+    }
+
+    const fn size(self) -> u32 {
+        match self {
+            Self::I32 | Self::F32 => 4,
+            Self::I64 | Self::F64 => 8,
+        }
+    }
+}
+
 /// Flatten a type into its core Wasm value types for the flat ABI.
 ///
 /// Compound types like String and list<T> are lowered to (i32, i32) pairs.
@@ -268,8 +293,26 @@ fn flatten_type(ty: &Type, out: &mut Vec<CmValType>) {
                 out.push(CmValType::I32); // len
             }
             "Stream" | "Future" | "Own" | "Borrow" => out.push(CmValType::I32),
-            // Option, Result, Tuple — not flattened inline, passed via outptr
-            // (exceeds MAX_FLAT_RESULTS=1 in most cases)
+            "Option" if generic.args.len() == 1 => {
+                // option<T> flattens to: discriminant i32 + flatten(T)
+                out.push(CmValType::I32);
+                flatten_type(&generic.args[0], out);
+            }
+            "Result" if generic.args.len() == 2 => {
+                // result<T, E> flattens to: discriminant i32 + union(flatten(T), flatten(E))
+                out.push(CmValType::I32);
+                let mut ok_flat = Vec::new();
+                let mut err_flat = Vec::new();
+                flatten_type(&generic.args[0], &mut ok_flat);
+                flatten_type(&generic.args[1], &mut err_flat);
+                // Union: take the longer list, using join on overlapping positions
+                let max_len = ok_flat.len().max(err_flat.len());
+                for i in 0..max_len {
+                    let ok_val = ok_flat.get(i).copied();
+                    let err_val = err_flat.get(i).copied();
+                    out.push(CmValType::join(ok_val, err_val));
+                }
+            }
             _ => out.push(CmValType::I32),
         },
         Type::Reference(_) | Type::MutReference(_) => out.push(CmValType::I32),
@@ -283,6 +326,63 @@ fn flatten_type(ty: &Type, out: &mut Vec<CmValType>) {
         }
         _ => {}
     }
+}
+
+/// For tuple return types, return the list of `CmPrimitiveType`s.
+/// Returns `None` if the type is not a tuple or not all elements are primitives.
+pub fn cm_tuple_primitive_types(ty: &Type) -> Option<Vec<crate::component_model::CmPrimitiveType>> {
+    use crate::component_model::CmPrimitiveType;
+    let elements = match ty {
+        Type::Tuple(elems) if !elems.is_empty() => elems,
+        Type::Generic(g) if g.name == "Tuple" && !g.args.is_empty() => &g.args,
+        _ => return None,
+    };
+    let mut prims = Vec::new();
+    for elem in elements {
+        match elem {
+            Type::Named(n) => match n.name.as_str() {
+                "i32" => prims.push(CmPrimitiveType::I32),
+                "i64" => prims.push(CmPrimitiveType::I64),
+                "u32" => prims.push(CmPrimitiveType::U32),
+                "u64" => prims.push(CmPrimitiveType::U64),
+                "f32" => prims.push(CmPrimitiveType::F32),
+                "f64" => prims.push(CmPrimitiveType::F64),
+                // Resource types, enums → i32 handle in CM ABI
+                _ => prims.push(CmPrimitiveType::I32),
+            },
+            // Future, Stream, Own, Borrow → i32 handle in CM ABI
+            Type::Generic(g)
+                if matches!(g.name.as_str(), "Future" | "Stream" | "Own" | "Borrow") =>
+            {
+                prims.push(CmPrimitiveType::I32);
+            }
+            _ => return None,
+        }
+    }
+    Some(prims)
+}
+
+/// For result<T, E> return types, return `(ok_is_resource, err_is_enum)`.
+/// Returns `None` if the type is not a Result.
+pub fn cm_result_return_info(ty: &Type) -> Option<(bool, bool)> {
+    let Type::Generic(g) = ty else { return None };
+    if g.name != "Result" || g.args.len() != 2 {
+        return None;
+    }
+    let ok_type = &g.args[0];
+    let err_type = &g.args[1];
+
+    // Both unit → still a result but with no payload
+    let ok_is_resource = matches!(ok_type, Type::Named(n) if !matches!(
+        n.name.as_str(),
+        "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "String" | "()"
+    ));
+    let err_is_enum = matches!(err_type, Type::Named(n) if !matches!(
+        n.name.as_str(),
+        "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "String" | "()"
+    ));
+
+    Some((ok_is_resource, err_is_enum))
 }
 
 /// Helper: create a `Type::Named` with a dummy span. Useful for tests.

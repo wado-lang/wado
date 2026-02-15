@@ -14,11 +14,7 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
-    let stdin_terminal: Option<i32> = __inline___cm_adapter__TerminalStdin_get_terminal_stdin_0: {
-        let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-        cm_raw_call wasi:cli/TerminalStdin::get_terminal_stdin(__outptr);
-        break __inline___cm_adapter__TerminalStdin_get_terminal_stdin_0: core::internal::cm_option_own_resource_to_option(__outptr);
-    };
+    let stdin_terminal: Option<i32> = __cm_adapter__TerminalStdin_get_terminal_stdin();
     __assert_0: {
         let __cond: bool = match stdin_terminal {
             None => true,
@@ -32,11 +28,11 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/wasi_cli_terminal.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_2: {
+                let mut __f: Formatter = __inline_Formatter__new_1: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_3: {
+                __inline_i32_Display__fmt_2: {
                     let self: Box<i32> = move Box<i32> { value: 10 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -48,11 +44,7 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
             });
         }
     }
-    let stdout_terminal: Option<i32> = __inline___cm_adapter__TerminalStdout_get_terminal_stdout_4: {
-        let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-        cm_raw_call wasi:cli/TerminalStdout::get_terminal_stdout(__outptr);
-        break __inline___cm_adapter__TerminalStdout_get_terminal_stdout_4: core::internal::cm_option_own_resource_to_option(__outptr);
-    };
+    let stdout_terminal: Option<i32> = __cm_adapter__TerminalStdout_get_terminal_stdout();
     __assert_1: {
         let __cond: bool = match stdout_terminal {
             None => true,
@@ -66,11 +58,11 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/wasi_cli_terminal.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_6: {
+                let mut __f: Formatter = __inline_Formatter__new_4: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_7: {
+                __inline_i32_Display__fmt_5: {
                     let self: Box<i32> = move Box<i32> { value: 13 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -82,11 +74,7 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
             });
         }
     }
-    let stderr_terminal: Option<i32> = __inline___cm_adapter__TerminalStderr_get_terminal_stderr_8: {
-        let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-        cm_raw_call wasi:cli/TerminalStderr::get_terminal_stderr(__outptr);
-        break __inline___cm_adapter__TerminalStderr_get_terminal_stderr_8: core::internal::cm_option_own_resource_to_option(__outptr);
-    };
+    let stderr_terminal: Option<i32> = __cm_adapter__TerminalStderr_get_terminal_stderr();
     __assert_2: {
         let __cond: bool = match stderr_terminal {
             None => true,
@@ -100,11 +88,11 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/wasi_cli_terminal.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_10: {
+                let mut __f: Formatter = __inline_Formatter__new_7: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_11: {
+                __inline_i32_Display__fmt_8: {
                     let self: Box<i32> = move Box<i32> { value: 16 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -117,5 +105,45 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
         }
     }
     core::cli::println(move "all terminal tests passed");
+}
+
+fn __cm_adapter__Stdout_write_via_stream(data: i32) {
+    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+fn __cm_adapter__TerminalStdin_get_terminal_stdin() -> Option<i32> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:cli/TerminalStdin::get_terminal_stdin(__outptr);
+    let __disc: i32 = core::builtin::i32_load8_u(__outptr);
+    let mut __option_result: Option<i32> = null;
+    if (__disc != 0) {
+        __option_result = Option::Some(Box<i32> { value: core::builtin::i32_load((__outptr + 4)) });
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __option_result;
+}
+
+fn __cm_adapter__TerminalStdout_get_terminal_stdout() -> Option<i32> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:cli/TerminalStdout::get_terminal_stdout(__outptr);
+    let __disc: i32 = core::builtin::i32_load8_u(__outptr);
+    let mut __option_result: Option<i32> = null;
+    if (__disc != 0) {
+        __option_result = Option::Some(Box<i32> { value: core::builtin::i32_load((__outptr + 4)) });
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __option_result;
+}
+
+fn __cm_adapter__TerminalStderr_get_terminal_stderr() -> Option<i32> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:cli/TerminalStderr::get_terminal_stderr(__outptr);
+    let __disc: i32 = core::builtin::i32_load8_u(__outptr);
+    let mut __option_result: Option<i32> = null;
+    if (__disc != 0) {
+        __option_result = Option::Some(Box<i32> { value: core::builtin::i32_load((__outptr + 4)) });
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __option_result;
 }
 
