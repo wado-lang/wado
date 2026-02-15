@@ -457,6 +457,11 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
+fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 pub fn "TreeMap<String,i32>::remove"(self: &mut TreeMap<String,i32>, key: String) -> bool {
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (index < 0) {

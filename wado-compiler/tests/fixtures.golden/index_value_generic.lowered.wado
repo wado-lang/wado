@@ -108,6 +108,11 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
+fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "Triple<i64>^IndexValue::index_value"(self: &Triple<i64>, index: i32) -> i64 {
     if (index == 0) {
         return self.first;

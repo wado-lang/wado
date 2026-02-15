@@ -59,6 +59,11 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
+fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn __Closure_0::__call(self: &__Closure_0, n: i32) -> i32 {
     let a: i64 = (n as i64 * 1000000000);
     let b: f64 = (n as f64 * 1.5);

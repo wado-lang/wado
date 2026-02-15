@@ -224,6 +224,8 @@ pub struct ComponentPlan {
 pub struct WorldExportPlan {
     /// Export function name (e.g., "run", "handle")
     pub name: String,
+    /// Core function name in the Wasm module (e.g., `"__cm_export__run"` if adapter exists, or `"run"`)
+    pub core_func_name: String,
     /// Whether this is an async export
     pub is_async: bool,
     /// Whether this is an HTTP handler (Service world)
@@ -318,8 +320,15 @@ fn build_world_export_plans(project: &Project) -> Vec<WorldExportPlan> {
         .into_iter()
         .map(|export| {
             let is_http_handler = export.returns_http_response();
+            // Use export adapter if one was synthesized by cm_adapter_gen
+            let core_func_name = project
+                .export_adapter_names
+                .get(&export.name)
+                .cloned()
+                .unwrap_or_else(|| export.name.clone());
             WorldExportPlan {
                 name: export.name,
+                core_func_name,
                 is_async: export.is_async,
                 is_http_handler,
                 params: export.params,
@@ -530,6 +539,12 @@ pub fn wasm_plan(mut project: Project) -> Result<Project, String> {
 
         // Analyze each world export and attach CmExportInfo to corresponding TirFunction
         for export in &world_info.exports {
+            // If an export adapter was synthesized by cm_adapter_gen, the adapter
+            // handles task-return in its TIR body — no CmExportInfo needed.
+            if project.export_adapter_names.contains_key(&export.name) {
+                continue;
+            }
+
             let is_http_handler = export.returns_http_response();
             let cm_export_info = if export.is_async {
                 CmExportInfo::async_export(is_http_handler)

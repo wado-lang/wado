@@ -60,6 +60,11 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
+fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "Array<Pair<i32,String>>^IndexValue::index_value"(self: &Array<Pair<i32, String>>, index: i32) -> Pair<i32,String> {
     if (index >= self.used) {
         core::internal::panic(move "index out of bounds");

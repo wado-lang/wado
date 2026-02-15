@@ -1307,6 +1307,11 @@ pub fn adapter_func_name(effect_name: &str, method_name: &str) -> String {
     format!("__cm_adapter__{effect_name}_{method_name}")
 }
 
+/// Build the export adapter function name for a world export.
+pub fn export_adapter_func_name(export_name: &str) -> String {
+    format!("__cm_export__{export_name}")
+}
+
 // ============================================================================
 // Adapter TirFunction synthesis
 // ============================================================================
@@ -1841,6 +1846,60 @@ fn synthesize_adapter(
 }
 
 // ============================================================================
+// Export adapter synthesis
+// ============================================================================
+
+/// Synthesize a CM export adapter for the `wasi:cli/run` Command world.
+///
+/// The adapter calls the user's `run()` function and then calls `task-return(0)`
+/// to signal successful completion. This replaces the task-return wrapping
+/// that was previously done in codegen's `generate_run_function`.
+///
+/// Generated TIR:
+/// ```text
+/// fn __cm_export__run() {
+///     run();
+///     cm_raw_call task-return(0);
+/// }
+/// ```
+fn synthesize_cli_export_adapter(
+    user_func: Rc<RefCell<TirFunction>>,
+    entry_source: &ModuleSource,
+) -> Rc<RefCell<TirFunction>> {
+    let adapter_name = export_adapter_func_name("run");
+    let mut body_stmts: Vec<TirStmt> = Vec::new();
+
+    // Call the user's run() function
+    let call_user = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::Resolved {
+                func: user_func,
+                module_source: entry_source.clone(),
+            },
+            type_args: vec![],
+            args: vec![],
+        },
+        TypeTable::UNIT,
+        synth_span(),
+    );
+    body_stmts.push(expr_stmt(call_user));
+
+    // Call task-return(0) — Ok discriminant for result<_, _>
+    body_stmts.push(expr_stmt(cm_raw_call(
+        "task-return",
+        vec![i32_const(0)],
+        TypeTable::UNIT,
+    )));
+
+    let body = block(body_stmts);
+
+    let adapter = make_adapter_function(adapter_name, vec![], TypeTable::UNIT, body, 0, vec![]);
+    // Mark as export so DCE keeps it as a root
+    adapter.borrow_mut().is_export = true;
+    adapter
+}
+
+// ============================================================================
 // Phase entry point
 // ============================================================================
 
@@ -1850,9 +1909,16 @@ fn synthesize_adapter(
 /// 1. Synthesizes an adapter TIR function that handles CM boundary crossing
 /// 2. Rewrites effect-like `Call` nodes to target the adapter function
 ///
+/// For each world export function:
+/// 3. Synthesizes an export adapter that wraps the user function with task-return
+///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
 pub fn generate_adapters(mut project: Project) -> Project {
+    let entry_source = project.entry_module_source.clone();
+
+    // ---- Import adapters ----
+
     // Step 1: Collect all used WASI effect calls and resource method calls
     let mut seen_effects: IndexSet<String> = IndexSet::new();
     for module in project.tir_modules.values() {
@@ -1864,51 +1930,88 @@ pub fn generate_adapters(mut project: Project) -> Project {
         }
     }
 
-    if seen_effects.is_empty() {
-        return project;
-    }
-
-    // Step 2: Synthesize adapter functions for each used WASI function
-    let entry_type_table = project
-        .tir_modules
-        .get(&project.entry_module_source)
-        .map(|m| m.type_table.clone())
-        .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
-    let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
-    for qualified_name in &seen_effects {
-        if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
-            let func_info = func_info.clone();
-            let adapter_name = adapter_func_name(&func_info.effect_name, &func_info.method_name);
-            let adapter = synthesize_adapter(&func_info, project.wasi_registry, &entry_type_table);
-            adapters.insert(qualified_name.clone(), adapter.clone());
-            // Also index by adapter function name for lookup
-            adapters.insert(adapter_name, adapter);
+    if !seen_effects.is_empty() {
+        // Step 2: Synthesize adapter functions for each used WASI function
+        let entry_type_table = project
+            .tir_modules
+            .get(&project.entry_module_source)
+            .map(|m| m.type_table.clone())
+            .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
+        let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
+        for qualified_name in &seen_effects {
+            if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
+                let func_info = func_info.clone();
+                let adapter_name =
+                    adapter_func_name(&func_info.effect_name, &func_info.method_name);
+                let adapter =
+                    synthesize_adapter(&func_info, project.wasi_registry, &entry_type_table);
+                adapters.insert(qualified_name.clone(), adapter.clone());
+                // Also index by adapter function name for lookup
+                adapters.insert(adapter_name, adapter);
+            }
         }
-    }
 
-    // Step 3: Add adapter functions to the entry module
-    let entry_source = project.entry_module_source.clone();
-    if let Some(entry_module) = project.tir_modules.get_mut(&entry_source) {
-        for (key, adapter_rc) in &adapters {
-            // Only add each adapter once (skip the duplicate keyed by adapter_name)
-            if key.contains("::") {
-                entry_module.functions.push(adapter_rc.clone());
+        // Step 3: Add adapter functions to the entry module
+        if let Some(entry_module) = project.tir_modules.get_mut(&entry_source) {
+            for (key, adapter_rc) in &adapters {
+                // Only add each adapter once (skip the duplicate keyed by adapter_name)
+                if key.contains("::") {
+                    entry_module.functions.push(adapter_rc.clone());
+                }
+            }
+        }
+
+        // Step 4: Rewrite effect-like call nodes to target adapters
+        let adapter_map: IndexMap<String, Rc<RefCell<TirFunction>>> = adapters
+            .iter()
+            .filter(|(k, _)| k.contains("::"))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        for module in project.tir_modules.values() {
+            for func_rc in &module.functions {
+                let mut func = func_rc.borrow_mut();
+                if let Some(body) = &mut func.body {
+                    rewrite_calls_in_block(body, &adapter_map, &entry_source);
+                }
             }
         }
     }
 
-    // Step 4: Rewrite effect-like call nodes to target adapters
-    let adapter_map: IndexMap<String, Rc<RefCell<TirFunction>>> = adapters
-        .iter()
-        .filter(|(k, _)| k.contains("::"))
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
+    // ---- Export adapters ----
 
-    for module in project.tir_modules.values() {
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(body) = &mut func.body {
-                rewrite_calls_in_block(body, &adapter_map, &entry_source);
+    // Step 5: Synthesize export adapter for Command world (wasi:cli/run)
+    let world_info = project.world_registry.get(&project.target_world).cloned();
+    if let Some(world_info) = world_info {
+        let entry_module = project
+            .tir_modules
+            .get_mut(&entry_source)
+            .expect("entry module should exist");
+
+        for export in &world_info.exports {
+            // Only handle Command world exports (no params, no return) for now.
+            // HTTP handler exports will be added in a follow-up.
+            if export.returns_http_response() {
+                continue;
+            }
+
+            // Find the user's export function
+            let user_func_rc = entry_module
+                .functions
+                .iter()
+                .find(|f| {
+                    let f = f.borrow();
+                    f.name == export.name && f.is_export
+                })
+                .cloned();
+
+            if let Some(user_func_rc) = user_func_rc {
+                let adapter_name = export_adapter_func_name(&export.name);
+                let adapter = synthesize_cli_export_adapter(user_func_rc, &entry_source);
+                project
+                    .export_adapter_names
+                    .insert(export.name.clone(), adapter_name);
+                entry_module.functions.push(adapter);
             }
         }
     }

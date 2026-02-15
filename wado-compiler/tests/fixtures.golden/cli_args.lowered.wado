@@ -59,6 +59,11 @@ fn __cm_adapter__Environment_get_arguments() -> Array<String> {
     return __result;
 }
 
+fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);

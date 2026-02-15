@@ -32,6 +32,11 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
+fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "Pair<i32>^Eq::eq"(self: &Pair<i32>, other: &Pair<i32>) -> bool {
     return ((self.first == other.first) && (self.second == other.second));
 }

@@ -31,7 +31,6 @@ use crate::wasm_plan::{
     sort_types_topologically,
 };
 use crate::wasm_postprocess;
-use crate::world_registry::WorldExportInfo;
 use heck::ToKebabCase;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
@@ -1324,14 +1323,14 @@ impl Codegen<'_> {
         }
 
         // World export types - derived from target world (default: Command)
-        // If a matching TIR function exists, use its params; otherwise use world definition
-        if let Some(world_info) = self.project.world_registry.get(&project.target_world) {
-            for export in &world_info.exports {
-                // Check if there's a matching TIR function in the entry module
+        // When an export adapter exists, the type is named after the adapter function.
+        if let Some(component_plan) = &self.project.component_plan {
+            for export in &component_plan.world_exports {
+                // Look up the core function (adapter or user function) by core_func_name
                 let tir_func_match = entry_tir
                     .functions
                     .iter()
-                    .find(|f| f.borrow().name == export.name);
+                    .find(|f| f.borrow().name == export.core_func_name);
 
                 let (params, results) = if let Some(tir_func_rc) = tir_func_match {
                     // Use TIR function's actual signature
@@ -1354,11 +1353,11 @@ impl Codegen<'_> {
                     (param_types, return_types)
                 } else {
                     // No matching TIR function - use world definition
-                    let params = self.world_export_to_core_params(export);
-                    let results = self.world_export_to_core_results(export);
+                    let params = self.world_export_to_core_params_from_plan(export);
+                    let results = self.world_export_to_core_results_from_plan(export);
                     (params, results)
                 };
-                builder.define_func_type(&export.name, &params, &results);
+                builder.define_func_type(&export.core_func_name, &params, &results);
             }
         }
 
@@ -1393,11 +1392,19 @@ impl Codegen<'_> {
         // ========================================
         // Function section
         // ========================================
-        // Collect world export names to skip (they are handled as entry points)
-        let world_export_names: IndexSet<String> = project
-            .world_registry
-            .get(&project.target_world)
-            .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
+        // Collect world export core function names to skip (they are handled as entry points).
+        // When an export adapter exists, the core function is the adapter (e.g., "__cm_export__run"),
+        // and the user's original function (e.g., "run") is NOT skipped.
+        let world_export_names: IndexSet<String> = self
+            .project
+            .component_plan
+            .as_ref()
+            .map(|plan| {
+                plan.world_exports
+                    .iter()
+                    .map(|e| e.core_func_name.clone())
+                    .collect()
+            })
             .unwrap_or_else(|| std::iter::once("run".to_string()).collect());
 
         // Collect closure __call method indices for element segment (required for ref.func)
@@ -1585,10 +1592,12 @@ impl Codegen<'_> {
         // ========================================
         // Export section
         // ========================================
-        // Export world functions based on target world
-        if let Some(world_info) = self.project.world_registry.get(&project.target_world) {
-            for export in &world_info.exports {
-                builder.export_func(&export.name, &export.name);
+        // Export world functions based on ComponentPlan
+        // When an export adapter exists, the core function name differs from the export name
+        // (e.g., core function "__cm_export__run" is exported as "run")
+        if let Some(component_plan) = &self.project.component_plan {
+            for export in &component_plan.world_exports {
+                builder.export_func(&export.name, &export.core_func_name);
             }
         } else {
             // Fallback to "run" for unknown worlds
@@ -1702,9 +1711,21 @@ impl Codegen<'_> {
                 .find(|f| f.borrow().name == *export_name);
 
             let export_wasm_func = if let Some(tir_rc) = export_tir_rc {
-                // Generate function body using the TIR function body generation
                 let tir_func = tir_rc.borrow();
-                self.generate_run_function(&tir_func, type_table, &builder)
+                if tir_func.is_cm_adapter {
+                    // CM export adapter: task-return is in the TIR body,
+                    // generate as a normal function (no codegen-level wrapping)
+                    let (func, _hints) = self.generate_function(
+                        &tir_func,
+                        type_table,
+                        &builder,
+                        entry_module_source,
+                    );
+                    func
+                } else {
+                    // Legacy path: user function with codegen-level task-return wrapping
+                    self.generate_run_function(&tir_func, type_table, &builder)
+                }
             } else {
                 // No matching function - create empty entry point
                 let mut func = Function::new(vec![]);
@@ -13186,23 +13207,22 @@ impl Codegen<'_> {
     /// For async exports, the actual params depend on the user's TIR function.
     /// We return empty here because the function type is later overridden by the
     /// user's TIR function if one exists.
-    fn world_export_to_core_params(&self, _export: &WorldExportInfo) -> Vec<ValType> {
-        // World export core params are handled dynamically based on the TIR function.
-        // For worlds where user provides the function (like CLI Command's run or HTTP Service's handle),
-        // the actual params come from the user's TIR function.
+    /// Convert world export plan to core params (for fallback when no TIR function exists)
+    fn world_export_to_core_params_from_plan(
+        &self,
+        _export: &crate::wasm_plan::WorldExportPlan,
+    ) -> Vec<ValType> {
         vec![]
     }
 
-    /// Convert a world export function type to Core Wasm results
-    ///
-    /// For async exports, there's no return (result passed via `task_return`).
-    /// For sync exports, the return type is mapped directly.
-    fn world_export_to_core_results(&self, export: &WorldExportInfo) -> Vec<ValType> {
+    /// Convert world export plan to core results (for fallback when no TIR function exists)
+    fn world_export_to_core_results_from_plan(
+        &self,
+        export: &crate::wasm_plan::WorldExportPlan,
+    ) -> Vec<ValType> {
         if export.is_async {
-            // Async exports have no return in core (use task_return)
             vec![]
         } else if let Some(ret_ty) = &export.return_type {
-            // Resolve newtypes (e.g., newtypes) before converting to ValType
             let resolved_ty = self.project.wasi_registry.resolve_type(ret_ty);
             vec![wasi_type_to_valtype(&resolved_ty)]
         } else {

@@ -29,6 +29,11 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
+fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
+}
+
 fn "Container<i32>::process"(self: &Container<i32>) {
     __for_of_0: {
         let mut __iter_0: ArrayIter<i32> = __inline_Array_i32__IntoIterator__into_iter_0: {

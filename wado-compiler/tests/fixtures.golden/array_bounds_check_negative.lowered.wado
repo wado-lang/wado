@@ -18,6 +18,14 @@ fn run() {
     arr."Array<i32>^IndexValue::index_value"(-1);
 }
 
+fn __cm_export__run() {
+    __inline_run_0: {
+        let arr: Array<i32> = move [10, 20, 30];
+        arr."Array<i32>^IndexValue::index_value"(-1);
+    };
+    cm_raw_call task-return(0);
+}
+
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
