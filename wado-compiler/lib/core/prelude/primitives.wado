@@ -13,7 +13,7 @@ pub global __PRIMITIVES_MODULE_LOADED: bool = true;
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr = builtin::array_new::<u8>(len);
     for let mut i = 0; i < len; i += 1 {
-        builtin::array_set_u8(arr, i, builtin::memory_load8_u(ptr + i));
+        builtin::array_set_u8(arr, i, builtin::i32_load8_u(ptr + i));
     }
     return arr;
 }

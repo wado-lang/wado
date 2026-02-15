@@ -102,7 +102,8 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 changed |= fold_constants_in_expr(arg, type_table);
             }

@@ -7255,6 +7255,15 @@ impl Codegen<'_> {
                 }
             }
 
+            // === Raw CM Call (used inside synthesized adapter functions) ===
+            TirExprKind::CmRawCall { local_name, args } => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                let func_idx = builder
+                    .try_func_idx(local_name)
+                    .unwrap_or_else(|| panic!("unknown CM raw call target: {local_name}"));
+                func.instruction(&Instruction::Call(func_idx));
+            }
+
             // === Method Call ===
             TirExprKind::MethodCall {
                 receiver,
@@ -12052,7 +12061,8 @@ impl Codegen<'_> {
             // Argument lists
             TirExprKind::Call { args, .. }
             | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::EffectCall { args, .. } => {
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.preallocate_scalarized_locals_in_expr(arg, type_table, ctx, builder);
                 }
@@ -12687,15 +12697,71 @@ impl Codegen<'_> {
                 let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                 func.instruction(&Instruction::ArraySet(u8_array_idx));
             }
-            "builtin::memory_store8" => {
+            "builtin::i32_load" => {
                 self.generate_args(func, args, type_table, ctx, builder);
-                func.instruction(&Instruction::I32Store8(MemArg {
+                func.instruction(&Instruction::I32Load(MemArg {
                     offset: 0,
-                    align: 0,
+                    align: 2,
                     memory_index: 0,
                 }));
             }
-            "builtin::memory_load8_u" => {
+            "builtin::i32_store" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::I32Store(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::i64_load" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::I64Load(MemArg {
+                    offset: 0,
+                    align: 3,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::i64_store" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::I64Store(MemArg {
+                    offset: 0,
+                    align: 3,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::f32_load" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::F32Load(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::f32_store" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::F32Store(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::f64_load" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::F64Load(MemArg {
+                    offset: 0,
+                    align: 3,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::f64_store" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::F64Store(MemArg {
+                    offset: 0,
+                    align: 3,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::i32_load8_u" => {
                 self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Load8U(MemArg {
                     offset: 0,
@@ -12703,11 +12769,27 @@ impl Codegen<'_> {
                     memory_index: 0,
                 }));
             }
-            "builtin::memory_load32" => {
+            "builtin::i32_load16_u" => {
                 self.generate_args(func, args, type_table, ctx, builder);
-                func.instruction(&Instruction::I32Load(MemArg {
+                func.instruction(&Instruction::I32Load16U(MemArg {
                     offset: 0,
-                    align: 2,
+                    align: 1,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::i32_store8" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::I32Store8(MemArg {
+                    offset: 0,
+                    align: 0,
+                    memory_index: 0,
+                }));
+            }
+            "builtin::i32_store16" => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                func.instruction(&Instruction::I32Store16(MemArg {
+                    offset: 0,
+                    align: 1,
                     memory_index: 0,
                 }));
             }

@@ -435,7 +435,8 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 check_escape_in_expr(arg, candidates, escaped);
             }
@@ -783,7 +784,8 @@ fn rewrite_expr(
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 rewrite_expr(arg, safe_set, field_map, info_map, candidate_mut);
             }

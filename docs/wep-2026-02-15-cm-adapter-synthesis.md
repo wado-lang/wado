@@ -25,19 +25,19 @@ The WIR layer (WEP 2026-02-14) will replace codegen with a structured `tir_to_wi
 
 ## Decision
 
-Introduce a **cm_adapter_gen** phase that synthesizes CM adapter functions as TIR, inserted between resolve and lower. Adapter functions express lifting, lowering, and boundary calls using Wado's own type system and builtins. They flow through the normal lower → optimize → codegen pipeline.
+Introduce a **cm_adapter_gen** phase that synthesizes CM adapter functions as TIR, inserted between effect_check and monomorphize. Adapter functions express lifting, lowering, and boundary calls using Wado's own type system and builtins. They flow through the normal monomorphize → lower → optimize → codegen pipeline.
 
 ### Pipeline Position
 
 ```
-parse → desugar → modules → symbols → tir (resolve)
-                                        ↓
-                                   cm_adapter_gen  ← NEW
-                                        ↓
-                                      lower → optimize → wasm_plan → codegen
+parse → desugar → modules → symbols → tir (resolve) → effect_check
+                                                            ↓
+                                                       cm_adapter_gen  ← NEW
+                                                            ↓
+                                       monomorphize → lower → optimize → wasm_plan → codegen
 ```
 
-The phase runs after type resolution (all types are concrete, WASI registry is built) and before lower (so adapter functions go through match desugaring, closure capture, monomorphization, and optimization).
+The phase runs after effect checking (all effects are validated) and before monomorphize (so adapter functions go through monomorphization, match desugaring, optimization, and codegen like any other function).
 
 ### What cm_adapter_gen Does
 
@@ -196,9 +196,9 @@ The adapter functions use builtins to perform low-level operations. Some already
 | Function                       | Purpose                                   |
 | ------------------------------ | ----------------------------------------- |
 | `builtin::realloc`             | Allocate linear memory                    |
-| `builtin::memory_load32`       | Read i32 from linear memory               |
-| `builtin::memory_store8`       | Write byte to linear memory               |
-| `builtin::memory_load8_u`      | Read byte from linear memory              |
+| `builtin::i32_load`            | Read i32 from linear memory               |
+| `builtin::i32_store8`          | Write byte to linear memory               |
+| `builtin::i32_load8_u`         | Read byte from linear memory              |
 | `internal::cm_lower_string`    | Lower String to (ptr, len) packed as i64  |
 | `internal::cm_lower_list_u8`   | Lower Array\<u8\> to (ptr, len)           |
 | `internal::memory_to_gc_array` | Copy bytes from linear memory to GC array |
@@ -220,7 +220,9 @@ The adapter functions use builtins to perform low-level operations. Some already
 
 Per-type converter functions (e.g., `cm_list_string_to_array`, `cm_option_string_to_option`) will be deleted once the synthesizer handles their types generically.
 
-#### New builtins to add
+#### Memory load/store builtins (added in Phase 1)
+
+All memory load/store builtins use Wasm instruction names for consistency. The old `memory_load32`, `memory_store8`, `memory_load8_u` aliases were removed in favor of these.
 
 | Function                | Wasm instruction | Purpose                                      |
 | ----------------------- | ---------------- | -------------------------------------------- |
@@ -237,8 +239,6 @@ Per-type converter functions (e.g., `cm_list_string_to_array`, `cm_option_string
 | `builtin::i32_store8`   | `i32.store8`     | Write byte to linear memory                  |
 | `builtin::i32_store16`  | `i32.store16`    | Write u16 to linear memory                   |
 
-Note: `builtin::memory_load32` already exists but should be aliased to `builtin::i32_load` for consistency. The naming convention `builtin::i32_load` matches the Wasm instruction name.
-
 #### Raw CM calls
 
 Raw CM calls are represented as a dedicated TIR node `CmRawCall` rather than builtin functions. This avoids polluting the builtin namespace and produces more readable unparse output:
@@ -246,16 +246,15 @@ Raw CM calls are represented as a dedicated TIR node `CmRawCall` rather than bui
 ```
 // TIR node
 TirExprKind::CmRawCall {
-    target: "Fields::get",                                    // effect::op reference
     local_name: "wasi:http/types/[method]fields.get",         // resolved import name
     args: [self_handle, name_ptr, name_len, outptr],          // flat ABI args
 }
 
 // Unparse output
-cm_raw_call Fields::get(self_handle, name_ptr, name_len, outptr)
+cm_raw_call wasi:http/types/[method]fields.get(self_handle, name_ptr, name_len, outptr)
 ```
 
-Codegen resolves the `local_name` to the imported function index. No builtin entity is needed per WASI function.
+The `local_name` field is the only identifier needed — codegen resolves it to the imported function index via `try_func_idx`. The original design included a separate `target` field for `effect::op` reference, but this was dropped as redundant; the adapter function name (`__cm_adapter__Effect_method`) is sufficient for human readability and the `local_name` is what codegen needs.
 
 ### Type-Driven Synthesis
 
@@ -405,16 +404,19 @@ After cm_adapter_gen is complete:
 | internal.wado      | `cm_list_tuple_string_string_to_array`  | ~25   | Deleted — adapter generates inline                        |
 | Total removed      |                                         | ~965  |                                                           |
 
-New code:
+New code (actual for Phases 1–2, estimated for Phases 3–4):
 
-| Module                 | Purpose                          | Lines (est.) |
-| ---------------------- | -------------------------------- | ------------ |
-| cm_adapter_gen.rs      | Type-driven adapter synthesis    | ~500         |
-| cm_abi.rs              | Canonical ABI layout computation | ~200         |
-| builtin.wado additions | Memory load/store builtins       | ~50          |
-| Total added            |                                  | ~750         |
+| Module                    | Purpose                          | Lines |
+| ------------------------- | -------------------------------- | ----- |
+| cm_abi.rs                 | Canonical ABI layout computation | 719   |
+| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 678   |
+| builtin.wado additions    | Memory load/store builtins       | ~50   |
+| CmRawCall visitor changes | Match arms across 14 files       | ~160  |
+| Total added               |                                  | ~1600 |
 
-Net: **~215 lines reduction**, plus elimination of the per-type hand-coding pattern.
+The actual code is larger than the original ~750 line estimate, mainly because `cm_abi.rs` is more thorough than expected (719 lines with 37 tests covering all type shapes, consistency checks, and edge cases like nested options/results). The adapter gen module will grow further as composite type lift/lower is added.
+
+Net line change will depend on how much codegen/component_model CM logic is deleted in Phases 3–4.
 
 ### What Stays
 
@@ -425,21 +427,24 @@ Net: **~215 lines reduction**, plus elimination of the per-type hand-coding patt
 
 ## Migration Plan
 
-### Phase 1: Builtins and Infrastructure
+### Phase 1: Builtins and Infrastructure (done)
 
-- [ ] Add `builtin::i32_load`, `builtin::i32_store`, `builtin::i64_load`, `builtin::i64_store`, `builtin::f32_load`, `builtin::f32_store`, `builtin::f64_load`, `builtin::f64_store` and sub-word variants to `builtin.wado` and codegen's builtin dispatch.
-- [ ] Create `cm_abi.rs` with Canonical ABI size/align/layout computation.
-- [ ] Add unit tests for `cm_abi.rs` against known Canonical ABI layouts.
+- [x] Add `builtin::i32_load`, `builtin::i32_store`, `builtin::i64_load`, `builtin::i64_store`, `builtin::f32_load`, `builtin::f32_store`, `builtin::f64_load`, `builtin::f64_store` and sub-word variants to `builtin.wado` and codegen's builtin dispatch.
+- [x] Create `cm_abi.rs` (719 lines) with Canonical ABI size/align/layout computation: `cm_size`, `cm_align`, `layout_record`, `layout_tuple`, `layout_option`, `layout_result`, `cm_flat_types`.
+- [x] Add 37 unit tests for `cm_abi.rs` against known Canonical ABI layouts.
 
 ### Phase 2: Import Adapters (Incremental)
 
 Migrate one WASI interface at a time, validating via existing E2E tests.
 
-- [ ] Create `cm_adapter_gen.rs` scaffolding: the phase entry point, TIR function synthesis helpers.
-- [ ] Implement `synthesize_lift` and `synthesize_lower` for primitives (i32, i64, f32, f64, bool, char).
-- [ ] Implement `synthesize_lift` and `synthesize_lower` for String.
+- [x] Add `TirExprKind::CmRawCall { local_name, args }` variant to TIR and handle in all 14 visitor/transform files (codegen, lower, monomorphize, effect_check, unparse, and all optimizer passes).
+- [x] Create `cm_adapter_gen.rs` scaffolding (678 lines): the phase entry point (`generate_adapters`), TIR function synthesis helpers (`builtin_call`, `internal_call`, `i32_const`, `i64_const`, `local_ref`, `binary`, `cast`, `let_stmt`, `expr_stmt`, `return_stmt`, `cm_raw_call`), effect call collector. 19 unit tests.
+- [x] Wire `cm_adapter_gen` into pipeline between `effect_check` and `monomorphize` (currently no-op scaffolding that scans effect calls without transforming).
+- [x] Implement `synthesize_lift` and `synthesize_lower` for primitives (i32, i64, f32, f64, bool, char, i8/u8, i16/u16).
+- [x] Implement `synthesize_lift` for String (via `memory_to_gc_string`). `synthesize_lower` for String not yet implemented (needs `cm_lower_string` integration).
+- [ ] Implement `synthesize_lower` for String.
 - [ ] Migrate `wasi:cli/Stdout` and `wasi:cli/Stderr` (simplest: void return, String param). Validate with E2E tests.
-- [ ] Implement `synthesize_lift` for `list<T>`, `option<T>`, `result<T, E>`.
+- [ ] Implement `synthesize_lift` and `synthesize_lower` for `list<T>`, `option<T>`, `result<T, E>`.
 - [ ] Migrate `wasi:cli/Environment` (returns `list<tuple<string, string>>`). This replaces `cm_list_tuple_string_string_to_array`.
 - [ ] Migrate `wasi:http/types` resource methods. This replaces `generate_cm_resource_method_call`.
 - [ ] Migrate remaining WASI interfaces.
@@ -458,6 +463,37 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 - [ ] Remove `cm_convention` and `cm_local_name` fields from TIR.
 - [ ] Inline or remove `CmCallConvention`.
 - [ ] Verify all E2E tests pass, including HTTP serve tests.
+
+## Implementation Notes
+
+### CmRawCall visitor coverage
+
+Adding a new `TirExprKind` variant requires updating 14 files with match arms. The pattern varies per file:
+
+- **Grouped with EffectCall**: Most optimizer passes group `CmRawCall` with `EffectCall` since they share the same `args` structure. This is the common case for passes that recurse into arguments.
+- **Standalone handling**: codegen, unparse, effect_check, and optimize_dce need separate match arms because they have variant-specific logic (e.g., codegen resolves `local_name` to a function index, unparse formats differently).
+- **Reconstruction**: optimize_inline must reconstruct `CmRawCall` when inlining, remapping local indices.
+
+### TIR construction gotchas
+
+Discovered during implementation:
+
+- `IntLiteral.value` is `u64`, not `i64`. Signed constants need `as u64` cast.
+- `TirBinaryOp::NotEq`, not `NotEqual`.
+- `TirStmtKind` has no `While` or `For` — loops are lowered to `Loop` with `Break`/`Continue`.
+- `TirStmtKind::Break` has `{ label, value }` fields, not a unit variant.
+- `Switch` and `Match` have different arm types: `Switch { arms: Vec<TirBlock>, default: TirBlock }` vs `Match { arms: Vec<TirMatchArm> }`.
+- `module_source()` returns `ModuleSource` directly, not `Option<ModuleSource>`.
+
+These are documented here to help future TIR-synthesizing phases avoid the same issues.
+
+### Pipeline position
+
+The original WEP placed cm_adapter_gen "between resolve and lower". The actual position is between `effect_check` and `monomorphize`. This is because:
+
+1. Effect checking must run first to validate effect declarations.
+2. Adapter functions need monomorphization (they may use generic builtins).
+3. Placing before monomorphize means adapters flow through all downstream phases: monomorphize → lower → optimize → wasm_plan → codegen.
 
 ## Consequences
 

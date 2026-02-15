@@ -2750,6 +2750,18 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(')');
             }
+            TirExprKind::CmRawCall { local_name, args } => {
+                self.output.push_str("cm_raw_call ");
+                self.output.push_str(local_name);
+                self.output.push('(');
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.unparse_expr(arg);
+                }
+                self.output.push(')');
+            }
             TirExprKind::MethodCall {
                 receiver,
                 func,

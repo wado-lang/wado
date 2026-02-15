@@ -231,6 +231,13 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(arg)?;
                 }
             }
+            TirExprKind::CmRawCall { args, .. } => {
+                // CmRawCall is used inside synthesized adapter functions;
+                // no effect checking needed (adapter functions are always effectful)
+                for arg in args {
+                    self.check_expr(arg)?;
+                }
+            }
             TirExprKind::IndirectCall { callee, args } => {
                 self.check_expr(callee)?;
                 for arg in args {

@@ -26,10 +26,10 @@ pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
     let ptr = builtin::realloc(0, 0, 1, alloc_size);
     for (let mut i = 0; i < len; i = i + 1) {
         let byte = builtin::array_get_u8(msg_bytes, i);
-        builtin::memory_store8(ptr + i, byte);
+        builtin::i32_store8(ptr + i, byte);
     }
     if add_newline {
-        builtin::memory_store8(ptr + len, '\n');
+        builtin::i32_store8(ptr + len, '\n');
     }
     builtin::stream_write(tx, ptr, alloc_size);
     builtin::stream_drop_writable(tx);

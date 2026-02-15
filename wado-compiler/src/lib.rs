@@ -73,6 +73,8 @@ pub mod ast;
 pub mod bind;
 pub mod builtin_registry;
 pub mod bundled;
+pub mod cm_abi;
+pub mod cm_adapter_gen;
 pub mod codegen;
 pub mod comment;
 pub mod compiler_host;
@@ -313,6 +315,12 @@ pub async fn compile_with_options<H: CompilerHost>(
         let _span = logger.span("effect-check");
         check_effects(&project.tir_modules, &logger)?;
     }
+
+    // === Phase 7b: CM Adapter Synthesis (Project -> Project) ===
+    let project = {
+        let _span = logger.span("cm-adapter-gen");
+        cm_adapter_gen::generate_adapters(project)
+    };
 
     // === Phase 8: Monomorphize (Project -> Project) ===
     let mut project = {

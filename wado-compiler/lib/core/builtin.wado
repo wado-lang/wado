@@ -108,14 +108,41 @@ fn array_copy<T>(dst: builtin::array<T>, dst_offset: i32, src: builtin::array<T>
 /// Fill a builtin::array<T> with a value
 /// Fills `len` elements starting at `offset` with `value`
 fn array_fill<T>(arr: builtin::array<T>, offset: i32, value: T, len: i32);
-/// Store a byte to linear memory
-fn memory_store8(addr: i32, value: i32);
+/// Load i32 from linear memory (Wasm i32.load)
+fn i32_load(addr: i32) -> i32;
 
-/// Load a byte from linear memory (zero-extended to i32)
-fn memory_load8_u(addr: i32) -> i32;
+/// Store i32 to linear memory (Wasm i32.store)
+fn i32_store(addr: i32, value: i32);
 
-/// Load a 32-bit value from linear memory
-fn memory_load32(addr: i32) -> i32;
+/// Load i64 from linear memory (Wasm i64.load)
+fn i64_load(addr: i32) -> i64;
+
+/// Store i64 to linear memory (Wasm i64.store)
+fn i64_store(addr: i32, value: i64);
+
+/// Load f32 from linear memory (Wasm f32.load)
+fn f32_load(addr: i32) -> f32;
+
+/// Store f32 to linear memory (Wasm f32.store)
+fn f32_store(addr: i32, value: f32);
+
+/// Load f64 from linear memory (Wasm f64.load)
+fn f64_load(addr: i32) -> f64;
+
+/// Store f64 to linear memory (Wasm f64.store)
+fn f64_store(addr: i32, value: f64);
+
+/// Load byte from linear memory, zero-extended to i32 (Wasm i32.load8_u)
+fn i32_load8_u(addr: i32) -> i32;
+
+/// Load u16 from linear memory, zero-extended to i32 (Wasm i32.load16_u)
+fn i32_load16_u(addr: i32) -> i32;
+
+/// Store low byte of i32 to linear memory (Wasm i32.store8)
+fn i32_store8(addr: i32, value: i32);
+
+/// Store low 16 bits of i32 to linear memory (Wasm i32.store16)
+fn i32_store16(addr: i32, value: i32);
 
 /// Allocate/reallocate memory in linear memory
 /// Standard WASI realloc signature
