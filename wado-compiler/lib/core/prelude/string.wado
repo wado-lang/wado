@@ -368,12 +368,12 @@ impl String {
         if byte_len >= self.used {
             return;
         }
-        assert byte_len >= 0, "truncate_bytes: negative length";
+        assert byte_len >= 0, "negative length";
         // Verify byte_len is on a UTF-8 boundary:
         // a continuation byte has the form 10xxxxxx (0x80..0xBF)
         if byte_len > 0 {
             let b = builtin::array_get_u8(self.repr, byte_len);
-            assert b < 0x80 || b >= 0xC0, "truncate_bytes: not on a UTF-8 character boundary";
+            assert b < 0x80 || b >= 0xC0, "not on a UTF-8 character boundary";
         }
         self.used = byte_len;
     }
