@@ -33,12 +33,12 @@ Introduce **WIR (Wasm IR)** — a tree-structured intermediate representation be
 ### New Pipeline
 
 ```
-lower → optimize → wasm_plan → codegen(emit) → wasm binary
-                       ↓
-                   WirModule
+lower → optimize → wasm_plan → tir_to_wir → wir_emit → wasm binary
+                                    ↓
+                                WirModule (inspectable via dump --wir)
 ```
 
-The `wasm_plan` phase is expanded to produce a `WirModule` — a complete description of the Wasm module in WIR form. Codegen becomes a mechanical WIR → Wasm binary translation.
+`tir_to_wir` translates the optimized Project into a `WirModule` — a complete description of the Wasm module in WIR form. `wir_emit` translates `WirModule` into Wasm binary bytes. `wasm_plan` remains unchanged and provides `ComponentPlan` metadata consumed by `tir_to_wir`.
 
 ### What WIR Is
 
@@ -841,75 +841,152 @@ fn "copy_array"(src: ref Array<i32>) -> ref Array<i32> {
 
 ## Migration Plan
 
-The migration is incremental. Each step produces a working compiler.
+### Strategy: Strangler Fig Pattern
 
-### Preparation: Extract Submodules from codegen.rs
+The migration builds a complete WIR pipeline **alongside** the existing codegen, without modifying `codegen.rs`. Both pipelines consume the same `&Project` after `wasm_plan`. E2E tests validate the new pipeline against the same fixtures. Once all tests pass, the old codegen is replaced and deleted.
 
-Before introducing WIR, split codegen.rs into manageable files:
+```
+                                  ┌→ codegen → wasm binary (existing, untouched)
+lower → optimize → wasm_plan ─────┤
+                                  └→ tir_to_wir → wir_emit → wasm binary (new, tested in parallel)
+```
 
-- [ ] **Step 0a**: Extract `type_registration.rs` — the 15+ type registration phases from `build_main_module()` (lines 700–1365). This is pure analysis + `wasm_encoder` type section building. ~700 lines.
-- [ ] **Step 0b**: Extract `value_copy.rs` — `generate_value_copy()`, `generate_struct_copy()`, `generate_array_copy()`, `generate_variant_copy()`, `generate_option_copy()`, `needs_value_copy()`. ~500 lines.
-- [ ] **Step 0c**: Extract `match_codegen.rs` — `generate_match_expr()`, `generate_match_arms()`, `generate_match_br_table()`, `generate_match_pattern_check()`, `generate_match_pattern_binding()`, `analyze_for_br_table()`. ~600 lines.
-- [ ] **Step 0d**: Extract `cm_codegen.rs` — `generate_cm_effect_call()`, `generate_cm_resource_method_call()`, CM payload lowering functions. ~700 lines.
-- [ ] **Step 0e**: Extract `scalarization.rs` — `collect_scalarization_candidates()`, `preallocate_scalarized_locals()`, related analysis. ~300 lines.
-- [ ] **Step 0f**: Move `effect_wait` from `builtin.wado` to `internal.wado` — `generate_effect_wait()` in codegen is not a single Wasm instruction nor an external import; it is a multi-instruction sequence (if/call to `waitable_set_new`, `waitable_join`, `waitable_set_wait`, `subtask_drop`). Refactor it into a Wado function `internal::effect_wait(subtask: i32)` that takes the subtask handle as a parameter. The compiler generates `Call(internal::effect_wait, __subtask)` instead of inline expansion. This removes ~50 lines of hard-coded codegen logic and makes `builtin.wado` strictly 1:1 Wasm instructions or `#[canonical]` imports.
+This is a departure from the original plan that required decomposing `codegen.rs` first (Phase 0). That approach was:
 
-After this step, codegen.rs is split into ~6 files but the architecture is unchanged. This is pure refactoring.
+- **High risk**: modifying `codegen.rs` while it is the only backend
+- **Big-bang**: each step must produce identical output or tests break
+- **Previously attempted and abandoned**
 
-### Phase 1: Define WIR Data Structures
+The strangler fig approach eliminates these risks:
+
+- **Zero risk to existing tests**: `codegen.rs` is never modified, so all tests always pass
+- **No Phase 0**: `codegen.rs` decomposition is unnecessary since we never modify it
+- **Living reference**: `codegen.rs` serves as the "correct answer" throughout development
+- **Incremental progress**: each feature added to `tir_to_wir` makes more WIR E2E tests pass
+- **Inspectable**: `wado dump --wir --unparse` provides visibility into the new pipeline at all times
+
+### Phase 1: Scaffolding and Inspection
+
+Set up the WIR data structures, unparse output, and dump integration. No code generation yet.
 
 - [ ] **Step 1a**: Create `wir.rs` with the WIR data structure definitions (types, instructions, module structure). No code uses it yet.
-- [ ] **Step 1b**: Create `wir_unparse.rs` for WIR → pseudo-Wado output. Hook into `wado dump --wir --unparse`.
-- [ ] **Step 1c**: Add `--wir` flag to the dump command. Pipeline: TIR → (existing codegen analysis) → WIR → display.
+- [ ] **Step 1b**: Create `wir_unparse.rs` for WIR → pseudo-Wado output.
+- [ ] **Step 1c**: Add `--wir` flag to the dump command (`wado dump --wir --unparse`). Initially outputs an empty `WirModule`.
+- [ ] **Step 1d**: Move `effect_wait` from `builtin.wado` to `internal.wado` — `generate_effect_wait()` in codegen is a multi-instruction sequence. Refactor it into a Wado function `internal::effect_wait(subtask: i32)`. This removes hard-coded codegen logic and simplifies future WIR translation. (This is the only change that touches existing code, and it is a semantic no-op.)
 
-### Phase 2: WIR Emission for Function Bodies
+After this phase: `wado dump --wir --unparse` works but shows an empty module.
 
-The core migration: replace TIR expression codegen with WIR generation.
+### Phase 2: Parallel E2E Test Infrastructure
 
-- [ ] **Step 2a**: Create `tir_to_wir.rs` — translates TIR expressions to WIR instructions. This extracts the logic from `generate_expr()` but produces WIR nodes instead of `wasm_encoder::Instruction`.
-- [ ] **Step 2b**: Create `wir_emit.rs` — translates WIR instructions to `wasm_encoder::Instruction`. This is a mechanical mapping (WIR names → Wasm indices, WIR tree → flat instruction sequence).
-- [ ] **Step 2c**: Wire it together: `tir_to_wir` produces `WirFunction` bodies, `wir_emit` produces `wasm_encoder::Function`. The old `generate_expr()` / `generate_function()` can be replaced incrementally (one TirExprKind at a time).
-- [ ] **Step 2d**: Delete the old `generate_expr()` once all expression kinds are covered by `tir_to_wir` + `wir_emit`.
+Set up the mechanism to run the same E2E test fixtures through the WIR pipeline.
 
-### Phase 3: WIR Emission for Type Section
+- [ ] **Step 2a**: Create `compile_with_wir(&Project) -> Vec<u8>` in a new module. This is the WIR pipeline entry point: calls `tir_to_wir` → `wir_emit` and returns Wasm bytes. Initially returns a minimal valid Wasm component (stub).
+- [ ] **Step 2b**: Create `tests/wir_e2e.rs` — a parallel E2E test harness that uses `compile_with_wir` instead of `Codegen::generate_wasm`. Same fixtures, same `__DATA__` specs. Gated by `WADO_WIR_TEST=1` so normal `make test` is unaffected.
+- [ ] **Step 2c**: Add a progress tracking mechanism — e.g., a test that counts how many fixtures pass vs. fail through the WIR pipeline, printed as a summary.
 
-- [ ] **Step 3a**: Move type layout decisions into WIR generation. The 15+ type registration phases produce `Vec<WirTypeDef>` (structs, variants, enums, flags, arrays, func types) instead of calling `wasm_encoder` directly.
-- [ ] **Step 3b**: `wir_emit` translates `WirTypeDef` → Wasm type section entries. This includes expanding `WirVariantType` into base struct + subtype structs, and skipping `WirEnumType`/`WirFlagsType` (no Wasm type section entry needed).
-- [ ] **Step 3c**: Delete the old type registration code in codegen.
+After this phase: `WADO_WIR_TEST=1 cargo test --test wir_e2e` runs but all tests fail. The scaffolding for incremental progress is in place.
 
-### Phase 4: WIR Emission for Module Structure
+### Phase 3: Core Translation
 
-- [ ] **Step 4a**: Move import/export/global/data section generation to produce WIR structures.
-- [ ] **Step 4b**: Move Component Model wrapper generation to produce `WirComponent`.
-- [ ] **Step 4c**: `wir_emit` translates the complete `WirModule` → Wasm binary.
+The main implementation work. Build `tir_to_wir` and `wir_emit` incrementally. Each feature added makes more E2E tests pass.
 
-### Phase 5: Merge wasm_plan into WIR Generation
+#### Step 3a: Type Registration
 
-At this point, `wasm_plan` and `tir_to_wir` are doing related work. Consolidate:
+Translate TIR type definitions to `Vec<WirTypeDef>`. Implement `wir_emit` type section generation.
 
-- [ ] **Step 5a**: Move `ComponentPlan` generation into WIR generation (it becomes `WirComponent`).
-- [ ] **Step 5b**: The pipeline becomes: `optimize → wir_gen → wir_emit`.
-- [ ] **Step 5c**: Delete the separate `wasm_plan` phase. Its analysis functions (topological sort, etc.) move into `wir_gen` or stay as utilities.
+- [ ] Struct types (fields, mutability, GC layout)
+- [ ] Variant types (base struct + case subtypes)
+- [ ] Enum types (i32 discriminant, no Wasm type entry)
+- [ ] Flags types (i32 bitfield, no Wasm type entry)
+- [ ] Array types (element type, mutability)
+- [ ] Tuple types (anonymous structs)
+- [ ] Closure types (funcref + captured environment struct)
+- [ ] Function types
+- [ ] Rec groups and topological sorting
 
-### Phase 6 (Future): Optimizer Migration
+#### Step 3b: Module Skeleton
+
+Translate module-level structure to `WirModule`.
+
+- [ ] Import section (WASI functions, bundled modules)
+- [ ] Global variables
+- [ ] Data section (string literals)
+- [ ] Element section (funcref tables)
+- [ ] Export section
+- [ ] Name section
+
+#### Step 3c: Function Bodies — Basics
+
+Implement `tir_to_wir` expression translation for core constructs.
+
+- [ ] Constants (i32, i64, f32, f64)
+- [ ] Local variables (get, set, tee, declare)
+- [ ] Arithmetic (i32, i64, f32, f64 — all operators)
+- [ ] Comparison and logical operators
+- [ ] Type casts and conversions
+- [ ] Block, Loop, If/Else, Br, BrIf, BrTable
+- [ ] Return, Unreachable, Nop, Drop
+- [ ] Function calls (direct)
+
+#### Step 3d: Function Bodies — GC and Compound
+
+- [ ] Struct construction (struct.new)
+- [ ] Field access (struct.get) and assignment (struct.set)
+- [ ] Array operations (new, get, set, len, copy, fill)
+- [ ] Reference operations (ref.null, ref.test, ref.cast, ref.eq)
+- [ ] Value copy (ValueCopy compound instruction)
+- [ ] Match expressions (pattern dispatch, br_table optimization)
+- [ ] Closure creation and call_ref
+- [ ] Global get/set
+
+#### Step 3e: Function Bodies — WASI and CM
+
+- [ ] CM effect calls (canonical lift/lower)
+- [ ] CM resource method calls
+- [ ] CM payload lowering (string, list, record, variant, option, result)
+- [ ] CM export glue functions
+- [ ] Async CM (subtask handling, waitable sets)
+
+#### Step 3f: Component Model Wrapper
+
+Translate `ComponentPlan` to `WirComponent` and emit the CM wrapper.
+
+- [ ] WASI interface imports
+- [ ] Bundled module instantiation (fts, libm)
+- [ ] Core module + component composition
+- [ ] World export declarations
+
+After this phase: all (or nearly all) E2E tests pass through the WIR pipeline.
+
+### Phase 4: Cutover
+
+Once all E2E tests pass via the WIR pipeline:
+
+- [ ] **Step 4a**: Verify behavioral equivalence across all fixtures and optimization levels.
+- [ ] **Step 4b**: Replace `Codegen::generate_wasm` calls in `compile_with_options` with `compile_with_wir`.
+- [ ] **Step 4c**: Delete `codegen.rs` and `copy_context.rs`.
+- [ ] **Step 4d**: Promote `tests/wir_e2e.rs` to be the primary `e2e.rs` (or remove it if identical).
+- [ ] **Step 4e**: Merge `wasm_plan` analysis into `tir_to_wir` where appropriate. The pipeline becomes: `optimize → tir_to_wir → wir_emit`.
+
+### Phase 5 (Future): Optimizer Migration
 
 After WIR is stable, migrate low-level optimizations from TIR to WIR:
 
-- [ ] **Step 6a**: Move constant folding to `wir_optimize`. Pattern: `I32Add(I32Const, I32Const)` → `I32Const`. No TIR dependency.
-- [ ] **Step 6b**: Move LICM to `wir_optimize`. Pattern: `Loop` + `StructGet` on non-modified locals. No TIR dependency.
-- [ ] **Step 6c**: Move ValueCopy analysis from `optimize_rewrite.rs` to `wir_gen`. Fresh value detection and copy type resolution happen during WIR generation instead of as a post-optimization rewrite. Remove `needed_copy_types`, `copy_source_types`, and `Move` from `TirFunction`.
-- [ ] **Step 6d**: Move `CopyContext` (scratch local pre-allocation) from codegen to `wir_emit`. WIR uses named locals, so pre-allocation is purely an emission concern.
-- [ ] **Step 6e**: Add peephole optimizations in `wir_optimize` (redundant `LocalSet`/`LocalGet` elimination, dead `Drop` removal, etc.).
+- [ ] **Step 5a**: Move constant folding to `wir_optimize`. Pattern: `I32Add(I32Const, I32Const)` → `I32Const`. No TIR dependency.
+- [ ] **Step 5b**: Move LICM to `wir_optimize`. Pattern: `Loop` + `StructGet` on non-modified locals. No TIR dependency.
+- [ ] **Step 5c**: Move ValueCopy analysis from `optimize_rewrite.rs` to `tir_to_wir`. Fresh value detection and copy type resolution happen during WIR generation instead of as a post-optimization rewrite. Remove `needed_copy_types`, `copy_source_types`, and `Move` from `TirFunction`.
+- [ ] **Step 5d**: Move `CopyContext` (scratch local pre-allocation) into `wir_emit`. WIR uses named locals, so pre-allocation is purely an emission concern.
+- [ ] **Step 5e**: Add peephole optimizations in `wir_optimize` (redundant `LocalSet`/`LocalGet` elimination, dead `Drop` removal, etc.).
 
 ### Final State
 
 ```
-lower → optimize → wir_gen → wir_emit → wasm binary
-                      ↓
-                  WirModule (inspectable via dump --wir)
+lower → optimize → tir_to_wir → wir_emit → wasm binary
+                        ↓
+                    WirModule (inspectable via dump --wir)
 ```
 
-- `wir_gen` (~5000 lines): TIR + Project → WirModule. All analysis, type layout, function translation, ValueCopy insertion.
+- `tir_to_wir` (~5000 lines): TIR + Project → WirModule. All analysis, type layout, function translation, ValueCopy insertion.
 - `wir_emit` (~2000 lines): WirModule → Wasm binary. Mechanical translation, index allocation, `wasm_encoder` calls, CopyContext local pre-allocation.
 - `wir.rs` (~500 lines): Data structure definitions.
 - `wir_unparse.rs` (~500 lines): WIR → pseudo-Wado for debugging.
@@ -917,13 +994,13 @@ lower → optimize → wir_gen → wir_emit → wasm binary
 #### Future State (with optimizer migration)
 
 ```
-lower → tir_optimize → wir_gen → wir_optimize → wir_emit → wasm binary
-                           ↓
-                       WirModule (inspectable via dump --wir)
+lower → tir_optimize → tir_to_wir → wir_optimize → wir_emit → wasm binary
+                             ↓
+                         WirModule (inspectable via dump --wir)
 ```
 
 - `tir_optimize`: Semantic optimizations (inlining, DCE, SROA, ref-elim, copy-prop). Operates on TIR with full TypeTable access.
-- `wir_gen`: TIR → WirModule. Includes ValueCopy insertion (freshness analysis + copy type resolution).
+- `tir_to_wir`: TIR → WirModule. Includes ValueCopy insertion (freshness analysis + copy type resolution).
 - `wir_optimize`: Wasm-level optimizations (constant folding, LICM, peephole). Operates on WIR where types are embedded in instruction names.
 - `wir_emit`: WirModule → Wasm binary. CopyContext, index allocation, `wasm_encoder` calls.
 
@@ -1018,8 +1095,8 @@ The metadata is lightweight (references and optional fields) and does not affect
 The current optimizer runs entirely on TIR. The long-term plan is to split optimizations into two levels:
 
 ```
-Current:  lower → optimize → wir_gen → wir_emit
-Future:   lower → tir_optimize → wir_gen → wir_optimize → wir_emit
+Current:  lower → optimize → tir_to_wir → wir_emit
+Future:   lower → tir_optimize → tir_to_wir → wir_optimize → wir_emit
 ```
 
 #### Responsibility Split
@@ -1042,7 +1119,7 @@ Future:   lower → tir_optimize → wir_gen → wir_optimize → wir_emit
 
 WIR does not need to carry `is_mut`, `address_taken_locals`, or `TypeTable` — those are only needed by semantic optimizations that stay on TIR. WIR-level optimizations rely on information already embedded in instruction names and structure.
 
-#### ValueCopy Belongs in `wir_gen`, Not the Optimizer
+#### ValueCopy Belongs in `tir_to_wir`, Not the Optimizer
 
 The current `optimize_rewrite.rs` performs three tasks that are not optimizations:
 
@@ -1052,10 +1129,10 @@ The current `optimize_rewrite.rs` performs three tasks that are not optimization
 
 These are **lowering concerns** — they implement Wasm GC value semantics, not performance optimizations. They are placed in the optimizer solely because they must run after inlining stabilizes function bodies.
 
-In the future pipeline, these move into `wir_gen`:
+In the future pipeline, these move into `tir_to_wir`:
 
-- `wir_gen` emits `ValueCopy { type_name, source_type, expr }` for non-fresh assignments to value types
-- `wir_gen` omits `ValueCopy` for fresh values (the TIR `Move` wrapper or WIR-level freshness analysis)
+- `tir_to_wir` emits `ValueCopy { type_name, source_type, expr }` for non-fresh assignments to value types
+- `tir_to_wir` omits `ValueCopy` for fresh values (the TIR `Move` wrapper or WIR-level freshness analysis)
 - The `ValueCopy` compound instruction carries its own `WirCopyType`, which `wir_emit` lowers to copy instructions
 - `CopyContext` (scratch local pre-allocation) moves entirely into `wir_emit`, since WIR uses named locals and index allocation is an emission concern
 
@@ -1082,4 +1159,4 @@ This eliminates the current coupling between the optimizer and codegen via `need
 
 - **Scope creep**: WIR should stay close to Wasm. Resist adding high-level abstractions.
 - **`WirTypeId` is not `Copy`**: `Rc<str>` prevents `Copy`. Mitigated by cheap `Clone` (non-atomic refcount increment) and instructions being heap-allocated (`Box<WirInstr>`) regardless.
-- **Incomplete migration**: If migration stalls midway, we'd have two code paths. Mitigated by the incremental approach where each step is a complete working state.
+- **Two code paths during migration**: The strangler fig approach intentionally maintains two pipelines (`codegen` and `tir_to_wir` + `wir_emit`) until cutover. This is safe because the existing pipeline is never modified — it always produces correct output. The new pipeline is tested independently via `wir_e2e.rs`. The risk is that migration stalls and the duplicate code persists indefinitely; mitigated by Phase 2's progress tracking which gives clear visibility into how close the WIR pipeline is to completion.
