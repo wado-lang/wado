@@ -1,24 +1,99 @@
 // JSON Parser in Wado - TDD approach using variant
-// Goal: Verify if Wado can implement a JSON parser with native variant support
 
 use {println, Stdout} from "core:cli";
 
 // =============================================================================
-// ParseResult - variant type combining result status and JSON value
+// ParseResult - variant type for JSON values
 // =============================================================================
 
-// Note: f64 payload has codegen bug (#151), so Number stores position info instead
-// Note: struct/tuple containing variant has codegen bug (#149), so we use
-//       a single variant that includes both Fail case and value cases
-// Each case uses explicit tuple syntax for multiple values
 variant ParseResult {
     Fail,
     Null,
     Bool(bool),
-    Number([i32, i32]),   // start, end positions (workaround for f64 bug)
+    Number([i32, i32]),   // start, end positions
     Str([i32, i32]),      // start, end positions
     Arr(i32),             // element count
     Obj(i32),             // key-value pair count
+}
+
+// =============================================================================
+// Helper functions
+// =============================================================================
+
+fn is_digit(c: char) -> bool {
+    return c >= '0' && c <= '9';
+}
+
+fn is_hex_digit(c: char) -> bool {
+    return (c >= '0' && c <= '9')
+        || (c >= 'A' && c <= 'F')
+        || (c >= 'a' && c <= 'f');
+}
+
+fn hex_to_i32(c: char) -> i32 {
+    if c >= '0' && c <= '9' {
+        return (c as i32) - ('0' as i32);
+    }
+    if c >= 'A' && c <= 'F' {
+        return (c as i32) - ('A' as i32) + 10;
+    }
+    if c >= 'a' && c <= 'f' {
+        return (c as i32) - ('a' as i32) + 10;
+    }
+    return -1;
+}
+
+fn is_high_surrogate(cp: i32) -> bool {
+    return cp >= 0xD800 && cp <= 0xDBFF;
+}
+
+fn is_low_surrogate(cp: i32) -> bool {
+    return cp >= 0xDC00 && cp <= 0xDFFF;
+}
+
+fn surrogate_to_codepoint(high: i32, low: i32) -> i32 {
+    return ((high - 0xD800) * 0x400) + (low - 0xDC00) + 0x10000;
+}
+
+// =============================================================================
+// Tests: Helper functions
+// =============================================================================
+
+test "hex-digit-check" {
+    assert is_hex_digit('0');
+    assert is_hex_digit('9');
+    assert is_hex_digit('A');
+    assert is_hex_digit('F');
+    assert is_hex_digit('a');
+    assert is_hex_digit('f');
+    assert !is_hex_digit('G');
+    assert !is_hex_digit('g');
+    assert !is_hex_digit('/');
+}
+
+test "hex-to-value" {
+    assert hex_to_i32('0') == 0;
+    assert hex_to_i32('9') == 9;
+    assert hex_to_i32('A') == 10;
+    assert hex_to_i32('F') == 15;
+    assert hex_to_i32('a') == 10;
+    assert hex_to_i32('f') == 15;
+}
+
+test "surrogate-detection" {
+    assert is_high_surrogate(0xD800);
+    assert is_high_surrogate(0xDBFF);
+    assert !is_high_surrogate(0xDC00);
+    assert is_low_surrogate(0xDC00);
+    assert is_low_surrogate(0xDFFF);
+    assert !is_low_surrogate(0xD800);
+}
+
+test "surrogate-pair-to-codepoint" {
+    let high = 0xD83D;
+    let low = 0xDE00;
+    let cp = surrogate_to_codepoint(high, low);
+    assert cp == 0x1F600;
 }
 
 // =============================================================================
@@ -35,21 +110,30 @@ impl Parser {
         return Parser { input, pos: 0 };
     }
 
-    fn peek(&self) -> i32 {
+    fn peek(&self) -> Option<char> {
         if self.pos >= self.input.len() {
-            return -1; // EOF
+            return null;
         }
-        return self.input.get_byte(self.pos);
+        return char::from_i32(self.input.get_byte(self.pos));
     }
 
     fn advance(&mut self) {
         self.pos += 1;
     }
 
+    fn expect(&mut self, expected: char) -> bool {
+        if let Some(c) = self.peek() {
+            if c == expected {
+                self.advance();
+                return true;
+            }
+        }
+        return false;
+    }
+
     fn skip_whitespace(&mut self) {
-        loop {
-            let c = self.peek();
-            if c == 32 || c == 9 || c == 10 || c == 13 {
+        while let Some(c) = self.peek() {
+            if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
                 self.advance();
             } else {
                 break;
@@ -60,10 +144,6 @@ impl Parser {
     fn is_eof(&self) -> bool {
         return self.pos >= self.input.len();
     }
-
-    fn is_digit(&self, c: i32) -> bool {
-        return c >= 48 && c <= 57;
-    }
 }
 
 // =============================================================================
@@ -72,19 +152,19 @@ impl Parser {
 
 test "parser-peek-and-advance" {
     let mut p = Parser::new("abc");
-    assert p.peek() == 97;
+    assert p.peek() matches { Some(c) && c == 'a' };
     p.advance();
-    assert p.peek() == 98;
+    assert p.peek() matches { Some(c) && c == 'b' };
     p.advance();
-    assert p.peek() == 99;
+    assert p.peek() matches { Some(c) && c == 'c' };
     p.advance();
-    assert p.peek() == -1;
+    assert p.peek() matches { None };
 }
 
 test "parser-skip-whitespace" {
     let mut p = Parser::new("  \t\nabc");
     p.skip_whitespace();
-    assert p.peek() == 97;
+    assert p.peek() matches { Some(c) && c == 'a' };
 }
 
 test "parser-is-eof" {
@@ -102,7 +182,7 @@ impl Parser {
     fn match_literal(&mut self, lit: String) -> bool {
         let start = self.pos;
         for let mut i = 0; i < lit.len(); i += 1 {
-            if self.peek() != lit.get_byte(i) {
+            if self.is_eof() || self.input.get_byte(self.pos) != lit.get_byte(i) {
                 self.pos = start;
                 return false;
             }
@@ -111,78 +191,23 @@ impl Parser {
         return true;
     }
 
-    fn is_hex_digit(&self, c: i32) -> bool {
-        return (c >= 48 && c <= 57)      // 0-9
-            || (c >= 65 && c <= 70)      // A-F
-            || (c >= 97 && c <= 102);    // a-f
-    }
-
-    fn hex_to_i32(&self, c: i32) -> i32 {
-        if c >= 48 && c <= 57 {
-            return c - 48;       // 0-9
-        }
-        if c >= 65 && c <= 70 {
-            return c - 65 + 10;  // A-F
-        }
-        if c >= 97 && c <= 102 {
-            return c - 97 + 10;  // a-f
-        }
-        return -1;
-    }
-
     // Parse \uXXXX and return the code point, or -1 on failure
     // Assumes parser is positioned after the 'u'
     fn parse_unicode_codepoint(&mut self) -> i32 {
         let mut value = 0;
         for let mut i = 0; i < 4; i += 1 {
-            let c = self.peek();
-            if !self.is_hex_digit(c) {
+            if let Some(c) = self.peek() {
+                if !is_hex_digit(c) {
+                    return -1;
+                }
+                value = value * 16 + hex_to_i32(c);
+                self.advance();
+            } else {
                 return -1;
             }
-            value = value * 16 + self.hex_to_i32(c);
-            self.advance();
         }
         return value;
     }
-
-    // Check if code point is high surrogate (0xD800-0xDBFF)
-    fn is_high_surrogate(&self, cp: i32) -> bool {
-        return cp >= 55296 && cp <= 56319;  // 0xD800-0xDBFF
-    }
-
-    // Check if code point is low surrogate (0xDC00-0xDFFF)
-    fn is_low_surrogate(&self, cp: i32) -> bool {
-        return cp >= 56320 && cp <= 57343;  // 0xDC00-0xDFFF
-    }
-
-    // Combine surrogate pair into full code point
-    fn surrogate_to_codepoint(&self, high: i32, low: i32) -> i32 {
-        // ((high - 0xD800) * 0x400) + (low - 0xDC00) + 0x10000
-        return ((high - 55296) * 1024) + (low - 56320) + 65536;
-    }
-}
-
-test "hex-digit-check" {
-    let p = Parser::new("");
-    assert p.is_hex_digit(48);   // '0'
-    assert p.is_hex_digit(57);   // '9'
-    assert p.is_hex_digit(65);   // 'A'
-    assert p.is_hex_digit(70);   // 'F'
-    assert p.is_hex_digit(97);   // 'a'
-    assert p.is_hex_digit(102);  // 'f'
-    assert !p.is_hex_digit(71);  // 'G'
-    assert !p.is_hex_digit(103); // 'g'
-    assert !p.is_hex_digit(47);  // '/'
-}
-
-test "hex-to-value" {
-    let p = Parser::new("");
-    assert p.hex_to_i32(48) == 0;   // '0'
-    assert p.hex_to_i32(57) == 9;   // '9'
-    assert p.hex_to_i32(65) == 10;  // 'A'
-    assert p.hex_to_i32(70) == 15;  // 'F'
-    assert p.hex_to_i32(97) == 10;  // 'a'
-    assert p.hex_to_i32(102) == 15; // 'f'
 }
 
 test "parse-unicode-codepoint" {
@@ -195,27 +220,6 @@ test "parse-unicode-codepoint-japanese" {
     let mut p = Parser::new("3042");  // 'あ'
     let cp = p.parse_unicode_codepoint();
     assert cp == 12354;
-}
-
-test "surrogate-detection" {
-    let p = Parser::new("");
-    // High surrogates
-    assert p.is_high_surrogate(55296);  // 0xD800
-    assert p.is_high_surrogate(56319);  // 0xDBFF
-    assert !p.is_high_surrogate(56320); // 0xDC00 (low)
-    // Low surrogates
-    assert p.is_low_surrogate(56320);   // 0xDC00
-    assert p.is_low_surrogate(57343);   // 0xDFFF
-    assert !p.is_low_surrogate(55296);  // 0xD800 (high)
-}
-
-test "surrogate-pair-to-codepoint" {
-    let p = Parser::new("");
-    // 😀 = U+1F600 = surrogate pair D83D DE00
-    let high = 55357;  // 0xD83D
-    let low = 56832;   // 0xDE00
-    let cp = p.surrogate_to_codepoint(high, low);
-    assert cp == 128512;  // 0x1F600
 }
 
 // =============================================================================
@@ -234,32 +238,17 @@ impl Parser {
 
 test "parse-null-valid" {
     let mut p = Parser::new("null");
-    let r = p.parse_null();
-    if let Null = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_null() matches { Null };
 }
 
 test "parse-null-with-whitespace" {
     let mut p = Parser::new("  null");
-    let r = p.parse_null();
-    if let Null = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_null() matches { Null };
 }
 
 test "parse-null-invalid" {
     let mut p = Parser::new("nul");
-    let r = p.parse_null();
-    if let Fail = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_null() matches { Fail };
 }
 
 // =============================================================================
@@ -301,16 +290,11 @@ test "parse-bool-false" {
 
 test "parse-bool-invalid" {
     let mut p = Parser::new("tru");
-    let r = p.parse_bool();
-    if let Fail = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_bool() matches { Fail };
 }
 
 // =============================================================================
-// Parse number (returns position info due to f64 codegen bug)
+// Parse number
 // =============================================================================
 
 impl Parser {
@@ -319,50 +303,50 @@ impl Parser {
         let start = self.pos;
 
         // Handle negative
-        if self.peek() == 45 {
-            self.advance();
+        if let Some(c) = self.peek() {
+            if c == '-' {
+                self.advance();
+            }
         }
 
         // Must have at least one digit
-        if !self.is_digit(self.peek()) {
+        if let Some(c) = self.peek() {
+            if !is_digit(c) {
+                self.pos = start;
+                return ParseResult::Fail;
+            }
+        } else {
             self.pos = start;
             return ParseResult::Fail;
         }
 
         // Integer part
-        loop {
-            if self.is_digit(self.peek()) {
-                self.advance();
-            } else {
-                break;
-            }
+        while let Some(c) = self.peek() {
+            if !is_digit(c) { break; }
+            self.advance();
         }
 
         // Fractional part
-        if self.peek() == 46 {
+        if self.peek() matches { Some(c) && c == '.' } {
             self.advance();
-            loop {
-                if self.is_digit(self.peek()) {
-                    self.advance();
-                } else {
-                    break;
-                }
+            while let Some(c) = self.peek() {
+                if !is_digit(c) { break; }
+                self.advance();
             }
         }
 
         // Exponent
-        let e = self.peek();
-        if e == 101 || e == 69 {
-            self.advance();
-            let sign = self.peek();
-            if sign == 45 || sign == 43 {
+        if let Some(e) = self.peek() {
+            if e == 'e' || e == 'E' {
                 self.advance();
-            }
-            loop {
-                if self.is_digit(self.peek()) {
+                if let Some(sign) = self.peek() {
+                    if sign == '-' || sign == '+' {
+                        self.advance();
+                    }
+                }
+                while let Some(c) = self.peek() {
+                    if !is_digit(c) { break; }
                     self.advance();
-                } else {
-                    break;
                 }
             }
         }
@@ -416,12 +400,7 @@ test "parse-number-exponent" {
 
 test "parse-number-invalid" {
     let mut p = Parser::new("abc");
-    let r = p.parse_number();
-    if let Fail = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_number() matches { Fail };
 }
 
 // =============================================================================
@@ -432,33 +411,30 @@ impl Parser {
     fn parse_string(&mut self) -> ParseResult {
         self.skip_whitespace();
 
-        if self.peek() != 34 {
+        if !self.expect('"') {
             return ParseResult::Fail;
         }
-        self.advance();
         let start = self.pos;
 
         loop {
-            let c = self.peek();
-            if c == -1 {
-                return ParseResult::Fail;
-            }
-            if c == 34 {
-                let end = self.pos;
-                self.advance();
-                return ParseResult::Str([start, end]);
-            }
-            if c == 92 {
-                self.advance();
-                if self.peek() != -1 {
+            if let Some(c) = self.peek() {
+                if c == '"' {
+                    let end = self.pos;
+                    self.advance();
+                    return ParseResult::Str([start, end]);
+                }
+                if c == '\\' {
+                    self.advance();
+                    if let Some(_) = self.peek() {
+                        self.advance();
+                    }
+                } else {
                     self.advance();
                 }
             } else {
-                self.advance();
+                return ParseResult::Fail;
             }
         }
-
-        return ParseResult::Fail;
     }
 }
 
@@ -486,22 +462,12 @@ test "parse-string-empty" {
 
 test "parse-string-unclosed" {
     let mut p = Parser::new("\"hello");
-    let r = p.parse_string();
-    if let Fail = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_string() matches { Fail };
 }
 
 test "parse-string-with-escape" {
     let mut p = Parser::new("\"hello\\nworld\"");
-    let r = p.parse_string();
-    if let Str(_) = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_string() matches { Str(_) };
 }
 
 test "parse-string-unicode-escape" {
@@ -580,12 +546,7 @@ test "parse-string-emoji-direct" {
 test "parse-string-all-escapes" {
     // All standard JSON escapes: \" \\ \/ \b \f \n \r \t
     let mut p = Parser::new("\"\\\"\\\\\\/ \\b\\f\\n\\r\\t\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_string() matches { Str(_) };
 }
 
 test "parse-string-cjk-unified" {
@@ -669,17 +630,6 @@ test "parse-string-musical-symbols" {
 }
 
 // =============================================================================
-// Helper: check if result is failure
-// =============================================================================
-
-fn is_fail(r: ParseResult) -> bool {
-    if let Fail = r {
-        return true;
-    }
-    return false;
-}
-
-// =============================================================================
 // Parse array
 // =============================================================================
 
@@ -687,42 +637,32 @@ impl Parser {
     fn parse_array(&mut self) -> ParseResult {
         self.skip_whitespace();
 
-        if self.peek() != 91 {
+        if !self.expect('[') {
             return ParseResult::Fail;
         }
-        self.advance();
         self.skip_whitespace();
 
-        if self.peek() == 93 {
-            self.advance();
+        if self.expect(']') {
             return ParseResult::Arr(0);
         }
 
         let mut count = 0;
         loop {
             let r = self.parse_value();
-            if is_fail(r) {
+            if r matches { Fail } {
                 return ParseResult::Fail;
             }
             count += 1;
 
             self.skip_whitespace();
-            let c = self.peek();
-
-            if c == 93 {
-                self.advance();
+            if self.expect(']') {
                 return ParseResult::Arr(count);
             }
-
-            if c == 44 {
-                self.advance();
-                self.skip_whitespace();
-            } else {
+            if !self.expect(',') {
                 return ParseResult::Fail;
             }
+            self.skip_whitespace();
         }
-
-        return ParseResult::Fail;
     }
 }
 
@@ -784,14 +724,12 @@ impl Parser {
     fn parse_object(&mut self) -> ParseResult {
         self.skip_whitespace();
 
-        if self.peek() != 123 {
+        if !self.expect('{') {
             return ParseResult::Fail;
         }
-        self.advance();
         self.skip_whitespace();
 
-        if self.peek() == 125 {
-            self.advance();
+        if self.expect('}') {
             return ParseResult::Obj(0);
         }
 
@@ -799,38 +737,29 @@ impl Parser {
         loop {
             self.skip_whitespace();
             let key = self.parse_string();
-            if is_fail(key) {
+            if key matches { Fail } {
                 return ParseResult::Fail;
             }
 
             self.skip_whitespace();
-            if self.peek() != 58 {
+            if !self.expect(':') {
                 return ParseResult::Fail;
             }
-            self.advance();
 
             let val = self.parse_value();
-            if is_fail(val) {
+            if val matches { Fail } {
                 return ParseResult::Fail;
             }
             count += 1;
 
             self.skip_whitespace();
-            let c = self.peek();
-
-            if c == 125 {
-                self.advance();
+            if self.expect('}') {
                 return ParseResult::Obj(count);
             }
-
-            if c == 44 {
-                self.advance();
-            } else {
+            if !self.expect(',') {
                 return ParseResult::Fail;
             }
         }
-
-        return ParseResult::Fail;
     }
 }
 
@@ -881,39 +810,21 @@ test "parse-object-nested" {
 impl Parser {
     fn parse_value(&mut self) -> ParseResult {
         self.skip_whitespace();
-        let c = self.peek();
-
-        if c == 110 {
-            return self.parse_null();
+        if let Some(c) = self.peek() {
+            if c == 'n' { return self.parse_null(); }
+            if c == 't' || c == 'f' { return self.parse_bool(); }
+            if c == '"' { return self.parse_string(); }
+            if c == '[' { return self.parse_array(); }
+            if c == '{' { return self.parse_object(); }
+            if is_digit(c) || c == '-' { return self.parse_number(); }
         }
-        if c == 116 || c == 102 {
-            return self.parse_bool();
-        }
-        if c == 34 {
-            return self.parse_string();
-        }
-        if c == 91 {
-            return self.parse_array();
-        }
-        if c == 123 {
-            return self.parse_object();
-        }
-        if self.is_digit(c) || c == 45 {
-            return self.parse_number();
-        }
-
         return ParseResult::Fail;
     }
 }
 
 test "parse-value-null" {
     let mut p = Parser::new("null");
-    let r = p.parse_value();
-    if let Null = r {
-        assert true;
-    } else {
-        assert false;
-    }
+    assert p.parse_value() matches { Null };
 }
 
 test "parse-value-bool" {
