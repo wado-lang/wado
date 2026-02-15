@@ -47,6 +47,10 @@ fn run() with Stdout {
     }
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data: i32) {
+    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
 fn "ArrayIter<f64>^Iterator::next"(self: &mut ArrayIter<f64>) -> Option<f64> {
     if (self.index >= self.used) {
         return null;
