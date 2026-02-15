@@ -15,27 +15,32 @@ fn trim(s: String) -> String {
     let chars: Array<char> = s.chars().collect();
     let len = chars.len();
 
+    // Find start (skip leading whitespace)
     let mut start = 0;
-    while start < len {
-        let c = chars[start];
+    for let c of chars {
         if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
             break;
         }
         start += 1;
     }
 
+    // Find end (skip trailing whitespace — reverse traversal needs index)
     let mut end = len;
     while end > start {
-        let c = chars[end - 1];
-        if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+        if chars[end - 1] != ' ' && chars[end - 1] != '\t' && chars[end - 1] != '\n' && chars[end - 1] != '\r' {
             break;
         }
         end -= 1;
     }
 
+    // Build result
     let mut result = String::with_capacity(end - start);
-    for let mut i = start; i < end; i += 1 {
-        result.append_char(chars[i]);
+    let mut i = 0;
+    for let c of chars {
+        if i >= start && i < end {
+            result.append_char(c);
+        }
+        i += 1;
     }
     return result;
 }
