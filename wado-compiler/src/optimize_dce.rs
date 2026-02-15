@@ -550,8 +550,12 @@ fn analyze_expr(
             );
 
             // Build function ID for the called function
-            // If the callee has an entry point module source (local call), use current module
-            let callee_module = if original_callee_module.is_entry_point() {
+            // If the callee has an entry point module source (local call), use current module.
+            // Exception: CM adapter functions (prefixed with "__cm_adapter__") are genuinely
+            // in the entry module and should NOT be remapped to the caller's module.
+            let callee_module = if original_callee_module.is_entry_point()
+                && !func_name.starts_with(crate::cm_adapter_gen::ADAPTER_PREFIX)
+            {
                 current_module.clone()
             } else {
                 original_callee_module.clone()
@@ -846,7 +850,17 @@ fn analyze_expr(
                 analyze_expr(arg, current_module, type_table, analysis);
             }
         }
-        TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::CmRawCall { local_name, args } => {
+            // CmRawCall references a lowered WASI import function.
+            // Parse the local_name (e.g., "wasi:cli/Stdout::write_via_stream")
+            // to extract the effect_name and op_name for WASI import tracking.
+            if let Some((effect_name, op_name)) = local_name.split_once("::").map(|(prefix, op)| {
+                // prefix is like "wasi:cli/Stdout" → extract "Stdout"
+                let effect = prefix.rsplit('/').next().unwrap_or(prefix);
+                (effect.to_string(), op.to_string())
+            }) {
+                analysis.effect_calls.insert((effect_name, op_name));
+            }
             for arg in args {
                 analyze_expr(arg, current_module, type_table, analysis);
             }
