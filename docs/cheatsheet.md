@@ -1313,14 +1313,8 @@ let mut iter: ArrayIter<i32> = arr.into_iter();
 iter.next();  // Some(1)
 iter.next();  // Some(2)
 
-// String iterators work directly with for-of
-let s = "hello";
-for let c of s.chars() {   // StrCharIter implements IntoIterator
-    println(`{c}`);
-}
-for let b of s.bytes() {   // StrUtf8ByteIter implements IntoIterator
-    println(`{b}`);
-}
+// String iterators (StrCharIter, StrUtf8ByteIter) implement both traits,
+// so they work directly with for-of (see Strings section for examples)
 ```
 
 ### Custom Iterables
