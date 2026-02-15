@@ -4,7 +4,7 @@
 
 The compiler's Component Model (CM) boundary logic — lifting GC values to linear memory, lowering linear memory to GC values, calling lowered WASI imports, wrapping exports for `canon lift` — is currently spread across multiple layers:
 
-- `codegen.rs`: `generate_cm_effect_call` (~140 lines), `generate_cm_resource_method_call` (~250 lines), `generate_effect_wait` (~50 lines), `emit_option_string_lowering` (~40 lines), `emit_field_size_payload_lowering` (~65 lines), plus scattered CM glue throughout function emission
+- `codegen.rs`: `generate_cm_effect_call` (~140 lines), `generate_cm_resource_method_call` (~250 lines), `emit_option_string_lowering` (~40 lines), `emit_field_size_payload_lowering` (~65 lines), plus scattered CM glue throughout function emission
 - `component_model.rs`: `CmCallConvention` and its `from_return_type` logic (~350 lines), deriving ABI conventions from WASI return types via pattern matching on `Type` variants
 - `internal.wado`: hand-written CM converter functions (`cm_lower_string`, `cm_list_string_to_array`, etc.) — each covers one specific type shape (~130 lines)
 - `wasm_plan.rs`: `CmExportInfo` with pre-computed scratch locals and required imports for export glue
@@ -174,11 +174,9 @@ fn __cm_adapter__write_via_stream(stream: i32, data: String) {
     let subtask = builtin::cm_raw_call(stream, data_ptr, data_len);
 
     // Wait for completion
-    builtin::effect_wait(subtask);
+    internal::wait_for_subtask(subtask);
 }
 ```
-
-The `builtin::effect_wait` call expands to `waitable_set_new` + `waitable_join` + `waitable_set_wait` + `subtask_drop`, which is already in `builtin.wado` (or can be moved to `internal.wado` as a Wado-level function).
 
 ### Required Builtins
 
@@ -196,7 +194,7 @@ The adapter functions use builtins to perform low-level operations. Some already
 | `internal::cm_lower_list_u8` | Lower Array\<u8\> to (ptr, len) |
 | `internal::memory_to_gc_array` | Copy bytes from linear memory to GC array |
 | `internal::gc_array_to_memory` | Copy bytes from GC array to linear memory |
-| `builtin::effect_wait` | Wait for async subtask completion |
+| `internal::wait_for_subtask` | Wait for async subtask completion |
 
 #### New builtins to add
 
@@ -366,7 +364,6 @@ After cm_adapter_gen is complete:
 | --- | --- | --- | --- |
 | codegen.rs | `generate_cm_effect_call` | ~140 | Deleted — adapter handles CM calls |
 | codegen.rs | `generate_cm_resource_method_call` | ~250 | Deleted — adapter handles resource calls |
-| codegen.rs | `generate_effect_wait` | ~50 | Deleted — adapter calls `builtin::effect_wait` |
 | codegen.rs | `emit_option_string_lowering` | ~40 | Deleted — adapter generates inline |
 | codegen.rs | `emit_field_size_payload_lowering` | ~65 | Deleted — adapter generates inline |
 | codegen.rs | `wado_type_to_cm_val_type` | ~50 | Moved to cm_abi.rs |
@@ -375,7 +372,7 @@ After cm_adapter_gen is complete:
 | internal.wado | `cm_option_string_to_option` | ~15 | Deleted — adapter generates inline |
 | internal.wado | `cm_option_own_resource_to_option` | ~10 | Deleted — adapter generates inline |
 | internal.wado | `cm_list_tuple_string_string_to_array` | ~25 | Deleted — adapter generates inline |
-| Total removed | | ~1015 | |
+| Total removed | | ~965 | |
 
 New code:
 
@@ -386,7 +383,7 @@ New code:
 | builtin.wado additions | Memory load/store builtins | ~50 |
 | Total added | | ~750 |
 
-Net: **~250 lines reduction**, plus elimination of the per-type hand-coding pattern.
+Net: **~215 lines reduction**, plus elimination of the per-type hand-coding pattern.
 
 ### What Stays
 

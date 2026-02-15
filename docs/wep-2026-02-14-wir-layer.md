@@ -874,7 +874,6 @@ Set up the WIR data structures, unparse output, and dump integration. No code ge
 - [ ] **Step 1a**: Create `wir.rs` with the WIR data structure definitions (types, instructions, module structure). No code uses it yet.
 - [ ] **Step 1b**: Create `wir_unparse.rs` for WIR → pseudo-Wado output.
 - [ ] **Step 1c**: Add `--wir` flag to the dump command (`wado dump --wir --unparse`). Initially outputs an empty `WirModule`.
-- [ ] **Step 1d**: Move `effect_wait` from `builtin.wado` to `internal.wado` — `generate_effect_wait()` in codegen is a multi-instruction sequence. Refactor it into a Wado function `internal::effect_wait(subtask: i32)`. This removes hard-coded codegen logic and simplifies future WIR translation. (This is the only change that touches existing code, and it is a semantic no-op.)
 
 After this phase: `wado dump --wir --unparse` works but shows an empty module.
 
