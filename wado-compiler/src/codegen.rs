@@ -8020,11 +8020,11 @@ impl Codegen<'_> {
                         let tuple_return = func_info
                             .return_type
                             .as_ref()
-                            .and_then(|rt| crate::cm_abi::cm_tuple_primitive_types(rt));
+                            .and_then(crate::cm_abi::cm_tuple_primitive_types);
                         let result_return = func_info
                             .return_type
                             .as_ref()
-                            .and_then(|rt| crate::cm_abi::cm_result_return_info(rt));
+                            .and_then(crate::cm_abi::cm_result_return_info);
 
                         // Handle outptr allocation for Result returns
                         if let Some((size, align)) = outptr_alloc {
