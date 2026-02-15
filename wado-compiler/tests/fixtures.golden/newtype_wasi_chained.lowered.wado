@@ -10,7 +10,7 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout, MonotonicClock {
-    let t1: Mark = MonotonicClock::now();
+    let t1: Mark = cm_raw_call wasi:clocks/MonotonicClock::now();
     let ts: Timestamp = t1 as Timestamp;
     let evt: EventTime = t1 as EventTime;
     let t1_u64: u64 = t1 as u64;
@@ -21,7 +21,7 @@ fn run() with Stdout, MonotonicClock {
     } else {
         core::cli::println(move "FAILED: values differ");
     }
-    let t2: Mark = MonotonicClock::now();
+    let t2: Mark = cm_raw_call wasi:clocks/MonotonicClock::now();
     let ts2: Timestamp = t2 as Timestamp;
     let diff: Timestamp = (ts2 - ts);
     if (diff >= 0) {

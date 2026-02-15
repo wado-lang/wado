@@ -8135,6 +8135,25 @@ impl Codegen<'_> {
                             let type_idx =
                                 self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
                             func.instruction(&Instruction::StructNew(type_idx));
+
+                            // Free the outptr linear memory
+                            if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
+                                let temp = ctx
+                                    .get_local("__cm_result_temp")
+                                    .expect("__cm_result_temp should be pre-allocated");
+                                func.instruction(&Instruction::LocalSet(temp));
+                                func.instruction(&Instruction::LocalGet(outptr_local));
+                                func.instruction(&Instruction::I32Const(alloc_size as i32));
+                                func.instruction(&Instruction::I32Const(alloc_align as i32));
+                                func.instruction(&Instruction::I32Const(0));
+                                let realloc_idx = builder.func_idx("realloc");
+                                func.instruction(&Instruction::Call(realloc_idx));
+                                func.instruction(&Instruction::Drop);
+                                func.instruction(&Instruction::LocalGet(temp));
+                                func.instruction(&Instruction::RefCastNullable(
+                                    HeapType::Concrete(type_idx),
+                                ));
+                            }
                         } else if let Some((ok_is_resource, _err_is_enum)) = conv.result_return {
                             let outptr_local = ctx
                                 .get_local("__cm_outptr")
@@ -8283,6 +8302,25 @@ impl Codegen<'_> {
                             func.instruction(&Instruction::StructNew(ok_type_idx));
 
                             func.instruction(&Instruction::End);
+
+                            // Free the outptr linear memory
+                            if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
+                                let temp = ctx
+                                    .get_local("__cm_result_temp")
+                                    .expect("__cm_result_temp should be pre-allocated");
+                                func.instruction(&Instruction::LocalSet(temp));
+                                func.instruction(&Instruction::LocalGet(outptr_local));
+                                func.instruction(&Instruction::I32Const(alloc_size as i32));
+                                func.instruction(&Instruction::I32Const(alloc_align as i32));
+                                func.instruction(&Instruction::I32Const(0));
+                                let realloc_idx = builder.func_idx("realloc");
+                                func.instruction(&Instruction::Call(realloc_idx));
+                                func.instruction(&Instruction::Drop);
+                                func.instruction(&Instruction::LocalGet(temp));
+                                func.instruction(&Instruction::RefCastNullable(
+                                    HeapType::Concrete(base_type_idx),
+                                ));
+                            }
                         }
 
                         return;
@@ -11548,6 +11586,22 @@ impl Codegen<'_> {
             self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
         }
 
+        // Pre-allocate anyref temp local for CM outptr deallocation.
+        // When a function uses __cm_outptr, it needs a temp to hold the GC result
+        // while freeing the linear memory outptr.
+        if func_ctx.get_local("__cm_outptr").is_some() {
+            func_ctx.alloc_local(
+                "__cm_result_temp",
+                ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Abstract {
+                        shared: false,
+                        ty: AbstractHeapType::Any,
+                    },
+                }),
+            );
+        }
+
         // Generate the function code
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
 
@@ -11631,6 +11685,20 @@ impl Codegen<'_> {
             && let Some(body) = &tir_func.body
         {
             self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
+        }
+
+        // Pre-allocate anyref temp local for CM outptr deallocation.
+        if func_ctx.get_local("__cm_outptr").is_some() {
+            func_ctx.alloc_local(
+                "__cm_result_temp",
+                ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Abstract {
+                        shared: false,
+                        ty: AbstractHeapType::Any,
+                    },
+                }),
+            );
         }
 
         let mut wasm_func = Function::new(func_ctx.get_local_decls());
@@ -12329,12 +12397,12 @@ impl Codegen<'_> {
         }
 
         // Handle result conversion
-        if let Some(ref converter) = conv.result_converter {
+        if let Some(converter) = conv.result_converter {
             let outptr_local = ctx.get_local("__cm_outptr").expect(
                 "__cm_outptr should be pre-allocated for functions with CM complex returns",
             );
             func.instruction(&Instruction::LocalGet(outptr_local));
-            let conv_idx = builder.func_idx(converter);
+            let conv_idx = builder.func_idx(converter.codegen_path());
             func.instruction(&Instruction::Call(conv_idx));
         } else if let Some(ref elements) = conv.tuple_return {
             // Create tuple struct from outptr values
@@ -12404,6 +12472,23 @@ impl Codegen<'_> {
             // Create tuple struct - consumes all values on stack
             if let Some(type_idx) = self.get_tuple_type_idx(&type_ids) {
                 func.instruction(&Instruction::StructNew(type_idx));
+
+                // Free the outptr linear memory
+                if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
+                    let temp = ctx
+                        .get_local("__cm_result_temp")
+                        .expect("__cm_result_temp should be pre-allocated");
+                    func.instruction(&Instruction::LocalSet(temp));
+                    func.instruction(&Instruction::LocalGet(outptr_local));
+                    func.instruction(&Instruction::I32Const(alloc_size as i32));
+                    func.instruction(&Instruction::I32Const(alloc_align as i32));
+                    func.instruction(&Instruction::I32Const(0));
+                    let realloc_idx = builder.func_idx("realloc");
+                    func.instruction(&Instruction::Call(realloc_idx));
+                    func.instruction(&Instruction::Drop);
+                    func.instruction(&Instruction::LocalGet(temp));
+                    func.instruction(&Instruction::RefCastNullable(HeapType::Concrete(type_idx)));
+                }
             } else {
                 panic!("tuple type {type_ids:?} not registered for CM return conversion");
             }
@@ -12530,7 +12615,7 @@ impl Codegen<'_> {
                 heap_type: HeapType::Concrete(base_type_idx),
             });
 
-            if conv.outptr_alloc.is_some() {
+            if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
                 // Result with outptr: discriminant and payload are in linear memory
                 let outptr_local = ctx
                     .get_local("__cm_outptr")
@@ -12636,6 +12721,23 @@ impl Codegen<'_> {
                 func.instruction(&Instruction::StructNew(ok_type_idx));
 
                 func.instruction(&Instruction::End);
+
+                // Free the outptr linear memory
+                let temp = ctx
+                    .get_local("__cm_result_temp")
+                    .expect("__cm_result_temp should be pre-allocated");
+                func.instruction(&Instruction::LocalSet(temp));
+                func.instruction(&Instruction::LocalGet(outptr_local));
+                func.instruction(&Instruction::I32Const(alloc_size as i32));
+                func.instruction(&Instruction::I32Const(alloc_align as i32));
+                func.instruction(&Instruction::I32Const(0));
+                let realloc_idx = builder.func_idx("realloc");
+                func.instruction(&Instruction::Call(realloc_idx));
+                func.instruction(&Instruction::Drop);
+                func.instruction(&Instruction::LocalGet(temp));
+                func.instruction(&Instruction::RefCastNullable(HeapType::Concrete(
+                    base_type_idx,
+                )));
             } else {
                 // Result without outptr (e.g., Result<(), ()>): discriminant returned directly
                 // on the stack as i32 (0 = Ok, non-zero = Err)
@@ -12655,13 +12757,13 @@ impl Codegen<'_> {
 
                 func.instruction(&Instruction::End);
             }
-        } else if let Some(ref converter) = conv.result_converter {
+        } else if let Some(converter) = conv.result_converter {
             // Complex return with converter function (e.g., list<string> -> Array<String>)
             let outptr_local = ctx.get_local("__cm_outptr").expect(
                 "__cm_outptr should be pre-allocated for functions with CM complex returns",
             );
             func.instruction(&Instruction::LocalGet(outptr_local));
-            let conv_idx = builder.func_idx(converter);
+            let conv_idx = builder.func_idx(converter.codegen_path());
             func.instruction(&Instruction::Call(conv_idx));
         }
         // If no conversion needed, the raw return value (bool, resource handle) stays on stack

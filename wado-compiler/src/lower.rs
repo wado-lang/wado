@@ -2052,6 +2052,7 @@ fn lower_global_initializers(module: &mut TirModule) {
         indirect_call_counts: IndexMap::new(),
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
+        is_cm_adapter: false,
         cm_export_info: None,
     };
 
@@ -2379,6 +2380,7 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         indirect_call_counts: IndexMap::new(),
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
+        is_cm_adapter: false,
         cm_export_info: None,
     };
 
@@ -4263,6 +4265,7 @@ impl ClosureLowerer {
                 indirect_call_counts: IndexMap::new(),
                 match_scrutinee_types: Vec::new(),
                 let_pattern_types: Vec::new(),
+                is_cm_adapter: false,
                 cm_export_info: None,
             };
 
@@ -5841,6 +5844,7 @@ impl ClosureLowerer {
             indirect_call_counts: callee.indirect_call_counts.clone(),
             match_scrutinee_types: callee.match_scrutinee_types.clone(),
             let_pattern_types: callee.let_pattern_types.clone(),
+            is_cm_adapter: false,
             cm_export_info: None,
         };
 
@@ -8839,6 +8843,7 @@ fn make_synthetic_method(
         indirect_call_counts: IndexMap::new(),
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
+        is_cm_adapter: false,
         cm_export_info: None,
     }
 }

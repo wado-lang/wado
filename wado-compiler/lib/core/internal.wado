@@ -105,7 +105,18 @@ pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
         let arr = memory_to_gc_array(str_ptr, str_len);
 
         result.append(String::internal_from_utf8_raw(arr, str_len));
+
+        // Free this string's linear memory
+        builtin::realloc(str_ptr, str_len, 1, 0);
     }
+
+    // Free the list element array (count * 8 bytes, each element is ptr+len pair)
+    if count > 0 {
+        builtin::realloc(base_ptr, count * 8, 4, 0);
+    }
+
+    // Free the outptr itself (8 bytes: base_ptr + count)
+    builtin::realloc(outptr, 8, 4, 0);
 
     return result;
 }
@@ -119,7 +130,8 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
     let discriminant = builtin::i32_load8_u(outptr);
 
     if discriminant == 0 {
-        // None
+        // None - free outptr and return
+        builtin::realloc(outptr, 12, 4, 0);
         return null;
     }
 
@@ -127,8 +139,14 @@ pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
     let str_ptr = builtin::i32_load(outptr + 4);
     let str_len = builtin::i32_load(outptr + 8);
     let arr = memory_to_gc_array(str_ptr, str_len);
+    let result = String::internal_from_utf8_raw(arr, str_len);
 
-    return String::internal_from_utf8_raw(arr, str_len);
+    // Free the string's linear memory
+    builtin::realloc(str_ptr, str_len, 1, 0);
+    // Free the outptr itself (12 bytes: discriminant + str_ptr + str_len)
+    builtin::realloc(outptr, 12, 4, 0);
+
+    return result;
 }
 
 /// Convert a Component Model option<own<resource>> to a GC Option<i32>
@@ -139,10 +157,16 @@ pub fn cm_option_own_resource_to_option(outptr: i32) -> Option<i32> {
     let discriminant = builtin::i32_load8_u(outptr);
 
     if discriminant == 0 {
+        // Free the outptr (8 bytes: discriminant + handle)
+        builtin::realloc(outptr, 8, 4, 0);
         return null;
     }
 
     let handle = builtin::i32_load(outptr + 4);
+
+    // Free the outptr (8 bytes: discriminant + handle)
+    builtin::realloc(outptr, 8, 4, 0);
+
     return Option::<i32>::Some(handle);
 }
 pub fn panic(message: String) -> ! {
@@ -213,7 +237,19 @@ pub fn cm_list_tuple_string_string_to_array(outptr: i32) -> Array<[String, Strin
         let arr2 = memory_to_gc_array(str2_ptr, str2_len);
 
         result.append([String::internal_from_utf8_raw(arr1, str1_len), String::internal_from_utf8_raw(arr2, str2_len)]);
+
+        // Free both strings' linear memory
+        builtin::realloc(str1_ptr, str1_len, 1, 0);
+        builtin::realloc(str2_ptr, str2_len, 1, 0);
     }
+
+    // Free the list element array (count * 16 bytes per tuple)
+    if count > 0 {
+        builtin::realloc(base_ptr, count * 16, 4, 0);
+    }
+
+    // Free the outptr itself (8 bytes: base_ptr + count)
+    builtin::realloc(outptr, 8, 4, 0);
 
     return result;
 }

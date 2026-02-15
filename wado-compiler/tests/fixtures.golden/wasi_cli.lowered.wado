@@ -12,30 +12,38 @@
 fn run() with Stdout, Stderr, Environment {
     core::cli::println(move "test: stdout works");
     core::cli::eprintln(move "test: stderr works");
-    let arguments: Array<String> = move Environment::get_arguments();
+    let arguments: Array<String> = __inline___cm_adapter__Environment_get_arguments_0: {
+        let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+        cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
+        break __inline___cm_adapter__Environment_get_arguments_0: core::internal::cm_list_string_to_array(__outptr);
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(57), used: 0 };
         __r.String::append(move "test: Environment::get_arguments().len = ");
-        let mut __f: Formatter = __inline_Formatter__new_1: {
+        let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_2: {
+        __inline_i32_Display__fmt_3: {
             let self: Box<i32> = move Box<i32> { value: arguments.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let env_vars: Array<[String, String]> = move Environment::get_environment();
+    let env_vars: Array<[String, String]> = __inline___cm_adapter__Environment_get_environment_5: {
+        let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+        cm_raw_call wasi:cli/Environment::get_environment(__outptr);
+        break __inline___cm_adapter__Environment_get_environment_5: core::internal::cm_list_tuple_string_string_to_array(__outptr);
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(59), used: 0 };
         __r.String::append(move "test: Environment::get_environment().len = ");
-        let mut __f: Formatter = __inline_Formatter__new_5: {
+        let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_6: {
+        __inline_i32_Display__fmt_8: {
             let self: Box<i32> = move Box<i32> { value: env_vars.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

@@ -469,58 +469,62 @@ pub async fn dump_with_host<H: CompilerHost>(
     // TIR modules already use ModuleSource keys
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> = tir_modules.clone();
 
-    // === Phase 8: Monomorphize all modules ===
-    // Use monomorphize_modules_indexed for cross-module generic function support
-    let monomorphized_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> = {
-        let _span = logger.span("monomorphize");
-        tir_modules_by_source
-            .clone()
-            .map(monomorphize_modules_indexed)
-    };
+    // === Phase 7b+8+9+10: Build Project and run remaining phases ===
+    // Create Project early so CM adapter synthesis runs before monomorphize,
+    // matching the compile_with_options pipeline.
+    let (monomorphized_tir_modules_by_source, lowered_tir_modules_by_source, optimized_project) =
+        if let Some(resolved_modules) = tir_modules_by_source.clone() {
+            let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-    // === Phase 9: Lower all modules ===
-    // Apply string literal collection to monomorphized modules
-    let entry_source = &load_result.entry_module_source;
-    let lowered_tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> = {
-        let _span = logger.span("lower");
-        monomorphized_tir_modules_by_source
-            .clone()
-            .map(|m| lower_modules_indexed(m, entry_source))
-    };
+            let (wasi_registry, world_registry) =
+                component_model::WasiRegistry::build_from_stdlib();
 
-    // === Phase 10: Optimize ===
-    // Build a Project from lowered modules if available
-    let optimized_project = {
-        let _span = logger.span("optimize");
-        lowered_tir_modules_by_source
-            .clone()
-            .and_then(|modules_by_source| {
-                let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
+            let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
+            let builtin_registry =
+                builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-                let implicit_modules_by_source = load_result.implicit_modules.clone();
+            let project = Project::new(
+                load_result.entry_module_source.clone(),
+                resolved_modules,
+                symbols.clone(),
+                load_result.implicit_modules.clone(),
+                module_name,
+                wasi_registry,
+                world_registry,
+                builtin_registry,
+            );
 
-                let (wasi_registry, world_registry) =
-                    component_model::WasiRegistry::build_from_stdlib();
+            // CM Adapter Synthesis (must run before monomorphize)
+            let project = {
+                let _span = logger.span("cm-adapter-gen");
+                cm_adapter_gen::generate_adapters(project)
+            };
 
-                // Build builtin registry (uses a temporary type table for type resolution)
-                let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
-                let builtin_registry =
-                    builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
+            // Monomorphize
+            let project = {
+                let _span = logger.span("monomorphize");
+                monomorphize_project(project)
+            };
+            let mono_snapshot = Some(project.tir_modules.clone());
 
-                let project = Project::new(
-                    load_result.entry_module_source.clone(),
-                    modules_by_source,
-                    symbols.clone(),
-                    implicit_modules_by_source,
-                    module_name,
-                    wasi_registry,
-                    world_registry,
-                    builtin_registry,
-                );
-                let project = optimize(project, opt_level);
-                wasm_plan(project).ok()
-            })
-    };
+            // Lower
+            let project = {
+                let _span = logger.span("lower");
+                lower_project(project)
+            };
+            let lower_snapshot = Some(project.tir_modules.clone());
+
+            // Optimize
+            let project = {
+                let _span = logger.span("optimize");
+                optimize(project, opt_level)
+            };
+            let optimized = wasm_plan(project).ok();
+
+            (mono_snapshot, lower_snapshot, optimized)
+        } else {
+            (None, None, None)
+        };
 
     Ok(DumpResult {
         source: source.to_string(),

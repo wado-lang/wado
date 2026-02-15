@@ -1498,6 +1498,53 @@ impl CmPrimitiveType {
     }
 }
 
+/// Types of CM converters that lift linear memory values to GC types.
+///
+/// Each variant corresponds to a function in `core/internal` that handles
+/// a specific Component Model return type pattern.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CmConverterKind {
+    /// `cm_list_string_to_array` — lifts `list<string>` to `Array<String>`
+    ListString,
+    /// `cm_list_u8_to_array` — lifts `list<u8>` to `Array<u8>`
+    ListU8,
+    /// `cm_list_tuple_string_string_to_array` — lifts `list<tuple<string, string>>` to `Array<[String, String]>`
+    ListTupleString,
+    /// `cm_option_string_to_option` — lifts `option<string>` to `Option<String>`
+    OptionString,
+    /// `cm_option_own_resource_to_option` — lifts `option<own<resource>>` to `Option<i32>`
+    OptionOwnResource,
+}
+
+impl CmConverterKind {
+    /// Function name in `core/internal` (e.g., `"cm_list_string_to_array"`).
+    pub fn func_name(self) -> &'static str {
+        match self {
+            Self::ListString => "cm_list_string_to_array",
+            Self::ListU8 => "cm_list_u8_to_array",
+            Self::ListTupleString => "cm_list_tuple_string_string_to_array",
+            Self::OptionString => "cm_option_string_to_option",
+            Self::OptionOwnResource => "cm_option_own_resource_to_option",
+        }
+    }
+
+    /// Full codegen path used by `WasmBuilder::func_idx` for function lookup.
+    pub fn codegen_path(self) -> &'static str {
+        match self {
+            Self::ListString => "core/internal/cm_list_string_to_array",
+            Self::ListU8 => "core/internal/cm_list_u8_to_array",
+            Self::ListTupleString => "core/internal/cm_list_tuple_string_string_to_array",
+            Self::OptionString => "core/internal/cm_option_string_to_option",
+            Self::OptionOwnResource => "core/internal/cm_option_own_resource_to_option",
+        }
+    }
+
+    /// Module source for TIR construction (all converters live in `core/internal`).
+    pub fn module_source(self) -> crate::name::ModuleSource {
+        crate::name::ModuleSource::core("internal")
+    }
+}
+
 /// Component Model ABI call convention
 ///
 /// Describes how to call a CM function and handle its return value.
@@ -1515,8 +1562,7 @@ pub struct CmCallConvention {
     /// If Some, allocate outptr before call: (`size_bytes`, `align_bytes`)
     pub outptr_alloc: Option<(u32, u32)>,
     /// Conversion function to call after the call (if any)
-    /// Full path like "`core/internal/cm_list_string_to_array`"
-    pub result_converter: Option<String>,
+    pub result_converter: Option<CmConverterKind>,
     /// For tuple returns: element types for struct creation
     pub tuple_return: Option<Vec<CmPrimitiveType>>,
     /// For result<T, E> returns: `Some((ok_is_resource`, `err_is_enum`))
@@ -1587,16 +1633,12 @@ impl CmCallConvention {
         // list<T> uses outptr (8 bytes: ptr + count, align 4)
         // Needs memory + realloc for lowering
         let converter = match element_type {
-            Type::Named(named) if named.name == "String" => {
-                Some("core/internal/cm_list_string_to_array".to_string())
-            }
-            Type::Named(named) if named.name == "u8" => {
-                Some("core/internal/cm_list_u8_to_array".to_string())
-            }
+            Type::Named(named) if named.name == "String" => Some(CmConverterKind::ListString),
+            Type::Named(named) if named.name == "u8" => Some(CmConverterKind::ListU8),
             // list<tuple<string, string>> for Environment::get_environment
             Type::Tuple(elems) if elems.len() == 2 => {
                 if Self::is_string_type(&elems[0]) && Self::is_string_type(&elems[1]) {
-                    Some("core/internal/cm_list_tuple_string_string_to_array".to_string())
+                    Some(CmConverterKind::ListTupleString)
                 } else {
                     None
                 }
@@ -1604,7 +1646,7 @@ impl CmCallConvention {
             // Tuple<String, String> syntax
             Type::Generic(g) if g.name == "Tuple" && g.args.len() == 2 => {
                 if Self::is_string_type(&g.args[0]) && Self::is_string_type(&g.args[1]) {
-                    Some("core/internal/cm_list_tuple_string_string_to_array".to_string())
+                    Some(CmConverterKind::ListTupleString)
                 } else {
                     None
                 }
@@ -1632,7 +1674,7 @@ impl CmCallConvention {
                 needs_memory: true,
                 needs_realloc: true,
                 outptr_alloc: Some((12, 4)),
-                result_converter: Some("core/internal/cm_option_string_to_option".to_string()),
+                result_converter: Some(CmConverterKind::OptionString),
                 tuple_return: None,
                 result_return: None,
             },
@@ -1645,9 +1687,7 @@ impl CmCallConvention {
                 needs_memory: true,
                 needs_realloc: true,
                 outptr_alloc: Some((8, 4)),
-                result_converter: Some(
-                    "core/internal/cm_option_own_resource_to_option".to_string(),
-                ),
+                result_converter: Some(CmConverterKind::OptionOwnResource),
                 tuple_return: None,
                 result_return: None,
             },
@@ -1665,9 +1705,7 @@ impl CmCallConvention {
                             needs_memory: true,
                             needs_realloc: true,
                             outptr_alloc: Some((8, 4)),
-                            result_converter: Some(
-                                "core/internal/cm_option_own_resource_to_option".to_string(),
-                            ),
+                            result_converter: Some(CmConverterKind::OptionOwnResource),
                             tuple_return: None,
                             result_return: None,
                         };
@@ -2020,10 +2058,7 @@ mod tests {
                 span: make_span(),
             })));
         assert_eq!(conv.outptr_alloc, Some((8, 4)));
-        assert_eq!(
-            conv.result_converter,
-            Some("core/internal/cm_list_string_to_array".to_string())
-        );
+        assert_eq!(conv.result_converter, Some(CmConverterKind::ListString));
         assert!(conv.needs_memory);
         assert!(conv.needs_realloc);
 

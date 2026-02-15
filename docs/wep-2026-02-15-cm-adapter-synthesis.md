@@ -409,7 +409,7 @@ New code (actual for Phases 1–2, estimated for Phases 3–4):
 | Module                    | Purpose                          | Lines |
 | ------------------------- | -------------------------------- | ----- |
 | cm_abi.rs                 | Canonical ABI layout computation | 719   |
-| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 678   |
+| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 1664  |
 | builtin.wado additions    | Memory load/store builtins       | ~50   |
 | CmRawCall visitor changes | Match arms across 14 files       | ~160  |
 | Total added               |                                  | ~1600 |
@@ -438,14 +438,19 @@ Net line change will depend on how much codegen/component_model CM logic is dele
 Migrate one WASI interface at a time, validating via existing E2E tests.
 
 - [x] Add `TirExprKind::CmRawCall { local_name, args }` variant to TIR and handle in all 14 visitor/transform files (codegen, lower, monomorphize, effect_check, unparse, and all optimizer passes).
-- [x] Create `cm_adapter_gen.rs` scaffolding (678 lines): the phase entry point (`generate_adapters`), TIR function synthesis helpers (`builtin_call`, `internal_call`, `i32_const`, `i64_const`, `local_ref`, `binary`, `cast`, `let_stmt`, `expr_stmt`, `return_stmt`, `cm_raw_call`), effect call collector. 19 unit tests.
+- [x] Create `cm_adapter_gen.rs` (1664 lines): the phase entry point (`generate_adapters`), TIR function synthesis helpers, effect call collector/rewriter, type fixup, adapter synthesis for all convention types. 19 unit tests.
 - [x] Wire `cm_adapter_gen` into pipeline between `effect_check` and `monomorphize` (currently no-op scaffolding that scans effect calls without transforming).
 - [x] Implement `synthesize_lift` and `synthesize_lower` for primitives (i32, i64, f32, f64, bool, char, i8/u8, i16/u16).
-- [x] Implement `synthesize_lift` for String (via `memory_to_gc_string`). `synthesize_lower` for String not yet implemented (needs `cm_lower_string` integration).
-- [ ] Implement `synthesize_lower` for String.
-- [ ] Migrate `wasi:cli/Stdout` and `wasi:cli/Stderr` (simplest: void return, String param). Validate with E2E tests.
+- [x] Implement `synthesize_lift` for String (via `memory_to_gc_string`).
+- [x] Implement `synthesize_lower` for String (via `cm_lower_string` packed i64).
+- [x] Migrate `wasi:cli/Stdout` and `wasi:cli/Stderr` (async: void return, String param). Adapter synthesizes param lowering + `CmRawCall` + subtask wait. Validated with all 3415 E2E tests.
+- [x] Migrate `wasi:cli/Environment` (returns `list<tuple<string, string>>`). Adapter delegates to `result_converter` function. Replaces `cm_list_tuple_string_string_to_array` usage via adapter path.
+- [x] Migrate `wasi:cli/Exit` (simple i32 param, void return). Adapter works for both `Call` and `EffectCall` TIR node types.
+- [x] Migrate `wasi:random/InsecureSeed` (tuple return: `[u64, u64]`). Adapter loads each element from outptr using `load_cm_primitive`.
+- [x] Handle both `TirExprKind::EffectCall` and `TirExprKind::Call` nodes in effect call collection and rewriting. Async WASI calls use `EffectCall`, sync calls like `Environment::get_arguments` use `Call`.
+- [x] Fix DCE integration: adapter module remapping (`ADAPTER_PREFIX` check in `optimize_dce.rs`) and `CmRawCall` WASI function tracking.
+- [x] Implement type fixup during call rewriting: adapter placeholder `TypeId`s are corrected from actual call site types.
 - [ ] Implement `synthesize_lift` and `synthesize_lower` for `list<T>`, `option<T>`, `result<T, E>`.
-- [ ] Migrate `wasi:cli/Environment` (returns `list<tuple<string, string>>`). This replaces `cm_list_tuple_string_string_to_array`.
 - [ ] Migrate `wasi:http/types` resource methods. This replaces `generate_cm_resource_method_call`.
 - [ ] Migrate remaining WASI interfaces.
 - [ ] Delete `CmCallConvention` and per-type converters in `internal.wado`.
@@ -486,6 +491,16 @@ Discovered during implementation:
 - `module_source()` returns `ModuleSource` directly, not `Option<ModuleSource>`.
 
 These are documented here to help future TIR-synthesizing phases avoid the same issues.
+
+### Call rewriting gotchas
+
+Discovered during Phase 2:
+
+- **EffectCall vs Call**: Async WASI calls (`Stdout::write_via_stream`, `Stderr::write_via_stream`) are stored as `TirExprKind::EffectCall`, while sync calls (`Environment::get_arguments`, `Exit::exit`) are `TirExprKind::Call` with an effect-like `ModuleSource`. Both must be collected and rewritten.
+- **DCE module remapping**: DCE remaps entry-module function sources to the caller's module. Adapter functions (in the entry module) must be exempt from this remapping — check for `ADAPTER_PREFIX` in the function name.
+- **DCE CmRawCall tracking**: DCE's `used_wasi_functions` set must be populated from `CmRawCall` nodes inside adapter bodies, not just `EffectCall`/`Call` nodes. Parse `local_name` to extract `(effect_name, op_name)`.
+- **Type fixup**: Adapter functions are created with placeholder `TypeId`s (e.g., `TypeTable::I32`) because the actual Wado types aren't known until call-site rewriting. The rewriter copies `TypeId`s from the call site to the adapter's params, return type, and body return expressions.
+- **Skip-scalarized-wrap**: The `ctx.skip_scalarized_wrap` flag in codegen must be saved/restored around adapter calls to avoid propagating to nested argument expressions.
 
 ### Pipeline position
 

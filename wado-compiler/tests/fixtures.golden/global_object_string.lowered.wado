@@ -11,9 +11,22 @@
 
 global mut MESSAGE: String = null;
 
+global mut __modules_initialized: bool = false;
+
 fn run() with Stdout {
+    __initialize_modules();
     core::cli::println(MESSAGE);
     MESSAGE = "Updated!";
     core::cli::println(MESSAGE);
+}
+
+fn __initialize_modules() {
+    if __modules_initialized {
+        return;
+    }
+    __inline___initialize_module_0: {
+        MESSAGE = "Hello, World!";
+    };
+    __modules_initialized = true;
 }
 

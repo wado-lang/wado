@@ -15,7 +15,10 @@
 
 global mut ITEMS: Array<i32> = null;
 
+global mut __modules_initialized: bool = false;
+
 fn run() with Stdout {
+    __initialize_modules();
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(20), used: 0 };
         __r.String::append(move "len=");
@@ -88,5 +91,15 @@ fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<i32>(self.repr, index);
+}
+
+fn __initialize_modules() {
+    if __modules_initialized {
+        return;
+    }
+    __inline___initialize_module_0: {
+        ITEMS = [1, 2, 3];
+    };
+    __modules_initialized = true;
 }
 

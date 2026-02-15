@@ -10,7 +10,7 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout, MonotonicClock {
-    let res: Duration = MonotonicClock::get_resolution();
+    let res: Duration = cm_raw_call wasi:clocks/MonotonicClock::get_resolution();
     if (res > 0) {
         core::cli::println(move "resolution is positive");
     } else {
