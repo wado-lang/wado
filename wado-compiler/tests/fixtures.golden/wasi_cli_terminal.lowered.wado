@@ -14,7 +14,7 @@
 // wasi::waitable-set-wait (waitable_set_wait)
 
 fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
-    let stdin_terminal: Option<i32> = __cm_adapter__TerminalStdin_get_terminal_stdin();
+    let stdin_terminal: Option<i32> = TerminalStdin::get_terminal_stdin();
     __assert_0: {
         let __cond: bool = match stdin_terminal {
             None => true,
@@ -44,7 +44,7 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
             });
         }
     }
-    let stdout_terminal: Option<i32> = __cm_adapter__TerminalStdout_get_terminal_stdout();
+    let stdout_terminal: Option<i32> = TerminalStdout::get_terminal_stdout();
     __assert_1: {
         let __cond: bool = match stdout_terminal {
             None => true,
@@ -74,7 +74,7 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
             });
         }
     }
-    let stderr_terminal: Option<i32> = __cm_adapter__TerminalStderr_get_terminal_stderr();
+    let stderr_terminal: Option<i32> = TerminalStderr::get_terminal_stderr();
     __assert_2: {
         let __cond: bool = match stderr_terminal {
             None => true,
@@ -105,27 +105,5 @@ fn run() with Stdout, TerminalStdin, TerminalStdout, TerminalStderr {
         }
     }
     core::cli::println(move "all terminal tests passed");
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data: i32) {
-    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
-}
-
-fn __cm_adapter__TerminalStdin_get_terminal_stdin() -> Option<i32> {
-    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    cm_raw_call wasi:cli/TerminalStdin::get_terminal_stdin(__outptr);
-    return core::internal::cm_option_own_resource_to_option(__outptr);
-}
-
-fn __cm_adapter__TerminalStdout_get_terminal_stdout() -> Option<i32> {
-    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    cm_raw_call wasi:cli/TerminalStdout::get_terminal_stdout(__outptr);
-    return core::internal::cm_option_own_resource_to_option(__outptr);
-}
-
-fn __cm_adapter__TerminalStderr_get_terminal_stderr() -> Option<i32> {
-    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    cm_raw_call wasi:cli/TerminalStderr::get_terminal_stderr(__outptr);
-    return core::internal::cm_option_own_resource_to_option(__outptr);
 }
 

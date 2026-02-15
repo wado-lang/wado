@@ -56,10 +56,6 @@ fn run() with Stdout {
     });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data: i32) {
-    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
-}
-
 fn "Container<i32>::transform"(self: &Container<i32>, f: fn(Box<i32>) -> i32) -> i32 {
     return f(move Box<i32> { value: self.value });
 }

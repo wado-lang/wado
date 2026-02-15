@@ -499,10 +499,6 @@ fn run() with Stdout {
     core::cli::println(move "collect tests passed");
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data: i32) {
-    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
-}
-
 fn "Array<char>^IndexValue::index_value"(self: &Array<char>, index: i32) -> char {
     if (index >= self.used) {
         core::internal::panic(move "index out of bounds");

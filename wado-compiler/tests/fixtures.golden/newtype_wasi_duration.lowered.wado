@@ -10,7 +10,7 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout, MonotonicClock {
-    let res: Duration = __cm_adapter__MonotonicClock_get_resolution();
+    let res: Duration = MonotonicClock::get_resolution();
     if (res > 0) {
         core::cli::println(move "resolution is positive");
     } else {
@@ -25,13 +25,5 @@ fn run() with Stdout, MonotonicClock {
         core::cli::println(move "cast to u64 works");
     }
     core::cli::println(move "duration tests passed");
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data: i32) {
-    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
-}
-
-fn __cm_adapter__MonotonicClock_get_resolution() -> Duration {
-    return cm_raw_call wasi:clocks/MonotonicClock::get_resolution();
 }
 

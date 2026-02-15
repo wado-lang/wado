@@ -382,10 +382,6 @@ fn run() with Stdout {
     core::cli::println(move "clear: ok");
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data: i32) {
-    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
-}
-
 fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) -> i32 {
     let mut current: Option<&mut TreeMapNode<String>> = self.root;
     let _licm_entries: Array<TreeMapEntry<String,i32>> = self.entries;

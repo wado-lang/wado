@@ -28,10 +28,6 @@ fn run() with Stdout {
     core::cli::println(result);
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data: i32) {
-    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
-}
-
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
         core::internal::panic(move "index out of bounds");

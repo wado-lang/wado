@@ -2309,25 +2309,14 @@ fn collect_effect_calls_in_expr(
     wasi_registry: &crate::component_model::WasiRegistry,
 ) {
     match &expr.kind {
-        TirExprKind::Call { func, args, .. } => {
-            let module_source = func.module_source();
-            if module_source.is_effect_like()
-                && let Some(effect_name) = module_source.effect_name()
-            {
-                let method_name = func.name();
-                effects.insert(format!("{effect_name}::{method_name}"));
-            }
+        TirExprKind::Call { args, .. } => {
+            // Regular effect calls (Call/EffectCall) are handled by codegen directly.
+            // Only resource MethodCalls need adapter synthesis (handled below).
             for arg in args {
                 collect_effect_calls_in_expr(arg, effects, wasi_registry);
             }
         }
-        TirExprKind::EffectCall {
-            effect_name,
-            op_name,
-            args,
-            ..
-        } => {
-            effects.insert(format!("{effect_name}::{op_name}"));
+        TirExprKind::EffectCall { args, .. } => {
             for arg in args {
                 collect_effect_calls_in_expr(arg, effects, wasi_registry);
             }
