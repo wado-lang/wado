@@ -193,49 +193,49 @@ The adapter functions use builtins to perform low-level operations. Some already
 
 #### Existing (in builtin.wado / internal.wado)
 
-| Function | Purpose |
-| --- | --- |
-| `builtin::realloc` | Allocate linear memory |
-| `builtin::memory_load32` | Read i32 from linear memory |
-| `builtin::memory_store8` | Write byte to linear memory |
-| `builtin::memory_load8_u` | Read byte from linear memory |
-| `internal::cm_lower_string` | Lower String to (ptr, len) packed as i64 |
-| `internal::cm_lower_list_u8` | Lower Array\<u8\> to (ptr, len) |
+| Function                       | Purpose                                   |
+| ------------------------------ | ----------------------------------------- |
+| `builtin::realloc`             | Allocate linear memory                    |
+| `builtin::memory_load32`       | Read i32 from linear memory               |
+| `builtin::memory_store8`       | Write byte to linear memory               |
+| `builtin::memory_load8_u`      | Read byte from linear memory              |
+| `internal::cm_lower_string`    | Lower String to (ptr, len) packed as i64  |
+| `internal::cm_lower_list_u8`   | Lower Array\<u8\> to (ptr, len)           |
 | `internal::memory_to_gc_array` | Copy bytes from linear memory to GC array |
 | `internal::gc_array_to_memory` | Copy bytes from GC array to linear memory |
-| `internal::wait_for_subtask` | Wait for async subtask completion |
+| `internal::wait_for_subtask`   | Wait for async subtask completion         |
 
 #### internal.wado scope
 
 `internal.wado` provides CM helper functions only for types where lowering/lifting involves real work (allocation, memory copy). Scalar types (i32, i64, f32, f64, etc.) are lowered/lifted inline by the synthesizer using `builtin::i32_load` / `builtin::i32_store` directly — wrapping these in `internal::cm_lower_i32()` etc. would be trivial identity functions with no benefit.
 
-| Type | Lowering | Lifting | Provider |
-| --- | --- | --- | --- |
-| i32, i64, f32, f64 | identity (flat param) / `builtin::*_store` (memory) | `builtin::*_load` | synthesizer inline |
-| bool | `value as i32` | `i32_load8_u(addr) != 0` | synthesizer inline |
-| char | `value as i32` | `char::from_u32_unchecked` | synthesizer inline |
-| String | alloc + copy → `(ptr, len)` | copy from linear memory → GC string | `internal::cm_lower_string`, `internal::memory_to_gc_string` |
-| Array\<u8\> | alloc + copy → `(ptr, len)` | copy from linear memory → GC array | `internal::cm_lower_array_u8`, `internal::memory_to_gc_array` |
-| list\<T\>, option\<T\>, result\<T, E\>, record, variant | recursive | recursive | synthesizer generates TIR (calls leaf helpers above) |
+| Type                                                    | Lowering                                            | Lifting                             | Provider                                                      |
+| ------------------------------------------------------- | --------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------- |
+| i32, i64, f32, f64                                      | identity (flat param) / `builtin::*_store` (memory) | `builtin::*_load`                   | synthesizer inline                                            |
+| bool                                                    | `value as i32`                                      | `i32_load8_u(addr) != 0`            | synthesizer inline                                            |
+| char                                                    | `value as i32`                                      | `char::from_u32_unchecked`          | synthesizer inline                                            |
+| String                                                  | alloc + copy → `(ptr, len)`                         | copy from linear memory → GC string | `internal::cm_lower_string`, `internal::memory_to_gc_string`  |
+| Array\<u8\>                                             | alloc + copy → `(ptr, len)`                         | copy from linear memory → GC array  | `internal::cm_lower_array_u8`, `internal::memory_to_gc_array` |
+| list\<T\>, option\<T\>, result\<T, E\>, record, variant | recursive                                           | recursive                           | synthesizer generates TIR (calls leaf helpers above)          |
 
 Per-type converter functions (e.g., `cm_list_string_to_array`, `cm_option_string_to_option`) will be deleted once the synthesizer handles their types generically.
 
 #### New builtins to add
 
-| Function | Wasm instruction | Purpose |
-| --- | --- | --- |
-| `builtin::i32_load` | `i32.load` | Read i32 from linear memory at offset |
-| `builtin::i32_store` | `i32.store` | Write i32 to linear memory at offset |
-| `builtin::i64_load` | `i64.load` | Read i64 from linear memory at offset |
-| `builtin::i64_store` | `i64.store` | Write i64 to linear memory at offset |
-| `builtin::f32_load` | `f32.load` | Read f32 from linear memory at offset |
-| `builtin::f32_store` | `f32.store` | Write f32 to linear memory at offset |
-| `builtin::f64_load` | `f64.load` | Read f64 from linear memory at offset |
-| `builtin::f64_store` | `f64.store` | Write f64 to linear memory at offset |
-| `builtin::i32_load8_u` | `i32.load8_u` | Read byte from linear memory (zero-extended) |
-| `builtin::i32_load16_u` | `i32.load16_u` | Read u16 from linear memory |
-| `builtin::i32_store8` | `i32.store8` | Write byte to linear memory |
-| `builtin::i32_store16` | `i32.store16` | Write u16 to linear memory |
+| Function                | Wasm instruction | Purpose                                      |
+| ----------------------- | ---------------- | -------------------------------------------- |
+| `builtin::i32_load`     | `i32.load`       | Read i32 from linear memory at offset        |
+| `builtin::i32_store`    | `i32.store`      | Write i32 to linear memory at offset         |
+| `builtin::i64_load`     | `i64.load`       | Read i64 from linear memory at offset        |
+| `builtin::i64_store`    | `i64.store`      | Write i64 to linear memory at offset         |
+| `builtin::f32_load`     | `f32.load`       | Read f32 from linear memory at offset        |
+| `builtin::f32_store`    | `f32.store`      | Write f32 to linear memory at offset         |
+| `builtin::f64_load`     | `f64.load`       | Read f64 from linear memory at offset        |
+| `builtin::f64_store`    | `f64.store`      | Write f64 to linear memory at offset         |
+| `builtin::i32_load8_u`  | `i32.load8_u`    | Read byte from linear memory (zero-extended) |
+| `builtin::i32_load16_u` | `i32.load16_u`   | Read u16 from linear memory                  |
+| `builtin::i32_store8`   | `i32.store8`     | Write byte to linear memory                  |
+| `builtin::i32_store16`  | `i32.store16`    | Write u16 to linear memory                   |
 
 Note: `builtin::memory_load32` already exists but should be aliased to `builtin::i32_load` for consistency. The naming convention `builtin::i32_load` matches the Wasm instruction name.
 
@@ -391,28 +391,28 @@ This replaces the ad-hoc size/align constants scattered throughout `CmCallConven
 
 After cm_adapter_gen is complete:
 
-| Location | Code | Lines | Fate |
-| --- | --- | --- | --- |
-| codegen.rs | `generate_cm_effect_call` | ~140 | Deleted — adapter handles CM calls |
-| codegen.rs | `generate_cm_resource_method_call` | ~250 | Deleted — adapter handles resource calls |
-| codegen.rs | `emit_option_string_lowering` | ~40 | Deleted — adapter generates inline |
-| codegen.rs | `emit_field_size_payload_lowering` | ~65 | Deleted — adapter generates inline |
-| codegen.rs | `wado_type_to_cm_val_type` | ~50 | Moved to cm_abi.rs |
-| component_model.rs | `CmCallConvention` + `from_return_type` | ~350 | Deleted — type-driven synthesis replaces pattern matching |
-| internal.wado | `cm_list_string_to_array` | ~20 | Deleted — adapter generates inline |
-| internal.wado | `cm_option_string_to_option` | ~15 | Deleted — adapter generates inline |
-| internal.wado | `cm_option_own_resource_to_option` | ~10 | Deleted — adapter generates inline |
-| internal.wado | `cm_list_tuple_string_string_to_array` | ~25 | Deleted — adapter generates inline |
-| Total removed | | ~965 | |
+| Location           | Code                                    | Lines | Fate                                                      |
+| ------------------ | --------------------------------------- | ----- | --------------------------------------------------------- |
+| codegen.rs         | `generate_cm_effect_call`               | ~140  | Deleted — adapter handles CM calls                        |
+| codegen.rs         | `generate_cm_resource_method_call`      | ~250  | Deleted — adapter handles resource calls                  |
+| codegen.rs         | `emit_option_string_lowering`           | ~40   | Deleted — adapter generates inline                        |
+| codegen.rs         | `emit_field_size_payload_lowering`      | ~65   | Deleted — adapter generates inline                        |
+| codegen.rs         | `wado_type_to_cm_val_type`              | ~50   | Moved to cm_abi.rs                                        |
+| component_model.rs | `CmCallConvention` + `from_return_type` | ~350  | Deleted — type-driven synthesis replaces pattern matching |
+| internal.wado      | `cm_list_string_to_array`               | ~20   | Deleted — adapter generates inline                        |
+| internal.wado      | `cm_option_string_to_option`            | ~15   | Deleted — adapter generates inline                        |
+| internal.wado      | `cm_option_own_resource_to_option`      | ~10   | Deleted — adapter generates inline                        |
+| internal.wado      | `cm_list_tuple_string_string_to_array`  | ~25   | Deleted — adapter generates inline                        |
+| Total removed      |                                         | ~965  |                                                           |
 
 New code:
 
-| Module | Purpose | Lines (est.) |
-| --- | --- | --- |
-| cm_adapter_gen.rs | Type-driven adapter synthesis | ~500 |
-| cm_abi.rs | Canonical ABI layout computation | ~200 |
-| builtin.wado additions | Memory load/store builtins | ~50 |
-| Total added | | ~750 |
+| Module                 | Purpose                          | Lines (est.) |
+| ---------------------- | -------------------------------- | ------------ |
+| cm_adapter_gen.rs      | Type-driven adapter synthesis    | ~500         |
+| cm_abi.rs              | Canonical ABI layout computation | ~200         |
+| builtin.wado additions | Memory load/store builtins       | ~50          |
+| Total added            |                                  | ~750         |
 
 Net: **~215 lines reduction**, plus elimination of the per-type hand-coding pattern.
 

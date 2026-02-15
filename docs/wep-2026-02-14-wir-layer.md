@@ -125,13 +125,13 @@ pub struct WirName {
 
 Examples:
 
-| Entity | `display` | `fq` |
-| ------ | --------- | ---- |
-| Struct Point from entry | `Point` | `<entry>//Point` |
-| Array<i32> from prelude | `Array<i32>` | `core:prelude//Array<i32>` |
-| Method Point::sum | `Point::sum` | `./geometry.wado/Point::sum` |
-| Global counter | `counter` | `<entry>//counter` |
-| Enum Ordering from prelude | `Ordering` | `core:prelude//Ordering` |
+| Entity                     | `display`    | `fq`                         |
+| -------------------------- | ------------ | ---------------------------- |
+| Struct Point from entry    | `Point`      | `<entry>//Point`             |
+| Array<i32> from prelude    | `Array<i32>` | `core:prelude//Array<i32>`   |
+| Method Point::sum          | `Point::sum` | `./geometry.wado/Point::sum` |
+| Global counter             | `counter`    | `<entry>//counter`           |
+| Enum Ordering from prelude | `Ordering`   | `core:prelude//Ordering`     |
 
 `WirName` is used on **definitions** (low frequency):
 
@@ -186,13 +186,13 @@ For both types:
 
 `tir_to_wir` creates name→ID maps during type and function registration. When generating instructions, it embeds the pre-resolved ID. `wir_emit` builds `WirTypeId.index → Wasm type index` and `WirFuncId.index → Wasm func index` tables once, then resolves every reference via O(1) integer indexing.
 
-| Property | `WirName` (definitions) | `WirTypeId` / `WirFuncId` (instructions) |
-| --- | --- | --- |
-| Eq / Hash | O(n) string hash | O(1) integer |
-| Clone | O(n) string copy | O(1) Rc refcount |
-| Debug | shows display name | shows fq name |
-| Stack size | 48 bytes (2× String) | 24 bytes (u32 + Rc\<str\>) |
-| Used in | Type/function definitions | Instructions (high frequency) |
+| Property   | `WirName` (definitions)   | `WirTypeId` / `WirFuncId` (instructions) |
+| ---------- | ------------------------- | ---------------------------------------- |
+| Eq / Hash  | O(n) string hash          | O(1) integer                             |
+| Clone      | O(n) string copy          | O(1) Rc refcount                         |
+| Debug      | shows display name        | shows fq name                            |
+| Stack size | 48 bytes (2× String)      | 24 bytes (u32 + Rc\<str\>)               |
+| Used in    | Type/function definitions | Instructions (high frequency)            |
 
 ### Metadata
 
@@ -761,13 +761,13 @@ pub struct WirComponent {
 
 WIR uses three reference mechanisms depending on frequency and scope:
 
-| Scope | Reference type | Used in | Eq / Hash |
-| ----- | -------------- | ------- | --------- |
-| Types (in instructions) | `WirTypeId` | `StructGet`, `ArrayNew`, `RefCast`, `CallRef`, etc. | O(1) integer |
-| Functions (in instructions) | `WirFuncId` | `Call`, `RefFunc` | O(1) integer |
-| Definitions | `WirName` | `WirStructType.name`, `WirFunction.name`, `WirGlobal.name` | O(n) string |
-| Globals (in instructions) | `WirName` | `GlobalGet`, `GlobalSet` | O(n) string |
-| Local scope | `String` | `LocalGet`, `StructGet.field_name`, labels, case names | N/A |
+| Scope                       | Reference type | Used in                                                    | Eq / Hash    |
+| --------------------------- | -------------- | ---------------------------------------------------------- | ------------ |
+| Types (in instructions)     | `WirTypeId`    | `StructGet`, `ArrayNew`, `RefCast`, `CallRef`, etc.        | O(1) integer |
+| Functions (in instructions) | `WirFuncId`    | `Call`, `RefFunc`                                          | O(1) integer |
+| Definitions                 | `WirName`      | `WirStructType.name`, `WirFunction.name`, `WirGlobal.name` | O(n) string  |
+| Globals (in instructions)   | `WirName`      | `GlobalGet`, `GlobalSet`                                   | O(n) string  |
+| Local scope                 | `String`       | `LocalGet`, `StructGet.field_name`, labels, case names     | N/A          |
 
 Type and function references in instructions use `WirTypeId` / `WirFuncId` because they are high-frequency (every GC instruction and every call). Global variable references use `WirName` because they are comparatively rare. Local-scope names use plain `String` (no module qualification needed).
 
@@ -1067,20 +1067,20 @@ Wasm has only 4 numeric types: `i32`, `i64`, `f32`, `f64`. Wado has `bool`, `cha
 
 WIR keeps the Wado types and lets the emit phase lower them:
 
-| WIR Type      | As Wasm local (ValType) | As struct field (StorageType) |
-| ------------- | ----------------------- | ----------------------------- |
-| Bool          | i32                     | i8                            |
-| Char          | i32                     | i32                           |
-| I8            | i32                     | i8                            |
-| U8            | i32                     | i8                            |
-| I16           | i32                     | i16                           |
-| U16           | i32                     | i16                           |
-| I32, U32      | i32                     | i32                           |
-| I64, U64      | i64                     | i64                           |
-| F32           | f32                     | f32                           |
-| F64           | f64                     | f64                           |
-| Enum { .. }   | i32                     | i32                           |
-| Flags { .. }  | i32                     | i32                           |
+| WIR Type     | As Wasm local (ValType) | As struct field (StorageType) |
+| ------------ | ----------------------- | ----------------------------- |
+| Bool         | i32                     | i8                            |
+| Char         | i32                     | i32                           |
+| I8           | i32                     | i8                            |
+| U8           | i32                     | i8                            |
+| I16          | i32                     | i16                           |
+| U16          | i32                     | i16                           |
+| I32, U32     | i32                     | i32                           |
+| I64, U64     | i64                     | i64                           |
+| F32          | f32                     | f32                           |
+| F64          | f64                     | f64                           |
+| Enum { .. }  | i32                     | i32                           |
+| Flags { .. } | i32                     | i32                           |
 
 This eliminates the `ValType`/`StorageType` split at the WIR level — there is just `WirType`. The emit phase knows the context (local vs. struct field) and picks the right Wasm encoding. It also makes unparse output more readable: `bool` instead of `i32`, `Color` instead of `i32`.
 
