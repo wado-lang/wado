@@ -74,9 +74,7 @@ fn count_expr(expr: &TirExpr) -> usize {
         | TirExprKind::Null => 0,
         // Closure and effect-related expressions
         TirExprKind::Capture { .. } | TirExprKind::EnumConstruct { .. } => 0,
-        TirExprKind::CmRawCall { args, .. } => {
-            args.iter().map(count_expr).sum()
-        }
+        TirExprKind::CmRawCall { args, .. } => args.iter().map(count_expr).sum(),
         TirExprKind::IndirectCall { callee, args } => {
             count_expr(callee) + args.iter().map(count_expr).sum::<usize>()
         }
