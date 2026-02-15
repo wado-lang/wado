@@ -352,7 +352,7 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
                 collect_modified_vars_in_expr(arg, modified);
             }
         }
-        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_modified_vars_in_expr(arg, modified);
             }
@@ -661,7 +661,7 @@ fn collect_licm_ref_bindings_in_expr(
                 collect_licm_ref_bindings_in_expr(arg, type_table, bindings);
             }
         }
-        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_licm_ref_bindings_in_expr(arg, type_table, bindings);
             }
@@ -1087,7 +1087,7 @@ fn find_hoist_candidates_in_expr(
                 );
             }
         }
-        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 find_hoist_candidates_in_expr(
                     arg,
@@ -1500,7 +1500,7 @@ fn replace_hoisted_in_expr(
                 replace_hoisted_in_expr(arg, candidates, ref_bindings);
             }
         }
-        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 replace_hoisted_in_expr(arg, candidates, ref_bindings);
             }

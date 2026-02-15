@@ -1187,11 +1187,6 @@ pub enum TirExprKind {
         type_args: Vec<TypeId>,
         args: Vec<TirExpr>,
     },
-    EffectCall {
-        effect_name: String,
-        op_name: String,
-        args: Vec<TirExpr>,
-    },
     /// Raw Component Model call to a lowered WASI import.
     ///
     /// Used inside synthesized CM adapter functions to call the flat-ABI WASI function

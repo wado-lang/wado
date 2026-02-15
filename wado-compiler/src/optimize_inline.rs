@@ -74,9 +74,7 @@ fn count_expr(expr: &TirExpr) -> usize {
         | TirExprKind::Null => 0,
         // Closure and effect-related expressions
         TirExprKind::Capture { .. } | TirExprKind::EnumConstruct { .. } => 0,
-        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
-            args.iter().map(count_expr).sum()
-        }
+        TirExprKind::CmRawCall { args, .. } => args.iter().map(count_expr).sum(),
         TirExprKind::IndirectCall { callee, args } => {
             count_expr(callee) + args.iter().map(count_expr).sum::<usize>()
         }
@@ -385,7 +383,6 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::Call { args, .. }
         | TirExprKind::MethodCall { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. }
         | TirExprKind::CmRawCall { args, .. } => args
             .iter()
             .any(|a| expr_has_complex_generic_types(a, type_table)),
@@ -658,7 +655,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         TirExprKind::ClosureToCanonical { functor, .. } => {
             collect_callees_from_expr(functor, callees);
         }
-        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_callees_from_expr(arg, callees);
             }
@@ -2174,18 +2171,6 @@ fn remap_expr(
                     .collect(),
             }
         }
-        TirExprKind::EffectCall {
-            effect_name,
-            op_name,
-            args,
-        } => TirExprKind::EffectCall {
-            effect_name: effect_name.clone(),
-            op_name: op_name.clone(),
-            args: args
-                .iter()
-                .map(|a| remap_expr(a, param_to_local, local_offset, param_count, source_module))
-                .collect(),
-        },
         TirExprKind::CmRawCall { local_name, args } => TirExprKind::CmRawCall {
             local_name: local_name.clone(),
             args: args
@@ -2914,7 +2899,7 @@ fn inline_calls_in_expr(
                 *expr = inlined_expr;
             }
         }
-        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 inline_calls_in_expr(
                     arg,

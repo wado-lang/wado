@@ -557,7 +557,6 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         TirExprKind::Call { args, .. }
         | TirExprKind::MethodCall { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. }
         | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 lower_wide_int_in_expr(arg, type_table);
@@ -1780,7 +1779,6 @@ impl<'a> PatternLowerer<'a> {
             TirExprKind::Call { args, .. }
             | TirExprKind::MethodCall { args, .. }
             | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.lower_expr(arg, type_table);
@@ -3142,7 +3140,7 @@ impl BoxLowerer {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.transform_expr(value, address_taken, type_table);
             }
-            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.transform_expr(arg, address_taken, type_table);
                 }
@@ -3767,7 +3765,6 @@ impl ClosureLowerer {
                 self.collect_closures_in_expr(inner);
             }
             TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. }
             | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
@@ -3973,7 +3970,6 @@ impl ClosureLowerer {
                 }
             }
             TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. }
             | TirExprKind::StaticCall { args, .. } => {
                 // Arguments are in argument position
@@ -4369,7 +4365,6 @@ impl ClosureLowerer {
             }
             TirExprKind::Call { args, .. }
             | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     Self::collect_locals_from_expr(arg, locals);
@@ -5167,7 +5162,6 @@ impl ClosureLowerer {
             }
             TirExprKind::Call { args, .. }
             | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. } => args
                 .iter()
                 .any(|a| self.fn_param_in_struct_field_expr(a, fn_param_indices)),
@@ -5430,7 +5424,7 @@ impl ClosureLowerer {
             | TirExprKind::Move { expr: inner } => {
                 self.collect_fn_param_specs_expr(inner, func_by_name, type_table, requests);
             }
-            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.collect_fn_param_specs_expr(arg, func_by_name, type_table, requests);
                 }
@@ -5614,7 +5608,6 @@ impl ClosureLowerer {
             }
             TirExprKind::Call { args, .. }
             | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.count_closures_in_expr(arg, counter);
@@ -6165,22 +6158,6 @@ impl ClosureLowerer {
                                 type_table,
                             )
                         })
-                        .collect(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::EffectCall {
-                effect_name,
-                op_name,
-                args,
-            } => TirExpr::new(
-                TirExprKind::EffectCall {
-                    effect_name: effect_name.clone(),
-                    op_name: op_name.clone(),
-                    args: args
-                        .iter()
-                        .map(|a| self.specialize_expr(a, param_to_functor, type_table))
                         .collect(),
                 },
                 expr.type_id,
@@ -6761,7 +6738,7 @@ impl ClosureLowerer {
                 // Check if this call has closure arguments that need fn-param specialization
                 self.try_transform_fn_param_call(func, args, type_table);
             }
-            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.transform_expr(arg, type_table);
                 }
@@ -7095,7 +7072,6 @@ impl ClosureLowerer {
             }
             // Recurse into all expression kinds
             TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. }
             | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
@@ -7376,7 +7352,6 @@ impl StringCollector {
                 self.collect_expr(inner);
             }
             TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. }
             | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
@@ -7673,7 +7648,6 @@ impl<'a> ScratchLocalAnalyzer<'a> {
                 }
             }
             TirExprKind::Call { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. }
             | TirExprKind::StaticCall { args, .. } => {
                 for arg in args {
@@ -7931,11 +7905,6 @@ impl<'a> EffectScratchAnalyzer<'a> {
 
     fn analyze_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            TirExprKind::EffectCall { args, .. } => {
-                for arg in args {
-                    self.analyze_expr(arg);
-                }
-            }
             TirExprKind::CmRawCall { args, .. } => {
                 // CmRawCall args are already flat ABI - just recurse
                 for arg in args {

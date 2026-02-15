@@ -151,7 +151,6 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. }
         | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 changed |= simplify_labeled_blocks_in_expr(arg);
@@ -375,7 +374,6 @@ fn is_fresh_value(expr: &TirExpr) -> bool {
         TirExprKind::Call { .. }
         | TirExprKind::StaticCall { .. }
         | TirExprKind::MethodCall { .. }
-        | TirExprKind::EffectCall { .. }
         | TirExprKind::CmRawCall { .. }
         | TirExprKind::IndirectCall { .. } => true,
 
@@ -519,7 +517,6 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. }
         | TirExprKind::CmRawCall { args, .. } => {
             // Wrap arguments in Move if they are fresh values (argument passing is assignment)
             for arg in args.iter_mut() {
@@ -789,7 +786,6 @@ fn collect_value_copy_types_in_expr(
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. }
         | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_value_copy_types_in_expr(arg, type_table, copy_types);

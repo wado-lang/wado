@@ -216,21 +216,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(arg)?;
                 }
             }
-            TirExprKind::EffectCall {
-                effect_name, args, ..
-            } => {
-                // Effect calls require the effect
-                if !self.current_effects.contains(effect_name) {
-                    self.logger.error(EffectError {
-                        callee: effect_name.clone(),
-                        missing_effect: effect_name.clone(),
-                        span: expr.span,
-                    })?;
-                }
-                for arg in args {
-                    self.check_expr(arg)?;
-                }
-            }
             TirExprKind::CmRawCall { args, .. } => {
                 // CmRawCall is used inside synthesized adapter functions;
                 // no effect checking needed (adapter functions are always effectful)

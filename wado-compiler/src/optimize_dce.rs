@@ -497,7 +497,6 @@ fn analyze_expr(
 
             // Detect effect calls: Effects have a single-element path with PascalCase name
             // (e.g., ["Stdout"], ["Stderr"], ["MonotonicClock"])
-            // Effect calls are represented as Call in TIR, not as EffectCall
             // Check using the original module path to detect effect-style paths
             let module_path = original_callee_module.to_path();
             if module_path.len() == 1 {
@@ -762,21 +761,6 @@ fn analyze_expr(
         }
         TirExprKind::Cast { expr, .. } => {
             analyze_expr(expr, current_module, type_table, analysis);
-        }
-        TirExprKind::EffectCall {
-            effect_name,
-            op_name,
-            args,
-            ..
-        } => {
-            // Track effect usage for WASI import DCE
-            analysis
-                .effect_calls
-                .insert((effect_name.clone(), op_name.clone()));
-
-            for arg in args {
-                analyze_expr(arg, current_module, type_table, analysis);
-            }
         }
         TirExprKind::CmRawCall { local_name, args } => {
             // CmRawCall references a lowered WASI import function.
@@ -1455,7 +1439,7 @@ fn collect_types_from_expr(
             collect_types_from_expr(expr, type_table, reachable);
             collect_type_transitive(*target_type, type_table, reachable);
         }
-        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_types_from_expr(arg, type_table, reachable);
             }

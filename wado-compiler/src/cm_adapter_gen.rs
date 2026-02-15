@@ -2118,59 +2118,6 @@ fn rewrite_calls_in_expr(
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
 ) {
-    // Check if this is an EffectCall that should be rewritten to target an adapter
-    if let TirExprKind::EffectCall {
-        effect_name,
-        op_name,
-        ..
-    } = &expr.kind
-    {
-        let qualified = format!("{effect_name}::{op_name}");
-        if let Some(adapter_rc) = adapters.get(&qualified) {
-            // Collect args before replacing (need to move them out)
-            let mut taken_args: Vec<TirExpr> = Vec::new();
-            if let TirExprKind::EffectCall { args, .. } = &mut expr.kind {
-                taken_args = std::mem::take(args);
-            }
-
-            // Fix up adapter function types from the call site
-            {
-                let mut adapter = adapter_rc.borrow_mut();
-                if adapter.return_type != expr.type_id {
-                    adapter.return_type = expr.type_id;
-                    fixup_return_type_in_body(&mut adapter, expr.type_id);
-                }
-                for (i, arg) in taken_args.iter().enumerate() {
-                    if i < adapter.params.len() && adapter.params[i].type_id != arg.type_id {
-                        let local_idx = adapter.params[i].local_index as usize;
-                        adapter.params[i].type_id = arg.type_id;
-                        if local_idx < adapter.local_types.len() {
-                            adapter.local_types[local_idx] = arg.type_id;
-                        }
-                    }
-                }
-            }
-
-            // Replace EffectCall with Call targeting the adapter
-            expr.kind = TirExprKind::Call {
-                func: FunctionRef::Resolved {
-                    func: adapter_rc.clone(),
-                    module_source: entry_source.clone(),
-                },
-                args: taken_args,
-                type_args: vec![],
-            };
-
-            // Recurse into args of the new Call
-            if let TirExprKind::Call { args, .. } = &mut expr.kind {
-                for arg in args {
-                    rewrite_calls_in_expr(arg, adapters, entry_source);
-                }
-            }
-            return;
-        }
-    }
-
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
         if func.module_source().is_effect_like() && func.module_source().effect_name().is_some());
@@ -2301,7 +2248,6 @@ fn rewrite_calls_in_expr(
     // Recurse into sub-expressions
     match &mut expr.kind {
         TirExprKind::Call { args, .. }
-        | TirExprKind::EffectCall { args, .. }
         | TirExprKind::CmRawCall { args, .. }
         | TirExprKind::StaticCall { args, .. } => {
             for arg in args {
@@ -2474,21 +2420,6 @@ fn collect_effect_calls_in_expr(
                 if wasi_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
                 }
-            }
-            for arg in args {
-                collect_effect_calls_in_expr(arg, effects, wasi_registry);
-            }
-        }
-        TirExprKind::EffectCall {
-            effect_name,
-            op_name,
-            args,
-            ..
-        } => {
-            // Collect async WASI calls (e.g., Stdout::write_via_stream)
-            let qualified = format!("{effect_name}::{op_name}");
-            if wasi_registry.get_function(&qualified).is_some() {
-                effects.insert(qualified);
             }
             for arg in args {
                 collect_effect_calls_in_expr(arg, effects, wasi_registry);
