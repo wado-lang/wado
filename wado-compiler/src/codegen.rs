@@ -6161,7 +6161,22 @@ impl Codegen<'_> {
                         heap_type: HeapType::Concrete(type_idx),
                     });
                 }
-                if let Some(struct_info) = self.lookup_struct_type(&mangled_name, module_source) {
+                if let Some(struct_info) = self
+                    .lookup_struct_type(&mangled_name, module_source)
+                    .or_else(|| {
+                        // Monomorphized structs are registered under entry_module_source,
+                        // but GenericInstance types retain the original library module_source.
+                        // Fall back to entry_module_source for the lookup.
+                        if module_source != &self.project.entry_module_source {
+                            self.lookup_struct_type(
+                                &mangled_name,
+                                &self.project.entry_module_source,
+                            )
+                        } else {
+                            None
+                        }
+                    })
+                {
                     ValType::Ref(RefType {
                         nullable: false,
                         heap_type: HeapType::Concrete(struct_info.type_idx),
@@ -6174,9 +6189,19 @@ impl Codegen<'_> {
                         heap_type: HeapType::Concrete(variant_info.base_type_idx),
                     })
                 } else {
-                    panic!(
-                        "unknown monomorphized generic type in type_id_to_valtype: {qualified_mangled_name}"
-                    )
+                    // Also check variant_types with entry_module_source fallback
+                    let entry_qualified =
+                        self.project.entry_module_source.qualify_name(&mangled_name);
+                    if let Some(variant_info) = self.variant_types.get(&entry_qualified) {
+                        ValType::Ref(RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(variant_info.base_type_idx),
+                        })
+                    } else {
+                        panic!(
+                            "unknown monomorphized generic type in type_id_to_valtype: {qualified_mangled_name}"
+                        )
+                    }
                 }
             }
 
