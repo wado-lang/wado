@@ -48,7 +48,7 @@ pub fn write_string_to_stream(tx: i32, message: String, add_newline: bool) {
 /// Wait for a pending async subtask to complete.
 /// If the subtask is still pending (status bit 0 == 0), creates a waitable set,
 /// joins the subtask, waits for completion, and drops the subtask handle.
-pub fn effect_wait(subtask: i32) {
+pub fn wait_for_subtask(subtask: i32) {
     if (subtask & 1) == 0 {
         let ws = builtin::waitable_set_new();
         builtin::waitable_join(ws, subtask);
@@ -68,7 +68,7 @@ pub fn log_stdout(message: String) {
 
     let subtask = builtin::call_indirect_stdout_write_via_stream(rx);
     write_string_to_stream(tx, message, true);
-    effect_wait(subtask);
+    wait_for_subtask(subtask);
 }
 
 /// Best-effort logging to stderr (ambient, no effect required)
@@ -80,7 +80,7 @@ pub fn log_stderr(message: String) {
 
     let subtask = builtin::call_indirect_stderr_write_via_stream(rx);
     write_string_to_stream(tx, message, true);
-    effect_wait(subtask);
+    wait_for_subtask(subtask);
 }
 
 /// Convert a Component Model list<string> to a GC Array<String>

@@ -56,17 +56,3 @@ pub fn waitable_set_wait(set: i32, out_addr: i32) -> i32 {
 pub fn subtask_drop(subtask: i32) {
     builtin::subtask_drop(subtask);
 }
-/// Wait for a write-via-stream subtask to complete if pending
-/// This is used after calling Stdout::write_via_stream or similar effect functions
-/// The subtask parameter is the return value from write-via-stream
-pub fn wait_for_subtask(subtask: i32) {
-    // Check if subtask is pending: (status & 1) == 0
-    if builtin::i32_eqz(builtin::i32_and(subtask, 1)) {
-        let waitable_set = builtin::waitable_set_new();
-        builtin::waitable_join(waitable_set, subtask);
-        let ptr = builtin::realloc(0, 0, 4, 4);
-        builtin::waitable_set_wait(waitable_set, ptr);
-        builtin::realloc(ptr, 4, 4, 0);
-        builtin::subtask_drop(subtask);
-    }
-}

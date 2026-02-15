@@ -281,7 +281,7 @@ pub fn analyze_project(project: &mut Project) {
         add_import_by_name(&mut imports, "task_return");
 
         // Waitable-set builtins (waitable_set_new, waitable_join, waitable_set_wait, subtask_drop)
-        // are added automatically via reachability from internal::effect_wait
+        // are added automatically via reachability from internal::wait_for_subtask
 
         // HTTP handler exports need future intrinsics for response creation
         // (trailers parameter to response.new is a future)
