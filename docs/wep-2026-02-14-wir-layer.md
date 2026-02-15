@@ -131,19 +131,66 @@ Examples:
 | Global counter | `counter` | `<entry>//counter` |
 | Enum Ordering from prelude | `Ordering` | `core:prelude//Ordering` |
 
-`WirName` is used in:
+`WirName` is used on **definitions** (low frequency):
 
 - **Type definitions**: `WirStructType.name`, `WirVariantType.name`, `WirEnumType.name`, etc.
-- **Type references**: `WirTypeRef(WirName)`
 - **Function definitions**: `WirFunction.name`
-- **Function references**: `Call { func_name: WirName }`, `RefFunc { func_name: WirName }`
 - **Global definitions and references**: `WirGlobal.name`, `GlobalGet { name: WirName }`
+
+**Instructions** use `WirTypeId` / `WirFuncId` instead of `WirName` (see below).
 
 Not used for local-scope names (no module qualification needed):
 
 - Struct field names, enum/variant case names
 - Local variable names (`DeclareLocal`, `LocalGet`, `LocalSet`)
 - Block labels
+
+### Type and Function IDs
+
+WIR instructions reference types and functions via lightweight IDs (`WirTypeId`, `WirFuncId`) instead of embedding `WirName` in every instruction. GC instructions (struct access, array access, ref cast, etc.) and call instructions are extremely frequent — in a typical Wado program, every field access, every function call, and every type test requires a type or function reference. Using IDs avoids per-instruction string hashing during emission.
+
+```rust
+use std::rc::Rc;
+
+/// Lightweight reference to a type definition in WirModule.types.
+///
+/// - `index`: indexes into WirModule.types (not the Wasm type section)
+/// - `fq`: fully-qualified name shared via Rc<str> for Debug output
+///
+/// Eq and Hash use `index` only (O(1) integer operations).
+/// Debug prints the fq name (e.g., "core:prelude//Array<i32>").
+/// Clone is O(1) — Rc refcount increment (non-atomic, near zero cost).
+#[derive(Clone)]
+pub struct WirTypeId {
+    index: u32,
+    fq: Rc<str>,
+}
+
+/// Lightweight reference to a function.
+/// Same design as WirTypeId.
+#[derive(Clone)]
+pub struct WirFuncId {
+    index: u32,
+    fq: Rc<str>,
+}
+```
+
+For both types:
+
+- `PartialEq` / `Eq`: compares `index` only
+- `Hash`: hashes `index` only
+- `fmt::Debug`: prints `fq` (e.g., `core:prelude//Point` instead of `WirTypeId(17)`)
+- All references to the same type/function share the same `Rc<str>` allocation
+
+`tir_to_wir` creates name→ID maps during type and function registration. When generating instructions, it embeds the pre-resolved ID. `wir_emit` builds `WirTypeId.index → Wasm type index` and `WirFuncId.index → Wasm func index` tables once, then resolves every reference via O(1) integer indexing.
+
+| Property | `WirName` (definitions) | `WirTypeId` / `WirFuncId` (instructions) |
+| --- | --- | --- |
+| Eq / Hash | O(n) string hash | O(1) integer |
+| Clone | O(n) string copy | O(1) Rc refcount |
+| Debug | shows display name | shows fq name |
+| Stack size | 48 bytes (2× String) | 24 bytes (u32 + Rc\<str\>) |
+| Used in | Type/function definitions | Instructions (high frequency) |
 
 ### Metadata
 
@@ -334,9 +381,6 @@ pub struct WirFuncType {
     pub params: Vec<WirType>,
     pub results: Vec<WirType>,
 }
-
-/// Reference to a type (resolved to index during emission via fq name)
-pub struct WirTypeRef(pub WirName);
 ```
 
 ### WIR Type System
@@ -374,11 +418,11 @@ pub enum WirType {
     // Unit (no Wasm representation; zero-size)
     Unit,
     /// Named enum type (i32 at Wasm level)
-    Enum { type_name: WirName },
+    Enum { type_id: WirTypeId },
     /// Named flags type (i32 at Wasm level)
-    Flags { type_name: WirName },
+    Flags { type_id: WirTypeId },
     /// Reference to a named GC type
-    Ref { type_name: WirName, nullable: bool },
+    Ref { type_id: WirTypeId, nullable: bool },
     /// Abstract reference type (anyref, funcref, etc.)
     AbstractRef { heap_type: WirAbstractHeapType, nullable: bool },
 }
@@ -401,8 +445,8 @@ pub enum WirAbstractHeapType {
 pub struct WirFunction {
     /// Function name (display: "Point::sum", fq: "./geometry.wado/Point::sum")
     pub name: WirName,
-    /// Type reference (function signature — param types and result types)
-    pub type_ref: WirTypeRef,
+    /// Function type ID (references a WirTypeDef::Func in WirModule.types)
+    pub type_id: WirTypeId,
     /// Parameter names (types come from the referenced WirFuncType)
     pub param_names: Vec<String>,
     /// Body (None for imported functions)
@@ -574,32 +618,32 @@ pub enum WirInstr {
     F64ReinterpretI64(Box<WirInstr>),
 
     // === GC: Struct ===
-    /// struct.new with named type
-    StructNew { type_name: WirName, fields: Vec<WirInstr> },
-    /// struct.get with named type and field (field index resolved by emitter)
-    StructGet { type_name: WirName, field_name: String, expr: Box<WirInstr> },
-    /// struct.set with named type and field (field index resolved by emitter)
-    StructSet { type_name: WirName, field_name: String, expr: Box<WirInstr>, value: Box<WirInstr> },
+    /// struct.new with type ID
+    StructNew { type_id: WirTypeId, fields: Vec<WirInstr> },
+    /// struct.get with type ID and field name (field index resolved by emitter)
+    StructGet { type_id: WirTypeId, field_name: String, expr: Box<WirInstr> },
+    /// struct.set with type ID and field name (field index resolved by emitter)
+    StructSet { type_id: WirTypeId, field_name: String, expr: Box<WirInstr>, value: Box<WirInstr> },
 
     // === GC: Array ===
-    ArrayNew { type_name: WirName, init: Box<WirInstr>, len: Box<WirInstr> },
-    ArrayNewDefault { type_name: WirName, len: Box<WirInstr> },
-    ArrayNewData { type_name: WirName, data_index: u32, offset: Box<WirInstr>, len: Box<WirInstr> },
-    ArrayNewFixed { type_name: WirName, elements: Vec<WirInstr> },
-    ArrayGet { type_name: WirName, array: Box<WirInstr>, index: Box<WirInstr> },
-    ArrayGetS { type_name: WirName, array: Box<WirInstr>, index: Box<WirInstr> },
-    ArrayGetU { type_name: WirName, array: Box<WirInstr>, index: Box<WirInstr> },
-    ArraySet { type_name: WirName, array: Box<WirInstr>, index: Box<WirInstr>, value: Box<WirInstr> },
+    ArrayNew { type_id: WirTypeId, init: Box<WirInstr>, len: Box<WirInstr> },
+    ArrayNewDefault { type_id: WirTypeId, len: Box<WirInstr> },
+    ArrayNewData { type_id: WirTypeId, data_index: u32, offset: Box<WirInstr>, len: Box<WirInstr> },
+    ArrayNewFixed { type_id: WirTypeId, elements: Vec<WirInstr> },
+    ArrayGet { type_id: WirTypeId, array: Box<WirInstr>, index: Box<WirInstr> },
+    ArrayGetS { type_id: WirTypeId, array: Box<WirInstr>, index: Box<WirInstr> },
+    ArrayGetU { type_id: WirTypeId, array: Box<WirInstr>, index: Box<WirInstr> },
+    ArraySet { type_id: WirTypeId, array: Box<WirInstr>, index: Box<WirInstr>, value: Box<WirInstr> },
     ArrayLen(Box<WirInstr>),
-    ArrayCopy { dest_type: WirName, src_type: WirName, dest: Box<WirInstr>, dest_offset: Box<WirInstr>, src: Box<WirInstr>, src_offset: Box<WirInstr>, len: Box<WirInstr> },
-    ArrayFill { type_name: WirName, array: Box<WirInstr>, offset: Box<WirInstr>, value: Box<WirInstr>, len: Box<WirInstr> },
+    ArrayCopy { dest_type_id: WirTypeId, src_type_id: WirTypeId, dest: Box<WirInstr>, dest_offset: Box<WirInstr>, src: Box<WirInstr>, src_offset: Box<WirInstr>, len: Box<WirInstr> },
+    ArrayFill { type_id: WirTypeId, array: Box<WirInstr>, offset: Box<WirInstr>, value: Box<WirInstr>, len: Box<WirInstr> },
 
     // === GC: Reference ===
     RefNull { heap_type: WirAbstractHeapType },
     RefIsNull(Box<WirInstr>),
     RefAsNonNull(Box<WirInstr>),
-    RefCast { type_name: WirName, nullable: bool, expr: Box<WirInstr> },
-    RefTest { type_name: WirName, nullable: bool, expr: Box<WirInstr> },
+    RefCast { type_id: WirTypeId, nullable: bool, expr: Box<WirInstr> },
+    RefTest { type_id: WirTypeId, nullable: bool, expr: Box<WirInstr> },
     RefEq(Box<WirInstr>, Box<WirInstr>),
     RefI31(Box<WirInstr>),
     I31GetS(Box<WirInstr>),
@@ -632,10 +676,10 @@ pub enum WirInstr {
     Select { condition: Box<WirInstr>, if_true: Box<WirInstr>, if_false: Box<WirInstr>, ty: Option<WirType> },
 
     // === Calls ===
-    Call { func_name: WirName, args: Vec<WirInstr> },
-    CallIndirect { type_name: WirName, table: u32, index: Box<WirInstr>, args: Vec<WirInstr> },
-    CallRef { type_name: WirName, func_ref: Box<WirInstr>, args: Vec<WirInstr> },
-    RefFunc { func_name: WirName },
+    Call { func_id: WirFuncId, args: Vec<WirInstr> },
+    CallIndirect { type_id: WirTypeId, table: u32, index: Box<WirInstr>, args: Vec<WirInstr> },
+    CallRef { type_id: WirTypeId, func_ref: Box<WirInstr>, args: Vec<WirInstr> },
+    RefFunc { func_id: WirFuncId },
 
     // === Memory ===
     MemorySize,
@@ -653,7 +697,7 @@ pub enum WirInstr {
 
     /// Deep copy of a value type (struct, array, variant, option, tuple).
     /// Lowered to field-by-field copy, array loop, etc. during emission.
-    ValueCopy { type_name: WirName, source_type: WirCopyType, expr: Box<WirInstr> },
+    ValueCopy { type_id: WirTypeId, source_type: WirCopyType, expr: Box<WirInstr> },
 
     /// Sequence of instructions (for statement blocks)
     Seq(Vec<WirInstr>),
@@ -703,33 +747,17 @@ pub struct WirComponent {
 
 ### Names and References
 
-WIR uses `WirName` for globally-scoped references and plain `String` for local-scope references. During emission, `WirName.fq` is resolved to indices via lookup tables. For unparse, `WirName.display` provides human-readable names.
+WIR uses three reference mechanisms depending on frequency and scope:
 
-| Scope | Reference type | Identity key | Display |
-| ----- | -------------- | ------------ | ------- |
-| Global | `WirName` | `fq` | `display` |
-| Local | `String` | name itself | name itself |
+| Scope | Reference type | Used in | Eq / Hash |
+| ----- | -------------- | ------- | --------- |
+| Types (in instructions) | `WirTypeId` | `StructGet`, `ArrayNew`, `RefCast`, `CallRef`, etc. | O(1) integer |
+| Functions (in instructions) | `WirFuncId` | `Call`, `RefFunc` | O(1) integer |
+| Definitions | `WirName` | `WirStructType.name`, `WirFunction.name`, `WirGlobal.name` | O(n) string |
+| Globals (in instructions) | `WirName` | `GlobalGet`, `GlobalSet` | O(n) string |
+| Local scope | `String` | `LocalGet`, `StructGet.field_name`, labels, case names | N/A |
 
-Global-scope references (use `WirName`):
-
-- **Types**: `WirTypeRef(WirName)` — in function signatures, instructions
-- **Functions**: `WirName` — in `Call`, `RefFunc`, `WirFunction.name`
-- **Globals**: `WirName` — in `GlobalGet`, `GlobalSet`
-
-Local-scope references (use `String`):
-
-- **Locals**: in `LocalGet`, `LocalSet`, `DeclareLocal`
-- **Fields**: in `StructGet`, `StructSet` (resolved to field index by emitter)
-- **Labels**: in `Block`, `Loop`
-- **Enum/variant cases**: in `WirEnumCase`, `WirVariantCase`
-
-```rust
-/// Type references carry both display and fq names
-pub struct WirTypeRef(pub WirName);
-
-/// Function references carry both display and fq names
-pub struct WirFuncRef(pub WirName);
-```
+Type and function references in instructions use `WirTypeId` / `WirFuncId` because they are high-frequency (every GC instruction and every call). Global variable references use `WirName` because they are comparatively rare. Local-scope names use plain `String` (no module qualification needed).
 
 ## Unparse Format
 
@@ -896,9 +924,10 @@ Wasm is a stack machine, but flat instruction sequences are hard to inspect and 
 
 ```rust
 // WIR (tree): readable, inspectable
+// Debug output shows fq names from WirTypeId (not integer indices)
 I32Add(
-    StructGet { type_name: "Point", field_name: "x", expr: LocalGet("self") },
-    StructGet { type_name: "Point", field_name: "y", expr: LocalGet("self") },
+    StructGet { type_id: <entry>//Point, field_name: "x", expr: LocalGet("self") },
+    StructGet { type_id: <entry>//Point, field_name: "y", expr: LocalGet("self") },
 )
 
 // Unparse: Wado-style field access
@@ -914,18 +943,22 @@ I32Add(
 
 Flattening trees to stack-machine instructions is trivial (post-order traversal). The reverse is not.
 
-### Why Named References (Not Indices)?
+### Why `WirTypeId` / `WirFuncId` with `Rc<str>` (Not Raw Indices or `WirName`)?
 
-Using names for all references keeps WIR independent of emission order and self-documenting:
+WIR instructions reference types and functions at very high frequency (every struct field access, every call, every ref cast). The reference design must balance three goals: emission speed, debuggability, and independence from emission order.
 
-- Global-scope names use `WirName` with both `display` (for unparse) and `fq` (for identity)
+Three alternatives were considered:
+
+1. **Raw `u32` index**: Fastest, but `Debug` output shows `WirTypeId(17)` — unreadable without a lookup table. Debugging the compiler requires constantly cross-referencing indices.
+2. **`WirName` (two owned `String`s)**: Most readable, but every clone copies two strings. In a program with thousands of instructions, this means thousands of string allocations. `Eq` and `Hash` require O(n) string operations.
+3. **`WirTypeId { index: u32, fq: Rc<str> }` (chosen)**: `Eq`/`Hash` are O(1) via integer comparison. `Debug` prints the fq name for readability. `Clone` is O(1) — just an `Rc` refcount increment (non-atomic, near zero cost). All references to the same type share one `Rc<str>` allocation.
+
+Additional design properties:
+
+- `WirTypeId.index` indexes into `WirModule.types`, not the Wasm type section — WIR remains independent of emission order
+- Type and function definitions retain full `WirName` (with `display` + `fq`) for unparse output
 - Local-scope names (locals, fields, labels) use plain `String`
-- Type registration order can change without invalidating WIR
-- Functions and globals can be reordered freely
 - Struct field indices are resolved from type definitions during emission
-- Unparse uses `display` names — no need to parse FQ names for readability
-
-The cost is a `fq`→index lookup during emission, which is O(1) with `IndexMap`.
 
 ### Why `ValueCopy` as a Compound Instruction?
 
@@ -1037,5 +1070,5 @@ This eliminates the current coupling between the optimizer and codegen via `need
 ### Risks
 
 - **Scope creep**: WIR should stay close to Wasm. Resist adding high-level abstractions.
-- **Name resolution overhead**: String-based name lookup during emission. Mitigated by single-pass name table construction.
+- **`WirTypeId` is not `Copy`**: `Rc<str>` prevents `Copy`. Mitigated by cheap `Clone` (non-atomic refcount increment) and instructions being heap-allocated (`Box<WirInstr>`) regardless.
 - **Incomplete migration**: If migration stalls midway, we'd have two code paths. Mitigated by the incremental approach where each step is a complete working state.
