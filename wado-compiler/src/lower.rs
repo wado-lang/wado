@@ -6174,8 +6174,6 @@ impl ClosureLowerer {
                 effect_name,
                 op_name,
                 args,
-                cm_convention,
-                cm_local_name,
             } => TirExpr::new(
                 TirExprKind::EffectCall {
                     effect_name: effect_name.clone(),
@@ -6184,8 +6182,6 @@ impl ClosureLowerer {
                         .iter()
                         .map(|a| self.specialize_expr(a, param_to_functor, type_table))
                         .collect(),
-                    cm_convention: cm_convention.clone(),
-                    cm_local_name: cm_local_name.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -7902,24 +7898,40 @@ impl<'a> EffectScratchAnalyzer<'a> {
         }
     }
 
+    fn analyze_wasi_func(&mut self, func_info: &crate::component_model::WasiFunctionInfo) {
+        if func_info.is_async {
+            self.needs_async = true;
+        }
+        if let Some(rt) = &func_info.return_type {
+            let flat = crate::cm_abi::cm_flat_types(rt);
+            if flat.len() > 1 {
+                self.needs_outptr = true;
+            }
+            if let Some((_, true)) = crate::cm_abi::cm_result_return_info(rt) {
+                self.needs_err_disc = true;
+            }
+        }
+        for (_pname, ptype) in &func_info.params {
+            let resolved = self.wasi_registry.resolve_type(ptype);
+            match &resolved {
+                crate::ast::Type::Named(n) if n.name == "String" => {
+                    self.needs_i64_temp = true;
+                }
+                crate::ast::Type::Generic(g)
+                    if g.name == "Array"
+                        && g.args.len() == 1
+                        && matches!(&g.args[0], crate::ast::Type::Named(n) if n.name == "u8") =>
+                {
+                    self.needs_i64_temp = true;
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn analyze_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            TirExprKind::EffectCall {
-                cm_convention,
-                args,
-                ..
-            } => {
-                if let Some(conv) = cm_convention {
-                    if conv.is_async {
-                        self.needs_async = true;
-                    }
-                    if conv.outptr_alloc.is_some() {
-                        self.needs_outptr = true;
-                    }
-                    if let Some((_, true)) = conv.result_return {
-                        self.needs_err_disc = true;
-                    }
-                }
+            TirExprKind::EffectCall { args, .. } => {
                 for arg in args {
                     self.analyze_expr(arg);
                 }
@@ -7949,32 +7961,13 @@ impl<'a> EffectScratchAnalyzer<'a> {
                                 if let Some(func_info) =
                                     self.wasi_registry.get_function(&qualified_name)
                                 {
-                                    let conv = &func_info.call_convention;
-                                    if conv.is_async {
-                                        self.needs_async = true;
-                                    }
-                                    if conv.outptr_alloc.is_some() {
-                                        self.needs_outptr = true;
-                                    }
-                                    if let Some((_, true)) = conv.result_return {
-                                        self.needs_err_disc = true;
-                                    }
+                                    self.analyze_wasi_func(func_info);
                                 }
                             }
                         }
                         ModuleSource::Wasi { .. } => {
-                            // WASI function calls - name is already qualified (e.g., "TcpSocket::static_tcp_socket_create")
                             if let Some(func_info) = self.wasi_registry.get_function(name) {
-                                let conv = &func_info.call_convention;
-                                if conv.is_async {
-                                    self.needs_async = true;
-                                }
-                                if conv.outptr_alloc.is_some() {
-                                    self.needs_outptr = true;
-                                }
-                                if let Some((_, true)) = conv.result_return {
-                                    self.needs_err_disc = true;
-                                }
+                                self.analyze_wasi_func(func_info);
                             }
                         }
                         ModuleSource::Core { name: module_name } if module_name == "builtin" => {
@@ -8000,38 +7993,18 @@ impl<'a> EffectScratchAnalyzer<'a> {
                 {
                     match module_source {
                         ModuleSource::Local { path } => {
-                            // Check if this is a WASI effect call (e.g., TcpSocket::static_tcp_socket_create)
                             if path.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
                                 let qualified_name = format!("{path}::{name}");
                                 if let Some(func_info) =
                                     self.wasi_registry.get_function(&qualified_name)
                                 {
-                                    let conv = &func_info.call_convention;
-                                    if conv.is_async {
-                                        self.needs_async = true;
-                                    }
-                                    if conv.outptr_alloc.is_some() {
-                                        self.needs_outptr = true;
-                                    }
-                                    if let Some((_, true)) = conv.result_return {
-                                        self.needs_err_disc = true;
-                                    }
+                                    self.analyze_wasi_func(func_info);
                                 }
                             }
                         }
                         ModuleSource::Wasi { .. } => {
-                            // WASI function calls - name is already qualified (e.g., "TcpSocket::static_tcp_socket_create")
                             if let Some(func_info) = self.wasi_registry.get_function(name) {
-                                let conv = &func_info.call_convention;
-                                if conv.is_async {
-                                    self.needs_async = true;
-                                }
-                                if conv.outptr_alloc.is_some() {
-                                    self.needs_outptr = true;
-                                }
-                                if let Some((_, true)) = conv.result_return {
-                                    self.needs_err_disc = true;
-                                }
+                                self.analyze_wasi_func(func_info);
                             }
                         }
                         ModuleSource::Core { .. } => {}
@@ -8058,32 +8031,7 @@ impl<'a> EffectScratchAnalyzer<'a> {
                 {
                     let func_name = format!("{name}::{}", method_info.method_name);
                     if let Some(func_info) = self.wasi_registry.get_function(&func_name) {
-                        if func_info.call_convention.outptr_alloc.is_some() {
-                            self.needs_outptr = true;
-                        }
-                        // Check if any parameter needs i64 temp for CM lowering
-                        // (String and Array<u8> params are lowered via i64-returning helpers)
-                        for (_pname, ptype) in &func_info.params {
-                            let resolved = self.wasi_registry.resolve_type(ptype);
-                            match &resolved {
-                                crate::ast::Type::Named(n) if n.name == "String" => {
-                                    self.needs_i64_temp = true;
-                                }
-                                crate::ast::Type::Generic(g)
-                                    if g.name == "Array"
-                                        && g.args.len() == 1
-                                        && matches!(&g.args[0], crate::ast::Type::Named(n) if n.name == "u8") =>
-                                {
-                                    self.needs_i64_temp = true;
-                                }
-                                _ => {}
-                            }
-                        }
-                        // Check if result return has enum error (needs __cm_err_disc local
-                        // for br_table dispatch to create correct variant subtypes)
-                        if let Some((_, true)) = func_info.call_convention.result_return {
-                            self.needs_err_disc = true;
-                        }
+                        self.analyze_wasi_func(func_info);
                     }
                 }
                 self.analyze_expr(receiver);

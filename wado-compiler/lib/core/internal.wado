@@ -127,54 +127,6 @@ pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
     return result;
 }
 
-/// Convert a Component Model option<string> to a GC Option<String>
-/// The outptr points to the CM option representation in linear memory:
-///   outptr[0..3]: discriminant (0 = none, 1 = some)
-///   outptr[4..7]: str_ptr (if some)
-///   outptr[8..11]: str_len (if some)
-pub fn cm_option_string_to_option(outptr: i32) -> Option<String> {
-    let discriminant = builtin::i32_load8_u(outptr);
-
-    if discriminant == 0 {
-        // None - free outptr and return
-        builtin::realloc(outptr, 12, 4, 0);
-        return null;
-    }
-
-    // Some - read string pointer and length
-    let str_ptr = builtin::i32_load(outptr + 4);
-    let str_len = builtin::i32_load(outptr + 8);
-    let arr = memory_to_gc_array(str_ptr, str_len);
-    let result = String::internal_from_utf8_raw(arr, str_len);
-
-    // Free the string's linear memory
-    builtin::realloc(str_ptr, str_len, 1, 0);
-    // Free the outptr itself (12 bytes: discriminant + str_ptr + str_len)
-    builtin::realloc(outptr, 12, 4, 0);
-
-    return result;
-}
-
-/// Convert a Component Model option<own<resource>> to a GC Option<i32>
-/// The outptr points to the CM option representation in linear memory:
-///   outptr[0]: discriminant (0 = none, 1 = some)
-///   outptr[4..7]: handle (i32, if some)
-pub fn cm_option_own_resource_to_option(outptr: i32) -> Option<i32> {
-    let discriminant = builtin::i32_load8_u(outptr);
-
-    if discriminant == 0 {
-        // Free the outptr (8 bytes: discriminant + handle)
-        builtin::realloc(outptr, 8, 4, 0);
-        return null;
-    }
-
-    let handle = builtin::i32_load(outptr + 4);
-
-    // Free the outptr (8 bytes: discriminant + handle)
-    builtin::realloc(outptr, 8, 4, 0);
-
-    return Option::<i32>::Some(handle);
-}
 pub fn panic(message: String) -> ! {
     log_stderr(message);
     builtin::unreachable();

@@ -5,7 +5,6 @@
 
 use indexmap::IndexSet;
 
-use crate::ast::Type;
 use crate::name::{
     FreeFunctionName, FunctionId, MethodName, ModuleSource, mangle_generic_name,
     mangle_local_method, mangle_local_trait_method, mangle_method_generic,
@@ -15,7 +14,6 @@ use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule, TirStmtKind,
     TypeId, TypeTable,
 };
-use crate::wasm_plan::{CmConverterKind, CmConverterRequirements};
 use indexmap::IndexMap;
 
 /// Call graph: function ID -> set of called function IDs
@@ -93,89 +91,21 @@ pub fn analyze_project(project: &mut Project) {
     let needs_f64_to_buffer = reachable.contains(&core_internal("f64_to_string"));
     let needs_f32_to_buffer = reachable.contains(&core_internal("f32_to_string"));
 
-    // Add CM converter functions based on WASI function call conventions
-    // These conversion functions are called from codegen, not Wado code
-    // We use CmCallConvention::result_converter as the single source of truth
-    let mut cm_requirements = CmConverterRequirements::default();
+    // CM converter functions (cm_list_string_to_array, cm_lower_string, etc.)
+    // are called from synthesized CM adapter functions, which are part of the TIR
+    // and discovered through normal call graph analysis.
 
-    for func_name in &used_wasi_functions {
-        if let Some(func_info) = project.wasi_registry.get_function(func_name) {
-            if let Some(return_type) = &func_info.return_type {
-                cm_requirements.analyze_type(return_type);
-            }
-            // Also check CmCallConvention for converters not detectable from type alone
-            // (e.g., Option<ResourceName> where ResourceName is a WASI resource)
-            if let Some(converter_kind) = func_info.call_convention.result_converter {
-                cm_requirements.add(converter_kind);
-            }
-        }
-    }
-
-    // Add CM parameter lowering functions based on WASI function parameter types
-    // These functions lower GC values to CM linear memory format for resource method calls
-    let mut needs_cm_lower_string = false;
-    let mut needs_cm_lower_array_u8 = false;
-    for func_name in &used_wasi_functions {
-        if let Some(func_info) = project.wasi_registry.get_function(func_name) {
-            for (_param_name, param_type) in &func_info.params {
-                let resolved = project.wasi_registry.resolve_type(param_type);
-                match &resolved {
-                    Type::Named(named) if named.name == "String" => {
-                        needs_cm_lower_string = true;
-                    }
-                    Type::Generic(generic)
-                        if generic.name == "Array"
-                            && generic.args.len() == 1
-                            && matches!(&generic.args[0], Type::Named(n) if n.name == "u8") =>
-                    {
-                        needs_cm_lower_array_u8 = true;
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
     // HTTP handler exports need cm_lower_string for ErrorCode payload lowering
-    // (ErrorCode variant cases can contain Option<String> payloads)
+    // (ErrorCode variant cases can contain Option<String> payloads).
+    // This is used in codegen's export path, not via TIR call graph.
     let has_http_handler_export_early = project
         .world_registry
         .get(&project.target_world)
         .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
-    if needs_cm_lower_string || has_http_handler_export_early {
+    if has_http_handler_export_early {
         let func = core_internal("cm_lower_string");
         reachable.extend(compute_reachable(&call_graph, &func));
     }
-    if needs_cm_lower_array_u8 {
-        let func = core_internal("cm_lower_array_u8");
-        reachable.extend(compute_reachable(&call_graph, &func));
-    }
-
-    // Add converter functions and their transitive dependencies
-    if cm_requirements.needs(CmConverterKind::ListString) {
-        let cm_list_func = core_internal("cm_list_string_to_array");
-        reachable.extend(compute_reachable(&call_graph, &cm_list_func));
-    }
-    if cm_requirements.needs(CmConverterKind::ListU8) {
-        let cm_list_func = core_internal("cm_list_u8_to_array");
-        reachable.extend(compute_reachable(&call_graph, &cm_list_func));
-    }
-    if cm_requirements.needs(CmConverterKind::ListTupleString) {
-        let cm_list_func = core_internal("cm_list_tuple_string_string_to_array");
-        reachable.extend(compute_reachable(&call_graph, &cm_list_func));
-    }
-    if cm_requirements.needs(CmConverterKind::OptionString) {
-        let cm_option_func = core_internal("cm_option_string_to_option");
-        let copy_string_func = core_internal("copy_string_from_linear");
-        reachable.extend(compute_reachable(&call_graph, &cm_option_func));
-        reachable.extend(compute_reachable(&call_graph, &copy_string_func));
-    }
-    if cm_requirements.needs(CmConverterKind::OptionOwnResource) {
-        let cm_option_func = core_internal("cm_option_own_resource_to_option");
-        reachable.extend(compute_reachable(&call_graph, &cm_option_func));
-    }
-
-    // Note: array_copy_string is tracked via call graph analysis
-    // It will be included if called from reachable user code
 
     // Check if stream intrinsics are needed by looking for:
     // 1. Stdout/Stderr effects being used

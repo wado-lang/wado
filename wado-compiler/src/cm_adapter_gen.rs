@@ -27,7 +27,7 @@ use crate::tir::{
 use crate::token::Span;
 
 /// Context for lifting CM values to GC types, providing access to
-/// the WASI registry (for variant/enum case info) and type table (for TypeIds).
+/// the WASI registry (for variant/enum case info) and type table (for `TypeIds`).
 pub struct LiftContext<'a> {
     pub wasi_registry: &'a WasiRegistry,
     pub type_table: &'a RefCell<TypeTable>,
@@ -389,12 +389,17 @@ fn synthesize_lift_inner(
             }
             _ => {
                 // Check if this is a WASI variant/enum that needs GC struct construction
-                if let Some(ctx) = ctx {
-                    if let Some(lifted) = try_lift_wasi_variant_or_enum(
-                        &named.name, addr.clone(), next_local, stmts, local_types, ctx,
-                    ) {
-                        return lifted;
-                    }
+                if let Some(ctx) = ctx
+                    && let Some(lifted) = try_lift_wasi_variant_or_enum(
+                        &named.name,
+                        addr.clone(),
+                        next_local,
+                        stmts,
+                        local_types,
+                        ctx,
+                    )
+                {
+                    return lifted;
                 }
                 // Default: treat as i32 handles (resources, unknown types)
                 builtin_call("i32_load", vec![addr], TypeTable::I32)
@@ -422,9 +427,7 @@ fn synthesize_lift_inner(
         Type::Tuple(elems) if elems.is_empty() => {
             TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
         }
-        Type::Tuple(elems) => {
-            synthesize_lift_tuple(elems, addr, next_local, stmts, local_types)
-        }
+        Type::Tuple(elems) => synthesize_lift_tuple(elems, addr, next_local, stmts, local_types),
         Type::Reference(_) | Type::MutReference(_) => {
             builtin_call("i32_load", vec![addr], TypeTable::I32)
         }
@@ -450,7 +453,13 @@ fn try_lift_wasi_variant_or_enum(
         let variant_type = tt.find_variant_type_by_name(name)?;
         drop(tt);
         return Some(synthesize_lift_wasi_variant(
-            name, variant_type, &cases, addr, next_local, stmts, local_types,
+            name,
+            variant_type,
+            &cases,
+            addr,
+            next_local,
+            stmts,
+            local_types,
         ));
     }
 
@@ -460,14 +469,20 @@ fn try_lift_wasi_variant_or_enum(
         let enum_type = tt.find_enum_type_by_name(name)?;
         drop(tt);
         return Some(synthesize_lift_wasi_enum(
-            name, enum_type, &case_names, addr, next_local, stmts, local_types,
+            name,
+            enum_type,
+            &case_names,
+            addr,
+            next_local,
+            stmts,
+            local_types,
         ));
     }
 
     None
 }
 
-/// Lift a WASI variant type (e.g., HeaderError) from an i32 discriminant.
+/// Lift a WASI variant type (e.g., `HeaderError`) from an i32 discriminant.
 /// Generates an if/else chain: disc==0 → Case0, disc==1 → Case1, ...
 fn synthesize_lift_wasi_variant(
     _name: &str,
@@ -614,7 +629,7 @@ fn synthesize_lift_wasi_enum(
     local_ref(result_local, "__eresult", enum_type)
 }
 
-/// Convert a kebab-case name to PascalCase (e.g., "invalid-syntax" → "InvalidSyntax").
+/// Convert a kebab-case name to `PascalCase` (e.g., "invalid-syntax" → "`InvalidSyntax`").
 fn kebab_to_pascal(s: &str) -> String {
     s.split('-')
         .map(|part| {
@@ -742,10 +757,7 @@ fn synthesize_lift_list(
     // __i = __i + 1
     loop_stmts.push(expr_stmt(assign(
         local_ref(i_local, "__i", TypeTable::I32),
-        binary_add(
-            local_ref(i_local, "__i", TypeTable::I32),
-            i32_const(1),
-        ),
+        binary_add(local_ref(i_local, "__i", TypeTable::I32), i32_const(1)),
     )));
 
     stmts.push(loop_stmt(block(loop_stmts)));
@@ -1217,7 +1229,10 @@ fn list_converter_for_type(ty: &Type) -> Option<&'static str> {
                 Type::Named(n) if n.name == "u8" => None, // u8 lists use memory_to_gc_array inline
                 Type::Tuple(elems) if elems.len() == 2 => {
                     // list<tuple<string, string>> → cm_list_tuple_string_string_to_array
-                    if elems.iter().all(|e| matches!(e, Type::Named(n) if n.name == "String")) {
+                    if elems
+                        .iter()
+                        .all(|e| matches!(e, Type::Named(n) if n.name == "String"))
+                    {
                         Some("cm_list_tuple_string_string_to_array")
                     } else {
                         None
@@ -1243,7 +1258,7 @@ fn needs_flat_result_lifting(ty: &Type) -> bool {
 /// Synthesize lifting of a flat Result discriminant into a GC variant struct.
 ///
 /// For `Result<(), ()>`: disc==0 → Ok, disc==1 → Err (no payloads)
-/// For `Result<(), ErrorCode>`: disc==0 → Ok, disc!=0 → Err(lift_error)
+/// For `Result<(), ErrorCode>`: disc==0 → Ok, disc!=0 → `Err(lift_error)`
 #[allow(clippy::too_many_arguments)]
 fn synthesize_lift_flat_result(
     ty: &Type,
@@ -1254,43 +1269,84 @@ fn synthesize_lift_flat_result(
     local_types: &mut Vec<TypeId>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    if let Type::Generic(g) = ty {
-        if g.name == "Result" && g.args.len() == 2 {
-            let ok_ty = &g.args[0];
-            let err_ty = &g.args[1];
+    if let Type::Generic(g) = ty
+        && g.name == "Result"
+        && g.args.len() == 2
+    {
+        let ok_ty = &g.args[0];
+        let err_ty = &g.args[1];
 
-            let ok_is_unit = matches!(ok_ty, Type::Named(n) if n.name == "()")
-                || matches!(ok_ty, Type::Tuple(elems) if elems.is_empty());
-            let err_is_unit = matches!(err_ty, Type::Named(n) if n.name == "()")
-                || matches!(err_ty, Type::Tuple(elems) if elems.is_empty());
+        let ok_is_unit = matches!(ok_ty, Type::Named(n) if n.name == "()")
+            || matches!(ok_ty, Type::Tuple(elems) if elems.is_empty());
+        let err_is_unit = matches!(err_ty, Type::Named(n) if n.name == "()")
+            || matches!(err_ty, Type::Tuple(elems) if elems.is_empty());
 
-            let ok_construct = if ok_is_unit {
+        let ok_construct = if ok_is_unit {
+            TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type: TypeTable::I32,
+                    case_index: 0,
+                    case_name: "Ok".to_string(),
+                    payload: None,
+                },
+                TypeTable::I32,
+                synth_span(),
+            )
+        } else {
+            // Ok with payload — flat result should use outptr instead
+            // This shouldn't happen, but handle gracefully
+            TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type: TypeTable::I32,
+                    case_index: 0,
+                    case_name: "Ok".to_string(),
+                    payload: None,
+                },
+                TypeTable::I32,
+                synth_span(),
+            )
+        };
+
+        let err_construct = if err_is_unit {
+            TirExpr::new(
+                TirExprKind::VariantConstruct {
+                    variant_type: TypeTable::I32,
+                    case_index: 1,
+                    case_name: "Err".to_string(),
+                    payload: None,
+                },
+                TypeTable::I32,
+                synth_span(),
+            )
+        } else {
+            // Err with a flat payload — the remaining flat values encode the error
+            // For enums/variants, the error value is the disc shifted appropriately
+            // For now, try to lift the error type using the WASI variant/enum path
+            let err_name = match err_ty {
+                Type::Named(n) => n.name.as_str(),
+                _ => "",
+            };
+            if let Some(lifted) = try_lift_wasi_variant_or_enum(
+                err_name,
+                // The error discriminant is in the remaining flat values after the Result disc
+                // For flat result, the second flat value is the error payload
+                disc_expr.clone(), // placeholder — we'll fix below
+                next_local,
+                stmts,
+                local_types,
+                ctx,
+            ) {
                 TirExpr::new(
                     TirExprKind::VariantConstruct {
                         variant_type: TypeTable::I32,
-                        case_index: 0,
-                        case_name: "Ok".to_string(),
-                        payload: None,
+                        case_index: 1,
+                        case_name: "Err".to_string(),
+                        payload: Some(Box::new(lifted)),
                     },
                     TypeTable::I32,
                     synth_span(),
                 )
             } else {
-                // Ok with payload — flat result should use outptr instead
-                // This shouldn't happen, but handle gracefully
-                TirExpr::new(
-                    TirExprKind::VariantConstruct {
-                        variant_type: TypeTable::I32,
-                        case_index: 0,
-                        case_name: "Ok".to_string(),
-                        payload: None,
-                    },
-                    TypeTable::I32,
-                    synth_span(),
-                )
-            };
-
-            let err_construct = if err_is_unit {
                 TirExpr::new(
                     TirExprKind::VariantConstruct {
                         variant_type: TypeTable::I32,
@@ -1301,67 +1357,27 @@ fn synthesize_lift_flat_result(
                     TypeTable::I32,
                     synth_span(),
                 )
-            } else {
-                // Err with a flat payload — the remaining flat values encode the error
-                // For enums/variants, the error value is the disc shifted appropriately
-                // For now, try to lift the error type using the WASI variant/enum path
-                let err_name = match err_ty {
-                    Type::Named(n) => n.name.as_str(),
-                    _ => "",
-                };
-                if let Some(lifted) = try_lift_wasi_variant_or_enum(
-                    err_name,
-                    // The error discriminant is in the remaining flat values after the Result disc
-                    // For flat result, the second flat value is the error payload
-                    disc_expr.clone(), // placeholder — we'll fix below
-                    next_local,
-                    stmts,
-                    local_types,
-                    ctx,
-                ) {
-                    TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type: TypeTable::I32,
-                            case_index: 1,
-                            case_name: "Err".to_string(),
-                            payload: Some(Box::new(lifted)),
-                        },
-                        TypeTable::I32,
-                        synth_span(),
-                    )
-                } else {
-                    TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type: TypeTable::I32,
-                            case_index: 1,
-                            case_name: "Err".to_string(),
-                            payload: None,
-                        },
-                        TypeTable::I32,
-                        synth_span(),
-                    )
-                }
-            };
+            }
+        };
 
-            stmts.push(if_stmt(
-                binary(
-                    crate::tir::TirBinaryOp::Eq,
-                    disc_expr,
-                    i32_const(0),
-                    TypeTable::BOOL,
-                ),
-                block(vec![expr_stmt(assign(
-                    local_ref(result_local, "__result_val", TypeTable::I32),
-                    ok_construct,
-                ))]),
-                Some(block(vec![expr_stmt(assign(
-                    local_ref(result_local, "__result_val", TypeTable::I32),
-                    err_construct,
-                ))])),
-            ));
+        stmts.push(if_stmt(
+            binary(
+                crate::tir::TirBinaryOp::Eq,
+                disc_expr,
+                i32_const(0),
+                TypeTable::BOOL,
+            ),
+            block(vec![expr_stmt(assign(
+                local_ref(result_local, "__result_val", TypeTable::I32),
+                ok_construct,
+            ))]),
+            Some(block(vec![expr_stmt(assign(
+                local_ref(result_local, "__result_val", TypeTable::I32),
+                err_construct,
+            ))])),
+        ));
 
-            return local_ref(result_local, "__result_val", TypeTable::I32);
-        }
+        return local_ref(result_local, "__result_val", TypeTable::I32);
     }
 
     // Fallback: just return the discriminant as-is
@@ -1407,30 +1423,33 @@ fn make_adapter_function(
 /// Map a WASI return type to the flat return `TypeId` for the adapter.
 /// Sync functions with outptr return void from the raw call itself.
 fn wasi_return_type_id(func_info: &WasiFunctionInfo) -> TypeId {
-    let conv = &func_info.call_convention;
-    if conv.is_async || conv.outptr_alloc.is_some() {
+    if func_info.is_async {
         // Async: raw call returns subtask handle (i32)
-        // Outptr: raw call returns void; result is read from outptr
-        if conv.is_async {
-            TypeTable::I32
+        TypeTable::I32
+    } else {
+        let needs_outptr = func_info
+            .return_type
+            .as_ref()
+            .is_some_and(|rt| crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS);
+        if needs_outptr {
+            // Outptr: raw call returns void; result is read from outptr
+            TypeTable::UNIT
+        } else if let Some(ty) = &func_info.return_type {
+            // Flat return: use the core type
+            match ty {
+                Type::Named(n) => match n.name.as_str() {
+                    "i32" | "u32" => TypeTable::I32,
+                    "i64" | "u64" => TypeTable::I64,
+                    "f32" => TypeTable::F32,
+                    "f64" => TypeTable::F64,
+                    "bool" => TypeTable::I32, // CM returns bool as i32
+                    _ => TypeTable::I32,
+                },
+                _ => TypeTable::I32,
+            }
         } else {
             TypeTable::UNIT
         }
-    } else if let Some(ty) = &func_info.return_type {
-        // Flat return: use the core type
-        match ty {
-            Type::Named(n) => match n.name.as_str() {
-                "i32" | "u32" => TypeTable::I32,
-                "i64" | "u64" => TypeTable::I64,
-                "f32" => TypeTable::F32,
-                "f64" => TypeTable::F64,
-                "bool" => TypeTable::I32, // CM returns bool as i32
-                _ => TypeTable::I32,
-            },
-            _ => TypeTable::I32,
-        }
-    } else {
-        TypeTable::UNIT
     }
 }
 
@@ -1455,13 +1474,15 @@ fn synthesize_adapter(
     let local_name = func_info.local_alias_name();
 
     // Derive outptr needs from return type using Canonical ABI layout
-    let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
-        crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
-    });
+    let needs_outptr = func_info
+        .return_type
+        .as_ref()
+        .is_some_and(|rt| crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS);
     let outptr_alloc = if needs_outptr {
-        func_info.return_type.as_ref().map(|rt| {
-            (crate::cm_abi::cm_size(rt), crate::cm_abi::cm_align(rt))
-        })
+        func_info
+            .return_type
+            .as_ref()
+            .map(|rt| (crate::cm_abi::cm_size(rt), crate::cm_abi::cm_align(rt)))
     } else {
         None
     };
@@ -1670,7 +1691,10 @@ fn synthesize_adapter(
             body_stmts.push(return_stmt(Some(converter_call)));
         } else {
             // Inline lifting for all other types (primitives, string, option, result, tuple, etc.)
-            let lift_ctx = LiftContext { wasi_registry, type_table };
+            let lift_ctx = LiftContext {
+                wasi_registry,
+                type_table,
+            };
             let lifted = synthesize_lift_with_context(
                 &resolved,
                 local_ref(outptr_local, "__outptr", TypeTable::I32),
@@ -1703,7 +1727,12 @@ fn synthesize_adapter(
             // an i32 discriminant on the stack, but the adapter needs to return a GC struct.
             // Synthesize VariantConstruct from the discriminant.
             let disc_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
-            body_stmts.push(let_stmt("__disc", disc_local, TypeTable::I32, raw_call_expr));
+            body_stmts.push(let_stmt(
+                "__disc",
+                disc_local,
+                TypeTable::I32,
+                raw_call_expr,
+            ));
 
             let result_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
             body_stmts.push(let_mut_stmt(
@@ -1713,7 +1742,10 @@ fn synthesize_adapter(
                 null_expr(TypeTable::I32),
             ));
 
-            let lift_ctx = LiftContext { wasi_registry, type_table };
+            let lift_ctx = LiftContext {
+                wasi_registry,
+                type_table,
+            };
             let lifted = synthesize_lift_flat_result(
                 &resolved,
                 local_ref(disc_local, "__disc", TypeTable::I32),
@@ -1767,11 +1799,7 @@ pub fn generate_adapters(mut project: Project) -> Project {
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if let Some(body) = &func.body {
-                collect_effect_calls_in_block(
-                    body,
-                    &mut seen_effects,
-                    &project.wasi_registry,
-                );
+                collect_effect_calls_in_block(body, &mut seen_effects, project.wasi_registry);
             }
         }
     }
@@ -1791,7 +1819,7 @@ pub fn generate_adapters(mut project: Project) -> Project {
         if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
             let func_info = func_info.clone();
             let adapter_name = adapter_func_name(&func_info.effect_name, &func_info.method_name);
-            let adapter = synthesize_adapter(&func_info, &project.wasi_registry, &entry_type_table);
+            let adapter = synthesize_adapter(&func_info, project.wasi_registry, &entry_type_table);
             adapters.insert(qualified_name.clone(), adapter.clone());
             // Also index by adapter function name for lookup
             adapters.insert(adapter_name, adapter);
@@ -1843,11 +1871,7 @@ fn fixup_return_type_in_body(adapter: &mut TirFunction, return_type: TypeId) {
 
 /// Recursively fix placeholder types in a block's return statements and
 /// their nested expressions.
-fn fixup_types_in_block(
-    block: &mut TirBlock,
-    return_type: TypeId,
-    local_types: &mut Vec<TypeId>,
-) {
+fn fixup_types_in_block(block: &mut TirBlock, return_type: TypeId, local_types: &mut Vec<TypeId>) {
     for stmt in &mut block.stmts {
         match &mut stmt.kind {
             TirStmtKind::Return {
@@ -1930,7 +1954,7 @@ fn fixup_adapter_expr(expr: &mut TirExpr, return_type: TypeId) {
     }
 }
 
-/// Fix up VariantConstruct and OptionSome expressions to use the real type.
+/// Fix up `VariantConstruct` and `OptionSome` expressions to use the real type.
 fn fixup_variant_construct(expr: &mut TirExpr, return_type: TypeId) {
     match &mut expr.kind {
         TirExprKind::VariantConstruct { variant_type, .. } => {
@@ -1954,9 +1978,8 @@ fn fixup_variant_construct(expr: &mut TirExpr, return_type: TypeId) {
 fn fixup_expr_type(expr: &mut TirExpr, type_id: TypeId) {
     expr.type_id = type_id;
     match &mut expr.kind {
-        TirExprKind::TupleLiteral { .. }
-        | TirExprKind::Call { .. }
-        | TirExprKind::Local { .. } => {}
+        TirExprKind::TupleLiteral { .. } | TirExprKind::Call { .. } | TirExprKind::Local { .. } => {
+        }
         TirExprKind::VariantConstruct { variant_type, .. } => {
             if *variant_type == TypeTable::I32 {
                 *variant_type = type_id;
@@ -2137,79 +2160,81 @@ fn rewrite_calls_in_expr(
     }
 
     // Check if this is a resource MethodCall that should be rewritten to target an adapter
-    if let TirExprKind::MethodCall { func, .. } = &expr.kind {
-        if let Some(method_info) = func.method_info() {
-            let qualified =
-                format!("{}::{}", method_info.base_struct_name, method_info.method_name);
-            if let Some(adapter_rc) = adapters.get(&qualified) {
-                // Extract receiver and args before replacing
-                let (taken_receiver, taken_args) =
-                    if let TirExprKind::MethodCall { receiver, args, .. } = &mut expr.kind {
-                        (
-                            std::mem::replace(
-                                receiver.as_mut(),
-                                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-                            ),
-                            std::mem::take(args),
-                        )
-                    } else {
-                        unreachable!()
-                    };
-
-                // Fix up adapter function types from the call site
-                // The adapter params include self as the first param
-                {
-                    let mut adapter = adapter_rc.borrow_mut();
-                    if adapter.return_type != expr.type_id {
-                        adapter.return_type = expr.type_id;
-                        fixup_return_type_in_body(&mut adapter, expr.type_id);
-                    }
-                    // Fix up self param (index 0) from the receiver
-                    if !adapter.params.is_empty() && adapter.params[0].type_id != taken_receiver.type_id
-                    {
-                        let local_idx = adapter.params[0].local_index as usize;
-                        adapter.params[0].type_id = taken_receiver.type_id;
-                        if local_idx < adapter.local_types.len() {
-                            adapter.local_types[local_idx] = taken_receiver.type_id;
-                        }
-                    }
-                    // Fix up remaining params from the args
-                    for (i, arg) in taken_args.iter().enumerate() {
-                        let param_idx = i + 1; // +1 to skip self
-                        if param_idx < adapter.params.len()
-                            && adapter.params[param_idx].type_id != arg.type_id
-                        {
-                            let local_idx = adapter.params[param_idx].local_index as usize;
-                            adapter.params[param_idx].type_id = arg.type_id;
-                            if local_idx < adapter.local_types.len() {
-                                adapter.local_types[local_idx] = arg.type_id;
-                            }
-                        }
-                    }
-                }
-
-                // Replace MethodCall with Call targeting the adapter
-                // Prepend receiver to args
-                let mut all_args = vec![taken_receiver];
-                all_args.extend(taken_args);
-
-                expr.kind = TirExprKind::Call {
-                    func: FunctionRef::Resolved {
-                        func: adapter_rc.clone(),
-                        module_source: entry_source.clone(),
-                    },
-                    args: all_args,
-                    type_args: vec![],
+    if let TirExprKind::MethodCall { func, .. } = &expr.kind
+        && let Some(method_info) = func.method_info()
+    {
+        let qualified = format!(
+            "{}::{}",
+            method_info.base_struct_name, method_info.method_name
+        );
+        if let Some(adapter_rc) = adapters.get(&qualified) {
+            // Extract receiver and args before replacing
+            let (taken_receiver, taken_args) =
+                if let TirExprKind::MethodCall { receiver, args, .. } = &mut expr.kind {
+                    (
+                        std::mem::replace(
+                            receiver.as_mut(),
+                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+                        ),
+                        std::mem::take(args),
+                    )
+                } else {
+                    unreachable!()
                 };
 
-                // Recurse into args of the new Call
-                if let TirExprKind::Call { args, .. } = &mut expr.kind {
-                    for arg in args {
-                        rewrite_calls_in_expr(arg, adapters, entry_source);
+            // Fix up adapter function types from the call site
+            // The adapter params include self as the first param
+            {
+                let mut adapter = adapter_rc.borrow_mut();
+                if adapter.return_type != expr.type_id {
+                    adapter.return_type = expr.type_id;
+                    fixup_return_type_in_body(&mut adapter, expr.type_id);
+                }
+                // Fix up self param (index 0) from the receiver
+                if !adapter.params.is_empty() && adapter.params[0].type_id != taken_receiver.type_id
+                {
+                    let local_idx = adapter.params[0].local_index as usize;
+                    adapter.params[0].type_id = taken_receiver.type_id;
+                    if local_idx < adapter.local_types.len() {
+                        adapter.local_types[local_idx] = taken_receiver.type_id;
                     }
                 }
-                return;
+                // Fix up remaining params from the args
+                for (i, arg) in taken_args.iter().enumerate() {
+                    let param_idx = i + 1; // +1 to skip self
+                    if param_idx < adapter.params.len()
+                        && adapter.params[param_idx].type_id != arg.type_id
+                    {
+                        let local_idx = adapter.params[param_idx].local_index as usize;
+                        adapter.params[param_idx].type_id = arg.type_id;
+                        if local_idx < adapter.local_types.len() {
+                            adapter.local_types[local_idx] = arg.type_id;
+                        }
+                    }
+                }
             }
+
+            // Replace MethodCall with Call targeting the adapter
+            // Prepend receiver to args
+            let mut all_args = vec![taken_receiver];
+            all_args.extend(taken_args);
+
+            expr.kind = TirExprKind::Call {
+                func: FunctionRef::Resolved {
+                    func: adapter_rc.clone(),
+                    module_source: entry_source.clone(),
+                },
+                args: all_args,
+                type_args: vec![],
+            };
+
+            // Recurse into args of the new Call
+            if let TirExprKind::Call { args, .. } = &mut expr.kind {
+                for arg in args {
+                    rewrite_calls_in_expr(arg, adapters, entry_source);
+                }
+            }
+            return;
         }
     }
 
@@ -2381,13 +2406,13 @@ fn collect_effect_calls_in_expr(
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
             // Collect effect-like Call nodes (sync WASI calls like Environment::get_arguments)
-            if func.module_source().is_effect_like() {
-                if let Some(effect_name) = func.module_source().effect_name() {
-                    let method_name = func.name();
-                    let qualified = format!("{effect_name}::{method_name}");
-                    if wasi_registry.get_function(&qualified).is_some() {
-                        effects.insert(qualified);
-                    }
+            if func.module_source().is_effect_like()
+                && let Some(effect_name) = func.module_source().effect_name()
+            {
+                let method_name = func.name();
+                let qualified = format!("{effect_name}::{method_name}");
+                if wasi_registry.get_function(&qualified).is_some() {
+                    effects.insert(qualified);
                 }
             }
             for arg in args {
@@ -2422,8 +2447,10 @@ fn collect_effect_calls_in_expr(
         } => {
             // Check if this is a WASI resource method call
             if let Some(method_info) = func.method_info() {
-                let qualified =
-                    format!("{}::{}", method_info.base_struct_name, method_info.method_name);
+                let qualified = format!(
+                    "{}::{}",
+                    method_info.base_struct_name, method_info.method_name
+                );
                 if wasi_registry.get_function(&qualified).is_some() {
                     effects.insert(qualified);
                 }
@@ -2670,10 +2697,8 @@ mod tests {
         let mut stmts = Vec::new();
         let mut local_types = Vec::new();
         let mut next_local = 0_u32;
-        let result_ty = cm_abi::generic_type(
-            "Result",
-            vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
-        );
+        let result_ty =
+            cm_abi::generic_type("Result", vec![Type::Tuple(vec![]), Type::Tuple(vec![])]);
         let expr = synthesize_lift(
             &result_ty,
             i32_const(100),

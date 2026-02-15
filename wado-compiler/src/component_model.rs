@@ -38,8 +38,6 @@ pub struct WasiFunctionInfo {
     pub params: Vec<(String, Type)>,
     /// Return type
     pub return_type: Option<Type>,
-    /// Component Model call convention (derived from return type)
-    pub call_convention: CmCallConvention,
 }
 
 impl WasiFunctionInfo {
@@ -49,6 +47,55 @@ impl WasiFunctionInfo {
     /// Example: `wasi:cli/Stdout::write_via_stream`
     pub fn local_alias_name(&self) -> String {
         build_local_alias_name(&self.package, &self.effect_name, &self.method_name)
+    }
+
+    /// Whether `canon lower` requires the Memory canonical option.
+    ///
+    /// True when any parameter or return type involves linear memory
+    /// (strings, lists, streams, options, results, tuples), or when async.
+    pub fn needs_memory(&self) -> bool {
+        if self.is_async {
+            return true;
+        }
+        if self
+            .params
+            .iter()
+            .any(|(_, ty)| Self::type_requires_memory(ty))
+        {
+            return true;
+        }
+        self.return_type
+            .as_ref()
+            .is_some_and(Self::return_type_requires_memory)
+    }
+
+    /// Whether `canon lower` requires the Realloc canonical option.
+    ///
+    /// Same conditions as `needs_memory` — they are always needed together.
+    pub fn needs_realloc(&self) -> bool {
+        self.needs_memory()
+    }
+
+    /// Check if a parameter type requires Memory + Realloc in canon lower.
+    fn type_requires_memory(ty: &Type) -> bool {
+        match ty {
+            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "Array"),
+            Type::Named(named) => named.name == "String",
+            _ => false,
+        }
+    }
+
+    /// Check if a return type requires Memory + Realloc in canon lower.
+    fn return_type_requires_memory(ty: &Type) -> bool {
+        match ty {
+            Type::Named(named) => named.name == "String",
+            Type::Generic(generic) => match generic.name.as_str() {
+                "Array" | "Option" | "Result" | "Tuple" | "Stream" | "Future" => true,
+                _ => false,
+            },
+            Type::Tuple(elems) => !elems.is_empty(),
+            _ => false,
+        }
     }
 }
 
@@ -577,15 +624,6 @@ impl WasiRegistry {
             .into_iter()
             .map(|(name, ty)| (name, self.resolve_type(&ty)))
             .collect();
-        // Don't resolve return type upfront - keep original for newtype semantics
-        // The resolver will handle newtype mapping
-        let resolved_return_for_convention = return_type.as_ref().map(|ty| self.resolve_type(ty));
-
-        // Derive CM call convention from resolved return type, params, and async flag
-        let call_convention = CmCallConvention::from_return_type(&resolved_return_for_convention)
-            .with_params(&resolved_params)
-            .with_async(is_async);
-
         let func_info = WasiFunctionInfo {
             effect_name: effect_name.to_string(),
             method_name: method_name.to_string(),
@@ -595,7 +633,6 @@ impl WasiRegistry {
             is_async,
             params: resolved_params,
             return_type,
-            call_convention,
         };
 
         // Generate the local alias name using utility function
@@ -1498,385 +1535,6 @@ impl CmPrimitiveType {
     }
 }
 
-/// Types of CM converters that lift linear memory values to GC types.
-///
-/// Each variant corresponds to a function in `core/internal` that handles
-/// a specific Component Model return type pattern.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CmConverterKind {
-    /// `cm_list_string_to_array` — lifts `list<string>` to `Array<String>`
-    ListString,
-    /// `cm_list_u8_to_array` — lifts `list<u8>` to `Array<u8>`
-    ListU8,
-    /// `cm_list_tuple_string_string_to_array` — lifts `list<tuple<string, string>>` to `Array<[String, String]>`
-    ListTupleString,
-    /// `cm_option_string_to_option` — lifts `option<string>` to `Option<String>`
-    OptionString,
-    /// `cm_option_own_resource_to_option` — lifts `option<own<resource>>` to `Option<i32>`
-    OptionOwnResource,
-}
-
-impl CmConverterKind {
-    /// Function name in `core/internal` (e.g., `"cm_list_string_to_array"`).
-    pub fn func_name(self) -> &'static str {
-        match self {
-            Self::ListString => "cm_list_string_to_array",
-            Self::ListU8 => "cm_list_u8_to_array",
-            Self::ListTupleString => "cm_list_tuple_string_string_to_array",
-            Self::OptionString => "cm_option_string_to_option",
-            Self::OptionOwnResource => "cm_option_own_resource_to_option",
-        }
-    }
-
-    /// Full codegen path used by `WasmBuilder::func_idx` for function lookup.
-    pub fn codegen_path(self) -> &'static str {
-        match self {
-            Self::ListString => "core/internal/cm_list_string_to_array",
-            Self::ListU8 => "core/internal/cm_list_u8_to_array",
-            Self::ListTupleString => "core/internal/cm_list_tuple_string_string_to_array",
-            Self::OptionString => "core/internal/cm_option_string_to_option",
-            Self::OptionOwnResource => "core/internal/cm_option_own_resource_to_option",
-        }
-    }
-
-    /// Module source for TIR construction (all converters live in `core/internal`).
-    pub fn module_source(self) -> crate::name::ModuleSource {
-        crate::name::ModuleSource::core("internal")
-    }
-}
-
-/// Component Model ABI call convention
-///
-/// Describes how to call a CM function and handle its return value.
-/// This struct is derived from the function's return type and captures
-/// all the information codegen needs without knowing WASI-specific details.
-#[derive(Debug, Clone, Default)]
-#[allow(clippy::struct_excessive_bools)] // These are independent properties, not state
-pub struct CmCallConvention {
-    /// Whether this is an async function (needs subtask handling)
-    pub is_async: bool,
-    /// Whether `canon lower` requires Memory canonical option
-    pub needs_memory: bool,
-    /// Whether `canon lower` requires Realloc canonical option
-    pub needs_realloc: bool,
-    /// If Some, allocate outptr before call: (`size_bytes`, `align_bytes`)
-    pub outptr_alloc: Option<(u32, u32)>,
-    /// Conversion function to call after the call (if any)
-    pub result_converter: Option<CmConverterKind>,
-    /// For tuple returns: element types for struct creation
-    pub tuple_return: Option<Vec<CmPrimitiveType>>,
-    /// For result<T, E> returns: `Some((ok_is_resource`, `err_is_enum`))
-    /// `ok_is_resource`: if true, Ok payload is a resource handle (i32)
-    /// `err_is_enum`: if true, Err payload is an enum (i32)
-    pub result_return: Option<(bool, bool)>,
-}
-
-impl CmCallConvention {
-    /// Derive call convention from a function's return type
-    ///
-    /// This analyzes the type and determines all CM ABI requirements,
-    /// so codegen doesn't need to know about specific WASI types.
-    pub fn from_return_type(return_type: &Option<Type>) -> Self {
-        let Some(ty) = return_type else {
-            return Self::default();
-        };
-
-        match ty {
-            // Primitives: direct return, no special handling
-            Type::Named(named) => match named.name.as_str() {
-                "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" => {
-                    Self::default()
-                }
-                // String return type needs memory/realloc for CM lowering
-                // (string is lowered as list<u8> which requires memory allocation)
-                "String" => Self {
-                    needs_memory: true,
-                    needs_realloc: true,
-                    outptr_alloc: Some((8, 4)), // ptr + len
-                    ..Self::default()
-                },
-                // Other named types (resources, enums) - use default
-                _ => Self::default(),
-            },
-
-            // Generic types
-            Type::Generic(generic) => match generic.name.as_str() {
-                // list<string> -> needs outptr (8 bytes: ptr + count) + converter
-                "Array" if generic.args.len() == 1 => Self::for_list_return(&generic.args[0]),
-
-                // option<T> -> depends on T
-                "Option" if generic.args.len() == 1 => Self::for_option_return(&generic.args[0]),
-
-                // Tuple<T, U, ...> -> needs outptr + tuple struct creation
-                "Tuple" if !generic.args.is_empty() => Self::for_tuple_return(&generic.args),
-
-                // Result<T, E> -> needs outptr
-                "Result" if generic.args.len() == 2 => {
-                    Self::for_result_return(&generic.args[0], &generic.args[1])
-                }
-
-                // Stream<T>, Future<T> - handle returns
-                "Stream" | "Future" => Self::default(),
-
-                _ => Self::default(),
-            },
-
-            // [T, U, ...] tuple syntax
-            Type::Tuple(elems) if !elems.is_empty() => Self::for_tuple_return(elems),
-
-            _ => Self::default(),
-        }
-    }
-
-    /// Convention for list<T> return types
-    fn for_list_return(element_type: &Type) -> Self {
-        // list<T> uses outptr (8 bytes: ptr + count, align 4)
-        // Needs memory + realloc for lowering
-        let converter = match element_type {
-            Type::Named(named) if named.name == "String" => Some(CmConverterKind::ListString),
-            Type::Named(named) if named.name == "u8" => Some(CmConverterKind::ListU8),
-            // list<tuple<string, string>> for Environment::get_environment
-            Type::Tuple(elems) if elems.len() == 2 => {
-                if Self::is_string_type(&elems[0]) && Self::is_string_type(&elems[1]) {
-                    Some(CmConverterKind::ListTupleString)
-                } else {
-                    None
-                }
-            }
-            // Tuple<String, String> syntax
-            Type::Generic(g) if g.name == "Tuple" && g.args.len() == 2 => {
-                if Self::is_string_type(&g.args[0]) && Self::is_string_type(&g.args[1]) {
-                    Some(CmConverterKind::ListTupleString)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        };
-
-        Self {
-            is_async: false,
-            needs_memory: true,
-            needs_realloc: true,
-            outptr_alloc: Some((8, 4)), // ptr + count
-            result_converter: converter,
-            tuple_return: None,
-            result_return: None,
-        }
-    }
-
-    /// Convention for option<T> return types
-    fn for_option_return(inner_type: &Type) -> Self {
-        match inner_type {
-            // option<string> -> outptr (12 bytes: discriminant + ptr + len)
-            Type::Named(named) if named.name == "String" => Self {
-                is_async: false,
-                needs_memory: true,
-                needs_realloc: true,
-                outptr_alloc: Some((12, 4)),
-                result_converter: Some(CmConverterKind::OptionString),
-                tuple_return: None,
-                result_return: None,
-            },
-
-            // option<own<resource>> -> outptr (8 bytes: discriminant u8 at +0, handle i32 at +4)
-            // CM ABI: 1-byte discriminant (0=none, 1=some) + 3-byte padding + 4-byte handle
-            // This covers TerminalInput, TerminalOutput, etc.
-            Type::Generic(g) if g.name == "Own" => Self {
-                is_async: false,
-                needs_memory: true,
-                needs_realloc: true,
-                outptr_alloc: Some((8, 4)),
-                result_converter: Some(CmConverterKind::OptionOwnResource),
-                tuple_return: None,
-                result_return: None,
-            },
-
-            // option<primitive> - simple case, but still needs outptr
-            Type::Named(named) => {
-                let prim_size = match named.name.as_str() {
-                    "i32" | "u32" | "f32" | "bool" | "char" => 4,
-                    "i64" | "u64" | "f64" => 8,
-                    // Unknown type - assume resource handle
-                    // CM ABI: 1-byte discriminant + 3-byte padding + 4-byte handle = 8 bytes
-                    _ => {
-                        return Self {
-                            is_async: false,
-                            needs_memory: true,
-                            needs_realloc: true,
-                            outptr_alloc: Some((8, 4)),
-                            result_converter: Some(CmConverterKind::OptionOwnResource),
-                            tuple_return: None,
-                            result_return: None,
-                        };
-                    }
-                };
-                // Discriminant (1 byte padded to align) + value
-                let align = prim_size;
-                let size = align + prim_size; // discriminant + padding + value
-                Self {
-                    is_async: false,
-                    needs_memory: true,
-                    needs_realloc: true,
-                    outptr_alloc: Some((size, align)),
-                    result_converter: None,
-                    tuple_return: None,
-                    result_return: None,
-                }
-            }
-
-            _ => Self::default(),
-        }
-    }
-
-    /// Convention for tuple<T, U, ...> return types
-    fn for_tuple_return(elements: &[Type]) -> Self {
-        let mut primitives = Vec::new();
-        let mut total_size: u32 = 0;
-        let mut max_align: u32 = 1;
-
-        for elem in elements {
-            if let Some(prim) = Self::type_to_primitive(elem) {
-                // Align current offset
-                let align = prim.align();
-                if !total_size.is_multiple_of(align) {
-                    total_size += align - (total_size % align);
-                }
-                total_size += prim.size();
-                max_align = max_align.max(align);
-                primitives.push(prim);
-            } else {
-                // Non-primitive in tuple - not supported yet
-                return Self::default();
-            }
-        }
-
-        // Final size must be aligned to max alignment
-        if !total_size.is_multiple_of(max_align) {
-            total_size += max_align - (total_size % max_align);
-        }
-
-        Self {
-            is_async: false,
-            needs_memory: true,
-            needs_realloc: true,
-            outptr_alloc: Some((total_size, max_align)),
-            result_converter: None,
-            tuple_return: Some(primitives),
-            result_return: None,
-        }
-    }
-
-    /// Convention for result<T, E> return types
-    fn for_result_return(ok_type: &Type, err_type: &Type) -> Self {
-        // Check if both ok and err are unit type (no payload)
-        // result<_, _> flattens to a single i32 discriminant — no outptr needed
-        let ok_is_unit = Self::is_unit_type(ok_type);
-        let err_is_unit = Self::is_unit_type(err_type);
-
-        if ok_is_unit && err_is_unit {
-            return Self {
-                result_return: Some((false, false)),
-                ..Self::default()
-            };
-        }
-
-        // Check if ok_type is a resource (named type that's not a primitive)
-        let ok_is_resource = matches!(ok_type, Type::Named(named) if !matches!(
-            named.name.as_str(),
-            "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "String"
-        ));
-
-        // Check if err_type is an enum (named type that's not a primitive)
-        let err_is_enum = matches!(err_type, Type::Named(named) if !matches!(
-            named.name.as_str(),
-            "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "String"
-        ));
-
-        // Result layout in CM: discriminant (i32) + max(ok_size, err_size)
-        // For Result<Resource, Enum>: discriminant (4) + payload (4) = 8 bytes
-        Self {
-            is_async: false,
-            needs_memory: true,
-            needs_realloc: true,
-            outptr_alloc: Some((8, 4)), // discriminant + payload
-            result_converter: None,
-            tuple_return: None,
-            result_return: Some((ok_is_resource, err_is_enum)),
-        }
-    }
-
-    /// Check if a type is the unit type `()` — can be Tuple([]) or Named("()")
-    fn is_unit_type(ty: &Type) -> bool {
-        matches!(ty, Type::Tuple(elems) if elems.is_empty())
-            || matches!(ty, Type::Named(n) if n.name == "()")
-    }
-
-    /// Set the `is_async` flag
-    pub fn with_async(mut self, is_async: bool) -> Self {
-        self.is_async = is_async;
-        // Async functions always need Memory + Realloc for continuation handling
-        if is_async {
-            self.needs_memory = true;
-            self.needs_realloc = true;
-        }
-        self
-    }
-
-    /// Update convention based on parameter types.
-    ///
-    /// Some parameter types (like Stream<T>) require Memory + Realloc
-    /// even if the return type doesn't require it.
-    pub fn with_params(mut self, params: &[(String, Type)]) -> Self {
-        for (_, ty) in params {
-            if Self::type_requires_memory(ty) {
-                self.needs_memory = true;
-                self.needs_realloc = true;
-                break;
-            }
-        }
-        self
-    }
-
-    /// Check if a type requires Memory + Realloc in canon lower
-    fn type_requires_memory(ty: &Type) -> bool {
-        match ty {
-            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "Array"),
-            Type::Named(named) => named.name == "String",
-            _ => false,
-        }
-    }
-
-    /// Check if a type is String
-    fn is_string_type(ty: &Type) -> bool {
-        matches!(ty, Type::Named(named) if named.name == "String")
-    }
-
-    /// Convert AST Type to `CmPrimitiveType`
-    fn type_to_primitive(ty: &Type) -> Option<CmPrimitiveType> {
-        match ty {
-            Type::Named(named) => match named.name.as_str() {
-                "i32" => Some(CmPrimitiveType::I32),
-                "i64" => Some(CmPrimitiveType::I64),
-                "u32" => Some(CmPrimitiveType::U32),
-                "u64" => Some(CmPrimitiveType::U64),
-                "f32" => Some(CmPrimitiveType::F32),
-                "f64" => Some(CmPrimitiveType::F64),
-                // String is a complex type (list<u8> in CM), not a primitive
-                "String" => None,
-                // Other named types are resource handles, enums, etc. — all i32 in core wasm
-                _ => Some(CmPrimitiveType::I32),
-            },
-            // Stream<T> and Future<T> are i32 handles in core wasm
-            Type::Generic(generic) => match generic.name.as_str() {
-                "Stream" | "Future" => Some(CmPrimitiveType::I32),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2029,55 +1687,10 @@ mod tests {
             is_async: true,
             params: vec![],
             return_type: None,
-            call_convention: CmCallConvention::default(),
         };
         assert_eq!(
             func_info.local_alias_name(),
             "wasi:cli/Stdout::write_via_stream"
-        );
-    }
-
-    #[test]
-    fn test_cm_call_convention_from_return_type() {
-        // Test primitives - no special handling
-        let conv = CmCallConvention::from_return_type(&Some(Type::Named(crate::ast::NamedType {
-            name: "i32".to_string(),
-            span: make_span(),
-        })));
-        assert!(conv.outptr_alloc.is_none());
-        assert!(conv.result_converter.is_none());
-
-        // Test list<string>
-        let conv =
-            CmCallConvention::from_return_type(&Some(Type::Generic(crate::ast::GenericType {
-                name: "Array".to_string(),
-                args: vec![Type::Named(crate::ast::NamedType {
-                    name: "String".to_string(),
-                    span: make_span(),
-                })],
-                span: make_span(),
-            })));
-        assert_eq!(conv.outptr_alloc, Some((8, 4)));
-        assert_eq!(conv.result_converter, Some(CmConverterKind::ListString));
-        assert!(conv.needs_memory);
-        assert!(conv.needs_realloc);
-
-        // Test tuple<u64, u64>
-        let conv = CmCallConvention::from_return_type(&Some(Type::Tuple(vec![
-            Type::Named(crate::ast::NamedType {
-                name: "u64".to_string(),
-                span: make_span(),
-            }),
-            Type::Named(crate::ast::NamedType {
-                name: "u64".to_string(),
-                span: make_span(),
-            }),
-        ])));
-        assert_eq!(conv.outptr_alloc, Some((16, 8)));
-        assert!(conv.result_converter.is_none());
-        assert_eq!(
-            conv.tuple_return,
-            Some(vec![CmPrimitiveType::U64, CmPrimitiveType::U64])
         );
     }
 
