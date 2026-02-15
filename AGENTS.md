@@ -306,6 +306,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Compile-Time Tuple Enumeration](./docs/wep-2026-02-10-compile-time-tuple-enumeration.md)
 - [Package Manifest (`wado.toml`)](./docs/wep-2026-02-14-package-manifest.md)
 - [Wasm IR (WIR) Layer](./docs/wep-2026-02-14-wir-layer.md)
+- [TIR-Level CM Adapter Synthesis](./docs/wep-2026-02-15-cm-adapter-synthesis.md)
 
 ### Structure
 

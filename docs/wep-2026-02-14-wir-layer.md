@@ -26,6 +26,8 @@ lower → optimize → wasm_plan → codegen → wasm binary
 
 `codegen` receives TIR + metadata and produces Wasm bytes in one monolithic pass. There is no inspectable intermediate form between TIR and binary.
 
+A complementary approach — [TIR-Level CM Adapter Synthesis](./wep-2026-02-15-cm-adapter-synthesis.md) — can reduce the CM-specific surface area of codegen independently and before WIR migration, by moving CM boundary logic into synthesized TIR functions that flow through the normal pipeline.
+
 ## Decision
 
 Introduce **WIR (Wasm IR)** — a tree-structured intermediate representation between TIR and Wasm binary. WIR is close to Wasm semantics but retains enough high-level information to be readable and debuggable.
@@ -940,6 +942,10 @@ Implement `tir_to_wir` expression translation for core constructs.
 - [ ] Global get/set
 
 #### Step 3e: Function Bodies — WASI and CM
+
+If [TIR-Level CM Adapter Synthesis](./wep-2026-02-15-cm-adapter-synthesis.md) is completed before this step, CM adapter functions are already ordinary TIR functions — `tir_to_wir` handles them like any other function, and this step is largely unnecessary. Only the raw CM call builtins (`builtin::cm_raw_call__*`) need WIR-level support.
+
+Without CM adapter synthesis, the following must be handled:
 
 - [ ] CM effect calls (canonical lift/lower)
 - [ ] CM resource method calls
