@@ -559,6 +559,12 @@ pub enum WirInstr {
     I64TruncF32U(Box<WirInstr>),
     I64ReinterpretF64(Box<WirInstr>),
 
+    // === Arithmetic (i128 via i64 pairs, Wasm 3.0) ===
+    I64Add128(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    I64Sub128(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
+    I64MulWideU(Box<WirInstr>, Box<WirInstr>),
+    I64MulWideS(Box<WirInstr>, Box<WirInstr>),
+
     // === Arithmetic (f32) ===
     F32Add(Box<WirInstr>, Box<WirInstr>),
     F32Sub(Box<WirInstr>, Box<WirInstr>),
@@ -683,7 +689,13 @@ pub enum WirInstr {
     MemorySize,
     MemoryGrow(Box<WirInstr>),
     I32Load { offset: u64, align: u32, addr: Box<WirInstr> },
+    I32Load8U { offset: u64, align: u32, addr: Box<WirInstr> },
+    I32Load8S { offset: u64, align: u32, addr: Box<WirInstr> },
+    I32Load16U { offset: u64, align: u32, addr: Box<WirInstr> },
+    I32Load16S { offset: u64, align: u32, addr: Box<WirInstr> },
     I32Store { offset: u64, align: u32, addr: Box<WirInstr>, value: Box<WirInstr> },
+    I32Store8 { offset: u64, align: u32, addr: Box<WirInstr>, value: Box<WirInstr> },
+    I32Store16 { offset: u64, align: u32, addr: Box<WirInstr>, value: Box<WirInstr> },
     I64Load { offset: u64, align: u32, addr: Box<WirInstr> },
     I64Store { offset: u64, align: u32, addr: Box<WirInstr>, value: Box<WirInstr> },
 
