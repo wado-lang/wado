@@ -88,11 +88,6 @@ pub fn analyze_project(project: &mut Project) {
         FunctionId::Free(FreeFunctionName::from_strs(&["core", "internal"], name))
     };
 
-    // Helper to check if a core/builtin function is reachable
-    let core_builtin = |name: &str| -> FunctionId {
-        FunctionId::Free(FreeFunctionName::from_strs(&["core", "builtin"], name))
-    };
-
     // Derive builtin usage from reachable internal functions
     // f64_to_string/f32_to_string call the bundled f64_to_buffer/f32_to_buffer
     let needs_f64_to_buffer = reachable.contains(&core_internal("f64_to_string"));
@@ -285,15 +280,8 @@ pub fn analyze_project(project: &mut Project) {
         // TaskReturn is always needed for async exports
         add_import_by_name(&mut imports, "task_return");
 
-        // Waitable-set builtins only needed when effect_wait is called
-        // effect_wait is used by ambient logging functions (log_stdout, log_stderr)
-        // but NOT by regular println/eprintln which don't wait for completion
-        if reachable.contains(&core_builtin("effect_wait")) {
-            add_import_by_name(&mut imports, "waitable_set_new");
-            add_import_by_name(&mut imports, "waitable_join");
-            add_import_by_name(&mut imports, "waitable_set_wait");
-            add_import_by_name(&mut imports, "subtask_drop");
-        }
+        // Waitable-set builtins (waitable_set_new, waitable_join, waitable_set_wait, subtask_drop)
+        // are added automatically via reachability from internal::wait_for_subtask
 
         // HTTP handler exports need future intrinsics for response creation
         // (trailers parameter to response.new is a future)

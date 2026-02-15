@@ -388,45 +388,44 @@ fn i32_and(a: i32, b: i32) -> i32;
 
 **Instruction Builtins:**
 
-| Function              | Wasm Instruction         | Category    |
-| --------------------- | ------------------------ | ----------- |
-| `i32_and`             | `i32.and`                | i32 ops     |
-| `i32_eqz`             | `i32.eqz`                | i32 ops     |
-| `i32_clz`             | `i32.clz`                | i32 ops     |
-| `i64_clz`             | `i64.clz`                | i64 ops     |
-| `array_len`           | `array.len`              | Array       |
-| `array_get_u8`        | `array.get_u $type`      | Array       |
-| `array_set_u8`        | `array.set $type`        | Array       |
-| `memory_store8`       | `i32.store8`             | Memory      |
-| `memory_load8_u`      | `i32.load8_u`            | Memory      |
-| `effect_wait`         | (effect synchronization) | Effects     |
-| `unreachable`         | `unreachable`            | Control     |
-| `f32_abs`             | `f32.abs`                | Float math  |
-| `f64_abs`             | `f64.abs`                | Float math  |
-| `f32_ceil`            | `f32.ceil`               | Float math  |
-| `f64_ceil`            | `f64.ceil`               | Float math  |
-| `f32_floor`           | `f32.floor`              | Float math  |
-| `f64_floor`           | `f64.floor`              | Float math  |
-| `f32_trunc`           | `f32.trunc`              | Float math  |
-| `f64_trunc`           | `f64.trunc`              | Float math  |
-| `f32_nearest`         | `f32.nearest`            | Float math  |
-| `f64_nearest`         | `f64.nearest`            | Float math  |
-| `f32_sqrt`            | `f32.sqrt`               | Float math  |
-| `f64_sqrt`            | `f64.sqrt`               | Float math  |
-| `f32_min`             | `f32.min`                | Float math  |
-| `f64_min`             | `f64.min`                | Float math  |
-| `f32_max`             | `f32.max`                | Float math  |
-| `f64_max`             | `f64.max`                | Float math  |
-| `f32_copysign`        | `f32.copysign`           | Float math  |
-| `f64_copysign`        | `f64.copysign`           | Float math  |
-| `i64_add128`          | `i64.add128`             | Wide arith  |
-| `i64_sub128`          | `i64.sub128`             | Wide arith  |
-| `i64_mul_wide_u`      | `i64.mul_wide_u`         | Wide arith  |
-| `i64_mul_wide_s`      | `i64.mul_wide_s`         | Wide arith  |
-| `i64_reinterpret_f64` | `i64.reinterpret_f64`    | Reinterpret |
-| `f64_reinterpret_i64` | `f64.reinterpret_i64`    | Reinterpret |
-| `i32_reinterpret_f32` | `i32.reinterpret_f32`    | Reinterpret |
-| `f32_reinterpret_i32` | `f32.reinterpret_i32`    | Reinterpret |
+| Function              | Wasm Instruction      | Category    |
+| --------------------- | --------------------- | ----------- |
+| `i32_and`             | `i32.and`             | i32 ops     |
+| `i32_eqz`             | `i32.eqz`             | i32 ops     |
+| `i32_clz`             | `i32.clz`             | i32 ops     |
+| `i64_clz`             | `i64.clz`             | i64 ops     |
+| `array_len`           | `array.len`           | Array       |
+| `array_get_u8`        | `array.get_u $type`   | Array       |
+| `array_set_u8`        | `array.set $type`     | Array       |
+| `memory_store8`       | `i32.store8`          | Memory      |
+| `memory_load8_u`      | `i32.load8_u`         | Memory      |
+| `unreachable`         | `unreachable`         | Control     |
+| `f32_abs`             | `f32.abs`             | Float math  |
+| `f64_abs`             | `f64.abs`             | Float math  |
+| `f32_ceil`            | `f32.ceil`            | Float math  |
+| `f64_ceil`            | `f64.ceil`            | Float math  |
+| `f32_floor`           | `f32.floor`           | Float math  |
+| `f64_floor`           | `f64.floor`           | Float math  |
+| `f32_trunc`           | `f32.trunc`           | Float math  |
+| `f64_trunc`           | `f64.trunc`           | Float math  |
+| `f32_nearest`         | `f32.nearest`         | Float math  |
+| `f64_nearest`         | `f64.nearest`         | Float math  |
+| `f32_sqrt`            | `f32.sqrt`            | Float math  |
+| `f64_sqrt`            | `f64.sqrt`            | Float math  |
+| `f32_min`             | `f32.min`             | Float math  |
+| `f64_min`             | `f64.min`             | Float math  |
+| `f32_max`             | `f32.max`             | Float math  |
+| `f64_max`             | `f64.max`             | Float math  |
+| `f32_copysign`        | `f32.copysign`        | Float math  |
+| `f64_copysign`        | `f64.copysign`        | Float math  |
+| `i64_add128`          | `i64.add128`          | Wide arith  |
+| `i64_sub128`          | `i64.sub128`          | Wide arith  |
+| `i64_mul_wide_u`      | `i64.mul_wide_u`      | Wide arith  |
+| `i64_mul_wide_s`      | `i64.mul_wide_s`      | Wide arith  |
+| `i64_reinterpret_f64` | `i64.reinterpret_f64` | Reinterpret |
+| `f64_reinterpret_i64` | `f64.reinterpret_i64` | Reinterpret |
+| `i32_reinterpret_f32` | `i32.reinterpret_f32` | Reinterpret |
+| `f32_reinterpret_i32` | `f32.reinterpret_i32` | Reinterpret |
 
 **Registry Usage:**
 
@@ -866,9 +865,6 @@ builtin::waitable_set_new() -> i32
 builtin::waitable_join(set: i32, subtask: i32)
 builtin::waitable_set_wait(set: i32, outptr: i32) -> i32
 builtin::subtask_drop(subtask: i32)
-
-// Effect synchronization
-builtin::effect_wait()                // Wait for all pending effects to complete
 
 // Branch hinting (Wasm branch hinting proposal)
 builtin::likely(cond: bool) -> bool    // Hint: branch is usually taken
