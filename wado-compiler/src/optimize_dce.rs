@@ -105,8 +105,8 @@ pub fn analyze_project(project: &mut Project) {
             }
             // Also check CmCallConvention for converters not detectable from type alone
             // (e.g., Option<ResourceName> where ResourceName is a WASI resource)
-            if let Some(converter) = &func_info.call_convention.result_converter {
-                cm_requirements.analyze_converter(converter);
+            if let Some(converter_kind) = func_info.call_convention.result_converter {
+                cm_requirements.add(converter_kind);
             }
         }
     }
@@ -551,10 +551,9 @@ fn analyze_expr(
 
             // Build function ID for the called function
             // If the callee has an entry point module source (local call), use current module.
-            // Exception: CM adapter functions (prefixed with "__cm_adapter__") are genuinely
-            // in the entry module and should NOT be remapped to the caller's module.
-            let callee_module = if original_callee_module.is_entry_point()
-                && !func_name.starts_with(crate::cm_adapter_gen::ADAPTER_PREFIX)
+            // Exception: CM adapter functions are genuinely in the entry module
+            // and should NOT be remapped to the caller's module.
+            let callee_module = if original_callee_module.is_entry_point() && !func.is_cm_adapter()
             {
                 current_module.clone()
             } else {

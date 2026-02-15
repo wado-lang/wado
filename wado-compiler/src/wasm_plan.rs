@@ -198,42 +198,38 @@ impl CmExportInfo {
 // CM Converter Analysis
 // =============================================================================
 
+// Re-export CmConverterKind from component_model (canonical location)
+pub use crate::component_model::CmConverterKind;
+
 /// Identifies which CM converter function is needed for a given return type.
 ///
 /// This centralizes the CM type analysis that determines what converter functions
 /// are needed to convert Component Model representations (in linear memory) to
 /// Wado's GC-based types.
-///
-/// Returns `None` if no converter is needed, or `Some(converter_name)` where
-/// `converter_name` is the function name in `core/internal` (e.g., `"cm_list_string_to_array"`).
 #[must_use]
-pub fn get_cm_converter_for_type(return_type: &Type) -> Option<&'static str> {
+pub fn get_cm_converter_for_type(return_type: &Type) -> Option<CmConverterKind> {
     match return_type {
-        // Array<String> -> cm_list_string_to_array
         Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
             if matches!(&g.args[0], Type::Named(n) if n.name == "String") {
-                return Some("cm_list_string_to_array");
+                return Some(CmConverterKind::ListString);
             }
-            // Array<u8> -> cm_list_u8_to_array
             if matches!(&g.args[0], Type::Named(n) if n.name == "u8") {
-                return Some("cm_list_u8_to_array");
+                return Some(CmConverterKind::ListU8);
             }
-            // Array<[String, String]> -> cm_list_tuple_string_string_to_array
             if let Type::Tuple(tuple_types) = &g.args[0]
                 && tuple_types.len() == 2
                 && matches!(&tuple_types[0], Type::Named(n) if n.name == "String")
                 && matches!(&tuple_types[1], Type::Named(n) if n.name == "String")
             {
-                return Some("cm_list_tuple_string_string_to_array");
+                return Some(CmConverterKind::ListTupleString);
             }
-            // Tuple<String, String> syntax (alternative to [String, String])
             if let Type::Generic(inner_g) = &g.args[0]
                 && inner_g.name == "Tuple"
                 && inner_g.args.len() == 2
                 && matches!(&inner_g.args[0], Type::Named(n) if n.name == "String")
                 && matches!(&inner_g.args[1], Type::Named(n) if n.name == "String")
             {
-                return Some("cm_list_tuple_string_string_to_array");
+                return Some(CmConverterKind::ListTupleString);
             }
             None
         }
@@ -245,25 +241,10 @@ pub fn get_cm_converter_for_type(return_type: &Type) -> Option<&'static str> {
                 && g.args.len() == 1
                 && matches!(&g.args[0], Type::Named(n) if n.name == "String") =>
         {
-            Some("cm_option_string_to_option")
+            Some(CmConverterKind::OptionString)
         }
         _ => None,
     }
-}
-
-/// Types of CM converters that may be needed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CmConverterKind {
-    /// `cm_list_string_to_array` converter
-    ListString,
-    /// `cm_list_u8_to_array` converter
-    ListU8,
-    /// `cm_list_tuple_string_string_to_array` converter
-    ListTupleString,
-    /// `cm_option_string_to_option` converter
-    OptionString,
-    /// `cm_option_own_resource_to_option` converter
-    OptionOwnResource,
 }
 
 /// Information about what CM converters are needed for a set of WASI functions.
@@ -276,30 +257,13 @@ pub struct CmConverterRequirements {
 impl CmConverterRequirements {
     /// Analyze a return type and update requirements.
     pub fn analyze_type(&mut self, return_type: &Type) {
-        if let Some(converter) = get_cm_converter_for_type(return_type) {
-            let kind = match converter {
-                "cm_list_string_to_array" => CmConverterKind::ListString,
-                "cm_list_u8_to_array" => CmConverterKind::ListU8,
-                "cm_list_tuple_string_string_to_array" => CmConverterKind::ListTupleString,
-                "cm_option_string_to_option" => CmConverterKind::OptionString,
-                _ => return,
-            };
+        if let Some(kind) = get_cm_converter_for_type(return_type) {
             self.needed.insert(kind);
         }
     }
 
-    /// Analyze a converter path (from `CmCallConvention::result_converter`) and update requirements.
-    pub fn analyze_converter(&mut self, converter_path: &str) {
-        // Extract the function name from the full path (e.g., "core/internal/cm_option_own_resource_to_option")
-        let func_name = converter_path.rsplit('/').next().unwrap_or(converter_path);
-        let kind = match func_name {
-            "cm_list_string_to_array" => CmConverterKind::ListString,
-            "cm_list_u8_to_array" => CmConverterKind::ListU8,
-            "cm_list_tuple_string_string_to_array" => CmConverterKind::ListTupleString,
-            "cm_option_string_to_option" => CmConverterKind::OptionString,
-            "cm_option_own_resource_to_option" => CmConverterKind::OptionOwnResource,
-            _ => return,
-        };
+    /// Register a converter kind as required.
+    pub fn add(&mut self, kind: CmConverterKind) {
         self.needed.insert(kind);
     }
 
@@ -766,7 +730,7 @@ mod tests {
         });
         assert_eq!(
             get_cm_converter_for_type(&return_type),
-            Some("cm_list_string_to_array")
+            Some(CmConverterKind::ListString)
         );
     }
 
@@ -782,7 +746,7 @@ mod tests {
         });
         assert_eq!(
             get_cm_converter_for_type(&return_type),
-            Some("cm_list_u8_to_array")
+            Some(CmConverterKind::ListU8)
         );
     }
 
@@ -798,7 +762,7 @@ mod tests {
         });
         assert_eq!(
             get_cm_converter_for_type(&return_type),
-            Some("cm_option_string_to_option")
+            Some(CmConverterKind::OptionString)
         );
     }
 
@@ -820,7 +784,7 @@ mod tests {
         });
         assert_eq!(
             get_cm_converter_for_type(&return_type),
-            Some("cm_list_tuple_string_string_to_array")
+            Some(CmConverterKind::ListTupleString)
         );
     }
 

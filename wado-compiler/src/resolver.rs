@@ -2448,6 +2448,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             indirect_call_counts: IndexMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            is_cm_adapter: false,
             cm_export_info: None,
         })
     }
@@ -2501,6 +2502,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             indirect_call_counts: IndexMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            is_cm_adapter: false,
             cm_export_info: None,
         };
 
@@ -2691,6 +2693,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             indirect_call_counts: IndexMap::new(),
             match_scrutinee_types: Vec::new(),
             let_pattern_types: Vec::new(),
+            is_cm_adapter: false,
             cm_export_info: None,
         })
     }

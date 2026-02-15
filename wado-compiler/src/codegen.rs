@@ -12372,12 +12372,12 @@ impl Codegen<'_> {
         }
 
         // Handle result conversion
-        if let Some(ref converter) = conv.result_converter {
+        if let Some(converter) = conv.result_converter {
             let outptr_local = ctx.get_local("__cm_outptr").expect(
                 "__cm_outptr should be pre-allocated for functions with CM complex returns",
             );
             func.instruction(&Instruction::LocalGet(outptr_local));
-            let conv_idx = builder.func_idx(converter);
+            let conv_idx = builder.func_idx(converter.codegen_path());
             func.instruction(&Instruction::Call(conv_idx));
         } else if let Some(ref elements) = conv.tuple_return {
             // Create tuple struct from outptr values
@@ -12732,13 +12732,13 @@ impl Codegen<'_> {
 
                 func.instruction(&Instruction::End);
             }
-        } else if let Some(ref converter) = conv.result_converter {
+        } else if let Some(converter) = conv.result_converter {
             // Complex return with converter function (e.g., list<string> -> Array<String>)
             let outptr_local = ctx.get_local("__cm_outptr").expect(
                 "__cm_outptr should be pre-allocated for functions with CM complex returns",
             );
             func.instruction(&Instruction::LocalGet(outptr_local));
-            let conv_idx = builder.func_idx(converter);
+            let conv_idx = builder.func_idx(converter.codegen_path());
             func.instruction(&Instruction::Call(conv_idx));
         }
         // If no conversion needed, the raw return value (bool, resource handle) stays on stack

@@ -527,12 +527,9 @@ pub fn flatten_param_type(ty: &Type) -> Vec<TypeId> {
 // Adapter function generation
 // ============================================================================
 
-/// Adapter function name prefix.
-pub const ADAPTER_PREFIX: &str = "__cm_adapter__";
-
 /// Build the adapter function name for a WASI import.
 pub fn adapter_func_name(effect_name: &str, method_name: &str) -> String {
-    format!("{ADAPTER_PREFIX}{effect_name}_{method_name}")
+    format!("__cm_adapter__{effect_name}_{method_name}")
 }
 
 // ============================================================================
@@ -541,24 +538,6 @@ pub fn adapter_func_name(effect_name: &str, method_name: &str) -> String {
 
 /// Fixed async outptr address (matches codegen convention).
 const ASYNC_OUTPTR: i32 = 2048;
-
-/// Parse a converter function path like `"core/internal/cm_list_string_to_array"`
-/// into `(ModuleSource, function_name)`.
-fn parse_converter_path(path: &str) -> (ModuleSource, String) {
-    // Format: "core/{module}/{function}" → ModuleSource::core(module), function
-    let parts: Vec<&str> = path.split('/').collect();
-    if parts.len() == 3 && parts[0] == "core" {
-        (ModuleSource::core(parts[1]), parts[2].to_string())
-    } else {
-        // Fallback: use the full path as module and last segment as name
-        let name = parts.last().unwrap_or(&path).to_string();
-        let module_parts: Vec<String> = parts[..parts.len().saturating_sub(1)]
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect();
-        (ModuleSource::from_path(&module_parts), name)
-    }
-}
 
 /// Create a `TirFunction` with default metadata fields.
 fn make_adapter_function(
@@ -591,6 +570,7 @@ fn make_adapter_function(
         indirect_call_counts: IndexMap::new(),
         match_scrutinee_types: vec![],
         let_pattern_types: vec![],
+        is_cm_adapter: true,
         cm_export_info: None,
     }))
 }
@@ -824,7 +804,7 @@ fn synthesize_adapter(func_info: &WasiFunctionInfo) -> Rc<RefCell<TirFunction>> 
         // Async: discard subtask handle, return void
         body_stmts.push(expr_stmt(raw_call_expr));
         adapter_return_type = TypeTable::UNIT;
-    } else if let Some(ref converter) = conv.result_converter {
+    } else if let Some(converter) = conv.result_converter {
         // Complex return with converter: call cm_raw_call, then call converter with outptr
         body_stmts.push(expr_stmt(raw_call_expr));
 
@@ -832,13 +812,11 @@ fn synthesize_adapter(func_info: &WasiFunctionInfo) -> Rc<RefCell<TirFunction>> 
         let outptr_local = next_local - 1; // __outptr was the last local before raw call
 
         // Call the converter function with outptr
-        // Converter paths are like "core/internal/cm_list_string_to_array"
-        let (conv_module, conv_name) = parse_converter_path(converter);
         let converter_call = TirExpr::new(
             TirExprKind::Call {
                 func: FunctionRef::External {
-                    module_source: conv_module,
-                    name: conv_name,
+                    module_source: converter.module_source(),
+                    name: converter.func_name().to_string(),
                     monomorph_info: None,
                     method_info: None,
                 },
