@@ -3140,8 +3140,7 @@ impl BoxLowerer {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.transform_expr(value, address_taken, type_table);
             }
-            TirExprKind::EffectCall { args, .. }
-            | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.transform_expr(arg, address_taken, type_table);
                 }
@@ -5428,8 +5427,7 @@ impl ClosureLowerer {
             | TirExprKind::Move { expr: inner } => {
                 self.collect_fn_param_specs_expr(inner, func_by_name, type_table, requests);
             }
-            TirExprKind::EffectCall { args, .. }
-            | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.collect_fn_param_specs_expr(arg, func_by_name, type_table, requests);
                 }
@@ -6763,8 +6761,7 @@ impl ClosureLowerer {
                 // Check if this call has closure arguments that need fn-param specialization
                 self.try_transform_fn_param_call(func, args, type_table);
             }
-            TirExprKind::EffectCall { args, .. }
-            | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.transform_expr(arg, type_table);
                 }

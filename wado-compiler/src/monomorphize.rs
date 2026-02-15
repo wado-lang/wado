@@ -763,8 +763,7 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(arg, type_table);
                 }
             }
-            TirExprKind::EffectCall { args, .. }
-            | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.rewrite_types_in_expr(arg, type_table);
                 }
@@ -1625,8 +1624,7 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::EffectCall { args, .. }
-            | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.collect_func_instantiation_sites_in_expr(
                         arg,
@@ -2316,8 +2314,7 @@ impl Monomorphizer {
                     }
                 }
             }
-            TirExprKind::EffectCall { args, .. }
-            | TirExprKind::CmRawCall { args, .. } => {
+            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.substitute_types_in_expr(arg, substitution, type_table);
                 }

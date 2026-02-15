@@ -406,13 +406,13 @@ After cm_adapter_gen is complete:
 
 New code (actual for Phases 1–2, estimated for Phases 3–4):
 
-| Module                    | Purpose                                | Lines    |
-| ------------------------- | -------------------------------------- | -------- |
-| cm_abi.rs                 | Canonical ABI layout computation       | 719      |
-| cm_adapter_gen.rs         | Type-driven adapter synthesis          | 678      |
-| builtin.wado additions    | Memory load/store builtins             | ~50      |
-| CmRawCall visitor changes | Match arms across 14 files             | ~160     |
-| Total added               |                                        | ~1600    |
+| Module                    | Purpose                          | Lines |
+| ------------------------- | -------------------------------- | ----- |
+| cm_abi.rs                 | Canonical ABI layout computation | 719   |
+| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 678   |
+| builtin.wado additions    | Memory load/store builtins       | ~50   |
+| CmRawCall visitor changes | Match arms across 14 files       | ~160  |
+| Total added               |                                  | ~1600 |
 
 The actual code is larger than the original ~750 line estimate, mainly because `cm_abi.rs` is more thorough than expected (719 lines with 37 tests covering all type shapes, consistency checks, and edge cases like nested options/results). The adapter gen module will grow further as composite type lift/lower is added.
 

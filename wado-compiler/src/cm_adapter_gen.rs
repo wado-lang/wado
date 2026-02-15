@@ -4,7 +4,7 @@
 //! Each adapter handles lifting Wado values to CM flat ABI (lowering params)
 //! and lifting CM flat ABI values back to Wado types (lifting results).
 //!
-//! Pipeline position: after effect_check, before monomorphize.
+//! Pipeline position: after `effect_check`, before monomorphize.
 //! This ensures adapter functions go through monomorphization, lowering,
 //! and optimization.
 //!
@@ -16,9 +16,7 @@ use crate::ast::Type;
 use crate::cm_abi;
 use crate::name::ModuleSource;
 use crate::project::Project;
-use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId, TypeTable,
-};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Synthetic span used for all generated adapter code.
@@ -103,12 +101,7 @@ pub fn local_ref(index: u32, name: &str, type_id: TypeId) -> TirExpr {
 }
 
 /// Create a binary expression.
-pub fn binary(
-    op: crate::tir::TirBinaryOp,
-    left: TirExpr,
-    right: TirExpr,
-    ty: TypeId,
-) -> TirExpr {
+pub fn binary(op: crate::tir::TirBinaryOp, left: TirExpr, right: TirExpr, ty: TypeId) -> TirExpr {
     TirExpr::new(
         TirExprKind::Binary {
             op,
@@ -228,33 +221,49 @@ pub fn synthesize_lower(ty: &Type, value: TirExpr, addr: TirExpr) -> Vec<TirStmt
     match ty {
         Type::Named(named) => match named.name.as_str() {
             "i32" | "u32" => vec![expr_stmt(builtin_call(
-                "i32_store", vec![addr, value], TypeTable::UNIT,
+                "i32_store",
+                vec![addr, value],
+                TypeTable::UNIT,
             ))],
             "i64" | "u64" => vec![expr_stmt(builtin_call(
-                "i64_store", vec![addr, value], TypeTable::UNIT,
+                "i64_store",
+                vec![addr, value],
+                TypeTable::UNIT,
             ))],
             "f32" => vec![expr_stmt(builtin_call(
-                "f32_store", vec![addr, value], TypeTable::UNIT,
+                "f32_store",
+                vec![addr, value],
+                TypeTable::UNIT,
             ))],
             "f64" => vec![expr_stmt(builtin_call(
-                "f64_store", vec![addr, value], TypeTable::UNIT,
+                "f64_store",
+                vec![addr, value],
+                TypeTable::UNIT,
             ))],
             "i8" | "u8" => vec![expr_stmt(builtin_call(
-                "i32_store8", vec![addr, value], TypeTable::UNIT,
+                "i32_store8",
+                vec![addr, value],
+                TypeTable::UNIT,
             ))],
             "i16" | "u16" => vec![expr_stmt(builtin_call(
-                "i32_store16", vec![addr, value], TypeTable::UNIT,
+                "i32_store16",
+                vec![addr, value],
+                TypeTable::UNIT,
             ))],
             "bool" => {
                 let as_i32 = cast(value, TypeTable::I32);
                 vec![expr_stmt(builtin_call(
-                    "i32_store8", vec![addr, as_i32], TypeTable::UNIT,
+                    "i32_store8",
+                    vec![addr, as_i32],
+                    TypeTable::UNIT,
                 ))]
             }
             "char" => {
                 let as_i32 = cast(value, TypeTable::I32);
                 vec![expr_stmt(builtin_call(
-                    "i32_store", vec![addr, as_i32], TypeTable::UNIT,
+                    "i32_store",
+                    vec![addr, as_i32],
+                    TypeTable::UNIT,
                 ))]
             }
             _ => panic!("synthesize_lower: unsupported type `{}`", named.name),
@@ -356,8 +365,7 @@ fn collect_effect_calls_in_stmt(stmt: &TirStmt, effects: &mut IndexSet<String>) 
                 collect_effect_calls_in_block(blk, effects);
             }
         }
-        TirStmtKind::Loop { body }
-        | TirStmtKind::LabeledBlock { block: body, .. } => {
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
             collect_effect_calls_in_block(body, effects);
         }
         TirStmtKind::IfPattern {
@@ -385,11 +393,11 @@ fn collect_effect_calls_in_expr(expr: &TirExpr, effects: &mut IndexSet<String>) 
     match &expr.kind {
         TirExprKind::Call { func, args, .. } => {
             let module_source = func.module_source();
-            if module_source.is_effect_like() {
-                if let Some(effect_name) = module_source.effect_name() {
-                    let method_name = func.name();
-                    effects.insert(format!("{effect_name}::{method_name}"));
-                }
+            if module_source.is_effect_like()
+                && let Some(effect_name) = module_source.effect_name()
+            {
+                let method_name = func.name();
+                effects.insert(format!("{effect_name}::{method_name}"));
             }
             for arg in args {
                 collect_effect_calls_in_expr(arg, effects);
@@ -402,9 +410,7 @@ fn collect_effect_calls_in_expr(expr: &TirExpr, effects: &mut IndexSet<String>) 
                 collect_effect_calls_in_expr(arg, effects);
             }
         }
-        TirExprKind::MethodCall {
-            receiver, args, ..
-        } => {
+        TirExprKind::MethodCall { receiver, args, .. } => {
             collect_effect_calls_in_expr(receiver, effects);
             for arg in args {
                 collect_effect_calls_in_expr(arg, effects);
@@ -442,7 +448,10 @@ fn collect_effect_calls_in_expr(expr: &TirExpr, effects: &mut IndexSet<String>) 
             }
         }
         TirExprKind::Index { expr: e, index }
-        | TirExprKind::Assign { target: e, value: index } => {
+        | TirExprKind::Assign {
+            target: e,
+            value: index,
+        } => {
             collect_effect_calls_in_expr(e, effects);
             collect_effect_calls_in_expr(index, effects);
         }
@@ -458,7 +467,10 @@ fn collect_effect_calls_in_expr(expr: &TirExpr, effects: &mut IndexSet<String>) 
             }
             collect_effect_calls_in_block(default, effects);
         }
-        TirExprKind::Match { expr: scrutinee, arms } => {
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
             collect_effect_calls_in_expr(scrutinee, effects);
             for arm in arms {
                 if let Some(guard) = &arm.guard {

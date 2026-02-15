@@ -1513,8 +1513,7 @@ fn collect_types_from_expr(
             collect_types_from_expr(expr, type_table, reachable);
             collect_type_transitive(*target_type, type_table, reachable);
         }
-        TirExprKind::EffectCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
+        TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_types_from_expr(arg, type_table, reachable);
             }
