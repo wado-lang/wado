@@ -89,44 +89,6 @@ pub fn log_stderr(message: String) {
     wait_for_subtask(subtask);
 }
 
-/// Convert a Component Model list<string> to a GC Array<String>
-/// The outptr points to the CM list representation in linear memory:
-///   outptr[0..4]: base_ptr - pointer to array of (ptr, len) pairs
-///   outptr[4..8]: count - number of strings
-/// Each string in the array is represented as:
-///   base_ptr[i*8+0..i*8+4]: str_ptr - pointer to UTF-8 bytes
-///   base_ptr[i*8+4..i*8+8]: str_len - length in bytes
-pub fn cm_list_string_to_array(outptr: i32) -> Array<String> {
-    let base_ptr = builtin::i32_load(outptr);
-    let count = builtin::i32_load(outptr + 4);
-
-    // Create Array<String> with capacity
-    let mut result = Array::<String>::with_capacity(count);
-
-    // Convert each CM string to a GC string
-    for (let mut i = 0; i < count; i += 1) {
-        let str_ptr = builtin::i32_load(base_ptr + i * 8);
-        let str_len = builtin::i32_load(base_ptr + i * 8 + 4);
-
-        let arr = memory_to_gc_array(str_ptr, str_len);
-
-        result.append(String::internal_from_utf8_raw(arr, str_len));
-
-        // Free this string's linear memory
-        builtin::realloc(str_ptr, str_len, 1, 0);
-    }
-
-    // Free the list element array (count * 8 bytes, each element is ptr+len pair)
-    if count > 0 {
-        builtin::realloc(base_ptr, count * 8, 4, 0);
-    }
-
-    // Free the outptr itself (8 bytes: base_ptr + count)
-    builtin::realloc(outptr, 8, 4, 0);
-
-    return result;
-}
-
 pub fn panic(message: String) -> ! {
     log_stderr(message);
     builtin::unreachable();
@@ -164,51 +126,5 @@ pub fn cm_lower_array_u8(arr: Array<u8>) -> i64 {
     return cm_lower_list_u8(data, len);
 }
 
-/// Convert a Component Model list<tuple<string, string>> to a GC Array<[String, String]>
-/// The outptr points to the CM list representation in linear memory:
-///   outptr[0..4]: base_ptr - pointer to array of tuples
-///   outptr[4..8]: count - number of tuples
-/// Each tuple is 16 bytes:
-///   base_ptr[i*16+0..i*16+4]: str1_ptr
-///   base_ptr[i*16+4..i*16+8]: str1_len
-///   base_ptr[i*16+8..i*16+12]: str2_ptr
-///   base_ptr[i*16+12..i*16+16]: str2_len
-pub fn cm_list_tuple_string_string_to_array(outptr: i32) -> Array<[String, String]> {
-    let base_ptr = builtin::i32_load(outptr);
-    let count = builtin::i32_load(outptr + 4);
 
-    // Create Array<[String, String]> with capacity
-    let mut result = Array::<[String, String]>::with_capacity(count);
-
-    // Convert each CM tuple to a GC tuple
-    for (let mut i = 0; i < count; i += 1) {
-        let tuple_offset = base_ptr + i * 16;
-
-        // Read first string
-        let str1_ptr = builtin::i32_load(tuple_offset);
-        let str1_len = builtin::i32_load(tuple_offset + 4);
-        let arr1 = memory_to_gc_array(str1_ptr, str1_len);
-
-        // Read second string
-        let str2_ptr = builtin::i32_load(tuple_offset + 8);
-        let str2_len = builtin::i32_load(tuple_offset + 12);
-        let arr2 = memory_to_gc_array(str2_ptr, str2_len);
-
-        result.append([String::internal_from_utf8_raw(arr1, str1_len), String::internal_from_utf8_raw(arr2, str2_len)]);
-
-        // Free both strings' linear memory
-        builtin::realloc(str1_ptr, str1_len, 1, 0);
-        builtin::realloc(str2_ptr, str2_len, 1, 0);
-    }
-
-    // Free the list element array (count * 16 bytes per tuple)
-    if count > 0 {
-        builtin::realloc(base_ptr, count * 16, 4, 0);
-    }
-
-    // Free the outptr itself (8 bytes: base_ptr + count)
-    builtin::realloc(outptr, 8, 4, 0);
-
-    return result;
-}
 

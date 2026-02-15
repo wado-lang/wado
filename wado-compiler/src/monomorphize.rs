@@ -3016,9 +3016,48 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_expr(arg, type_table);
                 }
             }
-            TirExprKind::EffectCall { args, .. }
-            | TirExprKind::CmRawCall { args, .. }
-            | TirExprKind::StaticCall { args, .. } => {
+            TirExprKind::EffectCall { args, .. } | TirExprKind::CmRawCall { args, .. } => {
+                for arg in args {
+                    self.rewrite_function_calls_in_expr(arg, type_table);
+                }
+            }
+            TirExprKind::StaticCall {
+                func: static_func,
+                args,
+            } => {
+                // Check if this is a monomorphized static call that needs rewriting.
+                // This handles calls like `Array::with_capacity` in adapter functions
+                // where monomorph_info carries the type_args for instantiation lookup.
+                if let FunctionRef::External {
+                    monomorph_info: Some(monomorph),
+                    method_info: Some(info),
+                    ..
+                } = static_func
+                    && !monomorph.type_args.is_empty()
+                {
+                    let generic_method_name = MethodName::format_local(
+                        &info.base_struct_name,
+                        info.trait_name.as_deref(),
+                        &info.method_name,
+                    );
+                    let key = InstantiationKey {
+                        name: generic_method_name.clone(),
+                        type_args: monomorph.type_args.clone(),
+                        method_info: Some(info.clone()),
+                    };
+                    if let Some(mangled) = self.function_instantiated.get(&key) {
+                        let original_method_info = static_func.method_info();
+                        *static_func = FunctionRef::External {
+                            module_source: self.entry_module_source.clone(),
+                            name: mangled.clone(),
+                            monomorph_info: Some(MonomorphInfo {
+                                generic_name: generic_method_name,
+                                type_args: key.type_args.clone(),
+                            }),
+                            method_info: original_method_info,
+                        };
+                    }
+                }
                 for arg in args {
                     self.rewrite_function_calls_in_expr(arg, type_table);
                 }

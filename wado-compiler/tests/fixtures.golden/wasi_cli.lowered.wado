@@ -56,12 +56,94 @@ fn __cm_adapter__Stderr_write_via_stream(data: i32) {
 fn __cm_adapter__Environment_get_arguments() -> Array<String> {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
-    return core::internal::cm_list_string_to_array(__outptr);
+    let __base: i32 = core::builtin::i32_load(__outptr);
+    let __count: i32 = core::builtin::i32_load((__outptr + 4));
+    let mut __result: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(__count), used: 0 };
+    let mut __i: i32 = 0;
+    loop {
+        if (__i >= __count) {
+            break;
+        }
+        let __elem_addr: i32 = (__base + (__i * 8));
+        __result."Array<String>::append"(__inline_memory_to_gc_string_1: {
+            let ptr: i32 = core::builtin::i32_load(__elem_addr);
+            let len: i32 = core::builtin::i32_load((__elem_addr + 4));
+            let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);
+            break __inline_memory_to_gc_string_1: String { repr: arr, used: len };
+        });
+        core::builtin::realloc(core::builtin::i32_load(__elem_addr), core::builtin::i32_load((__elem_addr + 4)), 1, 0);
+        __i = (__i + 1);
+    }
+    if (__count > 0) {
+        core::builtin::realloc(__base, (__count * 8), 4, 0);
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __result;
 }
 
 fn __cm_adapter__Environment_get_environment() -> Array<[String, String]> {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/Environment::get_environment(__outptr);
-    return core::internal::cm_list_tuple_string_string_to_array(__outptr);
+    let __base: i32 = core::builtin::i32_load(__outptr);
+    let __count: i32 = core::builtin::i32_load((__outptr + 4));
+    let mut __result: Array<[String, String]> = move Array<Tuple<String,String>> { repr: core::builtin::array_new::<[String, String]>(__count), used: 0 };
+    let mut __i: i32 = 0;
+    loop {
+        if (__i >= __count) {
+            break;
+        }
+        let __elem_addr: i32 = (__base + (__i * 16));
+        __result."Array<Tuple<String,String>>::append"(move [__inline_memory_to_gc_string_1: {
+            let ptr: i32 = core::builtin::i32_load((__elem_addr + 0));
+            let len: i32 = core::builtin::i32_load(((__elem_addr + 0) + 4));
+            let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);
+            break __inline_memory_to_gc_string_1: String { repr: arr, used: len };
+        }, __inline_memory_to_gc_string_2: {
+            let ptr: i32 = core::builtin::i32_load((__elem_addr + 8));
+            let len: i32 = core::builtin::i32_load(((__elem_addr + 8) + 4));
+            let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);
+            break __inline_memory_to_gc_string_2: String { repr: arr, used: len };
+        }]);
+        core::builtin::realloc(core::builtin::i32_load((__elem_addr + 0)), core::builtin::i32_load(((__elem_addr + 0) + 4)), 1, 0);
+        core::builtin::realloc(core::builtin::i32_load((__elem_addr + 8)), core::builtin::i32_load(((__elem_addr + 8) + 4)), 1, 0);
+        __i = (__i + 1);
+    }
+    if (__count > 0) {
+        core::builtin::realloc(__base, (__count * 16), 4, 0);
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __result;
+}
+
+pub fn "Array<Tuple<String,String>>::append"(self: &mut Array<[String, String]>, value: [String, String]) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let mut new_capacity: i32 = (capacity * 2);
+        if (capacity == 0) {
+            new_capacity = 4;
+        }
+        let new_repr: builtin::array<[String, String]> = core::builtin::array_new::<[String, String]>(new_capacity);
+        core::builtin::array_copy::<[String, String]>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<[String, String]>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
+pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let mut new_capacity: i32 = (capacity * 2);
+        if (capacity == 0) {
+            new_capacity = 4;
+        }
+        let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+        core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<String>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

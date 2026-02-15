@@ -91,7 +91,7 @@ pub fn analyze_project(project: &mut Project) {
     let needs_f64_to_buffer = reachable.contains(&core_internal("f64_to_string"));
     let needs_f32_to_buffer = reachable.contains(&core_internal("f32_to_string"));
 
-    // CM converter functions (cm_list_string_to_array, cm_lower_string, etc.)
+    // CM helper functions (cm_lower_string, memory_to_gc_string, etc.)
     // are called from synthesized CM adapter functions, which are part of the TIR
     // and discovered through normal call graph analysis.
 
