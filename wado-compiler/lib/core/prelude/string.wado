@@ -295,6 +295,15 @@ impl Iterator for StrCharIter {
 
 // StrCharIter uses Iterator::collect() and Iterator::count() default methods
 
+impl IntoIterator for StrCharIter {
+    type Item = char;
+    type Iter = StrCharIter;
+
+    fn into_iter(&self) -> StrCharIter {
+        return *self;
+    }
+}
+
 impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter {

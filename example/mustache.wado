@@ -5,38 +5,36 @@
 //   {{! comment }}     - comment (ignored)
 //
 // Missing variables are rendered as empty string.
-// All scanning is done via chars() → Array<char> + for-of for UTF-8 safety.
+// All scanning is done via for-of on String (IntoIterator<char>) for UTF-8 safety.
 
 use { println, Stdout } from "core:cli";
 use { TreeMap } from "core:collections";
 
 /// Trim leading and trailing whitespace.
 fn trim(s: String) -> String {
-    let chars: Array<char> = s.chars().collect();
-    let len = chars.len();
-
-    // Find start (skip leading whitespace)
+    // Single pass: find first and last non-whitespace positions
     let mut start = 0;
-    for let c of chars {
-        if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-            break;
+    let mut end = 0;
+    let mut found_start = false;
+    let mut i = 0;
+    for let c of s.chars() {
+        let is_ws = c == ' ' || c == '\t' || c == '\n' || c == '\r';
+        if !found_start {
+            if !is_ws {
+                start = i;
+                found_start = true;
+                end = i + 1;
+            }
+        } else if !is_ws {
+            end = i + 1;
         }
-        start += 1;
-    }
-
-    // Find end (skip trailing whitespace — reverse traversal needs index)
-    let mut end = len;
-    while end > start {
-        if chars[end - 1] != ' ' && chars[end - 1] != '\t' && chars[end - 1] != '\n' && chars[end - 1] != '\r' {
-            break;
-        }
-        end -= 1;
+        i += 1;
     }
 
     // Build result
     let mut result = String::with_capacity(end - start);
-    let mut i = 0;
-    for let c of chars {
+    i = 0;
+    for let c of s.chars() {
         if i >= start && i < end {
             result.append_char(c);
         }
@@ -53,8 +51,7 @@ fn render(template: String, context: &TreeMap<String, String>) -> String {
     let mut seen_open_brace = false;
     let mut seen_close_brace = false;
 
-    let chars: Array<char> = template.chars().collect();
-    for let c of chars {
+    for let c of template.chars() {
         if in_tag {
             if seen_close_brace {
                 if c == '}' {
