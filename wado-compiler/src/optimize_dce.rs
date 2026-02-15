@@ -846,6 +846,11 @@ fn analyze_expr(
                 analyze_expr(arg, current_module, type_table, analysis);
             }
         }
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                analyze_expr(arg, current_module, type_table, analysis);
+            }
+        }
         TirExprKind::StaticCall { func, args } => {
             let func_name = func.name();
             // Static method call - func_name already contains "StructName::method_name"
@@ -1508,7 +1513,8 @@ fn collect_types_from_expr(
             collect_types_from_expr(expr, type_table, reachable);
             collect_type_transitive(*target_type, type_table, reachable);
         }
-        TirExprKind::EffectCall { args, .. } => {
+        TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_types_from_expr(arg, type_table, reachable);
             }

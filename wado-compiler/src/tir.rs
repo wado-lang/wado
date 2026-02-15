@@ -1164,6 +1164,17 @@ pub enum TirExprKind {
         /// Full local alias name for CM call (e.g., "`wasi:cli/Environment::get_arguments`")
         cm_local_name: Option<String>,
     },
+    /// Raw Component Model call to a lowered WASI import.
+    ///
+    /// Used inside synthesized CM adapter functions to call the flat-ABI WASI function
+    /// directly, bypassing the normal effect call mechanism. Args are already lowered
+    /// to flat CM types (i32, i64, f32, f64).
+    CmRawCall {
+        /// Full WASI local alias name (e.g., "wasi:cli/stdout@0.3.0/write-via-stream")
+        local_name: String,
+        /// Flat ABI arguments (already lowered to core Wasm types)
+        args: Vec<TirExpr>,
+    },
     MethodCall {
         receiver: Box<TirExpr>,
         /// Method reference (resolved TIR function or external)

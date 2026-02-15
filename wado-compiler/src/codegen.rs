@@ -7255,6 +7255,15 @@ impl Codegen<'_> {
                 }
             }
 
+            // === Raw CM Call (used inside synthesized adapter functions) ===
+            TirExprKind::CmRawCall { local_name, args } => {
+                self.generate_args(func, args, type_table, ctx, builder);
+                let func_idx = builder
+                    .try_func_idx(local_name)
+                    .unwrap_or_else(|| panic!("unknown CM raw call target: {local_name}"));
+                func.instruction(&Instruction::Call(func_idx));
+            }
+
             // === Method Call ===
             TirExprKind::MethodCall {
                 receiver,
@@ -12052,7 +12061,8 @@ impl Codegen<'_> {
             // Argument lists
             TirExprKind::Call { args, .. }
             | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::EffectCall { args, .. } => {
+            | TirExprKind::EffectCall { args, .. }
+            | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.preallocate_scalarized_locals_in_expr(arg, type_table, ctx, builder);
                 }

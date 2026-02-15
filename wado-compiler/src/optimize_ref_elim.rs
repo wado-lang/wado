@@ -115,7 +115,8 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             let mut total = 0;
             let mut all_ok = true;
             for arg in args {
@@ -348,7 +349,8 @@ fn replace_ref_field_access_in_expr(
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 replace_ref_field_access_in_expr(arg, ref_local, target_local, target_name);
             }
@@ -684,7 +686,8 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_ref_bindings_in_expr(arg, bindings);
             }
@@ -889,7 +892,8 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 remove_dead_ref_bindings_in_expr(arg, dead_locals);
             }

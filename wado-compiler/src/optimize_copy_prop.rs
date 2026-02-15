@@ -200,7 +200,8 @@ fn collect_assigned_in_expr(expr: &TirExpr, assigned: &mut IndexSet<u32>) {
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_assigned_in_expr(arg, assigned);
             }
@@ -413,7 +414,8 @@ fn collect_usage_in_expr(
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_usage_in_expr(arg, usage, in_loop, in_condition);
             }
@@ -733,7 +735,8 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 substitute_in_expr(arg, substitutions);
             }
@@ -969,7 +972,8 @@ fn collect_copy_bindings_in_expr(
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 collect_copy_bindings_in_expr(arg, bindings, block_local_assigned);
             }
@@ -1168,7 +1172,8 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::EffectCall { args, .. } => {
+        | TirExprKind::EffectCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
                 remove_copy_bindings_in_expr(arg, dead_locals);
             }
