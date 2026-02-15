@@ -850,8 +850,9 @@ Before introducing WIR, split codegen.rs into manageable files:
 - [ ] **Step 0a**: Extract `type_registration.rs` — the 15+ type registration phases from `build_main_module()` (lines 700–1365). This is pure analysis + `wasm_encoder` type section building. ~700 lines.
 - [ ] **Step 0b**: Extract `value_copy.rs` — `generate_value_copy()`, `generate_struct_copy()`, `generate_array_copy()`, `generate_variant_copy()`, `generate_option_copy()`, `needs_value_copy()`. ~500 lines.
 - [ ] **Step 0c**: Extract `match_codegen.rs` — `generate_match_expr()`, `generate_match_arms()`, `generate_match_br_table()`, `generate_match_pattern_check()`, `generate_match_pattern_binding()`, `analyze_for_br_table()`. ~600 lines.
-- [ ] **Step 0d**: Extract `cm_codegen.rs` — `generate_cm_effect_call()`, `generate_cm_resource_method_call()`, `generate_effect_wait()`, CM payload lowering functions. ~800 lines.
+- [ ] **Step 0d**: Extract `cm_codegen.rs` — `generate_cm_effect_call()`, `generate_cm_resource_method_call()`, CM payload lowering functions. ~700 lines.
 - [ ] **Step 0e**: Extract `scalarization.rs` — `collect_scalarization_candidates()`, `preallocate_scalarized_locals()`, related analysis. ~300 lines.
+- [ ] **Step 0f**: Move `effect_wait` from `builtin.wado` to `internal.wado` — `generate_effect_wait()` in codegen is not a single Wasm instruction nor an external import; it is a multi-instruction sequence (if/call to `waitable_set_new`, `waitable_join`, `waitable_set_wait`, `subtask_drop`). Refactor it into a Wado function `internal::effect_wait(subtask: i32)` that takes the subtask handle as a parameter. The compiler generates `Call(internal::effect_wait, __subtask)` instead of inline expansion. This removes ~50 lines of hard-coded codegen logic and makes `builtin.wado` strictly 1:1 Wasm instructions or `#[canonical]` imports.
 
 After this step, codegen.rs is split into ~6 files but the architecture is unchanged. This is pure refactoring.
 
