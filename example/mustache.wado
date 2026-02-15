@@ -25,12 +25,10 @@ fn trim(s: String) -> String {
         }
     }
     // Trim trailing ASCII whitespace in-place.
-    // ASCII whitespace is single-byte, so byte-level reverse scan is safe
-    // and u8→char cast is zero-cost.
+    // ASCII whitespace is single-byte, so byte-level reverse scan is safe.
     let mut end = result.len();
     while end > 0 {
-        let b = result.get_byte(end - 1) as u8;
-        if (b as char).is_ascii_space() {
+        if (result.get_byte(end - 1) as char).is_ascii_space() {
             end -= 1;
         } else {
             break;

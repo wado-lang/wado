@@ -33,12 +33,12 @@ impl String {
     }
 
     /// Get a byte at the given index (low-level - prefer bytes() iterator)
-    pub fn get_byte(&self, index: i32) -> i32 {
-        return builtin::array_get_u8(self.repr, index);
+    pub fn get_byte(&self, index: i32) -> u8 {
+        return builtin::array_get_u8(self.repr, index) as u8;
     }
 
     /// Set a byte at the given index (low-level)
-    pub fn set_byte(&mut self, index: i32, value: i32) {
+    pub fn set_byte(&mut self, index: i32, value: u8) {
         builtin::array_set_u8(self.repr, index, value);
     }
     /// Internal: Get raw bytes array (stdlib use only)
