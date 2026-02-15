@@ -465,7 +465,7 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 - [x] Simplify DCE converter tracking: rely on call graph analysis instead of `CmConverterRequirements`.
 - [x] Delete unused per-type converters from internal.wado: `cm_option_string_to_option`, `cm_option_own_resource_to_option`.
 - [x] Implement `synthesize_lift` for `list<T>` generically — adapter synthesis now provides proper `MonomorphInfo` and `LocalMethodName` on `StaticCall`/`MethodCall` nodes for `Array::<T>::with_capacity()` and `.append()`, enabling the monomorphizer to instantiate these generic methods. `list_converter_for_type` workaround deleted along with `cm_list_string_to_array` and `cm_list_tuple_string_string_to_array` from internal.wado.
-- [ ] Migrate remaining WASI interfaces not yet covered by adapter synthesis (e.g., `wasi:clocks`).
+- [x] Migrate remaining WASI interfaces not yet covered by adapter synthesis (e.g., `wasi:clocks`). Verified: all WASI interfaces (cli, clocks, random, http, sockets) are handled by the generic adapter synthesizer. The old codegen paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) were already deleted; clocks E2E tests pass at all optimization levels.
 
 ### Phase 3: Export Adapters
 
@@ -474,9 +474,9 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 - [ ] Delete `CmExportInfo` scratch local logic — adapters declare their own locals.
 - [ ] Delete export-related CM glue from codegen.
 
-### Phase 4: Cleanup (partially done)
+### Phase 4: Cleanup (done)
 
-- [ ] Remove `TirExprKind::EffectCall` — all effect calls are now ordinary `Call`s to adapters.
+- [x] Remove `TirExprKind::EffectCall` — variant was dead code (resolver creates `Call` nodes for all WASI operations; `EffectCall` was never constructed). Removed from `TirExprKind` enum and all 15 files with match arms (effect_check, cm_adapter_gen, codegen, unparse, lower, monomorphize, and 8 optimizer passes).
 - [x] Remove `cm_convention` and `cm_local_name` fields from TIR.
 - [x] Delete `CmCallConvention`, `CmConverterKind`, and `CmConverterRequirements`.
 - [x] Delete unused per-type converter functions from `internal.wado`.
@@ -488,9 +488,11 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 
 Adding a new `TirExprKind` variant requires updating 14 files with match arms. The pattern varies per file:
 
-- **Grouped with EffectCall**: Most optimizer passes group `CmRawCall` with `EffectCall` since they share the same `args` structure. This is the common case for passes that recurse into arguments.
-- **Standalone handling**: codegen, unparse, effect_check, and optimize_dce need separate match arms because they have variant-specific logic (e.g., codegen resolves `local_name` to a function index, unparse formats differently).
+- **Grouped with Call/StaticCall**: Most optimizer passes group `CmRawCall` with `Call` and `StaticCall` since they share the same `args` structure. This is the common case for passes that recurse into arguments.
+- **Standalone handling**: codegen, unparse, and optimize_dce need separate match arms because they have variant-specific logic (e.g., codegen resolves `local_name` to a function index, unparse formats differently).
 - **Reconstruction**: optimize_inline must reconstruct `CmRawCall` when inlining, remapping local indices.
+
+Note: `TirExprKind::EffectCall` was removed in Phase 4. It was a dead variant — the resolver creates `Call` nodes for all WASI operations (both sync and async), and `cm_adapter_gen` identifies effect calls via `ModuleSource::is_effect_like()`. The `EffectCall` variant was never constructed in the current codebase.
 
 ### TIR construction gotchas
 

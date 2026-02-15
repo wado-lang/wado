@@ -7235,19 +7235,6 @@ impl Codegen<'_> {
                 }
             }
 
-            // === Effect Operation Call ===
-            // All WASI effect calls are rewritten to adapter function Calls
-            // by cm_adapter_gen. No EffectCall nodes should reach codegen.
-            TirExprKind::EffectCall {
-                effect_name,
-                op_name,
-                ..
-            } => {
-                panic!(
-                    "EffectCall {effect_name}::{op_name} should have been rewritten to a CM adapter call"
-                );
-            }
-
             // === Raw CM Call (used inside synthesized adapter functions) ===
             TirExprKind::CmRawCall { local_name, args } => {
                 self.generate_args(func, args, type_table, ctx, builder);
@@ -12126,7 +12113,6 @@ impl Codegen<'_> {
             // Argument lists
             TirExprKind::Call { args, .. }
             | TirExprKind::StaticCall { args, .. }
-            | TirExprKind::EffectCall { args, .. }
             | TirExprKind::CmRawCall { args, .. } => {
                 for arg in args {
                     self.preallocate_scalarized_locals_in_expr(arg, type_table, ctx, builder);
