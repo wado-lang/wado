@@ -52,7 +52,9 @@ pub fn effect_wait(subtask: i32) {
     if (subtask & 1) == 0 {
         let ws = builtin::waitable_set_new();
         builtin::waitable_join(ws, subtask);
-        builtin::waitable_set_wait(ws, 2048);
+        let ptr = builtin::realloc(0, 0, 4, 4);
+        builtin::waitable_set_wait(ws, ptr);
+        builtin::realloc(ptr, 4, 4, 0);
         builtin::subtask_drop(subtask);
     }
 }
