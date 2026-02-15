@@ -199,7 +199,7 @@ impl u128 {
             let rem: u128 = result[1];
             let digit_u64: u64 = rem.low();
             let digit: i32 = (digit_u64 as i64) as i32;
-            builtin::memory_store8(ptr + pos, ('0' as i32) + digit);
+            builtin::i32_store8(ptr + pos, ('0' as i32) + digit);
             temp = result[0];
         }
 
@@ -207,7 +207,7 @@ impl u128 {
         let len: i32 = 39 - pos;
         let arr = builtin::array_new::<u8>(len);
         for (let mut i: i32 = 0; i < len; i += 1) {
-            let byte: i32 = builtin::memory_load8_u(ptr + pos + i);
+            let byte: i32 = builtin::i32_load8_u(ptr + pos + i);
             builtin::array_set_u8(arr, i, byte);
         }
 

@@ -12697,23 +12697,7 @@ impl Codegen<'_> {
                 let u8_array_idx = self.get_array_type_index(TypeTable::U8);
                 func.instruction(&Instruction::ArraySet(u8_array_idx));
             }
-            "builtin::memory_store8" => {
-                self.generate_args(func, args, type_table, ctx, builder);
-                func.instruction(&Instruction::I32Store8(MemArg {
-                    offset: 0,
-                    align: 0,
-                    memory_index: 0,
-                }));
-            }
-            "builtin::memory_load8_u" => {
-                self.generate_args(func, args, type_table, ctx, builder);
-                func.instruction(&Instruction::I32Load8U(MemArg {
-                    offset: 0,
-                    align: 0,
-                    memory_index: 0,
-                }));
-            }
-            "builtin::memory_load32" | "builtin::i32_load" => {
+            "builtin::i32_load" => {
                 self.generate_args(func, args, type_table, ctx, builder);
                 func.instruction(&Instruction::I32Load(MemArg {
                     offset: 0,
