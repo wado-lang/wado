@@ -52,9 +52,9 @@ pub fn wait_for_subtask(subtask: i32) {
     if (subtask & 1) == 0 {
         let ws = builtin::waitable_set_new();
         builtin::waitable_join(ws, subtask);
-        let ptr = builtin::realloc(0, 0, 4, 4);
+        let ptr = builtin::realloc(0, 0, 4, 8);
         builtin::waitable_set_wait(ws, ptr);
-        builtin::realloc(ptr, 4, 4, 0);
+        builtin::realloc(ptr, 8, 4, 0);
         builtin::subtask_drop(subtask);
     }
 }

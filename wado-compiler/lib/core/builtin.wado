@@ -57,8 +57,11 @@ fn waitable_set_new() -> i32;
 #[canonical("wasi", "waitable-join")]
 fn waitable_join(set: i32, subtask: i32);
 
-/// Wait on a waitable set, returns when any task completes
-/// Writes completion info to outptr
+/// Wait on a waitable set, returns event ordinal when any task completes.
+/// Writes 8 bytes (POINTER_PAIR) to outptr:
+///   outptr+0: handle (u32) - waitable handle or 0
+///   outptr+4: result (u32) - packed status code
+/// Caller must allocate 8 bytes with 4-byte alignment.
 #[canonical("wasi", "waitable-set-wait")]
 fn waitable_set_wait(set: i32, outptr: i32) -> i32;
 
