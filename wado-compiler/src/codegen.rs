@@ -12632,59 +12632,6 @@ impl Codegen<'_> {
         // If no conversion needed, the raw return value (bool, resource handle) stays on stack
     }
 
-    /// Generate wait logic for pending effect subtasks
-    ///
-    /// This should be called at the end of functions that use Stdout/Stderr effects.
-    /// It waits for the subtask started by write-via-stream to complete.
-    fn generate_effect_wait(
-        &self,
-        func: &mut Function,
-        ctx: &FunctionContext,
-        builder: &CoreModuleBuilder,
-    ) {
-        // Check if we have a subtask to wait for
-        let subtask_local = match ctx.get_local("__subtask") {
-            Some(idx) => idx,
-            None => return, // No pending subtask
-        };
-
-        let waitable_set_new_idx = builder.func_idx("waitable-set-new");
-        let waitable_join_idx = builder.func_idx("waitable-join");
-        let waitable_set_wait_idx = builder.func_idx("waitable-set-wait");
-        let subtask_drop_idx = builder.func_idx("subtask-drop");
-        let waitable_set_local = ctx.get_local("__waitable_set").unwrap_or(subtask_local + 1);
-
-        // Check if subtask is pending
-        // If (status & 1) == 0, the operation is still pending and we need to wait
-        func.instruction(&Instruction::LocalGet(subtask_local));
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::I32And);
-        func.instruction(&Instruction::I32Eqz);
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-        // Subtask is pending - need to wait for it
-        // Create waitable-set
-        func.instruction(&Instruction::Call(waitable_set_new_idx));
-        func.instruction(&Instruction::LocalSet(waitable_set_local));
-
-        // Join subtask to waitable-set
-        func.instruction(&Instruction::LocalGet(waitable_set_local));
-        func.instruction(&Instruction::LocalGet(subtask_local));
-        func.instruction(&Instruction::Call(waitable_join_idx));
-
-        // Wait for completion
-        func.instruction(&Instruction::LocalGet(waitable_set_local));
-        func.instruction(&Instruction::I32Const(2048)); // outptr
-        func.instruction(&Instruction::Call(waitable_set_wait_idx));
-        func.instruction(&Instruction::Drop); // drop wait result
-
-        // Drop subtask
-        func.instruction(&Instruction::LocalGet(subtask_local));
-        func.instruction(&Instruction::Call(subtask_drop_idx));
-
-        func.instruction(&Instruction::End); // end if
-    }
-
     /// Generate code for a builtin function call.
     /// Handles both intrinsics (inline Wasm instructions) and builtins with canonical mappings.
     /// Panics if the builtin is unknown.
@@ -12721,9 +12668,6 @@ impl Codegen<'_> {
                 self.generate_expr(func, &args[0], type_table, ctx, builder);
                 let result_type = self.type_id_to_valtype(type_table, expr.type_id);
                 func.instruction(&Instruction::TypedSelect(result_type));
-            }
-            "builtin::effect_wait" => {
-                self.generate_effect_wait(func, ctx, builder);
             }
             "builtin::array_len" => {
                 // Generate array argument and ensure it's non-null
@@ -13036,10 +12980,7 @@ impl Codegen<'_> {
                 let stdout_func = build_local_alias_name("cli", "Stdout", "write_via_stream");
                 let func_idx = builder.func_idx(&stdout_func);
                 func.instruction(&Instruction::Call(func_idx));
-                let subtask_local = ctx.get_local("__subtask").expect(
-                    "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
-                );
-                func.instruction(&Instruction::LocalSet(subtask_local));
+                // Result (subtask handle i32) is left on the stack as the return value
             }
             "builtin::call_indirect_stderr_write_via_stream" => {
                 self.generate_args(func, args, type_table, ctx, builder);
@@ -13047,10 +12988,7 @@ impl Codegen<'_> {
                 let stderr_func = build_local_alias_name("cli", "Stderr", "write_via_stream");
                 let func_idx = builder.func_idx(&stderr_func);
                 func.instruction(&Instruction::Call(func_idx));
-                let subtask_local = ctx.get_local("__subtask").expect(
-                    "__subtask should be pre-allocated for functions with Stdout/Stderr effects",
-                );
-                func.instruction(&Instruction::LocalSet(subtask_local));
+                // Result (subtask handle i32) is left on the stack as the return value
             }
             // Builtins with canonical function mappings - generate regular function calls
             // These are declared with #[canonical(...)] in builtin.wado

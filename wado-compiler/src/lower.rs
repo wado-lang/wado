@@ -7947,15 +7947,6 @@ impl<'a> EffectScratchAnalyzer<'a> {
                             }
                         }
                         ModuleSource::Core { name: module_name } if module_name == "builtin" => {
-                            // Check for async-requiring builtins
-                            if name == "effect_wait"
-                                || name == "waitable_set_new"
-                                || name == "waitable_set_wait"
-                                || name == "call_indirect_stdout_write_via_stream"
-                                || name == "call_indirect_stderr_write_via_stream"
-                            {
-                                self.needs_async = true;
-                            }
                             // future/stream create pair returns i64 that needs unpacking
                             if name == "future_create_pair" || name == "stream_create_pair" {
                                 self.needs_i64_temp = true;
@@ -8012,17 +8003,7 @@ impl<'a> EffectScratchAnalyzer<'a> {
                                 }
                             }
                         }
-                        ModuleSource::Core { name: module_name } if module_name == "builtin" => {
-                            // Check for async-requiring builtins
-                            if name == "effect_wait"
-                                || name == "waitable_set_new"
-                                || name == "waitable_set_wait"
-                                || name == "call_indirect_stdout_write_via_stream"
-                                || name == "call_indirect_stderr_write_via_stream"
-                            {
-                                self.needs_async = true;
-                            }
-                        }
+                        ModuleSource::Core { .. } => {}
                         _ => {}
                     }
                 }
