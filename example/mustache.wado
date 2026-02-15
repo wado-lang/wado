@@ -10,14 +10,13 @@
 use { println, Stdout } from "core:cli";
 use { TreeMap } from "core:collections";
 
-/// Trim leading and trailing whitespace.
+/// Trim leading and trailing ASCII whitespace.
 fn trim(s: String) -> String {
     let mut result = String::with_capacity(s.len());
     let mut found_start = false;
     for let c of s.chars() {
         if !found_start {
-            let is_ws = c == ' ' || c == '\t' || c == '\n' || c == '\r';
-            if !is_ws {
+            if !c.is_ascii_space() {
                 found_start = true;
                 result.append_char(c);
             }
@@ -25,11 +24,13 @@ fn trim(s: String) -> String {
             result.append_char(c);
         }
     }
-    // Trim trailing ASCII whitespace in-place
+    // Trim trailing ASCII whitespace in-place.
+    // ASCII whitespace is single-byte, so byte-level reverse scan is safe
+    // and u8→char cast is zero-cost.
     let mut end = result.len();
     while end > 0 {
-        let b = result.get_byte(end - 1);
-        if b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D {
+        let b = result.get_byte(end - 1) as u8;
+        if (b as char).is_ascii_space() {
             end -= 1;
         } else {
             break;
