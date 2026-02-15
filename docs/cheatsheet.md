@@ -247,6 +247,16 @@ builder.append("World!");
 
 // String concatenation (static method)
 let combined = String::concat("Hello, ", "World!");  // "Hello, World!"
+
+// Iterating over characters (for-of with chars())
+for let c of "hello".chars() {
+    println(`{c}`);              // h, e, l, l, o
+}
+
+// Iterating over bytes (for-of with bytes())
+for let b of "hello".bytes() {
+    println(`{b}`);              // 104, 101, 108, 108, 111
+}
 ```
 
 ## Structs
@@ -1285,12 +1295,14 @@ let rest = iter2.collect();  // Array<i32> with [2, 3, 4, 5]
 
 ### Iterator vs IntoIterator
 
-| Trait            | Question                               | Examples             |
-| ---------------- | -------------------------------------- | -------------------- |
-| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`       |
-| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `String` |
+| Trait            | Question                               | Examples                                         |
+| ---------------- | -------------------------------------- | ------------------------------------------------ |
+| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `StrCharIter`, `StrUtf8ByteIter` |
+| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `StrCharIter`, `StrUtf8ByteIter`     |
 
-Collections like `Array<T>` implement `IntoIterator` to produce a separate iterator object:
+Collections like `Array<T>` implement `IntoIterator` to produce a separate iterator object.
+String iterators (`StrCharIter`, `StrUtf8ByteIter`) implement both `Iterator` and `IntoIterator`,
+so they work directly with `for-of`:
 
 ```wado
 let arr: Array<i32> = [1, 2, 3];
@@ -1300,6 +1312,9 @@ let mut iter: ArrayIter<i32> = arr.into_iter();
 // ArrayIter implements Iterator
 iter.next();  // Some(1)
 iter.next();  // Some(2)
+
+// String iterators (StrCharIter, StrUtf8ByteIter) implement both traits,
+// so they work directly with for-of (see Strings section for examples)
 ```
 
 ### Custom Iterables

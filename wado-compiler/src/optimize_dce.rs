@@ -723,17 +723,16 @@ fn analyze_expr(
                         if method_name == "to_string" {
                             add_to_string_callee(receiver.type_id, type_table, analysis);
                         }
-                        // Trait methods on primitives (e.g., i32^Ord::cmp)
-                        if trait_name.is_some() {
-                            let prim_name = prim.as_str().to_string();
-                            let method_id = FunctionId::Method(MethodName::new(
-                                ModuleSource::core("prelude/primitives.wado"),
-                                prim_name,
-                                trait_name.clone(),
-                                method_name.clone(),
-                            ));
-                            analysis.callees.insert(method_id);
-                        }
+                        // Trait and inherent methods on primitives
+                        // (e.g., i32^Ord::cmp, char::is_ascii_space)
+                        let prim_name = prim.as_str().to_string();
+                        let method_id = FunctionId::Method(MethodName::new(
+                            ModuleSource::core("prelude/primitives.wado"),
+                            prim_name,
+                            trait_name.clone(),
+                            method_name.clone(),
+                        ));
+                        analysis.callees.insert(method_id);
                     }
                     ResolvedType::GenericInstance {
                         name,

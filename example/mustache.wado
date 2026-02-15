@@ -1,0 +1,172 @@
+// Minimal Mustache template engine in Wado
+//
+// Supported tags:
+//   {{name}}           - variable interpolation (whitespace trimmed)
+//   {{! comment }}     - comment (ignored)
+//
+// Missing variables are rendered as empty string.
+// All scanning is done via for-of on String (IntoIterator<char>) for UTF-8 safety.
+
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+/// Trim leading and trailing ASCII whitespace.
+fn trim(s: String) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut found_start = false;
+    for let c of s.chars() {
+        if !found_start {
+            if !c.is_ascii_space() {
+                found_start = true;
+                result.append_char(c);
+            }
+        } else {
+            result.append_char(c);
+        }
+    }
+    // Trim trailing ASCII whitespace in-place.
+    // ASCII whitespace is single-byte, so byte-level reverse scan is safe.
+    let mut end = result.len();
+    while end > 0 {
+        if (result.get_byte(end - 1) as char).is_ascii_space() {
+            end -= 1;
+        } else {
+            break;
+        }
+    }
+    result.truncate_bytes(end);
+    return result;
+}
+
+/// Render a Mustache template with the given context.
+fn render(template: String, context: &TreeMap<String, String>) -> String {
+    let mut result = String::with_capacity(template.len());
+    let mut tag = String::with_capacity(32);
+    let mut in_tag = false;
+    let mut seen_open_brace = false;
+    let mut seen_close_brace = false;
+
+    for let c of template.chars() {
+        if in_tag {
+            if seen_close_brace {
+                if c == '}' {
+                    // Found closing `}}`  — process the tag
+                    let key = trim(tag);
+                    if !key.is_empty() {
+                        let mut check = key.chars();
+                        if let Some(fc) = check.next() {
+                            if fc != '!' {
+                                if let Some(value) = context[key] {
+                                    result.append(value);
+                                }
+                            }
+                        }
+                    }
+                    tag = String::with_capacity(32);
+                    in_tag = false;
+                    seen_close_brace = false;
+                } else {
+                    tag.append_char('}');
+                    tag.append_char(c);
+                    seen_close_brace = false;
+                }
+            } else if c == '}' {
+                seen_close_brace = true;
+            } else {
+                tag.append_char(c);
+            }
+        } else {
+            if seen_open_brace {
+                if c == '{' {
+                    in_tag = true;
+                    seen_open_brace = false;
+                } else {
+                    result.append_char('{');
+                    result.append_char(c);
+                    seen_open_brace = false;
+                }
+            } else if c == '{' {
+                seen_open_brace = true;
+            } else {
+                result.append_char(c);
+            }
+        }
+    }
+
+    if seen_open_brace {
+        result.append_char('{');
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+test "basic interpolation" {
+    let mut ctx = TreeMap::<String, String>::new();
+    ctx["greeting"] = "Hello";
+    ctx["name"] = "World";
+    assert render("{{greeting}}, {{name}}!", &ctx) == "Hello, World!";
+}
+
+test "whitespace in tags" {
+    let mut ctx = TreeMap::<String, String>::new();
+    ctx["name"] = "World";
+    assert render("{{ name }}", &ctx) == "World";
+    assert render("{{  name  }}", &ctx) == "World";
+}
+
+test "missing variable" {
+    let ctx = TreeMap::<String, String>::new();
+    assert render("Hi, {{missing}}!", &ctx) == "Hi, !";
+}
+
+test "comment" {
+    let ctx = TreeMap::<String, String>::new();
+    assert render("Hello{{! this is a comment }}, World!", &ctx) == "Hello, World!";
+}
+
+test "plain text" {
+    let ctx = TreeMap::<String, String>::new();
+    assert render("No tags here", &ctx) == "No tags here";
+}
+
+test "single brace passthrough" {
+    let ctx = TreeMap::<String, String>::new();
+    assert render("Not a {tag}", &ctx) == "Not a {tag}";
+}
+
+test "empty template" {
+    let ctx = TreeMap::<String, String>::new();
+    assert render("", &ctx) == "";
+}
+
+test "utf8 keys and values" {
+    let mut ctx = TreeMap::<String, String>::new();
+    ctx["名前"] = "太郎";
+    assert render("こんにちは、{{名前}}さん！", &ctx) == "こんにちは、太郎さん！";
+}
+
+test "repeated variable" {
+    let mut ctx = TreeMap::<String, String>::new();
+    ctx["x"] = "A";
+    assert render("{{x}}{{x}}{{x}}", &ctx) == "AAA";
+}
+
+test "trailing brace" {
+    let ctx = TreeMap::<String, String>::new();
+    assert render("end{", &ctx) == "end{";
+}
+
+// ---------------------------------------------------------------------------
+// Entry point (demo)
+// ---------------------------------------------------------------------------
+
+export fn run() with Stdout {
+    let mut ctx = TreeMap::<String, String>::new();
+    ctx["greeting"] = "Hello";
+    ctx["name"] = "World";
+    println(render("{{greeting}}, {{name}}!", &ctx));
+}

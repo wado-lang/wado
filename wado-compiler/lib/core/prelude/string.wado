@@ -33,12 +33,12 @@ impl String {
     }
 
     /// Get a byte at the given index (low-level - prefer bytes() iterator)
-    pub fn get_byte(&self, index: i32) -> i32 {
-        return builtin::array_get_u8(self.repr, index);
+    pub fn get_byte(&self, index: i32) -> u8 {
+        return builtin::array_get_u8(self.repr, index) as u8;
     }
 
     /// Set a byte at the given index (low-level)
-    pub fn set_byte(&mut self, index: i32, value: i32) {
+    pub fn set_byte(&mut self, index: i32, value: u8) {
         builtin::array_set_u8(self.repr, index, value);
     }
     /// Internal: Get raw bytes array (stdlib use only)
@@ -242,6 +242,15 @@ impl Iterator for StrUtf8ByteIter {
 
 // StrUtf8ByteIter uses Iterator::collect() and Iterator::count() default methods
 
+impl IntoIterator for StrUtf8ByteIter {
+    type Item = u8;
+    type Iter = StrUtf8ByteIter;
+
+    fn into_iter(&self) -> StrUtf8ByteIter {
+        return *self;
+    }
+}
+
 /// Iterator over Unicode scalar values (chars) of a String.
 /// Decodes UTF-8 and yields each character.
 pub struct StrCharIter {
@@ -295,6 +304,15 @@ impl Iterator for StrCharIter {
 
 // StrCharIter uses Iterator::collect() and Iterator::count() default methods
 
+impl IntoIterator for StrCharIter {
+    type Item = char;
+    type Iter = StrCharIter;
+
+    fn into_iter(&self) -> StrCharIter {
+        return *self;
+    }
+}
+
 impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter {
@@ -342,5 +360,42 @@ impl String {
             builtin::array_set_u8(self.repr, self.used + 3, 0x80 | (code & 0x3F));
             self.used += 4;
         }
+    }
+
+    /// Truncate the string to the given byte length.
+    /// Panics if `byte_len` is not on a UTF-8 character boundary.
+    pub fn truncate_bytes(&mut self, byte_len: i32) {
+        if byte_len >= self.used {
+            return;
+        }
+        assert byte_len >= 0, "negative length";
+        // Verify byte_len is on a UTF-8 boundary:
+        // a continuation byte has the form 10xxxxxx (0x80..0xBF)
+        if byte_len > 0 {
+            let b = builtin::array_get_u8(self.repr, byte_len);
+            assert b < 0x80 || b >= 0xC0, "not on a UTF-8 character boundary";
+        }
+        self.used = byte_len;
+    }
+
+    /// Truncate the string to the given number of characters.
+    /// If `char_count` >= number of characters, the string is unchanged.
+    pub fn truncate_chars(&mut self, char_count: i32) {
+        let mut byte_pos = 0;
+        let mut chars_seen = 0;
+        while byte_pos < self.used && chars_seen < char_count {
+            let b = builtin::array_get_u8(self.repr, byte_pos);
+            if b < 0x80 {
+                byte_pos += 1;
+            } else if b < 0xE0 {
+                byte_pos += 2;
+            } else if b < 0xF0 {
+                byte_pos += 3;
+            } else {
+                byte_pos += 4;
+            }
+            chars_seen += 1;
+        }
+        self.used = byte_pos;
     }
 }

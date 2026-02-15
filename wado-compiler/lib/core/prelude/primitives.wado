@@ -407,6 +407,33 @@ impl char {
         buf.append_char(self);
         return buf;
     }
+
+    /// Returns true if the character is an ASCII whitespace character:
+    /// space (0x20), tab (0x09), newline (0x0A), or carriage return (0x0D).
+    pub fn is_ascii_space(self) -> bool {
+        return self == ' ' || self == '\t' || self == '\n' || self == '\r';
+    }
+
+    /// Returns true if the character is a Unicode whitespace character.
+    /// Covers ASCII whitespace plus form feed (0x0C), vertical tab (0x0B),
+    /// and Unicode general category Zs/Zl/Zp code points.
+    pub fn is_unicode_space(self) -> bool {
+        let c = self as u32;
+        // ASCII whitespace: HT, LF, VT, FF, CR, SP
+        if c <= 0x20 {
+            return c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0B || c == 0x0C || c == 0x0D;
+        }
+        // Non-ASCII Unicode whitespace
+        return c == 0x85       // NEXT LINE
+            || c == 0xA0       // NO-BREAK SPACE
+            || c == 0x1680     // OGHAM SPACE MARK
+            || (c >= 0x2000 && c <= 0x200A)  // EN QUAD..HAIR SPACE
+            || c == 0x2028     // LINE SEPARATOR
+            || c == 0x2029     // PARAGRAPH SEPARATOR
+            || c == 0x202F     // NARROW NO-BREAK SPACE
+            || c == 0x205F     // MEDIUM MATHEMATICAL SPACE
+            || c == 0x3000;    // IDEOGRAPHIC SPACE
+    }
 }
 
 impl i8 {
