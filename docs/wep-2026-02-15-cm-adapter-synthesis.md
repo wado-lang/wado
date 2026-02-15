@@ -95,7 +95,7 @@ fn __cm_adapter__fields_get(self_handle: i32, name: String) -> Array<Array<u8>> 
     let outptr = builtin::realloc(0, 0, 4, 8);
 
     // 3. Call lowered WASI function (flat ABI)
-    builtin::cm_raw_call__wasi_http_types_fields_get(self_handle, name_ptr, name_len, outptr);
+    cm_raw_call Fields::get(self_handle, name_ptr, name_len, outptr);
 
     // 4. Free lowered param memory (callee has consumed it)
     builtin::realloc(name_ptr, name_len, 1, 0);
@@ -179,7 +179,7 @@ fn __cm_adapter__write_via_stream(stream: i32, data: String) {
     let data_len = (data_packed >> 32) as i32;
 
     // Call lowered async function — returns subtask handle
-    let subtask = builtin::cm_raw_call__wasi_cli_stdout_write_via_stream(stream, data_ptr, data_len);
+    let subtask = cm_raw_call Stdout::write_via_stream(stream, data_ptr, data_len);
 
     // Wait for completion, then free lowered param memory
     internal::wait_for_subtask(subtask);
@@ -226,14 +226,21 @@ Note: `builtin::memory_load32` already exists but should be aliased to `builtin:
 
 #### Raw CM calls
 
-Each lowered WASI function is represented as a builtin with a generated name:
+Raw CM calls are represented as a dedicated TIR node `CmRawCall` rather than builtin functions. This avoids polluting the builtin namespace and produces more readable unparse output:
 
 ```
-builtin::cm_raw_call__wasi_cli_stdout_get_stdout
-builtin::cm_raw_call__wasi_http_types_fields_get
+// TIR node
+TirExprKind::CmRawCall {
+    target: "Fields::get",                                    // effect::op reference
+    local_name: "wasi:http/types/[method]fields.get",         // resolved import name
+    args: [self_handle, name_ptr, name_len, outptr],          // flat ABI args
+}
+
+// Unparse output
+cm_raw_call Fields::get(self_handle, name_ptr, name_len, outptr)
 ```
 
-These map directly to imported core functions in the Component Model. Codegen emits them as `call` instructions targeting the imported function index.
+Codegen resolves the `local_name` to the imported function index. No builtin entity is needed per WASI function.
 
 ### Type-Driven Synthesis
 
