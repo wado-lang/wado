@@ -12,33 +12,25 @@ use { TreeMap } from "core:collections";
 
 /// Trim leading and trailing whitespace.
 fn trim(s: String) -> String {
-    // Single pass: find first and last non-whitespace positions
-    let mut start = 0;
-    let mut end = 0;
+    let mut result = String::with_capacity(s.len());
+    let mut trailing = String::with_capacity(16);
     let mut found_start = false;
-    let mut i = 0;
     for let c of s.chars() {
         let is_ws = c == ' ' || c == '\t' || c == '\n' || c == '\r';
         if !found_start {
             if !is_ws {
-                start = i;
                 found_start = true;
-                end = i + 1;
+                result.append_char(c);
             }
-        } else if !is_ws {
-            end = i + 1;
-        }
-        i += 1;
-    }
-
-    // Build result
-    let mut result = String::with_capacity(end - start);
-    i = 0;
-    for let c of s.chars() {
-        if i >= start && i < end {
+        } else if is_ws {
+            trailing.append_char(c);
+        } else {
+            if !trailing.is_empty() {
+                result.append(trailing);
+                trailing = String::with_capacity(16);
+            }
             result.append_char(c);
         }
-        i += 1;
     }
     return result;
 }
