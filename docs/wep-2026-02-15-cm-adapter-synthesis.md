@@ -87,7 +87,7 @@ cm_adapter_gen synthesizes a TIR function:
 // Synthesized adapter: wasi:http/types/[method]fields.get
 fn __cm_adapter__fields_get(self_handle: i32, name: String) -> Array<Array<u8>> {
     // 1. Lower params: String → (ptr, len) in linear memory
-    let name_packed = builtin::cm_lower_string(name);
+    let name_packed = internal::cm_lower_string(name);
     let name_ptr = name_packed as i32;
     let name_len = (name_packed >> 32) as i32;
 
@@ -95,20 +95,28 @@ fn __cm_adapter__fields_get(self_handle: i32, name: String) -> Array<Array<u8>> 
     let outptr = builtin::realloc(0, 0, 4, 8);
 
     // 3. Call lowered WASI function (flat ABI)
-    builtin::cm_raw_call(self_handle, name_ptr, name_len, outptr);
+    builtin::cm_raw_call__wasi_http_types_fields_get(self_handle, name_ptr, name_len, outptr);
 
-    // 4. Lift result: read (base_ptr, count) from outptr
+    // 4. Free lowered param memory (callee has consumed it)
+    builtin::realloc(name_ptr, name_len, 1, 0);
+
+    // 5. Lift result: read (base_ptr, count) from outptr
     let base_ptr = builtin::i32_load(outptr);
     let count = builtin::i32_load(outptr + 4);
 
-    // 5. Build Array<Array<u8>> from linear memory
+    // 6. Build Array<Array<u8>> from linear memory
     let result: Array<Array<u8>> = Array::<Array<u8>>::with_capacity(count);
     for let mut i = 0; i < count; i += 1 {
         let elem_ptr = builtin::i32_load(base_ptr + i * 8);
         let elem_len = builtin::i32_load(base_ptr + i * 8 + 4);
-        let bytes = builtin::memory_to_gc_array(elem_ptr, elem_len);
+        let bytes = internal::memory_to_gc_array(elem_ptr, elem_len);
         result.append(bytes);
     }
+
+    // 7. Free result linear memory (outer list + outptr)
+    builtin::realloc(base_ptr, count * 8, 4, 0);
+    builtin::realloc(outptr, 8, 4, 0);
+
     return result;
 }
 ```
@@ -139,8 +147,8 @@ fn __cm_export__handle(method_ptr: i32, method_len: i32,
                        /* ... flat params ... */
                        outptr: i32) {
     // 1. Lift params from flat ABI
-    let method = builtin::memory_to_gc_string(method_ptr, method_len);
-    let path = builtin::memory_to_gc_string(path_ptr, path_len);
+    let method = internal::memory_to_gc_string(method_ptr, method_len);
+    let path = internal::memory_to_gc_string(path_ptr, path_len);
     let request = Request { method, path, /* ... */ };
 
     // 2. Call user function
@@ -166,15 +174,16 @@ For async WASI functions (e.g., `Stdout::write_via_stream`):
 
 ```wado
 fn __cm_adapter__write_via_stream(stream: i32, data: String) {
-    let data_packed = builtin::cm_lower_string(data);
+    let data_packed = internal::cm_lower_string(data);
     let data_ptr = data_packed as i32;
     let data_len = (data_packed >> 32) as i32;
 
-    // Call lowered function — returns subtask handle
-    let subtask = builtin::cm_raw_call(stream, data_ptr, data_len);
+    // Call lowered async function — returns subtask handle
+    let subtask = builtin::cm_raw_call__wasi_cli_stdout_write_via_stream(stream, data_ptr, data_len);
 
-    // Wait for completion
+    // Wait for completion, then free lowered param memory
     internal::wait_for_subtask(subtask);
+    builtin::realloc(data_ptr, data_len, 1, 0);
 }
 ```
 
