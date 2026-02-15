@@ -13,25 +13,29 @@ use { TreeMap } from "core:collections";
 /// Trim leading and trailing whitespace.
 fn trim(s: String) -> String {
     let mut result = String::with_capacity(s.len());
-    let mut trailing = String::with_capacity(16);
     let mut found_start = false;
     for let c of s.chars() {
-        let is_ws = c == ' ' || c == '\t' || c == '\n' || c == '\r';
         if !found_start {
+            let is_ws = c == ' ' || c == '\t' || c == '\n' || c == '\r';
             if !is_ws {
                 found_start = true;
                 result.append_char(c);
             }
-        } else if is_ws {
-            trailing.append_char(c);
         } else {
-            if !trailing.is_empty() {
-                result.append(trailing);
-                trailing = String::with_capacity(16);
-            }
             result.append_char(c);
         }
     }
+    // Trim trailing ASCII whitespace in-place
+    let mut end = result.len();
+    while end > 0 {
+        let b = result.get_byte(end - 1);
+        if b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D {
+            end -= 1;
+        } else {
+            break;
+        }
+    }
+    result.truncate_bytes(end);
     return result;
 }
 
