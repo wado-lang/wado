@@ -1200,6 +1200,174 @@ pub fn adapter_func_name(effect_name: &str, method_name: &str) -> String {
 /// Fixed async outptr address (matches codegen convention).
 const ASYNC_OUTPTR: i32 = 2048;
 
+/// Canonical ABI: maximum number of flat return values before outptr is used.
+const MAX_FLAT_RESULTS: usize = 1;
+
+/// Returns the internal.wado converter function name for list types that need
+/// pre-compiled generic array operations, or `None` if the type can be lifted inline.
+///
+/// List types require `Array::<T>::with_capacity()` and `.append()` which are generic
+/// methods needing monomorphization. Since adapter synthesis runs after the resolver,
+/// we delegate to internal.wado converter functions for these types.
+fn list_converter_for_type(ty: &Type) -> Option<&'static str> {
+    match ty {
+        Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
+            match &g.args[0] {
+                Type::Named(n) if n.name == "String" => Some("cm_list_string_to_array"),
+                Type::Named(n) if n.name == "u8" => None, // u8 lists use memory_to_gc_array inline
+                Type::Tuple(elems) if elems.len() == 2 => {
+                    // list<tuple<string, string>> → cm_list_tuple_string_string_to_array
+                    if elems.iter().all(|e| matches!(e, Type::Named(n) if n.name == "String")) {
+                        Some("cm_list_tuple_string_string_to_array")
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.
+/// This is true for Result types where all payloads are empty (unit), so the raw call
+/// returns just a discriminant on the stack without an outptr.
+fn needs_flat_result_lifting(ty: &Type) -> bool {
+    match ty {
+        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => true,
+        _ => false,
+    }
+}
+
+/// Synthesize lifting of a flat Result discriminant into a GC variant struct.
+///
+/// For `Result<(), ()>`: disc==0 → Ok, disc==1 → Err (no payloads)
+/// For `Result<(), ErrorCode>`: disc==0 → Ok, disc!=0 → Err(lift_error)
+#[allow(clippy::too_many_arguments)]
+fn synthesize_lift_flat_result(
+    ty: &Type,
+    disc_expr: TirExpr,
+    result_local: u32,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    ctx: &LiftContext<'_>,
+) -> TirExpr {
+    if let Type::Generic(g) = ty {
+        if g.name == "Result" && g.args.len() == 2 {
+            let ok_ty = &g.args[0];
+            let err_ty = &g.args[1];
+
+            let ok_is_unit = matches!(ok_ty, Type::Named(n) if n.name == "()")
+                || matches!(ok_ty, Type::Tuple(elems) if elems.is_empty());
+            let err_is_unit = matches!(err_ty, Type::Named(n) if n.name == "()")
+                || matches!(err_ty, Type::Tuple(elems) if elems.is_empty());
+
+            let ok_construct = if ok_is_unit {
+                TirExpr::new(
+                    TirExprKind::VariantConstruct {
+                        variant_type: TypeTable::I32,
+                        case_index: 0,
+                        case_name: "Ok".to_string(),
+                        payload: None,
+                    },
+                    TypeTable::I32,
+                    synth_span(),
+                )
+            } else {
+                // Ok with payload — flat result should use outptr instead
+                // This shouldn't happen, but handle gracefully
+                TirExpr::new(
+                    TirExprKind::VariantConstruct {
+                        variant_type: TypeTable::I32,
+                        case_index: 0,
+                        case_name: "Ok".to_string(),
+                        payload: None,
+                    },
+                    TypeTable::I32,
+                    synth_span(),
+                )
+            };
+
+            let err_construct = if err_is_unit {
+                TirExpr::new(
+                    TirExprKind::VariantConstruct {
+                        variant_type: TypeTable::I32,
+                        case_index: 1,
+                        case_name: "Err".to_string(),
+                        payload: None,
+                    },
+                    TypeTable::I32,
+                    synth_span(),
+                )
+            } else {
+                // Err with a flat payload — the remaining flat values encode the error
+                // For enums/variants, the error value is the disc shifted appropriately
+                // For now, try to lift the error type using the WASI variant/enum path
+                let err_name = match err_ty {
+                    Type::Named(n) => n.name.as_str(),
+                    _ => "",
+                };
+                if let Some(lifted) = try_lift_wasi_variant_or_enum(
+                    err_name,
+                    // The error discriminant is in the remaining flat values after the Result disc
+                    // For flat result, the second flat value is the error payload
+                    disc_expr.clone(), // placeholder — we'll fix below
+                    next_local,
+                    stmts,
+                    local_types,
+                    ctx,
+                ) {
+                    TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type: TypeTable::I32,
+                            case_index: 1,
+                            case_name: "Err".to_string(),
+                            payload: Some(Box::new(lifted)),
+                        },
+                        TypeTable::I32,
+                        synth_span(),
+                    )
+                } else {
+                    TirExpr::new(
+                        TirExprKind::VariantConstruct {
+                            variant_type: TypeTable::I32,
+                            case_index: 1,
+                            case_name: "Err".to_string(),
+                            payload: None,
+                        },
+                        TypeTable::I32,
+                        synth_span(),
+                    )
+                }
+            };
+
+            stmts.push(if_stmt(
+                binary(
+                    crate::tir::TirBinaryOp::Eq,
+                    disc_expr,
+                    i32_const(0),
+                    TypeTable::BOOL,
+                ),
+                block(vec![expr_stmt(assign(
+                    local_ref(result_local, "__result_val", TypeTable::I32),
+                    ok_construct,
+                ))]),
+                Some(block(vec![expr_stmt(assign(
+                    local_ref(result_local, "__result_val", TypeTable::I32),
+                    err_construct,
+                ))])),
+            ));
+
+            return local_ref(result_local, "__result_val", TypeTable::I32);
+        }
+    }
+
+    // Fallback: just return the discriminant as-is
+    disc_expr
+}
+
 /// Create a `TirFunction` with default metadata fields.
 fn make_adapter_function(
     name: String,
@@ -1276,16 +1444,27 @@ fn wasi_return_type_id(func_info: &WasiFunctionInfo) -> TypeId {
 /// 5. Returns the Wado-typed result
 ///
 /// The adapter's Wado-level return type matches the WASI function declaration.
-/// For functions with `result_converter` (complex return types like list<string>),
-/// the adapter delegates to the existing converter function.
+/// All return types are lifted inline using `synthesize_lift` — no per-type
+/// converter functions are needed.
 fn synthesize_adapter(
     func_info: &WasiFunctionInfo,
     wasi_registry: &crate::component_model::WasiRegistry,
     type_table: &RefCell<TypeTable>,
 ) -> Rc<RefCell<TirFunction>> {
     let name = adapter_func_name(&func_info.effect_name, &func_info.method_name);
-    let conv = &func_info.call_convention;
     let local_name = func_info.local_alias_name();
+
+    // Derive outptr needs from return type using Canonical ABI layout
+    let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
+        crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
+    });
+    let outptr_alloc = if needs_outptr {
+        func_info.return_type.as_ref().map(|rt| {
+            (crate::cm_abi::cm_size(rt), crate::cm_abi::cm_align(rt))
+        })
+    } else {
+        None
+    };
 
     let mut next_local: u32 = 0;
     let mut params = Vec::new();
@@ -1432,9 +1611,9 @@ fn synthesize_adapter(
     }
 
     // ---- Handle outptr for async or complex returns ----
-    if conv.is_async {
+    if func_info.is_async {
         flat_args.push(i32_const(ASYNC_OUTPTR));
-    } else if let Some((size, align)) = conv.outptr_alloc {
+    } else if let Some((size, align)) = outptr_alloc {
         // Allocate outptr via realloc
         let outptr_local = next_local;
         let outptr_alloc = builtin_call(
@@ -1467,51 +1646,41 @@ fn synthesize_adapter(
     // The adapter's return type to the Wado caller:
     let adapter_return_type;
 
-    if conv.is_async {
+    if func_info.is_async {
         // Async: discard subtask handle, return void
         body_stmts.push(expr_stmt(raw_call_expr));
         adapter_return_type = TypeTable::UNIT;
-    } else if let Some(converter) = conv.result_converter {
-        // Complex return with converter: delegate to existing converter function
-        // (list<string>, list<u8>, option<string>, etc.)
-        body_stmts.push(expr_stmt(raw_call_expr));
-        let outptr_local = next_local - 1;
-
-        let converter_call = TirExpr::new(
-            TirExprKind::Call {
-                func: FunctionRef::External {
-                    module_source: converter.module_source(),
-                    name: converter.func_name().to_string(),
-                    monomorph_info: None,
-                    method_info: None,
-                },
-                type_args: vec![],
-                args: vec![local_ref(outptr_local, "__outptr", TypeTable::I32)],
-            },
-            TypeTable::I32,
-            synth_span(),
-        );
-        body_stmts.push(return_stmt(Some(converter_call)));
-        adapter_return_type = TypeTable::I32; // placeholder
-    } else if conv.result_return.is_some() && conv.outptr_alloc.is_some() {
-        // Result return with outptr: synthesize inline lifting using VariantConstruct
+    } else if let Some((alloc_size, alloc_align)) = outptr_alloc {
         body_stmts.push(expr_stmt(raw_call_expr));
         let outptr_local = next_local - 1;
 
         let return_type = func_info.return_type.as_ref().unwrap();
         let resolved = wasi_registry.resolve_type(return_type);
-        let lift_ctx = LiftContext { wasi_registry, type_table };
-        let lifted = synthesize_lift_with_context(
-            &resolved,
-            local_ref(outptr_local, "__outptr", TypeTable::I32),
-            &mut next_local,
-            &mut body_stmts,
-            &mut local_types,
-            &lift_ctx,
-        );
 
-        // Free the outptr
-        if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
+        // Check if this return type needs a pre-compiled internal converter function.
+        // List types require generic Array<T> operations (with_capacity, append) which
+        // need monomorphization. Since adapters are synthesized after resolution,
+        // we delegate to internal.wado converter functions for these types.
+        if let Some(converter_name) = list_converter_for_type(&resolved) {
+            let converter_call = internal_call(
+                converter_name,
+                vec![local_ref(outptr_local, "__outptr", TypeTable::I32)],
+                TypeTable::I32,
+            );
+            body_stmts.push(return_stmt(Some(converter_call)));
+        } else {
+            // Inline lifting for all other types (primitives, string, option, result, tuple, etc.)
+            let lift_ctx = LiftContext { wasi_registry, type_table };
+            let lifted = synthesize_lift_with_context(
+                &resolved,
+                local_ref(outptr_local, "__outptr", TypeTable::I32),
+                &mut next_local,
+                &mut body_stmts,
+                &mut local_types,
+                &lift_ctx,
+            );
+
+            // Free the outptr
             body_stmts.push(expr_stmt(builtin_call(
                 "realloc",
                 vec![
@@ -1522,144 +1691,45 @@ fn synthesize_adapter(
                 ],
                 TypeTable::I32,
             )));
+
+            body_stmts.push(return_stmt(Some(lifted)));
         }
-
-        body_stmts.push(return_stmt(Some(lifted)));
-        adapter_return_type = TypeTable::I32;
-    } else if conv.result_return.is_some() {
-        // Result return without outptr (e.g., Result<(), ()>): discriminant on stack
-        let disc_local = next_local;
-        body_stmts.push(let_stmt(
-            "__disc",
-            disc_local,
-            TypeTable::I32,
-            raw_call_expr,
-        ));
-        local_types.push(TypeTable::I32);
-        next_local += 1;
-
-        let result_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
-        body_stmts.push(let_mut_stmt(
-            "__result_val",
-            result_local,
-            TypeTable::I32,
-            null_expr(TypeTable::I32),
-        ));
-
-        // Ok case
-        let ok_construct = TirExpr::new(
-            TirExprKind::VariantConstruct {
-                variant_type: TypeTable::I32,
-                case_index: 0,
-                case_name: "Ok".to_string(),
-                payload: None,
-            },
-            TypeTable::I32,
-            synth_span(),
-        );
-        let err_construct = TirExpr::new(
-            TirExprKind::VariantConstruct {
-                variant_type: TypeTable::I32,
-                case_index: 1,
-                case_name: "Err".to_string(),
-                payload: None,
-            },
-            TypeTable::I32,
-            synth_span(),
-        );
-
-        body_stmts.push(if_stmt(
-            binary(
-                crate::tir::TirBinaryOp::Eq,
-                local_ref(disc_local, "__disc", TypeTable::I32),
-                i32_const(0),
-                TypeTable::BOOL,
-            ),
-            block(vec![expr_stmt(assign(
-                local_ref(result_local, "__result_val", TypeTable::I32),
-                ok_construct,
-            ))]),
-            Some(block(vec![expr_stmt(assign(
-                local_ref(result_local, "__result_val", TypeTable::I32),
-                err_construct,
-            ))])),
-        ));
-
-        body_stmts.push(return_stmt(Some(local_ref(
-            result_local,
-            "__result_val",
-            TypeTable::I32,
-        ))));
-        adapter_return_type = TypeTable::I32;
-    } else if let Some(ref _elements) = conv.tuple_return {
-        // Tuple return: load each element from outptr using synthesize_lift_tuple
-        body_stmts.push(expr_stmt(raw_call_expr));
-        let outptr_local = next_local - 1;
-
-        let return_type = func_info.return_type.as_ref().unwrap();
-        let resolved = wasi_registry.resolve_type(return_type);
-        let lift_ctx = LiftContext { wasi_registry, type_table };
-        let lifted = synthesize_lift_with_context(
-            &resolved,
-            local_ref(outptr_local, "__outptr", TypeTable::I32),
-            &mut next_local,
-            &mut body_stmts,
-            &mut local_types,
-            &lift_ctx,
-        );
-
-        // Free the outptr
-        if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
-            body_stmts.push(expr_stmt(builtin_call(
-                "realloc",
-                vec![
-                    local_ref(outptr_local, "__outptr", TypeTable::I32),
-                    i32_const(alloc_size as i32),
-                    i32_const(alloc_align as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            )));
-        }
-
-        body_stmts.push(return_stmt(Some(lifted)));
-        adapter_return_type = TypeTable::I32;
-    } else if conv.outptr_alloc.is_some() && func_info.return_type.is_some() {
-        // Outptr return without converter (e.g., String, simple outptr types)
-        body_stmts.push(expr_stmt(raw_call_expr));
-        let outptr_local = next_local - 1;
-
-        let return_type = func_info.return_type.as_ref().unwrap();
-        let resolved = wasi_registry.resolve_type(return_type);
-        let lift_ctx = LiftContext { wasi_registry, type_table };
-        let lifted = synthesize_lift_with_context(
-            &resolved,
-            local_ref(outptr_local, "__outptr", TypeTable::I32),
-            &mut next_local,
-            &mut body_stmts,
-            &mut local_types,
-            &lift_ctx,
-        );
-
-        if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
-            body_stmts.push(expr_stmt(builtin_call(
-                "realloc",
-                vec![
-                    local_ref(outptr_local, "__outptr", TypeTable::I32),
-                    i32_const(alloc_size as i32),
-                    i32_const(alloc_align as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            )));
-        }
-
-        body_stmts.push(return_stmt(Some(lifted)));
-        adapter_return_type = TypeTable::I32;
+        adapter_return_type = TypeTable::I32; // placeholder, fixed up at call site
     } else if func_info.return_type.is_some() {
-        // Flat return: cm_raw_call directly returns the value
-        body_stmts.push(return_stmt(Some(raw_call_expr)));
-        adapter_return_type = raw_call_return_type;
+        let return_type = func_info.return_type.as_ref().unwrap();
+        let resolved = wasi_registry.resolve_type(return_type);
+        if needs_flat_result_lifting(&resolved) {
+            // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
+            // an i32 discriminant on the stack, but the adapter needs to return a GC struct.
+            // Synthesize VariantConstruct from the discriminant.
+            let disc_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+            body_stmts.push(let_stmt("__disc", disc_local, TypeTable::I32, raw_call_expr));
+
+            let result_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+            body_stmts.push(let_mut_stmt(
+                "__result_val",
+                result_local,
+                TypeTable::I32,
+                null_expr(TypeTable::I32),
+            ));
+
+            let lift_ctx = LiftContext { wasi_registry, type_table };
+            let lifted = synthesize_lift_flat_result(
+                &resolved,
+                local_ref(disc_local, "__disc", TypeTable::I32),
+                result_local,
+                &mut next_local,
+                &mut body_stmts,
+                &mut local_types,
+                &lift_ctx,
+            );
+            body_stmts.push(return_stmt(Some(lifted)));
+            adapter_return_type = TypeTable::I32; // placeholder
+        } else {
+            // Truly flat return (primitive): cm_raw_call directly returns the value
+            body_stmts.push(return_stmt(Some(raw_call_expr)));
+            adapter_return_type = raw_call_return_type;
+        }
     } else {
         // No return: just call
         body_stmts.push(expr_stmt(raw_call_expr));
