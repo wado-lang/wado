@@ -411,14 +411,15 @@ New code (actual for Phases 1–2):
 | Module                    | Purpose                          | Lines |
 | ------------------------- | -------------------------------- | ----- |
 | cm_abi.rs                 | Canonical ABI layout computation | 813   |
-| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 2826  |
+| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 2909  |
 | builtin.wado additions    | Memory load/store builtins       | ~50   |
 | CmRawCall visitor changes | Match arms across 14 files       | ~160  |
-| Total added               |                                  | ~3849 |
+| monomorphize.rs additions | StaticCall rewrite in Phase 12   | ~20   |
+| Total added               |                                  | ~3952 |
 
-The adapter gen module grew significantly in Phase 2 (from 1664 to 2826 lines) as resource method adapter synthesis was added, including variant/enum lifting with discriminant dispatch, nested struct lifting (`FieldSizePayload`, `DnsErrorPayload`, `TlsAlertReceivedPayload`), and `Option<own<resource>>` lifting.
+The adapter gen module grew significantly in Phase 2 (from 1664 to 2909 lines) as resource method adapter synthesis was added, including variant/enum lifting with discriminant dispatch, nested struct lifting (`FieldSizePayload`, `DnsErrorPayload`, `TlsAlertReceivedPayload`), `Option<own<resource>>` lifting, and generic `list<T>` lifting with proper monomorphization support.
 
-Net impact: ~3849 lines added, ~1021 lines removed (with ~68 lines still pending removal). The new code is more general and eliminates per-type hand-coding.
+Net impact: ~3952 lines added, ~1089 lines removed. The new code is more general and eliminates per-type hand-coding.
 
 ### What Stays
 
