@@ -225,6 +225,8 @@ Wado is designed with the following Wasm features:
 - When referring to WAT, use folded style syntax.
 - Do not commit changes unless the user requests so. When commit, no need to explain the implementation details.
 - If you find a compiler bug, limitation, or awkward behavior, fix it. Such a problem must be treated as the highest priority.
+- Use sub-agents only for research tasks (searching, reading, exploring). Never use sub-agents for editing files.
+- `CLAUDE.md` is a symlink to `AGENTS.md`. Editing either one is sufficient.
 
 ## Rules for Rust
 
