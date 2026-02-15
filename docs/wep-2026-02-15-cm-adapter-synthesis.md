@@ -467,20 +467,20 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 - [x] Implement `synthesize_lift` for `list<T>` generically — adapter synthesis now provides proper `MonomorphInfo` and `LocalMethodName` on `StaticCall`/`MethodCall` nodes for `Array::<T>::with_capacity()` and `.append()`, enabling the monomorphizer to instantiate these generic methods. `list_converter_for_type` workaround deleted along with `cm_list_string_to_array` and `cm_list_tuple_string_string_to_array` from internal.wado.
 - [x] Migrate remaining WASI interfaces not yet covered by adapter synthesis (e.g., `wasi:clocks`). Verified: all WASI interfaces (cli, clocks, random, http, sockets) are handled by the generic adapter synthesizer. The old codegen paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) were already deleted; clocks E2E tests pass at all optimization levels.
 
-### Phase 3: Export Adapters
-
-- [ ] Implement export adapter synthesis for `wasi:cli/run` (simplest export).
-- [ ] Implement export adapter synthesis for `wasi:http/incoming-handler` (complex: async, Result return).
-- [ ] Delete `CmExportInfo` scratch local logic — adapters declare their own locals.
-- [ ] Delete export-related CM glue from codegen.
-
-### Phase 4: Cleanup (done)
+### Phase 3: Cleanup (done)
 
 - [x] Remove `TirExprKind::EffectCall` — variant was dead code (resolver creates `Call` nodes for all WASI operations; `EffectCall` was never constructed). Removed from `TirExprKind` enum and all 15 files with match arms (effect_check, cm_adapter_gen, codegen, unparse, lower, monomorphize, and 8 optimizer passes).
 - [x] Remove `cm_convention` and `cm_local_name` fields from TIR.
 - [x] Delete `CmCallConvention`, `CmConverterKind`, and `CmConverterRequirements`.
 - [x] Delete unused per-type converter functions from `internal.wado`.
 - [x] Verify all E2E tests (3425), HTTP tests (8), and unit tests (229) pass.
+
+### Phase 4: Export Adapters
+
+- [ ] Implement export adapter synthesis for `wasi:cli/run` (simplest export).
+- [ ] Implement export adapter synthesis for `wasi:http/incoming-handler` (complex: async, Result return).
+- [ ] Delete `CmExportInfo` scratch local logic — adapters declare their own locals.
+- [ ] Delete export-related CM glue from codegen.
 
 ## Implementation Notes
 
