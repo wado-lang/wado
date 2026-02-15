@@ -13,7 +13,10 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
+global mut __modules_initialized: bool = false;
+
 fn run() with Stdout {
+    __initialize_modules();
     let mut seg1: Array<u8> = move [];
     let msg1: String = move "Hello, ";
     __for_0: {
@@ -238,5 +241,15 @@ pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
     }
     core::builtin::array_set::<u8>(self.repr, used, value);
     self.used = (used + 1);
+}
+
+fn __initialize_modules() {
+    if __modules_initialized {
+        return;
+    }
+    __inline___initialize_module_0: {
+        core::zlib::CRC_TABLE = [];
+    };
+    __modules_initialized = true;
 }
 

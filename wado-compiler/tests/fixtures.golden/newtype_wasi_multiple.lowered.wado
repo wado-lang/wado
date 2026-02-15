@@ -10,12 +10,12 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout, MonotonicClock {
-    let start: Mark = MonotonicClock::now();
-    let res: Duration = MonotonicClock::get_resolution();
+    let start: Mark = cm_raw_call wasi:clocks/MonotonicClock::now();
+    let res: Duration = cm_raw_call wasi:clocks/MonotonicClock::get_resolution();
     if ((start > 0) && (res > 0)) {
         core::cli::println(move "both newtypes have positive values");
     }
-    let end: Mark = MonotonicClock::now();
+    let end: Mark = cm_raw_call wasi:clocks/MonotonicClock::now();
     let elapsed: Mark = (end - start);
     if (elapsed >= 0) {
         core::cli::println(move "elapsed time is non-negative");

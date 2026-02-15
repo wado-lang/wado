@@ -10,8 +10,8 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout, Random, Insecure, InsecureSeed {
-    let r1: u64 = Random::get_random_u64();
-    let r2: u64 = Random::get_random_u64();
+    let r1: u64 = cm_raw_call wasi:random/Random::get_random_u64();
+    let r2: u64 = cm_raw_call wasi:random/Random::get_random_u64();
     core::cli::println(move "test: random u64 works");
     if ((r1 != 0) || (r2 != 0)) {
         core::cli::println(move "test: random u64 produces non-zero values");
@@ -23,15 +23,15 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
     } else {
         core::cli::println(move "test: random u64 values same (unlikely but valid)");
     }
-    let ir1: u64 = Insecure::get_insecure_random_u64();
-    let ir2: u64 = Insecure::get_insecure_random_u64();
+    let ir1: u64 = cm_raw_call wasi:random/Insecure::get_insecure_random_u64();
+    let ir2: u64 = cm_raw_call wasi:random/Insecure::get_insecure_random_u64();
     core::cli::println(move "test: insecure random u64 works");
     if (ir1 != ir2) {
         core::cli::println(move "test: insecure random u64 values differ");
     } else {
         core::cli::println(move "test: insecure random u64 values same (unlikely but valid)");
     }
-    let seed: [u64, u64] = move InsecureSeed::get_insecure_seed();
+    let seed: [u64, u64] = move __cm_adapter__InsecureSeed_get_insecure_seed();
     let seed_low: u64 = seed.0;
     let seed_high: u64 = seed.1;
     core::cli::println(move "test: insecure seed works");
@@ -41,5 +41,11 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
         core::cli::println(move "test: insecure seed produced zeros (unlikely but valid)");
     }
     core::cli::println(move "all random tests passed");
+}
+
+fn __cm_adapter__InsecureSeed_get_insecure_seed() -> [u64, u64] {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 8, 16);
+    cm_raw_call wasi:random/InsecureSeed::get_insecure_seed(__outptr);
+    return [core::builtin::i64_load((__outptr + 0)), core::builtin::i64_load((__outptr + 8))];
 }
 

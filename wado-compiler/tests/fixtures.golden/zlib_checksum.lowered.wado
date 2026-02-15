@@ -13,7 +13,10 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
+global mut __modules_initialized: bool = false;
+
 fn run() with Stdout {
+    __initialize_modules();
     let data: Array<u8> = move [72, 101, 108, 108, 111];
     let checksum: u32 = core::zlib::adler32(1, &data, 0, 5);
     core::cli::println(__tmpl: {
@@ -120,5 +123,15 @@ fn run() with Stdout {
         }
     }
     core::cli::println(move "ok");
+}
+
+fn __initialize_modules() {
+    if __modules_initialized {
+        return;
+    }
+    __inline___initialize_module_0: {
+        core::zlib::CRC_TABLE = [];
+    };
+    __modules_initialized = true;
 }
 

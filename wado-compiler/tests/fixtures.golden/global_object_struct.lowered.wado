@@ -11,12 +11,15 @@
 
 global mut ORIGIN: Point = null;
 
+global mut __modules_initialized: bool = false;
+
 struct Point {
     x: i32,
     y: i32,
 }
 
 fn run() with Stdout {
+    __initialize_modules();
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(37), used: 0 };
         __r.String::append(move "x=");
@@ -66,5 +69,15 @@ fn run() with Stdout {
         };
         break __tmpl: __r;
     });
+}
+
+fn __initialize_modules() {
+    if __modules_initialized {
+        return;
+    }
+    __inline___initialize_module_0: {
+        ORIGIN = Point { x: 0, y: 0 };
+    };
+    __modules_initialized = true;
 }
 
