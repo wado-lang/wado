@@ -139,6 +139,17 @@ fn load_cm_primitive(prim: &crate::component_model::CmPrimitiveType, addr: TirEx
     builtin_call(load_name, vec![addr], type_id)
 }
 
+/// Map a CM primitive type to its TIR `TypeId`.
+fn cm_primitive_type_id(prim: &crate::component_model::CmPrimitiveType) -> TypeId {
+    use crate::component_model::CmPrimitiveType;
+    match prim {
+        CmPrimitiveType::I32 | CmPrimitiveType::U32 => TypeTable::I32,
+        CmPrimitiveType::I64 | CmPrimitiveType::U64 => TypeTable::I64,
+        CmPrimitiveType::F32 => TypeTable::F32,
+        CmPrimitiveType::F64 => TypeTable::F64,
+    }
+}
+
 /// Create a cast expression.
 pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
     TirExpr::new(
@@ -844,14 +855,14 @@ fn synthesize_adapter(func_info: &WasiFunctionInfo) -> Rc<RefCell<TirFunction>> 
         body_stmts.push(expr_stmt(raw_call_expr));
         let outptr_local = next_local - 1;
 
-        // Load each tuple element from outptr and construct a TupleLiteral
-        let mut tuple_elements = Vec::new();
+        // Load each tuple element into temp locals first (before freeing outptr)
+        let mut temp_locals = Vec::new();
         let mut field_offset: u32 = 0;
-        for prim in elements {
+        for (i, prim) in elements.iter().enumerate() {
             // Align offset
-            let align = prim.align();
-            if !field_offset.is_multiple_of(align) {
-                field_offset += align - (field_offset % align);
+            let prim_align = prim.align();
+            if !field_offset.is_multiple_of(prim_align) {
+                field_offset += prim_align - (field_offset % prim_align);
             }
 
             // Generate: builtin::i32_load(outptr + offset) or builtin::i64_load(outptr + offset)
@@ -860,9 +871,37 @@ fn synthesize_adapter(func_info: &WasiFunctionInfo) -> Rc<RefCell<TirFunction>> 
             let addr = binary_add(outptr_ref, offset_expr);
             let load = load_cm_primitive(prim, addr);
 
-            tuple_elements.push(load);
+            let temp_name = format!("__t{i}");
+            let temp_local = next_local;
+            let temp_type = cm_primitive_type_id(prim);
+            body_stmts.push(let_stmt(&temp_name, temp_local, temp_type, load));
+            local_types.push(temp_type);
+            next_local += 1;
+            temp_locals.push((temp_local, temp_name, temp_type));
+
             field_offset += prim.size();
         }
+
+        // Free the outptr linear memory
+        if let Some((alloc_size, alloc_align)) = conv.outptr_alloc {
+            let free_call = builtin_call(
+                "realloc",
+                vec![
+                    local_ref(outptr_local, "__outptr", TypeTable::I32),
+                    i32_const(alloc_size as i32),
+                    i32_const(alloc_align as i32),
+                    i32_const(0),
+                ],
+                TypeTable::I32,
+            );
+            body_stmts.push(expr_stmt(free_call));
+        }
+
+        // Build tuple from temp locals
+        let tuple_elements: Vec<TirExpr> = temp_locals
+            .iter()
+            .map(|(idx, name, typ)| local_ref(*idx, name, *typ))
+            .collect();
 
         let tuple_expr = TirExpr::new(
             TirExprKind::TupleLiteral {

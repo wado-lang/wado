@@ -46,6 +46,9 @@ fn run() with Stdout, Random, Insecure, InsecureSeed {
 fn __cm_adapter__InsecureSeed_get_insecure_seed() -> [u64, u64] {
     let __outptr: i32 = core::builtin::realloc(0, 0, 8, 16);
     cm_raw_call wasi:random/InsecureSeed::get_insecure_seed(__outptr);
-    return [core::builtin::i64_load((__outptr + 0)), core::builtin::i64_load((__outptr + 8))];
+    let __t0: i64 = core::builtin::i64_load((__outptr + 0));
+    let __t1: i64 = core::builtin::i64_load((__outptr + 8));
+    core::builtin::realloc(__outptr, 16, 8, 0);
+    return [__t0, __t1];
 }
 
