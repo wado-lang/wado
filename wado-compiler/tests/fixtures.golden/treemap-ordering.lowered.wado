@@ -581,6 +581,22 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
+pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let mut new_capacity: i32 = (capacity * 2);
+        if (capacity == 0) {
+            new_capacity = 4;
+        }
+        let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+        core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<String>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
@@ -660,22 +676,6 @@ pub fn "TreeMap<String,i32>::keys"(self: &TreeMap<String,i32>) -> Array<String> 
         }
     }
     return result;
-}
-
-pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
-    let used: i32 = self.used;
-    let capacity: i32 = core::builtin::array_len(self.repr);
-    if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
-        let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
-        core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
-        self.repr = new_repr;
-    }
-    core::builtin::array_set::<String>(self.repr, used, value);
-    self.used = (used + 1);
 }
 
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {

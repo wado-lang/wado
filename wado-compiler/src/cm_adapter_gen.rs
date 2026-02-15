@@ -18,11 +18,11 @@ use indexmap::{IndexMap, IndexSet};
 use crate::ast::Type;
 use crate::cm_abi;
 use crate::component_model::{WasiFunctionInfo, WasiRegistry};
-use crate::name::ModuleSource;
+use crate::name::{LocalMethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt,
+    TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -31,6 +31,55 @@ use crate::token::Span;
 pub struct LiftContext<'a> {
     pub wasi_registry: &'a WasiRegistry,
     pub type_table: &'a RefCell<TypeTable>,
+}
+
+/// Convert a WASI AST `Type` to a `TypeId` in the type table.
+///
+/// This is needed for synthesized adapter code that calls generic methods
+/// (e.g., `Array::<String>::with_capacity()`). The monomorphizer requires
+/// concrete `TypeId`s in `MonomorphInfo::type_args` to instantiate generic methods.
+pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
+    match ty {
+        Type::Named(named) => match named.name.as_str() {
+            "i8" => TypeTable::I8,
+            "i16" => TypeTable::I16,
+            "i32" => TypeTable::I32,
+            "i64" => TypeTable::I64,
+            "u8" => TypeTable::U8,
+            "u16" => TypeTable::U16,
+            "u32" => TypeTable::U32,
+            "u64" => TypeTable::U64,
+            "f32" => TypeTable::F32,
+            "f64" => TypeTable::F64,
+            "bool" => TypeTable::BOOL,
+            "char" => TypeTable::CHAR,
+            "String" => type_table.make_struct(
+                "String".to_string(),
+                ModuleSource::core("prelude/string.wado"),
+            ),
+            // Resource types and other named types are i32 handles
+            _ => TypeTable::I32,
+        },
+        Type::Generic(g) => match g.name.as_str() {
+            "Array" if g.args.len() == 1 => {
+                let elem_type = wasi_type_to_type_id(&g.args[0], type_table);
+                type_table.make_array(elem_type)
+            }
+            "Option" if g.args.len() == 1 => {
+                let inner_type = wasi_type_to_type_id(&g.args[0], type_table);
+                type_table.make_option(inner_type)
+            }
+            _ => TypeTable::UNIT,
+        },
+        Type::Tuple(types) => {
+            let resolved: Vec<TypeId> = types
+                .iter()
+                .map(|t| wasi_type_to_type_id(t, type_table))
+                .collect();
+            type_table.make_tuple(resolved)
+        }
+        _ => TypeTable::UNIT,
+    }
 }
 
 /// Synthetic span used for all generated adapter code.
@@ -242,25 +291,39 @@ pub fn assign(target: TirExpr, value: TirExpr) -> TirExpr {
     )
 }
 
-/// Create a method call expression.
-pub fn method_call(
-    receiver: TirExpr,
+/// Create a static call to a generic struct method with proper monomorphization info.
+///
+/// For example, `Array::<String>::with_capacity(n)` needs:
+/// - `method_info` with `struct_name: "Array"`, `method_name: "with_capacity"`
+/// - `monomorph_info` with `generic_name: "Array::with_capacity"`, `type_args: [String]`
+///
+/// Without these, the monomorphizer won't instantiate the generic method.
+fn generic_static_call(
+    struct_name: &str,
     method_name: &str,
-    method_module_source: ModuleSource,
+    module_source: ModuleSource,
     type_args: Vec<TypeId>,
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::MethodCall {
-            receiver: Box::new(receiver),
-            func: crate::tir::FunctionRef::External {
-                module_source: method_module_source,
-                name: method_name.to_string(),
-                monomorph_info: None,
-                method_info: None,
-            },
+    let info = LocalMethodName::new(struct_name.to_string(), None, method_name.to_string());
+    let mangled_name = info.to_mangled_name();
+    let monomorph_info = if type_args.is_empty() {
+        None
+    } else {
+        Some(MonomorphInfo {
+            generic_name: mangled_name.clone(),
             type_args,
+        })
+    };
+    TirExpr::new(
+        TirExprKind::StaticCall {
+            func: FunctionRef::External {
+                module_source,
+                name: mangled_name,
+                monomorph_info,
+                method_info: Some(info),
+            },
             args,
         },
         return_type,
@@ -268,21 +331,31 @@ pub fn method_call(
     )
 }
 
-/// Create a static call expression (e.g., `Array::<T>::with_capacity(n)`).
-pub fn static_call(
+/// Create a method call on a generic struct with proper monomorphization info.
+///
+/// For example, `arr.append(elem)` where `arr: Array<String>` needs:
+/// - `method_info` with `struct_name: "Array"`, `method_name: "append"`
+/// - The receiver's `type_id` must be the concrete `Array<String>` `TypeId`
+fn generic_method_call(
+    receiver: TirExpr,
+    struct_name: &str,
     method_name: &str,
-    module_source: ModuleSource,
+    method_module_source: ModuleSource,
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {
+    let info = LocalMethodName::new(struct_name.to_string(), None, method_name.to_string());
+    let mangled_name = info.to_mangled_name();
     TirExpr::new(
-        TirExprKind::StaticCall {
-            func: crate::tir::FunctionRef::External {
-                module_source,
-                name: method_name.to_string(),
+        TirExprKind::MethodCall {
+            receiver: Box::new(receiver),
+            func: FunctionRef::External {
+                module_source: method_module_source,
+                name: mangled_name,
                 monomorph_info: None,
-                method_info: None,
+                method_info: Some(info),
             },
+            type_args: vec![],
             args,
         },
         return_type,
@@ -407,7 +480,7 @@ fn synthesize_lift_inner(
         },
         Type::Generic(g) => match g.name.as_str() {
             "Array" if g.args.len() == 1 => {
-                synthesize_lift_list(&g.args[0], addr, next_local, stmts, local_types)
+                synthesize_lift_list(&g.args[0], addr, next_local, stmts, local_types, ctx)
             }
             "Option" if g.args.len() == 1 => {
                 synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, local_types, ctx)
@@ -427,7 +500,9 @@ fn synthesize_lift_inner(
         Type::Tuple(elems) if elems.is_empty() => {
             TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
         }
-        Type::Tuple(elems) => synthesize_lift_tuple(elems, addr, next_local, stmts, local_types),
+        Type::Tuple(elems) => {
+            synthesize_lift_tuple(elems, addr, next_local, stmts, local_types, ctx)
+        }
         Type::Reference(_) | Type::MutReference(_) => {
             builtin_call("i32_load", vec![addr], TypeTable::I32)
         }
@@ -656,8 +731,21 @@ fn synthesize_lift_list(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
+    ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let elem_size = cm_abi::cm_size(elem_ty);
+
+    // Resolve TypeIds for the element type and Array<ElemType>.
+    // These are needed by the monomorphizer to instantiate Array::with_capacity and .append().
+    let (elem_type_id, array_type_id) = if let Some(ctx) = ctx {
+        let mut tt = ctx.type_table.borrow_mut();
+        let elem_tid = wasi_type_to_type_id(elem_ty, &mut tt);
+        let array_tid = tt.make_array(elem_tid);
+        (elem_tid, array_tid)
+    } else {
+        // Fallback: use placeholder types (existing behavior for callers without context)
+        (TypeTable::I32, TypeTable::I32)
+    };
 
     let base_local = alloc_local(next_local, local_types, TypeTable::I32);
     stmts.push(let_stmt(
@@ -679,16 +767,18 @@ fn synthesize_lift_list(
         ),
     ));
 
-    let result_local = alloc_local(next_local, local_types, TypeTable::I32);
+    let result_local = alloc_local(next_local, local_types, array_type_id);
     stmts.push(let_mut_stmt(
         "__result",
         result_local,
-        TypeTable::I32,
-        static_call(
+        array_type_id,
+        generic_static_call(
+            "Array",
             "with_capacity",
             ModuleSource::core("prelude"),
+            vec![elem_type_id],
             vec![local_ref(count_local, "__count", TypeTable::I32)],
-            TypeTable::I32,
+            array_type_id,
         ),
     ));
 
@@ -727,23 +817,24 @@ fn synthesize_lift_list(
         ),
     ));
 
-    // Lift element
+    // Lift element (recursive: inner lists, options, etc. will also get proper types)
     let mut elem_lift_stmts: Vec<TirStmt> = Vec::new();
-    let lifted_elem = synthesize_lift(
+    let lifted_elem = synthesize_lift_inner(
         elem_ty,
         local_ref(elem_addr_local, "__elem_addr", TypeTable::I32),
         next_local,
         &mut elem_lift_stmts,
         local_types,
+        ctx,
     );
     loop_stmts.extend(elem_lift_stmts);
 
     // __result.append(lifted_elem)
-    loop_stmts.push(expr_stmt(method_call(
-        local_ref(result_local, "__result", TypeTable::I32),
+    loop_stmts.push(expr_stmt(generic_method_call(
+        local_ref(result_local, "__result", array_type_id),
+        "Array",
         "append",
         ModuleSource::core("prelude"),
-        vec![],
         vec![lifted_elem],
         TypeTable::UNIT,
     )));
@@ -856,7 +947,6 @@ fn synthesize_lift_option_inner(
 /// Lift a `result<T, E>` from linear memory at `addr`.
 ///
 /// Layout: discriminant i32 at offset 0, payload at aligned offset.
-
 #[allow(clippy::cast_possible_wrap)]
 fn synthesize_lift_result_inner(
     ok_ty: &Type,
@@ -970,19 +1060,31 @@ fn synthesize_lift_tuple(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
+    ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
     let layout = cm_abi::layout_tuple(elems);
     let mut elem_exprs = Vec::new();
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
-        let lifted = synthesize_lift(elem_ty, elem_addr, next_local, stmts, local_types);
+        let lifted = synthesize_lift_inner(elem_ty, elem_addr, next_local, stmts, local_types, ctx);
         elem_exprs.push(lifted);
     }
+    // Resolve the tuple TypeId if we have a type table context.
+    let tuple_type_id = if let Some(ctx) = ctx {
+        let mut tt = ctx.type_table.borrow_mut();
+        let elem_type_ids: Vec<TypeId> = elems
+            .iter()
+            .map(|t| wasi_type_to_type_id(t, &mut tt))
+            .collect();
+        tt.make_tuple(elem_type_ids)
+    } else {
+        TypeTable::I32
+    };
     TirExpr::new(
         TirExprKind::TupleLiteral {
             elements: elem_exprs,
         },
-        TypeTable::I32,
+        tuple_type_id,
         synth_span(),
     )
 }
@@ -1214,36 +1316,6 @@ const ASYNC_OUTPTR: i32 = 2048;
 
 /// Canonical ABI: maximum number of flat return values before outptr is used.
 const MAX_FLAT_RESULTS: usize = 1;
-
-/// Returns the internal.wado converter function name for list types that need
-/// pre-compiled generic array operations, or `None` if the type can be lifted inline.
-///
-/// List types require `Array::<T>::with_capacity()` and `.append()` which are generic
-/// methods needing monomorphization. Since adapter synthesis runs after the resolver,
-/// we delegate to internal.wado converter functions for these types.
-fn list_converter_for_type(ty: &Type) -> Option<&'static str> {
-    match ty {
-        Type::Generic(g) if g.name == "Array" && g.args.len() == 1 => {
-            match &g.args[0] {
-                Type::Named(n) if n.name == "String" => Some("cm_list_string_to_array"),
-                Type::Named(n) if n.name == "u8" => None, // u8 lists use memory_to_gc_array inline
-                Type::Tuple(elems) if elems.len() == 2 => {
-                    // list<tuple<string, string>> → cm_list_tuple_string_string_to_array
-                    if elems
-                        .iter()
-                        .all(|e| matches!(e, Type::Named(n) if n.name == "String"))
-                    {
-                        Some("cm_list_tuple_string_string_to_array")
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            }
-        }
-        _ => None,
-    }
-}
 
 /// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.
 /// This is true for Result types where all payloads are empty (unit), so the raw call
@@ -1678,46 +1750,34 @@ fn synthesize_adapter(
         let return_type = func_info.return_type.as_ref().unwrap();
         let resolved = wasi_registry.resolve_type(return_type);
 
-        // Check if this return type needs a pre-compiled internal converter function.
-        // List types require generic Array<T> operations (with_capacity, append) which
-        // need monomorphization. Since adapters are synthesized after resolution,
-        // we delegate to internal.wado converter functions for these types.
-        if let Some(converter_name) = list_converter_for_type(&resolved) {
-            let converter_call = internal_call(
-                converter_name,
-                vec![local_ref(outptr_local, "__outptr", TypeTable::I32)],
-                TypeTable::I32,
-            );
-            body_stmts.push(return_stmt(Some(converter_call)));
-        } else {
-            // Inline lifting for all other types (primitives, string, option, result, tuple, etc.)
-            let lift_ctx = LiftContext {
-                wasi_registry,
-                type_table,
-            };
-            let lifted = synthesize_lift_with_context(
-                &resolved,
+        // Inline lifting for all types, including list<T> which uses
+        // Array::<T>::with_capacity() and .append() with proper monomorphization info.
+        let lift_ctx = LiftContext {
+            wasi_registry,
+            type_table,
+        };
+        let lifted = synthesize_lift_with_context(
+            &resolved,
+            local_ref(outptr_local, "__outptr", TypeTable::I32),
+            &mut next_local,
+            &mut body_stmts,
+            &mut local_types,
+            &lift_ctx,
+        );
+
+        // Free the outptr
+        body_stmts.push(expr_stmt(builtin_call(
+            "realloc",
+            vec![
                 local_ref(outptr_local, "__outptr", TypeTable::I32),
-                &mut next_local,
-                &mut body_stmts,
-                &mut local_types,
-                &lift_ctx,
-            );
+                i32_const(alloc_size as i32),
+                i32_const(alloc_align as i32),
+                i32_const(0),
+            ],
+            TypeTable::I32,
+        )));
 
-            // Free the outptr
-            body_stmts.push(expr_stmt(builtin_call(
-                "realloc",
-                vec![
-                    local_ref(outptr_local, "__outptr", TypeTable::I32),
-                    i32_const(alloc_size as i32),
-                    i32_const(alloc_align as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            )));
-
-            body_stmts.push(return_stmt(Some(lifted)));
-        }
+        body_stmts.push(return_stmt(Some(lifted)));
         adapter_return_type = TypeTable::I32; // placeholder, fixed up at call site
     } else if func_info.return_type.is_some() {
         let return_type = func_info.return_type.as_ref().unwrap();
