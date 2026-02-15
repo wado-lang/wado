@@ -1295,8 +1295,8 @@ let rest = iter2.collect();  // Array<i32> with [2, 3, 4, 5]
 
 ### Iterator vs IntoIterator
 
-| Trait            | Question                               | Examples             |
-| ---------------- | -------------------------------------- | -------------------- |
+| Trait            | Question                               | Examples                                         |
+| ---------------- | -------------------------------------- | ------------------------------------------------ |
 | **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `StrCharIter`, `StrUtf8ByteIter` |
 | **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `StrCharIter`, `StrUtf8ByteIter`     |
 

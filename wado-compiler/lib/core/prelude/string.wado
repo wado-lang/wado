@@ -361,4 +361,45 @@ impl String {
             self.used += 4;
         }
     }
+
+    /// Truncate the string to the given byte length.
+    /// Panics if `byte_len` is not on a UTF-8 character boundary.
+    pub fn truncate_bytes(&mut self, byte_len: i32) {
+        if byte_len >= self.used {
+            return;
+        }
+        if byte_len < 0 {
+            panic("truncate_bytes: negative length");
+        }
+        // Verify byte_len is on a UTF-8 boundary:
+        // a continuation byte has the form 10xxxxxx (0x80..0xBF)
+        if byte_len > 0 {
+            let b = builtin::array_get_u8(self.repr, byte_len);
+            if b >= 0x80 && b < 0xC0 {
+                panic("truncate_bytes: not on a UTF-8 character boundary");
+            }
+        }
+        self.used = byte_len;
+    }
+
+    /// Truncate the string to the given number of characters.
+    /// If `char_count` >= number of characters, the string is unchanged.
+    pub fn truncate_chars(&mut self, char_count: i32) {
+        let mut byte_pos = 0;
+        let mut chars_seen = 0;
+        while byte_pos < self.used && chars_seen < char_count {
+            let b = builtin::array_get_u8(self.repr, byte_pos);
+            if b < 0x80 {
+                byte_pos += 1;
+            } else if b < 0xE0 {
+                byte_pos += 2;
+            } else if b < 0xF0 {
+                byte_pos += 3;
+            } else {
+                byte_pos += 4;
+            }
+            chars_seen += 1;
+        }
+        self.used = byte_pos;
+    }
 }

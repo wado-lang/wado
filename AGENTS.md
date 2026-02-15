@@ -84,6 +84,16 @@ __DATA__
 {"TODO": true, "stdout": "value\n"}
 ```
 
+### Adding New Test Fixtures
+
+After adding new `.wado` files to `wado-compiler/tests/fixtures/`, you must touch `wado-compiler/tests/e2e.rs` to trigger `datatest_mini` to rediscover test files:
+
+```sh
+touch wado-compiler/tests/e2e.rs
+```
+
+Without this, `cargo test` will not detect the new fixture because `datatest_mini` discovers files at compile time.
+
 ### The `wasi:*` Modules
 
 `wasi:*` modules are part of the Wado standard library.

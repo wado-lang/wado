@@ -6167,13 +6167,13 @@ impl Codegen<'_> {
                         // Monomorphized structs are registered under entry_module_source,
                         // but GenericInstance types retain the original library module_source.
                         // Fall back to entry_module_source for the lookup.
-                        if module_source != &self.project.entry_module_source {
+                        if module_source == &self.project.entry_module_source {
+                            None
+                        } else {
                             self.lookup_struct_type(
                                 &mangled_name,
                                 &self.project.entry_module_source,
                             )
-                        } else {
-                            None
                         }
                     })
                 {
