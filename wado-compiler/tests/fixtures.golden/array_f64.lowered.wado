@@ -51,6 +51,10 @@ fn run() with Stdout {
     });
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data: i32) {
+    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
 fn "Array<f64>^IndexValue::index_value"(self: &Array<f64>, index: i32) -> f64 {
     if (index >= self.used) {
         core::internal::panic(move "index out of bounds");

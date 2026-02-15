@@ -19,6 +19,12 @@ pub fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     return arr;
 }
 
+/// Copy bytes from linear memory to a new GC String
+pub fn memory_to_gc_string(ptr: i32, len: i32) -> String {
+    let arr = memory_to_gc_array(ptr, len);
+    return String::internal_from_utf8_raw(arr, len);
+}
+
 /// Copy bytes from a GC array to linear memory
 pub fn gc_array_to_memory(arr: builtin::array<u8>, ptr: i32, len: i32) {
     for (let mut i = 0; i < len; i += 1) {

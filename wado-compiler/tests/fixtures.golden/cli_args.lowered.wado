@@ -27,3 +27,13 @@ fn run() with Stdout, Environment {
     });
 }
 
+fn __cm_adapter__Stdout_write_via_stream(data: i32) {
+    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+fn __cm_adapter__Environment_get_arguments() -> Array<String> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
+    return core::internal::cm_list_string_to_array(__outptr);
+}
+

@@ -10,12 +10,12 @@
 // wasi::task-return (task_return)
 
 fn run() with Stdout, MonotonicClock {
-    let start: Mark = cm_raw_call wasi:clocks/MonotonicClock::now();
-    let res: Duration = cm_raw_call wasi:clocks/MonotonicClock::get_resolution();
+    let start: Mark = __cm_adapter__MonotonicClock_now();
+    let res: Duration = __cm_adapter__MonotonicClock_get_resolution();
     if ((start > 0) && (res > 0)) {
         core::cli::println(move "both newtypes have positive values");
     }
-    let end: Mark = cm_raw_call wasi:clocks/MonotonicClock::now();
+    let end: Mark = __cm_adapter__MonotonicClock_now();
     let elapsed: Mark = (end - start);
     if (elapsed >= 0) {
         core::cli::println(move "elapsed time is non-negative");
@@ -23,5 +23,17 @@ fn run() with Stdout, MonotonicClock {
     let elapsed_u64: u64 = elapsed as u64;
     let res_u64: u64 = res as u64;
     core::cli::println(move "multiple wasi newtype tests passed");
+}
+
+fn __cm_adapter__Stdout_write_via_stream(data: i32) {
+    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+fn __cm_adapter__MonotonicClock_now() -> Mark {
+    return cm_raw_call wasi:clocks/MonotonicClock::now();
+}
+
+fn __cm_adapter__MonotonicClock_get_resolution() -> Duration {
+    return cm_raw_call wasi:clocks/MonotonicClock::get_resolution();
 }
 

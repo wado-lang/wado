@@ -7465,6 +7465,7 @@ impl Codegen<'_> {
                     // WASI Resource method calls (e.g., Fields::has, Fields::append)
                     ResolvedType::Resource { name, .. } => {
                         let func_name = format!("{name}::{method_name}");
+                        eprintln!("[codegen] RESOURCE MethodCall: {func_name} - this should have been rewritten to adapter!");
                         let func_info = self
                             .project
                             .wasi_registry

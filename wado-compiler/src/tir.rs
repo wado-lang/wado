@@ -550,6 +550,40 @@ impl TypeTable {
         self.intern_map.get(&key).copied()
     }
 
+    /// Find a variant type by name (scanning all types).
+    /// Returns the first matching `ResolvedType::Variant` with the given name.
+    pub fn find_variant_type_by_name(&self, name: &str) -> Option<TypeId> {
+        for (&type_id, resolved) in &self.types {
+            if let ResolvedType::Variant {
+                name: vname,
+                ..
+            } = resolved
+            {
+                if vname == name {
+                    return Some(type_id);
+                }
+            }
+        }
+        None
+    }
+
+    /// Find an enum type by name (scanning all types).
+    /// Returns the first matching `ResolvedType::Enum` with the given name.
+    pub fn find_enum_type_by_name(&self, name: &str) -> Option<TypeId> {
+        for (&type_id, resolved) in &self.types {
+            if let ResolvedType::Enum {
+                name: ename,
+                ..
+            } = resolved
+            {
+                if ename == name {
+                    return Some(type_id);
+                }
+            }
+        }
+        None
+    }
+
     pub fn make_enum(&mut self, name: String, module_source: ModuleSource) -> TypeId {
         self.intern(ResolvedType::Enum {
             name,

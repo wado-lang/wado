@@ -154,6 +154,12 @@ fn is_inline_eligible(
         return false;
     };
 
+    // Don't inline CM adapter functions - they are ABI bridges between
+    // Wado GC types and CM linear memory that must remain as separate functions
+    if func.is_cm_adapter {
+        return false;
+    }
+
     // Don't inline functions that return Never (!)
     // These are error/abort paths that are never hot, so no performance benefit to inlining
     if matches!(type_table.get(func.return_type), ResolvedType::Never) {
