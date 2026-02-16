@@ -204,6 +204,45 @@ Parameter count validation is implemented: if the user's export function has a d
 
 The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support and full type validation.
 
+### Known Limitations and Edge Cases
+
+#### Parameter Lifting Gaps
+
+`synthesize_lift_from_flat_params` handles primitives, bool, char, String, resources, Array (with linear memory round-trip), Option, and tuples. The following types are **not yet implemented**:
+
+- **Struct parameters (non-String)**: Treated as i32 passthrough. Should lift each field from consecutive flat params.
+- **Result parameters**: Falls through to unit default. Unlikely in practice (Result is typically a return type, not a parameter).
+- **Variant parameters**: Treated as i32 passthrough. Should lift discriminant + case-specific payloads.
+
+These gaps are safe for current worlds (Command, Service) but would need to be addressed for custom worlds with complex parameter types.
+
+#### Flat Return Type Mismatch in General Adapter
+
+`synthesize_general_export_adapter` computes flat return types from the **user function's return type**, not from the world's `result<T, error-context>` wrapper. This means:
+
+- `task-return(0, ...T_flat)` provides `1 + |T_flat|` args
+- The CM expects `1 + max(|T_flat|, |E_flat|)` args (union of Ok and Err payloads)
+- If `error-context` has more flat slots than the Ok payload, the adapter may provide too few args
+
+In practice this is safe because:
+
+- Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>` (handled by `synthesize_result_export_adapter`)
+- `error-context` is typically i32 (1 slot), and most return types have >= 1 slot
+
+To fix: compute flat return types from the world's full `result<T, error-context>` type, and zero-fill any extra slots.
+
+#### Array Lifting Uses Temporary Linear Memory
+
+For `Array<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat params (ptr, len) to a temporary 8-byte linear memory block, then calls `synthesize_lift` which reads from that block. This:
+
+- Requires `builtin::realloc` to be linked (always true for programs with linear memory)
+- Allocates and immediately frees 8 bytes (wasteful but correct)
+- Could be optimized with a direct `synthesize_lift_list_from_flat` that takes ptr/len as locals
+
+#### No Type-Level Validation
+
+Parameter count is validated, but parameter types and return type compatibility are not checked. For example, the compiler won't error if the user declares `export fn run(x: String)` but the world expects `run(x: i32)`. The adapter would generate incorrect lifting code (treating i32 as String).
+
 ## Consequences
 
 ### Benefits

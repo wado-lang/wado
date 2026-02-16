@@ -2503,6 +2503,15 @@ fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
 /// `(ptr: i32, len: i32)` pointing to data in linear memory.
 ///
 /// Returns the lifted TIR expression and the number of flat params consumed.
+///
+/// Known limitations:
+/// - Struct parameters (non-String): treated as i32 passthrough (should
+///   lift each field from consecutive flat params)
+/// - Result<T, E> parameters: not handled (falls to unit default)
+/// - Variant parameters: treated as i32 passthrough (should lift discriminant
+///   + case-specific payloads)
+/// - Array<T> for non-u8 elements: uses temp linear memory round-trip via
+///   realloc, which assumes realloc is linked
 #[allow(clippy::too_many_arguments)]
 fn synthesize_lift_from_flat_params(
     ty: &Type,
@@ -3405,6 +3414,14 @@ fn synthesize_void_export_adapter(
 ///     cm_raw_call task-return(0, __flat0);
 /// }
 /// ```
+///
+/// Known limitation: flat return types are computed from the user's return type,
+/// not from the world's `result<T, error-context>` wrapper. If `error-context`
+/// has more flat slots than the Ok payload, the adapter may emit too few
+/// task-return args. In practice this is safe because:
+/// - Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>`
+///   (handled by `synthesize_result_export_adapter`)
+/// - This function is only used when the user doesn't return Result
 #[allow(clippy::too_many_arguments)]
 fn synthesize_general_export_adapter(
     export_name: &str,
@@ -3767,26 +3784,19 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                             export.returns_http_response(),
                             &export.params,
                         )
-                    } else if export.params.is_empty()
-                        && !export_needs_param_lifting(&export.params)
-                    {
-                        // Void return with no params or params that don't need lifting
-                        let user_func = user_func_rc.borrow();
-                        let tt = entry_type_table.borrow();
-                        let is_unit = matches!(
-                            tt.get(user_func.return_type),
-                            crate::tir::ResolvedType::Unit
-                        );
-                        let has_flat_returns = !flat_types_from_type_id(
-                            user_func.return_type,
-                            &project.tir_modules,
-                            &tt,
-                        )
-                        .is_empty();
-                        drop(tt);
-                        drop(user_func);
+                    } else {
+                        // Non-Result return: check if we can use the simple void adapter
+                        // (only when no params AND unit return type)
+                        let is_void_no_params = export.params.is_empty() && {
+                            let user_func = user_func_rc.borrow();
+                            let tt = entry_type_table.borrow();
+                            matches!(
+                                tt.get(user_func.return_type),
+                                crate::tir::ResolvedType::Unit
+                            )
+                        };
 
-                        if is_unit || !has_flat_returns {
+                        if is_void_no_params {
                             // Simple void adapter for () -> ()
                             synthesize_void_export_adapter(
                                 &export.name,
@@ -3794,7 +3804,8 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                                 &entry_source,
                             )
                         } else {
-                            // Non-Result, non-void return — use general adapter
+                            // General adapter: handles params (with lifting if needed)
+                            // and non-void return types
                             synthesize_general_export_adapter(
                                 &export.name,
                                 user_func_rc,
@@ -3804,16 +3815,6 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                                 &export.params,
                             )
                         }
-                    } else {
-                        // Has params that need lifting — use general adapter
-                        synthesize_general_export_adapter(
-                            &export.name,
-                            user_func_rc,
-                            &entry_source,
-                            &project.tir_modules,
-                            &entry_type_table,
-                            &export.params,
-                        )
                     }
                 } else {
                     // No user function: stub that just calls task-return(0)
