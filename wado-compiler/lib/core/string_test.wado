@@ -1,0 +1,264 @@
+test "chars iter ASCII" {
+    let chars: Array<char> = "ABC".chars().collect();
+    assert chars.len() == 3;
+    assert chars[0] == 'A';
+    assert chars[1] == 'B';
+    assert chars[2] == 'C';
+}
+
+test "chars iter 2-byte UTF-8" {
+    let chars: Array<char> = "ñé".chars().collect();
+    assert chars.len() == 2;
+    assert chars[0] as i32 == 0x00F1;
+    assert chars[1] as i32 == 0x00E9;
+}
+
+test "chars iter 3-byte UTF-8" {
+    let chars: Array<char> = "日本".chars().collect();
+    assert chars.len() == 2;
+    assert chars[0] as i32 == 0x65E5;
+    assert chars[1] as i32 == 0x672C;
+}
+
+test "chars iter 4-byte UTF-8" {
+    let chars: Array<char> = "😀".chars().collect();
+    assert chars.len() == 1;
+    assert chars[0] as i32 == 0x1F600;
+}
+
+test "chars iter empty string" {
+    assert "".chars().count() == 0;
+    let chars: Array<char> = "".chars().collect();
+    assert chars.len() == 0;
+}
+
+test "chars iter mixed encoding" {
+    let chars: Array<char> = "Aéï日😀".chars().collect();
+    assert chars.len() == 5;
+    assert chars[0] == 'A';
+    assert chars[1] as i32 == 0x00E9;
+    assert chars[2] as i32 == 0x00EF;
+    assert chars[3] as i32 == 0x65E5;
+    assert chars[4] as i32 == 0x1F600;
+}
+
+test "chars iter single char" {
+    let chars: Array<char> = "X".chars().collect();
+    assert chars.len() == 1;
+    assert chars[0] == 'X';
+}
+
+test "chars iter for-of" {
+    let mut count = 0;
+    let mut last = ' ';
+    for let c of "Hi!".chars() {
+        count += 1;
+        last = c;
+    }
+    assert count == 3;
+    assert last == '!';
+}
+
+test "bytes iter ASCII" {
+    let bytes: Array<u8> = "Hello".bytes().collect();
+    assert bytes.len() == 5;
+    assert bytes[0] == 'H' as u8;
+    assert bytes[1] == 'e' as u8;
+    assert bytes[2] == 'l' as u8;
+    assert bytes[3] == 'l' as u8;
+    assert bytes[4] == 'o' as u8;
+}
+
+test "bytes iter empty string" {
+    assert "".bytes().count() == 0;
+    let bytes: Array<u8> = "".bytes().collect();
+    assert bytes.len() == 0;
+}
+
+test "bytes iter 3-byte UTF-8" {
+    let bytes: Array<u8> = "日".bytes().collect();
+    assert bytes.len() == 3;
+    assert bytes[0] == 0xE6 as u8;
+    assert bytes[1] == 0x97 as u8;
+    assert bytes[2] == 0xA5 as u8;
+}
+
+test "bytes iter 2-byte UTF-8" {
+    let bytes: Array<u8> = "ñ".bytes().collect();
+    assert bytes.len() == 2;
+    assert bytes[0] == 0xC3 as u8;
+    assert bytes[1] == 0xB1 as u8;
+}
+
+test "bytes iter 4-byte UTF-8" {
+    let bytes: Array<u8> = "😀".bytes().collect();
+    assert bytes.len() == 4;
+    assert bytes[0] == 0xF0 as u8;
+    assert bytes[1] == 0x9F as u8;
+    assert bytes[2] == 0x98 as u8;
+    assert bytes[3] == 0x80 as u8;
+}
+
+test "bytes iter for-of" {
+    let mut sum: i32 = 0;
+    for let b of "AB".bytes() {
+        sum += b as i32;
+    }
+    assert sum == 65 + 66;
+}
+
+test "char count vs byte length ASCII" {
+    let s = "Hello";
+    assert s.len() == 5;
+    assert s.chars().count() == 5;
+}
+
+test "char count vs byte length 3-byte" {
+    let s = "日本";
+    assert s.len() == 6;
+    assert s.chars().count() == 2;
+}
+
+test "char count vs byte length 4-byte" {
+    let s = "😀";
+    assert s.len() == 4;
+    assert s.chars().count() == 1;
+}
+
+test "char count vs byte length 2-byte" {
+    let s = "ñé";
+    assert s.len() == 4;
+    assert s.chars().count() == 2;
+}
+
+test "char count vs byte length mixed" {
+    let s = "Aéï日😀";
+    assert s.len() == 12;
+    assert s.chars().count() == 5;
+}
+
+test "char count empty" {
+    assert "".len() == 0;
+    assert "".chars().count() == 0;
+}
+
+test "bytes count equals len" {
+    let s = "Aéï日😀";
+    assert s.bytes().count() == s.len();
+}
+
+test "collect bytes then chars" {
+    let s = "Hi!";
+    let bytes: Array<u8> = s.bytes().collect();
+    assert bytes.len() == 3;
+    assert bytes[0] == 'H' as u8;
+    assert bytes[1] == 'i' as u8;
+    assert bytes[2] == '!' as u8;
+
+    let chars: Array<char> = s.chars().collect();
+    assert chars.len() == 3;
+    assert chars[0] == 'H';
+    assert chars[1] == 'i';
+    assert chars[2] == '!';
+}
+
+test "collect multibyte chars" {
+    let s = "日😀";
+    let chars: Array<char> = s.chars().collect();
+    assert chars.len() == 2;
+    assert chars[0] as i32 == 0x65E5;
+    assert chars[1] as i32 == 0x1F600;
+
+    let bytes: Array<u8> = s.bytes().collect();
+    assert bytes.len() == 7;
+}
+
+test "truncate_bytes ASCII" {
+    let mut s = "hello world";
+    s.truncate_bytes(5);
+    assert s == "hello";
+}
+
+test "truncate_bytes no-op when len >= current" {
+    let mut s = "hi";
+    s.truncate_bytes(10);
+    assert s == "hi";
+}
+
+test "truncate_bytes to zero" {
+    let mut s = "abc";
+    s.truncate_bytes(0);
+    assert s == "";
+}
+
+test "truncate_bytes UTF-8 3-byte boundary" {
+    let mut s = "日本語";
+    s.truncate_bytes(6);
+    assert s == "日本";
+}
+
+test "truncate_bytes exact length" {
+    let mut s = "hello";
+    s.truncate_bytes(5);
+    assert s == "hello";
+}
+
+test "truncate_bytes UTF-8 2-byte boundary" {
+    let mut s = "ñé";
+    s.truncate_bytes(2);
+    assert s == "ñ";
+}
+
+test "truncate_bytes UTF-8 4-byte boundary" {
+    let mut s = "😀😃";
+    s.truncate_bytes(4);
+    assert s == "😀";
+}
+
+test "truncate_chars ASCII" {
+    let mut s = "hello world";
+    s.truncate_chars(5);
+    assert s == "hello";
+}
+
+test "truncate_chars no-op" {
+    let mut s = "hi";
+    s.truncate_chars(100);
+    assert s == "hi";
+}
+
+test "truncate_chars to zero" {
+    let mut s = "abc";
+    s.truncate_chars(0);
+    assert s == "";
+}
+
+test "truncate_chars multibyte" {
+    let mut s = "日本語";
+    s.truncate_chars(2);
+    assert s == "日本";
+}
+
+test "truncate_chars mixed ASCII and multibyte" {
+    let mut s = "A日B本C";
+    s.truncate_chars(3);
+    assert s == "A日B";
+}
+
+test "truncate_chars emoji" {
+    let mut s = "😀😃😎";
+    s.truncate_chars(2);
+    assert s == "😀😃";
+}
+
+test "truncate_chars single" {
+    let mut s = "hello";
+    s.truncate_chars(1);
+    assert s == "h";
+}
+
+test "truncate_chars exact count" {
+    let mut s = "abc";
+    s.truncate_chars(3);
+    assert s == "abc";
+}
