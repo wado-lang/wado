@@ -2817,7 +2817,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         .elements
                         .iter()
                         .map(|elem| {
-                            let resolved = self.resolve_expr(elem, ctx);
+                            let resolved =
+                                self.resolve_expr_with_expected_type(elem, ctx, Some(element_type));
                             if resolved.type_id != element_type
                                 && resolved.type_id != TypeTable::UNKNOWN
                             {
@@ -2847,9 +2848,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .iter()
                             .enumerate()
                             .map(|(i, elem)| {
-                                let resolved = self.resolve_expr(elem, ctx);
+                                let expected = expected_elem_types.get(i).copied();
+                                let resolved =
+                                    self.resolve_expr_with_expected_type(elem, ctx, expected);
                                 // Check if element type matches expected
-                                if let Some(&expected_type) = expected_elem_types.get(i)
+                                if let Some(expected_type) = expected
                                     && resolved.type_id != expected_type
                                     && resolved.type_id != TypeTable::UNKNOWN
                                 {
@@ -10732,7 +10735,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .elements
                 .iter()
                 .map(|elem| {
-                    let resolved = self.resolve_expr(elem, ctx);
+                    let resolved =
+                        self.resolve_expr_with_expected_type(elem, ctx, Some(element_type));
                     // Type check: each element must match Array element type
                     if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
                         let _ = self.logger.error(TypeError::TypeMismatch {

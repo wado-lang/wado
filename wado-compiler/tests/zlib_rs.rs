@@ -52,12 +52,12 @@ impl Drop for WasmGuard {
 // Helpers
 // ============================================================================
 
-/// Format a byte slice as Wado array literal elements: "72 as u8, 101 as u8, ..."
+/// Format a byte slice as Wado array literal elements: "72,101,..."
 fn bytes_to_wado_array(data: &[u8]) -> String {
     data.iter()
-        .map(|b| format!("{b} as u8"))
+        .map(|b| format!("{b}"))
         .collect::<Vec<_>>()
-        .join(", ")
+        .join(",")
 }
 
 /// Parse space-separated decimal bytes from stdout
