@@ -44,7 +44,7 @@ test:
 
 .PHONY: test-wado
 test-wado:
-	cargo run -p wado-cli --quiet -- test example/*.wado
+	cargo run -p wado-cli --quiet -- test example/*.wado wado-compiler/lib/core/*_test.wado
 
 .PHONY: test-cov
 test-cov:
