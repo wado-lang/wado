@@ -183,6 +183,10 @@ fn binary_add(left: TirExpr, right: TirExpr) -> TirExpr {
     binary(crate::tir::TirBinaryOp::Add, left, right, TypeTable::I32)
 }
 
+fn binary_ne(left: TirExpr, right: TirExpr) -> TirExpr {
+    binary(crate::tir::TirBinaryOp::NotEq, left, right, TypeTable::BOOL)
+}
+
 /// Create a cast expression.
 pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
     TirExpr::new(
@@ -2110,13 +2114,6 @@ fn find_struct_decl(
 // Export result lowering to flat CM ABI values
 // ============================================================================
 
-/// Linear memory offset used to pass the trailers future tx handle from
-/// user code to the export adapter for post-return resolution.
-const TRAILERS_TX_OFFSET: i32 = 512;
-
-/// Linear memory offset used for post-return payload writing.
-const POST_RETURN_PAYLOAD_OFFSET: i32 = 256;
-
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
 fn variant_tag(expr: TirExpr) -> TirExpr {
     let _variant_type_id = expr.type_id;
@@ -2518,6 +2515,7 @@ fn synthesize_result_export_adapter(
     flat_types: &[cm_abi::CmValType],
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
+    is_http_handler: bool,
 ) -> Rc<RefCell<TirFunction>> {
     let adapter_name = export_adapter_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -2674,54 +2672,107 @@ fn synthesize_result_export_adapter(
         TypeTable::UNIT,
     )));
 
-    // Post-return: resolve trailers future if tx was saved by user code
-    // Read tx handle from linear memory at TRAILERS_TX_OFFSET
-    let tx_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
-    ok_stmts.push(let_stmt(
-        "__tx",
-        tx_local,
-        TypeTable::I32,
-        builtin_call(
-            "i32_load",
-            vec![i32_const(TRAILERS_TX_OFFSET)],
+    // After task.return, resolve the pending trailers future with Ok(None).
+    // The trailers tx handle was saved to a global by Future::new codegen.
+    // future.write must happen post-task-return because the host doesn't start
+    // reading the trailers future until it receives the response.
+    if is_http_handler {
+        let tx_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+        let ptr_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+
+        // Read the pending trailers tx from global
+        ok_stmts.push(let_stmt(
+            "__trailers_tx",
+            tx_local,
             TypeTable::I32,
-        ),
-    ));
+            builtin_call("global_get_pending_trailers_tx", vec![], TypeTable::I32),
+        ));
 
-    // if tx != 0 { write Ok(None) to trailers future }
-    let mut trailers_stmts: Vec<TirStmt> = Vec::new();
-    // Write Result disc = Ok (0) at POST_RETURN_PAYLOAD_OFFSET
-    trailers_stmts.push(expr_stmt(builtin_call(
-        "i32_store",
-        vec![i32_const(POST_RETURN_PAYLOAD_OFFSET), i32_const(0)],
-        TypeTable::UNIT,
-    )));
-    // Write Option disc = None (0) at POST_RETURN_PAYLOAD_OFFSET + 4
-    trailers_stmts.push(expr_stmt(builtin_call(
-        "i32_store",
-        vec![i32_const(POST_RETURN_PAYLOAD_OFFSET + 4), i32_const(0)],
-        TypeTable::UNIT,
-    )));
-    // Call future-write(tx, payload_ptr)
-    trailers_stmts.push(expr_stmt(cm_raw_call(
-        "future-write",
-        vec![
-            local_ref(tx_local, "__tx", TypeTable::I32),
-            i32_const(POST_RETURN_PAYLOAD_OFFSET),
-        ],
-        TypeTable::I32, // future-write returns i32
-    )));
+        // if tx != 0 (a trailers future was created)
+        let mut then_stmts: Vec<TirStmt> = Vec::new();
 
-    ok_stmts.push(if_stmt(
-        binary(
-            crate::tir::TirBinaryOp::NotEq,
-            local_ref(tx_local, "__tx", TypeTable::I32),
-            i32_const(0),
-            TypeTable::BOOL,
-        ),
-        block(trailers_stmts),
-        None,
-    ));
+        // Allocate 8 bytes for the Ok(None) payload: [result_disc=0, option_disc=0]
+        // Alignment must be 8 because error-code contains u64 fields, and
+        // result alignment = max(alignment(ok_type), alignment(err_type)).
+        then_stmts.push(let_stmt(
+            "__trailers_ptr",
+            ptr_local,
+            TypeTable::I32,
+            builtin_call(
+                "realloc",
+                vec![i32_const(0), i32_const(0), i32_const(8), i32_const(8)],
+                TypeTable::I32,
+            ),
+        ));
+
+        // Write result disc = 0 (Ok)
+        then_stmts.push(expr_stmt(builtin_call(
+            "i32_store",
+            vec![
+                local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
+                i32_const(0),
+            ],
+            TypeTable::UNIT,
+        )));
+
+        // Write option disc = 0 (None)
+        then_stmts.push(expr_stmt(builtin_call(
+            "i32_store",
+            vec![
+                binary_add(
+                    local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
+                    i32_const(4),
+                ),
+                i32_const(0),
+            ],
+            TypeTable::UNIT,
+        )));
+
+        // future.write(tx, ptr)
+        then_stmts.push(expr_stmt(builtin_call(
+            "future_write",
+            vec![
+                local_ref(tx_local, "__trailers_tx", TypeTable::I32),
+                local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
+            ],
+            TypeTable::I32,
+        )));
+
+        // Free the payload memory
+        then_stmts.push(expr_stmt(builtin_call(
+            "realloc",
+            vec![
+                local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
+                i32_const(8),
+                i32_const(8),
+                i32_const(0),
+            ],
+            TypeTable::I32,
+        )));
+
+        // future.drop_writable(tx) — close the writable end
+        then_stmts.push(expr_stmt(builtin_call(
+            "future_drop_writable",
+            vec![local_ref(tx_local, "__trailers_tx", TypeTable::I32)],
+            TypeTable::UNIT,
+        )));
+
+        // if (tx != 0) { ... }
+        ok_stmts.push(TirStmt {
+            kind: TirStmtKind::If {
+                condition: binary_ne(
+                    local_ref(tx_local, "__trailers_tx", TypeTable::I32),
+                    i32_const(0),
+                ),
+                then_block: TirBlock {
+                    stmts: then_stmts,
+                    span: Span::new(0, 0, 1, 1),
+                },
+                else_block: None,
+            },
+            span: Span::new(0, 0, 1, 1),
+        });
+    }
 
     ok_stmts.push(return_stmt(None));
 
@@ -3179,6 +3230,7 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                             &flat_types,
                             &project.tir_modules,
                             &entry_type_table,
+                            export.returns_http_response(),
                         )
                     } else {
                         // Void or non-Result return: simple void adapter

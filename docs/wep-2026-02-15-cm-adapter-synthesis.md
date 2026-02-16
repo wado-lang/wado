@@ -42,14 +42,14 @@ For each world export, `cm_adapter_gen` synthesizes an adapter that wraps the us
 
 The core synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`) is recursive and type-driven:
 
-| Type | Lowering | Lifting | Provider |
-|---|---|---|---|
-| i32, i64, f32, f64 | identity / `builtin::*_store` | `builtin::*_load` | synthesizer inline |
-| bool | `value as i32` | `i32_load8_u(addr) != 0` | synthesizer inline |
-| char | `value as i32` | `char::from_u32_unchecked` | synthesizer inline |
-| String | alloc + copy → `(ptr, len)` | copy from linear memory → GC string | `internal::cm_lower_string`, `internal::memory_to_gc_string` |
-| Array\<u8\> | alloc + copy → `(ptr, len)` | copy from linear memory → GC array | `internal::cm_lower_array_u8`, `internal::memory_to_gc_array` |
-| list\<T\>, option\<T\>, result\<T, E\>, record, variant | recursive | recursive | synthesizer generates TIR |
+| Type                                                    | Lowering                      | Lifting                             | Provider                                                      |
+| ------------------------------------------------------- | ----------------------------- | ----------------------------------- | ------------------------------------------------------------- |
+| i32, i64, f32, f64                                      | identity / `builtin::*_store` | `builtin::*_load`                   | synthesizer inline                                            |
+| bool                                                    | `value as i32`                | `i32_load8_u(addr) != 0`            | synthesizer inline                                            |
+| char                                                    | `value as i32`                | `char::from_u32_unchecked`          | synthesizer inline                                            |
+| String                                                  | alloc + copy → `(ptr, len)`   | copy from linear memory → GC string | `internal::cm_lower_string`, `internal::memory_to_gc_string`  |
+| Array\<u8\>                                             | alloc + copy → `(ptr, len)`   | copy from linear memory → GC array  | `internal::cm_lower_array_u8`, `internal::memory_to_gc_array` |
+| list\<T\>, option\<T\>, result\<T, E\>, record, variant | recursive                     | recursive                           | synthesizer generates TIR                                     |
 
 No per-type converter functions exist. The synthesizer handles all composite types by recursing into their structure.
 
@@ -98,15 +98,15 @@ The lowering is fully generic — `synthesize_lower_to_flat` recurses into any t
 
 ### What's Generic vs What's Specific
 
-| Component | Generic? | Notes |
-|---|---|---|
-| `synthesize_lower_to_flat` | Yes | Recursive, type-driven. Only hard-codes `"String"` for `cm_lower_string` |
-| `synthesize_variant_lower_to_flat` | Yes | Iterates variant cases from declaration |
-| `flatten_*` flat type computation | Yes | Type-structure-based |
-| `cm_abi.rs` layout computation | Yes | Pure Canonical ABI spec |
-| Result Ok/Err dispatch | Intentional | Result is a language primitive with fixed case ordering |
-| `task-return` in all adapters | Async assumption | WASI P3 is async-only; needs change for sync |
-| Trailers future post-return | HTTP-specific | Guarded by `if tx != 0`, only activates for HTTP |
+| Component                          | Generic?         | Notes                                                                    |
+| ---------------------------------- | ---------------- | ------------------------------------------------------------------------ |
+| `synthesize_lower_to_flat`         | Yes              | Recursive, type-driven. Only hard-codes `"String"` for `cm_lower_string` |
+| `synthesize_variant_lower_to_flat` | Yes              | Iterates variant cases from declaration                                  |
+| `flatten_*` flat type computation  | Yes              | Type-structure-based                                                     |
+| `cm_abi.rs` layout computation     | Yes              | Pure Canonical ABI spec                                                  |
+| Result Ok/Err dispatch             | Intentional      | Result is a language primitive with fixed case ordering                  |
+| `task-return` in all adapters      | Async assumption | WASI P3 is async-only; needs change for sync                             |
+| Trailers future post-return        | HTTP-specific    | Guarded by `if tx != 0`, only activates for HTTP                         |
 
 ## Remaining Work: Generic CM Exports
 
@@ -176,7 +176,7 @@ This requires:
 
 ### Trailers Future Decoupling
 
-The trailers future post-return logic (reading tx from linear memory offset 512, writing `Ok(None)` to offset 256) is HTTP-specific. It is currently guarded by `if tx != 0`, so it only activates when the user's code stores a tx handle. This works, but a cleaner approach would be:
+The trailers future post-return logic uses a Wasm global (`__pending_trailers_tx`) to pass the tx handle from the user's `Future::new()` call to the adapter's post-task-return code. This is HTTP-specific and guarded by `is_http_handler` in `synthesize_result_export_adapter`. The global approach avoids magic memory offsets. Potential improvements:
 
 - [ ] Move trailers future resolution into the user-visible `Response` construction (stdlib level) rather than the export adapter
 - [ ] Or make trailers resolution part of the world-specific adapter template, not embedded in `synthesize_result_export_adapter`
@@ -188,13 +188,13 @@ The trailers future post-return logic (reading tx from linear memory offset 512,
 
 ### Summary
 
-| Task | Difficulty | Prerequisite |
-|---|---|---|
-| Parameter lifting | Medium | None — `synthesize_lift` exists |
-| Non-Result return types | Low | None — `synthesize_lower_to_flat` exists |
-| Sync export support | Medium | World metadata for async/sync distinction |
-| Trailers decoupling | Low | Design decision on where resolution lives |
-| Export signature validation | Low | None |
+| Task                        | Difficulty | Prerequisite                              |
+| --------------------------- | ---------- | ----------------------------------------- |
+| Parameter lifting           | Medium     | None — `synthesize_lift` exists           |
+| Non-Result return types     | Low        | None — `synthesize_lower_to_flat` exists  |
+| Sync export support         | Medium     | World metadata for async/sync distinction |
+| Trailers decoupling         | Low        | Design decision on where resolution lives |
+| Export signature validation | Low        | None                                      |
 
 The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is mostly wiring — connecting existing infrastructure to new export adapter shapes and supporting the sync calling convention.
 

@@ -1551,6 +1551,19 @@ impl Codegen<'_> {
                 );
             }
         }
+        // HTTP handler exports need a global to pass the trailers tx handle
+        // from the user's handler function to the post-task-return adapter code.
+        // (future.write cannot be called before task.return — the host hasn't started
+        // reading the future yet, so it would return BLOCKED.)
+        if self.project.has_http_handler_export {
+            builder.define_global(
+                "__pending_trailers_tx",
+                ValType::I32,
+                true,
+                ConstExpr::i32_const(0),
+                false,
+            );
+        }
         // Add globals section only if there are globals
         if builder.has_globals() {
             module.section(builder.globals());
@@ -11043,12 +11056,6 @@ impl Codegen<'_> {
             self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
         }
 
-        // Pre-allocate future tx temp local for HTTP handler context.
-        // Future::new() codegen saves the tx handle to linear memory, needing a temp local.
-        if self.project.has_http_handler_export {
-            func_ctx.alloc_local("_future_tx_tmp", ValType::I32);
-        }
-
         // Pre-allocate anyref temp local for CM outptr deallocation.
         // When a function uses __cm_outptr, it needs a temp to hold the GC result
         // while freeing the linear memory outptr.
@@ -12228,23 +12235,18 @@ impl Codegen<'_> {
                 func.instruction(&Instruction::I64ShrU);
                 func.instruction(&Instruction::I32WrapI64);
 
-                // Save the future tx handle to linear memory so the CM export adapter
-                // can resolve the trailers future after task-return (post-return).
-                // Offset 512 is the convention between cm_adapter_gen and codegen.
-                if self.project.has_http_handler_export {
-                    let tmp_tx =
-                        ctx.alloc_local("_future_tx_tmp", ValType::I32);
-                    // Save tx to temp, push addr, push tx, store, push tx back
-                    func.instruction(&Instruction::LocalSet(tmp_tx));
-                    func.instruction(&Instruction::I32Const(512)); // TRAILERS_TX_OFFSET
-                    func.instruction(&Instruction::LocalGet(tmp_tx));
-                    func.instruction(&Instruction::I32Store(wasm_encoder::MemArg {
-                        offset: 0,
-                        align: 2,
-                        memory_index: 0,
-                    }));
-                    func.instruction(&Instruction::LocalGet(tmp_tx)); // restore tx on stack
-                }
+                // For HTTP handler exports, save the tx to the __pending_trailers_tx global.
+                // The adapter's post-task-return code will read this global and call
+                // future.write to resolve the trailers future. (future.write cannot be
+                // called before task.return because the host isn't reading yet.)
+                if self.project.has_http_handler_export
+                    && builtin_name == "builtin::future_create_pair"
+                    && let Some(global_idx) = builder.try_global_idx("__pending_trailers_tx") {
+                        // Save tx to global, then reload it to keep the value on the stack.
+                        // GlobalSet consumes the value, so we GlobalGet it back.
+                        func.instruction(&Instruction::GlobalSet(global_idx));
+                        func.instruction(&Instruction::GlobalGet(global_idx));
+                    }
 
                 // Create tuple struct [rx, tx] unless skip_tuple_wrap is set
                 if !ctx.skip_tuple_wrap {
@@ -12258,6 +12260,11 @@ impl Codegen<'_> {
                         panic!("expected tuple type for future/stream create pair");
                     }
                 }
+            }
+            // Read the __pending_trailers_tx global (used by HTTP handler adapter)
+            "builtin::global_get_pending_trailers_tx" => {
+                let global_idx = builder.global_idx("__pending_trailers_tx");
+                func.instruction(&Instruction::GlobalGet(global_idx));
             }
             _ => panic!(
                 "unknown builtin function: {builtin_name}, which should be handled in Codegen::generate_builtin_call()"

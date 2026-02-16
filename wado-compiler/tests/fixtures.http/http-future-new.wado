@@ -16,7 +16,7 @@ use {
 
 export fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Create a trailers future pair
-    let [future_rx, future_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [future_rx, _future_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
     // Verify we got valid handles (non-negative i32 values)
     // The rx and tx handles are opaque i32 values managed by the runtime

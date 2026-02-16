@@ -63,6 +63,7 @@ pub struct CompileOptions {
     pub opt_level: OptLevel,
     pub wat_to_stdout: bool,
     pub log_level: LogLevel,
+    pub target_world: Option<String>,
 }
 
 pub fn print_usage() {
@@ -100,6 +101,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     let mut opt_level = OptLevel::default();
     let mut wat_to_stdout = false;
     let mut log_level = LogLevel::default();
+    let mut target_world: Option<String> = None;
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
@@ -109,6 +111,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
             }
             Long("wat-to-stdout") => {
                 wat_to_stdout = true;
+            }
+            Long("world") => {
+                target_world = Some(require_string(&mut parser));
             }
             Short('o') => {
                 output = Some(require_string(&mut parser));
@@ -168,6 +173,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
         opt_level,
         wat_to_stdout,
         log_level,
+        target_world,
     }
 }
 
@@ -254,7 +260,13 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 }
 
 pub async fn run(opts: CompileOptions) {
-    let wasm = compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
+    let wasm = compile_with_full_opts(
+        &opts.input,
+        opts.opt_level,
+        opts.log_level,
+        opts.target_world,
+    )
+    .await;
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {
