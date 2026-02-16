@@ -1457,7 +1457,7 @@ fn truncate_str(s: String, max_len: i32) -> String {
     }
     let mut result = String::with_capacity(max_len + 3);
     for let mut i = 0; i < max_len - 3; i += 1 {
-        result.append((s.get_byte(i) as char).to_string());
+        result.append(char::from_u32_unchecked(s.get_byte(i) as u32).to_string());
     }
     result.append("...");
     return result;
@@ -1487,7 +1487,7 @@ fn i32_to_str(n: i32) -> String {
     if is_neg { result.append("-"); }
     let mut i = digits.len() - 1;
     while i >= 0 {
-        result.append(((('0' as i32) + digits[i]) as char).to_string());
+        result.append(char::from_u32_unchecked(('0' as u32) + digits[i] as u32).to_string());
         i = i - 1;
     }
     return result;
@@ -1506,7 +1506,7 @@ fn u64_to_str(n: u64) -> String {
 
     let mut i = digits.len() - 1;
     while i >= 0 {
-        result.append(((('0' as i32) + digits[i]) as char).to_string());
+        result.append(char::from_u32_unchecked(('0' as u32) + digits[i] as u32).to_string());
         i = i - 1;
     }
     return result;
@@ -1515,15 +1515,16 @@ fn u64_to_str(n: u64) -> String {
 // Entry point for running benchmark
 export fn run() with Stdout, MonotonicClock {
     println("======================================================================");
-    println("Float-to-String Benchmark: fpfmt vs ryu (f64.to_string)");
+    println("Float-to-String Benchmark: Wado fpfmt vs bundled fpfmt");
     println("======================================================================");
     println("");
-    println("fpfmt: Russ Cox's unrounded scaling algorithm (rsc_fpfmt.wado)");
-    println("ryu:   Bundled ryu-based f64_to_buffer (f64.to_string)");
+    println("wado:    Wado port of Russ Cox's fpfmt (rsc_fpfmt.wado)");
+    println("bundled: Rust fpfmt crate compiled to Wasm (f64.to_string)");
     println("");
 
     // Number of iterations per test
-    let iterations = 10000;
+    // Note: using 1000 to avoid linear memory exhaustion in the benchmark loop.
+    let iterations = 1000;
 
     // Test categories
     benchmark_category("Integers", iterations, [1.0, 10.0, 100.0, 1000.0, 10000.0]);
@@ -1542,7 +1543,7 @@ export fn run() with Stdout, MonotonicClock {
 
 fn benchmark_category(name: String, iterations: i32, values: Array<f64>) with Stdout, MonotonicClock {
     println(`\n--- {name} ---`);
-    println("Value                      fpfmt(ns)    ryu(ns)       ratio");
+    println("Value                      wado(ns)     bundled(ns)   ratio");
     println("-----------------------------------------------------------------");
 
     for let val of values {
@@ -1551,25 +1552,25 @@ fn benchmark_category(name: String, iterations: i32, values: Array<f64>) with St
 }
 
 fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
-    // Benchmark fpfmt (this implementation)
-    let start_fpfmt = now();
+    // Benchmark Wado fpfmt (this implementation)
+    let start_wado = now();
     for let mut i = 0; i < iterations; i += 1 {
         let _ = f64_to_string_exp(val, false);
     }
-    let end_fpfmt = now();
-    let fpfmt_time = ((end_fpfmt - start_fpfmt) as u64) / (iterations as u64);
+    let end_wado = now();
+    let wado_time = ((end_wado - start_wado) as u64) / (iterations as u64);
 
-    // Benchmark ryu (f64.to_string)
-    let start_ryu = now();
+    // Benchmark bundled fpfmt (f64.to_string)
+    let start_bundled = now();
     for let mut i = 0; i < iterations; i += 1 {
         let _ = val.to_string();
     }
-    let end_ryu = now();
-    let ryu_time = ((end_ryu - start_ryu) as u64) / (iterations as u64);
+    let end_bundled = now();
+    let bundled_time = ((end_bundled - start_bundled) as u64) / (iterations as u64);
 
-    // Calculate ratio (fpfmt / ryu)
-    let ratio = if ryu_time > 0 {
-        (fpfmt_time as f64) / (ryu_time as f64)
+    // Calculate ratio (wado / bundled)
+    let ratio = if bundled_time > 0 {
+        (wado_time as f64) / (bundled_time as f64)
     } else {
         0.0
     };
@@ -1580,16 +1581,16 @@ fn benchmark_value(val: f64, iterations: i32) with Stdout, MonotonicClock {
     let padded_val = pad_right(display_val, 25);
 
     // Build output line
-    let fpfmt_str = format_ns(fpfmt_time);
-    let ryu_str = format_ns(ryu_time);
+    let wado_str = format_ns(wado_time);
+    let bundled_str = format_ns(bundled_time);
     let ratio_str = format_ratio(ratio);
 
     let mut line = String::with_capacity(80);
     line.append(padded_val);
     line.append(" ");
-    line.append(fpfmt_str);
+    line.append(wado_str);
     line.append("    ");
-    line.append(ryu_str);
+    line.append(bundled_str);
     line.append("     ");
     line.append(ratio_str);
     println(line);
