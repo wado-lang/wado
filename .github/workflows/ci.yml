@@ -105,7 +105,6 @@ jobs:
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked --all -- --skip fixture_test_
-      - run: cargo run --locked -p wado-cli -- test example/*.wado
 
   test-e2e-o0:
     name: Test (E2E O0)
@@ -203,6 +202,30 @@ jobs:
 
       - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_os
 
+  test-wado:
+    name: Test (Wado)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - uses: rui314/setup-mold@v1
+
+      - run: make test-wado
+
   check-wasm32:
     name: Check (wasm32)
     runs-on: ubuntu-latest
@@ -215,12 +238,12 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [test-core, test-e2e-o0, test-e2e-o1, test-e2e-o3, test-e2e-os, check-wasm32]
+    needs: [test-core, test-wado, test-e2e-o0, test-e2e-o1, test-e2e-o3, test-e2e-os, check-wasm32]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs passed
         run: |
-          results="${{ needs.test-core.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }}"
+          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check-wasm32.result }}"
           for result in $results; do
             if [ "$result" != "success" ]; then
               echo "One or more jobs failed"
