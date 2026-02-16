@@ -1330,10 +1330,7 @@ const MAX_FLAT_RESULTS: usize = 1;
 /// This is true for Result types where all payloads are empty (unit), so the raw call
 /// returns just a discriminant on the stack without an outptr.
 fn needs_flat_result_lifting(ty: &Type) -> bool {
-    match ty {
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => true,
-        _ => false,
-    }
+    matches!(ty, Type::Generic(g) if g.name == "Result" && g.args.len() == 2)
 }
 
 /// Synthesize lifting of a flat Result discriminant into a GC variant struct.
@@ -2785,7 +2782,7 @@ fn export_needs_param_lifting(params: &[(String, Type)]) -> bool {
 ///
 /// This is signature-driven: it examines the param/return types to generate
 /// appropriate lifting/lowering code for any export signature.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::vec_init_then_push)]
 fn synthesize_result_export_adapter(
     export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
@@ -3927,7 +3924,7 @@ fn fixup_adapter_let(
     local_index: u32,
     return_type: TypeId,
     let_type_id: &mut TypeId,
-    local_types: &mut Vec<TypeId>,
+    local_types: &mut [TypeId],
 ) {
     match &mut expr.kind {
         TirExprKind::StaticCall { .. } => {
