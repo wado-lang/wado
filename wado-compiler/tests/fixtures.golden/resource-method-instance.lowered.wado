@@ -11,7 +11,7 @@
 
 export fn run() with Stdout {
     let family: IpAddressFamily = IpAddressFamily::Ipv4;
-    let result: Result<TcpSocket, ErrorCode> = move TcpSocket::create(family);
+    let result: Result<TcpSocket, ErrorCode> = move __cm_adapter__TcpSocket_create(family);
     if __variant_test(result, case=0, name=Ok) {
         let socket: TcpSocket = __variant_payload(result, case=0);
         core::cli::println(move "Resource extracted from Result");
@@ -22,6 +22,20 @@ export fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+fn __cm_adapter__TcpSocket_create(address_family: i32) -> Result<TcpSocket, ErrorCode> {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:sockets/TcpSocket::create(address_family, __outptr);
+    let __disc: i32 = core::builtin::i32_load(__outptr);
+    let mut __result_val: Result<TcpSocket, ErrorCode> = move null;
+    if (__disc == 0) {
+        __result_val = move Result<TcpSocket, ErrorCode>::Ok(core::builtin::i32_load((__outptr + 4)));
+    } else {
+        __result_val = move Result<TcpSocket, ErrorCode>::Err(core::builtin::i32_load((__outptr + 4)));
+    }
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return __result_val;
 }
 
 export fn __cm_export__run() {

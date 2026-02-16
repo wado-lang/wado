@@ -1269,6 +1269,10 @@ pub fn synthesize_lower(
 }
 
 // ============================================================================
+// Option<T> parameter lowering for adapter synthesis
+// ============================================================================
+
+// ============================================================================
 // Flat ABI parameter/result computation
 // ============================================================================
 
@@ -1572,43 +1576,83 @@ fn synthesize_adapter(
 
     // ---- Pass 1: Allocate all parameter locals (contiguous) ----
     // Wasm requires params at indices [0..n-1], so allocate them first.
+    //
+    // For types that the adapter lowers internally (String, Array<u8>), we create
+    // a single placeholder param. The adapter body will lower them to flat CM args.
+    //
+    // For other types (handles, Option<T>, etc.), we create flat params matching
+    // the CM ABI directly. The call site must flatten args before passing them.
+    //
+    // Track (start_param_idx, param_count) per WASI param for Pass 2 indexing.
+    let mut param_mapping: Vec<(usize, usize)> = Vec::new();
     for (param_name, param_type) in &func_info.params {
         let flat_tys = flatten_param_type(param_type);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
-        let param_type_id = match param_type {
-            Type::Named(n) if n.name == "String" => TypeTable::I32, // placeholder for String
+        let start = params.len();
+        match param_type {
+            // String: single placeholder param (adapter body lowers to ptr+len)
+            Type::Named(n) if n.name == "String" => {
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: TypeTable::I32,
+                    local_index: next_local,
+                    span: synth_span(),
+                });
+                local_types.push(TypeTable::I32);
+                next_local += 1;
+                param_mapping.push((start, 1));
+            }
+            // Array<u8>: single placeholder param (adapter body lowers to ptr+len)
             Type::Generic(g)
                 if g.name == "Array"
                     && g.args.len() == 1
                     && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
             {
-                TypeTable::I32 // placeholder for Array<u8>
+                params.push(TirParam {
+                    name: param_name.clone(),
+                    type_id: TypeTable::I32,
+                    local_index: next_local,
+                    span: synth_span(),
+                });
+                local_types.push(TypeTable::I32);
+                next_local += 1;
+                param_mapping.push((start, 1));
             }
-            _ => flat_tys[0],
-        };
-        let param_local = next_local;
-        params.push(TirParam {
-            name: param_name.clone(),
-            type_id: param_type_id,
-            local_index: param_local,
-            span: synth_span(),
-        });
-        local_types.push(param_type_id);
-        next_local += 1;
+            // All other types: create flat params matching CM ABI
+            _ => {
+                for (j, flat_ty) in flat_tys.iter().enumerate() {
+                    let name = if flat_tys.len() == 1 {
+                        param_name.clone()
+                    } else {
+                        format!("{param_name}_flat{j}")
+                    };
+                    params.push(TirParam {
+                        name,
+                        type_id: *flat_ty,
+                        local_index: next_local,
+                        span: synth_span(),
+                    });
+                    local_types.push(*flat_ty);
+                    next_local += 1;
+                }
+                param_mapping.push((start, flat_tys.len()));
+            }
+        }
     }
 
     // ---- Pass 2: Generate parameter lowering code ----
     // Intermediate locals (packed i64, etc.) are allocated after all params.
-    let mut param_idx = 0usize;
+    let mut mapping_idx = 0usize;
     for (param_name, param_type) in &func_info.params {
         let flat_tys = flatten_param_type(param_type);
         if flat_tys.is_empty() {
             continue; // unit param, skip
         }
-        let param_local = params[param_idx].local_index;
-        param_idx += 1;
+        let (start_idx, count) = param_mapping[mapping_idx];
+        mapping_idx += 1;
+        let param_local = params[start_idx].local_index;
 
         match param_type {
             // String param: accept Wado String, lower to (ptr, len) pair
@@ -1700,10 +1744,12 @@ fn synthesize_adapter(
                 ));
             }
 
-            // Simple types: pass directly as flat args
+            // All other types (including Option<T>): flat params passed through directly
             _ => {
-                let param_type_id = flat_tys[0];
-                flat_args.push(local_ref(param_local, param_name, param_type_id));
+                for j in 0..count {
+                    let p = &params[start_idx + j];
+                    flat_args.push(local_ref(p.local_index, &p.name, p.type_id));
+                }
             }
         }
     }
@@ -3686,7 +3732,12 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             for func_rc in &module.functions {
                 let mut func = func_rc.borrow_mut();
                 if let Some(body) = &mut func.body {
-                    rewrite_calls_in_block(body, &adapter_map, &entry_source);
+                    rewrite_calls_in_block(
+                        body,
+                        &adapter_map,
+                        &entry_source,
+                        project.wasi_registry,
+                    );
                 }
             }
         }
@@ -3996,6 +4047,51 @@ fn fixup_expr_type(expr: &mut TirExpr, type_id: TypeId) {
     }
 }
 
+/// Flatten a Wado-level arg into flat CM ABI args at the call site.
+///
+/// For multi-flat types like `Option<T>`, the Wado-level arg (e.g., `null`)
+/// is expanded into multiple i32 args (discriminant + payload).
+fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut Vec<TirExpr>) {
+    match &arg.kind {
+        // null literal → discriminant=0, payload=0 for each flat type
+        TirExprKind::Null => {
+            for _ in flat_tys {
+                flat_args.push(i32_const(0));
+            }
+        }
+        // OptionSome(value) → discriminant=1, then flatten inner value
+        TirExprKind::OptionSome { value } => {
+            // First flat type is always the discriminant
+            flat_args.push(i32_const(1));
+            // Remaining flat types are the inner value
+            if flat_tys.len() == 2 {
+                // Single inner flat value (e.g., resource handle)
+                flat_args.push((**value).clone());
+            } else {
+                // Multi-value inner: would need further flattening
+                // For now, handle the common single-value case
+                for j in 1..flat_tys.len() {
+                    if j == 1 {
+                        flat_args.push((**value).clone());
+                    } else {
+                        flat_args.push(i32_const(0));
+                    }
+                }
+            }
+        }
+        // For any other expression, this is an arbitrary Option<T> value.
+        // Currently not supported — would need runtime null-check logic.
+        _ => {
+            panic!(
+                "StaticCall adapter: cannot flatten arg of kind {:?} into {} flat types at call site; \
+                 only null and OptionSome literals are supported",
+                arg.kind,
+                flat_tys.len()
+            );
+        }
+    }
+}
+
 // ============================================================================
 // Call site rewriting
 // ============================================================================
@@ -4004,9 +4100,10 @@ fn rewrite_calls_in_block(
     block: &mut TirBlock,
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
+    wasi_registry: &WasiRegistry,
 ) {
     for stmt in &mut block.stmts {
-        rewrite_calls_in_stmt(stmt, adapters, entry_source);
+        rewrite_calls_in_stmt(stmt, adapters, entry_source, wasi_registry);
     }
 }
 
@@ -4014,14 +4111,15 @@ fn rewrite_calls_in_stmt(
     stmt: &mut TirStmt,
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
+    wasi_registry: &WasiRegistry,
 ) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
-            rewrite_calls_in_expr(value, adapters, entry_source);
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                rewrite_calls_in_expr(v, adapters, entry_source);
+                rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry);
             }
         }
         TirStmtKind::If {
@@ -4029,14 +4127,14 @@ fn rewrite_calls_in_stmt(
             then_block,
             else_block,
         } => {
-            rewrite_calls_in_expr(condition, adapters, entry_source);
-            rewrite_calls_in_block(then_block, adapters, entry_source);
+            rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_block(then_block, adapters, entry_source, wasi_registry);
             if let Some(blk) = else_block {
-                rewrite_calls_in_block(blk, adapters, entry_source);
+                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry);
             }
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            rewrite_calls_in_block(body, adapters, entry_source);
+            rewrite_calls_in_block(body, adapters, entry_source, wasi_registry);
         }
         TirStmtKind::IfPattern {
             scrutinee,
@@ -4044,18 +4142,21 @@ fn rewrite_calls_in_stmt(
             else_block,
             ..
         } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source);
-            rewrite_calls_in_block(then_block, adapters, entry_source);
+            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_block(then_block, adapters, entry_source, wasi_registry);
             if let Some(blk) = else_block {
-                rewrite_calls_in_block(blk, adapters, entry_source);
+                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry);
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                rewrite_calls_in_expr(v, adapters, entry_source);
+                rewrite_calls_in_expr(v, adapters, entry_source, wasi_registry);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::LetPattern { .. } => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
+        }
+        TirStmtKind::Continue => {}
     }
 }
 
@@ -4063,6 +4164,7 @@ fn rewrite_calls_in_expr(
     expr: &mut TirExpr,
     adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &ModuleSource,
+    wasi_registry: &WasiRegistry,
 ) {
     // Check if this is an effect-like Call that should be rewritten
     let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
@@ -4106,7 +4208,7 @@ fn rewrite_calls_in_expr(
 
             // Recurse into args
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source);
+                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
             }
             return;
         }
@@ -4184,7 +4286,90 @@ fn rewrite_calls_in_expr(
             // Recurse into args of the new Call
             if let TirExprKind::Call { args, .. } = &mut expr.kind {
                 for arg in args {
-                    rewrite_calls_in_expr(arg, adapters, entry_source);
+                    rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
+                }
+            }
+            return;
+        }
+    }
+
+    // Check if this is a resource StaticCall that should be rewritten to target an adapter
+    if let TirExprKind::StaticCall { func, .. } = &expr.kind {
+        let func_name = func.name();
+        if let Some(adapter_rc) = adapters.get(&func_name) {
+            // Look up WASI function info to flatten args at the call site
+            let wasi_func_info = wasi_registry.get_function(&func_name).cloned();
+
+            // Extract args before replacing
+            let taken_args = if let TirExprKind::StaticCall { args, .. } = &mut expr.kind {
+                std::mem::take(args)
+            } else {
+                unreachable!()
+            };
+
+            // Fix up adapter return type from the call site
+            {
+                let mut adapter = adapter_rc.borrow_mut();
+                if adapter.return_type != expr.type_id {
+                    adapter.return_type = expr.type_id;
+                    fixup_return_type_in_body(&mut adapter, expr.type_id);
+                }
+            }
+
+            // Flatten call site args to match the adapter's flat CM params.
+            // Types that the adapter lowers internally (String, Array<u8>) are
+            // passed through. Option<T> and other multi-flat types are flattened
+            // here into individual i32 args.
+            let flat_call_args = if let Some(func_info) = &wasi_func_info {
+                let mut flat = Vec::new();
+                for (i, (_param_name, param_type)) in func_info.params.iter().enumerate() {
+                    let flat_tys = flatten_param_type(param_type);
+                    if flat_tys.is_empty() || i >= taken_args.len() {
+                        continue;
+                    }
+                    match param_type {
+                        // String/Array<u8>: pass through (adapter body lowers)
+                        Type::Named(n) if n.name == "String" => {
+                            flat.push(taken_args[i].clone());
+                        }
+                        Type::Generic(g)
+                            if g.name == "Array"
+                                && g.args.len() == 1
+                                && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
+                        {
+                            flat.push(taken_args[i].clone());
+                        }
+                        _ => {
+                            if flat_tys.len() == 1 {
+                                // Single flat type: pass through
+                                flat.push(taken_args[i].clone());
+                            } else {
+                                // Multi-flat type: flatten at call site
+                                flatten_arg_for_call_site(&taken_args[i], &flat_tys, &mut flat);
+                            }
+                        }
+                    }
+                }
+                flat
+            } else {
+                // No WASI function info: pass args as-is (fallback)
+                taken_args
+            };
+
+            // Replace StaticCall with Call targeting the adapter
+            expr.kind = TirExprKind::Call {
+                func: FunctionRef::Resolved {
+                    func: adapter_rc.clone(),
+                    module_source: entry_source.clone(),
+                },
+                args: flat_call_args,
+                type_args: vec![],
+            };
+
+            // Recurse into args of the new Call
+            if let TirExprKind::Call { args, .. } = &mut expr.kind {
+                for arg in args {
+                    rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
                 }
             }
             return;
@@ -4197,44 +4382,44 @@ fn rewrite_calls_in_expr(
         | TirExprKind::CmRawCall { args, .. }
         | TirExprKind::StaticCall { args, .. } => {
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source);
+                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_calls_in_expr(receiver, adapters, entry_source);
+            rewrite_calls_in_expr(receiver, adapters, entry_source, wasi_registry);
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source);
+                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
             }
         }
         TirExprKind::IndirectCall { callee, args } => {
-            rewrite_calls_in_expr(callee, adapters, entry_source);
+            rewrite_calls_in_expr(callee, adapters, entry_source, wasi_registry);
             for arg in args {
-                rewrite_calls_in_expr(arg, adapters, entry_source);
+                rewrite_calls_in_expr(arg, adapters, entry_source, wasi_registry);
             }
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_calls_in_block(block, adapters, entry_source);
+            rewrite_calls_in_block(block, adapters, entry_source, wasi_registry);
         }
         TirExprKind::Binary { left, right, .. } => {
-            rewrite_calls_in_expr(left, adapters, entry_source);
-            rewrite_calls_in_expr(right, adapters, entry_source);
+            rewrite_calls_in_expr(left, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(right, adapters, entry_source, wasi_registry);
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::OptionSome { value: inner }
         | TirExprKind::Move { expr: inner } => {
-            rewrite_calls_in_expr(inner, adapters, entry_source);
+            rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            rewrite_calls_in_expr(condition, adapters, entry_source);
-            rewrite_calls_in_block(then_branch, adapters, entry_source);
+            rewrite_calls_in_expr(condition, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_block(then_branch, adapters, entry_source, wasi_registry);
             if let Some(blk) = else_branch {
-                rewrite_calls_in_block(blk, adapters, entry_source);
+                rewrite_calls_in_block(blk, adapters, entry_source, wasi_registry);
             }
         }
         TirExprKind::Index { expr: e, index }
@@ -4242,8 +4427,8 @@ fn rewrite_calls_in_expr(
             target: e,
             value: index,
         } => {
-            rewrite_calls_in_expr(e, adapters, entry_source);
-            rewrite_calls_in_expr(index, adapters, entry_source);
+            rewrite_calls_in_expr(e, adapters, entry_source, wasi_registry);
+            rewrite_calls_in_expr(index, adapters, entry_source, wasi_registry);
         }
         TirExprKind::Switch {
             scrutinee,
@@ -4251,37 +4436,37 @@ fn rewrite_calls_in_expr(
             default,
             ..
         } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source);
+            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry);
             for arm in arms {
-                rewrite_calls_in_block(arm, adapters, entry_source);
+                rewrite_calls_in_block(arm, adapters, entry_source, wasi_registry);
             }
-            rewrite_calls_in_block(default, adapters, entry_source);
+            rewrite_calls_in_block(default, adapters, entry_source, wasi_registry);
         }
         TirExprKind::Match {
             expr: scrutinee,
             arms,
         } => {
-            rewrite_calls_in_expr(scrutinee, adapters, entry_source);
+            rewrite_calls_in_expr(scrutinee, adapters, entry_source, wasi_registry);
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    rewrite_calls_in_expr(guard, adapters, entry_source);
+                    rewrite_calls_in_expr(guard, adapters, entry_source, wasi_registry);
                 }
-                rewrite_calls_in_expr(&mut arm.body, adapters, entry_source);
+                rewrite_calls_in_expr(&mut arm.body, adapters, entry_source, wasi_registry);
             }
         }
         TirExprKind::Closure { body, .. } => {
-            rewrite_calls_in_expr(body, adapters, entry_source);
+            rewrite_calls_in_expr(body, adapters, entry_source, wasi_registry);
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            rewrite_calls_in_expr(functor, adapters, entry_source);
+            rewrite_calls_in_expr(functor, adapters, entry_source, wasi_registry);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in &mut fields.iter_mut() {
-                rewrite_calls_in_expr(&mut field.value, adapters, entry_source);
+                rewrite_calls_in_expr(&mut field.value, adapters, entry_source, wasi_registry);
             }
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_calls_in_expr(value, adapters, entry_source);
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
         }
         _ => {} // Leaf nodes: no sub-expressions
     }
@@ -4346,7 +4531,10 @@ fn collect_effect_calls_in_stmt(
                 collect_effect_calls_in_expr(v, effects, wasi_registry);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::LetPattern { .. } => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_effect_calls_in_expr(value, effects, wasi_registry);
+        }
+        TirStmtKind::Continue => {}
     }
 }
 
@@ -4371,7 +4559,17 @@ fn collect_effect_calls_in_expr(
                 collect_effect_calls_in_expr(arg, effects, wasi_registry);
             }
         }
-        TirExprKind::CmRawCall { args, .. } | TirExprKind::StaticCall { args, .. } => {
+        TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                collect_effect_calls_in_expr(arg, effects, wasi_registry);
+            }
+        }
+        TirExprKind::StaticCall { func, args, .. } => {
+            // Check if this is a WASI resource static method call (e.g., Response::new)
+            let func_name = func.name();
+            if wasi_registry.get_function(&func_name).is_some() {
+                effects.insert(func_name);
+            }
             for arg in args {
                 collect_effect_calls_in_expr(arg, effects, wasi_registry);
             }
