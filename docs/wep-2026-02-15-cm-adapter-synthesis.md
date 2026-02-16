@@ -477,6 +477,8 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 
 ### Phase 4: Export Adapters (Void Exports Done)
 
+Design principle: export adapter synthesis is **signature-driven, not name-driven**. The adapter generator inspects the export's parameter types and return type from the world registry metadata, not the function name. This ensures that any future world export with the same signature shape gets the same treatment without hard-coding names like `"run"` or `"handle"`.
+
 - [x] Implement export adapter synthesis for all `() -> ()` exports (Command world `run`, test functions).
 - [x] Move `export` keyword validation from `wasm_plan` to `cm_adapter_gen`.
 - [x] Synthesize stub adapters for optional world exports (e.g., test-only files with no `run`).
@@ -485,6 +487,8 @@ Migrate one WASI interface at a time, validating via existing E2E tests.
 - [ ] Implement export adapter synthesis for `wasi:http/incoming-handler` (complex: async, Result return).
 - [ ] Delete `CmExportInfo` scratch local logic — adapters declare their own locals.
 - [ ] Delete remaining export-related CM glue from codegen (`generate_http_handler_export`).
+
+Once all export signatures are handled by adapter synthesis and `generate_http_handler_export` is deleted from codegen, Phase 4 is complete.
 
 ## Implementation Notes
 
