@@ -240,9 +240,10 @@ pub struct WorldExport {
 }
 
 /// Use declaration item with optional renaming
-/// Supports both simple imports and effect function imports:
+/// Supports simple imports, effect function imports, and wildcard imports:
 /// - Simple: `name` or `name as alias`
 /// - Effect functions: `Effect::{func1, func2}`
+/// - Wildcard: `_` (load module without binding names)
 #[derive(Debug, Clone)]
 pub enum UseItem {
     /// Simple import: `name` or `name as alias`
@@ -252,6 +253,8 @@ pub enum UseItem {
         effect_name: String,
         functions: Vec<UseItemSimple>,
     },
+    /// Wildcard import: `use _ from "..."` (load module for side effects only)
+    Wildcard,
 }
 
 /// Simple use item (used within effect function imports)

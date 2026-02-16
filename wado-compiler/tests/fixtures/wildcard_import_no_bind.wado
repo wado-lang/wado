@@ -1,0 +1,10 @@
+// Test: wildcard import does NOT bind names
+use _ from "./sub/helper.wado";
+
+export fn run() {
+    // double is pub in the module, but not imported
+    let x = double(21);
+}
+
+__DATA__
+{"compile_error": "double"}

@@ -519,18 +519,27 @@ impl Parser {
     /// Parse use declaration with ESM-like syntax:
     /// `use {items} from "source";`
     /// `use {items} from "source" with { version: "1.0" };`
+    /// `use _ from "source";` (wildcard: load module without binding names)
     ///
     /// Items can be:
     /// - Simple: `name` or `name as alias`
     /// - Effect functions: `Effect::{func1, func2}` or `Effect::{func1 as alias}`
+    /// - Wildcard: `_` (no braces needed)
     fn parse_use_decl(&mut self, is_pub: bool) -> ParseResult<UseDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Use)?;
 
-        // Parse items: `{...}`
-        self.expect(&TokenKind::LBrace)?;
-        let items = self.parse_use_items()?;
-        self.expect(&TokenKind::RBrace)?;
+        // Check for wildcard import: `use _ from "..."`
+        let items = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "_") {
+            self.advance(); // consume `_`
+            vec![UseItem::Wildcard]
+        } else {
+            // Parse items: `{...}`
+            self.expect(&TokenKind::LBrace)?;
+            let items = self.parse_use_items()?;
+            self.expect(&TokenKind::RBrace)?;
+            items
+        };
 
         // Expect `from`
         self.expect(&TokenKind::From)?;
