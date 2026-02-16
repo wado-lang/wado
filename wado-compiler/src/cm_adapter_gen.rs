@@ -1849,27 +1849,28 @@ fn synthesize_adapter(
 // Export adapter synthesis
 // ============================================================================
 
-/// Synthesize a CM export adapter for the `wasi:cli/run` Command world.
+/// Synthesize a CM export adapter for a `() -> ()` async export.
 ///
-/// The adapter calls the user's `run()` function and then calls `task-return(0)`
+/// The adapter calls the user's export function and then calls `task-return(0)`
 /// to signal successful completion. This replaces the task-return wrapping
-/// that was previously done in codegen's `generate_run_function`.
+/// that was previously done at the codegen level.
 ///
-/// Generated TIR:
+/// Generated TIR (for export name "run"):
 /// ```text
 /// fn __cm_export__run() {
 ///     run();
 ///     cm_raw_call task-return(0);
 /// }
 /// ```
-fn synthesize_cli_export_adapter(
+fn synthesize_void_export_adapter(
+    export_name: &str,
     user_func: Rc<RefCell<TirFunction>>,
     entry_source: &ModuleSource,
 ) -> Rc<RefCell<TirFunction>> {
-    let adapter_name = export_adapter_func_name("run");
+    let adapter_name = export_adapter_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
 
-    // Call the user's run() function
+    // Call the user's export function
     let call_user = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef::Resolved {
@@ -1899,6 +1900,25 @@ fn synthesize_cli_export_adapter(
     adapter
 }
 
+/// Synthesize a stub export adapter that just calls `task-return(0)`.
+///
+/// Used when the world declares an export but the user didn't define the function
+/// (e.g., test-only files that have `test` blocks but no `export fn run()`).
+fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
+    let adapter_name = export_adapter_func_name(export_name);
+
+    // Just call task-return(0) — Ok discriminant for result<_, _>
+    let body = block(vec![expr_stmt(cm_raw_call(
+        "task-return",
+        vec![i32_const(0)],
+        TypeTable::UNIT,
+    ))]);
+
+    let adapter = make_adapter_function(adapter_name, vec![], TypeTable::UNIT, body, 0, vec![]);
+    adapter.borrow_mut().is_export = true;
+    adapter
+}
+
 // ============================================================================
 // Phase entry point
 // ============================================================================
@@ -1914,7 +1934,7 @@ fn synthesize_cli_export_adapter(
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
-pub fn generate_adapters(mut project: Project) -> Project {
+pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     let entry_source = project.entry_module_source.clone();
 
     // ---- Import adapters ----
@@ -1980,7 +2000,7 @@ pub fn generate_adapters(mut project: Project) -> Project {
 
     // ---- Export adapters ----
 
-    // Step 5: Synthesize export adapter for Command world (wasi:cli/run)
+    // Step 5: Synthesize export adapters for () -> () world exports
     let world_info = project.world_registry.get(&project.target_world).cloned();
     if let Some(world_info) = world_info {
         let entry_module = project
@@ -1989,34 +2009,74 @@ pub fn generate_adapters(mut project: Project) -> Project {
             .expect("entry module should exist");
 
         for export in &world_info.exports {
-            // Only handle Command world exports (no params, no return) for now.
+            // Only handle void exports (no params, no return) for now.
             // HTTP handler exports will be added in a follow-up.
             if export.returns_http_response() {
                 continue;
             }
 
-            // Find the user's export function
-            let user_func_rc = entry_module
-                .functions
-                .iter()
-                .find(|f| {
-                    let f = f.borrow();
-                    f.name == export.name && f.is_export
-                })
-                .cloned();
-
-            if let Some(user_func_rc) = user_func_rc {
-                let adapter_name = export_adapter_func_name(&export.name);
-                let adapter = synthesize_cli_export_adapter(user_func_rc, &entry_source);
-                project
-                    .export_adapter_names
-                    .insert(export.name.clone(), adapter_name);
-                entry_module.functions.push(adapter);
+            // Find the user's export function and check for missing `export` keyword
+            let mut found_exported = None;
+            let mut found_without_export = false;
+            for f in &entry_module.functions {
+                let func = f.borrow();
+                if func.name == export.name {
+                    if func.is_export {
+                        found_exported = Some(f.clone());
+                    } else {
+                        found_without_export = true;
+                    }
+                }
             }
+
+            if found_exported.is_none() && found_without_export {
+                return Err(format!(
+                    "function `{}` exists but is not marked with `export` keyword. \
+                     Add `export` to make it a world entry point: `export fn {}(...)`",
+                    export.name, export.name
+                ));
+            }
+
+            let adapter_name = export_adapter_func_name(&export.name);
+            let adapter = if let Some(user_func_rc) = found_exported {
+                synthesize_void_export_adapter(&export.name, user_func_rc, &entry_source)
+            } else {
+                // No user function: stub that just calls task-return(0)
+                synthesize_void_stub_adapter(&export.name)
+            };
+            project
+                .export_adapter_names
+                .insert(export.name.clone(), adapter_name);
+            entry_module.functions.push(adapter);
         }
     }
 
-    project
+    // Step 6: Synthesize export adapters for test functions (__test_*)
+    {
+        let entry_module = project
+            .tir_modules
+            .get_mut(&entry_source)
+            .expect("entry module should exist");
+
+        // Collect test functions first to avoid borrow conflict.
+        // Test functions have is_export=false (they're not world exports),
+        // but they need adapters for task-return when called via `wado test`.
+        let test_funcs: Vec<(String, Rc<RefCell<TirFunction>>)> = entry_module
+            .functions
+            .iter()
+            .filter(|f| f.borrow().name.starts_with("__test_"))
+            .map(|f| (f.borrow().name.clone(), f.clone()))
+            .collect();
+
+        for (test_name, user_func_rc) in test_funcs {
+            let adapter_name = export_adapter_func_name(&test_name);
+            let adapter = synthesize_void_export_adapter(&test_name, user_func_rc, &entry_source);
+            project.export_adapter_names.insert(test_name, adapter_name);
+            entry_module.functions.push(adapter);
+        }
+    }
+
+    Ok(project)
 }
 
 // ============================================================================

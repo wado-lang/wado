@@ -1603,9 +1603,15 @@ impl Codegen<'_> {
             // Fallback to "run" for unknown worlds
             builder.export_func("run", "run");
         }
-        // Export test functions for test runner
-        for test in &entry_tir.tests {
-            builder.export_func(&test.function_name, &test.function_name);
+        // Export test functions for test runner (use adapter name when available)
+        if let Some(component_plan) = &self.project.component_plan {
+            for test in &component_plan.test_exports {
+                builder.export_func(&test.function_name, &test.core_func_name);
+            }
+        } else {
+            for test in &entry_tir.tests {
+                builder.export_func(&test.function_name, &test.function_name);
+            }
         }
         module.section(builder.exports());
 
@@ -1646,17 +1652,11 @@ impl Codegen<'_> {
             if has_type_params {
                 continue;
             }
-            // Test functions need task.return wrapper like run
-            if tir_func.name.starts_with("__test_") {
-                let wasm_func = self.generate_run_function(&tir_func, type_table, &builder);
-                code.function(&wasm_func);
-            } else {
-                let (wasm_func, hints) =
-                    self.generate_function(&tir_func, type_table, &builder, entry_module_source);
-                code.function(&wasm_func);
-                if !hints.is_empty() {
-                    all_branch_hints.push((func_idx, hints));
-                }
+            let (wasm_func, hints) =
+                self.generate_function(&tir_func, type_table, &builder, entry_module_source);
+            code.function(&wasm_func);
+            if !hints.is_empty() {
+                all_branch_hints.push((func_idx, hints));
             }
             func_idx += 1;
         }
@@ -1703,7 +1703,7 @@ impl Codegen<'_> {
             func_idx += 1;
         }
 
-        // Generate world export functions (entry points with task.return wrapper)
+        // Generate world export functions
         for export_name in &world_export_names {
             let export_tir_rc = entry_tir
                 .functions
@@ -1723,31 +1723,11 @@ impl Codegen<'_> {
                     );
                     func
                 } else {
-                    // Legacy path: user function with codegen-level task-return wrapping
-                    self.generate_run_function(&tir_func, type_table, &builder)
+                    // Non-adapter world export: HTTP handler with codegen-level CM wrapping
+                    self.generate_http_handler_export(&tir_func, type_table, &builder)
                 }
             } else {
-                // No matching function - create empty entry point
-                let mut func = Function::new(vec![]);
-                let task_return_idx = builder.func_idx("task-return");
-                if self.project.has_http_handler_export {
-                    // Service world: result<own<response>, error-code> with complex payloads
-                    // Flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
-                    func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                    func.instruction(&Instruction::I32Const(38)); // internal-error
-                    func.instruction(&Instruction::I32Const(1)); // option<string> has Some
-                    func.instruction(&Instruction::I64Const(0)); // u64 padding
-                    func.instruction(&Instruction::I32Const(0)); // string ptr
-                    func.instruction(&Instruction::I32Const(37)); // string len
-                    func.instruction(&Instruction::I32Const(0)); // padding
-                    func.instruction(&Instruction::I32Const(0)); // padding
-                } else {
-                    // Command world: result<_, _> needs just (i32)
-                    func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                }
-                func.instruction(&Instruction::Call(task_return_idx));
-                func.instruction(&Instruction::End);
-                func
+                panic!("world export function `{export_name}` not found in entry module");
             };
 
             code.function(&export_wasm_func);
@@ -11605,11 +11585,12 @@ impl Codegen<'_> {
         (wasm_func, hints)
     }
 
-    /// Generate the 'run' function for TIR with task.return wrapper
+    /// Generate an HTTP handler export function with CM wrapping.
     ///
-    /// This is a special case of function generation for the WASI CLI entry point.
-    /// It generates the function body and appends task.return before End.
-    fn generate_run_function(
+    /// This handles Service world exports (e.g., `handle`) that have complex
+    /// Result payloads requiring codegen-level scratch locals and task-return.
+    /// Void exports (e.g., `run`) are handled by CM adapter synthesis instead.
+    fn generate_http_handler_export(
         &self,
         tir_func: &TirFunction,
         type_table: &TypeTable,
