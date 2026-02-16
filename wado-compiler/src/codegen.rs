@@ -9,7 +9,7 @@ use crate::ast::Type;
 use crate::builtin_registry::BuiltinFunctionInfo;
 use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{
-    CmInstanceTypeGen, CmPrimitiveType, WasiFunctionInfo, WasiInterfaceInfo,
+    CmInstanceTypeGen, WasiFunctionInfo, WasiInterfaceInfo,
     build_local_alias_name, flatten_wasi_param_type, return_type_requires_outptr,
     type_id_to_valtype, wasi_type_to_valtype,
 };
@@ -1160,14 +1160,18 @@ impl Codegen<'_> {
         for tir_func_rc in &entry_tir.functions {
             let tir_func = tir_func_rc.borrow();
             // Skip functions that contain type parameters (from generic structs like Box<T>)
-            // These functions need to be inlined at call sites with concrete types
-            let has_type_params = type_table.contains_type_param(tir_func.return_type)
-                || tir_func
-                    .params
-                    .iter()
-                    .any(|p| type_table.contains_type_param(p.type_id));
-            if has_type_params {
-                continue;
+            // These functions need to be inlined at call sites with concrete types.
+            // CM adapter functions are exempt: they use concrete Wasm-level types
+            // even if their return type references generic type IDs (e.g., Future<T>).
+            if !tir_func.is_cm_adapter {
+                let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                    || tir_func
+                        .params
+                        .iter()
+                        .any(|p| type_table.contains_type_param(p.type_id));
+                if has_type_params {
+                    continue;
+                }
             }
             let param_types: Vec<ValType> = tir_func
                 .params
@@ -1386,13 +1390,16 @@ impl Codegen<'_> {
                 continue;
             }
             // Skip functions that contain type parameters (from generic structs like Box<T>)
-            let has_type_params = type_table.contains_type_param(tir_func.return_type)
-                || tir_func
-                    .params
-                    .iter()
-                    .any(|p| type_table.contains_type_param(p.type_id));
-            if has_type_params {
-                continue;
+            // CM adapter functions are exempt (see type registration loop above).
+            if !tir_func.is_cm_adapter {
+                let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                    || tir_func
+                        .params
+                        .iter()
+                        .any(|p| type_table.contains_type_param(p.type_id));
+                if has_type_params {
+                    continue;
+                }
             }
             // Methods have method_info metadata for building mangled names
             if let Some(ref info) = tir_func.method_info {
@@ -1624,13 +1631,16 @@ impl Codegen<'_> {
                 continue; // Skip world exports - they are handled separately as entry points
             }
             // Skip functions that contain type parameters (from generic structs like Box<T>)
-            let has_type_params = type_table.contains_type_param(tir_func.return_type)
-                || tir_func
-                    .params
-                    .iter()
-                    .any(|p| type_table.contains_type_param(p.type_id));
-            if has_type_params {
-                continue;
+            // CM adapter functions are exempt (see type registration loop above).
+            if !tir_func.is_cm_adapter {
+                let has_type_params = type_table.contains_type_param(tir_func.return_type)
+                    || tir_func
+                        .params
+                        .iter()
+                        .any(|p| type_table.contains_type_param(p.type_id));
+                if has_type_params {
+                    continue;
+                }
             }
             let (wasm_func, hints) =
                 self.generate_function(&tir_func, type_table, &builder, entry_module_source);
@@ -7733,49 +7743,10 @@ impl Codegen<'_> {
             } => {
                 let func_name = static_func.name();
 
-                // Check if this is a WASI static function to use CM ABI arg lowering.
-                // WASI functions need special argument handling (e.g., Option<T> is lowered
-                // to a (discriminant, payload) pair of i32 values instead of a GC nullref).
-                if let Some(func_info) = self.project.wasi_registry.get_function(&func_name) {
-                    for (i, arg) in args.iter().enumerate() {
-                        let param_type = &func_info.params[i].1;
-                        let resolved_type = self.project.wasi_registry.resolve_type(param_type);
-                        match &resolved_type {
-                            Type::Generic(g) if g.name == "Option" => {
-                                // Option<T> param: lower to (discriminant i32, payload i32)
-                                if matches!(arg.kind, TirExprKind::Null) {
-                                    // None: discriminant=0, payload=0
-                                    func.instruction(&Instruction::I32Const(0));
-                                    func.instruction(&Instruction::I32Const(0));
-                                } else {
-                                    // Some(value): discriminant=1, then the inner value
-                                    func.instruction(&Instruction::I32Const(1));
-                                    self.generate_expr(func, arg, type_table, ctx, builder);
-                                }
-                            }
-                            Type::Named(named) if named.name == "String" => {
-                                // String argument: lower to (ptr, len) pair
-                                self.generate_expr(func, arg, type_table, ctx, builder);
-                                let lower_idx = builder.func_idx("core/internal/cm_lower_string");
-                                func.instruction(&Instruction::Call(lower_idx));
-                                let temp = ctx.alloc_local("__cm_i64_temp", ValType::I64);
-                                func.instruction(&Instruction::LocalTee(temp));
-                                func.instruction(&Instruction::I32WrapI64);
-                                func.instruction(&Instruction::LocalGet(temp));
-                                func.instruction(&Instruction::I64Const(32));
-                                func.instruction(&Instruction::I64ShrU);
-                                func.instruction(&Instruction::I32WrapI64);
-                            }
-                            _ => {
-                                // Primitives, resource handles, Future<T>, Stream<T>, etc.
-                                self.generate_expr(func, arg, type_table, ctx, builder);
-                            }
-                        }
-                    }
-                } else {
-                    // Normal path: generate GC-level arguments
-                    self.generate_args(func, args, type_table, ctx, builder);
-                }
+                // WASI resource static methods (e.g., Response::new) are rewritten
+                // to adapter function calls by cm_adapter_gen. No CM-specific
+                // parameter handling needed here.
+                self.generate_args(func, args, type_table, ctx, builder);
 
                 // Check if this is a monomorphized function using metadata
                 let base_struct_name = static_func.base_struct_name();
@@ -7962,302 +7933,9 @@ impl Codegen<'_> {
                         }
                     }
 
-                    // Try WASI function resolution for resource static methods
-                    // Resource methods like Response::new are registered
-                    // in wasi_registry under "Response::new"
-                    if let Some(func_info) = self.project.wasi_registry.get_function(&func_name) {
-                        let local_name = func_info.local_alias_name();
-
-                        // Compute ABI properties from return type
-                        let outptr_alloc = func_info.return_type.as_ref().and_then(|rt| {
-                            let flat = crate::cm_abi::cm_flat_types(rt);
-                            if flat.len() > 1 {
-                                Some((crate::cm_abi::cm_size(rt), crate::cm_abi::cm_align(rt)))
-                            } else {
-                                None
-                            }
-                        });
-                        let tuple_return = func_info
-                            .return_type
-                            .as_ref()
-                            .and_then(crate::cm_abi::cm_tuple_primitive_types);
-                        let result_return = func_info
-                            .return_type
-                            .as_ref()
-                            .and_then(crate::cm_abi::cm_result_return_info);
-
-                        // Handle outptr allocation for Result returns
-                        if let Some((size, align)) = outptr_alloc {
-                            // Allocate outptr using realloc
-                            func.instruction(&Instruction::I32Const(0)); // old_ptr
-                            func.instruction(&Instruction::I32Const(0)); // old_size
-                            func.instruction(&Instruction::I32Const(align as i32)); // align
-                            func.instruction(&Instruction::I32Const(size as i32)); // new_size
-                            let realloc_idx = builder.func_idx("realloc");
-                            func.instruction(&Instruction::Call(realloc_idx));
-
-                            // Store outptr for later use
-                            let outptr_local = ctx.get_local("__cm_outptr").expect(
-                                "__cm_outptr should be pre-allocated for functions with CM complex returns",
-                            );
-                            func.instruction(&Instruction::LocalTee(outptr_local));
-                        }
-
-                        // Call the WASI function
-                        let func_idx = builder.func_idx(&local_name);
-                        func.instruction(&Instruction::Call(func_idx));
-
-                        // Handle tuple return conversion (e.g., Response::new -> [Response, Future])
-                        if let Some(ref elements) = tuple_return {
-                            let outptr_local = ctx.get_local("__cm_outptr").expect(
-                                "__cm_outptr should be pre-allocated for functions with tuple returns",
-                            );
-
-                            // Load all values from outptr onto the stack
-                            let mut offset: u32 = 0;
-                            for prim in elements {
-                                let align = prim.align();
-                                if !offset.is_multiple_of(align) {
-                                    offset += align - (offset % align);
-                                }
-
-                                func.instruction(&Instruction::LocalGet(outptr_local));
-                                match prim {
-                                    CmPrimitiveType::I32 | CmPrimitiveType::U32 => {
-                                        func.instruction(&Instruction::I32Load(
-                                            wasm_encoder::MemArg {
-                                                offset: u64::from(offset),
-                                                align: 2,
-                                                memory_index: 0,
-                                            },
-                                        ));
-                                    }
-                                    CmPrimitiveType::I64 | CmPrimitiveType::U64 => {
-                                        func.instruction(&Instruction::I64Load(
-                                            wasm_encoder::MemArg {
-                                                offset: u64::from(offset),
-                                                align: 3,
-                                                memory_index: 0,
-                                            },
-                                        ));
-                                    }
-                                    CmPrimitiveType::F32 => {
-                                        func.instruction(&Instruction::F32Load(
-                                            wasm_encoder::MemArg {
-                                                offset: u64::from(offset),
-                                                align: 2,
-                                                memory_index: 0,
-                                            },
-                                        ));
-                                    }
-                                    CmPrimitiveType::F64 => {
-                                        func.instruction(&Instruction::F64Load(
-                                            wasm_encoder::MemArg {
-                                                offset: u64::from(offset),
-                                                align: 3,
-                                                memory_index: 0,
-                                            },
-                                        ));
-                                    }
-                                }
-                                offset += prim.size();
-                            }
-
-                            // Create tuple struct from the loaded values
-                            let type_idx =
-                                self.get_struct_or_tuple_type_idx(expr.type_id, type_table);
-                            func.instruction(&Instruction::StructNew(type_idx));
-
-                            // Free the outptr linear memory
-                            if let Some((alloc_size, alloc_align)) = outptr_alloc {
-                                let temp = ctx
-                                    .get_local("__cm_result_temp")
-                                    .expect("__cm_result_temp should be pre-allocated");
-                                func.instruction(&Instruction::LocalSet(temp));
-                                func.instruction(&Instruction::LocalGet(outptr_local));
-                                func.instruction(&Instruction::I32Const(alloc_size as i32));
-                                func.instruction(&Instruction::I32Const(alloc_align as i32));
-                                func.instruction(&Instruction::I32Const(0));
-                                let realloc_idx = builder.func_idx("realloc");
-                                func.instruction(&Instruction::Call(realloc_idx));
-                                func.instruction(&Instruction::Drop);
-                                func.instruction(&Instruction::LocalGet(temp));
-                                func.instruction(&Instruction::RefCastNullable(
-                                    HeapType::Concrete(type_idx),
-                                ));
-                            }
-                        } else if let Some((ok_is_resource, _err_is_enum)) = result_return {
-                            let outptr_local = ctx
-                                .get_local("__cm_outptr")
-                                .expect("__cm_outptr should be pre-allocated for Result returns");
-
-                            // Get Result type info for Ok and Err subtypes
-                            let result_type_id = expr.type_id;
-                            let mangled_name = type_table.mangle_type_name(result_type_id);
-                            let result_module_source = match type_table.get(result_type_id) {
-                                ResolvedType::GenericInstance { module_source, .. } => {
-                                    module_source.clone()
-                                }
-                                other => {
-                                    panic!("Expected GenericInstance (Result), got: {other:?}")
-                                }
-                            };
-                            let qualified_mangled_name =
-                                result_module_source.qualify_name(&mangled_name);
-                            let variant_types = &self.variant_types;
-                            let result_info = variant_types
-                                .get(&qualified_mangled_name)
-                                .unwrap_or_else(|| {
-                                    panic!("Result type not registered: {qualified_mangled_name}")
-                                });
-                            // Result has cases [Ok (0), Err (1)]
-                            let ok_type_idx = result_info.cases[0].type_idx;
-                            let err_type_idx = result_info.cases[1].type_idx;
-                            let base_type_idx = result_info.base_type_idx;
-
-                            // Result type for block result
-                            let result_ref_type = ValType::Ref(RefType {
-                                nullable: true,
-                                heap_type: HeapType::Concrete(base_type_idx),
-                            });
-
-                            // Read discriminant from outptr
-                            func.instruction(&Instruction::LocalGet(outptr_local));
-                            func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                                offset: 0,
-                                align: 2,
-                                memory_index: 0,
-                            }));
-
-                            // Branch based on discriminant: 0 = Ok, non-zero = Err
-                            func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                                result_ref_type,
-                            )));
-
-                            // Err case (discriminant != 0)
-                            func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                            // When error type is a variant/enum, the CM value is a discriminant
-                            // that needs to be wrapped in the error variant's GC struct.
-                            // Must create the specific subtype for ref.cast in pattern matching.
-                            // When error type is a variant with GC subtypes, dispatch via br_table
-                            // to create the correct subtype. Otherwise just load the i32 from outptr.
-                            let mut emitted_err_dispatch = false;
-                            if _err_is_enum
-                                && let Some(ValType::Ref(ref_type)) =
-                                    &result_info.cases[1].payload_type
-                                && let HeapType::Concrete(error_base_idx) = ref_type.heap_type
-                            {
-                                let error_variant_info = self
-                                    .variant_types
-                                    .values()
-                                    .find(|v| v.base_type_idx == error_base_idx);
-
-                                if let Some(variant_info) = error_variant_info {
-                                    // Save CM error discriminant to local (blocks partition the stack)
-                                    func.instruction(&Instruction::LocalGet(outptr_local));
-                                    func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                                        offset: 4,
-                                        align: 2,
-                                        memory_index: 0,
-                                    }));
-                                    let err_disc_local =
-                                        ctx.alloc_local("__cm_err_disc", ValType::I32);
-                                    func.instruction(&Instruction::LocalSet(err_disc_local));
-
-                                    let error_ref_type = ValType::Ref(RefType {
-                                        nullable: true,
-                                        heap_type: HeapType::Concrete(error_base_idx),
-                                    });
-                                    let num_cases = variant_info.cases.len();
-
-                                    func.instruction(&Instruction::Block(
-                                        wasm_encoder::BlockType::Result(error_ref_type),
-                                    ));
-                                    for _ in 0..num_cases {
-                                        func.instruction(&Instruction::Block(
-                                            wasm_encoder::BlockType::Empty,
-                                        ));
-                                    }
-                                    func.instruction(&Instruction::LocalGet(err_disc_local));
-                                    let labels: Vec<u32> = (0..num_cases as u32).collect();
-                                    func.instruction(&Instruction::BrTable(labels.into(), 0));
-                                    for i in 0..num_cases {
-                                        func.instruction(&Instruction::End);
-                                        func.instruction(&Instruction::I32Const(i as i32));
-                                        func.instruction(&Instruction::StructNew(
-                                            variant_info.cases[i].type_idx,
-                                        ));
-                                        if i < num_cases - 1 {
-                                            func.instruction(&Instruction::Br(
-                                                (num_cases - 1 - i) as u32,
-                                            ));
-                                        }
-                                    }
-                                    func.instruction(&Instruction::End);
-                                    emitted_err_dispatch = true;
-                                }
-                            }
-                            if !emitted_err_dispatch {
-                                // Simple error: load the error value from outptr
-                                func.instruction(&Instruction::LocalGet(outptr_local));
-                                func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                                    offset: 4,
-                                    align: 2,
-                                    memory_index: 0,
-                                }));
-                            }
-                            func.instruction(&Instruction::StructNew(err_type_idx));
-
-                            func.instruction(&Instruction::Else);
-
-                            // Ok case (discriminant == 0)
-                            let ok_has_payload = result_info.cases[0].payload_type.is_some();
-                            func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                            if ok_has_payload {
-                                func.instruction(&Instruction::LocalGet(outptr_local));
-                                if ok_is_resource {
-                                    // Resource handle is i32
-                                    func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                                        offset: 4,
-                                        align: 2,
-                                        memory_index: 0,
-                                    }));
-                                } else {
-                                    // Primitive type - for now assume i32
-                                    func.instruction(&Instruction::I32Load(wasm_encoder::MemArg {
-                                        offset: 4,
-                                        align: 2,
-                                        memory_index: 0,
-                                    }));
-                                }
-                            }
-                            func.instruction(&Instruction::StructNew(ok_type_idx));
-
-                            func.instruction(&Instruction::End);
-
-                            // Free the outptr linear memory
-                            if let Some((alloc_size, alloc_align)) = outptr_alloc {
-                                let temp = ctx
-                                    .get_local("__cm_result_temp")
-                                    .expect("__cm_result_temp should be pre-allocated");
-                                func.instruction(&Instruction::LocalSet(temp));
-                                func.instruction(&Instruction::LocalGet(outptr_local));
-                                func.instruction(&Instruction::I32Const(alloc_size as i32));
-                                func.instruction(&Instruction::I32Const(alloc_align as i32));
-                                func.instruction(&Instruction::I32Const(0));
-                                let realloc_idx = builder.func_idx("realloc");
-                                func.instruction(&Instruction::Call(realloc_idx));
-                                func.instruction(&Instruction::Drop);
-                                func.instruction(&Instruction::LocalGet(temp));
-                                func.instruction(&Instruction::RefCastNullable(
-                                    HeapType::Concrete(base_type_idx),
-                                ));
-                            }
-                        }
-
-                        return;
-                    }
-
+                    // WASI resource static methods (e.g., Response::new) are now
+                    // rewritten to adapter function calls by cm_adapter_gen.
+                    // If we reach here, the function was not found.
                     panic!("unknown static method: {func_name}");
                 }
             }
