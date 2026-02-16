@@ -254,28 +254,28 @@ test "compress_bound exceeds source length" {
     assert bound > 1000;
 }
 
-test "compression level 0 stored round-trip" {
+test "compression level 0 (stored) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress2(&data, Z_NO_COMPRESSION);
     let decompressed = inflate_zlib(&compressed);
     assert bytes_equal(&data, &decompressed);
 }
 
-test "compression level 1 fastest round-trip" {
+test "compression level 1 (fastest) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress2(&data, Z_BEST_SPEED);
     let decompressed = inflate_zlib(&compressed);
     assert bytes_equal(&data, &decompressed);
 }
 
-test "compression level 6 default round-trip" {
+test "compression level 6 (default) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress2(&data, Z_DEFAULT_COMPRESSION);
     let decompressed = inflate_zlib(&compressed);
     assert bytes_equal(&data, &decompressed);
 }
 
-test "compression level 9 best round-trip" {
+test "compression level 9 (best) round-trip" {
     let data = make_pattern_data(1000);
     let compressed = compress2(&data, Z_BEST_COMPRESSION);
     let decompressed = inflate_zlib(&compressed);

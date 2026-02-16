@@ -281,7 +281,7 @@ fn build_component_plan(project: &Project) -> ComponentPlan {
         .tests
         .iter()
         .map(|test| {
-            let export_name = test.function_name.trim_start_matches('_').replace('_', "-");
+            let export_name = sanitize_kebab_export_name(&test.function_name);
             TestExportPlan {
                 function_name: test.function_name.clone(),
                 export_name,
@@ -594,6 +594,36 @@ pub fn wasm_plan(mut project: Project) -> Result<Project, String> {
     Ok(project)
 }
 
+/// Convert a test function name (e.g., `__test_0_my_name`) to a valid kebab-case
+/// CM export name (e.g., `test-0-my-name`).
+///
+/// Test names may contain consecutive underscores when non-alphanumeric characters
+/// (like parentheses) in the original test string are each replaced with `_` by the
+/// resolver. A naive `replace('_', '-')` would produce consecutive dashes which
+/// violate the kebab-case requirement of the Component Model.
+fn sanitize_kebab_export_name(function_name: &str) -> String {
+    let raw = function_name
+        .trim_start_matches('_')
+        .replace('_', "-");
+    // Collapse consecutive dashes and strip trailing dashes
+    let mut prev_dash = false;
+    let collapsed: String = raw
+        .chars()
+        .filter(|&c| {
+            if c == '-' {
+                if prev_dash {
+                    return false;
+                }
+                prev_dash = true;
+            } else {
+                prev_dash = false;
+            }
+            true
+        })
+        .collect();
+    collapsed.trim_end_matches('-').to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -631,5 +661,26 @@ mod tests {
         assert!(!info.is_async);
         assert!(!info.is_http_handler);
         assert!(info.required_imports.is_empty());
+    }
+
+    #[test]
+    fn test_sanitize_kebab_export_name() {
+        // Simple case
+        assert_eq!(
+            sanitize_kebab_export_name("__test_0_simple"),
+            "test-0-simple"
+        );
+        // Consecutive underscores from parentheses in test name
+        assert_eq!(
+            sanitize_kebab_export_name("__test_23_compression_level_0__stored__round_trip"),
+            "test-23-compression-level-0-stored-round-trip"
+        );
+        // Trailing underscores
+        assert_eq!(
+            sanitize_kebab_export_name("__test_1_trailing__"),
+            "test-1-trailing"
+        );
+        // Unnamed test (no name part)
+        assert_eq!(sanitize_kebab_export_name("__test_5"), "test-5");
     }
 }
