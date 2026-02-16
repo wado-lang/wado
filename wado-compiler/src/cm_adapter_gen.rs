@@ -3732,7 +3732,12 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             for func_rc in &module.functions {
                 let mut func = func_rc.borrow_mut();
                 if let Some(body) = &mut func.body {
-                    rewrite_calls_in_block(body, &adapter_map, &entry_source, project.wasi_registry);
+                    rewrite_calls_in_block(
+                        body,
+                        &adapter_map,
+                        &entry_source,
+                        project.wasi_registry,
+                    );
                 }
             }
         }
@@ -4046,11 +4051,7 @@ fn fixup_expr_type(expr: &mut TirExpr, type_id: TypeId) {
 ///
 /// For multi-flat types like `Option<T>`, the Wado-level arg (e.g., `null`)
 /// is expanded into multiple i32 args (discriminant + payload).
-fn flatten_arg_for_call_site(
-    arg: &TirExpr,
-    flat_tys: &[TypeId],
-    flat_args: &mut Vec<TirExpr>,
-) {
+fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut Vec<TirExpr>) {
     match &arg.kind {
         // null literal → discriminant=0, payload=0 for each flat type
         TirExprKind::Null => {
@@ -4300,12 +4301,11 @@ fn rewrite_calls_in_expr(
             let wasi_func_info = wasi_registry.get_function(&func_name).cloned();
 
             // Extract args before replacing
-            let taken_args =
-                if let TirExprKind::StaticCall { args, .. } = &mut expr.kind {
-                    std::mem::take(args)
-                } else {
-                    unreachable!()
-                };
+            let taken_args = if let TirExprKind::StaticCall { args, .. } = &mut expr.kind {
+                std::mem::take(args)
+            } else {
+                unreachable!()
+            };
 
             // Fix up adapter return type from the call site
             {
@@ -4345,11 +4345,7 @@ fn rewrite_calls_in_expr(
                                 flat.push(taken_args[i].clone());
                             } else {
                                 // Multi-flat type: flatten at call site
-                                flatten_arg_for_call_site(
-                                    &taken_args[i],
-                                    &flat_tys,
-                                    &mut flat,
-                                );
+                                flatten_arg_for_call_site(&taken_args[i], &flat_tys, &mut flat);
                             }
                         }
                     }

@@ -249,6 +249,7 @@ Import adapters use two strategies depending on the parameter type:
 The call-site flattening approach was chosen for Option\<T\> because adapter-internal lowering faces a fundamental type mismatch: Wado's `null` literal generates `ref.null` (a GC nullable reference) at the Wasm level, but the adapter would need to accept it as a parameter and extract an i32 discriminant + payload. Converting between GC references and i32 scalars requires non-trivial unwrapping logic (pattern matching, unboxing) that the TIR synthesizer cannot easily generate for all Option\<T\> instantiations.
 
 By flattening at the call site:
+
 - `null` → `[i32(0), i32(0), ...]` (discriminant=0, zero payload)
 - `OptionSome(value)` → `[i32(1), value, ...]` (discriminant=1, inner value)
 

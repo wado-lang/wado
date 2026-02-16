@@ -9,9 +9,8 @@ use crate::ast::Type;
 use crate::builtin_registry::BuiltinFunctionInfo;
 use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{
-    CmInstanceTypeGen, WasiFunctionInfo, WasiInterfaceInfo,
-    build_local_alias_name, flatten_wasi_param_type, return_type_requires_outptr,
-    type_id_to_valtype, wasi_type_to_valtype,
+    CmInstanceTypeGen, WasiFunctionInfo, WasiInterfaceInfo, build_local_alias_name,
+    flatten_wasi_param_type, return_type_requires_outptr, type_id_to_valtype, wasi_type_to_valtype,
 };
 use crate::copy_context::{ArrayCopyLocals, CopyContext};
 use crate::name::{
