@@ -74,7 +74,7 @@ Codegen resolves `local_name` to the imported function index. This node is also 
 
 ### Import Adapters — Complete
 
-All WASI interfaces (cli, clocks, random, http, sockets) use adapter synthesis. The old codegen CM paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) and per-type converters (`cm_list_string_to_array`, `cm_option_string_to_option`, etc.) have been deleted.
+All WASI interfaces (cli, clocks, random, http, sockets) use adapter synthesis. Both instance method calls (MethodCall, e.g., `fields.append(name, value)`) and resource static method calls (StaticCall, e.g., `Response::new(headers, null, trailers)`) are rewritten to adapter calls. The old codegen CM paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) and per-type converters (`cm_list_string_to_array`, `cm_option_string_to_option`, etc.) have been deleted.
 
 ### Export Adapters — Async Only
 
@@ -238,6 +238,23 @@ For `Array<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat
 - Requires `builtin::realloc` to be linked (always true for programs with linear memory)
 - Allocates and immediately frees 8 bytes (wasteful but correct)
 - Could be optimized with a direct `synthesize_lift_list_from_flat` that takes ptr/len as locals
+
+#### Call-Site Flattening for Multi-Flat Parameters
+
+Import adapters use two strategies depending on the parameter type:
+
+- **Adapter-internal lowering** (String, Array\<u8\>): The adapter accepts a single Wado-level parameter and lowers it internally to multiple flat CM args (ptr + len). This works because String and Array have well-defined Wado TypeIds that codegen can convert to Wasm types.
+- **Call-site flattening** (Option\<T\>, other multi-flat types): The adapter accepts pre-flattened i32 params, and the call-site rewrite transforms Wado-level args into flat values before passing them.
+
+The call-site flattening approach was chosen for Option\<T\> because adapter-internal lowering faces a fundamental type mismatch: Wado's `null` literal generates `ref.null` (a GC nullable reference) at the Wasm level, but the adapter would need to accept it as a parameter and extract an i32 discriminant + payload. Converting between GC references and i32 scalars requires non-trivial unwrapping logic (pattern matching, unboxing) that the TIR synthesizer cannot easily generate for all Option\<T\> instantiations.
+
+By flattening at the call site:
+- `null` → `[i32(0), i32(0), ...]` (discriminant=0, zero payload)
+- `OptionSome(value)` → `[i32(1), value, ...]` (discriminant=1, inner value)
+
+The adapter body becomes a simple pass-through for these parameters. This avoids the GC-to-scalar type mismatch entirely.
+
+Current limitation: only literal `null` and `OptionSome` expressions are supported at call sites. Arbitrary `Option<T>` variables would require runtime null-check logic at the rewrite site, which is not yet implemented.
 
 #### No Type-Level Validation
 
