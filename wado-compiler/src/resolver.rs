@@ -2274,7 +2274,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Resolve the initializer expression with expected type for type inference
         let initializer =
-            self.resolve_expr_with_expected_type(&global_decl.initializer, &mut ctx, Some(ty));
+            self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         // Type check: initializer type must match declared type
         if initializer.type_id != ty
@@ -2748,7 +2748,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 && let Stmt::Expr(expr_stmt) = s
             {
                 let expr =
-                    self.resolve_expr_with_expected_type(&expr_stmt.expr, ctx, Some(expected_type));
+                    self.resolve_expr(&expr_stmt.expr, ctx, Some(expected_type));
                 stmts.push(TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span));
                 continue;
             }
@@ -2818,7 +2818,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         .iter()
                         .map(|elem| {
                             let resolved =
-                                self.resolve_expr_with_expected_type(elem, ctx, Some(element_type));
+                                self.resolve_expr(elem, ctx, Some(element_type));
                             if resolved.type_id != element_type
                                 && resolved.type_id != TypeTable::UNKNOWN
                             {
@@ -2850,7 +2850,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .map(|(i, elem)| {
                                 let expected = expected_elem_types.get(i).copied();
                                 let resolved =
-                                    self.resolve_expr_with_expected_type(elem, ctx, expected);
+                                    self.resolve_expr(elem, ctx, expected);
                                 // Check if element type matches expected
                                 if let Some(expected_type) = expected
                                     && resolved.type_id != expected_type
@@ -2885,7 +2885,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         );
                         (value, target_type)
                     } else {
-                        let value = self.resolve_expr(&let_stmt.value, ctx);
+                        let value = self.resolve_expr(&let_stmt.value, ctx, None);
                         (value, target_type)
                     }
                 }
@@ -2898,12 +2898,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         let name = name.clone();
                         let struct_type = target_type;
 
+                        let struct_field_types: Vec<(String, TypeId)> = self
+                            .struct_fields
+                            .get(&name)
+                            .map(|info| info.fields.clone())
+                            .unwrap_or_default();
+
                         let fields: Vec<TirStructField> = struct_lit
                             .fields
                             .iter()
                             .enumerate()
                             .map(|(index, field)| {
-                                let value = self.resolve_expr(&field.value, ctx);
+                                let expected_field_type = struct_field_types
+                                    .iter()
+                                    .find(|(n, _)| n == &field.name)
+                                    .map(|(_, type_id)| *type_id);
+                                let value =
+                                    self.resolve_expr(&field.value, ctx, expected_field_type);
                                 TirStructField {
                                     name: field.name.clone(),
                                     value,
@@ -2929,22 +2940,22 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             found: "implicit struct literal".into(),
                             span: struct_lit.span,
                         });
-                        let value = self.resolve_expr(&let_stmt.value, ctx);
+                        let value = self.resolve_expr(&let_stmt.value, ctx, None);
                         (value, target_type)
                     }
                 } else {
                     // Named struct literal - resolve normally
-                    let value = self.resolve_expr(&let_stmt.value, ctx);
+                    let value = self.resolve_expr(&let_stmt.value, ctx, None);
                     (value, target_type)
                 }
             } else {
                 // Use expected type for numeric literal coercion
                 let value =
-                    self.resolve_expr_with_expected_type(&let_stmt.value, ctx, Some(target_type));
+                    self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
                 (value, target_type)
             }
         } else {
-            let value = self.resolve_expr(&let_stmt.value, ctx);
+            let value = self.resolve_expr(&let_stmt.value, ctx, None);
             (value.clone(), value.type_id)
         };
 
@@ -3097,7 +3108,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve an expression statement
     fn resolve_expr_stmt(&mut self, expr_stmt: &ExprStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let expr = self.resolve_expr(&expr_stmt.expr, ctx);
+        let expr = self.resolve_expr(&expr_stmt.expr, ctx, None);
         TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span)
     }
 
@@ -3106,7 +3117,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let return_type = ctx.return_type;
         let value = ret_stmt.value.as_ref().map(|expr| {
             // Use expected type for coercion (numeric literals, tuple to array, etc.)
-            self.resolve_expr_with_expected_type(expr, ctx, Some(return_type))
+            self.resolve_expr(expr, ctx, Some(return_type))
         });
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
     }
@@ -3128,7 +3139,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
                 // Regular expression condition
-                let condition = self.resolve_expr(expr, ctx);
+                let condition = self.resolve_expr(expr, ctx, None);
                 let then_block = self.resolve_block(&if_stmt.then_block, ctx);
                 let else_block = if_stmt
                     .else_block
@@ -3146,7 +3157,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             ast::Condition::Pattern { pattern, expr, .. } => {
                 // Pattern match condition: if let Some(x) = expr { ... }
-                let scrutinee = self.resolve_expr(expr, ctx);
+                let scrutinee = self.resolve_expr(expr, ctx, None);
                 let scrutinee_type = scrutinee.type_id;
 
                 // Enter scope for pattern bindings (they're only visible in then_block)
@@ -3429,7 +3440,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve a break statement
     fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let value = break_stmt.value.as_ref().map(|v| self.resolve_expr(v, ctx));
+        let value = break_stmt.value.as_ref().map(|v| self.resolve_expr(v, ctx, None));
 
         // Validate that the target label exists
         if let Some(label) = &break_stmt.label
@@ -3467,7 +3478,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve an expression
-    fn resolve_expr(&mut self, expr: &Expr, ctx: &mut FunctionContext) -> TirExpr {
+    fn resolve_expr_core(&mut self, expr: &Expr, ctx: &mut FunctionContext) -> TirExpr {
         match expr {
             Expr::Literal(lit) => self.resolve_literal(lit, ctx),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx),
@@ -3838,7 +3849,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Check for associated constants (e.g., f64::PI, i32::MAX)
         if let Some((const_ty, const_expr)) = self.associated_constants.get(&ident.name).cloned() {
             let type_id = self.resolve_type(&const_ty);
-            let resolved = self.resolve_expr_with_expected_type(&const_expr, ctx, Some(type_id));
+            let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 
@@ -4000,33 +4011,33 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left to right's type
-            let right = self.resolve_expr(&binary.right, ctx);
+            let right = self.resolve_expr(&binary.right, ctx, None);
             let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
                 Some(right.type_id)
             } else {
                 None
             };
-            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, coerce_type);
+            let left = self.resolve_expr(&binary.left, ctx, coerce_type);
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right to left's type
-            let left = self.resolve_expr(&binary.left, ctx);
+            let left = self.resolve_expr(&binary.left, ctx, None);
             let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
                 Some(left.type_id)
             } else {
                 None
             };
-            let right = self.resolve_expr_with_expected_type(&binary.right, ctx, coerce_type);
+            let right = self.resolve_expr(&binary.right, ctx, coerce_type);
             (left, right)
         } else if left_is_numeric_literal && right_is_numeric_literal {
             // Both literals - use expected type from context (e.g., assignment target)
-            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, expected_type);
-            let right = self.resolve_expr_with_expected_type(&binary.right, ctx, expected_type);
+            let left = self.resolve_expr(&binary.left, ctx, expected_type);
+            let right = self.resolve_expr(&binary.right, ctx, expected_type);
             (left, right)
         } else {
             // Both non-literals - resolve normally
-            let left = self.resolve_expr(&binary.left, ctx);
-            let right = self.resolve_expr(&binary.right, ctx);
+            let left = self.resolve_expr(&binary.left, ctx, None);
+            let right = self.resolve_expr(&binary.right, ctx, None);
             (left, right)
         };
 
@@ -4415,7 +4426,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve a unary expression
     fn resolve_unary(&mut self, unary: &ast::UnaryExpr, ctx: &mut FunctionContext) -> TirExpr {
-        let expr = self.resolve_expr(&unary.expr, ctx);
+        let expr = self.resolve_expr(&unary.expr, ctx, None);
         let op = convert_unary_op(unary.op);
 
         // Track address-taken locals for &x and &mut x
@@ -4656,7 +4667,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
         if let ast::Expr::Index(index_expr) = &assign.target {
             // Resolve the indexed expression to get its type
-            let indexed_expr = self.resolve_expr(&index_expr.expr, ctx);
+            let indexed_expr = self.resolve_expr(&index_expr.expr, ctx, None);
 
             // Get base type (unwrap reference if needed)
             let base_type_id = match self.type_table.borrow().get(indexed_expr.type_id) {
@@ -4675,14 +4686,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 };
 
                 if !struct_name.is_empty() {
-                    let index_resolved = self.resolve_expr(&index_expr.index, ctx);
+                    let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
                     let index_type = index_resolved.type_id;
 
                     if let Some(trait_info) =
                         self.find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
                     {
                         // Generate: expr.index_assign(index, value)
-                        let value = self.resolve_expr(&assign.value, ctx);
+                        let value = self.resolve_expr(&assign.value, ctx, None);
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,
@@ -4722,10 +4733,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Standard assignment handling
-        let target = self.resolve_expr(&assign.target, ctx);
+        let target = self.resolve_expr(&assign.target, ctx, None);
         // Use target's type as expected type for value resolution
         // This enables coercion of empty array literals [] to the field's Array<T> type
-        let value = self.resolve_expr_with_expected_type(&assign.value, ctx, Some(target.type_id));
+        let value = self.resolve_expr(&assign.value, ctx, Some(target.type_id));
 
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
@@ -4819,8 +4830,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         // This should have been desugared, but handle it anyway
-        let target = self.resolve_expr(&compound.target, ctx);
-        let value = self.resolve_expr(&compound.value, ctx);
+        let target = self.resolve_expr(&compound.target, ctx, None);
+        let value = self.resolve_expr(&compound.value, ctx, None);
 
         let op = match compound.op {
             ast::CompoundAssignOp::Add => TirBinaryOp::Add,
@@ -4859,7 +4870,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> TirExpr {
         // This should have been desugared to binary && chain
         // Just resolve the first expression for now
-        self.resolve_expr(&chain.first, ctx)
+        self.resolve_expr(&chain.first, ctx, None)
     }
 
     /// Resolve a call expression
@@ -4892,7 +4903,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         .enumerate()
                         .map(|(i, arg)| {
                             let expected_type = fn_params.get(i).copied();
-                            self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                            self.resolve_expr(arg, ctx, expected_type)
                         })
                         .collect();
 
@@ -4922,7 +4933,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // This handles calling closures stored in struct fields
         if let Expr::FieldAccess(_field_access) = &call.callee {
             // Resolve the callee expression to get the field type
-            let callee_expr = self.resolve_expr(&call.callee, ctx);
+            let callee_expr = self.resolve_expr(&call.callee, ctx, None);
             let callee_type = self.type_table.borrow().get(callee_expr.type_id).clone();
 
             if let ResolvedType::Function {
@@ -4942,7 +4953,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     .enumerate()
                     .map(|(i, arg)| {
                         let expected_type = fn_params.get(i).copied();
-                        self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                        self.resolve_expr(arg, ctx, expected_type)
                     })
                     .collect();
 
@@ -4967,7 +4978,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = param_types.get(i).copied();
-                self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
 
@@ -5509,7 +5520,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve an expression with an expected type for coercion
-    fn resolve_expr_with_expected_type(
+    fn resolve_expr(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,
@@ -5850,7 +5861,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ResolvedType::Struct { name, .. } if name == "String"
             ) && target_type != base_id;
             if is_string_newtype {
-                let mut resolved = self.resolve_expr(expr, ctx);
+                let mut resolved = self.resolve_expr_core(expr, ctx);
                 resolved.type_id = target_type;
                 return resolved;
             }
@@ -5866,7 +5877,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ResolvedType::Struct { name, .. } if name == "String"
             ) && target_type != base_id;
             if is_string_newtype {
-                let mut resolved = self.resolve_expr(expr, ctx);
+                let mut resolved = self.resolve_expr_core(expr, ctx);
                 resolved.type_id = target_type;
                 return resolved;
             }
@@ -5883,7 +5894,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .iter()
                 .map(|elem| {
                     // Pass the element type as expected type for recursive coercion
-                    self.resolve_expr_with_expected_type(elem, ctx, Some(element_type))
+                    self.resolve_expr(elem, ctx, Some(element_type))
                 })
                 .collect();
 
@@ -5921,7 +5932,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Normal expression resolution
-        self.resolve_expr(expr, ctx)
+        self.resolve_expr_core(expr, ctx)
     }
 
     /// Resolve a type without registering new types
@@ -5943,7 +5954,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return result;
         }
 
-        let mut receiver = self.resolve_expr(&method_call.receiver, ctx);
+        let mut receiver = self.resolve_expr(&method_call.receiver, ctx, None);
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
@@ -6099,7 +6110,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = expected_param_types.get(i).copied();
-                self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
 
@@ -6316,7 +6327,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .enumerate()
             .map(|(i, a)| {
                 let expected_type = param_types.get(i).copied();
-                self.resolve_expr_with_expected_type(a, ctx, expected_type)
+                self.resolve_expr(a, ctx, expected_type)
             })
             .collect();
 
@@ -9071,7 +9082,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         // First, resolve the indexed container to get its type
-        let container_expr = self.resolve_expr(&index_expr.expr, ctx);
+        let container_expr = self.resolve_expr(&index_expr.expr, ctx, None);
 
         // Check if this is an Array type (Arrays use optimized direct access, not traits)
         let is_array = self
@@ -9097,7 +9108,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
 
         // Check if the type implements IndexMut
-        let index_resolved = self.resolve_expr(&index_expr.index, ctx);
+        let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
         let index_type = index_resolved.type_id;
 
         let index_mut_info =
@@ -9211,7 +9222,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let args: Vec<TirExpr> = method_call
             .args
             .iter()
-            .map(|a| self.resolve_expr(a, ctx))
+            .map(|a| self.resolve_expr(a, ctx, None))
             .collect();
 
         // Step 3: Resolve method type args
@@ -9263,7 +9274,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         field_access: &ast::FieldAccessExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let expr = self.resolve_expr(&field_access.expr, ctx);
+        let expr = self.resolve_expr(&field_access.expr, ctx, None);
 
         // Look up field type from struct type
         let (field_index, field_type) =
@@ -9473,7 +9484,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve an index expression
     fn resolve_index(&mut self, index: &ast::IndexExpr, ctx: &mut FunctionContext) -> TirExpr {
-        let expr = self.resolve_expr(&index.expr, ctx);
+        let expr = self.resolve_expr(&index.expr, ctx, None);
 
         // Get base type (unwrap reference if needed)
         let base_type_id = match self.type_table.borrow().get(expr.type_id) {
@@ -9534,7 +9545,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
 
         if !struct_name.is_empty() {
-            let index_expr = self.resolve_expr(&index.index, ctx);
+            let index_expr = self.resolve_expr(&index.index, ctx, None);
             let index_type = index_expr.type_id;
 
             // First, try Index trait (returns reference)
@@ -9696,7 +9707,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Resolve the condition
         let condition = match &if_expr.condition {
-            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
+            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, None),
             ast::Condition::Pattern { span, .. } => {
                 let _ = self.logger.error(TypeError::NotYetImplemented {
                     feature: "pattern matching in if expressions (use if statement instead)"
@@ -9795,7 +9806,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Resolve the condition
         let condition = match &if_expr.condition {
-            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
+            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, None),
             ast::Condition::Pattern { span, .. } => {
                 let _ = self.logger.error(TypeError::NotYetImplemented {
                     feature: "pattern matching in if expressions (use if statement instead)"
@@ -9837,7 +9848,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         match_expr: &ast::MatchExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let scrutinee = self.resolve_expr(&match_expr.expr, ctx);
+        let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
         let arms: Vec<TirMatchArm> = match_expr
@@ -9876,10 +9887,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
 
         // Resolve optional guard expression
-        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx));
+        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx, None));
 
         // Resolve arm body
-        let body = self.resolve_expr(&arm.body, ctx);
+        let body = self.resolve_expr(&arm.body, ctx, None);
 
         ctx.exit_scope();
 
@@ -9898,7 +9909,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         ctx: &mut FunctionContext,
         expected_type: TypeId,
     ) -> TirExpr {
-        let scrutinee = self.resolve_expr(&match_expr.expr, ctx);
+        let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
         let arms: Vec<TirMatchArm> = match_expr
@@ -9932,10 +9943,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
 
         // Resolve optional guard expression
-        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx));
+        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx, None));
 
         // Resolve arm body with expected type for coercion
-        let body = self.resolve_expr_with_expected_type(&arm.body, ctx, Some(expected_type));
+        let body = self.resolve_expr(&arm.body, ctx, Some(expected_type));
 
         ctx.exit_scope();
 
@@ -9971,7 +9982,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .collect();
 
         // Resolve body - this will detect captured variables
-        let body = self.resolve_expr(&closure.body, &mut closure_ctx);
+        let body = self.resolve_expr(&closure.body, &mut closure_ctx, None);
 
         // Build capture list from detected captures
         let captures: Vec<TirCapture> = closure_ctx
@@ -10044,7 +10055,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         if template.parts.len() == 1
             && let ast::TemplatePart::Interpolation { expr, format: None } = &template.parts[0]
         {
-            let resolved = self.resolve_expr(expr, ctx);
+            let resolved = self.resolve_expr(expr, ctx, None);
             if resolved.type_id == string_type {
                 return resolved;
             }
@@ -10156,7 +10167,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     stmts.push(TirStmt::new(TirStmtKind::Expr(append_call), span));
                 }
                 ast::TemplatePart::Interpolation { expr, format } => {
-                    let resolved = self.resolve_expr(expr, ctx);
+                    let resolved = self.resolve_expr(expr, ctx, None);
 
                     // If String type with no format spec, just append directly
                     if resolved.type_id == string_type && format.is_none() {
@@ -10736,7 +10747,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .iter()
                 .map(|elem| {
                     let resolved =
-                        self.resolve_expr_with_expected_type(elem, ctx, Some(element_type));
+                        self.resolve_expr(elem, ctx, Some(element_type));
                     // Type check: each element must match Array element type
                     if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
                         let _ = self.logger.error(TypeError::TypeMismatch {
@@ -10868,7 +10879,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
 
             // General expression cast (not a literal)
-            let expr_resolved = self.resolve_expr(&cast.expr, ctx);
+            let expr_resolved = self.resolve_expr(&cast.expr, ctx, None);
             let source_type = expr_resolved.type_id;
 
             // Check if source type is a numeric type we can convert from
@@ -10914,7 +10925,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Normal cast
-        let expr = self.resolve_expr(&cast.expr, ctx);
+        let expr = self.resolve_expr(&cast.expr, ctx, None);
         let source_type = expr.type_id;
 
         // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
@@ -11091,7 +11102,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
                 let mut value =
-                    self.resolve_expr_with_expected_type(&field.value, ctx, expected_field_type);
+                    self.resolve_expr(&field.value, ctx, expected_field_type);
 
                 // Check if this is a tuple literal that should become an array
                 // This happens when the struct field expects Array<T> and we have [...]
@@ -11381,7 +11392,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let elements: Vec<TirExpr> = tuple_lit
             .elements
             .iter()
-            .map(|elem| self.resolve_expr(elem, ctx))
+            .map(|elem| self.resolve_expr(elem, ctx, None))
             .collect();
 
         // Collect element types for the tuple type
