@@ -316,23 +316,32 @@ pub async fn compile_with_options<H: CompilerHost>(
         check_effects(&project.tir_modules, &logger)?;
     }
 
-    // === Phase 7b: CM Adapter Synthesis (Project -> Project) ===
-    let project = {
-        let _span = logger.span("cm-adapter-gen");
-        cm_adapter_gen::generate_adapters(project)
-    };
-
-    // === Phase 8: Monomorphize (Project -> Project) ===
-    let mut project = {
-        let _span = logger.span("monomorphize");
-        monomorphize_project(project)
-    };
-
-    // Apply target world from options
+    // Apply target world from options (must be before CM adapter synthesis)
     // Convert WIT-style world specifier (e.g., "wasi:http/service") to internal name (e.g., "Service")
+    let mut project = project;
     if let Some(world) = options.target_world {
         project.target_world = normalize_world_name(&world);
     }
+
+    // === Phase 7b: CM Adapter Synthesis (Project -> Project) ===
+    let project = {
+        let _span = logger.span("cm-adapter-gen");
+        cm_adapter_gen::generate_adapters(project).map_err(|message| {
+            let _ = logger.error(compiler_host::Diagnostic {
+                severity: compiler_host::Severity::Error,
+                code: compiler_host::Code::UnsupportedFeature,
+                message,
+                span: None,
+            });
+            Bail
+        })?
+    };
+
+    // === Phase 8: Monomorphize (Project -> Project) ===
+    let project = {
+        let _span = logger.span("monomorphize");
+        monomorphize_project(project)
+    };
 
     // === Phase 9: Lower (Project -> Project) ===
     let project = {
@@ -497,7 +506,15 @@ pub async fn dump_with_host<H: CompilerHost>(
             // CM Adapter Synthesis (must run before monomorphize)
             let project = {
                 let _span = logger.span("cm-adapter-gen");
-                cm_adapter_gen::generate_adapters(project)
+                cm_adapter_gen::generate_adapters(project).map_err(|message| {
+                    let _ = logger.error(compiler_host::Diagnostic {
+                        severity: compiler_host::Severity::Error,
+                        code: compiler_host::Code::UnsupportedFeature,
+                        message,
+                        span: None,
+                    });
+                    Bail
+                })?
             };
 
             // Monomorphize

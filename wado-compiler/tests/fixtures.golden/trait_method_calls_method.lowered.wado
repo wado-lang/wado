@@ -51,12 +51,17 @@ fn "Point^Describable::describe"(self: &Point) -> String {
     };
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let p: Point = move Point { x: 3, y: 4 };
     core::cli::println(move p."Point^Describable::describe"());
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

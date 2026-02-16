@@ -89,7 +89,7 @@ fn apply_padding(s: String, spec: FormatSpec) -> String {
     };
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let left: FormatSpec = move FormatSpec { align: Align::Left, width: 10, fill: '*' };
     let center: FormatSpec = move FormatSpec { align: Align::Center, width: 10, fill: '*' };
     let right: FormatSpec = move FormatSpec { align: Align::Right, width: 10, fill: '*' };
@@ -100,5 +100,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

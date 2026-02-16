@@ -34,7 +34,7 @@ struct "BTreeNode<String,i32>" {
     is_leaf: bool,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::new"(3);
     map."TreeMap<String,i32>::insert"(move "apple", 1);
     map."TreeMap<String,i32>::insert"(move "banana", 2);
@@ -228,6 +228,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {

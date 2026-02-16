@@ -13,7 +13,7 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
-fn run() {
+export fn run() {
     let a: i32 = (0b0011 | (0b0100 & 0b0110));
     __assert_0: {
         let __cond: bool = (a == 0b0111);
@@ -302,5 +302,10 @@ fn run() {
             });
         }
     }
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

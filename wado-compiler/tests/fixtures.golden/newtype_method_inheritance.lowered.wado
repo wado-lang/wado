@@ -22,7 +22,7 @@ fn Point::add(self: &Point, other: &Point) -> Point {
     return Point { x: (self.x + other.x), y: (self.y + other.y) };
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let loc1: Location = Point { x: 10, y: 20 } as Location;
     let loc2: Location = Point { x: 5, y: 5 } as Location;
     let s: i32 = loc1.Location::sum();
@@ -70,5 +70,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

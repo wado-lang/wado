@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout, MonotonicClock {
+export fn run() with Stdout, MonotonicClock {
     let start: Mark = __cm_adapter__MonotonicClock_now();
     let res: Duration = __cm_adapter__MonotonicClock_get_resolution();
     if ((start > 0) && (res > 0)) {
@@ -35,5 +35,10 @@ fn __cm_adapter__MonotonicClock_now() -> Mark {
 
 fn __cm_adapter__MonotonicClock_get_resolution() -> Duration {
     return cm_raw_call wasi:clocks/MonotonicClock::get_resolution();
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout, Environment {
+export fn run() with Stdout, Environment {
     let arguments: Array<String> = move core::cli::args();
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
@@ -57,6 +57,11 @@ fn __cm_adapter__Environment_get_arguments() -> Array<String> {
     }
     core::builtin::realloc(__outptr, 8, 4, 0);
     return __result;
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {

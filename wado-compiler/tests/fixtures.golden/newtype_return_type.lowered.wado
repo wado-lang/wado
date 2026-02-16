@@ -22,7 +22,7 @@ fn Point::offset(self: &Point, dx: i32, dy: i32) -> Point {
     return Point { x: (self.x + dx), y: (self.y + dy) };
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let loc: Location = Point { x: 10, y: 20 } as Location;
     let loc2: Location = loc.Location::clone_point();
     core::cli::println(__tmpl: {
@@ -80,5 +80,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

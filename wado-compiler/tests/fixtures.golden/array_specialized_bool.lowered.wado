@@ -15,7 +15,7 @@ pub struct "ArrayIter<bool>" {
     index: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut arr: Array<bool> = move [];
     arr."Array<bool>::append"(true);
     arr."Array<bool>::append"(false);
@@ -52,6 +52,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "ArrayIter<bool>^Iterator::next"(self: &mut ArrayIter<bool>) -> Option<bool> {

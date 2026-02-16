@@ -15,7 +15,7 @@ pub struct "ArrayIter<String>" {
     index: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut arr: Array<String> = move [];
     arr."Array<String>::append"(move "hello");
     arr."Array<String>::append"(move "world");
@@ -36,6 +36,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "ArrayIter<String>^Iterator::next"(self: &mut ArrayIter<String>) -> Option<String> {

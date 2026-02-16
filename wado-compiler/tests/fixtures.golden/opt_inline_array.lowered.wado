@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let x: i32 = __inline_test_0: {
         let arr: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(10), used: 0 };
         break __inline_test_0: arr.used;
@@ -31,5 +31,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

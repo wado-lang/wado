@@ -27,7 +27,7 @@ struct __Closure_2 {
 struct __Closure_3 {
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5];
     let sum: i32 = ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 }."ArrayIter<i32>::fold<i32>$__Closure_0"(0, &__Closure_0 {  });
     core::cli::println(__tmpl: {
@@ -94,6 +94,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {

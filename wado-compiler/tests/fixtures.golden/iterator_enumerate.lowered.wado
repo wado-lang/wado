@@ -22,7 +22,7 @@ pub struct "ArrayIter<String>" {
     index: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let arr: Array<String> = move ["a", "b", "c"];
     let mut iter: EnumerateIter<String> = __inline_ArrayIter_String___enumerate_0: {
         let self: &ArrayIter<String> = &ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
@@ -57,6 +57,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "EnumerateIter<String>^Iterator::next"(self: &mut EnumerateIter<String>) -> Option<[i32, String]> {

@@ -18,7 +18,7 @@ struct BigInts {
     b: i128,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let b: BigInts = move BigInts { a: u128 { low: 42, high: 0 }, b: i128 { low: 18446744073709551516, high: -1 } };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(18), used: 0 };
@@ -90,5 +90,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

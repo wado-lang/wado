@@ -224,6 +224,8 @@ pub struct ComponentPlan {
 pub struct WorldExportPlan {
     /// Export function name (e.g., "run", "handle")
     pub name: String,
+    /// Core function name in the Wasm module (e.g., `"__cm_export__run"` if adapter exists, or `"run"`)
+    pub core_func_name: String,
     /// Whether this is an async export
     pub is_async: bool,
     /// Whether this is an HTTP handler (Service world)
@@ -239,6 +241,8 @@ pub struct WorldExportPlan {
 pub struct TestExportPlan {
     /// Internal function name (e.g., "__`test_0_simple`")
     pub function_name: String,
+    /// Core function name in Wasm module (adapter name if adapter exists, otherwise same as `function_name`)
+    pub core_func_name: String,
     /// Component export name in kebab-case (e.g., "test-0-simple")
     pub export_name: String,
 }
@@ -282,8 +286,14 @@ fn build_component_plan(project: &Project) -> ComponentPlan {
         .iter()
         .map(|test| {
             let export_name = test.function_name.trim_start_matches('_').replace('_', "-");
+            let core_func_name = project
+                .export_adapter_names
+                .get(&test.function_name)
+                .cloned()
+                .unwrap_or_else(|| test.function_name.clone());
             TestExportPlan {
                 function_name: test.function_name.clone(),
+                core_func_name,
                 export_name,
             }
         })
@@ -318,8 +328,15 @@ fn build_world_export_plans(project: &Project) -> Vec<WorldExportPlan> {
         .into_iter()
         .map(|export| {
             let is_http_handler = export.returns_http_response();
+            // Use export adapter if one was synthesized by cm_adapter_gen
+            let core_func_name = project
+                .export_adapter_names
+                .get(&export.name)
+                .cloned()
+                .unwrap_or_else(|| export.name.clone());
             WorldExportPlan {
                 name: export.name,
+                core_func_name,
                 is_async: export.is_async,
                 is_http_handler,
                 params: export.params,
@@ -530,6 +547,12 @@ pub fn wasm_plan(mut project: Project) -> Result<Project, String> {
 
         // Analyze each world export and attach CmExportInfo to corresponding TirFunction
         for export in &world_info.exports {
+            // If an export adapter was synthesized by cm_adapter_gen, the adapter
+            // handles task-return in its TIR body — no CmExportInfo needed.
+            if project.export_adapter_names.contains_key(&export.name) {
+                continue;
+            }
+
             let is_http_handler = export.returns_http_response();
             let cm_export_info = if export.is_async {
                 CmExportInfo::async_export(is_http_handler)
@@ -570,21 +593,6 @@ pub fn wasm_plan(mut project: Project) -> Result<Project, String> {
             // Note: We don't error on missing functions here because some worlds
             // have optional exports (e.g., HTTP Service's handle is optional if
             // you're just testing). The codegen will fail later if needed.
-        }
-    }
-
-    // Attach CmExportInfo to test functions (__test_*)
-    // Test functions are async exports that use task.return, just like CLI Command's run
-    let entry_module = project
-        .tir_modules
-        .get_mut(&project.entry_module_source)
-        .expect("entry module should exist");
-
-    for func_rc in &entry_module.functions {
-        let mut func = func_rc.borrow_mut();
-        if func.name.starts_with("__test_") && func.cm_export_info.is_none() {
-            // Test functions are async (need task.return) but not HTTP handlers
-            func.cm_export_info = Some(CmExportInfo::async_export(false));
         }
     }
 

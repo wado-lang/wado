@@ -23,7 +23,7 @@ struct "Tree<String>" {
     max_keys: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let tree: Tree<String> = move Tree<String> { root: Node<String> { keys: ["apple", "banana", "cherry", "date"], deleted: [false, true, false, false] }, max_keys: 5 };
     let result: i32 = tree."Tree<String>::check"();
     core::cli::println(__tmpl: {
@@ -44,6 +44,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Tree<String>::check"(self: &Tree<String>) -> i32 {

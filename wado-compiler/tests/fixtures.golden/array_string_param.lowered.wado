@@ -23,13 +23,18 @@ fn join_names(names: Array<String>) -> String {
     };
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let result: String = move join_names(move ["Alice", "Bob"]);
     core::cli::println(result);
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {

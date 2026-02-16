@@ -23,7 +23,7 @@ struct Outer {
     id: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut __sroa___sroa___sroa_data_middle_inner_value: i32 = 0;
     let mut __sroa___sroa_data_middle_label: String = move "initial";
     core::cli::println(__tmpl: {
@@ -69,5 +69,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

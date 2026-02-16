@@ -23,7 +23,7 @@ fn Point::move_by(self: &mut Point, dx: i32, dy: i32) {
     self.y = (self.y + dy);
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut __sroa_h1_point: Point = move Point { x: 0, y: 0 };
     let mut __sroa_h2_point: Point = move Point { x: 10, y: 10 };
     __sroa_h1_point.Point::move_by(5, 5);
@@ -84,5 +84,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

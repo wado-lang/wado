@@ -13,7 +13,7 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
-fn run() {
+export fn run() {
     let left_shift: i32 = (1 << 3);
     let right_shift: i32 = (16 >> 2);
     __assert_0: {
@@ -86,5 +86,10 @@ fn run() {
             });
         }
     }
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

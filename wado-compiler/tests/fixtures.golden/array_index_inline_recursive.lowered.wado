@@ -36,7 +36,7 @@ fn print_depth(depth: i32) with Stdout {
     });
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut leaf1: Node<String> = move Node<String> { keys: ["a", "b"], children: [], is_leaf: true };
     let mut leaf2: Node<String> = move Node<String> { keys: ["d", "e"], children: [], is_leaf: true };
     let root: Node<String> = move Node<String> { keys: ["c"], children: [&mut leaf1, &mut leaf2], is_leaf: false };
@@ -45,6 +45,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Node<String>::traverse"(self: &Node<String>, depth: i32) with Stdout {

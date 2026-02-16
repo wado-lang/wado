@@ -37,7 +37,7 @@ fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
     return true;
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     __initialize_modules();
     let data: Array<u8> = move [72, 101, 108, 108, 111];
     let comp_hello: Array<u8> = __inline_zlib_compress_0: {
@@ -549,6 +549,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
