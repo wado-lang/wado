@@ -2273,8 +2273,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
 
         // Resolve the initializer expression with expected type for type inference
-        let initializer =
-            self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
+        let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         // Type check: initializer type must match declared type
         if initializer.type_id != ty
@@ -2409,7 +2408,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Resolve body
-        let body = func.body.as_ref().map(|b| self.resolve_block(b, &mut ctx, None));
+        let body = func
+            .body
+            .as_ref()
+            .map(|b| self.resolve_block(b, &mut ctx, None));
 
         // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = func
@@ -2637,7 +2639,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Resolve body
-        let body = func.body.as_ref().map(|b| self.resolve_block(b, &mut ctx, None));
+        let body = func
+            .body
+            .as_ref()
+            .map(|b| self.resolve_block(b, &mut ctx, None));
 
         // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = func
@@ -2804,8 +2809,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         .elements
                         .iter()
                         .map(|elem| {
-                            let resolved =
-                                self.resolve_expr(elem, ctx, Some(element_type));
+                            let resolved = self.resolve_expr(elem, ctx, Some(element_type));
                             if resolved.type_id != element_type
                                 && resolved.type_id != TypeTable::UNKNOWN
                             {
@@ -2836,8 +2840,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .enumerate()
                             .map(|(i, elem)| {
                                 let expected = expected_elem_types.get(i).copied();
-                                let resolved =
-                                    self.resolve_expr(elem, ctx, expected);
+                                let resolved = self.resolve_expr(elem, ctx, expected);
                                 // Check if element type matches expected
                                 if let Some(expected_type) = expected
                                     && resolved.type_id != expected_type
@@ -2937,8 +2940,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
             } else {
                 // Use expected type for numeric literal coercion
-                let value =
-                    self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
+                let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
                 (value, target_type)
             }
         } else {
@@ -3427,7 +3429,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve a break statement
     fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let value = break_stmt.value.as_ref().map(|v| self.resolve_expr(v, ctx, None));
+        let value = break_stmt
+            .value
+            .as_ref()
+            .map(|v| self.resolve_expr(v, ctx, None));
 
         // Validate that the target label exists
         if let Some(label) = &break_stmt.label
@@ -5427,11 +5432,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Handles int, float, and i128/u128 coercion. Returns `None` if the expression
     /// is not a numeric literal or the target type is not numeric.
     #[allow(clippy::too_many_lines)]
-    fn try_coerce_numeric_literal(
-        &mut self,
-        expr: &Expr,
-        target_type: TypeId,
-    ) -> Option<TirExpr> {
+    fn try_coerce_numeric_literal(&mut self, expr: &Expr, target_type: TypeId) -> Option<TirExpr> {
         // Number literal coercion to integer
         if let Expr::Literal(lit) = expr
             && let Literal::Number(num_lit) = &lit.value
@@ -5796,19 +5797,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Try literal coercion when expected type is known
-        if let Some(target_type) = expected_type {
-            if let Some(coerced) = self.try_coerce(expr, ctx, target_type) {
-                return coerced;
-            }
+        if let Some(target_type) = expected_type
+            && let Some(coerced) = self.try_coerce(expr, ctx, target_type)
+        {
+            return coerced;
         }
 
         // Main expression dispatch
         match expr {
             Expr::Literal(lit) => self.resolve_literal(lit, ctx),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx),
-            Expr::Binary(binary) => {
-                self.resolve_binary(binary, ctx, expected_type)
-            }
+            Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
             Expr::Unary(unary) => self.resolve_unary(unary, ctx),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx),
@@ -9758,7 +9757,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         ctx.enter_scope();
 
         let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
-        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx, Some(TypeTable::BOOL)));
+        let guard = arm
+            .guard
+            .as_ref()
+            .map(|g| self.resolve_expr(g, ctx, Some(TypeTable::BOOL)));
         let body = self.resolve_expr(&arm.body, ctx, expected_type);
 
         ctx.exit_scope();
@@ -10559,8 +10561,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .elements
                 .iter()
                 .map(|elem| {
-                    let resolved =
-                        self.resolve_expr(elem, ctx, Some(element_type));
+                    let resolved = self.resolve_expr(elem, ctx, Some(element_type));
                     // Type check: each element must match Array element type
                     if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
                         let _ = self.logger.error(TypeError::TypeMismatch {
@@ -10914,8 +10915,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
-                let mut value =
-                    self.resolve_expr(&field.value, ctx, expected_field_type);
+                let mut value = self.resolve_expr(&field.value, ctx, expected_field_type);
 
                 // Check if this is a tuple literal that should become an array
                 // This happens when the struct field expects Array<T> and we have [...]
