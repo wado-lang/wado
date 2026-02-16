@@ -285,16 +285,12 @@ fn build_component_plan(project: &Project) -> ComponentPlan {
         .tests
         .iter()
         .map(|test| {
-<<<<<<< HEAD
             let export_name = sanitize_kebab_export_name(&test.function_name);
-=======
-            let export_name = test.function_name.trim_start_matches('_').replace('_', "-");
             let core_func_name = project
                 .export_adapter_names
                 .get(&test.function_name)
                 .cloned()
                 .unwrap_or_else(|| test.function_name.clone());
->>>>>>> origin/main
             TestExportPlan {
                 function_name: test.function_name.clone(),
                 core_func_name,
@@ -614,9 +610,7 @@ pub fn wasm_plan(mut project: Project) -> Result<Project, String> {
 /// resolver. A naive `replace('_', '-')` would produce consecutive dashes which
 /// violate the kebab-case requirement of the Component Model.
 fn sanitize_kebab_export_name(function_name: &str) -> String {
-    let raw = function_name
-        .trim_start_matches('_')
-        .replace('_', "-");
+    let raw = function_name.trim_start_matches('_').replace('_', "-");
     // Collapse consecutive dashes and strip trailing dashes
     let mut prev_dash = false;
     let collapsed: String = raw
