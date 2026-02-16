@@ -665,8 +665,8 @@ struct IndexTraitInfo {
 
 /// Info about an `IndexAssign` trait implementation
 struct IndexAssignTraitInfo {
-    /// The Input associated type (reserved for future type checking)
-    _input_type: TypeId,
+    /// The Input associated type
+    input_type: TypeId,
     /// Self kind for the `index_assign` method (&mut self)
     self_kind: ast::SelfKind,
     /// The trait name (e.g., "`IndexAssign`<i32>")
@@ -2273,8 +2273,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let mut ctx = FunctionContext::new(ty, format!("global:{}", global_decl.name));
 
         // Resolve the initializer expression with expected type for type inference
-        let initializer =
-            self.resolve_expr_with_expected_type(&global_decl.initializer, &mut ctx, Some(ty));
+        let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         // Type check: initializer type must match declared type
         if initializer.type_id != ty
@@ -2409,7 +2408,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Resolve body
-        let body = func.body.as_ref().map(|b| self.resolve_block(b, &mut ctx));
+        let body = func
+            .body
+            .as_ref()
+            .map(|b| self.resolve_block(b, &mut ctx, None));
 
         // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = func
@@ -2480,7 +2482,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
 
         // Resolve the test body
-        let body = self.resolve_block(&test_decl.body, &mut ctx);
+        let body = self.resolve_block(&test_decl.body, &mut ctx, None);
 
         let tir_func = TirFunction {
             name: function_name.clone(),
@@ -2637,7 +2639,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Resolve body
-        let body = func.body.as_ref().map(|b| self.resolve_block(b, &mut ctx));
+        let body = func
+            .body
+            .as_ref()
+            .map(|b| self.resolve_block(b, &mut ctx, None));
 
         // Convert AST type params to TIR type params (while type params still in scope)
         let type_params: Vec<crate::tir::TirTypeParam> = func
@@ -2720,35 +2725,22 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve a block
-    fn resolve_block(&mut self, block: &Block, ctx: &mut FunctionContext) -> TirBlock {
-        ctx.enter_scope();
-        let stmts: Vec<TirStmt> = block
-            .stmts
-            .iter()
-            .flat_map(|s| self.resolve_stmt(s, ctx))
-            .collect();
-        ctx.exit_scope();
-        TirBlock::new(stmts, block.span)
-    }
-
-    /// Resolve a block with expected type for its result expression.
-    /// The last expression statement (if any) is resolved with the expected type
-    /// for literal coercion, while all other statements are resolved normally.
-    fn resolve_block_with_expected_type(
+    fn resolve_block(
         &mut self,
         block: &Block,
         ctx: &mut FunctionContext,
-        expected_type: TypeId,
+        expected_type: Option<TypeId>,
     ) -> TirBlock {
         ctx.enter_scope();
         let len = block.stmts.len();
         let mut stmts = Vec::new();
         for (i, s) in block.stmts.iter().enumerate() {
-            if i == len - 1
+            // Propagate expected type to the last expression for coercion
+            if expected_type.is_some()
+                && i == len - 1
                 && let Stmt::Expr(expr_stmt) = s
             {
-                let expr =
-                    self.resolve_expr_with_expected_type(&expr_stmt.expr, ctx, Some(expected_type));
+                let expr = self.resolve_expr(&expr_stmt.expr, ctx, expected_type);
                 stmts.push(TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span));
                 continue;
             }
@@ -2790,7 +2782,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> TirStmt {
         ctx.active_labels.push(labeled_block.label.clone());
         // resolve_block already handles scope entry/exit
-        let block = self.resolve_block(&labeled_block.block, ctx);
+        let block = self.resolve_block(&labeled_block.block, ctx, None);
         ctx.active_labels.pop();
 
         TirStmt::new(
@@ -2817,7 +2809,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         .elements
                         .iter()
                         .map(|elem| {
-                            let resolved = self.resolve_expr(elem, ctx);
+                            let resolved = self.resolve_expr(elem, ctx, Some(element_type));
                             if resolved.type_id != element_type
                                 && resolved.type_id != TypeTable::UNKNOWN
                             {
@@ -2847,9 +2839,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             .iter()
                             .enumerate()
                             .map(|(i, elem)| {
-                                let resolved = self.resolve_expr(elem, ctx);
+                                let expected = expected_elem_types.get(i).copied();
+                                let resolved = self.resolve_expr(elem, ctx, expected);
                                 // Check if element type matches expected
-                                if let Some(&expected_type) = expected_elem_types.get(i)
+                                if let Some(expected_type) = expected
                                     && resolved.type_id != expected_type
                                     && resolved.type_id != TypeTable::UNKNOWN
                                 {
@@ -2882,7 +2875,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         );
                         (value, target_type)
                     } else {
-                        let value = self.resolve_expr(&let_stmt.value, ctx);
+                        let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
                         (value, target_type)
                     }
                 }
@@ -2895,12 +2888,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         let name = name.clone();
                         let struct_type = target_type;
 
+                        let struct_field_types: Vec<(String, TypeId)> = self
+                            .struct_fields
+                            .get(&name)
+                            .map(|info| info.fields.clone())
+                            .unwrap_or_default();
+
                         let fields: Vec<TirStructField> = struct_lit
                             .fields
                             .iter()
                             .enumerate()
                             .map(|(index, field)| {
-                                let value = self.resolve_expr(&field.value, ctx);
+                                let expected_field_type = struct_field_types
+                                    .iter()
+                                    .find(|(n, _)| n == &field.name)
+                                    .map(|(_, type_id)| *type_id);
+                                let value =
+                                    self.resolve_expr(&field.value, ctx, expected_field_type);
                                 TirStructField {
                                     name: field.name.clone(),
                                     value,
@@ -2926,22 +2930,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             found: "implicit struct literal".into(),
                             span: struct_lit.span,
                         });
-                        let value = self.resolve_expr(&let_stmt.value, ctx);
+                        let value = self.resolve_expr(&let_stmt.value, ctx, None);
                         (value, target_type)
                     }
                 } else {
                     // Named struct literal - resolve normally
-                    let value = self.resolve_expr(&let_stmt.value, ctx);
+                    let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
                     (value, target_type)
                 }
             } else {
                 // Use expected type for numeric literal coercion
-                let value =
-                    self.resolve_expr_with_expected_type(&let_stmt.value, ctx, Some(target_type));
+                let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
                 (value, target_type)
             }
         } else {
-            let value = self.resolve_expr(&let_stmt.value, ctx);
+            let value = self.resolve_expr(&let_stmt.value, ctx, None);
             (value.clone(), value.type_id)
         };
 
@@ -3094,7 +3097,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve an expression statement
     fn resolve_expr_stmt(&mut self, expr_stmt: &ExprStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let expr = self.resolve_expr(&expr_stmt.expr, ctx);
+        let expr = self.resolve_expr(&expr_stmt.expr, ctx, None);
         TirStmt::new(TirStmtKind::Expr(expr), expr_stmt.span)
     }
 
@@ -3103,7 +3106,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let return_type = ctx.return_type;
         let value = ret_stmt.value.as_ref().map(|expr| {
             // Use expected type for coercion (numeric literals, tuple to array, etc.)
-            self.resolve_expr_with_expected_type(expr, ctx, Some(return_type))
+            self.resolve_expr(expr, ctx, Some(return_type))
         });
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
     }
@@ -3125,12 +3128,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
                 // Regular expression condition
-                let condition = self.resolve_expr(expr, ctx);
-                let then_block = self.resolve_block(&if_stmt.then_block, ctx);
+                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                let then_block = self.resolve_block(&if_stmt.then_block, ctx, None);
                 let else_block = if_stmt
                     .else_block
                     .as_ref()
-                    .map(|b| self.resolve_block(b, ctx));
+                    .map(|b| self.resolve_block(b, ctx, None));
 
                 result.push(TirStmt::new(
                     TirStmtKind::If {
@@ -3143,7 +3146,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             ast::Condition::Pattern { pattern, expr, .. } => {
                 // Pattern match condition: if let Some(x) = expr { ... }
-                let scrutinee = self.resolve_expr(expr, ctx);
+                let scrutinee = self.resolve_expr(expr, ctx, None);
                 let scrutinee_type = scrutinee.type_id;
 
                 // Enter scope for pattern bindings (they're only visible in then_block)
@@ -3153,7 +3156,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 let tir_pattern =
                     self.resolve_if_pattern(pattern, scrutinee_type, ctx, if_stmt.span);
 
-                let then_block = self.resolve_block(&if_stmt.then_block, ctx);
+                let then_block = self.resolve_block(&if_stmt.then_block, ctx, None);
 
                 // Exit pattern binding scope before resolving else block
                 ctx.exit_scope();
@@ -3161,7 +3164,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 let else_block = if_stmt
                     .else_block
                     .as_ref()
-                    .map(|b| self.resolve_block(b, ctx));
+                    .map(|b| self.resolve_block(b, ctx, None));
 
                 result.push(TirStmt::new(
                     TirStmtKind::IfPattern {
@@ -3420,13 +3423,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
     /// Resolve a loop statement (infinite loop)
     fn resolve_loop(&mut self, loop_stmt: &LoopStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let body = self.resolve_block(&loop_stmt.body, ctx);
+        let body = self.resolve_block(&loop_stmt.body, ctx, None);
         TirStmt::new(TirStmtKind::Loop { body }, loop_stmt.span)
     }
 
     /// Resolve a break statement
     fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) -> TirStmt {
-        let value = break_stmt.value.as_ref().map(|v| self.resolve_expr(v, ctx));
+        let value = break_stmt
+            .value
+            .as_ref()
+            .map(|v| self.resolve_expr(v, ctx, None));
 
         // Validate that the target label exists
         if let Some(label) = &break_stmt.label
@@ -3464,86 +3470,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve an expression
-    fn resolve_expr(&mut self, expr: &Expr, ctx: &mut FunctionContext) -> TirExpr {
-        match expr {
-            Expr::Literal(lit) => self.resolve_literal(lit, ctx),
-            Expr::Ident(ident) => self.resolve_ident(ident, ctx),
-            Expr::Binary(binary) => self.resolve_binary(binary, ctx),
-            Expr::Unary(unary) => self.resolve_unary(unary, ctx),
-            Expr::Assign(assign) => self.resolve_assign(assign, ctx),
-            Expr::Call(call) => self.resolve_call(call, ctx),
-            Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
-            Expr::StaticMethodCall(static_call) => {
-                self.resolve_static_method_call(static_call, ctx)
-            }
-            Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
-            Expr::Index(index) => self.resolve_index(index, ctx),
-            Expr::Block(block) => {
-                let tir_block = self.resolve_block(block, ctx);
-                // Block expression type is the last expression's type or Unit
-                let type_id = tir_block
-                    .stmts
-                    .last()
-                    .and_then(|s| match &s.kind {
-                        TirStmtKind::Expr(e) => Some(e.type_id),
-                        _ => None,
-                    })
-                    .unwrap_or(TypeTable::UNIT);
-                TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
-            }
-            Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx),
-            Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx),
-            Expr::Closure(closure) => self.resolve_closure(closure, ctx),
-            Expr::TemplateString(template) => self.resolve_template_string(template, ctx),
-            Expr::Cast(cast) => self.resolve_cast(cast, ctx),
-            Expr::StructLiteral(struct_lit) => self.resolve_struct_literal(struct_lit, ctx),
-            Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
-            Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
-            Expr::TupleLiteral(tuple_lit) => self.resolve_tuple_literal(tuple_lit, ctx),
-            Expr::LabeledBlock(lb) => {
-                // Labeled block expression: type is determined by `break label: expr;` statements
-                // Push a target to track break types
-                ctx.labeled_block_targets.push(LabeledBlockTarget {
-                    label: lb.label.clone(),
-                    break_types: Vec::new(),
-                });
-                ctx.active_labels.push(lb.label.clone());
-
-                ctx.enter_scope();
-                let tir_block = self.resolve_block(&lb.block, ctx);
-                ctx.exit_scope();
-
-                // Pop the target and determine the result type from break statements
-                ctx.active_labels.pop();
-                let target = ctx.labeled_block_targets.pop().unwrap();
-
-                // The result type is determined by the break expressions
-                // All break values must have the same type (or be unifiable)
-                let result_type = if target.break_types.is_empty() {
-                    // No break with value - block produces Unit
-                    TypeTable::UNIT
-                } else {
-                    // Use the first break type (TODO: type unification for multiple breaks)
-                    target.break_types[0]
-                };
-
-                TirExpr::new(
-                    TirExprKind::LabeledBlock {
-                        label: lb.label.clone(),
-                        block: tir_block,
-                        result_type,
-                    },
-                    result_type,
-                    lb.span,
-                )
-            }
-            // Matches expressions are desugared to if-let in the desugar phase
-            Expr::Matches(_) => {
-                panic!("Matches expression should have been desugared to if-let before resolver")
-            }
-        }
-    }
-
     /// Parse an integer literal string into a u64 value
     /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10")
     #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
@@ -3835,7 +3761,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Check for associated constants (e.g., f64::PI, i32::MAX)
         if let Some((const_ty, const_expr)) = self.associated_constants.get(&ident.name).cloned() {
             let type_id = self.resolve_type(&const_ty);
-            let resolved = self.resolve_expr_with_expected_type(&const_expr, ctx, Some(type_id));
+            let resolved = self.resolve_expr(&const_expr, ctx, Some(type_id));
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 
@@ -3980,11 +3906,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve a binary expression
-    fn resolve_binary(&mut self, binary: &ast::BinaryExpr, ctx: &mut FunctionContext) -> TirExpr {
-        self.resolve_binary_with_expected_type(binary, ctx, None)
-    }
-
-    fn resolve_binary_with_expected_type(
+    fn resolve_binary(
         &mut self,
         binary: &ast::BinaryExpr,
         ctx: &mut FunctionContext,
@@ -3997,33 +3919,33 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left to right's type
-            let right = self.resolve_expr(&binary.right, ctx);
+            let right = self.resolve_expr(&binary.right, ctx, expected_type);
             let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
                 Some(right.type_id)
             } else {
                 None
             };
-            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, coerce_type);
+            let left = self.resolve_expr(&binary.left, ctx, coerce_type);
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right to left's type
-            let left = self.resolve_expr(&binary.left, ctx);
+            let left = self.resolve_expr(&binary.left, ctx, expected_type);
             let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
                 Some(left.type_id)
             } else {
                 None
             };
-            let right = self.resolve_expr_with_expected_type(&binary.right, ctx, coerce_type);
+            let right = self.resolve_expr(&binary.right, ctx, coerce_type);
             (left, right)
         } else if left_is_numeric_literal && right_is_numeric_literal {
             // Both literals - use expected type from context (e.g., assignment target)
-            let left = self.resolve_expr_with_expected_type(&binary.left, ctx, expected_type);
-            let right = self.resolve_expr_with_expected_type(&binary.right, ctx, expected_type);
+            let left = self.resolve_expr(&binary.left, ctx, expected_type);
+            let right = self.resolve_expr(&binary.right, ctx, expected_type);
             (left, right)
         } else {
-            // Both non-literals - resolve normally
-            let left = self.resolve_expr(&binary.left, ctx);
-            let right = self.resolve_expr(&binary.right, ctx);
+            // Both non-literals - propagate expected type for coercion
+            let left = self.resolve_expr(&binary.left, ctx, expected_type);
+            let right = self.resolve_expr(&binary.right, ctx, expected_type);
             (left, right)
         };
 
@@ -4412,7 +4334,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve a unary expression
     fn resolve_unary(&mut self, unary: &ast::UnaryExpr, ctx: &mut FunctionContext) -> TirExpr {
-        let expr = self.resolve_expr(&unary.expr, ctx);
+        let expr = self.resolve_expr(&unary.expr, ctx, None);
         let op = convert_unary_op(unary.op);
 
         // Track address-taken locals for &x and &mut x
@@ -4653,7 +4575,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
         if let ast::Expr::Index(index_expr) = &assign.target {
             // Resolve the indexed expression to get its type
-            let indexed_expr = self.resolve_expr(&index_expr.expr, ctx);
+            let indexed_expr = self.resolve_expr(&index_expr.expr, ctx, None);
 
             // Get base type (unwrap reference if needed)
             let base_type_id = match self.type_table.borrow().get(indexed_expr.type_id) {
@@ -4672,14 +4594,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 };
 
                 if !struct_name.is_empty() {
-                    let index_resolved = self.resolve_expr(&index_expr.index, ctx);
+                    let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
                     let index_type = index_resolved.type_id;
 
                     if let Some(trait_info) =
                         self.find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
                     {
                         // Generate: expr.index_assign(index, value)
-                        let value = self.resolve_expr(&assign.value, ctx);
+                        let value =
+                            self.resolve_expr(&assign.value, ctx, Some(trait_info.input_type));
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,
@@ -4719,10 +4642,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Standard assignment handling
-        let target = self.resolve_expr(&assign.target, ctx);
+        let target = self.resolve_expr(&assign.target, ctx, None);
         // Use target's type as expected type for value resolution
         // This enables coercion of empty array literals [] to the field's Array<T> type
-        let value = self.resolve_expr_with_expected_type(&assign.value, ctx, Some(target.type_id));
+        let value = self.resolve_expr(&assign.value, ctx, Some(target.type_id));
 
         // Handle assignment to global variables
         if let TirExprKind::GlobalVarGet {
@@ -4816,8 +4739,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         // This should have been desugared, but handle it anyway
-        let target = self.resolve_expr(&compound.target, ctx);
-        let value = self.resolve_expr(&compound.value, ctx);
+        let target = self.resolve_expr(&compound.target, ctx, None);
+        let value = self.resolve_expr(&compound.value, ctx, Some(target.type_id));
 
         let op = match compound.op {
             ast::CompoundAssignOp::Add => TirBinaryOp::Add,
@@ -4856,7 +4779,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> TirExpr {
         // This should have been desugared to binary && chain
         // Just resolve the first expression for now
-        self.resolve_expr(&chain.first, ctx)
+        self.resolve_expr(&chain.first, ctx, None)
     }
 
     /// Resolve a call expression
@@ -4889,7 +4812,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         .enumerate()
                         .map(|(i, arg)| {
                             let expected_type = fn_params.get(i).copied();
-                            self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                            self.resolve_expr(arg, ctx, expected_type)
                         })
                         .collect();
 
@@ -4919,7 +4842,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // This handles calling closures stored in struct fields
         if let Expr::FieldAccess(_field_access) = &call.callee {
             // Resolve the callee expression to get the field type
-            let callee_expr = self.resolve_expr(&call.callee, ctx);
+            let callee_expr = self.resolve_expr(&call.callee, ctx, None);
             let callee_type = self.type_table.borrow().get(callee_expr.type_id).clone();
 
             if let ResolvedType::Function {
@@ -4939,7 +4862,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     .enumerate()
                     .map(|(i, arg)| {
                         let expected_type = fn_params.get(i).copied();
-                        self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                        self.resolve_expr(arg, ctx, expected_type)
                     })
                     .collect();
 
@@ -4964,7 +4887,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = param_types.get(i).copied();
-                self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
 
@@ -5505,420 +5428,451 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
-    /// Resolve an expression with an expected type for coercion
-    fn resolve_expr_with_expected_type(
-        &mut self,
-        expr: &Expr,
-        ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
-    ) -> TirExpr {
-        // Handle numeric literal coercion
-        if let Some(target_type) = expected_type {
-            // Number literal coercion to integer
-            if let Expr::Literal(lit) = expr
-                && let Literal::Number(num_lit) = &lit.value
-                && self.type_table.borrow().is_integer(target_type)
-            {
-                // Check if the literal can be an integer
-                if Self::is_float_only_literal(&num_lit.repr) {
+    /// Try to coerce a numeric literal (or negated numeric literal) to a target type.
+    /// Handles int, float, and i128/u128 coercion. Returns `None` if the expression
+    /// is not a numeric literal or the target type is not numeric.
+    #[allow(clippy::too_many_lines)]
+    fn try_coerce_numeric_literal(&mut self, expr: &Expr, target_type: TypeId) -> Option<TirExpr> {
+        // Number literal coercion to integer
+        if let Expr::Literal(lit) = expr
+            && let Literal::Number(num_lit) = &lit.value
+            && self.type_table.borrow().is_integer(target_type)
+        {
+            if Self::is_float_only_literal(&num_lit.repr) {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: format!(
+                        "cannot use float literal '{}' as integer (has decimal point or negative exponent)",
+                        num_lit.repr
+                    ),
+                    span: lit.span,
+                });
+                return Some(TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: 0,
+                        repr: num_lit.repr.clone(),
+                    },
+                    target_type,
+                    lit.span,
+                ));
+            }
+            return Some(match Self::parse_int_literal(&num_lit.repr) {
+                Ok(value) => TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value,
+                        repr: num_lit.repr.clone(),
+                    },
+                    target_type,
+                    lit.span,
+                ),
+                Err(message) => {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!(
-                            "cannot use float literal '{}' as integer (has decimal point or negative exponent)",
-                            num_lit.repr
-                        ),
+                        message,
                         span: lit.span,
                     });
-                    return TirExpr::new(
+                    TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: 0,
                             repr: num_lit.repr.clone(),
                         },
                         target_type,
                         lit.span,
-                    );
+                    )
                 }
-                match Self::parse_int_literal(&num_lit.repr) {
-                    Ok(value) => {
-                        return TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value,
-                                repr: num_lit.repr.clone(),
-                            },
-                            target_type,
-                            lit.span,
-                        );
-                    }
-                    Err(message) => {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        return TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: 0,
-                                repr: num_lit.repr.clone(),
-                            },
-                            target_type,
-                            lit.span,
-                        );
-                    }
-                }
-            }
+            });
+        }
 
-            // Negated number literal coercion to integer: -42 as i64
-            if let Expr::Unary(unary) = expr
-                && unary.op == UnaryOp::Neg
-                && let Expr::Literal(lit) = &unary.expr
-                && let Literal::Number(num_lit) = &lit.value
-                && self.type_table.borrow().is_integer(target_type)
-            {
-                // Check if the literal can be an integer
-                if Self::is_float_only_literal(&num_lit.repr) {
+        // Negated number literal coercion to integer: -42 as i64
+        if let Expr::Unary(unary) = expr
+            && unary.op == UnaryOp::Neg
+            && let Expr::Literal(lit) = &unary.expr
+            && let Literal::Number(num_lit) = &lit.value
+            && self.type_table.borrow().is_integer(target_type)
+        {
+            if Self::is_float_only_literal(&num_lit.repr) {
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: format!(
+                        "cannot use float literal '-{}' as integer (has decimal point or negative exponent)",
+                        num_lit.repr
+                    ),
+                    span: unary.span,
+                });
+                return Some(TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: 0,
+                        repr: format!("-{}", num_lit.repr),
+                    },
+                    target_type,
+                    unary.span,
+                ));
+            }
+            return Some(match Self::parse_int_literal(&num_lit.repr) {
+                Ok(value) => {
+                    let neg_value = (value as i64).wrapping_neg().cast_unsigned();
+                    TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: neg_value,
+                            repr: format!("-{}", num_lit.repr),
+                        },
+                        target_type,
+                        unary.span,
+                    )
+                }
+                Err(message) => {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!(
-                            "cannot use float literal '-{}' as integer (has decimal point or negative exponent)",
-                            num_lit.repr
-                        ),
-                        span: unary.span,
+                        message,
+                        span: lit.span,
                     });
-                    return TirExpr::new(
+                    TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: 0,
                             repr: format!("-{}", num_lit.repr),
                         },
                         target_type,
                         unary.span,
-                    );
+                    )
                 }
-                match Self::parse_int_literal(&num_lit.repr) {
-                    Ok(value) => {
-                        // Negate as i64 then store as u64 (two's complement)
-                        let neg_value = (value as i64).wrapping_neg().cast_unsigned();
-                        return TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: neg_value,
-                                repr: format!("-{}", num_lit.repr),
-                            },
-                            target_type,
-                            unary.span,
-                        );
-                    }
-                    Err(message) => {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        return TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value: 0,
-                                repr: format!("-{}", num_lit.repr),
-                            },
-                            target_type,
-                            unary.span,
-                        );
-                    }
-                }
-            }
+            });
+        }
 
-            // Number literal coercion to float
-            if let Expr::Literal(lit) = expr
-                && let Literal::Number(num_lit) = &lit.value
-                && self.type_table.borrow().is_float(target_type)
+        // Number literal coercion to float
+        if let Expr::Literal(lit) = expr
+            && let Literal::Number(num_lit) = &lit.value
+            && self.type_table.borrow().is_float(target_type)
+        {
+            return Some(match Self::parse_float_literal(&num_lit.repr) {
+                Ok(value) => TirExpr::new(
+                    TirExprKind::FloatLiteral {
+                        value,
+                        repr: num_lit.repr.clone(),
+                    },
+                    target_type,
+                    lit.span,
+                ),
+                Err(message) => {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                    TirExpr::new(
+                        TirExprKind::FloatLiteral {
+                            value: 0.0,
+                            repr: num_lit.repr.clone(),
+                        },
+                        target_type,
+                        lit.span,
+                    )
+                }
+            });
+        }
+
+        // Negated number literal coercion to float: -3.14 as f32
+        if let Expr::Unary(unary) = expr
+            && unary.op == UnaryOp::Neg
+            && let Expr::Literal(lit) = &unary.expr
+            && let Literal::Number(num_lit) = &lit.value
+            && self.type_table.borrow().is_float(target_type)
+        {
+            return Some(match Self::parse_float_literal(&num_lit.repr) {
+                Ok(value) => TirExpr::new(
+                    TirExprKind::FloatLiteral {
+                        value: -value,
+                        repr: format!("-{}", num_lit.repr),
+                    },
+                    target_type,
+                    unary.span,
+                ),
+                Err(message) => {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message,
+                        span: lit.span,
+                    });
+                    TirExpr::new(
+                        TirExprKind::FloatLiteral {
+                            value: 0.0,
+                            repr: format!("-{}", num_lit.repr),
+                        },
+                        target_type,
+                        unary.span,
+                    )
+                }
+            });
+        }
+
+        // i128/u128 literal coercion
+        if let Expr::Literal(lit) = expr
+            && let Literal::Number(num_lit) = &lit.value
+            && !Self::is_float_only_literal(&num_lit.repr)
+        {
+            let struct_name = match self.type_table.borrow().get(target_type).clone() {
+                ResolvedType::Struct { name, .. } => Some(name),
+                _ => None,
+            };
+
+            if let Some(name) = struct_name
+                && (name == "u128" || name == "i128")
             {
-                match Self::parse_float_literal(&num_lit.repr) {
-                    Ok(value) => {
-                        return TirExpr::new(
-                            TirExprKind::FloatLiteral {
+                if let Ok(value) = Self::parse_int_literal(&num_lit.repr) {
+                    let use_from_u64_or_i64 = if name == "u128" {
+                        true
+                    } else {
+                        i64::try_from(value).is_ok()
+                    };
+
+                    if use_from_u64_or_i64 {
+                        let (inner_type, method_name) = if name == "u128" {
+                            (TypeTable::U64, "from_u64")
+                        } else {
+                            (TypeTable::I64, "from_i64")
+                        };
+
+                        let inner_literal = TirExpr::new(
+                            TirExprKind::IntLiteral {
                                 value,
                                 repr: num_lit.repr.clone(),
                             },
-                            target_type,
+                            inner_type,
                             lit.span,
                         );
-                    }
-                    Err(message) => {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        return TirExpr::new(
-                            TirExprKind::FloatLiteral {
-                                value: 0.0,
-                                repr: num_lit.repr.clone(),
+
+                        let method_info =
+                            LocalMethodName::new(name.clone(), None, method_name.to_string());
+                        let mangled_func_name = method_info.to_mangled_name();
+
+                        return Some(TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("prelude/int128.wado"),
+                                    name: mangled_func_name,
+                                    monomorph_info: None,
+                                    method_info: Some(method_info),
+                                },
+                                args: vec![inner_literal],
                             },
                             target_type,
                             lit.span,
-                        );
+                        ));
                     }
                 }
-            }
 
-            // Negated number literal coercion to float: -3.14 as f32
-            if let Expr::Unary(unary) = expr
-                && unary.op == UnaryOp::Neg
-                && let Expr::Literal(lit) = &unary.expr
-                && let Literal::Number(num_lit) = &lit.value
-                && self.type_table.borrow().is_float(target_type)
-            {
-                match Self::parse_float_literal(&num_lit.repr) {
-                    Ok(value) => {
-                        return TirExpr::new(
-                            TirExprKind::FloatLiteral {
-                                value: -value,
-                                repr: format!("-{}", num_lit.repr),
-                            },
+                // Value doesn't fit in u64 (or i64 for i128), use from_pair
+                if name == "u128" {
+                    if let Ok(value) = Self::parse_u128_literal(&num_lit.repr) {
+                        let (low, high) = Self::unpack_u128(value);
+                        return Some(self.build_from_pair_call(
+                            &name,
+                            low,
+                            high as i64,
                             target_type,
-                            unary.span,
-                        );
+                            lit.span,
+                        ));
                     }
-                    Err(message) => {
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message,
-                            span: lit.span,
-                        });
-                        return TirExpr::new(
-                            TirExprKind::FloatLiteral {
-                                value: 0.0,
-                                repr: format!("-{}", num_lit.repr),
-                            },
-                            target_type,
-                            unary.span,
-                        );
-                    }
-                }
-            }
-
-            // i128/u128 literal coercion: let x: u128 = 42 → u128::from_u64(42 as u64)
-            // For values larger than u64, use from_pair: let x: u128 = 340... → u128::from_pair(low, high)
-            if let Expr::Literal(lit) = expr
-                && let Literal::Number(num_lit) = &lit.value
-                && !Self::is_float_only_literal(&num_lit.repr)
-            {
-                let struct_name = match self.type_table.borrow().get(target_type).clone() {
-                    ResolvedType::Struct { name, .. } => Some(name),
-                    _ => None,
-                };
-
-                if let Some(name) = struct_name
-                    && (name == "u128" || name == "i128")
-                {
-                    // Try to parse the literal value as u64 first (most efficient path)
-                    if let Ok(value) = Self::parse_int_literal(&num_lit.repr) {
-                        // For u128: value fits in u64, use from_u64
-                        // For i128: value must also fit in i64 (positive range)
-                        let use_from_u64_or_i64 = if name == "u128" {
-                            true // u64 always works for u128
-                        } else {
-                            // For i128, check if value fits in i64 positive range
-                            i64::try_from(value).is_ok()
-                        };
-
-                        if use_from_u64_or_i64 {
-                            let (inner_type, method_name) = if name == "u128" {
-                                (TypeTable::U64, "from_u64")
-                            } else {
-                                (TypeTable::I64, "from_i64")
-                            };
-
-                            let inner_literal = TirExpr::new(
-                                TirExprKind::IntLiteral {
-                                    value,
-                                    repr: num_lit.repr.clone(),
-                                },
-                                inner_type,
-                                lit.span,
-                            );
-
-                            // Build static call: u128::from_u64(value) or i128::from_i64(value)
-                            let method_info =
-                                LocalMethodName::new(name.clone(), None, method_name.to_string());
-                            let mangled_func_name = method_info.to_mangled_name();
-
-                            return TirExpr::new(
-                                TirExprKind::StaticCall {
-                                    func: FunctionRef::External {
-                                        module_source: ModuleSource::core("prelude/int128.wado"),
-                                        name: mangled_func_name,
-                                        monomorph_info: None,
-                                        method_info: Some(method_info),
-                                    },
-                                    args: vec![inner_literal],
-                                },
-                                target_type,
-                                lit.span,
-                            );
-                        }
-                    }
-
-                    // Value doesn't fit in u64 (or i64 for i128), use from_pair
-                    // Parse at compile time and generate from_pair(low, high)
-                    if name == "u128" {
-                        if let Ok(value) = Self::parse_u128_literal(&num_lit.repr) {
-                            let (low, high) = Self::unpack_u128(value);
-                            return self.build_from_pair_call(
-                                &name,
-                                low,
-                                high as i64,
-                                target_type,
-                                lit.span,
-                            );
-                        }
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message: format!("invalid u128 literal: {}", num_lit.repr),
-                            span: lit.span,
-                        });
-                    } else {
-                        // i128: parse as i128 (handles positive values > i64::MAX)
-                        if let Ok(value) = Self::parse_i128_literal(&num_lit.repr) {
-                            let (low, high) = Self::unpack_i128(value);
-                            return self.build_from_pair_call(
-                                &name,
-                                low,
-                                high,
-                                target_type,
-                                lit.span,
-                            );
-                        }
-                        let _ = self.logger.error(TypeError::InvalidLiteral {
-                            message: format!("invalid i128 literal: {}", num_lit.repr),
-                            span: lit.span,
-                        });
-                    }
-                }
-            }
-
-            // Handle negated number literal to i128: let x: i128 = -100
-            // For large values: let x: i128 = -170... → i128::from_pair(low, high)
-            if let Expr::Unary(unary) = expr
-                && unary.op == ast::UnaryOp::Neg
-                && let Expr::Literal(lit) = &unary.expr
-                && let Literal::Number(num_lit) = &lit.value
-                && !Self::is_float_only_literal(&num_lit.repr)
-            {
-                let struct_name = match self.type_table.borrow().get(target_type).clone() {
-                    ResolvedType::Struct { name, .. } => Some(name),
-                    _ => None,
-                };
-
-                if let Some(name) = struct_name
-                    && name == "i128"
-                {
-                    // Parse the negated value directly using Rust's i128
-                    let negated_repr = format!("-{}", Self::clean_literal_repr(&num_lit.repr));
-                    if let Ok(value) = Self::parse_i128_literal(&negated_repr) {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message: format!("invalid u128 literal: {}", num_lit.repr),
+                        span: lit.span,
+                    });
+                } else {
+                    if let Ok(value) = Self::parse_i128_literal(&num_lit.repr) {
                         let (low, high) = Self::unpack_i128(value);
-                        return self.build_from_pair_call(
+                        return Some(self.build_from_pair_call(
                             &name,
                             low,
                             high,
                             target_type,
-                            unary.span,
-                        );
+                            lit.span,
+                        ));
                     }
                     let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!("invalid i128 literal: -{}", num_lit.repr),
-                        span: unary.span,
+                        message: format!("invalid i128 literal: {}", num_lit.repr),
+                        span: lit.span,
                     });
                 }
             }
         }
 
-        // Handle null literal coercion: type null as the expected Option<T> type
-        // instead of Option<Unknown>
-        if let Some(target_type) = expected_type
-            && let Expr::Literal(lit) = expr
+        // Negated i128 literal: -100 as i128
+        if let Expr::Unary(unary) = expr
+            && unary.op == ast::UnaryOp::Neg
+            && let Expr::Literal(lit) = &unary.expr
+            && let Literal::Number(num_lit) = &lit.value
+            && !Self::is_float_only_literal(&num_lit.repr)
+        {
+            let struct_name = match self.type_table.borrow().get(target_type).clone() {
+                ResolvedType::Struct { name, .. } => Some(name),
+                _ => None,
+            };
+
+            if let Some(name) = struct_name
+                && name == "i128"
+            {
+                let negated_repr = format!("-{}", Self::clean_literal_repr(&num_lit.repr));
+                if let Ok(value) = Self::parse_i128_literal(&negated_repr) {
+                    let (low, high) = Self::unpack_i128(value);
+                    return Some(self.build_from_pair_call(
+                        &name,
+                        low,
+                        high,
+                        target_type,
+                        unary.span,
+                    ));
+                }
+                let _ = self.logger.error(TypeError::InvalidLiteral {
+                    message: format!("invalid i128 literal: -{}", num_lit.repr),
+                    span: unary.span,
+                });
+            }
+        }
+
+        None
+    }
+
+    /// Try to coerce an expression to match the expected type.
+    /// Handles numeric literals, null, string newtypes, and tuple-to-array coercion.
+    /// Returns `None` if no coercion applies.
+    fn try_coerce(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> Option<TirExpr> {
+        // Numeric literal coercion (int, float, i128/u128)
+        if let Some(coerced) = self.try_coerce_numeric_literal(expr, target_type) {
+            return Some(coerced);
+        }
+
+        // Null literal → Option<T>
+        if let Expr::Literal(lit) = expr
             && matches!(&lit.value, Literal::Null)
             && matches!(
                 self.type_table.borrow().get(target_type),
                 ResolvedType::Option(_)
             )
         {
-            return TirExpr::new(TirExprKind::Null, target_type, lit.span);
+            return Some(TirExpr::new(TirExprKind::Null, target_type, lit.span));
         }
 
-        // Handle string literal coercion to String newtypes (e.g., "foo" → FieldName)
-        if let Some(target_type) = expected_type
-            && let Expr::Literal(lit) = expr
-            && matches!(&lit.value, Literal::String(_))
-        {
+        // String/template literal → String newtype
+        let is_string_or_template = matches!(
+            expr,
+            Expr::Literal(lit) if matches!(&lit.value, Literal::String(_))
+        ) || matches!(expr, Expr::TemplateString(_));
+
+        if is_string_or_template {
             let base_id = self.type_table.borrow().get_ultimate_base_type(target_type);
             let is_string_newtype = matches!(
                 self.type_table.borrow().get(base_id),
                 ResolvedType::Struct { name, .. } if name == "String"
             ) && target_type != base_id;
             if is_string_newtype {
-                let mut resolved = self.resolve_expr(expr, ctx);
+                let mut resolved = self.resolve_expr(expr, ctx, None);
                 resolved.type_id = target_type;
-                return resolved;
+                return Some(resolved);
             }
         }
 
-        // Handle template string coercion to String newtypes
-        if let Some(target_type) = expected_type
-            && let Expr::TemplateString(_) = expr
-        {
-            let base_id = self.type_table.borrow().get_ultimate_base_type(target_type);
-            let is_string_newtype = matches!(
-                self.type_table.borrow().get(base_id),
-                ResolvedType::Struct { name, .. } if name == "String"
-            ) && target_type != base_id;
-            if is_string_newtype {
-                let mut resolved = self.resolve_expr(expr, ctx);
-                resolved.type_id = target_type;
-                return resolved;
-            }
-        }
-
-        // Handle tuple literal to array coercion
-        let element_type_opt = expected_type.and_then(|t| self.type_table.borrow().as_array(t));
-        if let Some(target_type) = expected_type
-            && let Expr::TupleLiteral(tuple_lit) = expr
+        // Tuple literal → Array<T>
+        let element_type_opt = self.type_table.borrow().as_array(target_type);
+        if let Expr::TupleLiteral(tuple_lit) = expr
             && let Some(element_type) = element_type_opt
         {
             let elements: Vec<TirExpr> = tuple_lit
                 .elements
                 .iter()
-                .map(|elem| {
-                    // Pass the element type as expected type for recursive coercion
-                    self.resolve_expr_with_expected_type(elem, ctx, Some(element_type))
-                })
+                .map(|elem| self.resolve_expr(elem, ctx, Some(element_type)))
                 .collect();
 
-            return TirExpr::new(
+            return Some(TirExpr::new(
                 TirExprKind::ArrayLiteral { elements },
                 target_type,
                 expr.span(),
-            );
+            ));
         }
 
-        // Handle match expression coercion - propagate expected type to arm bodies
+        None
+    }
+
+    fn resolve_expr(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
+        // Try literal coercion when expected type is known
         if let Some(target_type) = expected_type
-            && let Expr::Match(match_expr) = expr
+            && let Some(coerced) = self.try_coerce(expr, ctx, target_type)
         {
-            return self.resolve_match_expr_with_expected_type(match_expr, ctx, target_type);
+            return coerced;
         }
 
-        // Handle if expression coercion - propagate expected type to then/else branches
-        if let Some(target_type) = expected_type
-            && let Expr::If(if_expr) = expr
-        {
-            return self.resolve_if_expr_with_expected_type(if_expr, ctx, target_type);
-        }
+        // Main expression dispatch
+        match expr {
+            Expr::Literal(lit) => self.resolve_literal(lit, ctx),
+            Expr::Ident(ident) => self.resolve_ident(ident, ctx),
+            Expr::Binary(binary) => self.resolve_binary(binary, ctx, expected_type),
+            Expr::Unary(unary) => self.resolve_unary(unary, ctx),
+            Expr::Assign(assign) => self.resolve_assign(assign, ctx),
+            Expr::Call(call) => self.resolve_call(call, ctx),
+            Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
+            Expr::StaticMethodCall(static_call) => {
+                self.resolve_static_method_call(static_call, ctx)
+            }
+            Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
+            Expr::Index(index) => self.resolve_index(index, ctx),
+            Expr::Block(block) => {
+                let tir_block = self.resolve_block(block, ctx, None);
+                let type_id = tir_block
+                    .stmts
+                    .last()
+                    .and_then(|s| match &s.kind {
+                        TirStmtKind::Expr(e) => Some(e.type_id),
+                        _ => None,
+                    })
+                    .unwrap_or(TypeTable::UNIT);
+                TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
+            }
+            Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx, expected_type),
+            Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx, expected_type),
+            Expr::Closure(closure) => self.resolve_closure(closure, ctx),
+            Expr::TemplateString(template) => self.resolve_template_string(template, ctx),
+            Expr::Cast(cast) => self.resolve_cast(cast, ctx),
+            Expr::StructLiteral(struct_lit) => self.resolve_struct_literal(struct_lit, ctx),
+            Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
+            Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
+            Expr::TupleLiteral(tuple_lit) => self.resolve_tuple_literal(tuple_lit, ctx),
+            Expr::LabeledBlock(lb) => {
+                ctx.labeled_block_targets.push(LabeledBlockTarget {
+                    label: lb.label.clone(),
+                    break_types: Vec::new(),
+                });
+                ctx.active_labels.push(lb.label.clone());
 
-        // Handle binary expression with two numeric literals:
-        // propagate expected type so both operands coerce correctly
-        // e.g., `carry = 0 - 1` where carry is i64
-        if let Some(target_type) = expected_type
-            && let Expr::Binary(binary) = expr
-            && self.type_table.borrow().is_numeric(target_type)
-            && self.is_numeric_literal(&binary.left)
-            && self.is_numeric_literal(&binary.right)
-        {
-            return self.resolve_binary_with_expected_type(binary, ctx, Some(target_type));
-        }
+                ctx.enter_scope();
+                let tir_block = self.resolve_block(&lb.block, ctx, None);
+                ctx.exit_scope();
 
-        // Normal expression resolution
-        self.resolve_expr(expr, ctx)
+                ctx.active_labels.pop();
+                let target = ctx.labeled_block_targets.pop().unwrap();
+
+                let result_type = if target.break_types.is_empty() {
+                    TypeTable::UNIT
+                } else {
+                    // TODO: type unification for multiple breaks
+                    target.break_types[0]
+                };
+
+                TirExpr::new(
+                    TirExprKind::LabeledBlock {
+                        label: lb.label.clone(),
+                        block: tir_block,
+                        result_type,
+                    },
+                    result_type,
+                    lb.span,
+                )
+            }
+            Expr::Matches(_) => {
+                panic!("Matches expression should have been desugared to if-let before resolver")
+            }
+        }
     }
 
     /// Resolve a type without registering new types
@@ -5940,7 +5894,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return result;
         }
 
-        let mut receiver = self.resolve_expr(&method_call.receiver, ctx);
+        let mut receiver = self.resolve_expr(&method_call.receiver, ctx, None);
         // NOTE: args are resolved later (after method lookup) to enable literal coercion
         // using the method's parameter types as expected types.
 
@@ -6096,7 +6050,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .enumerate()
             .map(|(i, arg)| {
                 let expected_type = expected_param_types.get(i).copied();
-                self.resolve_expr_with_expected_type(arg, ctx, expected_type)
+                self.resolve_expr(arg, ctx, expected_type)
             })
             .collect();
 
@@ -6313,7 +6267,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .enumerate()
             .map(|(i, a)| {
                 let expected_type = param_types.get(i).copied();
-                self.resolve_expr_with_expected_type(a, ctx, expected_type)
+                self.resolve_expr(a, ctx, expected_type)
             })
             .collect();
 
@@ -8252,7 +8206,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             "Input",
         )
         .map(|(input_type, self_kind, trait_name)| IndexAssignTraitInfo {
-            _input_type: input_type,
+            input_type,
             self_kind,
             trait_name,
         })
@@ -9068,7 +9022,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         // First, resolve the indexed container to get its type
-        let container_expr = self.resolve_expr(&index_expr.expr, ctx);
+        let container_expr = self.resolve_expr(&index_expr.expr, ctx, None);
 
         // Check if this is an Array type (Arrays use optimized direct access, not traits)
         let is_array = self
@@ -9094,7 +9048,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
 
         // Check if the type implements IndexMut
-        let index_resolved = self.resolve_expr(&index_expr.index, ctx);
+        let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
         let index_type = index_resolved.type_id;
 
         let index_mut_info =
@@ -9158,7 +9112,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let MethodInfo {
             return_type,
             self_kind,
-            param_types: _,
+            param_types,
             inherited_from_base: _,
         } = method_info?;
 
@@ -9204,11 +9158,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             index_expr.span,
         );
 
-        // Step 2: Resolve method args
+        // Step 2: Resolve method args with expected parameter types for literal coercion
         let args: Vec<TirExpr> = method_call
             .args
             .iter()
-            .map(|a| self.resolve_expr(a, ctx))
+            .enumerate()
+            .map(|(i, a)| {
+                let expected = param_types.get(i).copied();
+                self.resolve_expr(a, ctx, expected)
+            })
             .collect();
 
         // Step 3: Resolve method type args
@@ -9260,7 +9218,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         field_access: &ast::FieldAccessExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let expr = self.resolve_expr(&field_access.expr, ctx);
+        let expr = self.resolve_expr(&field_access.expr, ctx, None);
 
         // Look up field type from struct type
         let (field_index, field_type) =
@@ -9470,7 +9428,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve an index expression
     fn resolve_index(&mut self, index: &ast::IndexExpr, ctx: &mut FunctionContext) -> TirExpr {
-        let expr = self.resolve_expr(&index.expr, ctx);
+        let expr = self.resolve_expr(&index.expr, ctx, None);
 
         // Get base type (unwrap reference if needed)
         let base_type_id = match self.type_table.borrow().get(expr.type_id) {
@@ -9531,7 +9489,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         };
 
         if !struct_name.is_empty() {
-            let index_expr = self.resolve_expr(&index.index, ctx);
+            let index_expr = self.resolve_expr(&index.index, ctx, None);
             let index_type = index_expr.type_id;
 
             // First, try Index trait (returns reference)
@@ -9676,24 +9634,22 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve an if expression
-    fn resolve_if_expr(&mut self, if_expr: &IfExpr, ctx: &mut FunctionContext) -> TirExpr {
-        // Handle optional init binding (scoped to this if expression)
+    fn resolve_if_expr(
+        &mut self,
+        if_expr: &IfExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
         if if_expr.init.is_some() {
             ctx.enter_scope();
         }
 
-        // Note: init binding for if expressions would need special handling
-        // in codegen since expressions can't contain statements. For now,
-        // we just resolve it for scoping purposes but codegen doesn't support it.
         if let Some(init) = &if_expr.init {
-            // The let binding is resolved for name resolution but not emitted as TIR
-            // This is a limitation for now - full support would require block expressions
             let _init_stmt = self.resolve_let(init, ctx);
         }
 
-        // Resolve the condition
         let condition = match &if_expr.condition {
-            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
+            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, Some(TypeTable::BOOL)),
             ast::Condition::Pattern { span, .. } => {
                 let _ = self.logger.error(TypeError::NotYetImplemented {
                     feature: "pattern matching in if expressions (use if statement instead)"
@@ -9704,26 +9660,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         };
 
-        let then_block = self.resolve_block(&if_expr.then_block, ctx);
+        let then_block = self.resolve_block(&if_expr.then_block, ctx, expected_type);
         let else_block = if_expr
             .else_block
             .as_ref()
-            .map(|b| self.resolve_block(b, ctx));
+            .map(|b| self.resolve_block(b, ctx, expected_type));
 
-        // Extract types from both branches
-        let then_type = Self::block_result_type(&then_block);
-        let else_type = else_block
-            .as_ref()
-            .map_or(TypeTable::UNIT, Self::block_result_type);
+        let type_id = if let Some(ty) = expected_type {
+            ty
+        } else {
+            let then_type = Self::block_result_type(&then_block);
+            let else_type = else_block
+                .as_ref()
+                .map_or(TypeTable::UNIT, Self::block_result_type);
 
-        // Determine the result type
-        let type_id = if then_type == else_type {
-            // Types match exactly
-            then_type
-        } else if then_type == TypeTable::UNIT || else_type == TypeTable::UNIT {
-            // If one branch is unit and else is missing, that's allowed for unit-typed if expressions
-            if else_block.is_none() {
-                // No else branch - require then branch to be unit
+            if then_type == else_type {
+                then_type
+            } else if else_block.is_none() {
                 if then_type != TypeTable::UNIT {
                     let type_name = self.type_table.borrow().type_name(then_type);
                     let _ = self.logger.error(TypeError::TypeMismatch {
@@ -9734,7 +9687,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
                 TypeTable::UNIT
             } else {
-                // Both branches exist but types don't match - report error
                 let then_name = self.type_table.borrow().type_name(then_type);
                 let else_name = self.type_table.borrow().type_name(else_type);
                 let _ = self.logger.error(TypeError::TypeMismatch {
@@ -9744,16 +9696,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 });
                 then_type
             }
-        } else {
-            // Types don't match
-            let then_name = self.type_table.borrow().type_name(then_type);
-            let else_name = self.type_table.borrow().type_name(else_type);
-            let _ = self.logger.error(TypeError::TypeMismatch {
-                expected: then_name,
-                found: else_name,
-                span: if_expr.else_block.as_ref().unwrap().span,
-            });
-            then_type
         };
 
         let result = TirExpr::new(
@@ -9763,61 +9705,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 else_branch: else_block,
             },
             type_id,
-            if_expr.span,
-        );
-
-        if if_expr.init.is_some() {
-            ctx.exit_scope();
-        }
-
-        result
-    }
-
-    /// Resolve an if expression with expected type for literal coercion.
-    /// Propagates the expected type into then/else block result expressions.
-    fn resolve_if_expr_with_expected_type(
-        &mut self,
-        if_expr: &IfExpr,
-        ctx: &mut FunctionContext,
-        expected_type: TypeId,
-    ) -> TirExpr {
-        // Handle optional init binding (scoped to this if expression)
-        if if_expr.init.is_some() {
-            ctx.enter_scope();
-        }
-
-        if let Some(init) = &if_expr.init {
-            let _init_stmt = self.resolve_let(init, ctx);
-        }
-
-        // Resolve the condition
-        let condition = match &if_expr.condition {
-            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx),
-            ast::Condition::Pattern { span, .. } => {
-                let _ = self.logger.error(TypeError::NotYetImplemented {
-                    feature: "pattern matching in if expressions (use if statement instead)"
-                        .to_string(),
-                    span: *span,
-                });
-                TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, *span)
-            }
-        };
-
-        // Resolve then/else blocks with expected type for coercion
-        let then_block =
-            self.resolve_block_with_expected_type(&if_expr.then_block, ctx, expected_type);
-        let else_block = if_expr
-            .else_block
-            .as_ref()
-            .map(|b| self.resolve_block_with_expected_type(b, ctx, expected_type));
-
-        let result = TirExpr::new(
-            TirExprKind::If {
-                condition: Box::new(condition),
-                then_branch: then_block,
-                else_branch: else_block,
-            },
-            expected_type,
             if_expr.span,
         );
 
@@ -9833,21 +9720,22 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         &mut self,
         match_expr: &ast::MatchExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TirExpr {
-        let scrutinee = self.resolve_expr(&match_expr.expr, ctx);
+        let scrutinee = self.resolve_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
         let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
-            .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx))
+            .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
 
-        // Match expression type is the type of the first arm body
-        let type_id = arms
-            .first()
-            .map(|a| a.body.type_id)
-            .unwrap_or(TypeTable::UNIT);
+        let type_id = expected_type.unwrap_or_else(|| {
+            arms.first()
+                .map(|a| a.body.type_id)
+                .unwrap_or(TypeTable::UNIT)
+        });
 
         TirExpr::new(
             TirExprKind::Match {
@@ -9859,80 +9747,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         )
     }
 
-    /// Resolve a match arm with scrutinee type information
     fn resolve_match_arm(
         &mut self,
         arm: &MatchArm,
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
-    ) -> TirMatchArm {
-        // Enter scope for pattern bindings (they're only visible in the arm body and guard)
-        ctx.enter_scope();
-
-        // Resolve pattern with scrutinee type information (same as if let)
-        let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
-
-        // Resolve optional guard expression
-        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx));
-
-        // Resolve arm body
-        let body = self.resolve_expr(&arm.body, ctx);
-
-        ctx.exit_scope();
-
-        TirMatchArm {
-            pattern,
-            guard,
-            body,
-            span: arm.span,
-        }
-    }
-
-    /// Resolve a match expression with an expected result type for arm coercion
-    fn resolve_match_expr_with_expected_type(
-        &mut self,
-        match_expr: &ast::MatchExpr,
-        ctx: &mut FunctionContext,
-        expected_type: TypeId,
-    ) -> TirExpr {
-        let scrutinee = self.resolve_expr(&match_expr.expr, ctx);
-        let scrutinee_type = scrutinee.type_id;
-
-        let arms: Vec<TirMatchArm> = match_expr
-            .arms
-            .iter()
-            .map(|arm| {
-                self.resolve_match_arm_with_expected_type(arm, scrutinee_type, ctx, expected_type)
-            })
-            .collect();
-
-        TirExpr::new(
-            TirExprKind::Match {
-                expr: Box::new(scrutinee),
-                arms,
-            },
-            expected_type,
-            match_expr.span,
-        )
-    }
-
-    /// Resolve a match arm with expected body type for coercion
-    fn resolve_match_arm_with_expected_type(
-        &mut self,
-        arm: &MatchArm,
-        scrutinee_type: TypeId,
-        ctx: &mut FunctionContext,
-        expected_type: TypeId,
+        expected_type: Option<TypeId>,
     ) -> TirMatchArm {
         ctx.enter_scope();
 
         let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
-
-        // Resolve optional guard expression
-        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx));
-
-        // Resolve arm body with expected type for coercion
-        let body = self.resolve_expr_with_expected_type(&arm.body, ctx, Some(expected_type));
+        let guard = arm
+            .guard
+            .as_ref()
+            .map(|g| self.resolve_expr(g, ctx, Some(TypeTable::BOOL)));
+        let body = self.resolve_expr(&arm.body, ctx, expected_type);
 
         ctx.exit_scope();
 
@@ -9968,7 +9797,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .collect();
 
         // Resolve body - this will detect captured variables
-        let body = self.resolve_expr(&closure.body, &mut closure_ctx);
+        let body = self.resolve_expr(&closure.body, &mut closure_ctx, None);
 
         // Build capture list from detected captures
         let captures: Vec<TirCapture> = closure_ctx
@@ -10041,7 +9870,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         if template.parts.len() == 1
             && let ast::TemplatePart::Interpolation { expr, format: None } = &template.parts[0]
         {
-            let resolved = self.resolve_expr(expr, ctx);
+            let resolved = self.resolve_expr(expr, ctx, None);
             if resolved.type_id == string_type {
                 return resolved;
             }
@@ -10153,7 +9982,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     stmts.push(TirStmt::new(TirStmtKind::Expr(append_call), span));
                 }
                 ast::TemplatePart::Interpolation { expr, format } => {
-                    let resolved = self.resolve_expr(expr, ctx);
+                    let resolved = self.resolve_expr(expr, ctx, None);
 
                     // If String type with no format spec, just append directly
                     if resolved.type_id == string_type && format.is_none() {
@@ -10732,7 +10561,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .elements
                 .iter()
                 .map(|elem| {
-                    let resolved = self.resolve_expr(elem, ctx);
+                    let resolved = self.resolve_expr(elem, ctx, Some(element_type));
                     // Type check: each element must match Array element type
                     if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
                         let _ = self.logger.error(TypeError::TypeMismatch {
@@ -10864,7 +10693,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
 
             // General expression cast (not a literal)
-            let expr_resolved = self.resolve_expr(&cast.expr, ctx);
+            let expr_resolved = self.resolve_expr(&cast.expr, ctx, None);
             let source_type = expr_resolved.type_id;
 
             // Check if source type is a numeric type we can convert from
@@ -10910,7 +10739,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Normal cast
-        let expr = self.resolve_expr(&cast.expr, ctx);
+        let expr = self.resolve_expr(&cast.expr, ctx, None);
         let source_type = expr.type_id;
 
         // Validate char casts: prohibit integer/float -> char (use char::from_u32 instead)
@@ -11086,8 +10915,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
-                let mut value =
-                    self.resolve_expr_with_expected_type(&field.value, ctx, expected_field_type);
+                let mut value = self.resolve_expr(&field.value, ctx, expected_field_type);
 
                 // Check if this is a tuple literal that should become an array
                 // This happens when the struct field expects Array<T> and we have [...]
@@ -11377,7 +11205,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let elements: Vec<TirExpr> = tuple_lit
             .elements
             .iter()
-            .map(|elem| self.resolve_expr(elem, ctx))
+            .map(|elem| self.resolve_expr(elem, ctx, None))
             .collect();
 
         // Collect element types for the tuple type
