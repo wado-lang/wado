@@ -62,11 +62,11 @@ test "chars iter for-of" {
 test "bytes iter ASCII" {
     let bytes: Array<u8> = "Hello".bytes().collect();
     assert bytes.len() == 5;
-    assert bytes[0] == 'H' as u8;
-    assert bytes[1] == 'e' as u8;
-    assert bytes[2] == 'l' as u8;
-    assert bytes[3] == 'l' as u8;
-    assert bytes[4] == 'o' as u8;
+    assert bytes[0] == 'H';
+    assert bytes[1] == 'e';
+    assert bytes[2] == 'l';
+    assert bytes[3] == 'l';
+    assert bytes[4] == 'o';
 }
 
 test "bytes iter empty string" {
@@ -78,25 +78,25 @@ test "bytes iter empty string" {
 test "bytes iter 3-byte UTF-8" {
     let bytes: Array<u8> = "日".bytes().collect();
     assert bytes.len() == 3;
-    assert bytes[0] == 0xE6 as u8;
-    assert bytes[1] == 0x97 as u8;
-    assert bytes[2] == 0xA5 as u8;
+    assert bytes[0] == 0xE6;
+    assert bytes[1] == 0x97;
+    assert bytes[2] == 0xA5;
 }
 
 test "bytes iter 2-byte UTF-8" {
     let bytes: Array<u8> = "ñ".bytes().collect();
     assert bytes.len() == 2;
-    assert bytes[0] == 0xC3 as u8;
-    assert bytes[1] == 0xB1 as u8;
+    assert bytes[0] == 0xC3;
+    assert bytes[1] == 0xB1;
 }
 
 test "bytes iter 4-byte UTF-8" {
     let bytes: Array<u8> = "😀".bytes().collect();
     assert bytes.len() == 4;
-    assert bytes[0] == 0xF0 as u8;
-    assert bytes[1] == 0x9F as u8;
-    assert bytes[2] == 0x98 as u8;
-    assert bytes[3] == 0x80 as u8;
+    assert bytes[0] == 0xF0;
+    assert bytes[1] == 0x9F;
+    assert bytes[2] == 0x98;
+    assert bytes[3] == 0x80;
 }
 
 test "bytes iter for-of" {
@@ -151,9 +151,9 @@ test "collect bytes then chars" {
     let s = "Hi!";
     let bytes: Array<u8> = s.bytes().collect();
     assert bytes.len() == 3;
-    assert bytes[0] == 'H' as u8;
-    assert bytes[1] == 'i' as u8;
-    assert bytes[2] == '!' as u8;
+    assert bytes[0] == 'H';
+    assert bytes[1] == 'i';
+    assert bytes[2] == '!';
 
     let chars: Array<char> = s.chars().collect();
     assert chars.len() == 3;
