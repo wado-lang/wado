@@ -484,11 +484,11 @@ Design principle: export adapter synthesis is **signature-driven, not name-drive
 - [x] Synthesize stub adapters for optional world exports (e.g., test-only files with no `run`).
 - [x] Remove `generate_run_function` usage for non-HTTP exports in codegen.
 - [x] Move target world assignment before `cm_adapter_gen` phase.
-- [ ] Implement export adapter synthesis for `wasi:http/incoming-handler` (complex: async, Result return).
-- [ ] Delete `CmExportInfo` scratch local logic — adapters declare their own locals.
-- [ ] Delete remaining export-related CM glue from codegen (`generate_http_handler_export`).
+- [x] Implement export adapter synthesis for `wasi:http/incoming-handler` (complex: async, Result return).
+- [x] Delete `CmExportInfo` scratch local logic — adapters declare their own locals.
+- [x] Delete remaining export-related CM glue from codegen (`generate_http_handler_export`).
 
-Once all export signatures are handled by adapter synthesis and `generate_http_handler_export` is deleted from codegen, Phase 4 is complete.
+Phase 4 is complete. All export signatures are handled by signature-driven adapter synthesis at the TIR level.
 
 ## Implementation Notes
 
