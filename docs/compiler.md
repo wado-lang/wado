@@ -285,6 +285,17 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 | `wasi:clocks`     | `clocks.wado`     | Clock interfaces |
 | `wasi:filesystem` | `filesystem.wado` | FS interfaces    |
 
+### Standard Library Tests
+
+Stdlib tests are co-located with their source as `*_test.wado` files (e.g., `lib/core/zlib_test.wado`). They use Wado's `test` declaration syntax and run via `wado test`:
+
+```sh
+make test-wado   # runs all *_test.wado files
+cargo run --bin wado -- test wado-compiler/lib/core/zlib_test.wado  # run one file
+```
+
+Test names can contain any characters (parentheses, dashes, etc.) — the compiler sanitizes them into valid kebab-case CM export names.
+
 ### WASI Registry
 
 The `WasiRegistry` module (`wasi_registry.rs`) collects WASI import information from `lib/wasi/*.wado` files and provides it to the code generator for dynamic Component Model generation.
