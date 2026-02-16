@@ -13,7 +13,7 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut result: i32 = 0;
     outer: {
         result = 1;
@@ -68,7 +68,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

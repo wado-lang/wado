@@ -17,7 +17,7 @@ struct "Container<i32>" {
     items: Array<i32>,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut container: Container<i32> = move Container<i32> { items: [] };
     __inline_Container_i32___add_1: {
         container.items."Array<i32>::append"(10);
@@ -93,7 +93,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

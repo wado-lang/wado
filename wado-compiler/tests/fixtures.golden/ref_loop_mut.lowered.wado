@@ -24,7 +24,7 @@ fn accumulate(target: Box<i32>, n: i32) {
     }
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut sum: Box<i32> = move Box<i32> { value: 0 };
     accumulate(sum, 5);
     core::cli::println(__tmpl: {
@@ -69,7 +69,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

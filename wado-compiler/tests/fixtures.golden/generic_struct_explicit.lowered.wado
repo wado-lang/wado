@@ -39,7 +39,7 @@ struct "Box<i32>" {
     value: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let __sroa_f32_box_value: f32 = 2.5 as f32;
     let __sroa_str_box_value: String = move "world";
     core::cli::println(__tmpl: {
@@ -138,7 +138,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

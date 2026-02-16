@@ -13,7 +13,7 @@ struct "Box_<i32>" {
     value: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let result: Option<i32> = Option::Some(Box<i32> { value: 42 });
     if __is_not_null(result) {
         let v: i32 = __unwrap_option(result).value;
@@ -40,7 +40,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

@@ -213,7 +213,7 @@ fn __test_1_array_of_boxes() {
     }
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     core::cli::println(move "ok");
 }
 
@@ -221,17 +221,17 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }
 
-fn __cm_export____test_0_container_of_boxes() {
+export fn __cm_export____test_0_container_of_boxes() {
     __test_0_container_of_boxes();
     cm_raw_call task-return(0);
 }
 
-fn __cm_export____test_1_array_of_boxes() {
+export fn __cm_export____test_1_array_of_boxes() {
     __test_1_array_of_boxes();
     cm_raw_call task-return(0);
 }

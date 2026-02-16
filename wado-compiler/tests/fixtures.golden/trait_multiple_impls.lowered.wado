@@ -17,7 +17,7 @@ struct Dog {
     name: String,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let __sroa_cat_name: String = move "Whiskers";
     let __sroa_dog_name: String = move "Buddy";
     core::cli::println(__tmpl: {
@@ -38,7 +38,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

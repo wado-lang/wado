@@ -17,7 +17,7 @@ struct "MiniDict<String,String>" {
     entries: Array<[String, String]>,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut dict: MiniDict<String,String> = move MiniDict<String,String> { entries: [] };
     dict."MiniDict<String,String>::set"(move "name", move "Wado");
     dict."MiniDict<String,String>::set"(move "type", move "language");
@@ -116,7 +116,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

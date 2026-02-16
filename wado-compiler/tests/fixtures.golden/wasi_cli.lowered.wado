@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout, Stderr, Environment {
+export fn run() with Stdout, Stderr, Environment {
     core::cli::println(move "test: stdout works");
     core::cli::eprintln(move "test: stderr works");
     let arguments: Array<String> = move __cm_adapter__Environment_get_arguments();
@@ -115,7 +115,7 @@ fn __cm_adapter__Environment_get_environment() -> Array<[String, String]> {
     return __result;
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

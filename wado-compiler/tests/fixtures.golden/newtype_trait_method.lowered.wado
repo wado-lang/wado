@@ -18,7 +18,7 @@ fn "Point^Describable::describe"(self: &Point) -> i32 {
     return (self.x + self.y);
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let loc: Location = Point { x: 10, y: 20 } as Location;
     let d: i32 = loc."Location^Describable::describe"();
     core::cli::println(__tmpl: {
@@ -40,7 +40,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

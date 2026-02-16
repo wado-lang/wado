@@ -18,7 +18,7 @@ struct "Container<String>" {
     markers: Array<bool>,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let c: Container<String> = move Container<String> { items: ["apple", "banana", "cherry"], markers: [true, false, true] };
     let item0: String = move c.items."Array<String>^IndexValue::index_value"(0);
     let item1: String = move c.items."Array<String>^IndexValue::index_value"(1);
@@ -88,7 +88,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

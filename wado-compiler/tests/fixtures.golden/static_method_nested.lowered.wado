@@ -24,7 +24,7 @@ fn Point::distance_squared(a: Point, b: Point) -> i32 {
     return ((dx * dx) + (dy * dy));
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let p1: Point = __inline_Point__scale_1: {
         let p: Point = move Point { x: 0, y: 0 };
         break __inline_Point__scale_1: Point { x: (p.x * 5), y: (p.y * 5) };
@@ -101,7 +101,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

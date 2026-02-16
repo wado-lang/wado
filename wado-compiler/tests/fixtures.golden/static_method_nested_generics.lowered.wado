@@ -25,7 +25,7 @@ struct "Box<Array<i32>>" {
     value: Array<i32>,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3];
     let boxed_arr: Box<Array<i32>> = move Box<Array<i32>> { value: arr };
     let inner: Array<i32> = boxed_arr.value;
@@ -80,7 +80,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

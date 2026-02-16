@@ -23,7 +23,7 @@ fn fmt_int(value: Box<i32>, fill: char, align: Alignment, sign_plus: bool, zero_
     return buf;
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let x: Box<i32> = move Box<i32> { value: 42 };
     let neg: Box<i32> = move Box<i32> { value: -42 };
     let big: Box<i32> = move Box<i32> { value: 12345 };
@@ -296,7 +296,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

@@ -37,7 +37,7 @@ fn bytes_equal(a: &Array<u8>, b: &Array<u8>) -> bool {
     return true;
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     __initialize_modules();
     let expected_hello: Array<u8> = move [72, 101, 108, 108, 111];
     let zlib_hello: Array<u8> = move [120, 156, 243, 72, 205, 201, 201, 7, 0, 5, 140, 1, 245];
@@ -422,7 +422,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

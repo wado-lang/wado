@@ -15,7 +15,7 @@ pub struct "ArrayIter<char>" {
     index: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut arr: Array<char> = move [];
     arr."Array<char>::append"('A');
     arr."Array<char>::append"('B');
@@ -46,7 +46,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

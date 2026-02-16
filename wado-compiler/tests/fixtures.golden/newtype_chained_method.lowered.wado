@@ -18,7 +18,7 @@ fn Point::add(self: &Point, other: &Point) -> Point {
     return Point { x: (self.x + other.x), y: (self.y + other.y) };
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let c1: C = Point { x: 1, y: 2 } as C;
     let c2: C = Point { x: 3, y: 4 } as C;
     let c3: C = c1.C::add(&c2);
@@ -52,7 +52,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

@@ -16,7 +16,7 @@ fn Foo::bar(self: &Foo) -> String with Stdout {
     return "Foo::bar";
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let foo: Foo = move Foo {  };
     core::cli::println(move foo.Foo::bar());
 }
@@ -25,7 +25,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

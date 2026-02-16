@@ -85,7 +85,7 @@ fn print_array(arr: &Array<i32>) with Stdout {
     core::cli::println(move "");
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut arr: Array<i32> = move [5, 3, 8, 1, 9, 2, 7, 4, 6];
     "quicksort$__Closure_0"(&mut arr, 0, (arr.used - 1), &__Closure_0 {  });
     print_array(&arr);
@@ -97,7 +97,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

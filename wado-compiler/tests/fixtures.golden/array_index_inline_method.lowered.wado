@@ -19,7 +19,7 @@ struct "Container<String,i32>" {
     deleted: Array<bool>,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let c: Container<String,i32> = move Container<String,i32> { keys: ["apple", "banana", "cherry"], values: [10, 20, 30], deleted: [false, true, false] };
     let idx: i32 = c."Container<String,i32>::find_key_index"(&"cherry");
     let full: bool = c."Container<String,i32>::is_full"(5);
@@ -57,7 +57,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

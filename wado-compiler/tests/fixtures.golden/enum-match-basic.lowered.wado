@@ -15,7 +15,7 @@ enum Color {
     Blue,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     core::cli::println(__inline_color_name_0: {
         let c: Color = Color::Red;
         break __inline_color_name_0: match c {
@@ -46,7 +46,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

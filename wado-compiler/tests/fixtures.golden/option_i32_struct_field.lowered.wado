@@ -13,7 +13,7 @@ struct Config {
     width: Option<i32>,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let __sroa_c_width: Option<i32> = Option::Some(Box<i32> { value: 42 });
     if __is_not_null(__sroa_c_width) {
         let w: i32 = __unwrap_option(__sroa_c_width).value;
@@ -45,7 +45,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

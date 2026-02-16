@@ -15,7 +15,7 @@ pub struct "ArrayIter<i32>" {
     index: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let outer: Array<i32> = move [1, 2, 3];
     let inner: Array<i32> = move [10, 20];
     __for_of_0: {
@@ -71,7 +71,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

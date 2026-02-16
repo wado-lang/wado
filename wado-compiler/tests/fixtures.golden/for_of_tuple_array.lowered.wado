@@ -15,7 +15,7 @@ pub struct "ArrayIter<Tuple<String,i32>>" {
     index: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let items: Array<[String, i32]> = move [["a", 1], ["b", 2]];
     __for_of_0: {
         let mut __iter_0: ArrayIter<Tuple<String,i32>> = move ArrayIter<Tuple<String,i32>> { repr: items.repr, used: items.used, index: 0 };
@@ -36,7 +36,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }

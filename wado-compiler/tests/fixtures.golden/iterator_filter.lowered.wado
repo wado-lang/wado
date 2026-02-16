@@ -28,7 +28,7 @@ struct __Closure_0 {
 struct __Closure_1 {
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let evens: Array<i32> = move __inline_ArrayIter_i32___filter_1: {
         let self: &ArrayIter<i32> = &ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
@@ -96,7 +96,7 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
-fn __cm_export__run() {
+export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
 }
