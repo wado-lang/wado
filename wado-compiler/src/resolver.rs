@@ -1393,6 +1393,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     }
                                 }
                             }
+                            crate::ast::UseItem::Wildcard => {
+                                // Wildcard import: no function names to collect
+                            }
                         }
                     }
                 }
@@ -1500,7 +1503,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 original_names.insert(local_name.clone(), name.clone());
                             }
                         }
-                        ast::UseItem::EffectFunctions { .. } => {}
+                        ast::UseItem::EffectFunctions { .. } | ast::UseItem::Wildcard => {}
                     }
                 }
             }

@@ -115,16 +115,24 @@ impl<'a> Unparser<'a> {
             self.output.push_str("pub ");
         }
 
-        self.output.push_str("use { ");
+        // Check for wildcard import
+        let is_wildcard = u.items.len() == 1 && matches!(u.items.first(), Some(UseItem::Wildcard));
 
-        for (i, item) in u.items.iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(", ");
+        if is_wildcard {
+            self.output.push_str("use _ from \"");
+        } else {
+            self.output.push_str("use { ");
+
+            for (i, item) in u.items.iter().enumerate() {
+                if i > 0 {
+                    self.output.push_str(", ");
+                }
+                self.unparse_use_item(item);
             }
-            self.unparse_use_item(item);
+
+            self.output.push_str(" } from \"");
         }
 
-        self.output.push_str(" } from \"");
         self.output.push_str(&u.source);
         self.output.push('"');
 
@@ -157,6 +165,9 @@ impl<'a> Unparser<'a> {
                     self.unparse_use_item_simple(func);
                 }
                 self.output.push_str(" }");
+            }
+            UseItem::Wildcard => {
+                self.output.push('_');
             }
         }
     }

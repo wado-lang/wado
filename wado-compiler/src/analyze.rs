@@ -510,6 +510,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 );
                             }
                         }
+                        UseItem::Wildcard => {
+                            // Wildcard import: module is loaded for side effects only,
+                            // no names to re-export
+                        }
                     }
                 }
             }
@@ -586,6 +590,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     })?;
                                 }
                             }
+                        }
+                        UseItem::Wildcard => {
+                            // Wildcard import: module is loaded for side effects only,
+                            // no symbols to register
                         }
                     }
                 }

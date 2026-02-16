@@ -357,6 +357,46 @@ let y = 2;
 }
 
 // ============================================================================
+// Wildcard Import Tests
+// ============================================================================
+
+#[test]
+fn test_format_wildcard_import() {
+    let source = r#"use _ from "core:prelude/primitives.wado";
+
+fn run() {
+    let x = 1;
+}
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains(r#"use _ from "core:prelude/primitives.wado";"#),
+        "wildcard import should be preserved: {}",
+        formatted
+    );
+    // Verify idempotency
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_wildcard_import_not_braces() {
+    // Wildcard import should NOT use braces
+    let source = r#"use _ from "some/module.wado";"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("use _ from"),
+        "wildcard import should use `use _ from` syntax: {}",
+        formatted
+    );
+    assert!(
+        !formatted.contains("use {"),
+        "wildcard import should NOT use braces: {}",
+        formatted
+    );
+}
+
+// ============================================================================
 // Compound Assignment (+=, -=, etc.) Preservation Tests
 // ============================================================================
 
