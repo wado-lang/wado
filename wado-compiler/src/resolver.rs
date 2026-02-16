@@ -3478,93 +3478,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve an expression
-    fn resolve_expr_core(
-        &mut self,
-        expr: &Expr,
-        ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
-    ) -> TirExpr {
-        match expr {
-            Expr::Literal(lit) => self.resolve_literal(lit, ctx),
-            Expr::Ident(ident) => self.resolve_ident(ident, ctx),
-            Expr::Binary(binary) => {
-                self.resolve_binary_with_expected_type(binary, ctx, expected_type)
-            }
-            Expr::Unary(unary) => self.resolve_unary(unary, ctx),
-            Expr::Assign(assign) => self.resolve_assign(assign, ctx),
-            Expr::Call(call) => self.resolve_call(call, ctx),
-            Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
-            Expr::StaticMethodCall(static_call) => {
-                self.resolve_static_method_call(static_call, ctx)
-            }
-            Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
-            Expr::Index(index) => self.resolve_index(index, ctx),
-            Expr::Block(block) => {
-                let tir_block = self.resolve_block(block, ctx);
-                // Block expression type is the last expression's type or Unit
-                let type_id = tir_block
-                    .stmts
-                    .last()
-                    .and_then(|s| match &s.kind {
-                        TirStmtKind::Expr(e) => Some(e.type_id),
-                        _ => None,
-                    })
-                    .unwrap_or(TypeTable::UNIT);
-                TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
-            }
-            Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx),
-            Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx),
-            Expr::Closure(closure) => self.resolve_closure(closure, ctx),
-            Expr::TemplateString(template) => self.resolve_template_string(template, ctx),
-            Expr::Cast(cast) => self.resolve_cast(cast, ctx),
-            Expr::StructLiteral(struct_lit) => self.resolve_struct_literal(struct_lit, ctx),
-            Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
-            Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
-            Expr::TupleLiteral(tuple_lit) => self.resolve_tuple_literal(tuple_lit, ctx),
-            Expr::LabeledBlock(lb) => {
-                // Labeled block expression: type is determined by `break label: expr;` statements
-                // Push a target to track break types
-                ctx.labeled_block_targets.push(LabeledBlockTarget {
-                    label: lb.label.clone(),
-                    break_types: Vec::new(),
-                });
-                ctx.active_labels.push(lb.label.clone());
-
-                ctx.enter_scope();
-                let tir_block = self.resolve_block(&lb.block, ctx);
-                ctx.exit_scope();
-
-                // Pop the target and determine the result type from break statements
-                ctx.active_labels.pop();
-                let target = ctx.labeled_block_targets.pop().unwrap();
-
-                // The result type is determined by the break expressions
-                // All break values must have the same type (or be unifiable)
-                let result_type = if target.break_types.is_empty() {
-                    // No break with value - block produces Unit
-                    TypeTable::UNIT
-                } else {
-                    // Use the first break type (TODO: type unification for multiple breaks)
-                    target.break_types[0]
-                };
-
-                TirExpr::new(
-                    TirExprKind::LabeledBlock {
-                        label: lb.label.clone(),
-                        block: tir_block,
-                        result_type,
-                    },
-                    result_type,
-                    lb.span,
-                )
-            }
-            // Matches expressions are desugared to if-let in the desugar phase
-            Expr::Matches(_) => {
-                panic!("Matches expression should have been desugared to if-let before resolver")
-            }
-        }
-    }
-
     /// Parse an integer literal string into a u64 value
     /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10")
     #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
@@ -5865,7 +5778,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ResolvedType::Struct { name, .. } if name == "String"
             ) && target_type != base_id;
             if is_string_newtype {
-                let mut resolved = self.resolve_expr_core(expr, ctx, None);
+                let mut resolved = self.resolve_expr(expr, ctx, None);
                 resolved.type_id = target_type;
                 return resolved;
             }
@@ -5881,7 +5794,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ResolvedType::Struct { name, .. } if name == "String"
             ) && target_type != base_id;
             if is_string_newtype {
-                let mut resolved = self.resolve_expr_core(expr, ctx, None);
+                let mut resolved = self.resolve_expr(expr, ctx, None);
                 resolved.type_id = target_type;
                 return resolved;
             }
@@ -5935,8 +5848,78 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return self.resolve_binary_with_expected_type(binary, ctx, Some(target_type));
         }
 
-        // Normal expression resolution
-        self.resolve_expr_core(expr, ctx, expected_type)
+        // Main expression dispatch
+        match expr {
+            Expr::Literal(lit) => self.resolve_literal(lit, ctx),
+            Expr::Ident(ident) => self.resolve_ident(ident, ctx),
+            Expr::Binary(binary) => {
+                self.resolve_binary_with_expected_type(binary, ctx, expected_type)
+            }
+            Expr::Unary(unary) => self.resolve_unary(unary, ctx),
+            Expr::Assign(assign) => self.resolve_assign(assign, ctx),
+            Expr::Call(call) => self.resolve_call(call, ctx),
+            Expr::MethodCall(method_call) => self.resolve_method_call(method_call, ctx),
+            Expr::StaticMethodCall(static_call) => {
+                self.resolve_static_method_call(static_call, ctx)
+            }
+            Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
+            Expr::Index(index) => self.resolve_index(index, ctx),
+            Expr::Block(block) => {
+                let tir_block = self.resolve_block(block, ctx);
+                let type_id = tir_block
+                    .stmts
+                    .last()
+                    .and_then(|s| match &s.kind {
+                        TirStmtKind::Expr(e) => Some(e.type_id),
+                        _ => None,
+                    })
+                    .unwrap_or(TypeTable::UNIT);
+                TirExpr::new(TirExprKind::Block(tir_block), type_id, block.span)
+            }
+            Expr::If(if_expr) => self.resolve_if_expr(if_expr, ctx),
+            Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx),
+            Expr::Closure(closure) => self.resolve_closure(closure, ctx),
+            Expr::TemplateString(template) => self.resolve_template_string(template, ctx),
+            Expr::Cast(cast) => self.resolve_cast(cast, ctx),
+            Expr::StructLiteral(struct_lit) => self.resolve_struct_literal(struct_lit, ctx),
+            Expr::CompoundAssign(compound) => self.resolve_compound_assign(compound, ctx),
+            Expr::ComparisonChain(chain) => self.resolve_comparison_chain(chain, ctx),
+            Expr::TupleLiteral(tuple_lit) => self.resolve_tuple_literal(tuple_lit, ctx),
+            Expr::LabeledBlock(lb) => {
+                ctx.labeled_block_targets.push(LabeledBlockTarget {
+                    label: lb.label.clone(),
+                    break_types: Vec::new(),
+                });
+                ctx.active_labels.push(lb.label.clone());
+
+                ctx.enter_scope();
+                let tir_block = self.resolve_block(&lb.block, ctx);
+                ctx.exit_scope();
+
+                ctx.active_labels.pop();
+                let target = ctx.labeled_block_targets.pop().unwrap();
+
+                let result_type = if target.break_types.is_empty() {
+                    TypeTable::UNIT
+                } else {
+                    // TODO: type unification for multiple breaks
+                    target.break_types[0]
+                };
+
+                TirExpr::new(
+                    TirExprKind::LabeledBlock {
+                        label: lb.label.clone(),
+                        block: tir_block,
+                        result_type,
+                    },
+                    result_type,
+                    lb.span,
+                )
+            }
+            Expr::Matches(_) => {
+                panic!("Matches expression should have been desugared to if-let before resolver")
+            }
+        }
     }
 
     /// Resolve a type without registering new types
