@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut opts: Options = move Options { align: Align::Right, width: 0 };
     opts.width = 10;
     let s1: String = move "./variant_import_struct_module.wado::format_with_opts"(move "hi", opts);
@@ -42,5 +42,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

@@ -2292,6 +2292,9 @@ impl<'a> TirUnparser<'a> {
         if f.is_pub {
             self.output.push_str("pub ");
         }
+        if f.is_export {
+            self.output.push_str("export ");
+        }
         self.output.push_str("fn ");
         self.output.push_str(&Self::quote_if_needed(&f.name));
 

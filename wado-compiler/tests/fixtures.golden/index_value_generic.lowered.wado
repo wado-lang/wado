@@ -21,7 +21,7 @@ struct "Triple<i32>" {
     third: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let nums: Triple<i32> = move Triple<i32> { first: 10, second: 20, third: 30 };
     let n0: i32 = nums."Triple<i32>^IndexValue::index_value"(0);
     let n1: i32 = nums."Triple<i32>^IndexValue::index_value"(1);
@@ -106,6 +106,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Triple<i64>^IndexValue::index_value"(self: &Triple<i64>, index: i32) -> i64 {

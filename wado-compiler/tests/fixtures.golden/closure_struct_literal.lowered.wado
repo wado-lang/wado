@@ -17,7 +17,7 @@ struct Point {
 struct __Closure_0 {
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let p: Point = move Point { x: 10, y: 20 };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
@@ -46,5 +46,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

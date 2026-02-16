@@ -18,7 +18,7 @@ struct Point {
     y: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let points: Array<Point> = move [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(47), used: 0 };
@@ -74,6 +74,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Array<Point>^IndexValue::index_value"(self: &Array<Point>, index: i32) -> Point {

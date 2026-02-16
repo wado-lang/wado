@@ -18,7 +18,7 @@ struct "Pair<i32,String>" {
     second: String,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let pairs: Array<Pair<i32, String>> = move [Pair<i32,String> { first: 1, second: "one" }, Pair<i32,String> { first: 2, second: "two" }];
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(46), used: 0 };
@@ -58,6 +58,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Array<Pair<i32,String>>^IndexValue::index_value"(self: &Array<Pair<i32, String>>, index: i32) -> Pair<i32,String> {

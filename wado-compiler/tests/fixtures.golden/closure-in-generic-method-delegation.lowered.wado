@@ -17,7 +17,7 @@ struct "Pair<i32>" {
 struct __Closure_0 {
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let p: Pair<i32> = move Pair<i32> { a: 10, b: 3 };
     let result: i32 = __inline_Pair_i32___pick_smaller_0: {
         let self: &Pair<i32> = &p;
@@ -40,6 +40,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Pair<i32>::pick_by$__Closure_0"(self: &Pair<i32>, cmp: &__Closure_0) -> i32 {

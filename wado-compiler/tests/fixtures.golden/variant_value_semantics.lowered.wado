@@ -10,7 +10,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let c1: Shape = move Shape::Circle(5.0);
     if __variant_test(c1, case=0, name=Circle) {
         let r: f64 = __variant_payload(c1, case=0);
@@ -57,5 +57,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

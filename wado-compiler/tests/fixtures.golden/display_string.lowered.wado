@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut buf: String = move String { repr: "array_new<u8>"(64), used: 0 };
     let mut f: Formatter = __inline_Formatter__new_1: {
         let buf: &mut String = &mut buf;
@@ -44,5 +44,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

@@ -54,7 +54,7 @@ pub fn "Robot^Greet::greet"(self: &Robot) -> String {
     };
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let p: Person = move Person { name: "Alice" };
     core::cli::println(move p."Person^Greet::greet"());
     let r: Robot = move Robot { id: 42 };
@@ -63,5 +63,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

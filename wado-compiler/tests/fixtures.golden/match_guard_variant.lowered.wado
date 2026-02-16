@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let opt1: Option<i32> = Option::Some(Box<i32> { value: 42 });
     let opt2: Option<i32> = Option::Some(Box<i32> { value: 3 });
     let none: Option<i32> = null;
@@ -35,5 +35,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

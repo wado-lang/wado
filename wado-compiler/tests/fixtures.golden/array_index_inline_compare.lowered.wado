@@ -25,7 +25,7 @@ fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
     return i;
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let keys: Array<String> = move ["apple", "banana", "cherry", "date"];
     let result: i32 = find_key_index(&keys, &"cherry");
     core::cli::println(__tmpl: {
@@ -46,6 +46,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {

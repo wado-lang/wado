@@ -25,7 +25,7 @@ pub fn format_str(s: String, opts: Opts) -> String {
     };
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let opts: Opts = move Opts { align: Align::Right, width: 0 };
     let s: String = move format_str(move "hello", opts);
     core::cli::println(s);
@@ -33,5 +33,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

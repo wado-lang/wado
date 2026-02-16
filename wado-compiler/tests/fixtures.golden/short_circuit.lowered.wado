@@ -23,7 +23,7 @@ fn side_effect(msg: String, result: bool) -> bool with Stdout {
     return result;
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     core::cli::println(move "=== Testing && ===");
     if (false && side_effect(move "should not print (&&)", true)) {
         core::cli::println(move "branch taken");
@@ -101,6 +101,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

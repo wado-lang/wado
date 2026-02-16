@@ -17,7 +17,7 @@ struct "Box<i32>" {
     value: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let b1: Box<i32> = move Box<i32> { value: 42 };
     let b2: Box<i64> = move Box<i64> { value: 100 };
     core::cli::println(__tmpl: {
@@ -52,5 +52,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

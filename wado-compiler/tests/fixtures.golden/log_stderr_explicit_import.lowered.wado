@@ -13,7 +13,14 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
-fn run() {
+export fn run() {
     core::internal::log_stderr(move "explicit import works");
+}
+
+export fn __cm_export__run() {
+    __inline_run_0: {
+        core::internal::log_stderr(move "explicit import works");
+    };
+    cm_raw_call task-return(0);
 }
 

@@ -41,11 +41,17 @@ pub fn analyze_project(project: &mut Project) {
     let (call_graph, effect_usage) = build_analysis_graph(&project.tir_modules);
 
     // Determine entry functions from world exports
-    let entry_func_names: Vec<String> = project
+    let mut entry_func_names: Vec<String> = project
         .world_registry
         .get(&project.target_world)
         .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
         .unwrap_or_else(|| vec!["run".to_string()]);
+
+    // Include export adapter functions as additional entry points
+    // (they wrap the user's export functions with CM boundary logic)
+    for adapter_name in project.export_adapter_names.values() {
+        entry_func_names.push(adapter_name.clone());
+    }
 
     // Compute reachable functions from all entry points
     let mut reachable = IndexSet::new();

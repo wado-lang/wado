@@ -27,7 +27,7 @@ struct "Pair<i32,i64>" {
     second: i64,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let p: Pair<i32,i64> = move Pair<i32,i64> { first: 10, second: 20 };
     let boxed: Box<i32> = __inline_Box_i32___new_2: {
         let value: i32 = p.first;
@@ -106,5 +106,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

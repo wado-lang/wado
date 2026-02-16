@@ -24,7 +24,7 @@ fn fmt_with(value: Box<i32>, sign_plus: bool, zero_pad: bool, width: i32, align:
     return buf;
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let x: Box<i32> = move Box<i32> { value: 42 };
     let neg: Box<i32> = move Box<i32> { value: -42 };
     __assert_0: {
@@ -200,5 +200,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

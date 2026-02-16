@@ -34,7 +34,7 @@ pub struct "TreeMap<String,i32>" {
     deleted_count: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
     __inline_TreeMap_String_i32__IndexAssign__index_assign_0: {
         let self: &mut TreeMap<String,i32> = &mut map;
@@ -67,6 +67,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {

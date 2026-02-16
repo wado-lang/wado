@@ -17,7 +17,7 @@ struct Holder {
     data: Data,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut __sroa_h_data: Data = move Data { value: 0 };
     __inline_modify_holder_0: {
         __inline_Data__set_value_1: {
@@ -44,5 +44,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

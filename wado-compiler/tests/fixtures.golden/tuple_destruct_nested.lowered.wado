@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let __pattern_temp_0: [[i32, i32], String] = move [[1, 2], "nested"];
     let __pattern_temp_1: [i32, i32] = __pattern_temp_0.0;
     let a: i32 = __pattern_temp_1.0;
@@ -44,5 +44,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

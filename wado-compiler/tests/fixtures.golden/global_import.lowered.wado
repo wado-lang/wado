@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let c: i32 = ./sub/global_import_module.wado::CONSTANT;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
@@ -43,5 +43,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

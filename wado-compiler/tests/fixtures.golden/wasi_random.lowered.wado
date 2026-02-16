@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout, Random, Insecure, InsecureSeed {
+export fn run() with Stdout, Random, Insecure, InsecureSeed {
     let r1: u64 = __cm_adapter__Random_get_random_u64();
     let r2: u64 = __cm_adapter__Random_get_random_u64();
     core::cli::println(move "test: random u64 works");
@@ -60,5 +60,10 @@ fn __cm_adapter__InsecureSeed_get_insecure_seed() -> [u64, u64] {
     cm_raw_call wasi:random/InsecureSeed::get_insecure_seed(__outptr);
     core::builtin::realloc(__outptr, 16, 8, 0);
     return [core::builtin::i64_load((__outptr + 0)), core::builtin::i64_load((__outptr + 8))];
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

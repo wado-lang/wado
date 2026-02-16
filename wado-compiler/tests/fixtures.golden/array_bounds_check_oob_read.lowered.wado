@@ -13,9 +13,17 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
-fn run() {
+export fn run() {
     let arr: Array<i32> = move [10, 20, 30];
     arr."Array<i32>^IndexValue::index_value"(3);
+}
+
+export fn __cm_export__run() {
+    __inline_run_0: {
+        let arr: Array<i32> = move [10, 20, 30];
+        arr."Array<i32>^IndexValue::index_value"(3);
+    };
+    cm_raw_call task-return(0);
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {

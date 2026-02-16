@@ -1307,6 +1307,11 @@ pub fn adapter_func_name(effect_name: &str, method_name: &str) -> String {
     format!("__cm_adapter__{effect_name}_{method_name}")
 }
 
+/// Build the export adapter function name for a world export.
+pub fn export_adapter_func_name(export_name: &str) -> String {
+    format!("__cm_export__{export_name}")
+}
+
 // ============================================================================
 // Adapter TirFunction synthesis
 // ============================================================================
@@ -1841,6 +1846,80 @@ fn synthesize_adapter(
 }
 
 // ============================================================================
+// Export adapter synthesis
+// ============================================================================
+
+/// Synthesize a CM export adapter for a `() -> ()` async export.
+///
+/// The adapter calls the user's export function and then calls `task-return(0)`
+/// to signal successful completion. This replaces the task-return wrapping
+/// that was previously done at the codegen level.
+///
+/// Generated TIR (for export name "run"):
+/// ```text
+/// fn __cm_export__run() {
+///     run();
+///     cm_raw_call task-return(0);
+/// }
+/// ```
+fn synthesize_void_export_adapter(
+    export_name: &str,
+    user_func: Rc<RefCell<TirFunction>>,
+    entry_source: &ModuleSource,
+) -> Rc<RefCell<TirFunction>> {
+    let adapter_name = export_adapter_func_name(export_name);
+    let mut body_stmts: Vec<TirStmt> = Vec::new();
+
+    // Call the user's export function
+    let call_user = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::Resolved {
+                func: user_func,
+                module_source: entry_source.clone(),
+            },
+            type_args: vec![],
+            args: vec![],
+        },
+        TypeTable::UNIT,
+        synth_span(),
+    );
+    body_stmts.push(expr_stmt(call_user));
+
+    // Call task-return(0) — Ok discriminant for result<_, _>
+    body_stmts.push(expr_stmt(cm_raw_call(
+        "task-return",
+        vec![i32_const(0)],
+        TypeTable::UNIT,
+    )));
+
+    let body = block(body_stmts);
+
+    let adapter = make_adapter_function(adapter_name, vec![], TypeTable::UNIT, body, 0, vec![]);
+    // Mark as export so DCE keeps it as a root
+    adapter.borrow_mut().is_export = true;
+    adapter
+}
+
+/// Synthesize a stub export adapter that just calls `task-return(0)`.
+///
+/// Used when the world declares an export but the user didn't define the function
+/// (e.g., test-only files that have `test` blocks but no `export fn run()`).
+fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
+    let adapter_name = export_adapter_func_name(export_name);
+
+    // Just call task-return(0) — Ok discriminant for result<_, _>
+    let body = block(vec![expr_stmt(cm_raw_call(
+        "task-return",
+        vec![i32_const(0)],
+        TypeTable::UNIT,
+    ))]);
+
+    let adapter = make_adapter_function(adapter_name, vec![], TypeTable::UNIT, body, 0, vec![]);
+    adapter.borrow_mut().is_export = true;
+    adapter
+}
+
+// ============================================================================
 // Phase entry point
 // ============================================================================
 
@@ -1850,9 +1929,16 @@ fn synthesize_adapter(
 /// 1. Synthesizes an adapter TIR function that handles CM boundary crossing
 /// 2. Rewrites effect-like `Call` nodes to target the adapter function
 ///
+/// For each world export function:
+/// 3. Synthesizes an export adapter that wraps the user function with task-return
+///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
-pub fn generate_adapters(mut project: Project) -> Project {
+pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
+    let entry_source = project.entry_module_source.clone();
+
+    // ---- Import adapters ----
+
     // Step 1: Collect all used WASI effect calls and resource method calls
     let mut seen_effects: IndexSet<String> = IndexSet::new();
     for module in project.tir_modules.values() {
@@ -1864,56 +1950,133 @@ pub fn generate_adapters(mut project: Project) -> Project {
         }
     }
 
-    if seen_effects.is_empty() {
-        return project;
-    }
-
-    // Step 2: Synthesize adapter functions for each used WASI function
-    let entry_type_table = project
-        .tir_modules
-        .get(&project.entry_module_source)
-        .map(|m| m.type_table.clone())
-        .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
-    let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
-    for qualified_name in &seen_effects {
-        if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
-            let func_info = func_info.clone();
-            let adapter_name = adapter_func_name(&func_info.effect_name, &func_info.method_name);
-            let adapter = synthesize_adapter(&func_info, project.wasi_registry, &entry_type_table);
-            adapters.insert(qualified_name.clone(), adapter.clone());
-            // Also index by adapter function name for lookup
-            adapters.insert(adapter_name, adapter);
+    if !seen_effects.is_empty() {
+        // Step 2: Synthesize adapter functions for each used WASI function
+        let entry_type_table = project
+            .tir_modules
+            .get(&project.entry_module_source)
+            .map(|m| m.type_table.clone())
+            .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
+        let mut adapters: IndexMap<String, Rc<RefCell<TirFunction>>> = IndexMap::new();
+        for qualified_name in &seen_effects {
+            if let Some(func_info) = project.wasi_registry.get_function(qualified_name) {
+                let func_info = func_info.clone();
+                let adapter_name =
+                    adapter_func_name(&func_info.effect_name, &func_info.method_name);
+                let adapter =
+                    synthesize_adapter(&func_info, project.wasi_registry, &entry_type_table);
+                adapters.insert(qualified_name.clone(), adapter.clone());
+                // Also index by adapter function name for lookup
+                adapters.insert(adapter_name, adapter);
+            }
         }
-    }
 
-    // Step 3: Add adapter functions to the entry module
-    let entry_source = project.entry_module_source.clone();
-    if let Some(entry_module) = project.tir_modules.get_mut(&entry_source) {
-        for (key, adapter_rc) in &adapters {
-            // Only add each adapter once (skip the duplicate keyed by adapter_name)
-            if key.contains("::") {
-                entry_module.functions.push(adapter_rc.clone());
+        // Step 3: Add adapter functions to the entry module
+        if let Some(entry_module) = project.tir_modules.get_mut(&entry_source) {
+            for (key, adapter_rc) in &adapters {
+                // Only add each adapter once (skip the duplicate keyed by adapter_name)
+                if key.contains("::") {
+                    entry_module.functions.push(adapter_rc.clone());
+                }
+            }
+        }
+
+        // Step 4: Rewrite effect-like call nodes to target adapters
+        let adapter_map: IndexMap<String, Rc<RefCell<TirFunction>>> = adapters
+            .iter()
+            .filter(|(k, _)| k.contains("::"))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        for module in project.tir_modules.values() {
+            for func_rc in &module.functions {
+                let mut func = func_rc.borrow_mut();
+                if let Some(body) = &mut func.body {
+                    rewrite_calls_in_block(body, &adapter_map, &entry_source);
+                }
             }
         }
     }
 
-    // Step 4: Rewrite effect-like call nodes to target adapters
-    let adapter_map: IndexMap<String, Rc<RefCell<TirFunction>>> = adapters
-        .iter()
-        .filter(|(k, _)| k.contains("::"))
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
+    // ---- Export adapters ----
 
-    for module in project.tir_modules.values() {
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            if let Some(body) = &mut func.body {
-                rewrite_calls_in_block(body, &adapter_map, &entry_source);
+    // Step 5: Synthesize export adapters for () -> () world exports
+    let world_info = project.world_registry.get(&project.target_world).cloned();
+    if let Some(world_info) = world_info {
+        let entry_module = project
+            .tir_modules
+            .get_mut(&entry_source)
+            .expect("entry module should exist");
+
+        for export in &world_info.exports {
+            // Only handle void exports (no params, no return) for now.
+            // HTTP handler exports will be added in a follow-up.
+            if export.returns_http_response() {
+                continue;
             }
+
+            // Find the user's export function and check for missing `export` keyword
+            let mut found_exported = None;
+            let mut found_without_export = false;
+            for f in &entry_module.functions {
+                let func = f.borrow();
+                if func.name == export.name {
+                    if func.is_export {
+                        found_exported = Some(f.clone());
+                    } else {
+                        found_without_export = true;
+                    }
+                }
+            }
+
+            if found_exported.is_none() && found_without_export {
+                return Err(format!(
+                    "function `{}` exists but is not marked with `export` keyword. \
+                     Add `export` to make it a world entry point: `export fn {}(...)`",
+                    export.name, export.name
+                ));
+            }
+
+            let adapter_name = export_adapter_func_name(&export.name);
+            let adapter = if let Some(user_func_rc) = found_exported {
+                synthesize_void_export_adapter(&export.name, user_func_rc, &entry_source)
+            } else {
+                // No user function: stub that just calls task-return(0)
+                synthesize_void_stub_adapter(&export.name)
+            };
+            project
+                .export_adapter_names
+                .insert(export.name.clone(), adapter_name);
+            entry_module.functions.push(adapter);
         }
     }
 
-    project
+    // Step 6: Synthesize export adapters for test functions (__test_*)
+    {
+        let entry_module = project
+            .tir_modules
+            .get_mut(&entry_source)
+            .expect("entry module should exist");
+
+        // Collect test functions first to avoid borrow conflict.
+        // Test functions have is_export=false (they're not world exports),
+        // but they need adapters for task-return when called via `wado test`.
+        let test_funcs: Vec<(String, Rc<RefCell<TirFunction>>)> = entry_module
+            .functions
+            .iter()
+            .filter(|f| f.borrow().name.starts_with("__test_"))
+            .map(|f| (f.borrow().name.clone(), f.clone()))
+            .collect();
+
+        for (test_name, user_func_rc) in test_funcs {
+            let adapter_name = export_adapter_func_name(&test_name);
+            let adapter = synthesize_void_export_adapter(&test_name, user_func_rc, &entry_source);
+            project.export_adapter_names.insert(test_name, adapter_name);
+            entry_module.functions.push(adapter);
+        }
+    }
+
+    Ok(project)
 }
 
 // ============================================================================

@@ -13,7 +13,7 @@
 // wasi::waitable-set-new (waitable_set_new)
 // wasi::waitable-set-wait (waitable_set_wait)
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let a: u128 = move u128 { low: 100, high: 0 };
     let b: u128 = move u128 { low: 200, high: 0 };
     let mul_result: u128 = move a."u128^Mul::mul"(&b);
@@ -148,5 +148,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

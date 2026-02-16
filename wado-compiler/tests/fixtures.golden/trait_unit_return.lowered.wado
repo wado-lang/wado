@@ -22,12 +22,17 @@ fn "Message^Printable::print"(self: &Message) with Stdout {
     });
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let m: Message = move Message { text: "Hello, World!" };
     m."Message^Printable::print"();
 }
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

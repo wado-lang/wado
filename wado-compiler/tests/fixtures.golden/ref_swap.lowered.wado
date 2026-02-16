@@ -15,7 +15,7 @@ fn swap(a: Box<i32>, b: Box<i32>) {
     b.value = tmp;
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let mut x: Box<i32> = move Box<i32> { value: 1 };
     let mut y: Box<i32> = move Box<i32> { value: 2 };
     core::cli::println(__tmpl: {
@@ -71,5 +71,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

@@ -9,7 +9,7 @@
 // wasi::stream-write (stream_write)
 // wasi::task-return (task_return)
 
-fn run() with Stdout, MonotonicClock {
+export fn run() with Stdout, MonotonicClock {
     let res: Duration = __cm_adapter__MonotonicClock_get_resolution();
     if (res > 0) {
         core::cli::println(move "resolution is positive");
@@ -33,5 +33,10 @@ fn __cm_adapter__Stdout_write_via_stream(data: i32) {
 
 fn __cm_adapter__MonotonicClock_get_resolution() -> Duration {
     return cm_raw_call wasi:clocks/MonotonicClock::get_resolution();
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

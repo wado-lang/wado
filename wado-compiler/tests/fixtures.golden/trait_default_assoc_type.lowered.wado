@@ -22,7 +22,7 @@ pub fn "IntBox^Container::has_items"(self: &IntBox) -> bool {
     return false;
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let b: IntBox = move IntBox { value: 42 };
     if b."IntBox^Container::has_items"() {
         core::cli::println(move "has items");
@@ -31,5 +31,10 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 

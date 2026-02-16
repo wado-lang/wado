@@ -18,7 +18,7 @@ struct "Pair<i32>" {
     second: i32,
 }
 
-fn run() with Stdout {
+export fn run() with Stdout {
     let __sroa_c_item: Pair<i32> = move Pair<i32> { first: 1, second: 2 };
     let other: Pair<i32> = move Pair<i32> { first: 1, second: 2 };
     if __sroa_c_item."Pair<i32>^Eq::eq"(&other) {
@@ -30,6 +30,11 @@ fn run() with Stdout {
 
 fn __cm_adapter__Stdout_write_via_stream(data: i32) {
     cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
+}
+
+export fn __cm_export__run() {
+    run();
+    cm_raw_call task-return(0);
 }
 
 fn "Pair<i32>^Eq::eq"(self: &Pair<i32>, other: &Pair<i32>) -> bool {

@@ -72,6 +72,14 @@ pub struct Project {
     pub has_http_handler_export: bool,
 
     // ========================================
+    // CM export adapter mapping (populated by cm_adapter_gen)
+    // ========================================
+    /// Maps world export name → adapter function name.
+    /// Populated by `cm_adapter_gen` when export adapters are synthesized.
+    /// For example: `"run"` → `"__cm_export__run"`.
+    pub export_adapter_names: IndexMap<String, String>,
+
+    // ========================================
     // Wasm plan (populated by wasm_plan phase, consumed by codegen)
     // ========================================
     /// Component Model structure plan. Populated by the `wasm_plan` phase.
@@ -107,6 +115,8 @@ impl Project {
             target_world: "Command".to_string(),
             // CM export characteristics
             has_http_handler_export: false,
+            // CM export adapter mapping
+            export_adapter_names: IndexMap::new(),
             // Wasm plan
             component_plan: None,
         }
