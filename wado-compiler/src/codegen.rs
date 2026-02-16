@@ -27,8 +27,7 @@ use crate::tir::{
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_plan::{
-    CmValType, TypeDecl, get_self_referential_field_types, get_type_dependencies,
-    sort_types_topologically,
+    TypeDecl, get_self_referential_field_types, get_type_dependencies, sort_types_topologically,
 };
 use crate::wasm_postprocess;
 use heck::ToKebabCase;
@@ -212,10 +211,6 @@ struct FunctionContext {
     /// When true, builtin calls returning tuples should NOT wrap in struct.new
     /// Used for tuple elision optimization when destructuring multi-value returns
     skip_tuple_wrap: bool,
-    /// When true, this function is an async export and returns should use task-return
-    is_async_export: bool,
-    /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>)
-    has_http_handler_export: bool,
     /// When true, Return statements should emit individual field values instead of struct.new
     is_scalarized_return: bool,
     /// Scalarized locals: original `local_index` → scratch locals (indexed by `field_index`)
@@ -225,32 +220,6 @@ struct FunctionContext {
 }
 
 impl FunctionContext {
-    fn new(param_count: u32) -> Self {
-        Self {
-            locals: IndexMap::new(),
-            local_type_map: IndexMap::new(),
-            param_count,
-            next_local: param_count,
-            local_types: Vec::new(),
-            return_type: None,
-            pending_branch_hint: None,
-            branch_hints: Vec::new(),
-            current_module_source: ModuleSource::entry_point_with_filename("<unknown>"),
-            loop_info: Vec::new(),
-            local_index_offset: 0,
-            indirect_call_counters: IndexMap::new(),
-            let_pattern_counter: 0,
-            match_scrutinee_counter: 0,
-            copy_context: CopyContext::new(),
-            skip_tuple_wrap: false,
-            is_async_export: false,
-            has_http_handler_export: false,
-            is_scalarized_return: false,
-            scalarized_locals: IndexMap::new(),
-            skip_scalarized_wrap: false,
-        }
-    }
-
     fn with_module_source(param_count: u32, module_source: ModuleSource) -> Self {
         Self {
             locals: IndexMap::new(),
@@ -269,8 +238,6 @@ impl FunctionContext {
             match_scrutinee_counter: 0,
             copy_context: CopyContext::new(),
             skip_tuple_wrap: false,
-            is_async_export: false,
-            has_http_handler_export: false,
             is_scalarized_return: false,
             scalarized_locals: IndexMap::new(),
             skip_scalarized_wrap: false,
@@ -1584,6 +1551,19 @@ impl Codegen<'_> {
                 );
             }
         }
+        // HTTP handler exports need a global to pass the trailers tx handle
+        // from the user's handler function to the post-task-return adapter code.
+        // (future.write cannot be called before task.return — the host hasn't started
+        // reading the future yet, so it would return BLOCKED.)
+        if self.project.has_http_handler_export {
+            builder.define_global(
+                "__pending_trailers_tx",
+                ValType::I32,
+                true,
+                ConstExpr::i32_const(0),
+                false,
+            );
+        }
         // Add globals section only if there are globals
         if builder.has_globals() {
             module.section(builder.globals());
@@ -1712,20 +1692,12 @@ impl Codegen<'_> {
 
             let export_wasm_func = if let Some(tir_rc) = export_tir_rc {
                 let tir_func = tir_rc.borrow();
-                if tir_func.is_cm_adapter {
-                    // CM export adapter: task-return is in the TIR body,
-                    // generate as a normal function (no codegen-level wrapping)
-                    let (func, _hints) = self.generate_function(
-                        &tir_func,
-                        type_table,
-                        &builder,
-                        entry_module_source,
-                    );
-                    func
-                } else {
-                    // Non-adapter world export: HTTP handler with codegen-level CM wrapping
-                    self.generate_http_handler_export(&tir_func, type_table, &builder)
-                }
+                // All world exports now have CM adapters synthesized by cm_adapter_gen.
+                // The adapter function body contains task-return calls,
+                // so we generate it as a normal function.
+                let (func, _hints) =
+                    self.generate_function(&tir_func, type_table, &builder, entry_module_source);
+                func
             } else {
                 panic!("world export function `{export_name}` not found in entry module");
             };
@@ -9672,469 +9644,7 @@ impl Codegen<'_> {
             }
 
             TirStmtKind::Return { value } => {
-                if ctx.is_async_export {
-                    // For async exports, call task-return with the result value
-                    if ctx.has_http_handler_export {
-                        // Service world: result<response, error-code>
-                        // Handle user's return value: extract Response from Ok,
-                        // fallback to hard-coded 200 for Err or missing return.
-
-                        if let Some(expr) = value {
-                            // Generate the user's Result<Response, ErrorCode> expression
-                            self.generate_expr(func, expr, type_table, ctx, builder);
-
-                            // Get Result variant type info for GC struct access
-                            let result_type_id = expr.type_id;
-                            let mangled_name = type_table.mangle_type_name(result_type_id);
-                            let result_module_source = match type_table.get(result_type_id) {
-                                ResolvedType::GenericInstance { module_source, .. } => {
-                                    module_source.clone()
-                                }
-                                other => {
-                                    panic!(
-                                        "Expected GenericInstance (Result) for HTTP handler return, got: {other:?}"
-                                    )
-                                }
-                            };
-                            let qualified_name = result_module_source.qualify_name(&mangled_name);
-                            let result_info = self
-                                .variant_types
-                                .get(&qualified_name)
-                                .unwrap_or_else(|| {
-                                    panic!("Result type not registered: {qualified_name}")
-                                })
-                                .clone();
-                            let base_type_idx = result_info.base_type_idx;
-                            let ok_type_idx = result_info.cases[0].type_idx;
-
-                            // Save the Result value to a pre-allocated anyref local
-                            let result_local = ctx.alloc_local(
-                                "_http_result",
-                                ValType::I32, /* unused, pre-allocated as anyref */
-                            );
-                            func.instruction(&Instruction::LocalSet(result_local));
-
-                            // Read discriminant: 0 = Ok, non-zero = Err
-                            // Cast from anyref to concrete Result base type first
-                            func.instruction(&Instruction::LocalGet(result_local));
-                            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                                base_type_idx,
-                            )));
-                            func.instruction(&Instruction::StructGet {
-                                struct_type_index: base_type_idx,
-                                field_index: 0,
-                            });
-                            func.instruction(&Instruction::I32Eqz); // true if Ok
-
-                            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-                            // === Ok case: extract Response handle and task-return ===
-                            func.instruction(&Instruction::LocalGet(result_local));
-                            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                                ok_type_idx,
-                            )));
-                            func.instruction(&Instruction::StructGet {
-                                struct_type_index: ok_type_idx,
-                                field_index: 1, // payload (Response handle)
-                            });
-                            let user_response = ctx.alloc_local("_user_response", ValType::I32);
-                            func.instruction(&Instruction::LocalSet(user_response));
-
-                            // task-return Ok(response)
-                            func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                            func.instruction(&Instruction::LocalGet(user_response));
-                            func.instruction(&Instruction::I32Const(0)); // padding
-                            func.instruction(&Instruction::I64Const(0)); // padding
-                            func.instruction(&Instruction::I32Const(0)); // padding
-                            func.instruction(&Instruction::I32Const(0)); // padding
-                            func.instruction(&Instruction::I32Const(0)); // padding
-                            func.instruction(&Instruction::I32Const(0)); // padding
-                            let task_ret = builder.func_idx("task-return");
-                            func.instruction(&Instruction::Call(task_ret));
-
-                            // Post-return: resolve the user's trailers future by writing None.
-                            // The tx handle was saved during Future::new() codegen.
-                            let user_tx = ctx.alloc_local("_user_trailers_tx", ValType::I32);
-                            // Write Result<Option<Trailers>, ErrorCode>::Ok(None) to memory
-                            func.instruction(&Instruction::I32Const(256)); // offset for result disc
-                            func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                            func.instruction(&Instruction::I32Store(MemArg {
-                                offset: 0,
-                                align: 2,
-                                memory_index: 0,
-                            }));
-                            func.instruction(&Instruction::I32Const(260)); // offset for option disc
-                            func.instruction(&Instruction::I32Const(0)); // None discriminant
-                            func.instruction(&Instruction::I32Store(MemArg {
-                                offset: 0,
-                                align: 2,
-                                memory_index: 0,
-                            }));
-                            func.instruction(&Instruction::LocalGet(user_tx));
-                            func.instruction(&Instruction::I32Const(256)); // payload ptr
-                            let future_write_idx = builder.func_idx("future-write");
-                            func.instruction(&Instruction::Call(future_write_idx));
-                            func.instruction(&Instruction::Drop);
-
-                            func.instruction(&Instruction::Return);
-
-                            func.instruction(&Instruction::Else);
-
-                            // === Err case: extract ErrorCode and lower payload ===
-                            let err_type_idx = result_info.cases[1].type_idx;
-
-                            // Get ErrorCode type from Result's type_args[1]
-                            let error_code_type_id = match type_table.get(result_type_id) {
-                                ResolvedType::GenericInstance { type_args, .. } => type_args[1],
-                                _ => panic!(
-                                    "expected GenericInstance for Result HTTP handler return"
-                                ),
-                            };
-                            let (ec_name, ec_module_source) = match type_table
-                                .get(error_code_type_id)
-                            {
-                                ResolvedType::Variant {
-                                    name,
-                                    module_source,
-                                } => (name.clone(), module_source.clone()),
-                                other => panic!("expected Variant for ErrorCode, got: {other:?}"),
-                            };
-                            let ec_qualified_name = ec_module_source.qualify_name(&ec_name);
-                            let ec_info = self
-                                .variant_types
-                                .get(&ec_qualified_name)
-                                .unwrap_or_else(|| {
-                                    panic!("ErrorCode variant not registered: {ec_qualified_name}")
-                                })
-                                .clone();
-                            let ec_base_type_idx = ec_info.base_type_idx;
-
-                            // Load Result and extract ErrorCode from Err variant
-                            func.instruction(&Instruction::LocalGet(result_local));
-                            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                                err_type_idx,
-                            )));
-                            func.instruction(&Instruction::StructGet {
-                                struct_type_index: err_type_idx,
-                                field_index: 1, // ErrorCode payload
-                            });
-
-                            // Save ErrorCode ref for payload extraction
-                            let ec_ref_local = ctx.alloc_local("_ec_ref", ValType::I32);
-                            func.instruction(&Instruction::LocalSet(ec_ref_local));
-
-                            // Cast to ErrorCode base type and read discriminant
-                            func.instruction(&Instruction::LocalGet(ec_ref_local));
-                            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                                ec_base_type_idx,
-                            )));
-                            func.instruction(&Instruction::StructGet {
-                                struct_type_index: ec_base_type_idx,
-                                field_index: 0, // discriminant
-                            });
-                            let ec_disc_local = ctx.alloc_local("_ec_disc", ValType::I32);
-                            func.instruction(&Instruction::LocalSet(ec_disc_local));
-
-                            // Pre-allocated payload locals (initialized to 0 by Wasm default)
-                            let p2 = ctx.alloc_local("_ec_p2", ValType::I32);
-                            let p3 = ctx.alloc_local("_ec_p3", ValType::I64);
-                            let p4 = ctx.alloc_local("_ec_p4", ValType::I32);
-                            let p5 = ctx.alloc_local("_ec_p5", ValType::I32);
-                            let p6 = ctx.alloc_local("_ec_p6", ValType::I32);
-                            let p7 = ctx.alloc_local("_ec_p7", ValType::I32);
-                            let payload_ref = ctx.alloc_local("_ec_payload_ref", ValType::I32);
-                            let field_ref = ctx.alloc_local("_ec_field_ref", ValType::I32);
-                            let i64_temp = ctx.alloc_local("_ec_i64_temp", ValType::I64);
-
-                            // Look up known payload struct types
-                            let string_type_idx = self
-                                .lookup_struct_type("String", &string_module_source())
-                                .map(|i| i.type_idx);
-                            let fsp_type_idx = self
-                                .lookup_struct_type("FieldSizePayload", &ec_module_source)
-                                .map(|i| i.type_idx);
-                            let dns_type_idx = self
-                                .lookup_struct_type("DnsErrorPayload", &ec_module_source)
-                                .map(|i| i.type_idx);
-                            let tls_type_idx = self
-                                .lookup_struct_type("TlsAlertReceivedPayload", &ec_module_source)
-                                .map(|i| i.type_idx);
-                            let box_u8_idx =
-                                self.get_box_struct_type_idx(&PrimitiveType::U8, type_table);
-                            let box_u16_idx =
-                                self.get_box_struct_type_idx(&PrimitiveType::U16, type_table);
-                            let box_u32_idx =
-                                self.get_box_struct_type_idx(&PrimitiveType::U32, type_table);
-                            let box_u64_idx =
-                                self.get_box_struct_type_idx(&PrimitiveType::U64, type_table);
-
-                            // Emit payload extraction for each non-unit ErrorCode case
-                            for case in &ec_info.cases {
-                                let Some(payload_vt) = &case.payload_type else {
-                                    continue; // unit case
-                                };
-                                let case_type_idx = case.type_idx;
-                                let case_index = case.name.clone(); // for debugging
-                                let _ = case_index;
-
-                                // Classify payload by ValType
-                                let (nullable, concrete_idx) = match payload_vt {
-                                    ValType::Ref(rt) => {
-                                        if let HeapType::Concrete(idx) = rt.heap_type {
-                                            (rt.nullable, Some(idx))
-                                        } else {
-                                            continue; // abstract ref, skip
-                                        }
-                                    }
-                                    _ => continue, // primitive, skip
-                                };
-
-                                // Emit: if (disc == case_index) { ... }
-                                func.instruction(&Instruction::LocalGet(ec_disc_local));
-                                func.instruction(&Instruction::I32Const(
-                                    ec_info
-                                        .cases
-                                        .iter()
-                                        .position(|c| c.type_idx == case_type_idx)
-                                        .unwrap() as i32,
-                                ));
-                                func.instruction(&Instruction::I32Eq);
-                                func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-                                // Cast to case subtype and extract payload (field 1)
-                                func.instruction(&Instruction::LocalGet(ec_ref_local));
-                                func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                                    case_type_idx,
-                                )));
-                                func.instruction(&Instruction::StructGet {
-                                    struct_type_index: case_type_idx,
-                                    field_index: 1,
-                                });
-                                func.instruction(&Instruction::LocalSet(payload_ref));
-
-                                // Determine payload type and lower accordingly
-                                if nullable {
-                                    // Option type: nullable ref
-                                    if concrete_idx == string_type_idx {
-                                        // Option<String>: p2=disc, p3=ptr(i64), p4=len
-                                        Self::emit_option_string_lowering(
-                                            func,
-                                            payload_ref,
-                                            p2,
-                                            p3,
-                                            p4,
-                                            i64_temp,
-                                            string_type_idx.unwrap(),
-                                            builder,
-                                        );
-                                    } else if concrete_idx == box_u64_idx {
-                                        // Option<u64>: p2=disc, p3=value(i64)
-                                        Self::emit_option_box_u64_lowering(
-                                            func,
-                                            payload_ref,
-                                            p2,
-                                            p3,
-                                            concrete_idx.unwrap(),
-                                        );
-                                    } else if concrete_idx == box_u32_idx {
-                                        // Option<u32>: p2=disc, p3=value(i64)
-                                        Self::emit_option_box_i32_lowering(
-                                            func,
-                                            payload_ref,
-                                            p2,
-                                            p3,
-                                            concrete_idx.unwrap(),
-                                        );
-                                    } else if concrete_idx == fsp_type_idx {
-                                        // Option<FieldSizePayload>: p2=disc, p3-p7=fields
-                                        Self::emit_option_field_size_payload_lowering(
-                                            func,
-                                            payload_ref,
-                                            field_ref,
-                                            p2,
-                                            p3,
-                                            p4,
-                                            p5,
-                                            p6,
-                                            p7,
-                                            i64_temp,
-                                            concrete_idx.unwrap(),
-                                            box_u32_idx,
-                                            string_type_idx.unwrap(),
-                                            builder,
-                                        );
-                                    }
-                                    // else: unknown nullable payload, leave zeros
-                                } else {
-                                    // Direct struct payload (non-nullable)
-                                    if concrete_idx == fsp_type_idx {
-                                        // FieldSizePayload: p2-p6
-                                        Self::emit_field_size_payload_lowering(
-                                            func,
-                                            payload_ref,
-                                            field_ref,
-                                            p2,
-                                            p3,
-                                            p4,
-                                            p5,
-                                            p6,
-                                            i64_temp,
-                                            concrete_idx.unwrap(),
-                                            box_u32_idx,
-                                            string_type_idx.unwrap(),
-                                            builder,
-                                        );
-                                    } else if concrete_idx == dns_type_idx {
-                                        // DnsErrorPayload: p2-p6
-                                        Self::emit_dns_error_payload_lowering(
-                                            func,
-                                            payload_ref,
-                                            field_ref,
-                                            p2,
-                                            p3,
-                                            p4,
-                                            p5,
-                                            p6,
-                                            i64_temp,
-                                            concrete_idx.unwrap(),
-                                            box_u16_idx,
-                                            string_type_idx.unwrap(),
-                                            builder,
-                                        );
-                                    } else if concrete_idx == tls_type_idx {
-                                        // TlsAlertReceivedPayload: p2-p6
-                                        Self::emit_tls_alert_payload_lowering(
-                                            func,
-                                            payload_ref,
-                                            field_ref,
-                                            p2,
-                                            p3,
-                                            p4,
-                                            p5,
-                                            p6,
-                                            i64_temp,
-                                            concrete_idx.unwrap(),
-                                            box_u8_idx,
-                                            string_type_idx.unwrap(),
-                                            builder,
-                                        );
-                                    }
-                                    // else: unknown struct payload, leave zeros
-                                }
-
-                                func.instruction(&Instruction::End); // end if
-                            }
-
-                            // task-return Err(error-code) with lowered payload
-                            func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                            func.instruction(&Instruction::LocalGet(ec_disc_local));
-                            func.instruction(&Instruction::LocalGet(p2));
-                            func.instruction(&Instruction::LocalGet(p3));
-                            func.instruction(&Instruction::LocalGet(p4));
-                            func.instruction(&Instruction::LocalGet(p5));
-                            func.instruction(&Instruction::LocalGet(p6));
-                            func.instruction(&Instruction::LocalGet(p7));
-                            let task_ret_err = builder.func_idx("task-return");
-                            func.instruction(&Instruction::Call(task_ret_err));
-
-                            func.instruction(&Instruction::Return);
-
-                            func.instruction(&Instruction::End); // end Ok/Err if
-                        }
-
-                        // Fallback: no return value (function without explicit return).
-                        // Create a hard-coded HTTP 200 response with empty body.
-                        // 1. Create headers
-                        // 2. Create trailers future (rx, tx)
-                        // 3. Call response.new
-                        // 4. task-return Ok(response)
-                        // 5. Write None to trailers future (post-return)
-
-                        // 1. Create headers
-                        let fields_constructor_idx = builder.func_idx("http-fields-constructor");
-                        func.instruction(&Instruction::Call(fields_constructor_idx));
-                        let headers_handle = ctx.alloc_local("_headers_handle", ValType::I32);
-                        func.instruction(&Instruction::LocalSet(headers_handle));
-
-                        // 2. Create trailers future
-                        let future_new_idx = builder.func_idx("future-new");
-                        func.instruction(&Instruction::Call(future_new_idx));
-                        let future_local = ctx.alloc_local("_http_future", ValType::I64);
-                        func.instruction(&Instruction::LocalSet(future_local));
-                        // Extract rx (low 32 bits)
-                        func.instruction(&Instruction::LocalGet(future_local));
-                        func.instruction(&Instruction::I32WrapI64);
-                        let trailers_rx = ctx.alloc_local("_trailers_rx", ValType::I32);
-                        func.instruction(&Instruction::LocalSet(trailers_rx));
-                        // Extract tx (high 32 bits)
-                        func.instruction(&Instruction::LocalGet(future_local));
-                        func.instruction(&Instruction::I64Const(32));
-                        func.instruction(&Instruction::I64ShrU);
-                        func.instruction(&Instruction::I32WrapI64);
-                        let trailers_tx = ctx.alloc_local("_trailers_tx", ValType::I32);
-                        func.instruction(&Instruction::LocalSet(trailers_tx));
-
-                        // 3. Call response.new
-                        let response_new_idx = builder.func_idx("http-response-new");
-                        func.instruction(&Instruction::LocalGet(headers_handle)); // headers
-                        func.instruction(&Instruction::I32Const(0)); // body discriminant = None
-                        func.instruction(&Instruction::I32Const(0)); // body stream handle
-                        func.instruction(&Instruction::LocalGet(trailers_rx)); // trailers future rx
-                        func.instruction(&Instruction::I32Const(128)); // out_ptr
-                        func.instruction(&Instruction::Call(response_new_idx));
-
-                        // 4. Read response handle from offset 128
-                        func.instruction(&Instruction::I32Const(128));
-                        func.instruction(&Instruction::I32Load(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                        let response_handle = ctx.alloc_local("_response_handle", ValType::I32);
-                        func.instruction(&Instruction::LocalSet(response_handle));
-
-                        // task-return Ok(response)
-                        func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                        func.instruction(&Instruction::LocalGet(response_handle));
-                        func.instruction(&Instruction::I32Const(0)); // padding
-                        func.instruction(&Instruction::I64Const(0)); // padding
-                        func.instruction(&Instruction::I32Const(0)); // padding
-                        func.instruction(&Instruction::I32Const(0)); // padding
-                        func.instruction(&Instruction::I32Const(0)); // padding
-                        func.instruction(&Instruction::I32Const(0)); // padding
-                        let task_ret = builder.func_idx("task-return");
-                        func.instruction(&Instruction::Call(task_ret));
-
-                        // 5. Write None to trailers future (post-return)
-                        func.instruction(&Instruction::I32Const(256)); // offset for payload
-                        func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                        func.instruction(&Instruction::I32Store(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                        func.instruction(&Instruction::I32Const(260)); // offset for option
-                        func.instruction(&Instruction::I32Const(0)); // None discriminant
-                        func.instruction(&Instruction::I32Store(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                        func.instruction(&Instruction::LocalGet(trailers_tx));
-                        func.instruction(&Instruction::I32Const(256)); // payload ptr
-                        let future_write_idx = builder.func_idx("future-write");
-                        func.instruction(&Instruction::Call(future_write_idx));
-                        func.instruction(&Instruction::Drop);
-
-                        func.instruction(&Instruction::Return);
-                    } else {
-                        // Command world: result<_, _> needs just (i32)
-                        func.instruction(&Instruction::I32Const(0)); // Ok discriminant
-                        let task_return_idx = builder.func_idx("task-return");
-                        func.instruction(&Instruction::Call(task_return_idx));
-                        func.instruction(&Instruction::Return);
-                    }
-                } else if ctx.is_scalarized_return {
+                if ctx.is_scalarized_return {
                     // Scalarized return: emit individual field values, skip struct.new
                     if let Some(expr) = value {
                         let inner = match &expr.kind {
@@ -11585,116 +11095,6 @@ impl Codegen<'_> {
         (wasm_func, hints)
     }
 
-    /// Generate an HTTP handler export function with CM wrapping.
-    ///
-    /// This handles Service world exports (e.g., `handle`) that have complex
-    /// Result payloads requiring codegen-level scratch locals and task-return.
-    /// Void exports (e.g., `run`) are handled by CM adapter synthesis instead.
-    fn generate_http_handler_export(
-        &self,
-        tir_func: &TirFunction,
-        type_table: &TypeTable,
-        builder: &CoreModuleBuilder,
-    ) -> Function {
-        // Create function context
-        let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
-
-        // Set async export flags from CmExportInfo (computed by wasm_plan phase)
-        let cm_info = tir_func
-            .cm_export_info
-            .as_ref()
-            .expect("world export should have CmExportInfo from wasm_plan phase");
-        func_ctx.is_async_export = cm_info.is_async;
-        func_ctx.has_http_handler_export = cm_info.is_http_handler;
-
-        // Add parameters to context
-        for param in &tir_func.params {
-            let param_type = self.type_id_to_valtype(type_table, param.type_id);
-            func_ctx.add_param(&param.name, param_type);
-        }
-
-        // Pre-allocate locals from TIR (skip params which are already added)
-        // After the lower phase, address-taken locals already have Box<T> struct types
-        for (i, &local_type_id) in tir_func.local_types.iter().enumerate() {
-            let local_idx = i as u32;
-            // Skip if it's a param (already added)
-            if local_idx < tir_func.params.len() as u32 {
-                continue;
-            }
-
-            let local_type = self.type_id_to_valtype(type_table, local_type_id);
-
-            let local_name = format!("_local_{local_idx}");
-            func_ctx.alloc_local(&local_name, local_type);
-        }
-
-        self.allocate_precomputed_scratch_locals(tir_func, type_table, &mut func_ctx);
-
-        // Pre-allocate CM scratch locals from wasm_plan phase
-        for scratch_local in &cm_info.scratch_locals {
-            let val_type = cm_valtype_to_valtype(scratch_local.val_type);
-            func_ctx.alloc_local(&scratch_local.name, val_type);
-        }
-
-        // Reset let-pattern counter so code generation uses the same indices as pre-allocation
-        func_ctx.reset_let_pattern_counter();
-        // Reset match-scrutinee counter so code generation uses the same indices as pre-allocation
-        func_ctx.reset_match_scrutinee_counter();
-
-        // Pre-allocate scratch locals for scalarized call sites
-        if !self.scalarized_funcs.is_empty()
-            && let Some(body) = &tir_func.body
-        {
-            self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
-        }
-
-        // Pre-allocate anyref temp local for CM outptr deallocation.
-        if func_ctx.get_local("__cm_outptr").is_some() {
-            func_ctx.alloc_local(
-                "__cm_result_temp",
-                ValType::Ref(RefType {
-                    nullable: true,
-                    heap_type: HeapType::Abstract {
-                        shared: false,
-                        ty: AbstractHeapType::Any,
-                    },
-                }),
-            );
-        }
-
-        let mut wasm_func = Function::new(func_ctx.get_local_decls());
-
-        // Generate body
-        if let Some(body) = &tir_func.body {
-            self.generate_block(&mut wasm_func, body, type_table, &mut func_ctx, builder);
-        }
-
-        // For async exports, ensure task-return is called even for fall-through paths
-        // (functions without explicit return statements)
-        if func_ctx.is_async_export {
-            // For Service world: result<own<response>, error-code> with complex payloads
-            // The full error-code variant flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
-            // For Command world: result<_, _> needs just (i32)
-            if func_ctx.has_http_handler_export {
-                wasm_func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                wasm_func.instruction(&Instruction::I32Const(38)); // internal-error discriminant
-                wasm_func.instruction(&Instruction::I32Const(1)); // option<string> = Some
-                wasm_func.instruction(&Instruction::I64Const(0)); // string ptr
-                wasm_func.instruction(&Instruction::I32Const(37)); // string len
-                wasm_func.instruction(&Instruction::I32Const(0)); // padding
-                wasm_func.instruction(&Instruction::I32Const(0)); // padding
-                wasm_func.instruction(&Instruction::I32Const(0)); // padding
-            } else {
-                wasm_func.instruction(&Instruction::I32Const(0)); // Ok discriminant for result<_, _>
-            }
-            let task_return_idx = builder.func_idx("task-return");
-            wasm_func.instruction(&Instruction::Call(task_return_idx));
-        }
-        wasm_func.instruction(&Instruction::End);
-
-        wasm_func
-    }
-
     // ========================================================================
     // Return Scalarization
     // ========================================================================
@@ -12835,14 +12235,18 @@ impl Codegen<'_> {
                 func.instruction(&Instruction::I64ShrU);
                 func.instruction(&Instruction::I32WrapI64);
 
-                // In HTTP handler, save the future tx handle so post-return code
-                // can resolve the trailers future after task-return.
-                if ctx.has_http_handler_export {
-                    let user_tx =
-                        ctx.alloc_local("_user_trailers_tx", ValType::I32);
-                    // Duplicate the tx value on the stack (tee saves and keeps)
-                    func.instruction(&Instruction::LocalTee(user_tx));
-                }
+                // For HTTP handler exports, save the tx to the __pending_trailers_tx global.
+                // The adapter's post-task-return code will read this global and call
+                // future.write to resolve the trailers future. (future.write cannot be
+                // called before task.return because the host isn't reading yet.)
+                if self.project.has_http_handler_export
+                    && builtin_name == "builtin::future_create_pair"
+                    && let Some(global_idx) = builder.try_global_idx("__pending_trailers_tx") {
+                        // Save tx to global, then reload it to keep the value on the stack.
+                        // GlobalSet consumes the value, so we GlobalGet it back.
+                        func.instruction(&Instruction::GlobalSet(global_idx));
+                        func.instruction(&Instruction::GlobalGet(global_idx));
+                    }
 
                 // Create tuple struct [rx, tx] unless skip_tuple_wrap is set
                 if !ctx.skip_tuple_wrap {
@@ -12856,6 +12260,11 @@ impl Codegen<'_> {
                         panic!("expected tuple type for future/stream create pair");
                     }
                 }
+            }
+            // Read the __pending_trailers_tx global (used by HTTP handler adapter)
+            "builtin::global_get_pending_trailers_tx" => {
+                let global_idx = builder.global_idx("__pending_trailers_tx");
+                func.instruction(&Instruction::GlobalGet(global_idx));
             }
             _ => panic!(
                 "unknown builtin function: {builtin_name}, which should be handled in Codegen::generate_builtin_call()"
@@ -13305,419 +12714,6 @@ impl Codegen<'_> {
 
         module.finish()
     }
-
-    // ========================================================================
-    // ErrorCode payload lowering helpers
-    // ========================================================================
-    //
-    // These helpers emit Wasm instructions to lower ErrorCode variant payloads
-    // into flattened CM values for task-return. Each writes to pre-allocated
-    // locals (p2..p7) that map to task-return params 2..7.
-    //
-    // The CM ABI flattening of result<own<response>, error-code> is:
-    //   (i32, i32, i32, i64, i32, i32, i32, i32)
-    //    disc  ec   p2    p3   p4   p5   p6   p7
-    //
-    // Position p3 is i64 because it's the join of i32 (most cases) and i64
-    // (Option<u64> payload). When storing i32 values in p3, they must be
-    // extended to i64.
-
-    /// Emit lowering for Option<String> payload.
-    /// Layout: p2=disc, p3=ptr(i64), p4=len
-    fn emit_option_string_lowering(
-        func: &mut Function,
-        payload_ref: u32,
-        p2: u32,
-        p3: u32,
-        p4: u32,
-        i64_temp: u32,
-        string_type_idx: u32,
-        builder: &CoreModuleBuilder,
-    ) {
-        // payload_ref holds nullable String ref (stored in anyref local)
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefIsNull);
-        func.instruction(&Instruction::I32Eqz);
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-        // Some: disc=1
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::LocalSet(p2));
-        // Lower string to linear memory (cast anyref → String for cm_lower_string)
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            string_type_idx,
-        )));
-        let lower_idx = builder.func_idx("core/internal/cm_lower_string");
-        func.instruction(&Instruction::Call(lower_idx));
-        func.instruction(&Instruction::LocalTee(i64_temp));
-        // Extract ptr (low 32 bits) → extend to i64
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::I64ExtendI32U);
-        func.instruction(&Instruction::LocalSet(p3));
-        // Extract len (high 32 bits)
-        func.instruction(&Instruction::LocalGet(i64_temp));
-        func.instruction(&Instruction::I64Const(32));
-        func.instruction(&Instruction::I64ShrU);
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(p4));
-        func.instruction(&Instruction::End);
-    }
-
-    /// Emit lowering for Option<u64> payload (nullable Box<u64>).
-    /// Layout: p2=disc, p3=value(i64)
-    fn emit_option_box_u64_lowering(
-        func: &mut Function,
-        payload_ref: u32,
-        p2: u32,
-        p3: u32,
-        box_type_idx: u32,
-    ) {
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefIsNull);
-        func.instruction(&Instruction::I32Eqz);
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::LocalSet(p2));
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            box_type_idx,
-        )));
-        func.instruction(&Instruction::StructGet {
-            struct_type_index: box_type_idx,
-            field_index: 0,
-        });
-        func.instruction(&Instruction::LocalSet(p3));
-        func.instruction(&Instruction::End);
-    }
-
-    /// Emit lowering for Option<u32> / Option<u16> / Option<u8> payload
-    /// (nullable Box with i32-valued field).
-    /// Layout: p2=disc, p3=value(i64, extended from i32)
-    fn emit_option_box_i32_lowering(
-        func: &mut Function,
-        payload_ref: u32,
-        p2: u32,
-        p3: u32,
-        box_type_idx: u32,
-    ) {
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefIsNull);
-        func.instruction(&Instruction::I32Eqz);
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::LocalSet(p2));
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            box_type_idx,
-        )));
-        func.instruction(&Instruction::StructGet {
-            struct_type_index: box_type_idx,
-            field_index: 0,
-        });
-        func.instruction(&Instruction::I64ExtendI32U);
-        func.instruction(&Instruction::LocalSet(p3));
-        func.instruction(&Instruction::End);
-    }
-
-    /// Emit lowering for `FieldSizePayload` struct.
-    /// {`field_name`: Option<String>, `field_size`: Option<u32>}
-    /// Layout: `p2=name_disc`, `p3=name_ptr(i64)`, `p4=name_len`, `p5=size_disc`, `p6=size_val`
-    #[allow(clippy::too_many_arguments)]
-    fn emit_field_size_payload_lowering(
-        func: &mut Function,
-        payload_ref: u32,
-        field_ref: u32,
-        p2: u32,
-        p3: u32,
-        p4: u32,
-        p5: u32,
-        p6: u32,
-        i64_temp: u32,
-        struct_type_idx: u32,
-        box_u32_idx: Option<u32>,
-        string_type_idx: u32,
-        builder: &CoreModuleBuilder,
-    ) {
-        // field_name (field 0): Option<String> = nullable String ref
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            struct_type_idx,
-        )));
-        func.instruction(&Instruction::StructGet {
-            struct_type_index: struct_type_idx,
-            field_index: 0,
-        });
-        func.instruction(&Instruction::LocalSet(field_ref));
-        Self::emit_option_string_lowering(
-            func,
-            field_ref,
-            p2,
-            p3,
-            p4,
-            i64_temp,
-            string_type_idx,
-            builder,
-        );
-
-        // field_size (field 1): Option<u32> = nullable Box<u32> ref
-        if let Some(box_idx) = box_u32_idx {
-            func.instruction(&Instruction::LocalGet(payload_ref));
-            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                struct_type_idx,
-            )));
-            func.instruction(&Instruction::StructGet {
-                struct_type_index: struct_type_idx,
-                field_index: 1,
-            });
-            func.instruction(&Instruction::LocalSet(field_ref));
-            // Inline option box lowering to p5/p6 (not p2/p3)
-            func.instruction(&Instruction::LocalGet(field_ref));
-            func.instruction(&Instruction::RefIsNull);
-            func.instruction(&Instruction::I32Eqz);
-            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-            func.instruction(&Instruction::I32Const(1));
-            func.instruction(&Instruction::LocalSet(p5));
-            func.instruction(&Instruction::LocalGet(field_ref));
-            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(box_idx)));
-            func.instruction(&Instruction::StructGet {
-                struct_type_index: box_idx,
-                field_index: 0,
-            });
-            func.instruction(&Instruction::LocalSet(p6));
-            func.instruction(&Instruction::End);
-        }
-    }
-
-    /// Emit lowering for Option<FieldSizePayload>.
-    /// Layout: `p2=outer_disc`, `p3=name_disc(i64)`, `p4=name_ptr`, `p5=name_len`,
-    ///         `p6=size_disc`, `p7=size_val`
-    #[allow(clippy::too_many_arguments)]
-    fn emit_option_field_size_payload_lowering(
-        func: &mut Function,
-        payload_ref: u32,
-        field_ref: u32,
-        p2: u32,
-        p3: u32,
-        p4: u32,
-        p5: u32,
-        p6: u32,
-        p7: u32,
-        i64_temp: u32,
-        fsp_type_idx: u32,
-        box_u32_idx: Option<u32>,
-        string_type_idx: u32,
-        builder: &CoreModuleBuilder,
-    ) {
-        // payload_ref is nullable FieldSizePayload ref
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefIsNull);
-        func.instruction(&Instruction::I32Eqz);
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-        // Some
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::LocalSet(p2));
-
-        // field_name (field 0): nullable String ref
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            fsp_type_idx,
-        )));
-        func.instruction(&Instruction::StructGet {
-            struct_type_index: fsp_type_idx,
-            field_index: 0,
-        });
-        func.instruction(&Instruction::LocalSet(field_ref));
-        // Check field_name is non-null
-        func.instruction(&Instruction::LocalGet(field_ref));
-        func.instruction(&Instruction::RefIsNull);
-        func.instruction(&Instruction::I32Eqz);
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-        // name disc → p3 (as i64)
-        func.instruction(&Instruction::I64Const(1));
-        func.instruction(&Instruction::LocalSet(p3));
-        // Lower string (cast anyref → String for cm_lower_string)
-        func.instruction(&Instruction::LocalGet(field_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            string_type_idx,
-        )));
-        let lower_idx = builder.func_idx("core/internal/cm_lower_string");
-        func.instruction(&Instruction::Call(lower_idx));
-        func.instruction(&Instruction::LocalTee(i64_temp));
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(p4));
-        func.instruction(&Instruction::LocalGet(i64_temp));
-        func.instruction(&Instruction::I64Const(32));
-        func.instruction(&Instruction::I64ShrU);
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(p5));
-        func.instruction(&Instruction::End);
-
-        // field_size (field 1): nullable Box<u32> ref
-        if let Some(box_idx) = box_u32_idx {
-            func.instruction(&Instruction::LocalGet(payload_ref));
-            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                fsp_type_idx,
-            )));
-            func.instruction(&Instruction::StructGet {
-                struct_type_index: fsp_type_idx,
-                field_index: 1,
-            });
-            func.instruction(&Instruction::LocalSet(field_ref));
-            func.instruction(&Instruction::LocalGet(field_ref));
-            func.instruction(&Instruction::RefIsNull);
-            func.instruction(&Instruction::I32Eqz);
-            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-            func.instruction(&Instruction::I32Const(1));
-            func.instruction(&Instruction::LocalSet(p6));
-            func.instruction(&Instruction::LocalGet(field_ref));
-            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(box_idx)));
-            func.instruction(&Instruction::StructGet {
-                struct_type_index: box_idx,
-                field_index: 0,
-            });
-            func.instruction(&Instruction::LocalSet(p7));
-            func.instruction(&Instruction::End);
-        }
-
-        func.instruction(&Instruction::End); // end outer Some
-    }
-
-    /// Emit lowering for `DnsErrorPayload` struct.
-    /// {rcode: Option<String>, `info_code`: Option<u16>}
-    /// Layout: `p2=rcode_disc`, `p3=rcode_ptr(i64)`, `p4=rcode_len`,
-    ///         `p5=info_disc`, `p6=info_val`
-    #[allow(clippy::too_many_arguments)]
-    fn emit_dns_error_payload_lowering(
-        func: &mut Function,
-        payload_ref: u32,
-        field_ref: u32,
-        p2: u32,
-        p3: u32,
-        p4: u32,
-        p5: u32,
-        p6: u32,
-        i64_temp: u32,
-        struct_type_idx: u32,
-        box_u16_idx: Option<u32>,
-        string_type_idx: u32,
-        builder: &CoreModuleBuilder,
-    ) {
-        // rcode (field 0): Option<String> = nullable String ref
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            struct_type_idx,
-        )));
-        func.instruction(&Instruction::StructGet {
-            struct_type_index: struct_type_idx,
-            field_index: 0,
-        });
-        func.instruction(&Instruction::LocalSet(field_ref));
-        Self::emit_option_string_lowering(
-            func,
-            field_ref,
-            p2,
-            p3,
-            p4,
-            i64_temp,
-            string_type_idx,
-            builder,
-        );
-
-        // info_code (field 1): Option<u16> = nullable Box<u16> ref
-        if let Some(box_idx) = box_u16_idx {
-            func.instruction(&Instruction::LocalGet(payload_ref));
-            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                struct_type_idx,
-            )));
-            func.instruction(&Instruction::StructGet {
-                struct_type_index: struct_type_idx,
-                field_index: 1,
-            });
-            func.instruction(&Instruction::LocalSet(field_ref));
-            func.instruction(&Instruction::LocalGet(field_ref));
-            func.instruction(&Instruction::RefIsNull);
-            func.instruction(&Instruction::I32Eqz);
-            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-            func.instruction(&Instruction::I32Const(1));
-            func.instruction(&Instruction::LocalSet(p5));
-            func.instruction(&Instruction::LocalGet(field_ref));
-            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(box_idx)));
-            func.instruction(&Instruction::StructGet {
-                struct_type_index: box_idx,
-                field_index: 0,
-            });
-            func.instruction(&Instruction::LocalSet(p6));
-            func.instruction(&Instruction::End);
-        }
-    }
-
-    /// Emit lowering for `TlsAlertReceivedPayload` struct.
-    /// {`alert_id`: Option<u8>, `alert_message`: Option<String>}
-    /// Layout: `p2=id_disc`, `p3=id_val(i64)`, `p4=msg_disc`, `p5=msg_ptr`, `p6=msg_len`
-    #[allow(clippy::too_many_arguments)]
-    fn emit_tls_alert_payload_lowering(
-        func: &mut Function,
-        payload_ref: u32,
-        field_ref: u32,
-        p2: u32,
-        p3: u32,
-        p4: u32,
-        p5: u32,
-        p6: u32,
-        i64_temp: u32,
-        struct_type_idx: u32,
-        box_u8_idx: Option<u32>,
-        string_type_idx: u32,
-        builder: &CoreModuleBuilder,
-    ) {
-        // alert_id (field 0): Option<u8> = nullable Box<u8> ref
-        if let Some(box_idx) = box_u8_idx {
-            func.instruction(&Instruction::LocalGet(payload_ref));
-            func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-                struct_type_idx,
-            )));
-            func.instruction(&Instruction::StructGet {
-                struct_type_index: struct_type_idx,
-                field_index: 0,
-            });
-            func.instruction(&Instruction::LocalSet(field_ref));
-            Self::emit_option_box_i32_lowering(func, field_ref, p2, p3, box_idx);
-        }
-
-        // alert_message (field 1): Option<String> = nullable String ref
-        func.instruction(&Instruction::LocalGet(payload_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            struct_type_idx,
-        )));
-        func.instruction(&Instruction::StructGet {
-            struct_type_index: struct_type_idx,
-            field_index: 1,
-        });
-        func.instruction(&Instruction::LocalSet(field_ref));
-        // Lower to p4/p5/p6 instead of p2/p3/p4
-        func.instruction(&Instruction::LocalGet(field_ref));
-        func.instruction(&Instruction::RefIsNull);
-        func.instruction(&Instruction::I32Eqz);
-        func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-        func.instruction(&Instruction::I32Const(1));
-        func.instruction(&Instruction::LocalSet(p4));
-        // Cast anyref → String for cm_lower_string
-        func.instruction(&Instruction::LocalGet(field_ref));
-        func.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(
-            string_type_idx,
-        )));
-        let lower_idx = builder.func_idx("core/internal/cm_lower_string");
-        func.instruction(&Instruction::Call(lower_idx));
-        func.instruction(&Instruction::LocalTee(i64_temp));
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(p5));
-        func.instruction(&Instruction::LocalGet(i64_temp));
-        func.instruction(&Instruction::I64Const(32));
-        func.instruction(&Instruction::I64ShrU);
-        func.instruction(&Instruction::I32WrapI64);
-        func.instruction(&Instruction::LocalSet(p6));
-        func.instruction(&Instruction::End);
-    }
 }
 
 /// Convert a `PrimitiveType` to its corresponding Wasm `ValType`.
@@ -13738,23 +12734,6 @@ fn primitive_to_valtype(prim: &PrimitiveType) -> ValType {
         PrimitiveType::I128 | PrimitiveType::U128 => {
             panic!("i128/u128 references not yet supported")
         }
-    }
-}
-
-/// Convert a `CmValType` (from `wasm_plan` phase) to Wasm `ValType`.
-fn cm_valtype_to_valtype(cm_type: CmValType) -> ValType {
-    match cm_type {
-        CmValType::I32 => ValType::I32,
-        CmValType::I64 => ValType::I64,
-        CmValType::F32 => ValType::F32,
-        CmValType::F64 => ValType::F64,
-        CmValType::AnyRef => ValType::Ref(RefType {
-            nullable: true,
-            heap_type: HeapType::Abstract {
-                shared: false,
-                ty: AbstractHeapType::Any,
-            },
-        }),
     }
 }
 

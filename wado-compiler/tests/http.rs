@@ -119,7 +119,7 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     // Add timeout wrapper
-    let timeout_duration = Duration::from_secs(10);
+    let timeout_duration = Duration::from_secs(1);
 
     // Run handler, then receive response if Ok
     // Note: We don't await `io` because our handler doesn't consume request body

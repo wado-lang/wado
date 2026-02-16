@@ -238,7 +238,7 @@ pub enum CmValType {
 impl CmValType {
     /// Join two value types for union flattening (Canonical ABI `join` operation).
     /// When one side is absent, uses the other. When both present, picks the larger type.
-    fn join(a: Option<Self>, b: Option<Self>) -> Self {
+    pub fn join(a: Option<Self>, b: Option<Self>) -> Self {
         match (a, b) {
             (Some(a), None) | (None, Some(a)) => a,
             (None, None) => Self::I32,

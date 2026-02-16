@@ -63,7 +63,6 @@ pub fn analyze_project(project: &mut Project) {
         let entry_reachable = compute_reachable(&call_graph, &entry_func);
         reachable.extend(entry_reachable);
     }
-
     // Add test functions as additional entry points
     // Test functions are also roots for reachability analysis
     if let Some(entry_module) = project.tir_modules.get(&project.entry_module_source) {

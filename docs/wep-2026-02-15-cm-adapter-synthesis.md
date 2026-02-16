@@ -2,559 +2,258 @@
 
 ## Context
 
-The compiler's Component Model (CM) boundary logic — lifting GC values to linear memory, lowering linear memory to GC values, calling lowered WASI imports, wrapping exports for `canon lift` — is currently spread across multiple layers:
+The compiler needs to cross the Component Model (CM) boundary at two points: **imports** (calling WASI functions) and **exports** (exposing Wado functions to the host). This boundary crossing requires lowering Wado GC values to CM flat ABI (linear memory scalars) and lifting CM values back to Wado types.
 
-- `codegen.rs`: `generate_cm_effect_call` (~140 lines), `generate_cm_resource_method_call` (~250 lines), `emit_option_string_lowering` (~40 lines), `emit_field_size_payload_lowering` (~65 lines), plus scattered CM glue throughout function emission
-- `component_model.rs`: `CmCallConvention` and its `from_return_type` logic (~350 lines), deriving ABI conventions from WASI return types via pattern matching on `Type` variants
-- `internal.wado`: hand-written CM converter functions (`cm_lower_string`, `cm_list_string_to_array`, etc.) — each covers one specific type shape (~130 lines)
-- `wasm_plan.rs`: `CmExportInfo` with pre-computed scratch locals and required imports for export glue
+Previously, this logic was scattered across codegen (raw Wasm instruction emission), per-type converter functions in `internal.wado`, and pattern-matching convention structs. Every new WIT type shape required hand-coded support in multiple places.
 
-This architecture has two problems:
+CM adapter synthesis replaces all of that with a single **type-driven recursive synthesizer** that generates adapter functions as TIR. Adapters flow through the normal compiler pipeline (monomorphize → lower → optimize → codegen) like any other function.
 
-### Per-type hand-coding
-
-Every new WASI return type shape requires adding a new `cm_*` function in `internal.wado`, a new match arm in `CmCallConvention::from_return_type`, and sometimes new codegen logic. For example, `list<tuple<string, string>>` required `cm_list_tuple_string_string_to_array` — a dedicated function for a single WASI call. This does not scale to arbitrary WIT types from third-party components.
-
-### Codegen complexity
-
-Codegen emits raw Wasm instructions for CM boundary crossing: `i32.load`, `i32.store`, `memory.grow`, `realloc` calls, outptr allocation, discriminant dispatch. This mixes two abstraction levels — Wado semantics and CM ABI mechanics — in the same function. The resulting code is hard to test, hard to debug (no intermediate representation between TIR and Wasm binary), and hard to optimize (the optimizer never sees CM glue code).
-
-### Relationship to WIR
-
-The WIR layer (WEP 2026-02-14) will replace codegen with a structured `tir_to_wir → wir_emit` pipeline. CM adapter synthesis can be done **before** WIR: it transforms `EffectCall` TIR nodes into ordinary `Call` nodes targeting synthesized adapter functions, reducing the surface area of CM-specific logic that `tir_to_wir` must handle.
-
-## Decision
-
-Introduce a **cm_adapter_gen** phase that synthesizes CM adapter functions as TIR, inserted between effect_check and monomorphize. Adapter functions express lifting, lowering, and boundary calls using Wado's own type system and builtins. They flow through the normal monomorphize → lower → optimize → codegen pipeline.
+## Architecture
 
 ### Pipeline Position
 
 ```
 parse → desugar → modules → symbols → tir (resolve) → effect_check
                                                             ↓
-                                                       cm_adapter_gen  ← NEW
+                                                       cm_adapter_gen
                                                             ↓
                                        monomorphize → lower → optimize → wasm_plan → codegen
 ```
 
-The phase runs after effect checking (all effects are validated) and before monomorphize (so adapter functions go through monomorphization, match desugaring, optimization, and codegen like any other function).
+The phase runs after effect checking and before monomorphize, so adapter functions go through monomorphization, optimization, and codegen like user code.
 
-### What cm_adapter_gen Does
+### Import Adapters
 
-For each WASI import function used by the program:
+For each WASI function used by the program, `cm_adapter_gen` synthesizes an adapter that:
 
-1. **Synthesize an adapter function** that:
-   - Accepts Wado-typed parameters (String, Array, structs, etc.)
-   - Lowers parameters to CM flat ABI (linear memory via builtins)
-   - Calls the lowered WASI function (flat i32/i64 params)
-   - Lifts the result from CM flat ABI back to Wado types
-   - Returns the Wado-typed result
+1. Accepts Wado-typed parameters (String, Array, structs, etc.)
+2. Lowers parameters to CM flat ABI (linear memory via builtins)
+3. Calls the lowered WASI function via `CmRawCall`
+4. Lifts the result from CM flat ABI back to Wado types
+5. Returns the Wado-typed result
 
-2. **Rewrite `EffectCall` nodes** to ordinary `Call` nodes targeting the adapter function.
+All call sites are rewritten from the original WASI call to the adapter call.
 
-For each export function:
+### Export Adapters
 
-3. **Synthesize an export adapter function** that:
-   - Accepts flat CM parameters (i32/i64 values, pointers)
-   - Lifts parameters to Wado types
-   - Calls the user's export function
-   - Lowers the result to flat CM ABI
-   - Returns flat values or writes to outptr
-
-### Import Adapter Example
-
-Given a WASI function:
-
-```wit
-// wasi:http/types.fields.get: func(self: borrow<fields>, name: string) -> list<list<u8>>
-```
-
-Currently represented as:
-
-```
-TirExprKind::EffectCall {
-    effect_name: "Fields",
-    op_name: "get",
-    args: [self_handle, name],
-    cm_convention: Some(CmCallConvention { outptr_alloc: Some((8, 4)), ... }),
-    cm_local_name: Some("wasi:http/types/[method]fields.get"),
-}
-```
-
-cm_adapter_gen synthesizes a TIR function:
-
-```wado
-// Synthesized adapter: wasi:http/types/[method]fields.get
-fn __cm_adapter__fields_get(self_handle: i32, name: String) -> Array<Array<u8>> {
-    // 1. Lower params: String → (ptr, len) in linear memory
-    let name_packed = internal::cm_lower_string(name);
-    let name_ptr = name_packed as i32;
-    let name_len = (name_packed >> 32) as i32;
-
-    // 2. Allocate outptr for list<list<u8>> return
-    let outptr = builtin::realloc(0, 0, 4, 8);
-
-    // 3. Call lowered WASI function (flat ABI)
-    cm_raw_call Fields::get(self_handle, name_ptr, name_len, outptr);
-
-    // 4. Free lowered param memory (callee has consumed it)
-    builtin::realloc(name_ptr, name_len, 1, 0);
-
-    // 5. Lift result: read (base_ptr, count) from outptr
-    let base_ptr = builtin::i32_load(outptr);
-    let count = builtin::i32_load(outptr + 4);
-
-    // 6. Build Array<Array<u8>> from linear memory
-    let result: Array<Array<u8>> = Array::<Array<u8>>::with_capacity(count);
-    for let mut i = 0; i < count; i += 1 {
-        let elem_ptr = builtin::i32_load(base_ptr + i * 8);
-        let elem_len = builtin::i32_load(base_ptr + i * 8 + 4);
-        let bytes = internal::memory_to_gc_array(elem_ptr, elem_len);
-        result.append(bytes);
-    }
-
-    // 7. Free result linear memory (outer list + outptr)
-    builtin::realloc(base_ptr, count * 8, 4, 0);
-    builtin::realloc(outptr, 8, 4, 0);
-
-    return result;
-}
-```
-
-And the `EffectCall` becomes:
-
-```
-TirExprKind::Call {
-    func: FunctionRef::Resolved("__cm_adapter__fields_get"),
-    args: [self_handle, name],
-}
-```
-
-### Export Adapter Example
-
-Given a user export:
-
-```wado
-export fn handle(request: Request) -> Result<Response, ErrorCode> { ... }
-```
-
-cm_adapter_gen synthesizes:
-
-```wado
-// Synthesized export adapter
-fn __cm_export__handle(method_ptr: i32, method_len: i32,
-                       path_ptr: i32, path_len: i32,
-                       /* ... flat params ... */
-                       outptr: i32) {
-    // 1. Lift params from flat ABI
-    let method = internal::memory_to_gc_string(method_ptr, method_len);
-    let path = internal::memory_to_gc_string(path_ptr, path_len);
-    let request = Request { method, path, /* ... */ };
-
-    // 2. Call user function
-    let result = handle(request);
-
-    // 3. Lower Result<Response, ErrorCode> to outptr
-    match result {
-        Ok(response) => {
-            builtin::i32_store(outptr, 0);  // discriminant = Ok
-            // lower response fields to outptr + 4...
-        },
-        Err(code) => {
-            builtin::i32_store(outptr, 1);  // discriminant = Err
-            builtin::i32_store(outptr + 4, code as i32);
-        },
-    }
-}
-```
-
-### Async Adapter Example
-
-For async WASI functions (e.g., `Stdout::write_via_stream`):
-
-```wado
-fn __cm_adapter__write_via_stream(stream: i32, data: String) {
-    let data_packed = internal::cm_lower_string(data);
-    let data_ptr = data_packed as i32;
-    let data_len = (data_packed >> 32) as i32;
-
-    // Call lowered async function — returns subtask handle
-    let subtask = cm_raw_call Stdout::write_via_stream(stream, data_ptr, data_len);
-
-    // Wait for completion, then free lowered param memory
-    internal::wait_for_subtask(subtask);
-    builtin::realloc(data_ptr, data_len, 1, 0);
-}
-```
-
-### Required Builtins
-
-The adapter functions use builtins to perform low-level operations. Some already exist, others need to be added:
-
-#### Existing (in builtin.wado / internal.wado)
-
-| Function                       | Purpose                                   |
-| ------------------------------ | ----------------------------------------- |
-| `builtin::realloc`             | Allocate linear memory                    |
-| `builtin::i32_load`            | Read i32 from linear memory               |
-| `builtin::i32_store8`          | Write byte to linear memory               |
-| `builtin::i32_load8_u`         | Read byte from linear memory              |
-| `internal::cm_lower_string`    | Lower String to (ptr, len) packed as i64  |
-| `internal::cm_lower_list_u8`   | Lower Array\<u8\> to (ptr, len)           |
-| `internal::memory_to_gc_array` | Copy bytes from linear memory to GC array |
-| `internal::gc_array_to_memory` | Copy bytes from GC array to linear memory |
-| `internal::wait_for_subtask`   | Wait for async subtask completion         |
-
-#### internal.wado scope
-
-`internal.wado` provides CM helper functions only for types where lowering/lifting involves real work (allocation, memory copy). Scalar types (i32, i64, f32, f64, etc.) are lowered/lifted inline by the synthesizer using `builtin::i32_load` / `builtin::i32_store` directly — wrapping these in `internal::cm_lower_i32()` etc. would be trivial identity functions with no benefit.
-
-| Type                                                    | Lowering                                            | Lifting                             | Provider                                                      |
-| ------------------------------------------------------- | --------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------- |
-| i32, i64, f32, f64                                      | identity (flat param) / `builtin::*_store` (memory) | `builtin::*_load`                   | synthesizer inline                                            |
-| bool                                                    | `value as i32`                                      | `i32_load8_u(addr) != 0`            | synthesizer inline                                            |
-| char                                                    | `value as i32`                                      | `char::from_u32_unchecked`          | synthesizer inline                                            |
-| String                                                  | alloc + copy → `(ptr, len)`                         | copy from linear memory → GC string | `internal::cm_lower_string`, `internal::memory_to_gc_string`  |
-| Array\<u8\>                                             | alloc + copy → `(ptr, len)`                         | copy from linear memory → GC array  | `internal::cm_lower_array_u8`, `internal::memory_to_gc_array` |
-| list\<T\>, option\<T\>, result\<T, E\>, record, variant | recursive                                           | recursive                           | synthesizer generates TIR (calls leaf helpers above)          |
-
-All per-type converter functions (`cm_list_string_to_array`, `cm_option_string_to_option`, etc.) have been deleted. The synthesizer handles all types generically using inline TIR with proper monomorphization info.
-
-#### Memory load/store builtins (added in Phase 1)
-
-All memory load/store builtins use Wasm instruction names for consistency. The old `memory_load32`, `memory_store8`, `memory_load8_u` aliases were removed in favor of these.
-
-| Function                | Wasm instruction | Purpose                                      |
-| ----------------------- | ---------------- | -------------------------------------------- |
-| `builtin::i32_load`     | `i32.load`       | Read i32 from linear memory at offset        |
-| `builtin::i32_store`    | `i32.store`      | Write i32 to linear memory at offset         |
-| `builtin::i64_load`     | `i64.load`       | Read i64 from linear memory at offset        |
-| `builtin::i64_store`    | `i64.store`      | Write i64 to linear memory at offset         |
-| `builtin::f32_load`     | `f32.load`       | Read f32 from linear memory at offset        |
-| `builtin::f32_store`    | `f32.store`      | Write f32 to linear memory at offset         |
-| `builtin::f64_load`     | `f64.load`       | Read f64 from linear memory at offset        |
-| `builtin::f64_store`    | `f64.store`      | Write f64 to linear memory at offset         |
-| `builtin::i32_load8_u`  | `i32.load8_u`    | Read byte from linear memory (zero-extended) |
-| `builtin::i32_load16_u` | `i32.load16_u`   | Read u16 from linear memory                  |
-| `builtin::i32_store8`   | `i32.store8`     | Write byte to linear memory                  |
-| `builtin::i32_store16`  | `i32.store16`    | Write u16 to linear memory                   |
-
-#### Raw CM calls
-
-Raw CM calls are represented as a dedicated TIR node `CmRawCall` rather than builtin functions. This avoids polluting the builtin namespace and produces more readable unparse output:
-
-```
-// TIR node
-TirExprKind::CmRawCall {
-    local_name: "wasi:http/types/[method]fields.get",         // resolved import name
-    args: [self_handle, name_ptr, name_len, outptr],          // flat ABI args
-}
-
-// Unparse output
-cm_raw_call wasi:http/types/[method]fields.get(self_handle, name_ptr, name_len, outptr)
-```
-
-The `local_name` field is the only identifier needed — codegen resolves it to the imported function index via `try_func_idx`. The original design included a separate `target` field for `effect::op` reference, but this was dropped as redundant; the adapter function name (`__cm_adapter__Effect_method`) is sufficient for human readability and the `local_name` is what codegen needs.
+For each world export, `cm_adapter_gen` synthesizes an adapter that wraps the user's function. The adapter is what the component actually exports — it handles CM ABI translation and calls the user function internally.
 
 ### Type-Driven Synthesis
 
-The core of cm_adapter_gen is a **type-driven recursive synthesizer** that generates lift/lower TIR expressions for any Canonical ABI type:
+The core synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`) is recursive and type-driven:
 
-```rust
-// cm_adapter_gen.rs
-impl CmAdapterGen {
-    /// Synthesize TIR expressions to lift a CM value from linear memory
-    fn synthesize_lift(&self, ty: &ResolvedType, addr: TirExpr) -> TirExpr {
-        match ty {
-            // Primitives: single load
-            ResolvedType::I32 | ResolvedType::U32 =>
-                builtin_call("i32_load", vec![addr]),
-            ResolvedType::I64 | ResolvedType::U64 =>
-                builtin_call("i64_load", vec![addr]),
-            ResolvedType::F32 =>
-                builtin_call("f32_load", vec![addr]),
-            ResolvedType::F64 =>
-                builtin_call("f64_load", vec![addr]),
-            ResolvedType::Bool =>
-                // i32.load8_u, then != 0
-                ne(builtin_call("i32_load8_u", vec![addr]), i32_const(0)),
+| Type                                                    | Lowering                      | Lifting                             | Provider                                                      |
+| ------------------------------------------------------- | ----------------------------- | ----------------------------------- | ------------------------------------------------------------- |
+| i32, i64, f32, f64                                      | identity / `builtin::*_store` | `builtin::*_load`                   | synthesizer inline                                            |
+| bool                                                    | `value as i32`                | `i32_load8_u(addr) != 0`            | synthesizer inline                                            |
+| char                                                    | `value as i32`                | `char::from_u32_unchecked`          | synthesizer inline                                            |
+| String                                                  | alloc + copy → `(ptr, len)`   | copy from linear memory → GC string | `internal::cm_lower_string`, `internal::memory_to_gc_string`  |
+| Array\<u8\>                                             | alloc + copy → `(ptr, len)`   | copy from linear memory → GC array  | `internal::cm_lower_array_u8`, `internal::memory_to_gc_array` |
+| list\<T\>, option\<T\>, result\<T, E\>, record, variant | recursive                     | recursive                           | synthesizer generates TIR                                     |
 
-            // String: read (ptr, len), copy from linear memory
-            ResolvedType::String => {
-                let ptr = builtin_call("i32_load", vec![addr.clone()]);
-                let len = builtin_call("i32_load", vec![add(addr, i32_const(4))]);
-                internal_call("memory_to_gc_string", vec![ptr, len])
-            }
+No per-type converter functions exist. The synthesizer handles all composite types by recursing into their structure.
 
-            // Array<T>: read (ptr, count), lift each element
-            ResolvedType::Array(elem_ty) => {
-                let base = builtin_call("i32_load", vec![addr.clone()]);
-                let count = builtin_call("i32_load", vec![add(addr, i32_const(4))]);
-                let elem_size = self.cm_size(elem_ty);
-                // Generate loop: for i in 0..count, lift element at base + i * elem_size
-                self.synthesize_lift_list(elem_ty, base, count, elem_size)
-            }
+### Canonical ABI Layout
 
-            // Option<T>: read discriminant, conditionally lift payload
-            ResolvedType::Option(inner_ty) => {
-                let disc = builtin_call("i32_load8_u", vec![addr.clone()]);
-                let payload_offset = self.cm_align(inner_ty);  // padding after discriminant
-                // if disc == 0 { None } else { Some(lift(inner, addr + offset)) }
-                self.synthesize_lift_option(inner_ty, disc, addr, payload_offset)
-            }
+`cm_abi.rs` computes sizes, alignments, field offsets, and flat type sequences for any Canonical ABI type. This replaces the ad-hoc size/align constants that were previously scattered across convention structs.
 
-            // Result<T, E>: read discriminant, lift Ok or Err
-            ResolvedType::Result(ok_ty, err_ty) => {
-                let disc = builtin_call("i32_load", vec![addr.clone()]);
-                let payload_offset = 4;  // after i32 discriminant
-                // match disc { 0 => Ok(lift(ok, addr+4)), 1 => Err(lift(err, addr+4)) }
-                self.synthesize_lift_result(ok_ty, err_ty, disc, addr, payload_offset)
-            }
+### CmRawCall
 
-            // Record/struct: lift each field at its offset
-            ResolvedType::Record(fields) => {
-                self.synthesize_lift_record(fields, addr)
-            }
+Raw CM calls are a dedicated TIR node:
 
-            // Enum: load discriminant
-            ResolvedType::Enum(_) =>
-                builtin_call("i32_load", vec![addr]),
-
-            // Variant: load discriminant, lift payload per case
-            ResolvedType::Variant(cases) => {
-                self.synthesize_lift_variant(cases, addr)
-            }
-
-            // Resource handle: just an i32
-            ResolvedType::Resource =>
-                builtin_call("i32_load", vec![addr]),
-        }
-    }
-
-    /// Synthesize TIR expressions to lower a Wado value to linear memory
-    fn synthesize_lower(&self, ty: &ResolvedType, value: TirExpr, addr: TirExpr) -> TirExpr {
-        // Symmetric to synthesize_lift: store primitives, recurse for composites
-        // ...
-    }
+```
+TirExprKind::CmRawCall {
+    local_name: "wasi:http/types/[method]fields.get",
+    args: [self_handle, name_ptr, name_len, outptr],
 }
 ```
 
-### Canonical ABI Layout Computation
+Codegen resolves `local_name` to the imported function index. This node is also used for `task-return`, `future-write`, and other CM intrinsics in export adapters.
 
-A pure `cm_abi.rs` module computes sizes, alignments, and field offsets for Canonical ABI types:
+## Current State
 
-```rust
-// cm_abi.rs
+### Import Adapters — Complete
 
-/// Canonical ABI size in bytes
-pub fn cm_size(ty: &ResolvedType) -> u32 {
-    match ty {
-        ResolvedType::Bool | ResolvedType::U8 | ResolvedType::I8 => 1,
-        ResolvedType::U16 | ResolvedType::I16 => 2,
-        ResolvedType::I32 | ResolvedType::U32 | ResolvedType::F32 |
-        ResolvedType::Char | ResolvedType::Enum(_) | ResolvedType::Resource => 4,
-        ResolvedType::I64 | ResolvedType::U64 | ResolvedType::F64 => 8,
-        ResolvedType::String | ResolvedType::Array(_) => 8,  // (ptr, len)
-        ResolvedType::Option(inner) => {
-            let payload = cm_size(inner);
-            let align = cm_align(inner);
-            align_to(1, align) + payload  // disc + padding + payload
-        }
-        ResolvedType::Result(ok, err) => {
-            4 + max(cm_size(ok), cm_size(err))  // disc(i32) + max(ok, err)
-        }
-        ResolvedType::Record(fields) => {
-            // Sum of fields with alignment padding
-            layout_record(fields).size
-        }
-        ResolvedType::Variant(cases) => {
-            4 + cases.iter().map(|c| cm_size(&c.payload)).max().unwrap_or(0)
-        }
-        // Tuple is a record
-        ResolvedType::Tuple(elems) => {
-            layout_tuple(elems).size
-        }
-    }
+All WASI interfaces (cli, clocks, random, http, sockets) use adapter synthesis. The old codegen CM paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) and per-type converters (`cm_list_string_to_array`, `cm_option_string_to_option`, etc.) have been deleted.
+
+### Export Adapters — Async Only
+
+Export adapters currently handle two cases:
+
+#### Void exports (`() -> ()`)
+
+Used by Command world's `run()` and test functions. The adapter calls the user function, then calls `task-return(0)`.
+
+#### Result-returning exports (`(...) -> Result<T, E>`)
+
+Used by Service world's `handle()`. The adapter:
+
+1. Calls the user function (passing through parameters)
+2. Tests the Result discriminant
+3. Ok: lowers T to flat CM values via `synthesize_lower_to_flat`, calls `task-return`
+4. Err: lowers E (variant, struct, or primitive) to flat CM values, calls `task-return`
+5. Post-return: resolves trailers future if present (HTTP-specific)
+
+The lowering is fully generic — `synthesize_lower_to_flat` recurses into any type structure (primitives, strings, options, structs, variants) without hard-coded type names.
+
+### What's Generic vs What's Specific
+
+| Component                          | Generic?         | Notes                                                                    |
+| ---------------------------------- | ---------------- | ------------------------------------------------------------------------ |
+| `synthesize_lower_to_flat`         | Yes              | Recursive, type-driven. Only hard-codes `"String"` for `cm_lower_string` |
+| `synthesize_variant_lower_to_flat` | Yes              | Iterates variant cases from declaration                                  |
+| `flatten_*` flat type computation  | Yes              | Type-structure-based                                                     |
+| `cm_abi.rs` layout computation     | Yes              | Pure Canonical ABI spec                                                  |
+| Result Ok/Err dispatch             | Intentional      | Result is a language primitive with fixed case ordering                  |
+| `task-return` in all adapters      | Async assumption | WASI P3 is async-only; needs change for sync                             |
+| Trailers future post-return        | HTTP-specific    | Guarded by `if tx != 0`, only activates for HTTP                         |
+
+## Remaining Work: Generic CM Exports
+
+The current export adapter synthesis works for the two hosted worlds (Command, Service). To support **arbitrary world exports** — including publishing Wado libraries as `.wasm` components — the following work is needed.
+
+### Parameter Lifting
+
+Current adapters pass user function parameters through unchanged. This works because:
+
+- Command world `run()` takes no parameters
+- Service world `handle(request: Request)` receives a resource handle (i32), which needs no lifting
+
+For generic exports with composite parameters, the adapter must **lift flat CM params to Wado types**:
+
+```wado
+// User writes:
+export fn greet(name: String) -> String { ... }
+
+// Adapter must synthesize:
+fn __cm_export__greet(name_ptr: i32, name_len: i32) {
+    let name = internal::memory_to_gc_string(name_ptr, name_len);
+    let result = greet(name);
+    // lower result...
 }
-
-/// Canonical ABI alignment in bytes
-pub fn cm_align(ty: &ResolvedType) -> u32 { ... }
-
-/// Compute field offsets for a record/struct
-pub fn layout_record(fields: &[CmField]) -> CmLayout { ... }
 ```
 
-This replaces the ad-hoc size/align constants scattered throughout `CmCallConvention` (e.g., `outptr_alloc: Some((8, 4))` for string, `Some((12, 4))` for option\<string\>).
+This requires:
 
-### What Gets Removed
+- [x] Compute flat parameter types from the world export's WIT signature
+- [x] Generate `synthesize_lift_from_flat_params` for each parameter in the export adapter
+- [x] Map flat params to adapter function parameters
 
-After cm_adapter_gen is complete:
+Implemented via `synthesize_lift_from_flat_params` which lifts flat CM params (i32/i64/f32/f64) to Wado-typed values. Handles primitives, bool, char, String, resources, Array, Option, and tuples. The export adapter now detects when param lifting is needed (via `export_needs_param_lifting`) and generates flat-typed adapter params with lifting code.
 
-| Location           | Code                                   | Lines | Fate                                                              |
-| ------------------ | -------------------------------------- | ----- | ----------------------------------------------------------------- |
-| codegen.rs         | `generate_cm_effect_call`              | ~155  | **Deleted** — adapter handles CM calls                            |
-| codegen.rs         | `generate_cm_resource_method_call`     | ~264  | **Deleted** — adapter handles resource calls                      |
-| codegen.rs         | `emit_option_string_lowering`          | ~40   | Deleted — adapter generates inline                                |
-| codegen.rs         | `emit_field_size_payload_lowering`     | ~65   | Deleted — adapter generates inline                                |
-| codegen.rs         | `wado_type_to_cm_val_type`             | ~50   | Moved to cm_abi.rs                                                |
-| component_model.rs | `CmCallConvention` struct + impl       | ~360  | **Deleted** — type-driven synthesis replaces pattern matching     |
-| component_model.rs | `CmConverterKind` enum + impl          | ~50   | **Deleted** — call graph analysis replaces converter tracking     |
-| wasm_plan.rs       | `CmConverterRequirements` + tests      | ~110  | **Deleted** — call graph analysis replaces converter tracking     |
-| internal.wado      | `cm_option_string_to_option`           | ~26   | **Deleted** — adapter generates inline                            |
-| internal.wado      | `cm_option_own_resource_to_option`     | ~16   | **Deleted** — adapter generates inline                            |
-| internal.wado      | `cm_list_string_to_array`              | ~30   | **Deleted** — adapter generates inline with generic Array methods |
-| internal.wado      | `cm_list_tuple_string_string_to_array` | ~38   | **Deleted** — adapter generates inline with generic Array methods |
-| Total removed      |                                        | ~1089 | (bold = deleted)                                                  |
+### Non-Result Return Types
 
-New code (actual for Phases 1–2):
+Current adapters handle `()` and `Result<T, E>`. For generic exports, any return type should work:
 
-| Module                    | Purpose                          | Lines |
-| ------------------------- | -------------------------------- | ----- |
-| cm_abi.rs                 | Canonical ABI layout computation | 813   |
-| cm_adapter_gen.rs         | Type-driven adapter synthesis    | 2909  |
-| builtin.wado additions    | Memory load/store builtins       | ~50   |
-| CmRawCall visitor changes | Match arms across 14 files       | ~160  |
-| monomorphize.rs additions | StaticCall rewrite in Phase 12   | ~20   |
-| Total added               |                                  | ~3952 |
+```wado
+export fn add(a: i32, b: i32) -> i32 { ... }
+export fn get_name() -> String { ... }
+export fn get_pair() -> [String, i32] { ... }
+```
 
-The adapter gen module grew significantly in Phase 2 (from 1664 to 2909 lines) as resource method adapter synthesis was added, including variant/enum lifting with discriminant dispatch, nested struct lifting (`FieldSizePayload`, `DnsErrorPayload`, `TlsAlertReceivedPayload`), `Option<own<resource>>` lifting, and generic `list<T>` lifting with proper monomorphization support.
+This requires:
 
-Net impact: ~3952 lines added, ~1089 lines removed. The new code is more general and eliminates per-type hand-coding.
+- [x] `synthesize_lower_to_flat` for non-Result returns (the function exists, just not wired for direct returns)
+- [ ] Handle return-via-flat-params vs return-via-outptr (CM spec: if flat count > `MAX_FLAT_RESULTS`, use an outptr)
 
-### What Stays
+Implemented via `synthesize_general_export_adapter` which handles non-Result return types. The adapter calls the user function, lowers the return value to flat CM values, and calls `task-return(0, ...flat_values)` — wrapping in Ok since CM exports wrap returns in `result<T, error-context>`.
 
-- `WasiRegistry` in component_model.rs — still needed to know which WASI functions exist and their signatures
-- `ComponentPlan` in wasm_plan.rs — still needed for component wrapper construction
-- `CmExportInfo` in wasm_plan.rs — absorbed into cm_adapter_gen (export adapter synthesis replaces scratch local pre-computation)
-- Component wrapper encoding in codegen — still emits the outer Component Model structure (`ComponentBuilder` calls)
+### Sync Export Support
 
-## Migration Plan
+All current adapters assume WASI P3 async semantics (`task-return`). For publishing `.wasm` components consumed by non-async hosts, sync exports are needed:
 
-### Phase 1: Builtins and Infrastructure (done)
+```
+// Async (current): adapter calls task-return with flat values
+cm_raw_call task-return(disc, val1, val2, ...);
 
-- [x] Add `builtin::i32_load`, `builtin::i32_store`, `builtin::i64_load`, `builtin::i64_store`, `builtin::f32_load`, `builtin::f32_store`, `builtin::f64_load`, `builtin::f64_store` and sub-word variants to `builtin.wado` and codegen's builtin dispatch.
-- [x] Create `cm_abi.rs` (719 lines) with Canonical ABI size/align/layout computation: `cm_size`, `cm_align`, `layout_record`, `layout_tuple`, `layout_option`, `layout_result`, `cm_flat_types`.
-- [x] Add 37 unit tests for `cm_abi.rs` against known Canonical ABI layouts.
+// Sync: adapter returns flat values directly
+return (val1, val2, ...);
+```
 
-### Phase 2: Import Adapters (Incremental)
+This requires:
 
-Migrate one WASI interface at a time, validating via existing E2E tests.
+- [ ] Detect whether the target world is async (P3) or sync (P2/standalone)
+- [ ] Sync adapters return flat values or write to outptr instead of calling `task-return`
+- [ ] Sync adapters use `canon lift` / `canon lower` rather than `task-return`
 
-- [x] Add `TirExprKind::CmRawCall { local_name, args }` variant to TIR and handle in all 14 visitor/transform files (codegen, lower, monomorphize, effect_check, unparse, and all optimizer passes).
-- [x] Create `cm_adapter_gen.rs` (1664 lines): the phase entry point (`generate_adapters`), TIR function synthesis helpers, effect call collector/rewriter, type fixup, adapter synthesis for all convention types. 19 unit tests.
-- [x] Wire `cm_adapter_gen` into pipeline between `effect_check` and `monomorphize` (currently no-op scaffolding that scans effect calls without transforming).
-- [x] Implement `synthesize_lift` and `synthesize_lower` for primitives (i32, i64, f32, f64, bool, char, i8/u8, i16/u16).
-- [x] Implement `synthesize_lift` for String (via `memory_to_gc_string`).
-- [x] Implement `synthesize_lower` for String (via `cm_lower_string` packed i64).
-- [x] Migrate `wasi:cli/Stdout` and `wasi:cli/Stderr` (async: void return, String param). Adapter synthesizes param lowering + `CmRawCall` + subtask wait. Validated with all 3415 E2E tests.
-- [x] Migrate `wasi:cli/Environment` (returns `list<tuple<string, string>>`). Adapter delegates to `result_converter` function. Replaces `cm_list_tuple_string_string_to_array` usage via adapter path.
-- [x] Migrate `wasi:cli/Exit` (simple i32 param, void return). Adapter works for both `Call` and `EffectCall` TIR node types.
-- [x] Migrate `wasi:random/InsecureSeed` (tuple return: `[u64, u64]`). Adapter loads each element from outptr using `load_cm_primitive`.
-- [x] Handle both `TirExprKind::EffectCall` and `TirExprKind::Call` nodes in effect call collection and rewriting. Async WASI calls use `EffectCall`, sync calls like `Environment::get_arguments` use `Call`.
-- [x] Fix DCE integration: adapter module remapping (`ADAPTER_PREFIX` check in `optimize_dce.rs`) and `CmRawCall` WASI function tracking.
-- [x] Implement type fixup during call rewriting: adapter placeholder `TypeId`s are corrected from actual call site types.
-- [x] Rewrite `synthesize_adapter` to derive ABI directly from `WasiFunctionInfo` types (async detection, params, return type) instead of pattern-matching on convention kinds. This makes the synthesizer data-driven.
-- [x] Implement `synthesize_lift` for resource method results: variant/enum lifting with discriminant dispatch, `Option<own<resource>>` lifting, `FieldSizePayload`/`DnsErrorPayload` struct lifting.
-- [x] Migrate resource method calls: `Fields::get`, `Fields::has`, `Fields::set`, `Fields::delete`, `Fields::get_and_delete`, `Fields::append`, `Fields::copy_all`, `Fields::clone`, `Response::get_status_code`, `Response::set_status_code`, `Response::get_headers`.
-- [x] Delete `generate_cm_effect_call` (~155 lines) and `generate_cm_resource_method_call` (~264 lines) from codegen.rs. EffectCall and resource method call codegen paths now panic.
-- [x] Delete `CmCallConvention` struct and impl (~360 lines) from component_model.rs.
-- [x] Delete `CmConverterKind` enum and impl (~50 lines) from component_model.rs.
-- [x] Remove `call_convention` field from `WasiFunctionInfo`; add `needs_memory()` and `needs_realloc()` methods derived from function signatures.
-- [x] Remove `cm_convention` and `cm_local_name` fields from `TirExprKind::EffectCall`.
-- [x] Delete `CmConverterRequirements` struct and `get_cm_converter_for_type` from wasm_plan.rs.
-- [x] Simplify DCE converter tracking: rely on call graph analysis instead of `CmConverterRequirements`.
-- [x] Delete unused per-type converters from internal.wado: `cm_option_string_to_option`, `cm_option_own_resource_to_option`.
-- [x] Implement `synthesize_lift` for `list<T>` generically — adapter synthesis now provides proper `MonomorphInfo` and `LocalMethodName` on `StaticCall`/`MethodCall` nodes for `Array::<T>::with_capacity()` and `.append()`, enabling the monomorphizer to instantiate these generic methods. `list_converter_for_type` workaround deleted along with `cm_list_string_to_array` and `cm_list_tuple_string_string_to_array` from internal.wado.
-- [x] Migrate remaining WASI interfaces not yet covered by adapter synthesis (e.g., `wasi:clocks`). Verified: all WASI interfaces (cli, clocks, random, http, sockets) are handled by the generic adapter synthesizer. The old codegen paths (`generate_cm_effect_call`, `generate_cm_resource_method_call`) were already deleted; clocks E2E tests pass at all optimization levels.
+### Trailers Future Decoupling
 
-### Phase 3: Cleanup (done)
+The trailers future post-return logic uses a Wasm global (`__pending_trailers_tx`) to pass the tx handle from the user's `Future::new()` call to the adapter's post-task-return code. This is HTTP-specific and guarded by `is_http_handler` in `synthesize_result_export_adapter`. The global approach avoids magic memory offsets. Potential improvements:
 
-- [x] Remove `TirExprKind::EffectCall` — variant was dead code (resolver creates `Call` nodes for all WASI operations; `EffectCall` was never constructed). Removed from `TirExprKind` enum and all 15 files with match arms (effect_check, cm_adapter_gen, codegen, unparse, lower, monomorphize, and 8 optimizer passes).
-- [x] Remove `cm_convention` and `cm_local_name` fields from TIR.
-- [x] Delete `CmCallConvention`, `CmConverterKind`, and `CmConverterRequirements`.
-- [x] Delete unused per-type converter functions from `internal.wado`.
-- [x] Verify all E2E tests (3425), HTTP tests (8), and unit tests (229) pass.
+- [ ] Move trailers future resolution into the user-visible `Response` construction (stdlib level) rather than the export adapter
+- [ ] Or make trailers resolution part of the world-specific adapter template, not embedded in `synthesize_result_export_adapter`
 
-### Phase 4: Export Adapters (Void Exports Done)
+### Export Validation
 
-Design principle: export adapter synthesis is **signature-driven, not name-driven**. The adapter generator inspects the export's parameter types and return type from the world registry metadata, not the function name. This ensures that any future world export with the same signature shape gets the same treatment without hard-coding names like `"run"` or `"handle"`.
+- [x] Validate that user's export function parameter count matches the world declaration
+- [ ] Validate parameter types match (beyond count)
+- [ ] Validate return type compatibility
+- [ ] Produce clear error messages for type mismatches
 
-- [x] Implement export adapter synthesis for all `() -> ()` exports (Command world `run`, test functions).
-- [x] Move `export` keyword validation from `wasm_plan` to `cm_adapter_gen`.
-- [x] Synthesize stub adapters for optional world exports (e.g., test-only files with no `run`).
-- [x] Remove `generate_run_function` usage for non-HTTP exports in codegen.
-- [x] Move target world assignment before `cm_adapter_gen` phase.
-- [ ] Implement export adapter synthesis for `wasi:http/incoming-handler` (complex: async, Result return).
-- [ ] Delete `CmExportInfo` scratch local logic — adapters declare their own locals.
-- [ ] Delete remaining export-related CM glue from codegen (`generate_http_handler_export`).
+Parameter count validation is implemented: if the user's export function has a different number of parameters than the world declaration, a clear compile error is produced.
 
-Once all export signatures are handled by adapter synthesis and `generate_http_handler_export` is deleted from codegen, Phase 4 is complete.
+### Summary
 
-## Implementation Notes
+| Task                        | Difficulty | Status  | Notes                                     |
+| --------------------------- | ---------- | ------- | ----------------------------------------- |
+| Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`        |
+| Non-Result return types     | Low        | Done    | `synthesize_general_export_adapter`       |
+| Sync export support         | Medium     | Pending | World metadata for async/sync distinction |
+| Trailers decoupling         | Low        | Pending | Design decision on where resolution lives |
+| Export signature validation | Low        | Partial | Parameter count validated; types not yet  |
 
-### CmRawCall visitor coverage
+The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support and full type validation.
 
-Adding a new `TirExprKind` variant requires updating 14 files with match arms. The pattern varies per file:
+### Known Limitations and Edge Cases
 
-- **Grouped with Call/StaticCall**: Most optimizer passes group `CmRawCall` with `Call` and `StaticCall` since they share the same `args` structure. This is the common case for passes that recurse into arguments.
-- **Standalone handling**: codegen, unparse, and optimize_dce need separate match arms because they have variant-specific logic (e.g., codegen resolves `local_name` to a function index, unparse formats differently).
-- **Reconstruction**: optimize_inline must reconstruct `CmRawCall` when inlining, remapping local indices.
+#### Parameter Lifting Gaps
 
-Note: `TirExprKind::EffectCall` was removed in Phase 4. It was a dead variant — the resolver creates `Call` nodes for all WASI operations (both sync and async), and `cm_adapter_gen` identifies effect calls via `ModuleSource::is_effect_like()`. The `EffectCall` variant was never constructed in the current codebase.
+`synthesize_lift_from_flat_params` handles primitives, bool, char, String, resources, Array (with linear memory round-trip), Option, and tuples. The following types are **not yet implemented**:
 
-### TIR construction gotchas
+- **Struct parameters (non-String)**: Treated as i32 passthrough. Should lift each field from consecutive flat params.
+- **Result parameters**: Falls through to unit default. Unlikely in practice (Result is typically a return type, not a parameter).
+- **Variant parameters**: Treated as i32 passthrough. Should lift discriminant + case-specific payloads.
 
-Discovered during implementation:
+These gaps are safe for current worlds (Command, Service) but would need to be addressed for custom worlds with complex parameter types.
 
-- `IntLiteral.value` is `u64`, not `i64`. Signed constants need `as u64` cast.
-- `TirBinaryOp::NotEq`, not `NotEqual`.
-- `TirStmtKind` has no `While` or `For` — loops are lowered to `Loop` with `Break`/`Continue`.
-- `TirStmtKind::Break` has `{ label, value }` fields, not a unit variant.
-- `Switch` and `Match` have different arm types: `Switch { arms: Vec<TirBlock>, default: TirBlock }` vs `Match { arms: Vec<TirMatchArm> }`.
-- `module_source()` returns `ModuleSource` directly, not `Option<ModuleSource>`.
+#### Flat Return Type Mismatch in General Adapter
 
-These are documented here to help future TIR-synthesizing phases avoid the same issues.
+`synthesize_general_export_adapter` computes flat return types from the **user function's return type**, not from the world's `result<T, error-context>` wrapper. This means:
 
-### Call rewriting gotchas
+- `task-return(0, ...T_flat)` provides `1 + |T_flat|` args
+- The CM expects `1 + max(|T_flat|, |E_flat|)` args (union of Ok and Err payloads)
+- If `error-context` has more flat slots than the Ok payload, the adapter may provide too few args
 
-Discovered during Phase 2:
+In practice this is safe because:
 
-- **EffectCall vs Call**: Async WASI calls (`Stdout::write_via_stream`, `Stderr::write_via_stream`) are stored as `TirExprKind::EffectCall`, while sync calls (`Environment::get_arguments`, `Exit::exit`) are `TirExprKind::Call` with an effect-like `ModuleSource`. Both must be collected and rewritten.
-- **DCE module remapping**: DCE remaps entry-module function sources to the caller's module. Adapter functions (in the entry module) must be exempt from this remapping — check for `ADAPTER_PREFIX` in the function name.
-- **DCE CmRawCall tracking**: DCE's `used_wasi_functions` set must be populated from `CmRawCall` nodes inside adapter bodies, not just `EffectCall`/`Call` nodes. Parse `local_name` to extract `(effect_name, op_name)`.
-- **Type fixup**: Adapter functions are created with placeholder `TypeId`s (e.g., `TypeTable::I32`) because the actual Wado types aren't known until call-site rewriting. The rewriter copies `TypeId`s from the call site to the adapter's params, return type, and body return expressions.
-- **Skip-scalarized-wrap**: The `ctx.skip_scalarized_wrap` flag in codegen must be saved/restored around adapter calls to avoid propagating to nested argument expressions.
+- Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>` (handled by `synthesize_result_export_adapter`)
+- `error-context` is typically i32 (1 slot), and most return types have >= 1 slot
 
-### Pipeline position
+To fix: compute flat return types from the world's full `result<T, error-context>` type, and zero-fill any extra slots.
 
-The original WEP placed cm_adapter_gen "between resolve and lower". The actual position is between `effect_check` and `monomorphize`. This is because:
+#### Array Lifting Uses Temporary Linear Memory
 
-1. Effect checking must run first to validate effect declarations.
-2. Adapter functions need monomorphization (they may use generic builtins).
-3. Placing before monomorphize means adapters flow through all downstream phases: monomorphize → lower → optimize → wasm_plan → codegen.
+For `Array<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat params (ptr, len) to a temporary 8-byte linear memory block, then calls `synthesize_lift` which reads from that block. This:
+
+- Requires `builtin::realloc` to be linked (always true for programs with linear memory)
+- Allocates and immediately frees 8 bytes (wasteful but correct)
+- Could be optimized with a direct `synthesize_lift_list_from_flat` that takes ptr/len as locals
+
+#### No Type-Level Validation
+
+Parameter count is validated, but parameter types and return type compatibility are not checked. For example, the compiler won't error if the user declares `export fn run(x: String)` but the world expects `run(x: i32)`. The adapter would generate incorrect lifting code (treating i32 as String).
 
 ## Consequences
 
 ### Benefits
 
 - **Extensibility**: Any Canonical ABI type is supported by the recursive synthesizer — no per-type hand-coding.
-- **Optimization**: Adapter functions go through lower → optimize, so the optimizer can inline small adapters, eliminate dead branches in match arms, and propagate constants.
+- **Optimization**: Adapter functions go through lower → optimize, so the optimizer can inline small adapters, eliminate dead branches, and propagate constants.
 - **Debuggability**: `wado dump --tir --unparse` and `wado dump --lower --unparse` show the full CM glue as Wado code.
-- **Independence from WIR**: This can be implemented and shipped before WIR migration begins. It reduces the CM surface area that `tir_to_wir` must handle (Step 3e in WIR WEP).
-- **Simpler codegen**: Codegen no longer needs to know about CM lifting/lowering. It just compiles adapter functions like any other function.
-- **Simpler `tir_to_wir`**: When WIR migration begins, CM adapters are already ordinary TIR functions — no special CM translation logic needed in `tir_to_wir`.
-
-### Trade-offs
-
-- **TIR growth**: The synthesized adapter functions add to the TIR function count. Mitigated by dead code elimination (unused adapters are removed) and by adapter functions being small.
-- **Builtin surface area**: More builtins (`builtin::i32_load`, etc.) increase the builtin dispatch table. These are trivial 1:1 mappings to Wasm instructions.
-- **Two-phase migration**: During migration, some WASI calls use adapters while others still use the old `generate_cm_effect_call` path. Each interface is migrated independently, so the codebase is always in a working state.
-
-### Known Limitations
-
-- ~~**Array method calls in synthesized adapters**~~: Resolved. The adapter synthesizer now provides proper `MonomorphInfo` and `LocalMethodName` on `StaticCall`/`MethodCall` TIR nodes. The monomorphizer's collection phase (Phase 8) picks up the instantiation sites, and a new `StaticCall` rewrite path in Phase 12 renames calls to their monomorphized names. A `wasi_type_to_type_id` helper converts WASI AST types to `TypeId`s during adapter synthesis so the receiver and type arguments carry correct types.
+- **Simpler codegen**: Codegen no longer needs to know about CM lifting/lowering. It compiles adapter functions like any other function.
+- **WIR-ready**: When WIR migration begins, CM adapters are already ordinary TIR functions — no special CM translation needed in `tir_to_wir`.
 
 ### Risks
 
-- **Canonical ABI correctness**: The layout computation must match the Component Model specification exactly. Mitigated by unit tests against known layouts and by validating against wasmtime's runtime behavior via E2E tests.
-- **Performance regression in adapter code**: Synthesized TIR may produce suboptimal Wasm compared to hand-written codegen. Mitigated by the optimizer (which sees adapter functions) and by golden fixture comparison.
+- **Canonical ABI correctness**: Layout computation must match the CM spec exactly. Mitigated by unit tests (37 in `cm_abi.rs`) and E2E tests against wasmtime.
+- **Performance**: Synthesized TIR may produce suboptimal Wasm compared to hand-written codegen. Mitigated by the optimizer and golden fixture comparison.
