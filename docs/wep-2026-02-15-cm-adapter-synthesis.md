@@ -135,11 +135,11 @@ fn __cm_export__greet(name_ptr: i32, name_len: i32) {
 
 This requires:
 
-- [ ] Compute flat parameter types from the world export's WIT signature
-- [ ] Generate `synthesize_lift` for each parameter in the export adapter
-- [ ] Map flat params to adapter function parameters
+- [x] Compute flat parameter types from the world export's WIT signature
+- [x] Generate `synthesize_lift_from_flat_params` for each parameter in the export adapter
+- [x] Map flat params to adapter function parameters
 
-The `synthesize_lift` infrastructure already exists for import adapters. The work is wiring it into export adapter synthesis.
+Implemented via `synthesize_lift_from_flat_params` which lifts flat CM params (i32/i64/f32/f64) to Wado-typed values. Handles primitives, bool, char, String, resources, Array, Option, and tuples. The export adapter now detects when param lifting is needed (via `export_needs_param_lifting`) and generates flat-typed adapter params with lifting code.
 
 ### Non-Result Return Types
 
@@ -153,8 +153,10 @@ export fn get_pair() -> [String, i32] { ... }
 
 This requires:
 
-- [ ] `synthesize_lower_to_flat` for non-Result returns (the function exists, just not wired for direct returns)
+- [x] `synthesize_lower_to_flat` for non-Result returns (the function exists, just not wired for direct returns)
 - [ ] Handle return-via-flat-params vs return-via-outptr (CM spec: if flat count > `MAX_FLAT_RESULTS`, use an outptr)
+
+Implemented via `synthesize_general_export_adapter` which handles non-Result return types. The adapter calls the user function, lowers the return value to flat CM values, and calls `task-return(0, ...flat_values)` — wrapping in Ok since CM exports wrap returns in `result<T, error-context>`.
 
 ### Sync Export Support
 
@@ -183,20 +185,24 @@ The trailers future post-return logic uses a Wasm global (`__pending_trailers_tx
 
 ### Export Validation
 
-- [ ] Validate that user's export function signature matches the world declaration (parameter types, return type)
-- [ ] Produce clear error messages for signature mismatches
+- [x] Validate that user's export function parameter count matches the world declaration
+- [ ] Validate parameter types match (beyond count)
+- [ ] Validate return type compatibility
+- [ ] Produce clear error messages for type mismatches
+
+Parameter count validation is implemented: if the user's export function has a different number of parameters than the world declaration, a clear compile error is produced.
 
 ### Summary
 
-| Task                        | Difficulty | Prerequisite                              |
-| --------------------------- | ---------- | ----------------------------------------- |
-| Parameter lifting           | Medium     | None — `synthesize_lift` exists           |
-| Non-Result return types     | Low        | None — `synthesize_lower_to_flat` exists  |
-| Sync export support         | Medium     | World metadata for async/sync distinction |
-| Trailers decoupling         | Low        | Design decision on where resolution lives |
-| Export signature validation | Low        | None                                      |
+| Task                        | Difficulty | Status  | Notes                                     |
+| --------------------------- | ---------- | ------- | ----------------------------------------- |
+| Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`        |
+| Non-Result return types     | Low        | Done    | `synthesize_general_export_adapter`       |
+| Sync export support         | Medium     | Pending | World metadata for async/sync distinction |
+| Trailers decoupling         | Low        | Pending | Design decision on where resolution lives |
+| Export signature validation | Low        | Partial | Parameter count validated; types not yet  |
 
-The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is mostly wiring — connecting existing infrastructure to new export adapter shapes and supporting the sync calling convention.
+The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support and full type validation.
 
 ## Consequences
 
