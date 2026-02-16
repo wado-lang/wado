@@ -272,11 +272,11 @@ pub fn digits(d: u64) -> i32 {
 }
 
 fn i2a_first(n: i32) -> char {
-    return (('0' as i32) + n / 10) as char;
+    return char::from_u32_unchecked(('0' as u32) + (n / 10) as u32);
 }
 
 fn i2a_second(n: i32) -> char {
-    return (('0' as i32) + n % 10) as char;
+    return char::from_u32_unchecked(('0' as u32) + (n % 10) as u32);
 }
 
 // Format result to decimal string (no exponent)
@@ -308,12 +308,12 @@ pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
             buf.append_char('0');
         }
         for let mut i = 0; i < nd; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
         }
     } else if decimal_pos >= nd {
         // Integer with trailing zeros: digits000...
         for let mut i = 0; i < nd; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
         }
         for let mut i = 0; i < decimal_pos - nd; i += 1 {
             buf.append_char('0');
@@ -321,11 +321,11 @@ pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
     } else {
         // Decimal point in the middle: dig.its
         for let mut i = 0; i < decimal_pos; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
         }
         buf.append_char('.');
         for let mut i = decimal_pos; i < nd; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
         }
     }
 
@@ -351,13 +351,13 @@ pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
     }
 
     // First digit
-    buf.append_char(digit_chars[0] as char);
+    buf.append_char(char::from_u32_unchecked(digit_chars[0] as u32));
 
     // Decimal point and remaining digits
     if nd > 1 {
         buf.append_char('.');
         for let mut i = 1; i < nd; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
         }
     }
 
@@ -373,12 +373,12 @@ pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
         buf.append_char('0');
-        buf.append_char((('0' as i32) + abs_exp) as char);
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + abs_exp as u32));
     } else if abs_exp < 100 {
         buf.append_char(i2a_first(abs_exp));
         buf.append_char(i2a_second(abs_exp));
     } else {
-        buf.append_char((('0' as i32) + abs_exp / 100) as char);
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + (abs_exp / 100) as u32));
         buf.append_char(i2a_first(abs_exp % 100));
         buf.append_char(i2a_second(abs_exp % 100));
     }
@@ -550,7 +550,7 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
             let remaining_prec = precision - leading_zeros;
             let digits_to_output = if remaining_prec < nd { remaining_prec } else { nd };
             for let mut i = 0; i < digits_to_output; i += 1 {
-                buf.append_char(digit_chars[i] as char);
+                buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
             }
             // Trailing zeros if needed
             let trailing = precision - leading_zeros - digits_to_output;
@@ -561,7 +561,7 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
     } else if decimal_pos >= nd {
         // Integer part only: digits000...
         for let mut i = 0; i < nd; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
         }
         for let mut i = 0; i < decimal_pos - nd; i += 1 {
             buf.append_char('0');
@@ -575,7 +575,7 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
     } else {
         // Decimal point in the middle: dig.its
         for let mut i = 0; i < decimal_pos; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
         }
         buf.append_char('.');
         // How many digits after decimal
@@ -583,12 +583,12 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
         if precision <= after_decimal {
             // Only output precision digits
             for let mut i = decimal_pos; i < decimal_pos + precision; i += 1 {
-                buf.append_char(digit_chars[i] as char);
+                buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
             }
         } else {
             // Output all digits then trailing zeros
             for let mut i = decimal_pos; i < nd; i += 1 {
-                buf.append_char(digit_chars[i] as char);
+                buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
             }
             let trailing = precision - after_decimal;
             for let mut i = 0; i < trailing; i += 1 {
@@ -625,7 +625,7 @@ pub fn format_exp_prec(d: i64, p: i32, nd: i32, precision: i32, upper: bool) -> 
     }
 
     // First digit
-    buf.append_char(digit_chars[0] as char);
+    buf.append_char(char::from_u32_unchecked(digit_chars[0] as u32));
 
     // Decimal point and remaining digits based on precision
     if precision > 0 {
@@ -634,7 +634,7 @@ pub fn format_exp_prec(d: i64, p: i32, nd: i32, precision: i32, upper: bool) -> 
         let available = nd - 1;
         let to_output = if precision < available { precision } else { available };
         for let mut i = 1; i <= to_output; i += 1 {
-            buf.append_char(digit_chars[i] as char);
+            buf.append_char(char::from_u32_unchecked(digit_chars[i] as u32));
         }
         // Trailing zeros if needed
         let trailing = precision - to_output;
@@ -655,12 +655,12 @@ pub fn format_exp_prec(d: i64, p: i32, nd: i32, precision: i32, upper: bool) -> 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
         buf.append_char('0');
-        buf.append_char((('0' as i32) + abs_exp) as char);
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + abs_exp as u32));
     } else if abs_exp < 100 {
         buf.append_char(i2a_first(abs_exp));
         buf.append_char(i2a_second(abs_exp));
     } else {
-        buf.append_char((('0' as i32) + abs_exp / 100) as char);
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + (abs_exp / 100) as u32));
         buf.append_char(i2a_first(abs_exp % 100));
         buf.append_char(i2a_second(abs_exp % 100));
     }
@@ -690,7 +690,7 @@ pub fn apply_padding(s: String, spec: FormatSpec, is_neg: bool) -> String {
         // Add sign prefix if present in original string
         let mut start_idx = 0;
         if s.len() > 0 && (s.get_byte(0) == '-' as i32 || s.get_byte(0) == '+' as i32) {
-            result.append_char(s.get_byte(0) as char);
+            result.append_char(char::from_u32_unchecked(s.get_byte(0) as u32));
             start_idx = 1;
         }
 
@@ -701,7 +701,7 @@ pub fn apply_padding(s: String, spec: FormatSpec, is_neg: bool) -> String {
 
         // Add rest of string
         for let mut i = start_idx; i < s.len(); i += 1 {
-            result.append_char(s.get_byte(i) as char);
+            result.append_char(char::from_u32_unchecked(s.get_byte(i) as u32));
         }
 
         return result;
