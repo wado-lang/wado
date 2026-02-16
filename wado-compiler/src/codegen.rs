@@ -27,8 +27,7 @@ use crate::tir::{
 };
 use crate::wasm_builder::{ComponentModelContext, CoreModuleBuilder, RecTypeKind};
 use crate::wasm_plan::{
-    CmValType, TypeDecl, get_self_referential_field_types, get_type_dependencies,
-    sort_types_topologically,
+    TypeDecl, get_self_referential_field_types, get_type_dependencies, sort_types_topologically,
 };
 use crate::wasm_postprocess;
 use heck::ToKebabCase;
@@ -225,32 +224,6 @@ struct FunctionContext {
 }
 
 impl FunctionContext {
-    fn new(param_count: u32) -> Self {
-        Self {
-            locals: IndexMap::new(),
-            local_type_map: IndexMap::new(),
-            param_count,
-            next_local: param_count,
-            local_types: Vec::new(),
-            return_type: None,
-            pending_branch_hint: None,
-            branch_hints: Vec::new(),
-            current_module_source: ModuleSource::entry_point_with_filename("<unknown>"),
-            loop_info: Vec::new(),
-            local_index_offset: 0,
-            indirect_call_counters: IndexMap::new(),
-            let_pattern_counter: 0,
-            match_scrutinee_counter: 0,
-            copy_context: CopyContext::new(),
-            skip_tuple_wrap: false,
-            is_async_export: false,
-            has_http_handler_export: false,
-            is_scalarized_return: false,
-            scalarized_locals: IndexMap::new(),
-            skip_scalarized_wrap: false,
-        }
-    }
-
     fn with_module_source(param_count: u32, module_source: ModuleSource) -> Self {
         Self {
             locals: IndexMap::new(),
@@ -1712,20 +1685,12 @@ impl Codegen<'_> {
 
             let export_wasm_func = if let Some(tir_rc) = export_tir_rc {
                 let tir_func = tir_rc.borrow();
-                if tir_func.is_cm_adapter {
-                    // CM export adapter: task-return is in the TIR body,
-                    // generate as a normal function (no codegen-level wrapping)
-                    let (func, _hints) = self.generate_function(
-                        &tir_func,
-                        type_table,
-                        &builder,
-                        entry_module_source,
-                    );
-                    func
-                } else {
-                    // Non-adapter world export: HTTP handler with codegen-level CM wrapping
-                    self.generate_http_handler_export(&tir_func, type_table, &builder)
-                }
+                // All world exports now have CM adapters synthesized by cm_adapter_gen.
+                // The adapter function body contains task-return calls,
+                // so we generate it as a normal function.
+                let (func, _hints) =
+                    self.generate_function(&tir_func, type_table, &builder, entry_module_source);
+                func
             } else {
                 panic!("world export function `{export_name}` not found in entry module");
             };
@@ -11546,6 +11511,12 @@ impl Codegen<'_> {
             self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
         }
 
+        // Pre-allocate future tx temp local for HTTP handler context.
+        // Future::new() codegen saves the tx handle to linear memory, needing a temp local.
+        if self.project.has_http_handler_export {
+            func_ctx.alloc_local("_future_tx_tmp", ValType::I32);
+        }
+
         // Pre-allocate anyref temp local for CM outptr deallocation.
         // When a function uses __cm_outptr, it needs a temp to hold the GC result
         // while freeing the linear memory outptr.
@@ -11583,116 +11554,6 @@ impl Codegen<'_> {
 
         let hints = std::mem::take(&mut func_ctx.branch_hints);
         (wasm_func, hints)
-    }
-
-    /// Generate an HTTP handler export function with CM wrapping.
-    ///
-    /// This handles Service world exports (e.g., `handle`) that have complex
-    /// Result payloads requiring codegen-level scratch locals and task-return.
-    /// Void exports (e.g., `run`) are handled by CM adapter synthesis instead.
-    fn generate_http_handler_export(
-        &self,
-        tir_func: &TirFunction,
-        type_table: &TypeTable,
-        builder: &CoreModuleBuilder,
-    ) -> Function {
-        // Create function context
-        let mut func_ctx = FunctionContext::new(tir_func.params.len() as u32);
-
-        // Set async export flags from CmExportInfo (computed by wasm_plan phase)
-        let cm_info = tir_func
-            .cm_export_info
-            .as_ref()
-            .expect("world export should have CmExportInfo from wasm_plan phase");
-        func_ctx.is_async_export = cm_info.is_async;
-        func_ctx.has_http_handler_export = cm_info.is_http_handler;
-
-        // Add parameters to context
-        for param in &tir_func.params {
-            let param_type = self.type_id_to_valtype(type_table, param.type_id);
-            func_ctx.add_param(&param.name, param_type);
-        }
-
-        // Pre-allocate locals from TIR (skip params which are already added)
-        // After the lower phase, address-taken locals already have Box<T> struct types
-        for (i, &local_type_id) in tir_func.local_types.iter().enumerate() {
-            let local_idx = i as u32;
-            // Skip if it's a param (already added)
-            if local_idx < tir_func.params.len() as u32 {
-                continue;
-            }
-
-            let local_type = self.type_id_to_valtype(type_table, local_type_id);
-
-            let local_name = format!("_local_{local_idx}");
-            func_ctx.alloc_local(&local_name, local_type);
-        }
-
-        self.allocate_precomputed_scratch_locals(tir_func, type_table, &mut func_ctx);
-
-        // Pre-allocate CM scratch locals from wasm_plan phase
-        for scratch_local in &cm_info.scratch_locals {
-            let val_type = cm_valtype_to_valtype(scratch_local.val_type);
-            func_ctx.alloc_local(&scratch_local.name, val_type);
-        }
-
-        // Reset let-pattern counter so code generation uses the same indices as pre-allocation
-        func_ctx.reset_let_pattern_counter();
-        // Reset match-scrutinee counter so code generation uses the same indices as pre-allocation
-        func_ctx.reset_match_scrutinee_counter();
-
-        // Pre-allocate scratch locals for scalarized call sites
-        if !self.scalarized_funcs.is_empty()
-            && let Some(body) = &tir_func.body
-        {
-            self.preallocate_scalarized_locals(body, type_table, &mut func_ctx, builder);
-        }
-
-        // Pre-allocate anyref temp local for CM outptr deallocation.
-        if func_ctx.get_local("__cm_outptr").is_some() {
-            func_ctx.alloc_local(
-                "__cm_result_temp",
-                ValType::Ref(RefType {
-                    nullable: true,
-                    heap_type: HeapType::Abstract {
-                        shared: false,
-                        ty: AbstractHeapType::Any,
-                    },
-                }),
-            );
-        }
-
-        let mut wasm_func = Function::new(func_ctx.get_local_decls());
-
-        // Generate body
-        if let Some(body) = &tir_func.body {
-            self.generate_block(&mut wasm_func, body, type_table, &mut func_ctx, builder);
-        }
-
-        // For async exports, ensure task-return is called even for fall-through paths
-        // (functions without explicit return statements)
-        if func_ctx.is_async_export {
-            // For Service world: result<own<response>, error-code> with complex payloads
-            // The full error-code variant flattens to: (i32, i32, i32, i64, i32, i32, i32, i32)
-            // For Command world: result<_, _> needs just (i32)
-            if func_ctx.has_http_handler_export {
-                wasm_func.instruction(&Instruction::I32Const(1)); // Err discriminant
-                wasm_func.instruction(&Instruction::I32Const(38)); // internal-error discriminant
-                wasm_func.instruction(&Instruction::I32Const(1)); // option<string> = Some
-                wasm_func.instruction(&Instruction::I64Const(0)); // string ptr
-                wasm_func.instruction(&Instruction::I32Const(37)); // string len
-                wasm_func.instruction(&Instruction::I32Const(0)); // padding
-                wasm_func.instruction(&Instruction::I32Const(0)); // padding
-                wasm_func.instruction(&Instruction::I32Const(0)); // padding
-            } else {
-                wasm_func.instruction(&Instruction::I32Const(0)); // Ok discriminant for result<_, _>
-            }
-            let task_return_idx = builder.func_idx("task-return");
-            wasm_func.instruction(&Instruction::Call(task_return_idx));
-        }
-        wasm_func.instruction(&Instruction::End);
-
-        wasm_func
     }
 
     // ========================================================================
@@ -12835,13 +12696,22 @@ impl Codegen<'_> {
                 func.instruction(&Instruction::I64ShrU);
                 func.instruction(&Instruction::I32WrapI64);
 
-                // In HTTP handler, save the future tx handle so post-return code
-                // can resolve the trailers future after task-return.
-                if ctx.has_http_handler_export {
-                    let user_tx =
-                        ctx.alloc_local("_user_trailers_tx", ValType::I32);
-                    // Duplicate the tx value on the stack (tee saves and keeps)
-                    func.instruction(&Instruction::LocalTee(user_tx));
+                // Save the future tx handle to linear memory so the CM export adapter
+                // can resolve the trailers future after task-return (post-return).
+                // Offset 512 is the convention between cm_adapter_gen and codegen.
+                if self.project.has_http_handler_export {
+                    let tmp_tx =
+                        ctx.alloc_local("_future_tx_tmp", ValType::I32);
+                    // Save tx to temp, push addr, push tx, store, push tx back
+                    func.instruction(&Instruction::LocalSet(tmp_tx));
+                    func.instruction(&Instruction::I32Const(512)); // TRAILERS_TX_OFFSET
+                    func.instruction(&Instruction::LocalGet(tmp_tx));
+                    func.instruction(&Instruction::I32Store(wasm_encoder::MemArg {
+                        offset: 0,
+                        align: 2,
+                        memory_index: 0,
+                    }));
+                    func.instruction(&Instruction::LocalGet(tmp_tx)); // restore tx on stack
                 }
 
                 // Create tuple struct [rx, tx] unless skip_tuple_wrap is set
@@ -13738,23 +13608,6 @@ fn primitive_to_valtype(prim: &PrimitiveType) -> ValType {
         PrimitiveType::I128 | PrimitiveType::U128 => {
             panic!("i128/u128 references not yet supported")
         }
-    }
-}
-
-/// Convert a `CmValType` (from `wasm_plan` phase) to Wasm `ValType`.
-fn cm_valtype_to_valtype(cm_type: CmValType) -> ValType {
-    match cm_type {
-        CmValType::I32 => ValType::I32,
-        CmValType::I64 => ValType::I64,
-        CmValType::F32 => ValType::F32,
-        CmValType::F64 => ValType::F64,
-        CmValType::AnyRef => ValType::Ref(RefType {
-            nullable: true,
-            heap_type: HeapType::Abstract {
-                shared: false,
-                ty: AbstractHeapType::Any,
-            },
-        }),
     }
 }
 

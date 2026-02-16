@@ -1493,7 +1493,6 @@ fn make_adapter_function(
         match_scrutinee_types: vec![],
         let_pattern_types: vec![],
         is_cm_adapter: true,
-        cm_export_info: None,
     }))
 }
 
@@ -1846,6 +1845,1116 @@ fn synthesize_adapter(
 }
 
 // ============================================================================
+// Export flat type computation
+// ============================================================================
+
+/// Compute flat CM ABI types for an export return type, resolving variant and
+/// struct definitions from the TIR modules. This is signature-driven: it works
+/// for any return type shape, not just known names.
+fn compute_export_flat_return_types(
+    ty: &Type,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) -> Vec<cm_abi::CmValType> {
+    let mut out = Vec::new();
+    flatten_export_type(ty, &mut out, tir_modules, type_table);
+    out
+}
+
+/// Recursively flatten an export type to CM ABI flat values.
+fn flatten_export_type(
+    ty: &Type,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) {
+    match ty {
+        Type::Named(named) => match named.name.as_str() {
+            "bool" | "u8" | "i8" | "u16" | "i16" | "i32" | "u32" | "char" => {
+                out.push(cm_abi::CmValType::I32);
+            }
+            "i64" | "u64" => out.push(cm_abi::CmValType::I64),
+            "f32" => out.push(cm_abi::CmValType::F32),
+            "f64" => out.push(cm_abi::CmValType::F64),
+            "String" => {
+                out.push(cm_abi::CmValType::I32); // ptr
+                out.push(cm_abi::CmValType::I32); // len
+            }
+            "()" => {} // unit — no values
+            _ => {
+                // Check if it's a variant type defined in TIR modules
+                if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
+                    flatten_variant_type(&variant_decl, out, tir_modules, type_table);
+                } else if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
+                    flatten_struct_type(&struct_decl, out, tir_modules, type_table);
+                } else {
+                    // Resource handles, enums, unknown → i32
+                    out.push(cm_abi::CmValType::I32);
+                }
+            }
+        },
+        Type::Generic(generic) => match generic.name.as_str() {
+            "Array" => {
+                out.push(cm_abi::CmValType::I32); // ptr
+                out.push(cm_abi::CmValType::I32); // len
+            }
+            "Stream" | "Future" | "Own" | "Borrow" => out.push(cm_abi::CmValType::I32),
+            "Option" if generic.args.len() == 1 => {
+                out.push(cm_abi::CmValType::I32); // discriminant
+                flatten_export_type(&generic.args[0], out, tir_modules, type_table);
+            }
+            "Result" if generic.args.len() == 2 => {
+                out.push(cm_abi::CmValType::I32); // discriminant
+                let mut ok_flat = Vec::new();
+                let mut err_flat = Vec::new();
+                flatten_export_type(&generic.args[0], &mut ok_flat, tir_modules, type_table);
+                flatten_export_type(&generic.args[1], &mut err_flat, tir_modules, type_table);
+                let max_len = ok_flat.len().max(err_flat.len());
+                for i in 0..max_len {
+                    let ok_val = ok_flat.get(i).copied();
+                    let err_val = err_flat.get(i).copied();
+                    out.push(cm_abi::CmValType::join(ok_val, err_val));
+                }
+            }
+            _ => out.push(cm_abi::CmValType::I32),
+        },
+        Type::Tuple(elems) => {
+            for elem in elems {
+                flatten_export_type(elem, out, tir_modules, type_table);
+            }
+        }
+        Type::Reference(_) | Type::MutReference(_) => out.push(cm_abi::CmValType::I32),
+        _ => {}
+    }
+}
+
+/// Flatten a variant type: discriminant + union of all case payloads.
+fn flatten_variant_type(
+    variant_decl: &crate::tir::TirVariantDecl,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) {
+    out.push(cm_abi::CmValType::I32); // variant discriminant
+    let mut max_payload: Vec<cm_abi::CmValType> = Vec::new();
+    for case in &variant_decl.cases {
+        let case_flat = flat_types_from_type_id(case.payload, tir_modules, type_table);
+        // Union: extend with join at each position
+        for (i, &val) in case_flat.iter().enumerate() {
+            if i < max_payload.len() {
+                max_payload[i] = cm_abi::CmValType::join(Some(max_payload[i]), Some(val));
+            } else {
+                max_payload.push(val);
+            }
+        }
+    }
+    out.extend(max_payload);
+}
+
+/// Flatten a struct type: concatenation of all field flat types.
+fn flatten_struct_type(
+    struct_decl: &crate::tir::TirStruct,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) {
+    for field in &struct_decl.fields {
+        flat_types_from_type_id_into(field.type_id, out, tir_modules, type_table);
+    }
+}
+
+/// Compute flat CM ABI types from a `TypeId`, resolving through the type table.
+fn flat_types_from_type_id(
+    type_id: TypeId,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) -> Vec<cm_abi::CmValType> {
+    let mut out = Vec::new();
+    flat_types_from_type_id_into(type_id, &mut out, tir_modules, type_table);
+    out
+}
+
+/// Append flat CM ABI types from a `TypeId` to `out`.
+fn flat_types_from_type_id_into(
+    type_id: TypeId,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) {
+    use crate::tir::{PrimitiveType, ResolvedType};
+    match type_table.get(type_id) {
+        ResolvedType::Primitive(p) => match p {
+            PrimitiveType::I8
+            | PrimitiveType::U8
+            | PrimitiveType::I16
+            | PrimitiveType::U16
+            | PrimitiveType::I32
+            | PrimitiveType::U32
+            | PrimitiveType::Bool
+            | PrimitiveType::Char => out.push(cm_abi::CmValType::I32),
+            PrimitiveType::I64 | PrimitiveType::U64 => out.push(cm_abi::CmValType::I64),
+            PrimitiveType::F32 => out.push(cm_abi::CmValType::F32),
+            PrimitiveType::F64 => out.push(cm_abi::CmValType::F64),
+            PrimitiveType::I128 | PrimitiveType::U128 => {
+                // 128-bit types are not standard CM flat types; treat as two i64
+                out.push(cm_abi::CmValType::I64);
+                out.push(cm_abi::CmValType::I64);
+            }
+        },
+        ResolvedType::Unit => {} // no flat values
+        ResolvedType::Struct { name, .. } => {
+            if name == "String" {
+                out.push(cm_abi::CmValType::I32); // ptr
+                out.push(cm_abi::CmValType::I32); // len
+            } else if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
+                flatten_struct_type(&struct_decl, out, tir_modules, type_table);
+            } else {
+                out.push(cm_abi::CmValType::I32); // unknown struct → i32
+            }
+        }
+        ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),
+        ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
+        ResolvedType::Variant { name, .. } => {
+            if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
+                flatten_variant_type(&variant_decl, out, tir_modules, type_table);
+            } else {
+                out.push(cm_abi::CmValType::I32);
+            }
+        }
+        ResolvedType::Option(inner) => {
+            out.push(cm_abi::CmValType::I32); // discriminant
+            flat_types_from_type_id_into(*inner, out, tir_modules, type_table);
+        }
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } => {
+            match name.as_str() {
+                "Result" if type_args.len() == 2 => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    let mut ok_flat = Vec::new();
+                    let mut err_flat = Vec::new();
+                    flat_types_from_type_id_into(
+                        type_args[0],
+                        &mut ok_flat,
+                        tir_modules,
+                        type_table,
+                    );
+                    flat_types_from_type_id_into(
+                        type_args[1],
+                        &mut err_flat,
+                        tir_modules,
+                        type_table,
+                    );
+                    let max_len = ok_flat.len().max(err_flat.len());
+                    for i in 0..max_len {
+                        let ok_val = ok_flat.get(i).copied();
+                        let err_val = err_flat.get(i).copied();
+                        out.push(cm_abi::CmValType::join(ok_val, err_val));
+                    }
+                }
+                "Option" if type_args.len() == 1 => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    flat_types_from_type_id_into(type_args[0], out, tir_modules, type_table);
+                }
+                "Array" => {
+                    out.push(cm_abi::CmValType::I32); // ptr
+                    out.push(cm_abi::CmValType::I32); // len
+                }
+                _ => out.push(cm_abi::CmValType::I32),
+            }
+        }
+        ResolvedType::Tuple(elems) => {
+            for &elem in elems {
+                flat_types_from_type_id_into(elem, out, tir_modules, type_table);
+            }
+        }
+        ResolvedType::Newtype { base_type, .. } => {
+            flat_types_from_type_id_into(*base_type, out, tir_modules, type_table);
+        }
+        ResolvedType::Stream(_) | ResolvedType::Future(_) => out.push(cm_abi::CmValType::I32),
+        _ => {} // Never, Error, Unknown, etc.
+    }
+}
+
+/// Find a variant declaration by name across all TIR modules.
+fn find_variant_decl(
+    name: &str,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+) -> Option<crate::tir::TirVariantDecl> {
+    for module in tir_modules.values() {
+        for variant in &module.variants {
+            if variant.name == name {
+                return Some(variant.clone());
+            }
+        }
+    }
+    None
+}
+
+/// Find a struct declaration by name across all TIR modules.
+fn find_struct_decl(
+    name: &str,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+) -> Option<crate::tir::TirStruct> {
+    for module in tir_modules.values() {
+        for s in &module.structs {
+            if s.name == name {
+                return Some(s.clone());
+            }
+        }
+    }
+    None
+}
+
+// ============================================================================
+// Export result lowering to flat CM ABI values
+// ============================================================================
+
+/// Linear memory offset used to pass the trailers future tx handle from
+/// user code to the export adapter for post-return resolution.
+const TRAILERS_TX_OFFSET: i32 = 512;
+
+/// Linear memory offset used for post-return payload writing.
+const POST_RETURN_PAYLOAD_OFFSET: i32 = 256;
+
+/// Create a `VariantTag` TIR expression (extracts i32 discriminant).
+fn variant_tag(expr: TirExpr) -> TirExpr {
+    let _variant_type_id = expr.type_id;
+    TirExpr::new(
+        TirExprKind::VariantTag {
+            expr: Box::new(expr),
+        },
+        TypeTable::I32,
+        synth_span(),
+    )
+}
+
+/// Create a `VariantTest` TIR expression (tests if variant is a specific case).
+fn variant_test(expr: TirExpr, case_index: u32, case_name: &str) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::VariantTest {
+            expr: Box::new(expr),
+            case_index,
+            case_name: case_name.to_string(),
+        },
+        TypeTable::BOOL,
+        synth_span(),
+    )
+}
+
+/// Create a `VariantPayload` TIR expression (extracts payload from a variant case).
+fn variant_payload(expr: TirExpr, case_index: u32, payload_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::VariantPayload {
+            expr: Box::new(expr),
+            case_index,
+            payload_type,
+        },
+        payload_type,
+        synth_span(),
+    )
+}
+
+/// Create an `IsNotNull` TIR expression (tests if Option has a value).
+fn is_not_null(expr: TirExpr) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::IsNotNull {
+            expr: Box::new(expr),
+        },
+        TypeTable::BOOL,
+        synth_span(),
+    )
+}
+
+/// Create an `UnwrapOption` TIR expression (unwraps Option to inner value).
+fn unwrap_option(expr: TirExpr, inner_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::UnwrapOption {
+            expr: Box::new(expr),
+            inner_type,
+        },
+        inner_type,
+        synth_span(),
+    )
+}
+
+/// Create a `FieldAccess` TIR expression (accesses a struct field).
+fn field_access(expr: TirExpr, field_name: &str, field_index: u32, field_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(expr),
+            field_name: field_name.to_string(),
+            field_index,
+        },
+        field_type,
+        synth_span(),
+    )
+}
+
+/// Synthesize TIR that lowers a Wado value to flat CM ABI values (on-stack).
+///
+/// Unlike `synthesize_lower` which stores to linear memory, this produces
+/// TIR that yields individual flat values as locals. Used for export adapters
+/// where results are passed to `task-return` as flat params.
+///
+/// Returns: list of local indices containing the flat values, and appends
+/// statements to `stmts` for computing them.
+fn synthesize_lower_to_flat(
+    value: TirExpr,
+    type_id: TypeId,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) -> Vec<FlatLocal> {
+    let resolved = type_table.get(type_id);
+    lower_to_flat_inner(
+        value,
+        type_id,
+        resolved,
+        next_local,
+        stmts,
+        local_types,
+        tir_modules,
+        type_table,
+    )
+}
+
+/// A flat local: holds a lowered CM value with its CM type.
+struct FlatLocal {
+    index: u32,
+    cm_type: cm_abi::CmValType,
+}
+
+/// Inner recursive implementation of `synthesize_lower_to_flat`.
+#[allow(clippy::too_many_arguments)]
+fn lower_to_flat_inner(
+    value: TirExpr,
+    type_id: TypeId,
+    resolved: &crate::tir::ResolvedType,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) -> Vec<FlatLocal> {
+    use crate::tir::{PrimitiveType, ResolvedType};
+
+    match resolved {
+        ResolvedType::Primitive(p) => {
+            let (flat_type_id, cm_type) = match p {
+                PrimitiveType::I8
+                | PrimitiveType::U8
+                | PrimitiveType::I16
+                | PrimitiveType::U16
+                | PrimitiveType::I32
+                | PrimitiveType::U32
+                | PrimitiveType::Bool
+                | PrimitiveType::Char => (TypeTable::I32, cm_abi::CmValType::I32),
+                PrimitiveType::I64 | PrimitiveType::U64 => (TypeTable::I64, cm_abi::CmValType::I64),
+                PrimitiveType::F32 => (TypeTable::F32, cm_abi::CmValType::F32),
+                PrimitiveType::F64 => (TypeTable::F64, cm_abi::CmValType::F64),
+                PrimitiveType::I128 | PrimitiveType::U128 => {
+                    // Not standard; skip for now
+                    return vec![];
+                }
+            };
+            let cast_value = if flat_type_id == type_id {
+                value
+            } else {
+                cast(value, flat_type_id)
+            };
+            let local = alloc_local(next_local, local_types, flat_type_id);
+            stmts.push(let_stmt("__flat", local, flat_type_id, cast_value));
+            vec![FlatLocal {
+                index: local,
+                cm_type,
+            }]
+        }
+        ResolvedType::Resource { .. } | ResolvedType::Enum { .. } => {
+            // Resource handles and enums are i32
+            let local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
+            vec![FlatLocal {
+                index: local,
+                cm_type: cm_abi::CmValType::I32,
+            }]
+        }
+        ResolvedType::Struct { name, .. } if name == "String" => {
+            // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
+            let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
+            let packed_local = alloc_local(next_local, local_types, TypeTable::I64);
+            stmts.push(let_stmt("__packed", packed_local, TypeTable::I64, packed));
+
+            // ptr = packed as i32
+            let ptr = cast(
+                local_ref(packed_local, "__packed", TypeTable::I64),
+                TypeTable::I32,
+            );
+            let ptr_local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt("__ptr", ptr_local, TypeTable::I32, ptr));
+
+            // len = (packed >> 32) as i32
+            let shifted = binary(
+                crate::tir::TirBinaryOp::Shr,
+                local_ref(packed_local, "__packed", TypeTable::I64),
+                i64_const(32),
+                TypeTable::I64,
+            );
+            let len = cast(shifted, TypeTable::I32);
+            let len_local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt("__len", len_local, TypeTable::I32, len));
+
+            vec![
+                FlatLocal {
+                    index: ptr_local,
+                    cm_type: cm_abi::CmValType::I32,
+                },
+                FlatLocal {
+                    index: len_local,
+                    cm_type: cm_abi::CmValType::I32,
+                },
+            ]
+        }
+        ResolvedType::Unit => vec![],
+        ResolvedType::Option(inner_type_id) => {
+            // Option<T> → disc(i32) + flat(T)
+            let inner_type_id = *inner_type_id;
+            let mut result = Vec::new();
+
+            // Save value to a local for reuse
+            let opt_local = alloc_local(next_local, local_types, type_id);
+            stmts.push(let_stmt("__opt_val", opt_local, type_id, value));
+
+            // Discriminant: is_not_null → 1 = Some, 0 = None
+            let disc_expr = TirExpr::new(
+                TirExprKind::Cast {
+                    expr: Box::new(is_not_null(local_ref(opt_local, "__opt_val", type_id))),
+                    target_type: TypeTable::I32,
+                },
+                TypeTable::I32,
+                synth_span(),
+            );
+            let disc_local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt(
+                "__opt_disc",
+                disc_local,
+                TypeTable::I32,
+                disc_expr,
+            ));
+            result.push(FlatLocal {
+                index: disc_local,
+                cm_type: cm_abi::CmValType::I32,
+            });
+
+            // If Some, lower the inner value
+            let inner_flat_types = flat_types_from_type_id(inner_type_id, tir_modules, type_table);
+            if !inner_flat_types.is_empty() {
+                // Allocate locals for inner flat values (initialized to zero)
+                let inner_locals: Vec<(u32, cm_abi::CmValType)> = inner_flat_types
+                    .iter()
+                    .map(|&vt| {
+                        let tid = cm_val_type_to_type_id(vt);
+                        let l = alloc_local(next_local, local_types, tid);
+                        stmts.push(let_mut_stmt("__opt_inner", l, tid, cm_zero(vt)));
+                        (l, vt)
+                    })
+                    .collect();
+
+                // if disc != 0 { lower(unwrap(value)) → inner_locals }
+                let mut then_stmts: Vec<TirStmt> = Vec::new();
+                let unwrapped =
+                    unwrap_option(local_ref(opt_local, "__opt_val", type_id), inner_type_id);
+                let inner_lowered = synthesize_lower_to_flat(
+                    unwrapped,
+                    inner_type_id,
+                    next_local,
+                    &mut then_stmts,
+                    local_types,
+                    tir_modules,
+                    type_table,
+                );
+                for (i, flat_val) in inner_lowered.iter().enumerate() {
+                    if i < inner_locals.len() {
+                        let (target_local, target_vt) = inner_locals[i];
+                        let target_type = cm_val_type_to_type_id(target_vt);
+                        let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                        let mut val = local_ref(flat_val.index, "__flat", source_type);
+                        if flat_val.cm_type != target_vt {
+                            val = cast(val, target_type);
+                        }
+                        then_stmts.push(expr_stmt(assign(
+                            local_ref(target_local, "__opt_inner", target_type),
+                            val,
+                        )));
+                    }
+                }
+
+                stmts.push(if_stmt(
+                    binary(
+                        crate::tir::TirBinaryOp::NotEq,
+                        local_ref(disc_local, "__opt_disc", TypeTable::I32),
+                        i32_const(0),
+                        TypeTable::BOOL,
+                    ),
+                    block(then_stmts),
+                    None,
+                ));
+
+                for (l, vt) in inner_locals {
+                    result.push(FlatLocal {
+                        index: l,
+                        cm_type: vt,
+                    });
+                }
+            }
+
+            result
+        }
+        ResolvedType::Struct { name, .. } if name != "String" => {
+            // Struct: concatenation of field flat types
+            if let Some(struct_decl) = find_struct_decl(name, tir_modules) {
+                let mut result = Vec::new();
+
+                // Save value to a local
+                let struct_local = alloc_local(next_local, local_types, type_id);
+                stmts.push(let_stmt("__struct_val", struct_local, type_id, value));
+
+                for field in &struct_decl.fields {
+                    let field_value = field_access(
+                        local_ref(struct_local, "__struct_val", type_id),
+                        &field.name,
+                        field.index,
+                        field.type_id,
+                    );
+                    let field_lowered = synthesize_lower_to_flat(
+                        field_value,
+                        field.type_id,
+                        next_local,
+                        stmts,
+                        local_types,
+                        tir_modules,
+                        type_table,
+                    );
+                    result.extend(field_lowered);
+                }
+                result
+            } else {
+                let local = alloc_local(next_local, local_types, TypeTable::I32);
+                stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
+                vec![FlatLocal {
+                    index: local,
+                    cm_type: cm_abi::CmValType::I32,
+                }]
+            }
+        }
+        _ => {
+            // For other types (including complex variants, newtypes, etc.), lower as i32
+            let local = alloc_local(next_local, local_types, TypeTable::I32);
+            stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
+            vec![FlatLocal {
+                index: local,
+                cm_type: cm_abi::CmValType::I32,
+            }]
+        }
+    }
+}
+
+/// Convert `CmValType` to the TIR `TypeId` used for locals.
+fn cm_val_type_to_type_id(vt: cm_abi::CmValType) -> TypeId {
+    match vt {
+        cm_abi::CmValType::I32 => TypeTable::I32,
+        cm_abi::CmValType::I64 => TypeTable::I64,
+        cm_abi::CmValType::F32 => TypeTable::F32,
+        cm_abi::CmValType::F64 => TypeTable::F64,
+    }
+}
+
+/// Create a zero constant for a given CM value type.
+fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
+    match vt {
+        cm_abi::CmValType::I32 => i32_const(0),
+        cm_abi::CmValType::I64 => i64_const(0),
+        cm_abi::CmValType::F32 => TirExpr::new(
+            TirExprKind::FloatLiteral {
+                value: 0.0,
+                repr: "0.0".to_string(),
+            },
+            TypeTable::F32,
+            synth_span(),
+        ),
+        cm_abi::CmValType::F64 => TirExpr::new(
+            TirExprKind::FloatLiteral {
+                value: 0.0,
+                repr: "0.0".to_string(),
+            },
+            TypeTable::F64,
+            synth_span(),
+        ),
+    }
+}
+
+// ============================================================================
+// Export adapter synthesis (signature-driven)
+// ============================================================================
+
+/// Synthesize a CM export adapter for an async export with a Result return type.
+///
+/// The adapter:
+/// 1. Calls the user's export function (passing through params)
+/// 2. Pattern-matches the Result<T, E> return value
+/// 3. For Ok(T): lowers T to flat CM values, calls task-return
+/// 4. For Err(E): lowers E to flat CM values, calls task-return
+///
+/// This is signature-driven: it examines the param/return types to generate
+/// appropriate lifting/lowering code for any export signature.
+#[allow(clippy::too_many_arguments)]
+fn synthesize_result_export_adapter(
+    export_name: &str,
+    user_func: Rc<RefCell<TirFunction>>,
+    entry_source: &ModuleSource,
+    _return_type: &Type,
+    flat_types: &[cm_abi::CmValType],
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+) -> Rc<RefCell<TirFunction>> {
+    let adapter_name = export_adapter_func_name(export_name);
+    let mut body_stmts: Vec<TirStmt> = Vec::new();
+    let mut local_types: Vec<TypeId> = Vec::new();
+
+    let user_func_ref = user_func.borrow();
+    let user_return_type = user_func_ref.return_type;
+
+    // Copy user function params for the adapter
+    let adapter_params: Vec<TirParam> = user_func_ref
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| TirParam {
+            name: p.name.clone(),
+            type_id: p.type_id,
+            local_index: i as u32,
+            span: synth_span(),
+        })
+        .collect();
+
+    let param_count = adapter_params.len() as u32;
+    for p in &adapter_params {
+        local_types.push(p.type_id);
+    }
+
+    let mut next_local = param_count;
+
+    // Build call args (pass adapter params through to user function)
+    let call_args: Vec<TirExpr> = adapter_params
+        .iter()
+        .map(|p| local_ref(p.local_index, &p.name, p.type_id))
+        .collect();
+
+    // Call user function
+    let call_user = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::Resolved {
+                func: user_func.clone(),
+                module_source: entry_source.clone(),
+            },
+            type_args: vec![],
+            args: call_args,
+        },
+        user_return_type,
+        synth_span(),
+    );
+
+    // Store result in a local
+    let result_local = alloc_local(&mut next_local, &mut local_types, user_return_type);
+    body_stmts.push(let_stmt(
+        "__result",
+        result_local,
+        user_return_type,
+        call_user,
+    ));
+
+    // Determine Ok and Err type IDs from the Result type
+    let tt = type_table.borrow();
+    let (ok_type_id, err_type_id) = match tt.get(user_return_type) {
+        crate::tir::ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+            (type_args[0], type_args[1])
+        }
+        _ => {
+            // Not a Result — shouldn't happen for result export adapters
+            panic!(
+                "Expected Result type for export adapter return, got: {:?}",
+                tt.get(user_return_type)
+            );
+        }
+    };
+    drop(tt);
+
+    // Allocate mutable flat value locals (initialized to zero)
+    // These hold the flattened task-return args
+    let flat_locals: Vec<u32> = flat_types
+        .iter()
+        .map(|&vt| {
+            let type_id = cm_val_type_to_type_id(vt);
+            let local = alloc_local(&mut next_local, &mut local_types, type_id);
+            body_stmts.push(let_mut_stmt("__tv", local, type_id, cm_zero(vt)));
+            local
+        })
+        .collect();
+
+    // === Ok case ===
+    let mut ok_stmts: Vec<TirStmt> = Vec::new();
+
+    // Set flat[0] = 0 (Ok discriminant)
+    ok_stmts.push(expr_stmt(assign(
+        local_ref(
+            flat_locals[0],
+            "__tv",
+            cm_val_type_to_type_id(flat_types[0]),
+        ),
+        i32_const(0),
+    )));
+
+    // Extract Ok payload
+    let ok_value = variant_payload(
+        local_ref(result_local, "__result", user_return_type),
+        0, // Ok case index
+        ok_type_id,
+    );
+
+    // Lower Ok payload to flat values starting at flat[1]
+    let tt = type_table.borrow();
+    let ok_flat_types = flat_types_from_type_id(ok_type_id, tir_modules, &tt);
+    drop(tt);
+
+    if !ok_flat_types.is_empty() {
+        // Store Ok payload in a local for reference
+        let ok_local = alloc_local(&mut next_local, &mut local_types, ok_type_id);
+        ok_stmts.push(let_stmt("__ok_val", ok_local, ok_type_id, ok_value));
+
+        let tt = type_table.borrow();
+        let ok_lowered = synthesize_lower_to_flat(
+            local_ref(ok_local, "__ok_val", ok_type_id),
+            ok_type_id,
+            &mut next_local,
+            &mut ok_stmts,
+            &mut local_types,
+            tir_modules,
+            &tt,
+        );
+        drop(tt);
+
+        // Assign lowered values to flat locals [1..1+ok_flat_count]
+        for (i, flat_val) in ok_lowered.iter().enumerate() {
+            if 1 + i < flat_locals.len() {
+                let target_type = cm_val_type_to_type_id(flat_types[1 + i]);
+                let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                let mut val = local_ref(flat_val.index, "__flat", source_type);
+                if flat_val.cm_type != flat_types[1 + i] {
+                    val = cast(val, target_type);
+                }
+                ok_stmts.push(expr_stmt(assign(
+                    local_ref(flat_locals[1 + i], "__tv", target_type),
+                    val,
+                )));
+            }
+        }
+    }
+
+    // Call task-return with flat values
+    let task_return_args: Vec<TirExpr> = flat_locals
+        .iter()
+        .zip(flat_types.iter())
+        .map(|(&local, &vt)| local_ref(local, "__tv", cm_val_type_to_type_id(vt)))
+        .collect();
+    ok_stmts.push(expr_stmt(cm_raw_call(
+        "task-return",
+        task_return_args,
+        TypeTable::UNIT,
+    )));
+
+    // Post-return: resolve trailers future if tx was saved by user code
+    // Read tx handle from linear memory at TRAILERS_TX_OFFSET
+    let tx_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
+    ok_stmts.push(let_stmt(
+        "__tx",
+        tx_local,
+        TypeTable::I32,
+        builtin_call(
+            "i32_load",
+            vec![i32_const(TRAILERS_TX_OFFSET)],
+            TypeTable::I32,
+        ),
+    ));
+
+    // if tx != 0 { write Ok(None) to trailers future }
+    let mut trailers_stmts: Vec<TirStmt> = Vec::new();
+    // Write Result disc = Ok (0) at POST_RETURN_PAYLOAD_OFFSET
+    trailers_stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![i32_const(POST_RETURN_PAYLOAD_OFFSET), i32_const(0)],
+        TypeTable::UNIT,
+    )));
+    // Write Option disc = None (0) at POST_RETURN_PAYLOAD_OFFSET + 4
+    trailers_stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![i32_const(POST_RETURN_PAYLOAD_OFFSET + 4), i32_const(0)],
+        TypeTable::UNIT,
+    )));
+    // Call future-write(tx, payload_ptr)
+    trailers_stmts.push(expr_stmt(cm_raw_call(
+        "future-write",
+        vec![
+            local_ref(tx_local, "__tx", TypeTable::I32),
+            i32_const(POST_RETURN_PAYLOAD_OFFSET),
+        ],
+        TypeTable::I32, // future-write returns i32
+    )));
+
+    ok_stmts.push(if_stmt(
+        binary(
+            crate::tir::TirBinaryOp::NotEq,
+            local_ref(tx_local, "__tx", TypeTable::I32),
+            i32_const(0),
+            TypeTable::BOOL,
+        ),
+        block(trailers_stmts),
+        None,
+    ));
+
+    ok_stmts.push(return_stmt(None));
+
+    // === Err case ===
+    let mut err_stmts: Vec<TirStmt> = Vec::new();
+
+    // Set flat[0] = 1 (Err discriminant)
+    err_stmts.push(expr_stmt(assign(
+        local_ref(
+            flat_locals[0],
+            "__tv",
+            cm_val_type_to_type_id(flat_types[0]),
+        ),
+        i32_const(1),
+    )));
+
+    // Extract Err payload
+    let err_value = variant_payload(
+        local_ref(result_local, "__result", user_return_type),
+        1, // Err case index
+        err_type_id,
+    );
+    let err_local = alloc_local(&mut next_local, &mut local_types, err_type_id);
+    err_stmts.push(let_stmt("__err_val", err_local, err_type_id, err_value));
+
+    // Lower Err payload to flat values
+    // For variant Err types (like ErrorCode), we need the discriminant and per-case payload
+    let tt = type_table.borrow();
+    let err_resolved = tt.get(err_type_id);
+
+    // Check if Err type is a variant with payloads
+    if let crate::tir::ResolvedType::Variant { name, .. } = &err_resolved {
+        if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
+            // Variant lowering: discriminant + per-case payload extraction
+            synthesize_variant_lower_to_flat(
+                err_local,
+                err_type_id,
+                &variant_decl,
+                &flat_locals[1..],
+                &flat_types[1..],
+                &mut next_local,
+                &mut err_stmts,
+                &mut local_types,
+                tir_modules,
+                &tt,
+            );
+        } else {
+            // Unknown variant — lower as i32
+            if flat_locals.len() > 1 {
+                err_stmts.push(expr_stmt(assign(
+                    local_ref(
+                        flat_locals[1],
+                        "__tv",
+                        cm_val_type_to_type_id(flat_types[1]),
+                    ),
+                    local_ref(err_local, "__err_val", err_type_id),
+                )));
+            }
+        }
+    } else {
+        // Non-variant Err type — lower directly
+        let err_lowered = synthesize_lower_to_flat(
+            local_ref(err_local, "__err_val", err_type_id),
+            err_type_id,
+            &mut next_local,
+            &mut err_stmts,
+            &mut local_types,
+            tir_modules,
+            &tt,
+        );
+        for (i, flat_val) in err_lowered.iter().enumerate() {
+            if 1 + i < flat_locals.len() {
+                let target_type = cm_val_type_to_type_id(flat_types[1 + i]);
+                let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                let mut val = local_ref(flat_val.index, "__flat", source_type);
+                if flat_val.cm_type != flat_types[1 + i] {
+                    val = cast(val, target_type);
+                }
+                err_stmts.push(expr_stmt(assign(
+                    local_ref(flat_locals[1 + i], "__tv", target_type),
+                    val,
+                )));
+            }
+        }
+    }
+
+    drop(tt);
+
+    // Call task-return with flat values
+    let task_return_args: Vec<TirExpr> = flat_locals
+        .iter()
+        .zip(flat_types.iter())
+        .map(|(&local, &vt)| local_ref(local, "__tv", cm_val_type_to_type_id(vt)))
+        .collect();
+    err_stmts.push(expr_stmt(cm_raw_call(
+        "task-return",
+        task_return_args,
+        TypeTable::UNIT,
+    )));
+
+    err_stmts.push(return_stmt(None));
+
+    // === Combine Ok/Err into if-else ===
+    body_stmts.push(if_stmt(
+        variant_test(
+            local_ref(result_local, "__result", user_return_type),
+            0,
+            "Ok",
+        ),
+        block(ok_stmts),
+        Some(block(err_stmts)),
+    ));
+
+    // Fallthrough (unreachable because both arms return, but emit task-return just in case)
+    let fallthrough_args: Vec<TirExpr> = flat_types.iter().map(|&vt| cm_zero(vt)).collect();
+    body_stmts.push(expr_stmt(cm_raw_call(
+        "task-return",
+        fallthrough_args,
+        TypeTable::UNIT,
+    )));
+
+    let body = block(body_stmts);
+    let local_count = next_local;
+
+    let adapter = make_adapter_function(
+        adapter_name,
+        adapter_params,
+        TypeTable::UNIT,
+        body,
+        local_count,
+        local_types,
+    );
+    adapter.borrow_mut().is_export = true;
+    adapter
+}
+
+/// Synthesize TIR for lowering a variant value to flat CM locals.
+///
+/// Generates:
+/// ```text
+/// flat[0] = variant_tag(value)  // discriminant
+/// if variant_test(value, case_0) { flat[1..] = lower(payload_0) }
+/// if variant_test(value, case_1) { flat[1..] = lower(payload_1) }
+/// ...
+/// ```
+#[allow(clippy::too_many_arguments)]
+fn synthesize_variant_lower_to_flat(
+    value_local: u32,
+    value_type_id: TypeId,
+    variant_decl: &crate::tir::TirVariantDecl,
+    flat_locals: &[u32], // flat locals for [disc, p2, p3, ...]
+    flat_types: &[cm_abi::CmValType],
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    local_types: &mut Vec<TypeId>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &TypeTable,
+) {
+    // Set flat[0] = discriminant
+    if !flat_locals.is_empty() {
+        stmts.push(expr_stmt(assign(
+            local_ref(
+                flat_locals[0],
+                "__tv",
+                cm_val_type_to_type_id(flat_types[0]),
+            ),
+            variant_tag(local_ref(value_local, "__err_val", value_type_id)),
+        )));
+    }
+
+    // For each non-unit case, generate: if variant_test { extract payload, lower to flat }
+    for case in &variant_decl.cases {
+        let case_flat = flat_types_from_type_id(case.payload, tir_modules, type_table);
+        if case_flat.is_empty() {
+            continue; // Unit case — no payload to lower
+        }
+
+        let mut case_stmts: Vec<TirStmt> = Vec::new();
+
+        // Extract payload
+        let payload = variant_payload(
+            local_ref(value_local, "__err_val", value_type_id),
+            case.index,
+            case.payload,
+        );
+        let payload_local = alloc_local(next_local, local_types, case.payload);
+        case_stmts.push(let_stmt(
+            "__case_payload",
+            payload_local,
+            case.payload,
+            payload,
+        ));
+
+        // Lower payload to flat values
+        let lowered = synthesize_lower_to_flat(
+            local_ref(payload_local, "__case_payload", case.payload),
+            case.payload,
+            next_local,
+            &mut case_stmts,
+            local_types,
+            tir_modules,
+            type_table,
+        );
+
+        // Assign lowered values to flat locals [1..]
+        for (i, flat_val) in lowered.iter().enumerate() {
+            if 1 + i < flat_locals.len() {
+                let target_type = cm_val_type_to_type_id(flat_types[1 + i]);
+                let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                let mut val = local_ref(flat_val.index, "__flat", source_type);
+                if flat_val.cm_type != flat_types[1 + i] {
+                    val = cast(val, target_type);
+                }
+                case_stmts.push(expr_stmt(assign(
+                    local_ref(flat_locals[1 + i], "__tv", target_type),
+                    val,
+                )));
+            }
+        }
+
+        stmts.push(if_stmt(
+            variant_test(
+                local_ref(value_local, "__err_val", value_type_id),
+                case.index,
+                &case.name,
+            ),
+            block(case_stmts),
+            None,
+        ));
+    }
+}
+
+// ============================================================================
 // Export adapter synthesis
 // ============================================================================
 
@@ -2000,53 +3109,98 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
 
     // ---- Export adapters ----
 
-    // Step 5: Synthesize export adapters for () -> () world exports
+    // Step 5: Synthesize export adapters for world exports (signature-driven)
     let world_info = project.world_registry.get(&project.target_world).cloned();
     if let Some(world_info) = world_info {
+        let entry_type_table = project
+            .tir_modules
+            .get(&entry_source)
+            .map(|m| m.type_table.clone())
+            .unwrap_or_else(|| Rc::new(RefCell::new(TypeTable::new())));
+
+        // Collect adapters in a read-only pass (synthesize_result_export_adapter needs &tir_modules)
+        let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
+        {
+            let entry_module = project
+                .tir_modules
+                .get(&entry_source)
+                .expect("entry module should exist");
+
+            for export in &world_info.exports {
+                // Find the user's export function and check for missing `export` keyword
+                let mut found_exported = None;
+                let mut found_without_export = false;
+                for f in &entry_module.functions {
+                    let func = f.borrow();
+                    if func.name == export.name {
+                        if func.is_export {
+                            found_exported = Some(f.clone());
+                        } else {
+                            found_without_export = true;
+                        }
+                    }
+                }
+
+                if found_exported.is_none() && found_without_export {
+                    return Err(format!(
+                        "function `{}` exists but is not marked with `export` keyword. \
+                         Add `export` to make it a world entry point: `export fn {}(...)`",
+                        export.name, export.name
+                    ));
+                }
+
+                let adapter_name = export_adapter_func_name(&export.name);
+                let adapter = if let Some(user_func_rc) = found_exported {
+                    // Check the user function's actual return type (signature-driven)
+                    let user_returns_result = {
+                        let user_func = user_func_rc.borrow();
+                        let tt = entry_type_table.borrow();
+                        matches!(
+                            tt.get(user_func.return_type),
+                            crate::tir::ResolvedType::GenericInstance { name, .. }
+                                if name == "Result"
+                        )
+                    };
+
+                    if user_returns_result {
+                        // Result<T, E> return: full lowering adapter (signature-driven)
+                        let tt = entry_type_table.borrow();
+                        let flat_types = compute_export_flat_return_types(
+                            export.return_type.as_ref().unwrap(),
+                            &project.tir_modules,
+                            &tt,
+                        );
+                        drop(tt);
+                        synthesize_result_export_adapter(
+                            &export.name,
+                            user_func_rc,
+                            &entry_source,
+                            export.return_type.as_ref().unwrap(),
+                            &flat_types,
+                            &project.tir_modules,
+                            &entry_type_table,
+                        )
+                    } else {
+                        // Void or non-Result return: simple void adapter
+                        synthesize_void_export_adapter(&export.name, user_func_rc, &entry_source)
+                    }
+                } else {
+                    // No user function: stub that just calls task-return(0)
+                    synthesize_void_stub_adapter(&export.name)
+                };
+                export_adapters.push((export.name.clone(), adapter_name, adapter));
+            }
+        }
+
+        // Push adapters with mutable access
         let entry_module = project
             .tir_modules
             .get_mut(&entry_source)
             .expect("entry module should exist");
-
-        for export in &world_info.exports {
-            // Only handle void exports (no params, no return) for now.
-            // HTTP handler exports will be added in a follow-up.
-            if export.returns_http_response() {
-                continue;
-            }
-
-            // Find the user's export function and check for missing `export` keyword
-            let mut found_exported = None;
-            let mut found_without_export = false;
-            for f in &entry_module.functions {
-                let func = f.borrow();
-                if func.name == export.name {
-                    if func.is_export {
-                        found_exported = Some(f.clone());
-                    } else {
-                        found_without_export = true;
-                    }
-                }
-            }
-
-            if found_exported.is_none() && found_without_export {
-                return Err(format!(
-                    "function `{}` exists but is not marked with `export` keyword. \
-                     Add `export` to make it a world entry point: `export fn {}(...)`",
-                    export.name, export.name
-                ));
-            }
-
-            let adapter_name = export_adapter_func_name(&export.name);
-            let adapter = if let Some(user_func_rc) = found_exported {
-                synthesize_void_export_adapter(&export.name, user_func_rc, &entry_source)
-            } else {
-                // No user function: stub that just calls task-return(0)
-                synthesize_void_stub_adapter(&export.name)
-            };
+        for (export_name, adapter_name, adapter) in export_adapters {
             project
                 .export_adapter_names
-                .insert(export.name.clone(), adapter_name);
+                .insert(export_name, adapter_name);
             entry_module.functions.push(adapter);
         }
     }

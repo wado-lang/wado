@@ -6,16 +6,14 @@
 //! ```
 //!
 //! Responsibilities:
-//! 1. CM boundary analysis - Analyze export signatures to determine required glue code
-//! 2. Attach `CmExportInfo` to `TirFunctions` that are world exports
-//! 3. Compute scratch locals needed for CM operations
-//! 4. Analyze WASI function return types to determine required CM converters
-//! 5. Component structure analysis - Determine what the CM component needs
-//! 6. Type ordering analysis - Topological sort and dependency analysis for type registration
+//! 1. Set project flags based on world analysis (e.g., `has_http_handler_export`)
+//! 2. Build `ComponentPlan` for codegen (structure, imports, exports)
+//! 3. Type ordering analysis - Topological sort and dependency analysis for type registration
+//!
+//! Note: CM export adapter synthesis (task-return wrapping, Result lowering) is handled
+//! by `cm_adapter_gen` at the TIR level. This phase focuses on metadata and planning.
 //!
 //! Design principles:
-//! - Metadata over TIR for glue code: CM glue uses low-level Wasm operations that
-//!   don't map cleanly to TIR, so we use metadata to tell codegen what to generate
 //! - Keep codegen simple: codegen should just convert TIR to Wasm without
 //!   needing to analyze world definitions or export signatures
 //! - Centralize Wasm-related analysis: All pre-codegen analysis should be in this
@@ -30,171 +28,6 @@ use crate::world_registry::WorldExportInfo;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 
-/// Wasm value type for CM scratch locals
-///
-/// This mirrors `wasm_encoder::ValType` but is simpler and doesn't require
-/// the `wasm_encoder` dependency in this module.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CmValType {
-    I32,
-    I64,
-    F32,
-    F64,
-    /// Nullable anyref - used for storing GC objects
-    AnyRef,
-}
-
-/// A scratch local variable needed for CM glue code
-#[derive(Debug, Clone)]
-pub struct CmScratchLocal {
-    /// Local variable name (for debugging in WAT output)
-    pub name: String,
-    /// Wasm value type
-    pub val_type: CmValType,
-}
-
-/// CM export information attached to `TirFunction`
-///
-/// This metadata tells codegen how to generate Component Model glue code
-/// for a world export function.
-#[derive(Debug, Clone, Default)]
-pub struct CmExportInfo {
-    /// Whether this is an async export (from world definition)
-    pub is_async: bool,
-    /// Whether this export returns Result<Response, `ErrorCode`> (HTTP handler)
-    pub is_http_handler: bool,
-    /// Scratch locals needed for CM glue code
-    pub scratch_locals: Vec<CmScratchLocal>,
-    /// CM functions that must be imported (e.g., "task-return", "future-new")
-    pub required_imports: Vec<String>,
-}
-
-impl CmExportInfo {
-    /// Create `CmExportInfo` for an async export
-    pub fn async_export(is_http_handler: bool) -> Self {
-        let mut required_imports = vec!["task-return".to_string()];
-        let mut scratch_locals = Vec::new();
-
-        if is_http_handler {
-            // HTTP handler needs additional imports for response creation
-            required_imports.extend([
-                "future-new".to_string(),
-                "future-write".to_string(),
-                "http-fields-constructor".to_string(),
-                "http-response-new".to_string(),
-            ]);
-
-            // Pre-computed scratch locals for HTTP response creation
-            // These are the locals needed for CM glue code in codegen
-            scratch_locals.extend([
-                CmScratchLocal {
-                    name: "_http_future".to_string(),
-                    val_type: CmValType::I64,
-                },
-                CmScratchLocal {
-                    name: "_trailers_rx".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_trailers_tx".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_headers_handle".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_write_result".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_result_disc".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_response_handle".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_http_result".to_string(),
-                    val_type: CmValType::AnyRef,
-                },
-                CmScratchLocal {
-                    name: "_user_response".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_user_trailers_tx".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_ec_disc".to_string(),
-                    val_type: CmValType::I32,
-                },
-                // ErrorCode payload lowering scratch locals
-                CmScratchLocal {
-                    name: "_ec_ref".to_string(),
-                    val_type: CmValType::AnyRef,
-                },
-                CmScratchLocal {
-                    name: "_ec_p2".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_ec_p3".to_string(),
-                    val_type: CmValType::I64,
-                },
-                CmScratchLocal {
-                    name: "_ec_p4".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_ec_p5".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_ec_p6".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_ec_p7".to_string(),
-                    val_type: CmValType::I32,
-                },
-                CmScratchLocal {
-                    name: "_ec_payload_ref".to_string(),
-                    val_type: CmValType::AnyRef,
-                },
-                CmScratchLocal {
-                    name: "_ec_field_ref".to_string(),
-                    val_type: CmValType::AnyRef,
-                },
-                CmScratchLocal {
-                    name: "_ec_i64_temp".to_string(),
-                    val_type: CmValType::I64,
-                },
-            ]);
-        }
-
-        Self {
-            is_async: true,
-            is_http_handler,
-            scratch_locals,
-            required_imports,
-        }
-    }
-
-    /// Create `CmExportInfo` for a sync export
-    pub fn sync_export() -> Self {
-        Self {
-            is_async: false,
-            is_http_handler: false,
-            scratch_locals: Vec::new(),
-            required_imports: Vec::new(),
-        }
-    }
-}
-
-// =============================================================================
 // =============================================================================
 // Component Plan
 // =============================================================================
@@ -544,56 +377,8 @@ pub fn wasm_plan(mut project: Project) -> Result<Project, String> {
     if let Some(world_info) = world_info {
         // Update project's HTTP handler flag based on world analysis
         project.has_http_handler_export = world_info.has_http_handler_export();
-
-        // Analyze each world export and attach CmExportInfo to corresponding TirFunction
-        for export in &world_info.exports {
-            // If an export adapter was synthesized by cm_adapter_gen, the adapter
-            // handles task-return in its TIR body — no CmExportInfo needed.
-            if project.export_adapter_names.contains_key(&export.name) {
-                continue;
-            }
-
-            let is_http_handler = export.returns_http_response();
-            let cm_export_info = if export.is_async {
-                CmExportInfo::async_export(is_http_handler)
-            } else {
-                CmExportInfo::sync_export()
-            };
-
-            // Find and update the corresponding TirFunction in the entry module
-            let entry_module = project
-                .tir_modules
-                .get_mut(&project.entry_module_source)
-                .expect("entry module should exist");
-
-            let mut found_with_export = false;
-            let mut found_without_export = false;
-
-            for func_rc in &entry_module.functions {
-                let mut func = func_rc.borrow_mut();
-                if func.name == export.name {
-                    if func.is_export {
-                        func.cm_export_info = Some(cm_export_info.clone());
-                        found_with_export = true;
-                        break;
-                    } else {
-                        found_without_export = true;
-                    }
-                }
-            }
-
-            // Check for errors
-            if !found_with_export && found_without_export {
-                return Err(format!(
-                    "function `{}` exists but is not marked with `export` keyword. \
-                         Add `export` to make it a world entry point: `export fn {}(...)`",
-                    export.name, export.name
-                ));
-            }
-            // Note: We don't error on missing functions here because some worlds
-            // have optional exports (e.g., HTTP Service's handle is optional if
-            // you're just testing). The codegen will fail later if needed.
-        }
+        // All world exports are handled by CM adapter synthesis (cm_adapter_gen).
+        // The adapter functions contain task-return calls in their TIR bodies.
     }
 
     // Build ComponentPlan
@@ -638,35 +423,6 @@ mod tests {
 
     fn make_span() -> Span {
         Span::new(0, 0, 0, 0)
-    }
-
-    #[test]
-    fn test_cm_export_info_async() {
-        let info = CmExportInfo::async_export(false);
-        assert!(info.is_async);
-        assert!(!info.is_http_handler);
-        assert!(info.required_imports.contains(&"task-return".to_string()));
-    }
-
-    #[test]
-    fn test_cm_export_info_http_handler() {
-        let info = CmExportInfo::async_export(true);
-        assert!(info.is_async);
-        assert!(info.is_http_handler);
-        assert!(info.required_imports.contains(&"task-return".to_string()));
-        assert!(
-            info.required_imports
-                .contains(&"http-response-new".to_string())
-        );
-        assert!(info.required_imports.contains(&"future-new".to_string()));
-    }
-
-    #[test]
-    fn test_cm_export_info_sync() {
-        let info = CmExportInfo::sync_export();
-        assert!(!info.is_async);
-        assert!(!info.is_http_handler);
-        assert!(info.required_imports.is_empty());
     }
 
     #[test]

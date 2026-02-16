@@ -2051,7 +2051,6 @@ fn lower_global_initializers(module: &mut TirModule) {
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
         is_cm_adapter: false,
-        cm_export_info: None,
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -2379,7 +2378,6 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
         is_cm_adapter: false,
-        cm_export_info: None,
     };
 
     entry_module
@@ -4262,7 +4260,6 @@ impl ClosureLowerer {
                 match_scrutinee_types: Vec::new(),
                 let_pattern_types: Vec::new(),
                 is_cm_adapter: false,
-                cm_export_info: None,
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -5838,7 +5835,6 @@ impl ClosureLowerer {
             match_scrutinee_types: callee.match_scrutinee_types.clone(),
             let_pattern_types: callee.let_pattern_types.clone(),
             is_cm_adapter: false,
-            cm_export_info: None,
         };
 
         self.generated_functions
@@ -8761,7 +8757,6 @@ fn make_synthetic_method(
         match_scrutinee_types: Vec::new(),
         let_pattern_types: Vec::new(),
         is_cm_adapter: false,
-        cm_export_info: None,
     }
 }
 
