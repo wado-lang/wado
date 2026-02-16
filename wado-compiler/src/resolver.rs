@@ -665,8 +665,8 @@ struct IndexTraitInfo {
 
 /// Info about an `IndexAssign` trait implementation
 struct IndexAssignTraitInfo {
-    /// The Input associated type (reserved for future type checking)
-    _input_type: TypeId,
+    /// The Input associated type
+    input_type: TypeId,
     /// Self kind for the `index_assign` method (&mut self)
     self_kind: ast::SelfKind,
     /// The trait name (e.g., "`IndexAssign`<i32>")
@@ -2885,7 +2885,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         );
                         (value, target_type)
                     } else {
-                        let value = self.resolve_expr(&let_stmt.value, ctx, None);
+                        let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
                         (value, target_type)
                     }
                 }
@@ -2945,7 +2945,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     }
                 } else {
                     // Named struct literal - resolve normally
-                    let value = self.resolve_expr(&let_stmt.value, ctx, None);
+                    let value = self.resolve_expr(&let_stmt.value, ctx, Some(target_type));
                     (value, target_type)
                 }
             } else {
@@ -3139,7 +3139,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         match &if_stmt.condition {
             ast::Condition::Expr(expr) => {
                 // Regular expression condition
-                let condition = self.resolve_expr(expr, ctx, None);
+                let condition = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
                 let then_block = self.resolve_block(&if_stmt.then_block, ctx);
                 let else_block = if_stmt
                     .else_block
@@ -3478,11 +3478,18 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve an expression
-    fn resolve_expr_core(&mut self, expr: &Expr, ctx: &mut FunctionContext) -> TirExpr {
+    fn resolve_expr_core(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TirExpr {
         match expr {
             Expr::Literal(lit) => self.resolve_literal(lit, ctx),
             Expr::Ident(ident) => self.resolve_ident(ident, ctx),
-            Expr::Binary(binary) => self.resolve_binary(binary, ctx),
+            Expr::Binary(binary) => {
+                self.resolve_binary_with_expected_type(binary, ctx, expected_type)
+            }
             Expr::Unary(unary) => self.resolve_unary(unary, ctx),
             Expr::Assign(assign) => self.resolve_assign(assign, ctx),
             Expr::Call(call) => self.resolve_call(call, ctx),
@@ -3994,10 +4001,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Resolve a binary expression
-    fn resolve_binary(&mut self, binary: &ast::BinaryExpr, ctx: &mut FunctionContext) -> TirExpr {
-        self.resolve_binary_with_expected_type(binary, ctx, None)
-    }
-
     fn resolve_binary_with_expected_type(
         &mut self,
         binary: &ast::BinaryExpr,
@@ -4011,7 +4014,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left to right's type
-            let right = self.resolve_expr(&binary.right, ctx, None);
+            let right = self.resolve_expr(&binary.right, ctx, expected_type);
             let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
                 Some(right.type_id)
             } else {
@@ -4021,7 +4024,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right to left's type
-            let left = self.resolve_expr(&binary.left, ctx, None);
+            let left = self.resolve_expr(&binary.left, ctx, expected_type);
             let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
                 Some(left.type_id)
             } else {
@@ -4035,9 +4038,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             let right = self.resolve_expr(&binary.right, ctx, expected_type);
             (left, right)
         } else {
-            // Both non-literals - resolve normally
-            let left = self.resolve_expr(&binary.left, ctx, None);
-            let right = self.resolve_expr(&binary.right, ctx, None);
+            // Both non-literals - propagate expected type for coercion
+            let left = self.resolve_expr(&binary.left, ctx, expected_type);
+            let right = self.resolve_expr(&binary.right, ctx, expected_type);
             (left, right)
         };
 
@@ -4693,7 +4696,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         self.find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
                     {
                         // Generate: expr.index_assign(index, value)
-                        let value = self.resolve_expr(&assign.value, ctx, None);
+                        let value =
+                            self.resolve_expr(&assign.value, ctx, Some(trait_info.input_type));
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,
@@ -4831,7 +4835,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> TirExpr {
         // This should have been desugared, but handle it anyway
         let target = self.resolve_expr(&compound.target, ctx, None);
-        let value = self.resolve_expr(&compound.value, ctx, None);
+        let value = self.resolve_expr(&compound.value, ctx, Some(target.type_id));
 
         let op = match compound.op {
             ast::CompoundAssignOp::Add => TirBinaryOp::Add,
@@ -5861,7 +5865,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ResolvedType::Struct { name, .. } if name == "String"
             ) && target_type != base_id;
             if is_string_newtype {
-                let mut resolved = self.resolve_expr_core(expr, ctx);
+                let mut resolved = self.resolve_expr_core(expr, ctx, None);
                 resolved.type_id = target_type;
                 return resolved;
             }
@@ -5877,7 +5881,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ResolvedType::Struct { name, .. } if name == "String"
             ) && target_type != base_id;
             if is_string_newtype {
-                let mut resolved = self.resolve_expr_core(expr, ctx);
+                let mut resolved = self.resolve_expr_core(expr, ctx, None);
                 resolved.type_id = target_type;
                 return resolved;
             }
@@ -5932,7 +5936,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Normal expression resolution
-        self.resolve_expr_core(expr, ctx)
+        self.resolve_expr_core(expr, ctx, expected_type)
     }
 
     /// Resolve a type without registering new types
@@ -8266,7 +8270,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             "Input",
         )
         .map(|(input_type, self_kind, trait_name)| IndexAssignTraitInfo {
-            _input_type: input_type,
+            input_type,
             self_kind,
             trait_name,
         })
@@ -9172,7 +9176,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let MethodInfo {
             return_type,
             self_kind,
-            param_types: _,
+            param_types,
             inherited_from_base: _,
         } = method_info?;
 
@@ -9218,11 +9222,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             index_expr.span,
         );
 
-        // Step 2: Resolve method args
+        // Step 2: Resolve method args with expected parameter types for literal coercion
         let args: Vec<TirExpr> = method_call
             .args
             .iter()
-            .map(|a| self.resolve_expr(a, ctx, None))
+            .enumerate()
+            .map(|(i, a)| {
+                let expected = param_types.get(i).copied();
+                self.resolve_expr(a, ctx, expected)
+            })
             .collect();
 
         // Step 3: Resolve method type args
@@ -9707,7 +9715,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Resolve the condition
         let condition = match &if_expr.condition {
-            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, None),
+            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, Some(TypeTable::BOOL)),
             ast::Condition::Pattern { span, .. } => {
                 let _ = self.logger.error(TypeError::NotYetImplemented {
                     feature: "pattern matching in if expressions (use if statement instead)"
@@ -9806,7 +9814,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Resolve the condition
         let condition = match &if_expr.condition {
-            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, None),
+            ast::Condition::Expr(expr) => self.resolve_expr(expr, ctx, Some(TypeTable::BOOL)),
             ast::Condition::Pattern { span, .. } => {
                 let _ = self.logger.error(TypeError::NotYetImplemented {
                     feature: "pattern matching in if expressions (use if statement instead)"
@@ -9887,7 +9895,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
 
         // Resolve optional guard expression
-        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx, None));
+        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx, Some(TypeTable::BOOL)));
 
         // Resolve arm body
         let body = self.resolve_expr(&arm.body, ctx, None);
@@ -9943,7 +9951,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let pattern = self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
 
         // Resolve optional guard expression
-        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx, None));
+        let guard = arm.guard.as_ref().map(|g| self.resolve_expr(g, ctx, Some(TypeTable::BOOL)));
 
         // Resolve arm body with expected type for coercion
         let body = self.resolve_expr(&arm.body, ctx, Some(expected_type));
