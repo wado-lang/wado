@@ -69,6 +69,7 @@ async fn compile_http_service(path: &Path) -> Result<Vec<u8>, CompileError> {
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         target_world: Some("wasi:http/service".to_string()),
+        use_wir_backend: false,
     };
 
     wado_compiler::compile_with_options(&source, &host, Some(&filename), options)

@@ -231,6 +231,7 @@ pub async fn compile_with_full_opts(
     let options = wado_compiler::CompilerOptions {
         opt_level: to_compiler_opt_level(opt_level),
         target_world,
+        use_wir_backend: false,
     };
 
     // Compile using async API

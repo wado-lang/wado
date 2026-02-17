@@ -104,6 +104,7 @@ pub mod stdlib;
 pub mod symbol;
 pub mod syntax;
 pub mod tir;
+pub mod tir_to_wir;
 pub mod token;
 pub mod unparse;
 pub mod wasm_builder;
@@ -188,6 +189,9 @@ pub struct CompilerOptions {
     /// Target world name (e.g., "Command", "Service")
     /// Defaults to "Command" if not specified
     pub target_world: Option<String>,
+    /// Use the WIR backend instead of the legacy codegen.
+    /// When true, the compiler uses `tir_to_wir` → `wir_emit` instead of `Codegen::generate_wasm`.
+    pub use_wir_backend: bool,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -215,6 +219,7 @@ pub async fn compile_with_host<H: CompilerHost>(
     let options = CompilerOptions {
         opt_level,
         target_world: None,
+        use_wir_backend: false,
     };
     compile_with_options(source, host, filename, options).await
 }
@@ -374,7 +379,10 @@ pub async fn compile_with_options<H: CompilerHost>(
     };
 
     // === Phase 12: Codegen ===
-    let wasm = {
+    let wasm = if options.use_wir_backend {
+        let _span = logger.span("tir_to_wir");
+        tir_to_wir::compile_with_wir(&project)
+    } else {
         let _span = logger.span("codegen");
         Codegen::generate_wasm(&project)
     };
