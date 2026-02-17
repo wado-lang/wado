@@ -83,15 +83,15 @@ impl<'a> WirUnparser<'a> {
     /// E.g., `"core:prelude/string.wado/String::grow"` → `"String::grow"`
     fn shorten_nested_path(&self, name: &str) -> String {
         // Replace entry-point path prefix
-        if let Some(ref ep) = self.entry_point_path {
-            if let Some(rest) = name.strip_prefix(ep.as_str()) {
-                if let Some(func) = rest.strip_prefix('/') {
-                    return func.to_string();
-                }
-                // Exact match (no trailing /)
-                if rest.is_empty() {
-                    return name.to_string();
-                }
+        if let Some(ref ep) = self.entry_point_path
+            && let Some(rest) = name.strip_prefix(ep.as_str())
+        {
+            if let Some(func) = rest.strip_prefix('/') {
+                return func.to_string();
+            }
+            // Exact match (no trailing /)
+            if rest.is_empty() {
+                return name.to_string();
             }
         }
         // Replace core:prelude/* prefix
@@ -107,10 +107,10 @@ impl<'a> WirUnparser<'a> {
     /// Shorten a module path for display.
     fn shorten_module_path(&self, module: &str) -> String {
         // Entry-point path → empty (items display as just name)
-        if let Some(ref ep) = self.entry_point_path {
-            if module == ep {
-                return String::new();
-            }
+        if let Some(ref ep) = self.entry_point_path
+            && module == ep
+        {
+            return String::new();
         }
         // Absolute paths → canonicalize to ./filename.wado
         if module.starts_with('/') {
@@ -660,11 +660,11 @@ impl<'a> WirUnparser<'a> {
                     if i > 0 {
                         self.write(", ");
                     }
-                    if let Some(ref names) = field_names {
-                        if let Some(name) = names.get(i) {
-                            self.write(name);
-                            self.write(": ");
-                        }
+                    if let Some(ref names) = field_names
+                        && let Some(name) = names.get(i)
+                    {
+                        self.write(name);
+                        self.write(": ");
                     }
                     self.unparse_instr_inline(f);
                 }

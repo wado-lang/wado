@@ -177,9 +177,9 @@ impl<'a> WirContext<'a> {
         self.type_map.get(fq)
     }
 
-    /// Look up a struct type by name only (ignoring module_source).
-    /// Used as fallback when module_source doesn't match (e.g., monomorphized
-    /// structs where the type's module_source is the use site, not the definition site).
+    /// Look up a struct type by name only (ignoring `module_source`).
+    /// Used as fallback when `module_source` doesn't match (e.g., monomorphized
+    /// structs where the type's `module_source` is the use site, not the definition site).
     fn lookup_struct_by_name(&self, name: &str) -> Option<&WirTypeId> {
         self.struct_type_map
             .iter()
@@ -348,7 +348,7 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::GenericInstance {
-                name,
+                name: _,
                 module_source,
                 type_args: _,
             } => {
