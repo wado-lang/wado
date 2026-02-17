@@ -455,13 +455,19 @@ pub fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
         let instance = linker.instantiate_async(&mut store, &component).await?;
         let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
 
-        let trapped = match run_func.call_async(&mut store, ()).await {
-            Ok((result,)) => result.is_err(),
-            Err(_) => true,
+        let (trapped, trap_msg) = match run_func.call_async(&mut store, ()).await {
+            Ok((result,)) => (result.is_err(), String::new()),
+            Err(e) => (true, format!("{e:#}")),
         };
 
         let stdout = String::from_utf8(stdout_clone.contents().to_vec())?;
-        let stderr = String::from_utf8(stderr_clone.contents().to_vec())?;
+        let mut stderr = String::from_utf8(stderr_clone.contents().to_vec())?;
+        if !trap_msg.is_empty() {
+            if !stderr.is_empty() {
+                stderr.push('\n');
+            }
+            stderr.push_str(&trap_msg);
+        }
 
         Ok(WasmRunResult {
             stdout,

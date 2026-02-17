@@ -17,6 +17,8 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+use indexmap::IndexMap;
+
 use crate::name::ModuleSource;
 use crate::token::Span;
 
@@ -51,6 +53,9 @@ pub struct WirModule {
     pub names: WirNames,
     /// Component Model wrapper info.
     pub component: WirComponent,
+    /// Variant case type info: case WIR type index → (variant WIR type index, case index).
+    /// Used by emitter to resolve case-specific struct types within variant rec groups.
+    pub variant_case_info: IndexMap<u32, (u32, u32)>,
 }
 
 impl WirModule {
@@ -68,6 +73,7 @@ impl WirModule {
             branch_hints: Vec::new(),
             names: WirNames::default(),
             component: WirComponent::default(),
+            variant_case_info: IndexMap::new(),
         }
     }
 }
@@ -332,7 +338,7 @@ pub struct WirVariantType {
 }
 
 /// A case in a variant type.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WirVariantCase {
     /// Case name (e.g., "Circle", "Ok").
     pub name: String,
@@ -948,6 +954,152 @@ pub enum WirInstr {
 
     /// Sequence of instructions (for statement blocks).
     Seq(Vec<WirInstr>),
+}
+
+impl WirInstr {
+    /// Visit all child instructions of this node (non-recursive).
+    /// Used by the emitter for pre-scanning (e.g., collecting DeclareLocal).
+    pub fn for_each_child(&self, f: &mut impl FnMut(&WirInstr)) {
+        match self {
+            // Leaf nodes
+            Self::I32Const(_) | Self::I64Const(_) | Self::F32Const(_) | Self::F64Const(_)
+            | Self::LocalGet { .. } | Self::GlobalGet { .. }
+            | Self::RefNull { .. } | Self::Nop | Self::Unreachable | Self::MemorySize
+            | Self::Br { .. } | Self::DeclareLocal { .. } | Self::RefFunc { .. }
+            | Self::Return { value: None }
+            => {}
+            Self::Return { value } => {
+                if let Some(v) = value { f(v); }
+            }
+            // Unary Box<WirInstr>
+            Self::LocalSet { value, .. } | Self::LocalTee { value, .. }
+            | Self::GlobalSet { value, .. } => f(value),
+            Self::StructGet { expr, .. } | Self::RefCast { expr, .. }
+            | Self::RefTest { expr, .. } | Self::ValueCopy { expr, .. } => f(expr),
+            Self::BrIf { condition, .. } => f(condition),
+            Self::BrTable { index, .. } => f(index),
+            Self::ArrayNewDefault { len, .. } => f(len),
+            Self::Drop(o) | Self::MemoryGrow(o) | Self::I32Eqz(o) | Self::I64Eqz(o)
+            | Self::I32WrapI64(o) | Self::I64ExtendI32S(o) | Self::I64ExtendI32U(o)
+            | Self::I32Clz(o) | Self::I32Ctz(o) | Self::I32Popcnt(o)
+            | Self::I64Clz(o) | Self::I64Ctz(o) | Self::I64Popcnt(o)
+            | Self::I32TruncF64S(o) | Self::I32TruncF64U(o)
+            | Self::I32TruncF32S(o) | Self::I32TruncF32U(o)
+            | Self::I64TruncF64S(o) | Self::I64TruncF64U(o)
+            | Self::I64TruncF32S(o) | Self::I64TruncF32U(o)
+            | Self::I32ReinterpretF32(o) | Self::F32ReinterpretI32(o)
+            | Self::I64ReinterpretF64(o) | Self::F64ReinterpretI64(o)
+            | Self::I32Extend8S(o) | Self::I32Extend16S(o)
+            | Self::F32Neg(o) | Self::F32Abs(o) | Self::F32Ceil(o)
+            | Self::F32Floor(o) | Self::F32Trunc(o) | Self::F32Nearest(o) | Self::F32Sqrt(o)
+            | Self::F32ConvertI32S(o) | Self::F32ConvertI32U(o)
+            | Self::F32ConvertI64S(o) | Self::F32ConvertI64U(o)
+            | Self::F32DemoteF64(o)
+            | Self::F64Neg(o) | Self::F64Abs(o) | Self::F64Ceil(o)
+            | Self::F64Floor(o) | Self::F64Trunc(o) | Self::F64Nearest(o) | Self::F64Sqrt(o)
+            | Self::F64ConvertI32S(o) | Self::F64ConvertI32U(o)
+            | Self::F64ConvertI64S(o) | Self::F64ConvertI64U(o)
+            | Self::F64PromoteF32(o)
+            | Self::RefIsNull(o) | Self::RefAsNonNull(o)
+            | Self::RefI31(o) | Self::I31GetS(o) | Self::I31GetU(o)
+            | Self::ExternInternalize(o) | Self::ExternExternalize(o)
+            | Self::ArrayLen(o) => f(o),
+            // Binary Box<WirInstr>
+            Self::I32Add(l, r) | Self::I32Sub(l, r) | Self::I32Mul(l, r)
+            | Self::I32DivS(l, r) | Self::I32DivU(l, r)
+            | Self::I32RemS(l, r) | Self::I32RemU(l, r)
+            | Self::I32And(l, r) | Self::I32Or(l, r) | Self::I32Xor(l, r)
+            | Self::I32Shl(l, r) | Self::I32ShrS(l, r) | Self::I32ShrU(l, r)
+            | Self::I32Eq(l, r) | Self::I32Ne(l, r)
+            | Self::I32LtS(l, r) | Self::I32LtU(l, r)
+            | Self::I32GtS(l, r) | Self::I32GtU(l, r)
+            | Self::I32LeS(l, r) | Self::I32LeU(l, r)
+            | Self::I32GeS(l, r) | Self::I32GeU(l, r)
+            | Self::I64Add(l, r) | Self::I64Sub(l, r) | Self::I64Mul(l, r)
+            | Self::I64DivS(l, r) | Self::I64DivU(l, r)
+            | Self::I64RemS(l, r) | Self::I64RemU(l, r)
+            | Self::I64And(l, r) | Self::I64Or(l, r) | Self::I64Xor(l, r)
+            | Self::I64Shl(l, r) | Self::I64ShrS(l, r) | Self::I64ShrU(l, r)
+            | Self::I64Eq(l, r) | Self::I64Ne(l, r)
+            | Self::I64LtS(l, r) | Self::I64LtU(l, r)
+            | Self::I64GtS(l, r) | Self::I64GtU(l, r)
+            | Self::I64LeS(l, r) | Self::I64LeU(l, r)
+            | Self::I64GeS(l, r) | Self::I64GeU(l, r)
+            | Self::I64MulWideU(l, r) | Self::I64MulWideS(l, r)
+            | Self::F32Add(l, r) | Self::F32Sub(l, r) | Self::F32Mul(l, r)
+            | Self::F32Div(l, r) | Self::F32Min(l, r) | Self::F32Max(l, r)
+            | Self::F32Copysign(l, r)
+            | Self::F32Eq(l, r) | Self::F32Ne(l, r)
+            | Self::F32Lt(l, r) | Self::F32Gt(l, r) | Self::F32Le(l, r) | Self::F32Ge(l, r)
+            | Self::F64Add(l, r) | Self::F64Sub(l, r) | Self::F64Mul(l, r)
+            | Self::F64Div(l, r) | Self::F64Min(l, r) | Self::F64Max(l, r)
+            | Self::F64Copysign(l, r)
+            | Self::F64Eq(l, r) | Self::F64Ne(l, r)
+            | Self::F64Lt(l, r) | Self::F64Gt(l, r) | Self::F64Le(l, r) | Self::F64Ge(l, r)
+            | Self::RefEq(l, r) => { f(l); f(r); }
+            Self::StructSet { expr, value, .. } => { f(expr); f(value); }
+            Self::ArrayNew { init, len, .. } | Self::ArrayNewData { offset: init, len, .. } => {
+                f(init); f(len);
+            }
+            Self::ArrayGet { array, index, .. }
+            | Self::ArrayGetS { array, index, .. }
+            | Self::ArrayGetU { array, index, .. } => { f(array); f(index); }
+            Self::ArraySet { array, index, value, .. } => {
+                f(array); f(index); f(value);
+            }
+            Self::ArrayFill { array, offset, value, len, .. } => {
+                f(array); f(offset); f(value); f(len);
+            }
+            Self::ArrayCopy { dest, dest_offset, src, src_offset, len, .. } => {
+                f(dest); f(dest_offset); f(src); f(src_offset); f(len);
+            }
+            Self::Select { condition, if_true, if_false, .. } => {
+                f(condition); f(if_true); f(if_false);
+            }
+            Self::I64Add128(a, b, c, d) | Self::I64Sub128(a, b, c, d) => {
+                f(a); f(b); f(c); f(d);
+            }
+            Self::TableGet { index, .. } => f(index),
+            Self::TableSet { index, value, .. } => { f(index); f(value); }
+            // Memory operations
+            Self::I32Load { addr, .. } | Self::I32Load8U { addr, .. }
+            | Self::I32Load8S { addr, .. } | Self::I32Load16U { addr, .. }
+            | Self::I32Load16S { addr, .. }
+            | Self::I64Load { addr, .. } => f(addr),
+            Self::I32Store { addr, value, .. } | Self::I32Store8 { addr, value, .. }
+            | Self::I32Store16 { addr, value, .. }
+            | Self::I64Store { addr, value, .. } => { f(addr); f(value); }
+            // Vec<WirInstr> children
+            Self::StructNew { fields, .. } | Self::ArrayNewFixed { elements: fields, .. } => {
+                for child in fields { f(child); }
+            }
+            Self::Call { args, .. } => {
+                for arg in args { f(arg); }
+            }
+            Self::CallIndirect { args, index, .. } => {
+                for arg in args { f(arg); }
+                f(index);
+            }
+            Self::CallRef { args, func_ref, .. } => {
+                for arg in args { f(arg); }
+                f(func_ref);
+            }
+            // Control flow with body
+            Self::Block { body, .. } | Self::Loop { body, .. } => {
+                for child in body { f(child); }
+            }
+            Self::If { condition, then_body, else_body, .. } => {
+                f(condition);
+                for child in then_body { f(child); }
+                if let Some(eb) = else_body {
+                    for child in eb { f(child); }
+                }
+            }
+            Self::Seq(body) => {
+                for child in body { f(child); }
+            }
+        }
+    }
 }
 
 // =============================================================================

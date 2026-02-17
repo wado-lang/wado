@@ -82,9 +82,14 @@ fn try_run_fixture(path: &Path, source: &str, opt_level: OptLevel) -> Result<(),
 
     // Check trapped
     if result.trapped != spec.trapped {
+        let stderr_info = if !result.stderr.is_empty() {
+            format!(" stderr={:?}", result.stderr)
+        } else {
+            String::new()
+        };
         return Err(format!(
-            "trapped mismatch: expected {}, got {}",
-            spec.trapped, result.trapped
+            "trapped mismatch: expected {}, got {}{}",
+            spec.trapped, result.trapped, stderr_info
         ));
     }
 
@@ -248,11 +253,11 @@ fn wir_pipeline_progress() {
 
     // Print first few failures for quick diagnosis
     if !failures.is_empty() {
-        let show = failures.len().min(10);
+        let show = failures.len().min(500);
         eprintln!();
         eprintln!("  First {show} failures:");
         for (name, msg) in failures.iter().take(show) {
-            let short_msg = if msg.len() > 80 { &msg[..80] } else { msg };
+            let short_msg = if msg.len() > 400 { &msg[..400] } else { msg };
             eprintln!("    {name}: {short_msg}");
         }
         if failures.len() > show {
