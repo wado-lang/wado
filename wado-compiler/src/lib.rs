@@ -553,9 +553,8 @@ pub async fn dump_with_host<H: CompilerHost>(
         };
         let optimized = wasm_plan(project).ok();
 
-        // WIR: Generate an empty WirModule for now (Phase 1 scaffolding).
-        // In the future, tir_to_wir will translate the optimized Project here.
-        let wir_module = optimized.as_ref().map(|_| wir::WirModule::empty());
+        // WIR: Translate optimized Project to WirModule for inspection.
+        let wir_module = optimized.as_ref().map(tir_to_wir::build_wir_module);
 
         (mono_snapshot, lower_snapshot, optimized, wir_module)
     } else {

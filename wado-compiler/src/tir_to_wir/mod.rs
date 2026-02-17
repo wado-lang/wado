@@ -45,7 +45,7 @@ pub fn compile_with_wir(project: &Project) -> Vec<u8> {
 }
 
 /// Build a `WirModule` from a Project.
-fn build_wir_module(project: &Project) -> WirModule {
+pub fn build_wir_module(project: &Project) -> WirModule {
     let mut ctx = context::WirContext::new(project);
 
     // Step 1: Register all types

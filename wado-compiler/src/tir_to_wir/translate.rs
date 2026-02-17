@@ -9,6 +9,7 @@ use crate::tir::{
     TypeTable,
 };
 use crate::wir::{WirAbstractHeapType, WirInstr, WirType};
+use indexmap::IndexMap;
 
 use super::context::WirContext;
 
@@ -46,6 +47,46 @@ macro_rules! binary_f32 {
     }};
 }
 
+/// Recursively collect variable names from Let statements.
+fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
+    for stmt in stmts {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                name, local_index, ..
+            } => {
+                names.insert(*local_index, name.clone());
+            }
+            TirStmtKind::Loop { body } => {
+                collect_let_names(names, &body.stmts);
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_let_names(names, &then_block.stmts);
+                if let Some(eb) = else_block {
+                    collect_let_names(names, &eb.stmts);
+                }
+            }
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_let_names(names, &then_block.stmts);
+                if let Some(eb) = else_block {
+                    collect_let_names(names, &eb.stmts);
+                }
+            }
+            TirStmtKind::LabeledBlock { block, .. } => {
+                collect_let_names(names, &block.stmts);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Translate all pending function bodies from TIR to WIR instructions.
 pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     let pending: Vec<_> = std::mem::take(&mut ctx.pending_bodies);
@@ -55,6 +96,14 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         let type_table = pending_body.type_table.borrow();
 
         if let Some(ref body) = tir_func.body {
+            // Build local name map from params
+            let mut local_names = IndexMap::new();
+            for param in &tir_func.params {
+                local_names.insert(param.local_index, param.name.clone());
+            }
+            // Pre-scan Let statements to collect variable names
+            collect_let_names(&mut local_names, &body.stmts);
+
             let mut translator = FunctionTranslator {
                 ctx,
                 type_table: &type_table,
@@ -62,6 +111,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 module_source: &pending_body.module_source,
                 label_stack: Vec::new(),
                 match_counter: 0,
+                local_names,
             };
             let wir_body = translator.translate_block(body);
             drop(type_table);
@@ -91,9 +141,27 @@ struct FunctionTranslator<'a, 'b> {
     label_stack: Vec<LabelEntry>,
     /// Counter for generating unique match scrutinee local names.
     match_counter: u32,
+    /// Map from local index to variable name (built from params + Let stmts).
+    local_names: IndexMap<u32, String>,
 }
 
 impl FunctionTranslator<'_, '_> {
+    /// Get the WIR local name for a given local index.
+    /// Uses the TIR variable name if available, otherwise falls back to `__local_N`.
+    fn local_name(&self, index: u32) -> String {
+        if let Some(name) = self.local_names.get(&index) {
+            // Disambiguate: if multiple locals share the same name, append index
+            let count = self.local_names.values().filter(|n| *n == name).count();
+            if count > 1 {
+                format!("{name}_{index}")
+            } else {
+                name.clone()
+            }
+        } else {
+            format!("__local_{index}")
+        }
+    }
+
     /// Translate the top-level function body: declares locals and translates statements.
     fn translate_block(&mut self, block: &TirBlock) -> Vec<WirInstr> {
         let mut instrs = Vec::new();
@@ -112,7 +180,8 @@ impl FunctionTranslator<'_, '_> {
                 if i < param_count {
                     continue;
                 }
-                let local_name = format!("__local_{i}");
+                let idx = u32::try_from(i).unwrap();
+                let local_name = self.local_name(idx);
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
                 instrs.push(WirInstr::DeclareLocal {
                     name: local_name,
@@ -140,7 +209,7 @@ impl FunctionTranslator<'_, '_> {
                     // Skip params (they are already declared via param_names)
                     let param_count = u32::try_from(self.tir_func.params.len()).unwrap();
                     if *local_index >= param_count {
-                        let local_name = format!("__local_{local_index}");
+                        let local_name = self.local_name(*local_index);
                         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, *type_id);
                         instrs.push(WirInstr::DeclareLocal {
                             name: local_name,
@@ -220,7 +289,7 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
-                let local_name = format!("__local_{local_index}");
+                let local_name = self.local_name(*local_index);
                 let value_instr = self.translate_expr(value);
                 Some(WirInstr::LocalSet {
                     name: local_name,
@@ -384,7 +453,7 @@ impl FunctionTranslator<'_, '_> {
 
             // === Variables ===
             TirExprKind::Local { index, .. } => WirInstr::LocalGet {
-                name: format!("__local_{index}"),
+                name: self.local_name(*index),
             },
             TirExprKind::Global { .. } | TirExprKind::GlobalVarGet { .. } => {
                 // TODO: proper global lookup
@@ -523,7 +592,7 @@ impl FunctionTranslator<'_, '_> {
                 let val = self.translate_expr(value);
                 match &target.kind {
                     TirExprKind::Local { index, .. } => WirInstr::LocalSet {
-                        name: format!("__local_{index}"),
+                        name: self.local_name(*index),
                         value: Box::new(val),
                     },
                     TirExprKind::FieldAccess {
@@ -2224,7 +2293,7 @@ impl FunctionTranslator<'_, '_> {
         match pattern {
             TirPattern::Binding { local_index, .. } => {
                 instrs.push(WirInstr::LocalSet {
-                    name: format!("__local_{local_index}"),
+                    name: self.local_name(*local_index),
                     value: Box::new(WirInstr::LocalGet {
                         name: scrut_local.to_string(),
                     }),
@@ -2291,7 +2360,7 @@ impl FunctionTranslator<'_, '_> {
                     for (i, binding) in bindings.iter().enumerate() {
                         if let TirPattern::Binding { local_index, .. } = binding {
                             instrs.push(WirInstr::LocalSet {
-                                name: format!("__local_{local_index}"),
+                                name: self.local_name(*local_index),
                                 value: Box::new(WirInstr::StructGet {
                                     type_id: case_type_id.clone(),
                                     field_name: format!("payload_{i}"),
@@ -2307,7 +2376,7 @@ impl FunctionTranslator<'_, '_> {
                     for binding in bindings {
                         if let TirPattern::Binding { local_index, .. } = binding {
                             instrs.push(WirInstr::LocalSet {
-                                name: format!("__local_{local_index}"),
+                                name: self.local_name(*local_index),
                                 value: Box::new(WirInstr::LocalGet {
                                     name: scrut_local.to_string(),
                                 }),

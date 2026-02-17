@@ -83,17 +83,18 @@ WIR uses trees where operands are children (not stack values). `I32Add(StructGet
 `wado dump --wir --unparse` outputs pseudo-Wado:
 
 ```
-struct Point { x: i32, y: i32 }  // from ./geometry.wado
+struct Point { mut x: i32, mut y: i32 }
 
-variant Shape {  // from ./shapes.wado
-    Circle(f64),
-    Point,
+fn "run"() with Stdout {
+    let p: ref null Point;
+    p = Point { x: 10, y: 20 };
+    call core:cli/println(block -> ref null String {
+        ...
+    });
 }
 
-enum Color { Red = 0, Green = 1, Blue = 2 }  // from ./colors.wado
-
-fn "Point::sum"(self: ref Point) -> i32 {  // from ./geometry.wado
-    return i32.add(self.x, self.y);
+fn "core:cli/println"(message) with Stdout {  // from core:cli
+    ...
 }
 ```
 
@@ -101,8 +102,11 @@ Principles:
 
 - Type definitions use Wado syntax (`struct`, `variant`, `enum`), not Wasm GC syntax
 - Field access uses `self.x`, not `struct.get Point.x(self)`
+- Struct construction uses `Type { field: value }` syntax
 - Instructions use WAT-style mnemonics (`i32.add`, `f64.mul`)
 - Wado-level types in signatures (`bool`, `char`, `u8`, not `i32`)
+- Names are shortened: entry-point items show just the name, prelude types like `String` omit module path
+- TIR variable names are preserved in WIR locals
 
 ## Migration Plan
 
@@ -239,8 +243,8 @@ This outputs a summary like:
 ═══════════════════════════════════════════════════════
   WIR Pipeline Progress (O2)
 ═══════════════════════════════════════════════════════
-  Passed:   251 / 651  (38.6%)
-  Failed:   400
+  Passed:   481 / 671  (71.7%)
+  Failed:   190
 ═══════════════════════════════════════════════════════
 ```
 
