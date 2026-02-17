@@ -337,6 +337,26 @@ pub fn compile_source_with_opts(
         .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
+/// Compile source code with full compiler options (including WIR backend flag)
+pub fn compile_source_with_compiler_options(
+    path: &std::path::Path,
+    source: &str,
+    options: wado_compiler::CompilerOptions,
+) -> Result<wado_compiler::CompileResult, CompileError> {
+    let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let host = FilesystemHost::new(base_path);
+    let filename = path.to_string_lossy();
+
+    runtime()
+        .block_on(wado_compiler::compile_with_options(
+            source,
+            &host,
+            Some(&filename),
+            options,
+        ))
+        .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
+}
+
 /// Compile a file asynchronously (for use within async context)
 pub async fn compile_file_async(
     path: &std::path::Path,
