@@ -51,11 +51,18 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     // Phase 5: All remaining array types
     register_remaining_arrays(ctx);
 
+    // Phase 6: Array<T> wrapper structs
+    register_array_wrapper_structs(ctx);
+
     // Register enums from all modules
     register_enums(ctx);
 
     // Register flags from all modules
     register_flags(ctx);
+
+    // Final pass: fix up struct fields that resolved to AbstractRef(Struct)
+    // because of self-referential or forward-referenced types
+    fixup_abstract_struct_fields(ctx);
 }
 
 /// Register a single struct type.
@@ -67,9 +74,21 @@ fn register_struct(
 ) {
     let struct_name = StructName::new(module_source.clone(), tir_struct.name.clone());
 
-    // Skip if already registered
+    // Skip if already registered (exact match)
     if ctx.struct_type_map.contains_key(&struct_name) {
         return;
+    }
+
+    // Skip if already registered under a different module_source (name-only match).
+    // Monomorphized structs like TreeMap<String,i32> may appear in both the
+    // definition module and the entry module. Only register the first occurrence.
+    // Only applies to monomorphized structs — non-mono structs with the same name
+    // from different modules (e.g., two modules defining `Pair`) are distinct types.
+    if tir_struct.monomorph_info.is_some() {
+        if let Some(existing) = ctx.lookup_struct_by_name(&tir_struct.name).cloned() {
+            ctx.struct_type_map.insert(struct_name, existing);
+            return;
+        }
     }
 
     let fq = format!("{module_source}//{}", tir_struct.name);
@@ -497,4 +516,300 @@ fn register_enums(ctx: &mut WirContext<'_>) {
 
 fn register_flags(_ctx: &mut WirContext<'_>) {
     // Flags are not yet supported in TIR; this is a placeholder
+}
+
+/// Register Array<T> wrapper structs for all `GenericInstance("Array", [T])` types
+/// found in any module's type table.
+///
+/// In the TIR, `Array<T>` is `GenericInstance { name: "Array", type_args: [T] }`,
+/// not a struct definition. The old codegen creates wrapper structs on-the-fly
+/// via `get_or_create_array_struct_type`. We replicate that here.
+fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
+    use crate::tir::ResolvedType;
+
+    // Collect unique Array<T> element types across all modules
+    let mut array_elem_types: Vec<(crate::tir::TypeId, String, ModuleSource)> = Vec::new();
+    for tir_mod in ctx.project.tir_modules.values() {
+        let type_table = &*tir_mod.type_table.borrow();
+        for type_id in type_table.iter_type_ids() {
+            if let ResolvedType::GenericInstance { name, type_args, .. } = type_table.get(type_id) {
+                if name == "Array" && type_args.len() == 1 {
+                    let elem_name = type_table.mangle_type_name(type_args[0]);
+                    if !array_elem_types.iter().any(|(_, n, _)| n == &elem_name) {
+                        // Ensure raw array type is registered
+                        register_raw_array_type(ctx, type_args[0], type_table);
+                        array_elem_types.push((
+                            type_args[0],
+                            elem_name,
+                            tir_mod.module_source.clone(),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    for (_, elem_name, _module_source) in &array_elem_types {
+        let mangled =
+            crate::name::mangle_generic_name("Array", std::slice::from_ref(elem_name));
+
+        // Skip if already registered (by name)
+        if ctx.lookup_struct_by_name(&mangled).is_some() {
+            continue;
+        }
+
+        let raw_array_type_id = ctx.array_type_by_name.get(elem_name).cloned();
+        let Some(raw_type) = raw_array_type_id else {
+            continue;
+        };
+
+        let module_source = ModuleSource::core("prelude");
+        let struct_name = StructName::new(module_source.clone(), mangled.clone());
+        if ctx.struct_type_map.contains_key(&struct_name) {
+            continue;
+        }
+
+        let fq = format!("{module_source}//{mangled}");
+        let type_id = ctx.register_type(
+            fq.clone(),
+            WirTypeDef::Struct(WirStructType {
+                name: WirName {
+                    display: mangled.clone(),
+                    fq,
+                },
+                fields: vec![
+                    WirField {
+                        name: "repr".to_string(),
+                        ty: crate::wir::WirType::Ref {
+                            type_id: raw_type,
+                            nullable: true,
+                        },
+                        mutable: true,
+                    },
+                    WirField {
+                        name: "used".to_string(),
+                        ty: crate::wir::WirType::I32,
+                        mutable: true,
+                    },
+                ],
+                meta: WirMeta {
+                    module_source: Some(module_source.clone()),
+                    ..WirMeta::default()
+                },
+                generic_origin: Some(WirGenericOrigin {
+                    base_name: "Array".to_string(),
+                    type_args: vec![elem_name.clone()],
+                }),
+                newtype_origin: None,
+            }),
+        );
+        ctx.struct_type_map.insert(struct_name, type_id);
+    }
+}
+
+/// Check if a WirType is an unresolved abstract struct/array reference.
+fn is_abstract_ref(ty: &crate::wir::WirType) -> bool {
+    matches!(
+        ty,
+        crate::wir::WirType::AbstractRef {
+            heap_type: crate::wir::WirAbstractHeapType::Struct
+                | crate::wir::WirAbstractHeapType::Array,
+            ..
+        }
+    )
+}
+
+/// Fix up types that resolved to `AbstractRef(Struct)` or `AbstractRef(Array)`
+/// because of forward references or self-referential types.
+///
+/// After all types are registered, re-scan struct fields, array element types,
+/// and function parameters/results. For any abstract refs, try to resolve
+/// them to concrete types using the now-complete type registry.
+fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
+    use crate::wir::WirType;
+
+    // Phase 1: Fix struct fields
+    let mut struct_fixups: Vec<(usize, usize, WirType)> = Vec::new();
+
+    for (wir_idx, typedef) in ctx.types.iter().enumerate() {
+        let WirTypeDef::Struct(s) = typedef else {
+            continue;
+        };
+
+        for (field_idx, field) in s.fields.iter().enumerate() {
+            if !is_abstract_ref(&field.ty) {
+                continue;
+            }
+
+            let module_source = s.meta.module_source.as_ref();
+            let struct_name_str = &s.name.display;
+
+            let mut resolved = None;
+            for tir_mod in ctx.project.tir_modules.values() {
+                let type_table = &*tir_mod.type_table.borrow();
+                for tir_struct in &tir_mod.structs {
+                    if &tir_struct.name != struct_name_str {
+                        continue;
+                    }
+                    if let Some(ms) = module_source {
+                        if &tir_mod.module_source != ms {
+                            continue;
+                        }
+                    }
+                    if field_idx < tir_struct.fields.len() {
+                        let wir_type =
+                            ctx.type_id_to_wir_type(&type_table, tir_struct.fields[field_idx].type_id);
+                        if !is_abstract_ref(&wir_type) {
+                            resolved = Some(wir_type);
+                            break;
+                        }
+                    }
+                }
+                if resolved.is_some() {
+                    break;
+                }
+            }
+
+            if let Some(new_type) = resolved {
+                struct_fixups.push((wir_idx, field_idx, new_type));
+            }
+        }
+    }
+
+    for (type_idx, field_idx, new_type) in struct_fixups {
+        if let WirTypeDef::Struct(s) = &mut ctx.types[type_idx] {
+            s.fields[field_idx].ty = new_type;
+        }
+    }
+
+    // Phase 2: Fix array element types
+    let mut array_fixups: Vec<(usize, WirType)> = Vec::new();
+    for (wir_idx, typedef) in ctx.types.iter().enumerate() {
+        if let WirTypeDef::Array(a) = typedef {
+            if is_abstract_ref(&a.element_type) {
+                // Try to resolve via TIR BuiltinArray types
+                for tir_mod in ctx.project.tir_modules.values() {
+                    let type_table = &*tir_mod.type_table.borrow();
+                    for type_id in type_table.iter_type_ids() {
+                        if let crate::tir::ResolvedType::BuiltinArray(elem_tid) =
+                            type_table.get(type_id)
+                        {
+                            if let Some(arr_wir_id) = ctx.array_type_map.get(elem_tid) {
+                                if arr_wir_id.index() == u32::try_from(wir_idx).unwrap() {
+                                    let wir_type =
+                                        ctx.type_id_to_wir_type(&type_table, *elem_tid);
+                                    if !is_abstract_ref(&wir_type) {
+                                        array_fixups.push((wir_idx, wir_type));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (type_idx, new_elem_type) in array_fixups {
+        if let WirTypeDef::Array(a) = &mut ctx.types[type_idx] {
+            a.element_type = new_elem_type;
+        }
+    }
+
+    // Phase 3: Fix function parameter/result types
+    // Function types are registered during translation, after type registration.
+    // Some param/result types may reference types that weren't available yet.
+    // Re-resolve by scanning TIR functions for matching signatures.
+    let mut func_fixups: Vec<(usize, Vec<WirType>, Vec<WirType>)> = Vec::new();
+    for (wir_idx, typedef) in ctx.types.iter().enumerate() {
+        if let WirTypeDef::Func(f) = typedef {
+            let has_abstract =
+                f.params.iter().any(is_abstract_ref) || f.results.iter().any(is_abstract_ref);
+            if !has_abstract {
+                continue;
+            }
+
+            // Find the TIR function that matches this func type
+            let fq = &f.name.display;
+            let mut resolved_params = None;
+            let mut resolved_results = None;
+            for body in &ctx.pending_bodies {
+                let tir_func = body.tir_func.borrow();
+                let tt = body.type_table.borrow();
+                if fq.contains(&tir_func.name.to_string()) {
+                    let params: Vec<WirType> = tir_func
+                        .params
+                        .iter()
+                        .map(|p| ctx.type_id_to_wir_type(&tt, p.type_id))
+                        .collect();
+                    let results: Vec<WirType> = if tt.get(tir_func.return_type)
+                        != &crate::tir::ResolvedType::Unit
+                    {
+                        vec![ctx.type_id_to_wir_type(&tt, tir_func.return_type)]
+                    } else {
+                        Vec::new()
+                    };
+                    // Only accept if it actually resolves more types
+                    let new_abstract_count =
+                        params.iter().filter(|t| is_abstract_ref(t)).count()
+                            + results.iter().filter(|t| is_abstract_ref(t)).count();
+                    let old_abstract_count =
+                        f.params.iter().filter(|t| is_abstract_ref(t)).count()
+                            + f.results.iter().filter(|t| is_abstract_ref(t)).count();
+                    if new_abstract_count < old_abstract_count {
+                        resolved_params = Some(params);
+                        resolved_results = Some(results);
+                        break;
+                    }
+                }
+            }
+
+            if resolved_params.is_some() || resolved_results.is_some() {
+                let params = resolved_params.unwrap_or_else(|| f.params.clone());
+                let results = resolved_results.unwrap_or_else(|| f.results.clone());
+                func_fixups.push((wir_idx, params, results));
+            }
+        }
+    }
+    for (type_idx, params, results) in func_fixups {
+        if let WirTypeDef::Func(f) = &mut ctx.types[type_idx] {
+            f.params = params;
+            f.results = results;
+        }
+    }
+
+    // Phase 4: Fix variant case payload types
+    let mut variant_fixups: Vec<(usize, usize, Vec<WirType>)> = Vec::new();
+    for (wir_idx, typedef) in ctx.types.iter().enumerate() {
+        if let WirTypeDef::Variant(v) = typedef {
+            for (case_idx, case) in v.cases.iter().enumerate() {
+                if case.payload.iter().any(is_abstract_ref) {
+                    // Try to resolve payload types through TIR variant decls
+                    for tir_mod in ctx.project.tir_modules.values() {
+                        let tt = tir_mod.type_table.borrow();
+                        for tir_variant in &tir_mod.variants {
+                            if tir_variant.name == v.name.display
+                                && case_idx < tir_variant.cases.len()
+                            {
+                                let payload_type_id = tir_variant.cases[case_idx].payload;
+                                if tt.get(payload_type_id) != &crate::tir::ResolvedType::Unit {
+                                    let wir_type = ctx.type_id_to_wir_type(&tt, payload_type_id);
+                                    if !is_abstract_ref(&wir_type) {
+                                        variant_fixups
+                                            .push((wir_idx, case_idx, vec![wir_type]));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (type_idx, case_idx, payload) in variant_fixups {
+        if let WirTypeDef::Variant(v) = &mut ctx.types[type_idx] {
+            v.cases[case_idx].payload = payload;
+        }
+    }
 }

@@ -183,7 +183,7 @@ impl<'a> WirContext<'a> {
     /// Look up a struct type by name only (ignoring `module_source`).
     /// Used as fallback when `module_source` doesn't match (e.g., monomorphized
     /// structs where the type's `module_source` is the use site, not the definition site).
-    fn lookup_struct_by_name(&self, name: &str) -> Option<&WirTypeId> {
+    pub fn lookup_struct_by_name(&self, name: &str) -> Option<&WirTypeId> {
         self.struct_type_map
             .iter()
             .find(|(k, _)| k.name == name)
@@ -417,10 +417,25 @@ impl<'a> WirContext<'a> {
                         type_id,
                         nullable: true,
                     },
-                    _ => WirType::AbstractRef {
-                        heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: true,
-                    },
+                    _ => {
+                        // For primitive types, Option<T> maps to nullable ref Box<T>
+                        let inner_name = type_table.mangle_type_name(*inner);
+                        let box_name = crate::name::mangle_generic_name(
+                            "Box",
+                            std::slice::from_ref(&inner_name),
+                        );
+                        if let Some(tid) = self.lookup_struct_by_name(&box_name) {
+                            WirType::Ref {
+                                type_id: tid.clone(),
+                                nullable: true,
+                            }
+                        } else {
+                            WirType::AbstractRef {
+                                heap_type: crate::wir::WirAbstractHeapType::Struct,
+                                nullable: true,
+                            }
+                        }
+                    }
                 }
             }
             ResolvedType::Enum {
@@ -469,8 +484,31 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // References are the same as the inner type at Wasm level
-                self.type_id_to_wir_type(type_table, *inner)
+                // For reference types (structs, variants, strings, arrays), the inner type
+                // is already a ref type in Wasm GC, so &T = T at the Wasm level.
+                // For value types (primitives, enums), we need Box<T> to provide
+                // a mutable location for &mut T semantics.
+                let inner_wir = self.type_id_to_wir_type(type_table, *inner);
+                match &inner_wir {
+                    WirType::Ref { .. } | WirType::AbstractRef { .. } => inner_wir,
+                    _ => {
+                        // Value type: use Box<T> for reference semantics
+                        let inner_name = type_table.mangle_type_name(*inner);
+                        let box_name = crate::name::mangle_generic_name(
+                            "Box",
+                            std::slice::from_ref(&inner_name),
+                        );
+                        if let Some(tid) = self.lookup_struct_by_name(&box_name) {
+                            WirType::Ref {
+                                type_id: tid.clone(),
+                                nullable: true,
+                            }
+                        } else {
+                            // Fallback: treat as value type (no boxing available)
+                            inner_wir
+                        }
+                    }
+                }
             }
             ResolvedType::Function { .. } => {
                 // Function references use abstract funcref
