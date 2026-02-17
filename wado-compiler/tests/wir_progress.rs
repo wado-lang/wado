@@ -45,8 +45,8 @@ struct ProgressStats {
 fn try_run_fixture(path: &Path, source: &str, opt_level: OptLevel) -> Result<(), String> {
     let data_section =
         common::extract_data_section(source).ok_or_else(|| "missing __DATA__".to_string())?;
-    let spec: TestSpec = serde_json::from_str(data_section)
-        .map_err(|e| format!("invalid __DATA__ JSON: {e}"))?;
+    let spec: TestSpec =
+        serde_json::from_str(data_section).map_err(|e| format!("invalid __DATA__ JSON: {e}"))?;
 
     let options = CompilerOptions {
         opt_level,
@@ -77,7 +77,8 @@ fn try_run_fixture(path: &Path, source: &str, opt_level: OptLevel) -> Result<(),
 
     let compile_result = compile_result.map_err(|e| format!("compile error: {e}"))?;
 
-    let result = common::run_wasm(compile_result.wasm).map_err(|e| format!("runtime error: {e}"))?;
+    let result =
+        common::run_wasm(compile_result.wasm).map_err(|e| format!("runtime error: {e}"))?;
 
     // Check trapped
     if result.trapped != spec.trapped {
@@ -223,7 +224,10 @@ fn wir_pipeline_progress() {
     eprintln!("═══════════════════════════════════════════════════════");
     eprintln!("  WIR Pipeline Progress (O2)");
     eprintln!("═══════════════════════════════════════════════════════");
-    eprintln!("  Passed:  {:>4} / {:<4} ({pct:.1}%)", stats.passed, non_todo_total);
+    eprintln!(
+        "  Passed:  {:>4} / {:<4} ({pct:.1}%)",
+        stats.passed, non_todo_total
+    );
     eprintln!("  Failed:  {:>4}", failed);
     if stats.failed_compile > 0 {
         eprintln!("    compile: {:>4}", stats.failed_compile);
