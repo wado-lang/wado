@@ -109,6 +109,8 @@ pub mod unparse;
 pub mod wasm_builder;
 pub mod wasm_plan;
 pub mod wasm_postprocess;
+pub mod wir;
+pub mod wir_unparse;
 pub mod world_registry;
 
 pub use analyze::Analyzer;
@@ -172,6 +174,8 @@ pub struct DumpResult {
     pub lowered_tir_modules: Option<IndexMap<ModuleSource, tir::TirModule>>,
     /// Optimized project (contains usage analysis results)
     pub optimized_project: Option<Project>,
+    /// WIR module (after `tir_to_wir` translation)
+    pub wir_module: Option<wir::WirModule>,
     /// Comments for unparsing
     pub comments: comment::CommentMap,
 }
@@ -481,67 +485,74 @@ pub async fn dump_with_host<H: CompilerHost>(
     // === Phase 7b+8+9+10: Build Project and run remaining phases ===
     // Create Project early so CM adapter synthesis runs before monomorphize,
     // matching the compile_with_options pipeline.
-    let (monomorphized_tir_modules_by_source, lowered_tir_modules_by_source, optimized_project) =
-        if let Some(resolved_modules) = tir_modules_by_source.clone() {
-            let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
+    let (
+        monomorphized_tir_modules_by_source,
+        lowered_tir_modules_by_source,
+        optimized_project,
+        wir_module,
+    ) = if let Some(resolved_modules) = tir_modules_by_source.clone() {
+        let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
 
-            let (wasi_registry, world_registry) =
-                component_model::WasiRegistry::build_from_stdlib();
+        let (wasi_registry, world_registry) = component_model::WasiRegistry::build_from_stdlib();
 
-            let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
-            let builtin_registry =
-                builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
+        let temp_type_table = std::cell::RefCell::new(tir::TypeTable::new());
+        let builtin_registry =
+            builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-            let project = Project::new(
-                load_result.entry_module_source.clone(),
-                resolved_modules,
-                symbols.clone(),
-                load_result.implicit_modules.clone(),
-                module_name,
-                wasi_registry,
-                world_registry,
-                builtin_registry,
-            );
+        let project = Project::new(
+            load_result.entry_module_source.clone(),
+            resolved_modules,
+            symbols.clone(),
+            load_result.implicit_modules.clone(),
+            module_name,
+            wasi_registry,
+            world_registry,
+            builtin_registry,
+        );
 
-            // CM Adapter Synthesis (must run before monomorphize)
-            let project = {
-                let _span = logger.span("cm-adapter-gen");
-                cm_adapter_gen::generate_adapters(project).map_err(|message| {
-                    let _ = logger.error(compiler_host::Diagnostic {
-                        severity: compiler_host::Severity::Error,
-                        code: compiler_host::Code::UnsupportedFeature,
-                        message,
-                        span: None,
-                    });
-                    Bail
-                })?
-            };
-
-            // Monomorphize
-            let project = {
-                let _span = logger.span("monomorphize");
-                monomorphize_project(project)
-            };
-            let mono_snapshot = Some(project.tir_modules.clone());
-
-            // Lower
-            let project = {
-                let _span = logger.span("lower");
-                lower_project(project)
-            };
-            let lower_snapshot = Some(project.tir_modules.clone());
-
-            // Optimize
-            let project = {
-                let _span = logger.span("optimize");
-                optimize(project, opt_level)
-            };
-            let optimized = wasm_plan(project).ok();
-
-            (mono_snapshot, lower_snapshot, optimized)
-        } else {
-            (None, None, None)
+        // CM Adapter Synthesis (must run before monomorphize)
+        let project = {
+            let _span = logger.span("cm-adapter-gen");
+            cm_adapter_gen::generate_adapters(project).map_err(|message| {
+                let _ = logger.error(compiler_host::Diagnostic {
+                    severity: compiler_host::Severity::Error,
+                    code: compiler_host::Code::UnsupportedFeature,
+                    message,
+                    span: None,
+                });
+                Bail
+            })?
         };
+
+        // Monomorphize
+        let project = {
+            let _span = logger.span("monomorphize");
+            monomorphize_project(project)
+        };
+        let mono_snapshot = Some(project.tir_modules.clone());
+
+        // Lower
+        let project = {
+            let _span = logger.span("lower");
+            lower_project(project)
+        };
+        let lower_snapshot = Some(project.tir_modules.clone());
+
+        // Optimize
+        let project = {
+            let _span = logger.span("optimize");
+            optimize(project, opt_level)
+        };
+        let optimized = wasm_plan(project).ok();
+
+        // WIR: Generate an empty WirModule for now (Phase 1 scaffolding).
+        // In the future, tir_to_wir will translate the optimized Project here.
+        let wir_module = optimized.as_ref().map(|_| wir::WirModule::empty());
+
+        (mono_snapshot, lower_snapshot, optimized, wir_module)
+    } else {
+        (None, None, None, None)
+    };
 
     Ok(DumpResult {
         source: source.to_string(),
@@ -556,6 +567,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         monomorphized_tir_modules: monomorphized_tir_modules_by_source,
         lowered_tir_modules: lowered_tir_modules_by_source,
         optimized_project,
+        wir_module,
         comments: comment_map,
     })
 }
