@@ -12391,6 +12391,677 @@ impl Codegen<'_> {
 
         module.finish()
     }
+
+    /// Static helper: generate WASI imports for a component.
+    /// Used by both the legacy codegen and the WIR pipeline.
+    pub fn generate_wasi_imports_for_project(
+        project: &Project,
+        builder: &mut ComponentBuilder,
+        ctx: &mut ComponentModelContext,
+    ) {
+        let codegen = Self::create_minimal(project);
+        codegen.generate_wasi_imports(builder, ctx, project);
+    }
+
+    /// Static helper: build the memory module.
+    /// Used by both the legacy codegen and the WIR pipeline.
+    pub fn build_memory_module_for_project(strip_names: bool) -> Vec<u8> {
+        use wasm_encoder::{
+            CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection,
+            GlobalType, Instruction, MemorySection, MemoryType, Module, NameMap, NameSection,
+            TypeSection, ValType,
+        };
+
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function(
+            [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            [ValType::I32],
+        );
+        module.section(&types);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        memories.memory(MemoryType {
+            minimum: 17,
+            maximum: None,
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+        module.section(&memories);
+
+        let mut globals = GlobalSection::new();
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            &wasm_encoder::ConstExpr::i32_const(1024),
+        );
+        module.section(&globals);
+
+        let mut exports = ExportSection::new();
+        exports.export("memory", ExportKind::Memory, 0);
+        exports.export("realloc", ExportKind::Func, 0);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut realloc_func = Function::new([(1, ValType::I32)]);
+        realloc_func.instruction(&Instruction::GlobalGet(0));
+        realloc_func.instruction(&Instruction::LocalGet(2));
+        realloc_func.instruction(&Instruction::I32Add);
+        realloc_func.instruction(&Instruction::I32Const(1));
+        realloc_func.instruction(&Instruction::I32Sub);
+        realloc_func.instruction(&Instruction::I32Const(0));
+        realloc_func.instruction(&Instruction::LocalGet(2));
+        realloc_func.instruction(&Instruction::I32Sub);
+        realloc_func.instruction(&Instruction::I32And);
+        realloc_func.instruction(&Instruction::LocalSet(4));
+        realloc_func.instruction(&Instruction::LocalGet(4));
+        realloc_func.instruction(&Instruction::LocalGet(3));
+        realloc_func.instruction(&Instruction::I32Add);
+        realloc_func.instruction(&Instruction::GlobalSet(0));
+        realloc_func.instruction(&Instruction::LocalGet(4));
+        realloc_func.instruction(&Instruction::End);
+        code.function(&realloc_func);
+        module.section(&code);
+
+        if !strip_names {
+            let mut names = NameSection::new();
+            let mut func_names = NameMap::new();
+            func_names.append(0, "realloc");
+            names.functions(&func_names);
+            let mut type_names = NameMap::new();
+            type_names.append(0, "realloc");
+            names.types(&type_names);
+            module.section(&names);
+        }
+
+        module.finish()
+    }
+
+    /// Build a complete Wasm Component from a pre-built core module.
+    ///
+    /// Used by the WIR pipeline: the core module is already built by `emit_core_module`,
+    /// and this method wraps it in the Component Model shell with WASI imports,
+    /// canonical intrinsics, bundled modules, and world exports.
+    pub fn build_component_from_core_module(project: &Project, core_module: &[u8]) -> Vec<u8> {
+        let codegen = Self::create_minimal(project);
+        codegen.generate_component_from_core_module(core_module)
+    }
+
+    /// Instance method that wraps a core module in a Component Model component.
+    ///
+    /// This reuses the same component generation logic as `generate_component`,
+    /// but takes pre-built core module bytes instead of building them internally.
+    fn generate_component_from_core_module(&self, core_module: &[u8]) -> Vec<u8> {
+        let project = self.project;
+
+        let mut builder = ComponentBuilder::default();
+        let mut ctx = ComponentModelContext::new();
+
+        // ========================================
+        // Generate WASI imports dynamically from registry
+        // ========================================
+        self.generate_wasi_imports(&mut builder, &mut ctx, project);
+
+        // ========================================
+        // Type: stream<u8> for stream intrinsics
+        // ========================================
+        let stream_u8_type = ctx.register_type("stream-u8");
+        {
+            let (_, enc) = builder.ty(Some("stream-u8"));
+            enc.defined_type()
+                .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+        }
+
+        // ========================================
+        // Type: result unit for run function (needed for task.return)
+        // ========================================
+        let result_unit_type = ctx.register_type("result-unit");
+        {
+            let (_, enc) = builder.ty(Some("result-unit"));
+            enc.defined_type().result(None, None);
+        }
+
+        // ========================================
+        // Core memory module
+        // ========================================
+        let mem_module = Self::build_memory_module_for_project(project.strip_names);
+        ctx.register_core_module("mem-mod");
+        builder.core_module_raw(Some("mem-mod"), &mem_module);
+
+        ctx.register_core_instance("mem");
+        builder.core_instantiate(
+            Some("mem"),
+            ctx.core_module_idx("mem-mod"),
+            Vec::<(&str, ModuleArg)>::new(),
+        );
+
+        ctx.set_memory(0);
+        builder.core_alias_export(
+            Some("memory"),
+            ctx.core_instance_idx("mem"),
+            "memory",
+            ExportKind::Memory,
+        );
+        ctx.register_core_func("realloc");
+        builder.core_alias_export(
+            Some("realloc"),
+            ctx.core_instance_idx("mem"),
+            "realloc",
+            ExportKind::Func,
+        );
+
+        // ========================================
+        // Bundled modules (FTS and libm)
+        // ========================================
+        let component_plan = project
+            .component_plan
+            .as_ref()
+            .expect("component_plan should be set by wasm_plan phase");
+        let bundled_functions = &component_plan.bundled_functions;
+
+        let fts_functions: Vec<_> = bundled_functions
+            .iter()
+            .filter(|f| is_fts_function(f))
+            .cloned()
+            .collect();
+        let libm_functions: Vec<_> = bundled_functions
+            .iter()
+            .filter(|f| !is_fts_function(f))
+            .cloned()
+            .collect();
+
+        if !fts_functions.is_empty() {
+            let fts_module = wasm_postprocess::convert_memory_to_import(
+                wado_bundled_fts_wasm(),
+                "env",
+                "memory",
+            )
+            .expect("Failed to process wado-bundled-fts module");
+
+            let keep_exports: IndexSet<_> = fts_functions.iter().cloned().collect();
+            let final_module = wasm_postprocess::eliminate_dead_code(&fts_module, &keep_exports);
+
+            ctx.register_core_module("fts-mod");
+            builder.core_module_raw(Some("fts-mod"), &final_module);
+
+            ctx.register_core_instance("fts-env");
+            let fts_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
+            let fts_env_instance =
+                builder.core_instantiate_exports(Some("fts-env-instance"), fts_env_exports);
+
+            ctx.register_core_instance("fts");
+            builder.core_instantiate(
+                Some("fts"),
+                ctx.core_module_idx("fts-mod"),
+                [("env", ModuleArg::Instance(fts_env_instance))],
+            );
+
+            for func_name in &fts_functions {
+                ctx.register_core_func(func_name);
+                builder.core_alias_export(
+                    Some(func_name),
+                    ctx.core_instance_idx("fts"),
+                    func_name,
+                    ExportKind::Func,
+                );
+            }
+        }
+
+        if !libm_functions.is_empty() {
+            let libm_module = wasm_postprocess::convert_memory_to_import(
+                wado_bundled_libm_wasm(),
+                "env",
+                "memory",
+            )
+            .expect("Failed to process wado-bundled-libm module");
+
+            let keep_exports: IndexSet<_> = libm_functions.iter().cloned().collect();
+            let final_module = wasm_postprocess::eliminate_dead_code(&libm_module, &keep_exports);
+
+            ctx.register_core_module("libm-mod");
+            builder.core_module_raw(Some("libm-mod"), &final_module);
+
+            ctx.register_core_instance("libm-env");
+            let libm_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
+            let libm_env_instance =
+                builder.core_instantiate_exports(Some("libm-env-instance"), libm_env_exports);
+
+            ctx.register_core_instance("libm");
+            builder.core_instantiate(
+                Some("libm"),
+                ctx.core_module_idx("libm-mod"),
+                [("env", ModuleArg::Instance(libm_env_instance))],
+            );
+
+            for func_name in &libm_functions {
+                ctx.register_core_func(func_name);
+                builder.core_alias_export(
+                    Some(func_name),
+                    ctx.core_instance_idx("libm"),
+                    func_name,
+                    ExportKind::Func,
+                );
+            }
+        }
+
+        // ========================================
+        // HTTP response types for future<T> canonical intrinsics
+        // ========================================
+        let needs_future_intrinsics = component_plan.needs_future_intrinsics;
+
+        let trailers_future_type = if needs_future_intrinsics {
+            ctx.register_type("http-fields");
+            {
+                let fields_resource_idx = ctx.type_idx("http-fields-resource");
+                let (_, enc) = builder.ty(Some("http-fields"));
+                enc.defined_type().own(fields_resource_idx);
+            }
+
+            ctx.register_type("http-option-stream-u8");
+            {
+                let (_, enc) = builder.ty(Some("http-option-stream-u8"));
+                enc.defined_type()
+                    .option(ComponentValType::Type(stream_u8_type));
+            }
+
+            ctx.register_type("http-option-fields");
+            {
+                let fields_idx = ctx.type_idx("http-fields");
+                let (_, enc) = builder.ty(Some("http-option-fields"));
+                enc.defined_type()
+                    .option(ComponentValType::Type(fields_idx));
+            }
+
+            ctx.register_type("http-trailers-result");
+            {
+                let option_fields_idx = ctx.type_idx("http-option-fields");
+                let error_code_idx = ctx.type_idx("http-error-code");
+                let (_, enc) = builder.ty(Some("http-trailers-result"));
+                enc.defined_type().result(
+                    Some(ComponentValType::Type(option_fields_idx)),
+                    Some(ComponentValType::Type(error_code_idx)),
+                );
+            }
+
+            let trailers_future_type = ctx.register_type("http-trailers-future");
+            {
+                let trailers_result_idx = ctx.type_idx("http-trailers-result");
+                let (_, enc) = builder.ty(Some("http-trailers-future"));
+                enc.defined_type()
+                    .future(Some(ComponentValType::Type(trailers_result_idx)));
+            }
+
+            ctx.register_type("http-transmission-result");
+            {
+                let error_code_idx = ctx.type_idx("http-error-code");
+                let (_, enc) = builder.ty(Some("http-transmission-result"));
+                enc.defined_type()
+                    .result(None, Some(ComponentValType::Type(error_code_idx)));
+            }
+
+            ctx.register_type("http-transmission-future");
+            {
+                let transmission_result_idx = ctx.type_idx("http-transmission-result");
+                let (_, enc) = builder.ty(Some("http-transmission-future"));
+                enc.defined_type()
+                    .future(Some(ComponentValType::Type(transmission_result_idx)));
+            }
+
+            trailers_future_type
+        } else {
+            0
+        };
+
+        // ========================================
+        // Canonical intrinsics
+        // ========================================
+        for name in &component_plan.canonical_intrinsics {
+            let name = name.as_str();
+            ctx.register_core_func(name);
+
+            match name {
+                "stream-new" => {
+                    builder.stream_new(stream_u8_type);
+                }
+                "stream-write" => {
+                    builder.stream_write(
+                        stream_u8_type,
+                        [
+                            CanonicalOption::Memory(ctx.memory_idx()),
+                            CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                        ],
+                    );
+                }
+                "stream-drop-writable" => {
+                    builder.stream_drop_writable(stream_u8_type);
+                }
+                "stream-drop-readable" => {
+                    builder.stream_drop_readable(stream_u8_type);
+                }
+                "future-new" => {
+                    builder.future_new(trailers_future_type);
+                }
+                "future-write" => {
+                    builder.future_write(
+                        trailers_future_type,
+                        [
+                            CanonicalOption::Memory(ctx.memory_idx()),
+                            CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                        ],
+                    );
+                }
+                "future-drop-writable" => {
+                    builder.future_drop_writable(trailers_future_type);
+                }
+                "future-drop-readable" => {
+                    builder.future_drop_readable(trailers_future_type);
+                }
+                "task-return" => {
+                    let task_return_type = if ctx.has_type("http-handler-result") {
+                        ctx.type_idx("http-handler-result")
+                    } else {
+                        result_unit_type
+                    };
+                    builder.task_return(
+                        Some(ComponentValType::Type(task_return_type)),
+                        [CanonicalOption::Memory(ctx.memory_idx())],
+                    );
+                }
+                "waitable-set-new" => {
+                    builder.waitable_set_new();
+                }
+                "waitable-join" => {
+                    builder.waitable_join();
+                }
+                "waitable-set-wait" => {
+                    builder.waitable_set_wait(false, ctx.memory_idx());
+                }
+                "subtask-drop" => {
+                    builder.subtask_drop();
+                }
+                _ => {}
+            }
+        }
+
+        // ========================================
+        // Lower WASI functions
+        // ========================================
+        self.lower_wasi_functions(&mut builder, &mut ctx);
+
+        // Lower HTTP types functions
+        if ctx.has_comp_func("http-fields-constructor") {
+            ctx.register_core_func("http-fields-constructor");
+            builder.lower_func(
+                Some("http-fields-constructor"),
+                ctx.comp_func_idx("http-fields-constructor"),
+                [],
+            );
+
+            ctx.register_core_func("http-response-new");
+            builder.lower_func(
+                Some("http-response-new"),
+                ctx.comp_func_idx("http-response-new"),
+                [
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                    CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                ],
+            );
+        }
+
+        // ========================================
+        // Collect available WASI functions
+        // ========================================
+        let mut available_wasi_funcs: IndexSet<String> = IndexSet::new();
+        for interface in project.wasi_registry.interfaces() {
+            for func in &interface.functions {
+                let local_name = func.local_alias_name();
+                if ctx.has_core_func(&local_name) {
+                    available_wasi_funcs.insert(local_name);
+                }
+            }
+        }
+
+        // ========================================
+        // Embed core module
+        // ========================================
+        ctx.register_core_module("main-mod");
+        builder.core_module_raw(Some("main-mod"), core_module);
+
+        // Build wasi instance
+        let mut wasi_exports: Vec<(String, ExportKind, u32)> = Vec::new();
+
+        for intrinsic_name in &component_plan.canonical_intrinsics {
+            wasi_exports.push((
+                intrinsic_name.clone(),
+                ExportKind::Func,
+                ctx.core_func_idx(intrinsic_name),
+            ));
+        }
+
+        for local_name in &available_wasi_funcs {
+            wasi_exports.push((
+                local_name.clone(),
+                ExportKind::Func,
+                ctx.core_func_idx(local_name),
+            ));
+        }
+
+        if project.has_http_handler_export && ctx.has_core_func("http-fields-constructor") {
+            wasi_exports.push((
+                "http-fields-constructor".to_string(),
+                ExportKind::Func,
+                ctx.core_func_idx("http-fields-constructor"),
+            ));
+            wasi_exports.push((
+                "http-response-new".to_string(),
+                ExportKind::Func,
+                ctx.core_func_idx("http-response-new"),
+            ));
+            wasi_exports.push((
+                "wasi:http/Response::new".to_string(),
+                ExportKind::Func,
+                ctx.core_func_idx("http-response-new"),
+            ));
+        }
+
+        let wasi_exports_refs: Vec<_> = wasi_exports
+            .iter()
+            .map(|(name, kind, idx)| (name.as_str(), *kind, *idx))
+            .collect();
+        let wasi_instance =
+            builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports_refs);
+        ctx.register_core_instance("wasi");
+
+        // Build mem instance
+        let mem_exports: Vec<(&str, ExportKind, u32)> = vec![
+            ("memory", ExportKind::Memory, ctx.memory_idx()),
+            ("realloc", ExportKind::Func, ctx.core_func_idx("realloc")),
+        ];
+        let mem_instance = builder.core_instantiate_exports(Some("mem-instance"), mem_exports);
+        ctx.register_core_instance("mem-inst");
+
+        // Build bundled instance
+        let bundled_exports: Vec<(String, ExportKind, u32)> = bundled_functions
+            .iter()
+            .map(|func_name| {
+                (
+                    func_name.clone(),
+                    ExportKind::Func,
+                    ctx.core_func_idx(func_name),
+                )
+            })
+            .collect();
+
+        let bundled_instance = if bundled_exports.is_empty() {
+            None
+        } else {
+            let bundled_exports_refs: Vec<_> = bundled_exports
+                .iter()
+                .map(|(name, kind, idx)| (name.as_str(), *kind, *idx))
+                .collect();
+            let instance =
+                builder.core_instantiate_exports(Some("bundled-instance"), bundled_exports_refs);
+            ctx.register_core_instance("bundled");
+            Some(instance)
+        };
+
+        // Instantiate core module
+        ctx.register_core_instance("main");
+        let mut main_args: Vec<(&str, ModuleArg)> = vec![
+            ("wasi", ModuleArg::Instance(wasi_instance)),
+            ("mem", ModuleArg::Instance(mem_instance)),
+        ];
+        if let Some(bundled_inst) = bundled_instance {
+            main_args.push(("bundled", ModuleArg::Instance(bundled_inst)));
+        }
+        builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
+
+        // ========================================
+        // World exports
+        // ========================================
+        for export in &component_plan.world_exports {
+            let core_name = format!("{}-core", export.name);
+            let func_type_name = format!("{}-func-type", export.name);
+
+            ctx.register_core_func(&core_name);
+            builder.core_alias_export(
+                Some(&core_name),
+                ctx.core_instance_idx("main"),
+                &export.name,
+                ExportKind::Func,
+            );
+
+            let func_type = ctx.register_type(&func_type_name);
+            {
+                let (_, enc) = builder.ty(Some(&func_type_name));
+
+                if export.is_http_handler {
+                    let request_type_idx = ctx.type_idx("http-request");
+                    let handler_result_type_idx = ctx.type_idx("http-handler-result");
+                    enc.function()
+                        .async_(export.is_async)
+                        .params([("request", ComponentValType::Type(request_type_idx))])
+                        .result(Some(ComponentValType::Type(handler_result_type_idx)));
+                } else {
+                    enc.function()
+                        .async_(export.is_async)
+                        .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                        .result(Some(ComponentValType::Type(result_unit_type)));
+                }
+            }
+
+            ctx.register_comp_func(&export.name);
+            builder.lift_func(
+                Some(&export.name),
+                ctx.core_func_idx(&core_name),
+                func_type,
+                [
+                    CanonicalOption::Async,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                ],
+            );
+
+            builder.export(
+                &export.name,
+                ComponentExportKind::Func,
+                ctx.comp_func_idx(&export.name),
+                None,
+            );
+            ctx.skip_comp_func_idx();
+        }
+
+        // Test exports
+        for test in &component_plan.test_exports {
+            let export_name = &test.export_name;
+            let core_name = format!("{export_name}-core");
+            let test_func_type_name = format!("{export_name}-func-type");
+
+            ctx.register_core_func(&core_name);
+            builder.core_alias_export(
+                Some(&core_name),
+                ctx.core_instance_idx("main"),
+                &test.function_name,
+                ExportKind::Func,
+            );
+
+            let test_func_type = ctx.register_type(&test_func_type_name);
+            {
+                let (_, enc) = builder.ty(Some(&test_func_type_name));
+                enc.function()
+                    .async_(true)
+                    .params::<[(&str, ComponentValType); 0], ComponentValType>([])
+                    .result(Some(ComponentValType::Type(result_unit_type)));
+            }
+
+            ctx.register_comp_func(export_name);
+            builder.lift_func(
+                Some(export_name),
+                ctx.core_func_idx(&core_name),
+                test_func_type,
+                [
+                    CanonicalOption::Async,
+                    CanonicalOption::Memory(ctx.memory_idx()),
+                ],
+            );
+
+            builder.export(
+                export_name,
+                ComponentExportKind::Func,
+                ctx.comp_func_idx(export_name),
+                None,
+            );
+            ctx.skip_comp_func_idx();
+        }
+
+        if !project.strip_names {
+            builder.append_names();
+        }
+
+        let mut component_bytes = builder.finish();
+
+        if project.has_http_handler_export {
+            Self::append_http_handler_export(&mut component_bytes, &ctx);
+        }
+
+        component_bytes
+    }
+
+    /// Create a minimal Codegen instance for delegating component-level operations.
+    fn create_minimal(project: &Project) -> Codegen<'_> {
+        let mut string_literals = Vec::new();
+        for tir_module in project.tir_modules.values() {
+            for s in &tir_module.string_literals {
+                if !string_literals.contains(s) {
+                    string_literals.push(s.clone());
+                }
+            }
+        }
+        Codegen {
+            project,
+            string_literals,
+            struct_types: IndexMap::new(),
+            tuple_types: IndexMap::new(),
+            array_types: IndexMap::new(),
+            array_types_by_name: IndexMap::new(),
+            closure_counter: 0,
+            closure_struct_types: IndexMap::new(),
+            canonical_closure_types: IndexMap::new(),
+            closure_canonical_wrappers: IndexMap::new(),
+            variant_types: IndexMap::new(),
+            pending_type_indices: IndexMap::new(),
+            internal_box_names: IndexSet::new(),
+            scalarized_funcs: IndexMap::new(),
+        }
+    }
 }
 
 /// Convert a `PrimitiveType` to its corresponding Wasm `ValType`.

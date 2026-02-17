@@ -1,0 +1,509 @@
+//! Function collection — gathers all reachable functions from the Project,
+//! registers their types and creates `WirFunction` stubs (bodies filled later).
+
+use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
+use crate::tir::{TirFunction, TypeTable};
+use crate::wir::{WirFunction, WirImport, WirImportDesc, WirMeta, WirName, WirType};
+
+use super::context::{PendingFunctionBody, WirContext};
+
+/// Collect all functions from the Project, register imports, and create function stubs.
+pub fn collect_functions(ctx: &mut WirContext<'_>) {
+    // Step 1: Register builtin + bundled imports
+    register_imports(ctx);
+
+    // Step 2: Register WASI function imports
+    register_wasi_imports(ctx);
+
+    // Step 2.5: Register memory import from "mem" module
+    register_memory_import(ctx);
+
+    // Step 3: Collect and register entry module functions
+    register_entry_functions(ctx);
+
+    // Step 4: Collect and register loaded module functions
+    register_loaded_functions(ctx);
+
+    // Step 5: Collect and register methods from all modules
+    register_methods(ctx);
+
+    // Step 6: Register data segments for string literals
+    register_string_data(ctx);
+
+    // Step 7: Register exports
+    register_exports(ctx);
+}
+
+/// Register builtin and bundled function imports.
+fn register_imports(ctx: &mut WirContext<'_>) {
+    let entry_tir = ctx.project.entry_module();
+    let type_table = &*entry_tir.type_table.borrow();
+
+    for import in &entry_tir.imports {
+        // Register the function type
+        let params: Vec<WirType> = import
+            .params
+            .iter()
+            .map(|&p| ctx.type_id_to_wir_type(type_table, p))
+            .collect();
+        let results: Vec<WirType> =
+            if import.return_type == TypeTable::UNIT || import.return_type == TypeTable::NEVER {
+                Vec::new()
+            } else {
+                vec![ctx.type_id_to_wir_type(type_table, import.return_type)]
+            };
+
+        let type_fq = format!("functype//{}/{}", import.namespace, import.canonical_name);
+        let type_id = ctx.register_func_type(type_fq, params, results);
+
+        let name = WirName {
+            display: import.canonical_name.clone(),
+            fq: format!("{}/{}", import.namespace, import.canonical_name),
+        };
+
+        let func_id = ctx.register_import_func(
+            import.namespace.clone(),
+            import.canonical_name.clone(),
+            type_id,
+            name,
+        );
+
+        // Also register under the TIR builtin function name so call sites can resolve.
+        // e.g., "builtin/realloc" → same WirFuncId as "mem/realloc"
+        if !import.func_name.is_empty() {
+            let alias = format!("builtin/{}", import.func_name);
+            ctx.func_map.insert(alias, func_id);
+        }
+    }
+}
+
+/// Register WASI function imports.
+///
+/// WASI functions are already lowered at the component level;
+/// the core module imports them from the "wasi" namespace.
+/// Uses the same type conversion as codegen's `wasi_func_to_core_params`/`wasi_func_to_core_results`.
+fn register_wasi_imports(ctx: &mut WirContext<'_>) {
+    let wasi_registry = ctx.project.wasi_registry;
+
+    for interface_info in wasi_registry.interfaces() {
+        for func in &interface_info.functions {
+            let local_name = func.local_alias_name();
+
+            // Only register functions that are actually used
+            if !ctx.project.has_effect(&func.effect_name) {
+                continue;
+            }
+
+            // Skip unsupported functions
+            if !wasi_registry.is_function_supported(func) {
+                continue;
+            }
+
+            // Skip async functions with void return (not fully supported)
+            if func.is_async && func.return_type.is_none() {
+                continue;
+            }
+
+            // Build param types matching codegen's wasi_func_to_core_params
+            let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
+            for (_, ty) in &func.params {
+                let resolved_ty = wasi_registry.resolve_type(ty);
+                crate::component_model::flatten_wasi_param_type(&resolved_ty, &mut param_vts);
+            }
+
+            // Async functions have an additional outptr parameter
+            if func.is_async {
+                param_vts.push(wasm_encoder::ValType::I32);
+            }
+            // Sync functions with complex return types also need an outptr
+            else if let Some(ret_ty) = &func.return_type {
+                let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
+                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty) {
+                    param_vts.push(wasm_encoder::ValType::I32);
+                }
+            }
+
+            let params: Vec<WirType> = param_vts.into_iter().map(valtype_to_wir_type).collect();
+
+            // Build result types matching codegen's wasi_func_to_core_results
+            let results: Vec<WirType> = if func.is_async {
+                // Async functions always return i32 (subtask handle)
+                vec![WirType::I32]
+            } else if let Some(ret_ty) = &func.return_type {
+                let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
+                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty) {
+                    // Complex return via outptr — function returns nothing
+                    Vec::new()
+                } else {
+                    // Simple return — flatten the return type
+                    let mut out = Vec::new();
+                    crate::component_model::flatten_wasi_param_type(&resolved_ret_ty, &mut out);
+                    out.into_iter().map(valtype_to_wir_type).collect()
+                }
+            } else {
+                Vec::new()
+            };
+
+            let type_fq = format!("functype//wasi/{local_name}");
+            let type_id = ctx.register_func_type(type_fq, params, results);
+
+            let name = WirName {
+                display: local_name.clone(),
+                fq: format!("wasi/{local_name}"),
+            };
+
+            ctx.register_import_func("wasi".to_string(), local_name.clone(), type_id, name);
+
+            ctx.available_wasi_funcs.insert(local_name);
+        }
+    }
+}
+
+/// Register memory import from "mem" module.
+///
+/// The core module imports memory and realloc from the "mem" instance,
+/// which is provided by the component model wrapper.
+fn register_memory_import(ctx: &mut WirContext<'_>) {
+    ctx.imports.push(WirImport {
+        module: "mem".to_string(),
+        field: "memory".to_string(),
+        desc: WirImportDesc::Memory { min: 1, max: None },
+    });
+}
+
+/// Register entry module functions.
+fn register_entry_functions(ctx: &mut WirContext<'_>) {
+    let entry_tir = ctx.project.entry_module();
+    let type_table_rc = entry_tir.type_table.clone();
+    let type_table = &*type_table_rc.borrow();
+    let module_source = entry_tir.module_source.clone();
+
+    for func_rc in &entry_tir.functions {
+        let tir_func = func_rc.borrow();
+
+        // Skip bodyless functions
+        if tir_func.body.is_none() {
+            continue;
+        }
+
+        // Skip methods (handled in register_methods)
+        if tir_func.name.contains("::") {
+            continue;
+        }
+
+        // Skip generic template functions
+        if !tir_func.type_params.is_empty() && tir_func.monomorph_info.is_none() {
+            continue;
+        }
+
+        // Build function ID for reachability check
+        let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+            &module_source,
+            &tir_func.name,
+        ));
+
+        // Skip unreachable functions (but keep export functions)
+        if !tir_func.is_export && !ctx.project.is_reachable(&func_id) {
+            continue;
+        }
+
+        register_single_function(
+            ctx,
+            &tir_func,
+            type_table,
+            &module_source,
+            func_rc.clone(),
+            type_table_rc.clone(),
+        );
+    }
+}
+
+/// Register loaded module functions (core:*, etc.).
+fn register_loaded_functions(ctx: &mut WirContext<'_>) {
+    let entry_source = ctx.project.entry_module_source.clone();
+
+    for (module_source, tir_mod) in &ctx.project.tir_modules {
+        if *module_source == entry_source || module_source.is_wasi() {
+            continue;
+        }
+
+        let type_table_rc = tir_mod.type_table.clone();
+        let type_table = &*type_table_rc.borrow();
+
+        for func_rc in &tir_mod.functions {
+            let tir_func = func_rc.borrow();
+
+            if tir_func.name == "run" || tir_func.body.is_none() || tir_func.name.contains("::") {
+                continue;
+            }
+
+            // Skip generic template functions
+            if !tir_func.type_params.is_empty() && tir_func.monomorph_info.is_none() {
+                continue;
+            }
+
+            // Skip unsupported effects
+            if has_unsupported_effects(&tir_func, ctx.project) {
+                continue;
+            }
+
+            // Build function ID
+            let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
+                module_source,
+                &tir_func.name,
+            ));
+            if !ctx.project.is_reachable(&func_id) {
+                continue;
+            }
+
+            register_single_function(
+                ctx,
+                &tir_func,
+                type_table,
+                module_source,
+                func_rc.clone(),
+                type_table_rc.clone(),
+            );
+        }
+    }
+}
+
+/// Register methods from all modules.
+fn register_methods(ctx: &mut WirContext<'_>) {
+    for (module_source, tir_mod) in &ctx.project.tir_modules {
+        if module_source.is_wasi() {
+            continue;
+        }
+
+        let type_table_rc = tir_mod.type_table.clone();
+        let type_table = &*type_table_rc.borrow();
+
+        for func_rc in &tir_mod.functions {
+            let tir_func = func_rc.borrow();
+
+            // Only methods
+            let Some(ref method_info) = tir_func.method_info else {
+                continue;
+            };
+
+            if tir_func.body.is_none() {
+                continue;
+            }
+
+            // Skip generic template methods
+            if type_table.contains_type_param(tir_func.return_type)
+                || tir_func
+                    .params
+                    .iter()
+                    .any(|p| type_table.contains_type_param(p.type_id))
+            {
+                continue;
+            }
+
+            // Build method ID
+            let method_name = MethodName::new(
+                module_source.clone(),
+                method_info.struct_name.clone(),
+                method_info.trait_name.clone(),
+                method_info.method_name.clone(),
+            );
+            let method_id = FunctionId::Method(method_name);
+
+            let is_mono = tir_func.monomorph_info.is_some();
+            if !is_mono && !ctx.project.is_reachable(&method_id) {
+                continue;
+            }
+
+            // Skip unsupported effects
+            if has_unsupported_effects(&tir_func, ctx.project) {
+                continue;
+            }
+
+            register_single_function(
+                ctx,
+                &tir_func,
+                type_table,
+                module_source,
+                func_rc.clone(),
+                type_table_rc.clone(),
+            );
+        }
+    }
+}
+
+/// Register a single function with its type and create a `WirFunction` stub.
+fn register_single_function(
+    ctx: &mut WirContext<'_>,
+    tir_func: &TirFunction,
+    type_table: &TypeTable,
+    module_source: &ModuleSource,
+    tir_func_rc: std::rc::Rc<std::cell::RefCell<TirFunction>>,
+    type_table_rc: std::rc::Rc<std::cell::RefCell<TypeTable>>,
+) {
+    let mangled_name = build_mangled_name(tir_func, module_source);
+
+    // Skip if already registered
+    let fq = format!("{module_source}/{mangled_name}");
+    if ctx.func_map.contains_key(&fq) {
+        return;
+    }
+
+    // Build param types
+    let params: Vec<WirType> = tir_func
+        .params
+        .iter()
+        .map(|p| ctx.type_id_to_wir_type(type_table, p.type_id))
+        .collect();
+
+    // Build result types
+    let results: Vec<WirType> =
+        if tir_func.return_type == TypeTable::UNIT || tir_func.return_type == TypeTable::NEVER {
+            Vec::new()
+        } else {
+            vec![ctx.type_id_to_wir_type(type_table, tir_func.return_type)]
+        };
+
+    let param_names: Vec<String> = tir_func.params.iter().map(|p| p.name.clone()).collect();
+    let effects: Vec<String> = tir_func.effects.clone();
+
+    // Register function type
+    let type_fq = format!("functype//{fq}");
+    let type_id = ctx.register_func_type(type_fq, params, results);
+
+    let wir_func = WirFunction {
+        name: WirName {
+            display: mangled_name.clone(),
+            fq: fq.clone(),
+        },
+        type_id,
+        param_names,
+        body: None, // Filled later by translate phase
+        meta: WirMeta {
+            module_source: Some(module_source.clone()),
+            ..WirMeta::default()
+        },
+        generic_origin: tir_func
+            .monomorph_info
+            .as_ref()
+            .map(|info| WirGenericOrigin {
+                base_name: info.generic_name.clone(),
+                type_args: info
+                    .type_args
+                    .iter()
+                    .map(|&ta| type_table.mangle_type_name(ta))
+                    .collect(),
+            }),
+        effects,
+    };
+
+    let _func_id = ctx.register_function(wir_func);
+    let wir_func_index = ctx.functions.len() - 1;
+
+    // Register as pending body for translation
+    ctx.pending_bodies.push(PendingFunctionBody {
+        wir_func_index,
+        tir_func: tir_func_rc,
+        type_table: type_table_rc,
+        module_source: module_source.clone(),
+    });
+}
+
+/// Register data segments for string literals.
+fn register_string_data(ctx: &mut WirContext<'_>) {
+    let literals: Vec<String> = ctx.string_literals.clone();
+    for s in &literals {
+        ctx.register_string_literal(s);
+    }
+}
+
+/// Register function exports (world exports like "run").
+fn register_exports(ctx: &mut WirContext<'_>) {
+    let component_plan = ctx
+        .project
+        .component_plan
+        .as_ref()
+        .expect("component_plan should be set");
+
+    for export in &component_plan.world_exports {
+        let core_func_name = &export.core_func_name;
+        // Find the function in the map
+        let entry_source = &ctx.project.entry_module_source;
+        let fq = format!("{entry_source}/{core_func_name}");
+        if let Some(func_id) = ctx.func_map.get(&fq) {
+            // Export with export.name (component-level name), using core_func_name's function
+            ctx.exports.push(crate::wir::WirExport {
+                name: export.name.clone(),
+                desc: crate::wir::WirExportDesc::Func {
+                    func_id: func_id.clone(),
+                },
+            });
+        } else {
+            eprintln!("[WIR] Warning: export function '{core_func_name}' not found (fq: {fq})");
+            eprintln!(
+                "[WIR] Available functions: {:?}",
+                ctx.func_map.keys().collect::<Vec<_>>()
+            );
+        }
+    }
+
+    // Also export test functions
+    for test in &component_plan.test_exports {
+        let entry_source = &ctx.project.entry_module_source;
+        let fq = format!("{entry_source}/{}", test.core_func_name);
+        if let Some(func_id) = ctx.func_map.get(&fq) {
+            // Export test function with its core function name
+            ctx.exports.push(crate::wir::WirExport {
+                name: test.function_name.clone(),
+                desc: crate::wir::WirExportDesc::Func {
+                    func_id: func_id.clone(),
+                },
+            });
+        }
+    }
+}
+
+// === Helpers ===
+
+/// Build a mangled function name from TIR function and module source.
+fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> String {
+    if let Some(ref method_info) = tir_func.method_info {
+        method_info.to_mangled_name()
+    } else {
+        tir_func.name.clone()
+    }
+}
+
+/// Check if a function has unsupported effects.
+fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::project::Project) -> bool {
+    if tir_func.effects.is_empty() {
+        return false;
+    }
+    let exit_available = project.has_effect("Exit");
+    tir_func.effects.iter().any(|e| {
+        let effect_name = e.as_str();
+        if effect_name == "Exit" {
+            return !exit_available;
+        }
+        !matches!(
+            effect_name,
+            "Stdout" | "Stderr" | "MonotonicClock" | "Environment"
+        )
+    })
+}
+
+/// Convert a `wasm_encoder` `ValType` to `WirType`.
+fn valtype_to_wir_type(vt: wasm_encoder::ValType) -> WirType {
+    match vt {
+        wasm_encoder::ValType::I32 => WirType::I32,
+        wasm_encoder::ValType::I64 => WirType::I64,
+        wasm_encoder::ValType::F32 => WirType::F32,
+        wasm_encoder::ValType::F64 => WirType::F64,
+        wasm_encoder::ValType::Ref(_) => WirType::AbstractRef {
+            heap_type: crate::wir::WirAbstractHeapType::Any,
+            nullable: true,
+        },
+        _ => WirType::I32,
+    }
+}
+
+use crate::wir::WirGenericOrigin;
