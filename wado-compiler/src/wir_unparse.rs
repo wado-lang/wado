@@ -11,23 +11,117 @@ use crate::wir::{
 };
 
 /// Unparse a `WirModule` into pseudo-Wado source code.
-pub fn unparse_wir(module: &WirModule) -> String {
-    let mut unparser = WirUnparser::new();
+///
+/// `cwd` is the current working directory used to shorten entry-point paths.
+pub fn unparse_wir(module: &WirModule, cwd: Option<&str>) -> String {
+    let mut unparser = WirUnparser::new(module.entry_point_path.as_deref(), cwd, &module.types);
     unparser.unparse(module);
     unparser.output
 }
 
-struct WirUnparser {
+struct WirUnparser<'a> {
     output: String,
     indent: usize,
+    /// Entry-point module path (to detect and shorten in FQ names).
+    entry_point_path: Option<String>,
+    /// Type definitions for struct field name lookup.
+    types: &'a [WirTypeDef],
 }
 
-impl WirUnparser {
-    fn new() -> Self {
+impl<'a> WirUnparser<'a> {
+    fn new(entry_point_path: Option<&str>, _cwd: Option<&str>, types: &'a [WirTypeDef]) -> Self {
         Self {
             output: String::new(),
             indent: 0,
+            entry_point_path: entry_point_path.map(String::from),
+            types,
         }
+    }
+
+    /// Look up field names for a struct type by `WirTypeId`.
+    fn struct_field_names(&self, type_id: &crate::wir::WirTypeId) -> Option<Vec<String>> {
+        let idx = type_id.index() as usize;
+        if let Some(WirTypeDef::Struct(s)) = self.types.get(idx) {
+            Some(s.fields.iter().map(|f| f.name.clone()).collect())
+        } else {
+            None
+        }
+    }
+
+    /// Shorten a fully-qualified WIR name for display.
+    ///
+    /// FQ names follow the format `"module_source//name"`.
+    /// - Entry-point items → just the name (e.g., `Point`, `run`)
+    /// - `core:prelude/string.wado//String` → `String`
+    /// - `core:cli//println` → `core:cli/println`
+    /// - `builtin::array<u8>` → `array<u8>`
+    fn shorten_fq(&self, fq: &str) -> String {
+        // Handle "builtin::" prefix
+        if let Some(rest) = fq.strip_prefix("builtin::") {
+            return rest.to_string();
+        }
+
+        // Split on "//" separator
+        if let Some((module, name)) = fq.split_once("//") {
+            let short_module = self.shorten_module_path(module);
+            // Also shorten the name part (it may contain module paths, e.g. functype names)
+            let short_name = self.shorten_nested_path(name);
+            if short_module.is_empty() {
+                short_name
+            } else {
+                format!("{short_module}/{short_name}")
+            }
+        } else {
+            // No "//" separator — check for entry-point path as prefix
+            self.shorten_nested_path(fq)
+        }
+    }
+
+    /// Shorten nested module paths within a name segment.
+    ///
+    /// E.g., `"wado-compiler/tests/fixtures/geometry.wado/run"` → `"run"`
+    /// E.g., `"core:prelude/string.wado/String::grow"` → `"String::grow"`
+    fn shorten_nested_path(&self, name: &str) -> String {
+        // Replace entry-point path prefix
+        if let Some(ref ep) = self.entry_point_path {
+            if let Some(rest) = name.strip_prefix(ep.as_str()) {
+                if let Some(func) = rest.strip_prefix('/') {
+                    return func.to_string();
+                }
+                // Exact match (no trailing /)
+                if rest.is_empty() {
+                    return name.to_string();
+                }
+            }
+        }
+        // Replace core:prelude/* prefix
+        if name.starts_with("core:prelude") {
+            // Find the "//" or last "/" after the .wado extension
+            if let Some(pos) = name.find(".wado/") {
+                return name[pos + 6..].to_string();
+            }
+        }
+        name.to_string()
+    }
+
+    /// Shorten a module path for display.
+    fn shorten_module_path(&self, module: &str) -> String {
+        // Entry-point path → empty (items display as just name)
+        if let Some(ref ep) = self.entry_point_path {
+            if module == ep {
+                return String::new();
+            }
+        }
+        // Absolute paths → canonicalize to ./filename.wado
+        if module.starts_with('/') {
+            return crate::name::canonicalize_entry_point(module);
+        }
+        // core:prelude/* → omit for well-known prelude types
+        if module.starts_with("core:prelude") {
+            return String::new();
+        }
+        // Already short (core:cli, wasi:*, etc.)
+        module.to_string()
     }
 
     fn unparse(&mut self, module: &WirModule) {
@@ -132,7 +226,7 @@ impl WirUnparser {
         }
         self.write(&field.name);
         self.write(": ");
-        self.write(&format_type(&field.ty));
+        self.write(&self.fmt_type(&field.ty));
     }
 
     fn unparse_variant_type(&mut self, v: &WirVariantType) {
@@ -153,7 +247,7 @@ impl WirUnparser {
                     if i > 0 {
                         self.write(", ");
                     }
-                    self.write(&format_type(ty));
+                    self.write(&self.fmt_type(ty));
                 }
                 self.write(")");
             }
@@ -216,7 +310,7 @@ impl WirUnparser {
         } else {
             self.write(" (");
         }
-        self.write(&format_type(&a.element_type));
+        self.write(&self.fmt_type(&a.element_type));
         self.write(")");
         self.unparse_source_comment(&a.meta);
         self.newline();
@@ -225,26 +319,26 @@ impl WirUnparser {
     fn unparse_func_type(&mut self, f: &WirFuncType) {
         self.write_indent();
         self.write("type ");
-        self.write(&f.name.display);
+        self.write(&self.shorten_fq(&f.name.display));
         self.write(" = fn(");
         for (i, param) in f.params.iter().enumerate() {
             if i > 0 {
                 self.write(", ");
             }
-            self.write(&format_type(param));
+            self.write(&self.fmt_type(param));
         }
         self.write(")");
         if !f.results.is_empty() {
             self.write(" -> ");
             if f.results.len() == 1 {
-                self.write(&format_type(&f.results[0]));
+                self.write(&self.fmt_type(&f.results[0]));
             } else {
                 self.write("[");
                 for (i, r) in f.results.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
                     }
-                    self.write(&format_type(r));
+                    self.write(&self.fmt_type(r));
                 }
                 self.write("]");
             }
@@ -267,7 +361,7 @@ impl WirUnparser {
                 if *mutable {
                     self.write("mut ");
                 }
-                self.write(&format_type(ty));
+                self.write(&self.fmt_type(ty));
             }
             WirImportDesc::Memory { min, max } => {
                 self.write(&format!("memory ({min}"));
@@ -281,7 +375,8 @@ impl WirUnparser {
                 if let Some(max) = max {
                     self.write(&format!(", {max}"));
                 }
-                self.write(&format!(") {}", format_type(ty)));
+                let ty_str = self.fmt_type(ty);
+                self.write(&format!(") {ty_str}"));
             }
         }
         self.write(&format!(" from \"{}/{}\"", import.module, import.field));
@@ -298,7 +393,7 @@ impl WirUnparser {
         }
         self.write(&global.name.display);
         self.write(": ");
-        self.write(&format_type(&global.ty));
+        self.write(&self.fmt_type(&global.ty));
         self.write(" = ");
         self.unparse_instr_inline(&global.init);
         self.write(";");
@@ -311,7 +406,7 @@ impl WirUnparser {
     fn unparse_function(&mut self, func: &WirFunction) {
         self.write_indent();
         self.write("fn \"");
-        self.write(&func.name.display);
+        self.write(&self.shorten_fq(&func.name.fq));
         self.write("\"(");
 
         // We need the function type to get parameter types
@@ -359,7 +454,8 @@ impl WirUnparser {
         match instr {
             // Locals
             WirInstr::DeclareLocal { name, ty } => {
-                self.write(&format!("let {name}: {}", format_type(ty)));
+                let ty_str = self.fmt_type(ty);
+                self.write(&format!("let {name}: {ty_str}"));
             }
             WirInstr::LocalGet { name } => {
                 self.write(name);
@@ -556,14 +652,23 @@ impl WirUnparser {
 
             // GC: Struct
             WirInstr::StructNew { type_id, fields } => {
-                self.write(&format!("struct.new {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                let field_names = self.struct_field_names(type_id);
+                self.write(&tid);
+                self.write(" { ");
                 for (i, f) in fields.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
                     }
+                    if let Some(ref names) = field_names {
+                        if let Some(name) = names.get(i) {
+                            self.write(name);
+                            self.write(": ");
+                        }
+                    }
                     self.unparse_instr_inline(f);
                 }
-                self.write(")");
+                self.write(" }");
             }
             WirInstr::StructGet {
                 field_name, expr, ..
@@ -587,14 +692,16 @@ impl WirUnparser {
 
             // GC: Array
             WirInstr::ArrayNew { type_id, init, len } => {
-                self.write(&format!("array.new {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.new {tid}("));
                 self.unparse_instr_inline(init);
                 self.write(", ");
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
             WirInstr::ArrayNewDefault { type_id, len } => {
-                self.write(&format!("array.new_default {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.new_default {tid}("));
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
@@ -604,14 +711,16 @@ impl WirUnparser {
                 offset,
                 len,
             } => {
-                self.write(&format!("array.new_data {type_id} {data_index}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.new_data {tid} {data_index}("));
                 self.unparse_instr_inline(offset);
                 self.write(", ");
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
             WirInstr::ArrayNewFixed { type_id, elements } => {
-                self.write(&format!("array.new_fixed {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.new_fixed {tid}("));
                 for (i, e) in elements.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
@@ -625,7 +734,8 @@ impl WirUnparser {
                 array,
                 index,
             } => {
-                self.write(&format!("array.get {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.get {tid}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -636,7 +746,8 @@ impl WirUnparser {
                 array,
                 index,
             } => {
-                self.write(&format!("array.get_s {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.get_s {tid}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -647,7 +758,8 @@ impl WirUnparser {
                 array,
                 index,
             } => {
-                self.write(&format!("array.get_u {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.get_u {tid}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -659,7 +771,8 @@ impl WirUnparser {
                 index,
                 value,
             } => {
-                self.write(&format!("array.set {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.set {tid}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -677,7 +790,9 @@ impl WirUnparser {
                 src_offset,
                 len,
             } => {
-                self.write(&format!("array.copy {dest_type_id} {src_type_id}("));
+                let dtid = self.shorten_fq(&dest_type_id.to_string());
+                let stid = self.shorten_fq(&src_type_id.to_string());
+                self.write(&format!("array.copy {dtid} {stid}("));
                 self.unparse_instr_inline(dest);
                 self.write(", ");
                 self.unparse_instr_inline(dest_offset);
@@ -696,7 +811,8 @@ impl WirUnparser {
                 value,
                 len,
             } => {
-                self.write(&format!("array.fill {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("array.fill {tid}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(offset);
@@ -722,7 +838,8 @@ impl WirUnparser {
                 expr,
             } => {
                 let null_str = if *nullable { " null" } else { "" };
-                self.write(&format!("ref.cast{null_str} {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("ref.cast{null_str} {tid}("));
                 self.unparse_instr_inline(expr);
                 self.write(")");
             }
@@ -732,7 +849,8 @@ impl WirUnparser {
                 expr,
             } => {
                 let null_str = if *nullable { " null" } else { "" };
-                self.write(&format!("ref.test{null_str} {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("ref.test{null_str} {tid}("));
                 self.unparse_instr_inline(expr);
                 self.write(")");
             }
@@ -754,7 +872,8 @@ impl WirUnparser {
                 }
                 self.write("block");
                 if let Some(ty) = result {
-                    self.write(&format!(" -> {}", format_type(ty)));
+                    let ty_str = self.fmt_type(ty);
+                    self.write(&format!(" -> {ty_str}"));
                 }
                 self.write(" {");
                 self.newline();
@@ -789,7 +908,8 @@ impl WirUnparser {
                 self.write("if ");
                 self.unparse_instr_inline(condition);
                 if let Some(ty) = result {
-                    self.write(&format!(" -> {}", format_type(ty)));
+                    let ty_str = self.fmt_type(ty);
+                    self.write(&format!(" -> {ty_str}"));
                 }
                 self.write(" {");
                 self.newline();
@@ -852,7 +972,8 @@ impl WirUnparser {
             } => {
                 self.write("select");
                 if let Some(ty) = ty {
-                    self.write(&format!(" {}", format_type(ty)));
+                    let ty_str = self.fmt_type(ty);
+                    self.write(&format!(" {ty_str}"));
                 }
                 self.write("(");
                 self.unparse_instr_inline(condition);
@@ -865,7 +986,8 @@ impl WirUnparser {
 
             // Calls
             WirInstr::Call { func_id, args } => {
-                self.write(&format!("call {func_id}("));
+                let fid = self.shorten_fq(&func_id.to_string());
+                self.write(&format!("call {fid}("));
                 for (i, a) in args.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
@@ -880,7 +1002,8 @@ impl WirUnparser {
                 index,
                 args,
             } => {
-                self.write(&format!("call_indirect {type_id} table={table}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("call_indirect {tid} table={table}("));
                 self.unparse_instr_inline(index);
                 for a in args {
                     self.write(", ");
@@ -893,7 +1016,8 @@ impl WirUnparser {
                 func_ref,
                 args,
             } => {
-                self.write(&format!("call_ref {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("call_ref {tid}("));
                 self.unparse_instr_inline(func_ref);
                 for a in args {
                     self.write(", ");
@@ -902,7 +1026,8 @@ impl WirUnparser {
                 self.write(")");
             }
             WirInstr::RefFunc { func_id } => {
-                self.write(&format!("ref.func {func_id}"));
+                let fid = self.shorten_fq(&func_id.to_string());
+                self.write(&format!("ref.func {fid}"));
             }
 
             // Memory
@@ -1007,7 +1132,8 @@ impl WirUnparser {
 
             // Compound
             WirInstr::ValueCopy { type_id, expr, .. } => {
-                self.write(&format!("value_copy {type_id}("));
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("value_copy {tid}("));
                 self.unparse_instr_inline(expr);
                 self.write(")");
             }
@@ -1030,7 +1156,8 @@ impl WirUnparser {
         self.write("export ");
         match &export.desc {
             WirExportDesc::Func { func_id } => {
-                self.write(&format!("fn {func_id}"));
+                let fid = self.shorten_fq(&func_id.to_string());
+                self.write(&format!("fn {fid}"));
             }
             WirExportDesc::Global { name } => {
                 self.write(&format!("global {}", name.display));
@@ -1066,7 +1193,51 @@ impl WirUnparser {
 
     fn unparse_source_comment(&mut self, meta: &crate::wir::WirMeta) {
         if let Some(ref source) = meta.module_source {
-            self.write(&format!("  // from {source}"));
+            let short = self.shorten_module_path(&source.to_string());
+            if !short.is_empty() {
+                self.write(&format!("  // from {short}"));
+            }
+            // Omit comment for entry-point module (empty short means entry point)
+        }
+    }
+
+    /// Format a `WirType` with shortened names.
+    fn fmt_type(&self, ty: &WirType) -> String {
+        match ty {
+            WirType::I8 => "i8".to_string(),
+            WirType::I16 => "i16".to_string(),
+            WirType::I32 => "i32".to_string(),
+            WirType::I64 => "i64".to_string(),
+            WirType::U8 => "u8".to_string(),
+            WirType::U16 => "u16".to_string(),
+            WirType::U32 => "u32".to_string(),
+            WirType::U64 => "u64".to_string(),
+            WirType::F32 => "f32".to_string(),
+            WirType::F64 => "f64".to_string(),
+            WirType::Bool => "bool".to_string(),
+            WirType::Char => "char".to_string(),
+            WirType::Unit => "()".to_string(),
+            WirType::Enum { type_id } => self.shorten_fq(&type_id.to_string()),
+            WirType::Flags { type_id } => self.shorten_fq(&type_id.to_string()),
+            WirType::Ref { type_id, nullable } => {
+                let short = self.shorten_fq(&type_id.to_string());
+                if *nullable {
+                    format!("ref null {short}")
+                } else {
+                    format!("ref {short}")
+                }
+            }
+            WirType::AbstractRef {
+                heap_type,
+                nullable,
+            } => {
+                let ht = format_abstract_heap_type(heap_type);
+                if *nullable {
+                    format!("ref null {ht}")
+                } else {
+                    format!("ref {ht}")
+                }
+            }
         }
     }
 

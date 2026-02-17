@@ -504,6 +504,7 @@ impl<'a> WirContext<'a> {
             names: self.names,
             component: WirComponent::default(),
             variant_case_info: self.variant_case_info,
+            entry_point_path: Some(self.project.entry_module_source.to_string()),
         }
     }
 }

@@ -726,7 +726,7 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         if let Some(ref wir_module) = result.wir_module {
             if opts.unparse {
                 println!("=== WIR (Wasm IR, unparsed) ===");
-                let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_module);
+                let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_module, None);
                 if unparsed.is_empty() {
                     println!("(empty module)");
                 } else {

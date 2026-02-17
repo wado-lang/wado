@@ -56,6 +56,8 @@ pub struct WirModule {
     /// Variant case type info: case WIR type index → (variant WIR type index, case index).
     /// Used by emitter to resolve case-specific struct types within variant rec groups.
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
+    /// Entry-point module path string (for display shortening in unparse).
+    pub entry_point_path: Option<String>,
 }
 
 impl WirModule {
@@ -74,6 +76,7 @@ impl WirModule {
             names: WirNames::default(),
             component: WirComponent::default(),
             variant_case_info: IndexMap::new(),
+            entry_point_path: None,
         }
     }
 }
