@@ -66,6 +66,8 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | WorldRegistry    | `world_registry.rs`     | World definitions registry for export signatures      |
 | WasmBuilder      | `wasm_builder.rs`       | Tracks Wasm indices, builds wasm-encoder sections     |
 | Codegen          | `codegen.rs`            | Generates Component Model Wasm from TIR               |
+| WIR              | `wir.rs`                | Wasm IR data structures (WEP: wir-layer)              |
+| WIR Unparse      | `wir_unparse.rs`        | WIR → pseudo-Wado source code for debugging           |
 | Bundled          | `bundled.rs`            | Loads pre-compiled Wasm builtins (wado-bundled)       |
 | Postproc         | `wasm_postprocess.rs`   | Wasm binary transformations                           |
 

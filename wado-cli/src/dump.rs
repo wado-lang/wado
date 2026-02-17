@@ -20,6 +20,7 @@ pub struct DumpOptions {
     pub show_monomorphize: bool,
     pub show_lower: bool,
     pub show_optimize: bool,
+    pub show_wir: bool,
     pub unparse: bool,
     pub opt_level: OptLevel,
     /// Output template for bulk generation, e.g., "path/to/{name}.lowered.wado"
@@ -43,6 +44,7 @@ pub fn print_usage() {
     eprintln!("  --monomorphize (Phase 7: Monomorphize) Show monomorphized TIR");
     eprintln!("  --lower        (Phase 8: Lower) Show lowered TIR");
     eprintln!("  --optimize     (Phase 9: Optimize) Show optimization hints");
+    eprintln!("  --wir          (Phase 10: WIR) Show Wasm IR");
     eprintln!("  --all        Show all phases (default if no phase specified)");
     eprintln!();
     eprintln!("Display Options:");
@@ -65,6 +67,7 @@ pub fn print_usage() {
     eprintln!("  --help       Show this help message");
 }
 
+#[allow(clippy::similar_names)] // show_tir and show_wir are intentional phase names
 pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut inputs: Vec<String> = Vec::new();
     let mut show_tokens = false;
@@ -76,6 +79,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut show_monomorphize = false;
     let mut show_lower = false;
     let mut show_optimize = false;
+    let mut show_wir = false;
     let mut unparse = false;
     let mut opt_level = OptLevel::O2;
     let mut output_template: Option<String> = None;
@@ -95,6 +99,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
             Long("monomorphize") => show_monomorphize = true,
             Long("lower") => show_lower = true,
             Long("optimize") => show_optimize = true,
+            Long("wir") => show_wir = true,
             Long("unparse") => unparse = true,
             Long("all") => {
                 show_tokens = true;
@@ -106,6 +111,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                 show_monomorphize = true;
                 show_lower = true;
                 show_optimize = true;
+                show_wir = true;
             }
             Short('O') => {
                 let level = parser.value().unwrap_or_else(|_| {
@@ -152,6 +158,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         && !show_monomorphize
         && !show_lower
         && !show_optimize
+        && !show_wir
     {
         show_tokens = true;
         show_ast = true;
@@ -162,6 +169,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         show_monomorphize = true;
         show_lower = true;
         show_optimize = true;
+        show_wir = true;
     }
 
     DumpOptions {
@@ -175,6 +183,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         show_monomorphize,
         show_lower,
         show_optimize,
+        show_wir,
         unparse,
         opt_level,
         output_template,
@@ -708,6 +717,29 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         } else {
             println!("=== Optimized Project (Optimize) ===");
             println!("(Optimization failed or not available)");
+            println!();
+        }
+    }
+
+    // WIR section (Wasm IR phase)
+    if opts.show_wir {
+        if let Some(ref wir_module) = result.wir_module {
+            if opts.unparse {
+                println!("=== WIR (Wasm IR, unparsed) ===");
+                let unparsed = wado_compiler::wir_unparse::unparse_wir(wir_module);
+                if unparsed.is_empty() {
+                    println!("(empty module)");
+                } else {
+                    print!("{unparsed}");
+                }
+            } else {
+                println!("=== WIR (Wasm IR) ===");
+                println!("{wir_module:#?}");
+            }
+            println!();
+        } else {
+            println!("=== WIR (Wasm IR) ===");
+            println!("(WIR generation failed or not available)");
             println!();
         }
     }

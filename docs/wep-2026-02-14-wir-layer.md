@@ -871,9 +871,9 @@ The strangler fig approach eliminates these risks:
 
 Set up the WIR data structures, unparse output, and dump integration. No code generation yet.
 
-- [ ] **Step 1a**: Create `wir.rs` with the WIR data structure definitions (types, instructions, module structure). No code uses it yet.
-- [ ] **Step 1b**: Create `wir_unparse.rs` for WIR → pseudo-Wado output.
-- [ ] **Step 1c**: Add `--wir` flag to the dump command (`wado dump --wir --unparse`). Initially outputs an empty `WirModule`.
+- [x] **Step 1a**: Create `wir.rs` with the WIR data structure definitions (types, instructions, module structure). No code uses it yet.
+- [x] **Step 1b**: Create `wir_unparse.rs` for WIR → pseudo-Wado output.
+- [x] **Step 1c**: Add `--wir` flag to the dump command (`wado dump --wir --unparse`). Initially outputs an empty `WirModule`.
 
 After this phase: `wado dump --wir --unparse` works but shows an empty module.
 

@@ -167,6 +167,7 @@ Available phases (in compilation order):
 6. `--tir` - Typed IR (supports `--unparse`)
 7. `--lower` - Lowered TIR (supports `--unparse`)
 8. `--optimize` - Optimized TIR (supports `--unparse`)
+9. `--wir` - Wasm IR (supports `--unparse`)
 
 Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip names).
 
