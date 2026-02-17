@@ -48,17 +48,17 @@ WIR is a tree-structured IR that maps almost 1:1 to Wasm instructions, but with 
 
 ### Source Files
 
-| File | Description |
-| ---- | ----------- |
-| `wir.rs` | WIR data structures: `WirModule`, `WirTypeDef`, `WirType`, `WirInstr`, `WirTypeId`, `WirFuncId`, `WirName`, etc. |
-| `wir_unparse.rs` | WIR → pseudo-Wado rendering for `wado dump --wir --unparse` |
-| `tir_to_wir/mod.rs` | Pipeline entry: `compile_with_wir(&Project) -> Vec<u8>` — orchestrates build → emit → validate → component wrapping |
-| `tir_to_wir/context.rs` | `WirContext` — builder that accumulates types, functions, and module-level entries during translation |
-| `tir_to_wir/types.rs` | Type registration: translates TIR type definitions to `Vec<WirTypeDef>` with multi-phase topological sorting |
-| `tir_to_wir/functions.rs` | Function collection: gathers imports, entry/library functions, methods, data segments, exports |
-| `tir_to_wir/translate.rs` | Function body translation: converts TIR expressions/statements to `WirInstr` trees |
-| `tir_to_wir/emit.rs` | `WirEmitter`: converts `WirModule` to core Wasm bytes via `wasm_encoder` |
-| `tir_to_wir/component.rs` | Component Model wrapping: delegates to `Codegen::build_component_from_core_module()` |
+| File                      | Description                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `wir.rs`                  | WIR data structures: `WirModule`, `WirTypeDef`, `WirType`, `WirInstr`, `WirTypeId`, `WirFuncId`, `WirName`, etc.    |
+| `wir_unparse.rs`          | WIR → pseudo-Wado rendering for `wado dump --wir --unparse`                                                         |
+| `tir_to_wir/mod.rs`       | Pipeline entry: `compile_with_wir(&Project) -> Vec<u8>` — orchestrates build → emit → validate → component wrapping |
+| `tir_to_wir/context.rs`   | `WirContext` — builder that accumulates types, functions, and module-level entries during translation               |
+| `tir_to_wir/types.rs`     | Type registration: translates TIR type definitions to `Vec<WirTypeDef>` with multi-phase topological sorting        |
+| `tir_to_wir/functions.rs` | Function collection: gathers imports, entry/library functions, methods, data segments, exports                      |
+| `tir_to_wir/translate.rs` | Function body translation: converts TIR expressions/statements to `WirInstr` trees                                  |
+| `tir_to_wir/emit.rs`      | `WirEmitter`: converts `WirModule` to core Wasm bytes via `wasm_encoder`                                            |
+| `tir_to_wir/component.rs` | Component Model wrapping: delegates to `Codegen::build_component_from_core_module()`                                |
 
 ### Key Design Decisions
 

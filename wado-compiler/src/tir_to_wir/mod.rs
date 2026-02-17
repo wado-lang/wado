@@ -4,7 +4,7 @@
 //! This module is the entry point for the WIR pipeline:
 //!   `compile_with_wir(&Project) -> Vec<u8>`
 //!
-//! The pipeline: Project → `build_wir_module` (WirModule) → `emit` (Wasm bytes)
+//! The pipeline: Project → `build_wir_module` (`WirModule`) → `emit` (Wasm bytes)
 
 use crate::project::Project;
 use crate::wir::WirModule;
@@ -44,7 +44,7 @@ pub fn compile_with_wir(project: &Project) -> Vec<u8> {
     wasm
 }
 
-/// Build a WirModule from a Project.
+/// Build a `WirModule` from a Project.
 fn build_wir_module(project: &Project) -> WirModule {
     let mut ctx = context::WirContext::new(project);
 
@@ -84,8 +84,7 @@ fn validate_core_module(wasm: &[u8]) {
 
 /// Validate generated Wasm binary using wasmparser.
 fn validate_wasm(wasm: &[u8]) {
-    let mut validator =
-        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
+    let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
     if let Err(e) = validator.validate_all(wasm) {
         panic!(
             "Internal compiler error: WIR pipeline generated invalid Wasm\n\

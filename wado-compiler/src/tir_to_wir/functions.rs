@@ -1,5 +1,5 @@
 //! Function collection — gathers all reachable functions from the Project,
-//! registers their types and creates WirFunction stubs (bodies filled later).
+//! registers their types and creates `WirFunction` stubs (bodies filled later).
 
 use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
 use crate::tir::{TirFunction, TypeTable};
@@ -46,13 +46,12 @@ fn register_imports(ctx: &mut WirContext<'_>) {
             .iter()
             .map(|&p| ctx.type_id_to_wir_type(type_table, p))
             .collect();
-        let results: Vec<WirType> = if import.return_type == TypeTable::UNIT
-            || import.return_type == TypeTable::NEVER
-        {
-            Vec::new()
-        } else {
-            vec![ctx.type_id_to_wir_type(type_table, import.return_type)]
-        };
+        let results: Vec<WirType> =
+            if import.return_type == TypeTable::UNIT || import.return_type == TypeTable::NEVER {
+                Vec::new()
+            } else {
+                vec![ctx.type_id_to_wir_type(type_table, import.return_type)]
+            };
 
         let type_fq = format!("functype//{}/{}", import.namespace, import.canonical_name);
         let type_id = ctx.register_func_type(type_fq, params, results);
@@ -153,12 +152,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 fq: format!("wasi/{local_name}"),
             };
 
-            ctx.register_import_func(
-                "wasi".to_string(),
-                local_name.clone(),
-                type_id,
-                name,
-            );
+            ctx.register_import_func("wasi".to_string(), local_name.clone(), type_id, name);
 
             ctx.available_wasi_funcs.insert(local_name);
         }
@@ -173,10 +167,7 @@ fn register_memory_import(ctx: &mut WirContext<'_>) {
     ctx.imports.push(WirImport {
         module: "mem".to_string(),
         field: "memory".to_string(),
-        desc: WirImportDesc::Memory {
-            min: 1,
-            max: None,
-        },
+        desc: WirImportDesc::Memory { min: 1, max: None },
     });
 }
 
@@ -216,7 +207,14 @@ fn register_entry_functions(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        register_single_function(ctx, &tir_func, type_table, &module_source, func_rc.clone(), type_table_rc.clone());
+        register_single_function(
+            ctx,
+            &tir_func,
+            type_table,
+            &module_source,
+            func_rc.clone(),
+            type_table_rc.clone(),
+        );
     }
 }
 
@@ -258,7 +256,14 @@ fn register_loaded_functions(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
-            register_single_function(ctx, &tir_func, type_table, module_source, func_rc.clone(), type_table_rc.clone());
+            register_single_function(
+                ctx,
+                &tir_func,
+                type_table,
+                module_source,
+                func_rc.clone(),
+                type_table_rc.clone(),
+            );
         }
     }
 }
@@ -287,7 +292,10 @@ fn register_methods(ctx: &mut WirContext<'_>) {
 
             // Skip generic template methods
             if type_table.contains_type_param(tir_func.return_type)
-                || tir_func.params.iter().any(|p| type_table.contains_type_param(p.type_id))
+                || tir_func
+                    .params
+                    .iter()
+                    .any(|p| type_table.contains_type_param(p.type_id))
             {
                 continue;
             }
@@ -311,12 +319,19 @@ fn register_methods(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
-            register_single_function(ctx, &tir_func, type_table, module_source, func_rc.clone(), type_table_rc.clone());
+            register_single_function(
+                ctx,
+                &tir_func,
+                type_table,
+                module_source,
+                func_rc.clone(),
+                type_table_rc.clone(),
+            );
         }
     }
 }
 
-/// Register a single function with its type and create a WirFunction stub.
+/// Register a single function with its type and create a `WirFunction` stub.
 fn register_single_function(
     ctx: &mut WirContext<'_>,
     tir_func: &TirFunction,
@@ -328,7 +343,7 @@ fn register_single_function(
     let mangled_name = build_mangled_name(tir_func, module_source);
 
     // Skip if already registered
-    let fq = format!("{module_source}/{}", mangled_name);
+    let fq = format!("{module_source}/{mangled_name}");
     if ctx.func_map.contains_key(&fq) {
         return;
     }
@@ -367,20 +382,21 @@ fn register_single_function(
             module_source: Some(module_source.clone()),
             ..WirMeta::default()
         },
-        generic_origin: tir_func.monomorph_info.as_ref().map(|info| {
-            WirGenericOrigin {
+        generic_origin: tir_func
+            .monomorph_info
+            .as_ref()
+            .map(|info| WirGenericOrigin {
                 base_name: info.generic_name.clone(),
                 type_args: info
                     .type_args
                     .iter()
                     .map(|&ta| type_table.mangle_type_name(ta))
                     .collect(),
-            }
-        }),
+            }),
         effects,
     };
 
-    let func_id = ctx.register_function(wir_func);
+    let _func_id = ctx.register_function(wir_func);
     let wir_func_index = ctx.functions.len() - 1;
 
     // Register as pending body for translation
@@ -423,7 +439,10 @@ fn register_exports(ctx: &mut WirContext<'_>) {
             });
         } else {
             eprintln!("[WIR] Warning: export function '{core_func_name}' not found (fq: {fq})");
-            eprintln!("[WIR] Available functions: {:?}", ctx.func_map.keys().collect::<Vec<_>>());
+            eprintln!(
+                "[WIR] Available functions: {:?}",
+                ctx.func_map.keys().collect::<Vec<_>>()
+            );
         }
     }
 
@@ -446,7 +465,7 @@ fn register_exports(ctx: &mut WirContext<'_>) {
 // === Helpers ===
 
 /// Build a mangled function name from TIR function and module source.
-fn build_mangled_name(tir_func: &TirFunction, module_source: &ModuleSource) -> String {
+fn build_mangled_name(tir_func: &TirFunction, _module_source: &ModuleSource) -> String {
     if let Some(ref method_info) = tir_func.method_info {
         method_info.to_mangled_name()
     } else {
@@ -472,7 +491,7 @@ fn has_unsupported_effects(tir_func: &TirFunction, project: &crate::project::Pro
     })
 }
 
-/// Convert a wasm_encoder ValType to WirType.
+/// Convert a `wasm_encoder` `ValType` to `WirType`.
 fn valtype_to_wir_type(vt: wasm_encoder::ValType) -> WirType {
     match vt {
         wasm_encoder::ValType::I32 => WirType::I32,

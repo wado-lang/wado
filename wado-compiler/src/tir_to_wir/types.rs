@@ -13,13 +13,13 @@ use crate::wir::{
 
 use super::context::WirContext;
 
-/// Register all types from the Project into the WirContext.
+/// Register all types from the Project into the `WirContext`.
 ///
 /// This follows the multi-phase registration order from codegen to ensure
 /// type dependencies are satisfied.
 pub fn register_types(ctx: &mut WirContext<'_>) {
     let entry_tir = ctx.project.entry_module();
-    let type_table = &*entry_tir.type_table.borrow();
+    let _type_table = &*entry_tir.type_table.borrow();
 
     // Phase 0: Internal Box<T> structs
     register_box_structs(ctx);
@@ -93,14 +93,17 @@ fn register_struct(
         })
         .collect();
 
-    let generic_origin = tir_struct.monomorph_info.as_ref().map(|info| WirGenericOrigin {
-        base_name: info.generic_name.clone(),
-        type_args: info
-            .type_args
-            .iter()
-            .map(|&ta| type_table.mangle_type_name(ta))
-            .collect(),
-    });
+    let generic_origin = tir_struct
+        .monomorph_info
+        .as_ref()
+        .map(|info| WirGenericOrigin {
+            base_name: info.generic_name.clone(),
+            type_args: info
+                .type_args
+                .iter()
+                .map(|&ta| type_table.mangle_type_name(ta))
+                .collect(),
+        });
 
     let type_id = ctx.register_type(
         fq,
@@ -216,7 +219,7 @@ fn register_variant(
     }
 }
 
-/// Register a raw GC array type for a given element TypeId.
+/// Register a raw GC array type for a given element `TypeId`.
 fn register_raw_array_type(
     ctx: &mut WirContext<'_>,
     element_type_id: crate::tir::TypeId,
@@ -440,7 +443,7 @@ fn register_mono_entry_types(ctx: &mut WirContext<'_>) {
     }
 }
 
-fn register_mono_variants(ctx: &mut WirContext<'_>) {
+fn register_mono_variants(_ctx: &mut WirContext<'_>) {
     // Generic variants are registered as separate entries with resolved type_params
     // Skip this for now - variants without type_params are already registered
 }

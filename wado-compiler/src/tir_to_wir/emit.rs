@@ -17,29 +17,29 @@ use wasm_encoder::{
     NameSection, RefType, StorageType, StructType, SubType, TypeSection, ValType,
 };
 
-/// Emit a core Wasm module from a WirModule.
+/// Emit a core Wasm module from a `WirModule`.
 pub fn emit_core_module(wir: &WirModule) -> Vec<u8> {
     let mut emitter = WirEmitter::new(wir);
     emitter.emit()
 }
 
-/// Emitter state for converting WirModule to Wasm binary.
+/// Emitter state for converting `WirModule` to Wasm binary.
 struct WirEmitter<'a> {
     wir: &'a WirModule,
-    /// Map from WirTypeDef index → Wasm type section index.
+    /// Map from `WirTypeDef` index → Wasm type section index.
     /// For structs: maps to the single struct type index.
     /// For variants: maps to the base type index (case subtypes follow immediately).
     /// For enums/flags: no entry (they don't produce Wasm types).
     /// For arrays: maps to the array type index.
     /// For funcs: maps to the func type index.
     type_index_map: IndexMap<u32, u32>,
-    /// Variant case type indices: wir_type_idx → vec of (case_index, wasm_type_idx).
+    /// Variant case type indices: `wir_type_idx` → vec of (`case_index`, `wasm_type_idx`).
     variant_case_types: IndexMap<u32, Vec<(u32, u32)>>,
-    /// Struct field indices: wir_type_idx → map of field_name → field_index.
+    /// Struct field indices: `wir_type_idx` → map of `field_name` → `field_index`.
     struct_field_map: IndexMap<u32, IndexMap<String, u32>>,
     /// Function index offset (import count).
     func_index_offset: u32,
-    /// Map from WirFuncId index → Wasm function index.
+    /// Map from `WirFuncId` index → Wasm function index.
     func_index_map: IndexMap<u32, u32>,
     /// Local name map for current function.
     current_locals: IndexMap<String, u32>,
@@ -106,8 +106,9 @@ impl<'a> WirEmitter<'a> {
 
         // 8. Data count section (for passive data segments)
         if !self.wir.data.is_empty() {
-            let data_count =
-                DataCountSection { count: u32::try_from(self.wir.data.len()).unwrap() };
+            let data_count = DataCountSection {
+                count: u32::try_from(self.wir.data.len()).unwrap(),
+            };
             module.section(&data_count);
         }
 
@@ -138,9 +139,7 @@ impl<'a> WirEmitter<'a> {
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             match typedef {
-                WirTypeDef::Struct(_)
-                    if self.wir.variant_case_info.contains_key(&wir_idx) =>
-                {
+                WirTypeDef::Struct(_) if self.wir.variant_case_info.contains_key(&wir_idx) => {
                     // Variant case struct — already emitted as part of the variant's rec group.
                     // Type index mapping is set up in emit_variant_type.
                 }
@@ -267,24 +266,20 @@ impl<'a> WirEmitter<'a> {
 
         // Map variant case WIR type indices to their Wasm type indices
         for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info {
-            if variant_wir_idx == wir_idx {
-                if let Some(&(_, wasm_idx)) =
-                    case_types.iter().find(|(idx, _)| *idx == case_idx)
-                {
-                    self.type_index_map.insert(case_wir_idx, wasm_idx);
-                    // Register field map for case struct
-                    let mut case_field_map = IndexMap::new();
-                    case_field_map.insert("discriminant".to_string(), 0);
-                    if let Some(case_def) = v.cases.get(case_idx as usize) {
-                        for (j, _) in case_def.payload.iter().enumerate() {
-                            case_field_map.insert(
-                                format!("payload_{j}"),
-                                u32::try_from(j + 1).unwrap(),
-                            );
-                        }
+            if variant_wir_idx == wir_idx
+                && let Some(&(_, wasm_idx)) = case_types.iter().find(|(idx, _)| *idx == case_idx)
+            {
+                self.type_index_map.insert(case_wir_idx, wasm_idx);
+                // Register field map for case struct
+                let mut case_field_map = IndexMap::new();
+                case_field_map.insert("discriminant".to_string(), 0);
+                if let Some(case_def) = v.cases.get(case_idx as usize) {
+                    for (j, _) in case_def.payload.iter().enumerate() {
+                        case_field_map
+                            .insert(format!("payload_{j}"), u32::try_from(j + 1).unwrap());
                     }
-                    self.struct_field_map.insert(case_wir_idx, case_field_map);
                 }
+                self.struct_field_map.insert(case_wir_idx, case_field_map);
             }
         }
 
@@ -318,9 +313,16 @@ impl<'a> WirEmitter<'a> {
         self.next_type_idx += 1;
         self.type_index_map.insert(wir_idx, type_idx);
 
-        let params: Vec<ValType> = f.params.iter().map(|t| self.wir_type_to_val_type(t)).collect();
-        let results: Vec<ValType> =
-            f.results.iter().map(|t| self.wir_type_to_val_type(t)).collect();
+        let params: Vec<ValType> = f
+            .params
+            .iter()
+            .map(|t| self.wir_type_to_val_type(t))
+            .collect();
+        let results: Vec<ValType> = f
+            .results
+            .iter()
+            .map(|t| self.wir_type_to_val_type(t))
+            .collect();
         types.ty().function(params, results);
     }
 
@@ -338,7 +340,11 @@ impl<'a> WirEmitter<'a> {
                         .get(&type_id.index())
                         .copied()
                         .unwrap_or(0);
-                    imports.import(&import.module, &import.field, wasm_encoder::EntityType::Function(wasm_type_idx));
+                    imports.import(
+                        &import.module,
+                        &import.field,
+                        wasm_encoder::EntityType::Function(wasm_type_idx),
+                    );
                     func_count += 1;
                 }
                 WirImportDesc::Memory { min, max } => {
@@ -347,7 +353,7 @@ impl<'a> WirEmitter<'a> {
                         &import.field,
                         wasm_encoder::MemoryType {
                             minimum: u64::from(*min),
-                            maximum: max.map(|m| u64::from(m)),
+                            maximum: max.map(u64::from),
                             memory64: false,
                             shared: false,
                             page_size_log2: None,
@@ -512,20 +518,16 @@ impl<'a> WirEmitter<'a> {
         f
     }
 
-    /// Collect DeclareLocal instructions from a body to pre-allocate.
-    /// Recursively walks the entire instruction tree to find all DeclareLocal nodes.
+    /// Collect `DeclareLocal` instructions from a body to pre-allocate.
+    /// Recursively walks the entire instruction tree to find all `DeclareLocal` nodes.
     fn collect_declared_locals(&self, body: &[WirInstr], locals: &mut Vec<(String, ValType)>) {
         for instr in body {
             self.collect_declared_locals_instr(instr, locals);
         }
     }
 
-    /// Recursively collect DeclareLocal from a single instruction and all its children.
-    fn collect_declared_locals_instr(
-        &self,
-        instr: &WirInstr,
-        locals: &mut Vec<(String, ValType)>,
-    ) {
+    /// Recursively collect `DeclareLocal` from a single instruction and all its children.
+    fn collect_declared_locals_instr(&self, instr: &WirInstr, locals: &mut Vec<(String, ValType)>) {
         match instr {
             WirInstr::DeclareLocal { name, ty } => {
                 locals.push((name.clone(), self.wir_type_to_val_type(ty)));
@@ -569,7 +571,10 @@ impl<'a> WirEmitter<'a> {
                 }
                 self.collect_declared_locals_instr(func_ref, locals);
             }
-            WirInstr::StructNew { fields, .. } | WirInstr::ArrayNewFixed { elements: fields, .. } => {
+            WirInstr::StructNew { fields, .. }
+            | WirInstr::ArrayNewFixed {
+                elements: fields, ..
+            } => {
                 for f in fields {
                     self.collect_declared_locals_instr(f, locals);
                 }
@@ -583,7 +588,10 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(expr, locals);
                 self.collect_declared_locals_instr(value, locals);
             }
-            WirInstr::ArrayNew { init, len, .. } | WirInstr::ArrayNewData { offset: init, len, .. } => {
+            WirInstr::ArrayNew { init, len, .. }
+            | WirInstr::ArrayNewData {
+                offset: init, len, ..
+            } => {
                 self.collect_declared_locals_instr(init, locals);
                 self.collect_declared_locals_instr(len, locals);
             }
@@ -596,18 +604,36 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(array, locals);
                 self.collect_declared_locals_instr(index, locals);
             }
-            WirInstr::ArraySet { array, index, value, .. } => {
+            WirInstr::ArraySet {
+                array,
+                index,
+                value,
+                ..
+            } => {
                 self.collect_declared_locals_instr(array, locals);
                 self.collect_declared_locals_instr(index, locals);
                 self.collect_declared_locals_instr(value, locals);
             }
-            WirInstr::ArrayFill { array, offset, value, len, .. } => {
+            WirInstr::ArrayFill {
+                array,
+                offset,
+                value,
+                len,
+                ..
+            } => {
                 self.collect_declared_locals_instr(array, locals);
                 self.collect_declared_locals_instr(offset, locals);
                 self.collect_declared_locals_instr(value, locals);
                 self.collect_declared_locals_instr(len, locals);
             }
-            WirInstr::ArrayCopy { dest, dest_offset, src, src_offset, len, .. } => {
+            WirInstr::ArrayCopy {
+                dest,
+                dest_offset,
+                src,
+                src_offset,
+                len,
+                ..
+            } => {
                 self.collect_declared_locals_instr(dest, locals);
                 self.collect_declared_locals_instr(dest_offset, locals);
                 self.collect_declared_locals_instr(src, locals);
@@ -629,7 +655,12 @@ impl<'a> WirEmitter<'a> {
             WirInstr::BrIf { condition, .. } => {
                 self.collect_declared_locals_instr(condition, locals);
             }
-            WirInstr::Select { condition, if_true, if_false, .. } => {
+            WirInstr::Select {
+                condition,
+                if_true,
+                if_false,
+                ..
+            } => {
                 self.collect_declared_locals_instr(condition, locals);
                 self.collect_declared_locals_instr(if_true, locals);
                 self.collect_declared_locals_instr(if_false, locals);
@@ -663,11 +694,11 @@ impl<'a> WirEmitter<'a> {
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalTee(idx));
             }
-            WirInstr::GlobalGet { name } => {
+            WirInstr::GlobalGet { name: _ } => {
                 // TODO: resolve global index
                 f.instruction(&Instruction::GlobalGet(0));
             }
-            WirInstr::GlobalSet { name, value } => {
+            WirInstr::GlobalSet { name: _, value } => {
                 self.emit_instr(f, value);
                 // TODO: resolve global index
                 f.instruction(&Instruction::GlobalSet(0));
@@ -837,15 +868,24 @@ impl<'a> WirEmitter<'a> {
                 match self.is_field_packed(type_id.index(), field_name) {
                     Some(true) => {
                         // Signed packed (I8/I16) → struct.get_s
-                        f.instruction(&Instruction::StructGetS { struct_type_index: wasm_idx, field_index: field_idx });
+                        f.instruction(&Instruction::StructGetS {
+                            struct_type_index: wasm_idx,
+                            field_index: field_idx,
+                        });
                     }
                     Some(false) => {
                         // Unsigned packed (U8/U16/Bool) → struct.get_u
-                        f.instruction(&Instruction::StructGetU { struct_type_index: wasm_idx, field_index: field_idx });
+                        f.instruction(&Instruction::StructGetU {
+                            struct_type_index: wasm_idx,
+                            field_index: field_idx,
+                        });
                     }
                     None => {
                         // Non-packed → regular struct.get
-                        f.instruction(&Instruction::StructGet { struct_type_index: wasm_idx, field_index: field_idx });
+                        f.instruction(&Instruction::StructGet {
+                            struct_type_index: wasm_idx,
+                            field_index: field_idx,
+                        });
                     }
                 }
             }
@@ -859,7 +899,10 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, value);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 let field_idx = self.resolve_field_index(type_id.index(), field_name);
-                f.instruction(&Instruction::StructSet { struct_type_index: wasm_idx, field_index: field_idx });
+                f.instruction(&Instruction::StructSet {
+                    struct_type_index: wasm_idx,
+                    field_index: field_idx,
+                });
             }
 
             // GC: Array
@@ -898,7 +941,11 @@ impl<'a> WirEmitter<'a> {
                     array_size: u32::try_from(elements.len()).unwrap(),
                 });
             }
-            WirInstr::ArrayGet { type_id, array, index } => {
+            WirInstr::ArrayGet {
+                type_id,
+                array,
+                index,
+            } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
                 let wasm_idx = self.resolve_type_index(type_id.index());
@@ -935,7 +982,11 @@ impl<'a> WirEmitter<'a> {
             WirInstr::RefEq(l, r) => self.emit_binary(f, l, r, Instruction::RefEq),
 
             // Control Flow
-            WirInstr::Block { label, result, body } => {
+            WirInstr::Block {
+                label: _,
+                result,
+                body,
+            } => {
                 let bt = self.wir_type_to_block_type(result);
                 f.instruction(&Instruction::Block(bt));
                 for instr in body {
@@ -943,7 +994,7 @@ impl<'a> WirEmitter<'a> {
                 }
                 f.instruction(&Instruction::End);
             }
-            WirInstr::Loop { label, body } => {
+            WirInstr::Loop { label: _, body } => {
                 f.instruction(&Instruction::Loop(BlockType::Empty));
                 for instr in body {
                     self.emit_instr(f, instr);
@@ -977,7 +1028,11 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, condition);
                 f.instruction(&Instruction::BrIf(*depth));
             }
-            WirInstr::BrTable { index, targets, default } => {
+            WirInstr::BrTable {
+                index,
+                targets,
+                default,
+            } => {
                 self.emit_instr(f, index);
                 f.instruction(&Instruction::BrTable(targets.clone().into(), *default));
             }
@@ -1010,15 +1065,27 @@ impl<'a> WirEmitter<'a> {
                 let wasm_idx = self.resolve_func_index(func_id.index());
                 f.instruction(&Instruction::RefFunc(wasm_idx));
             }
-            WirInstr::CallIndirect { type_id, table, index, args } => {
+            WirInstr::CallIndirect {
+                type_id,
+                table,
+                index,
+                args,
+            } => {
                 for arg in args {
                     self.emit_instr(f, arg);
                 }
                 self.emit_instr(f, index);
                 let wasm_idx = self.resolve_type_index(type_id.index());
-                f.instruction(&Instruction::CallIndirect { type_index: wasm_idx, table_index: *table });
+                f.instruction(&Instruction::CallIndirect {
+                    type_index: wasm_idx,
+                    table_index: *table,
+                });
             }
-            WirInstr::CallRef { type_id, func_ref, args } => {
+            WirInstr::CallRef {
+                type_id,
+                func_ref,
+                args,
+            } => {
                 for arg in args {
                     self.emit_instr(f, arg);
                 }
@@ -1028,49 +1095,133 @@ impl<'a> WirEmitter<'a> {
             }
 
             // Memory operations
-            WirInstr::I32Load { offset, align, addr } => {
+            WirInstr::I32Load {
+                offset,
+                align,
+                addr,
+            } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I32Load(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I32Load8U { offset, align, addr } => {
+            WirInstr::I32Load8U {
+                offset,
+                align,
+                addr,
+            } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load8U(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I32Load8U(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I32Load8S { offset, align, addr } => {
+            WirInstr::I32Load8S {
+                offset,
+                align,
+                addr,
+            } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load8S(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I32Load8S(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I32Load16U { offset, align, addr } => {
+            WirInstr::I32Load16U {
+                offset,
+                align,
+                addr,
+            } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load16U(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I32Load16U(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I32Load16S { offset, align, addr } => {
+            WirInstr::I32Load16S {
+                offset,
+                align,
+                addr,
+            } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I32Load16S(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I32Load16S(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I32Store { offset, align, addr, value } => {
+            WirInstr::I32Store {
+                offset,
+                align,
+                addr,
+                value,
+            } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I32Store(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I32Store8 { offset, align, addr, value } => {
+            WirInstr::I32Store8 {
+                offset,
+                align,
+                addr,
+                value,
+            } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store8(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I32Store8(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I32Store16 { offset, align, addr, value } => {
+            WirInstr::I32Store16 {
+                offset,
+                align,
+                addr,
+                value,
+            } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I32Store16(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I32Store16(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I64Load { offset, align, addr } => {
+            WirInstr::I64Load {
+                offset,
+                align,
+                addr,
+            } => {
                 self.emit_instr(f, addr);
-                f.instruction(&Instruction::I64Load(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I64Load(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
-            WirInstr::I64Store { offset, align, addr, value } => {
+            WirInstr::I64Store {
+                offset,
+                align,
+                addr,
+                value,
+            } => {
                 self.emit_instr(f, addr);
                 self.emit_instr(f, value);
-                f.instruction(&Instruction::I64Store(MemArg { offset: u64::from(*offset), align: *align, memory_index: 0 }));
+                f.instruction(&Instruction::I64Store(MemArg {
+                    offset: (*offset),
+                    align: *align,
+                    memory_index: 0,
+                }));
             }
             WirInstr::MemorySize => {
                 f.instruction(&Instruction::MemorySize(0));
@@ -1081,19 +1232,35 @@ impl<'a> WirEmitter<'a> {
             }
 
             // GC: Array (packed access)
-            WirInstr::ArrayGetS { type_id, array, index } => {
+            WirInstr::ArrayGetS {
+                type_id,
+                array,
+                index,
+            } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArrayGetS(wasm_idx));
             }
-            WirInstr::ArrayGetU { type_id, array, index } => {
+            WirInstr::ArrayGetU {
+                type_id,
+                array,
+                index,
+            } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, index);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::ArrayGetU(wasm_idx));
             }
-            WirInstr::ArrayCopy { dest_type_id, src_type_id, dest, dest_offset, src, src_offset, len } => {
+            WirInstr::ArrayCopy {
+                dest_type_id,
+                src_type_id,
+                dest,
+                dest_offset,
+                src,
+                src_offset,
+                len,
+            } => {
                 self.emit_instr(f, dest);
                 self.emit_instr(f, dest_offset);
                 self.emit_instr(f, src);
@@ -1101,9 +1268,18 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, len);
                 let dst_idx = self.resolve_type_index(dest_type_id.index());
                 let src_idx = self.resolve_type_index(src_type_id.index());
-                f.instruction(&Instruction::ArrayCopy { array_type_index_dst: dst_idx, array_type_index_src: src_idx });
+                f.instruction(&Instruction::ArrayCopy {
+                    array_type_index_dst: dst_idx,
+                    array_type_index_src: src_idx,
+                });
             }
-            WirInstr::ArrayFill { type_id, array, offset, value, len } => {
+            WirInstr::ArrayFill {
+                type_id,
+                array,
+                offset,
+                value,
+                len,
+            } => {
                 self.emit_instr(f, array);
                 self.emit_instr(f, offset);
                 self.emit_instr(f, value);
@@ -1113,7 +1289,11 @@ impl<'a> WirEmitter<'a> {
             }
 
             // GC: Reference (casts, i31, extern)
-            WirInstr::RefCast { type_id, nullable, expr } => {
+            WirInstr::RefCast {
+                type_id,
+                nullable,
+                expr,
+            } => {
                 self.emit_instr(f, expr);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 if *nullable {
@@ -1122,7 +1302,11 @@ impl<'a> WirEmitter<'a> {
                     f.instruction(&Instruction::RefCastNonNull(HeapType::Concrete(wasm_idx)));
                 }
             }
-            WirInstr::RefTest { type_id, nullable, expr } => {
+            WirInstr::RefTest {
+                type_id,
+                nullable,
+                expr,
+            } => {
                 self.emit_instr(f, expr);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 if *nullable {
@@ -1138,7 +1322,12 @@ impl<'a> WirEmitter<'a> {
             WirInstr::ExternExternalize(o) => self.emit_unary(f, o, Instruction::ExternConvertAny),
 
             // Select
-            WirInstr::Select { condition, if_true, if_false, ty } => {
+            WirInstr::Select {
+                condition,
+                if_true,
+                if_false,
+                ty,
+            } => {
                 self.emit_instr(f, if_true);
                 self.emit_instr(f, if_false);
                 self.emit_instr(f, condition);
@@ -1206,7 +1395,13 @@ impl<'a> WirEmitter<'a> {
 
     // === Helpers ===
 
-    fn emit_binary(&self, f: &mut Function, left: &WirInstr, right: &WirInstr, op: Instruction<'_>) {
+    fn emit_binary(
+        &self,
+        f: &mut Function,
+        left: &WirInstr,
+        right: &WirInstr,
+        op: Instruction<'_>,
+    ) {
         self.emit_instr(f, left);
         self.emit_instr(f, right);
         f.instruction(&op);
@@ -1232,10 +1427,7 @@ impl<'a> WirEmitter<'a> {
     }
 
     fn resolve_local(&self, name: &str) -> u32 {
-        self.current_locals
-            .get(name)
-            .copied()
-            .unwrap_or(0) // fallback
+        self.current_locals.get(name).copied().unwrap_or(0) // fallback
     }
 
     fn resolve_type_index(&self, wir_idx: u32) -> u32 {
@@ -1261,30 +1453,30 @@ impl<'a> WirEmitter<'a> {
     /// or `None` if the array element is not packed.
     fn is_array_packed(&self, wir_type_idx: u32) -> Option<bool> {
         let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len() {
-            if let WirTypeDef::Array(ref arr) = self.wir.types[idx] {
-                return match &arr.element_type {
-                    WirType::I8 | WirType::I16 => Some(true),
-                    WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
-                    _ => None,
-                };
-            }
+        if idx < self.wir.types.len()
+            && let WirTypeDef::Array(ref arr) = self.wir.types[idx]
+        {
+            return match &arr.element_type {
+                WirType::I8 | WirType::I16 => Some(true),
+                WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
+                _ => None,
+            };
         }
         None
     }
 
     fn is_field_packed(&self, wir_type_idx: u32, field_name: &str) -> Option<bool> {
         let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len() {
-            if let WirTypeDef::Struct(ref st) = self.wir.types[idx] {
-                for field in &st.fields {
-                    if field.name == field_name {
-                        return match &field.ty {
-                            WirType::I8 | WirType::I16 => Some(true),
-                            WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
-                            _ => None,
-                        };
-                    }
+        if idx < self.wir.types.len()
+            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
+        {
+            for field in &st.fields {
+                if field.name == field_name {
+                    return match &field.ty {
+                        WirType::I8 | WirType::I16 => Some(true),
+                        WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
+                        _ => None,
+                    };
                 }
             }
         }
@@ -1300,19 +1492,26 @@ impl<'a> WirEmitter<'a> {
 
     fn get_func_type(&self, wir_type_idx: u32) -> Option<&WirFuncType> {
         let idx = wir_type_idx as usize;
-        if idx < self.wir.types.len() {
-            if let WirTypeDef::Func(ref ft) = self.wir.types[idx] {
-                return Some(ft);
-            }
+        if idx < self.wir.types.len()
+            && let WirTypeDef::Func(ref ft) = self.wir.types[idx]
+        {
+            return Some(ft);
         }
         None
     }
 
-    /// Convert WirType to Wasm ValType (for locals and function signatures).
+    /// Convert `WirType` to Wasm `ValType` (for locals and function signatures).
     fn wir_type_to_val_type(&self, ty: &WirType) -> ValType {
         match ty {
-            WirType::I8 | WirType::I16 | WirType::I32 | WirType::U8 | WirType::U16
-            | WirType::U32 | WirType::Bool | WirType::Char | WirType::Unit => ValType::I32,
+            WirType::I8
+            | WirType::I16
+            | WirType::I32
+            | WirType::U8
+            | WirType::U16
+            | WirType::U32
+            | WirType::Bool
+            | WirType::Char
+            | WirType::Unit => ValType::I32,
             WirType::I64 | WirType::U64 => ValType::I64,
             WirType::F32 => ValType::F32,
             WirType::F64 => ValType::F64,
@@ -1337,7 +1536,7 @@ impl<'a> WirEmitter<'a> {
         }
     }
 
-    /// Convert WirType to Wasm StorageType (for struct fields).
+    /// Convert `WirType` to Wasm `StorageType` (for struct fields).
     fn wir_type_to_storage_type(&self, ty: &WirType) -> StorageType {
         match ty {
             WirType::I8 | WirType::U8 | WirType::Bool => StorageType::I8,

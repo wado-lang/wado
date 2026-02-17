@@ -1,6 +1,6 @@
 //! Function body translation — converts TIR expressions and statements to WIR instructions.
 //!
-//! This is the core of the tir_to_wir phase, translating each TIR function body
+//! This is the core of the `tir_to_wir` phase, translating each TIR function body
 //! into a sequence of WIR instructions.
 
 use crate::tir::{
@@ -93,7 +93,7 @@ struct FunctionTranslator<'a, 'b> {
     match_counter: u32,
 }
 
-impl<'a, 'b> FunctionTranslator<'a, 'b> {
+impl FunctionTranslator<'_, '_> {
     /// Translate the top-level function body: declares locals and translates statements.
     fn translate_block(&mut self, block: &TirBlock) -> Vec<WirInstr> {
         let mut instrs = Vec::new();
@@ -127,7 +127,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
         instrs
     }
 
-    /// Scan statements recursively to discover Let declarations and emit DeclareLocal.
+    /// Scan statements recursively to discover Let declarations and emit `DeclareLocal`.
     /// Used when `local_types` is empty (for functions from library modules).
     fn declare_locals_from_stmts(&self, instrs: &mut Vec<WirInstr>, stmts: &[TirStmt]) {
         for stmt in stmts {
@@ -141,8 +141,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                     let param_count = u32::try_from(self.tir_func.params.len()).unwrap();
                     if *local_index >= param_count {
                         let local_name = format!("__local_{local_index}");
-                        let wir_type =
-                            self.ctx.type_id_to_wir_type(self.type_table, *type_id);
+                        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, *type_id);
                         instrs.push(WirInstr::DeclareLocal {
                             name: local_name,
                             ty: wir_type,
@@ -219,9 +218,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
     fn translate_stmt(&mut self, stmt: &TirStmt) -> Option<WirInstr> {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index,
-                value,
-                ..
+                local_index, value, ..
             } => {
                 let local_name = format!("__local_{local_index}");
                 let value_instr = self.translate_expr(value);
@@ -280,10 +277,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 let depth = self.compute_break_depth(label.as_deref());
                 if let Some(val) = value {
                     let val_instr = self.translate_expr(val);
-                    Some(WirInstr::Seq(vec![
-                        val_instr,
-                        WirInstr::Br { depth },
-                    ]))
+                    Some(WirInstr::Seq(vec![val_instr, WirInstr::Br { depth }]))
                 } else {
                     Some(WirInstr::Br { depth })
                 }
@@ -364,25 +358,17 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
     fn translate_expr(&mut self, expr: &TirExpr) -> WirInstr {
         match &expr.kind {
             // === Literals ===
-            TirExprKind::IntLiteral { value, .. } => {
-                match self.type_table.get(expr.type_id) {
-                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-                        WirInstr::I64Const(*value as i64)
-                    }
-                    _ => WirInstr::I32Const(*value as i32),
+            TirExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
+                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+                    WirInstr::I64Const(*value as i64)
                 }
-            }
-            TirExprKind::FloatLiteral { value, .. } => {
-                match self.type_table.get(expr.type_id) {
-                    ResolvedType::Primitive(PrimitiveType::F32) => {
-                        WirInstr::F32Const(*value as f32)
-                    }
-                    _ => WirInstr::F64Const(*value),
-                }
-            }
-            TirExprKind::BoolLiteral(value) => {
-                WirInstr::I32Const(i32::from(*value))
-            }
+                _ => WirInstr::I32Const(*value as i32),
+            },
+            TirExprKind::FloatLiteral { value, .. } => match self.type_table.get(expr.type_id) {
+                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
+                _ => WirInstr::F64Const(*value),
+            },
+            TirExprKind::BoolLiteral(value) => WirInstr::I32Const(i32::from(*value)),
             TirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
             TirExprKind::StringLiteral(s) => {
                 // String literals are constructed from data segments
@@ -418,35 +404,26 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
             }
 
             // === Unary Operations ===
-            TirExprKind::Unary { op, expr: inner } => {
-                match op {
-                    TirUnaryOp::Ref | TirUnaryOp::MutRef => {
-                        self.translate_expr(inner)
-                    }
-                    TirUnaryOp::Deref => {
-                        self.translate_expr(inner)
-                    }
-                    _ => {
-                        let o = Box::new(self.translate_expr(inner));
-                        self.translate_unary_op(op, o, inner.type_id)
-                    }
+            TirExprKind::Unary { op, expr: inner } => match op {
+                TirUnaryOp::Ref | TirUnaryOp::MutRef => self.translate_expr(inner),
+                TirUnaryOp::Deref => self.translate_expr(inner),
+                _ => {
+                    let o = Box::new(self.translate_expr(inner));
+                    self.translate_unary_op(op, o, inner.type_id)
                 }
-            }
+            },
 
             // === Function Calls ===
-            TirExprKind::Call {
-                func, args, ..
-            } => {
+            TirExprKind::Call { func, args, .. } => {
                 // Check for instruction-builtins first
                 let builtin = func
                     .builtin_name()
                     .or_else(|| func.monomorphized_builtin_name());
-                if let Some(ref builtin_name) = builtin {
-                    if let Some(instr) =
+                if let Some(ref builtin_name) = builtin
+                    && let Some(instr) =
                         self.translate_builtin_call(builtin_name, args, expr.type_id)
-                    {
-                        return instr;
-                    }
+                {
+                    return instr;
                 }
 
                 let translated_args: Vec<WirInstr> =
@@ -458,7 +435,11 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                         args: translated_args,
                     }
                 } else {
-                    eprintln!("[WIR] unresolved Call: name={:?} builtin={:?}", func.name(), builtin);
+                    eprintln!(
+                        "[WIR] unresolved Call: name={:?} builtin={:?}",
+                        func.name(),
+                        builtin
+                    );
                     WirInstr::Unreachable
                 }
             }
@@ -503,8 +484,10 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
             TirExprKind::StructLiteral { fields, .. } => {
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, expr.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
-                    let field_instrs: Vec<WirInstr> =
-                        fields.iter().map(|f| self.translate_expr(&f.value)).collect();
+                    let field_instrs: Vec<WirInstr> = fields
+                        .iter()
+                        .map(|f| self.translate_expr(&f.value))
+                        .collect();
                     WirInstr::StructNew {
                         type_id,
                         fields: field_instrs,
@@ -521,8 +504,9 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 ..
             } => {
                 let recv = self.translate_expr(receiver);
-                let wir_type =
-                    self.ctx.type_id_to_wir_type(self.type_table, receiver.type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, receiver.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     WirInstr::StructGet {
                         type_id,
@@ -584,10 +568,10 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
 
             // === Block ===
             TirExprKind::Block(block) => {
-                let body = if expr.type_id != TypeTable::UNIT {
-                    self.translate_stmts_as_value(&block.stmts)
-                } else {
+                let body = if expr.type_id == TypeTable::UNIT {
                     self.translate_stmts(&block.stmts)
+                } else {
+                    self.translate_stmts_as_value(&block.stmts)
                 };
                 WirInstr::Seq(body)
             }
@@ -689,8 +673,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
             TirExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
                 let val = self.translate_expr(inner);
-                let wir_type =
-                    self.ctx.type_id_to_wir_type(self.type_table, inner.type_id);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner.type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     WirInstr::StructGet {
                         type_id,
@@ -723,12 +706,8 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 payload.as_deref(),
                 expr.type_id,
             ),
-            TirExprKind::EnumConstruct { case_index, .. } => {
-                WirInstr::I32Const(*case_index as i32)
-            }
-            TirExprKind::OptionSome { value } => {
-                self.translate_expr(value)
-            }
+            TirExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
+            TirExprKind::OptionSome { value } => self.translate_expr(value),
 
             // === CM Raw Call ===
             TirExprKind::CmRawCall {
@@ -737,9 +716,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 let translated_args: Vec<WirInstr> =
                     args.iter().map(|a| self.translate_expr(a)).collect();
                 // Look up in WASI imports
-                if let Some(func_id) =
-                    self.ctx.func_map.get(&format!("wasi/{local_name}"))
-                {
+                if let Some(func_id) = self.ctx.func_map.get(&format!("wasi/{local_name}")) {
                     WirInstr::Call {
                         func_id: func_id.clone(),
                         args: translated_args,
@@ -783,10 +760,10 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                     self.translate_stmts(&block.stmts)
                 };
                 self.label_stack.pop();
-                let result_type = if expr.type_id != TypeTable::UNIT {
-                    Some(self.ctx.type_id_to_wir_type(self.type_table, expr.type_id))
-                } else {
+                let result_type = if expr.type_id == TypeTable::UNIT {
                     None
+                } else {
+                    Some(self.ctx.type_id_to_wir_type(self.type_table, expr.type_id))
                 };
                 WirInstr::Block {
                     label: None,
@@ -831,7 +808,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
     /// Translate a string literal to WIR instructions.
     ///
     /// Creates a String struct from a passive data segment:
-    ///   array.new_data $u8_array, $data_idx (offset=0, len=bytes)
+    ///   `array.new_data` $`u8_array`, $`data_idx` (offset=0, len=bytes)
     ///   struct.new $String (repr=array, used=len)
     fn translate_string_literal(&self, s: &str) -> WirInstr {
         let byte_len = s.len();
@@ -865,12 +842,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
             }
         } else {
             // Non-empty string: look up data segment
-            let data_index = self
-                .ctx
-                .string_literal_map
-                .get(s)
-                .copied()
-                .unwrap_or(0);
+            let data_index = self.ctx.string_literal_map.get(s).copied().unwrap_or(0);
             let len_i32 = i32::try_from(byte_len).unwrap_or(0);
 
             WirInstr::StructNew {
@@ -911,10 +883,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
         let is_unsigned = matches!(
             self.type_table.get(left_type_id),
             ResolvedType::Primitive(
-                PrimitiveType::U8
-                    | PrimitiveType::U16
-                    | PrimitiveType::U32
-                    | PrimitiveType::U64
+                PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
             )
         );
 
@@ -1178,12 +1147,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
     }
 
     /// Translate a type cast.
-    fn translate_cast(
-        &mut self,
-        inner: &TirExpr,
-        from_type: TypeId,
-        to_type: TypeId,
-    ) -> WirInstr {
+    fn translate_cast(&mut self, inner: &TirExpr, from_type: TypeId, to_type: TypeId) -> WirInstr {
         let inner_instr = self.translate_expr(inner);
         let from = self.type_table.get(from_type);
         let to = self.type_table.get(to_type);
@@ -1247,7 +1211,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
         }
     }
 
-    /// Resolve a TIR FunctionRef to a WirFuncId.
+    /// Resolve a TIR `FunctionRef` to a `WirFuncId`.
     fn resolve_function_ref(
         &self,
         func_ref: &crate::tir::FunctionRef,
@@ -1255,7 +1219,9 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
         use crate::tir::FunctionRef;
         match func_ref {
             FunctionRef::Resolved {
-                func, module_source, ..
+                func,
+                module_source,
+                ..
             } => {
                 let name = func.borrow().name.clone();
                 // Try direct name lookup
@@ -1280,7 +1246,9 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 None
             }
             FunctionRef::External {
-                module_source, name, ..
+                module_source,
+                name,
+                ..
             } => {
                 // Try direct name lookup
                 let fq = format!("{module_source}/{name}");
@@ -1377,8 +1345,9 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
             "builtin::array_new" => {
                 // array.new_default: creates a new array of the given element type
                 let len = self.translate_expr(&args[0]);
-                let wir_type =
-                    self.ctx.type_id_to_wir_type(self.type_table, result_type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, result_type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayNewDefault {
                         type_id,
@@ -1395,36 +1364,35 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
             "builtin::array_get_u8" => {
                 let arr = self.translate_expr(&args[0]);
                 let idx = self.translate_expr(&args[1]);
-                if let Some(type_id) = self.ctx.array_type_by_name.get("u8") {
-                    Some(WirInstr::ArrayGetU {
+                self.ctx
+                    .array_type_by_name
+                    .get("u8")
+                    .map(|type_id| WirInstr::ArrayGetU {
                         type_id: type_id.clone(),
                         array: Box::new(arr),
                         index: Box::new(idx),
                     })
-                } else {
-                    None
-                }
             }
             "builtin::array_set_u8" => {
                 let arr = self.translate_expr(&args[0]);
                 let idx = self.translate_expr(&args[1]);
                 let val = self.translate_expr(&args[2]);
-                if let Some(type_id) = self.ctx.array_type_by_name.get("u8") {
-                    Some(WirInstr::ArraySet {
+                self.ctx
+                    .array_type_by_name
+                    .get("u8")
+                    .map(|type_id| WirInstr::ArraySet {
                         type_id: type_id.clone(),
                         array: Box::new(arr),
                         index: Box::new(idx),
                         value: Box::new(val),
                     })
-                } else {
-                    None
-                }
             }
             "builtin::array_get" => {
                 let arr = self.translate_expr(&args[0]);
                 let idx = self.translate_expr(&args[1]);
-                let wir_type =
-                    self.ctx.type_id_to_wir_type(self.type_table, args[0].type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, args[0].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayGet {
                         type_id,
@@ -1439,8 +1407,9 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 let arr = self.translate_expr(&args[0]);
                 let idx = self.translate_expr(&args[1]);
                 let val = self.translate_expr(&args[2]);
-                let wir_type =
-                    self.ctx.type_id_to_wir_type(self.type_table, args[0].type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, args[0].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArraySet {
                         type_id,
@@ -1458,8 +1427,9 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 let src = self.translate_expr(&args[2]);
                 let src_offset = self.translate_expr(&args[3]);
                 let len = self.translate_expr(&args[4]);
-                let wir_type =
-                    self.ctx.type_id_to_wir_type(self.type_table, args[0].type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, args[0].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayCopy {
                         dest_type_id: type_id.clone(),
@@ -1479,8 +1449,9 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 let offset = self.translate_expr(&args[1]);
                 let val = self.translate_expr(&args[2]);
                 let len = self.translate_expr(&args[3]);
-                let wir_type =
-                    self.ctx.type_id_to_wir_type(self.type_table, args[0].type_id);
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, args[0].type_id);
                 if let WirType::Ref { type_id, .. } = wir_type {
                     Some(WirInstr::ArrayFill {
                         type_id,
@@ -1577,8 +1548,9 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 let cond = self.translate_expr(&args[0]);
                 let a = self.translate_expr(&args[1]);
                 let b = self.translate_expr(&args[2]);
-                let result_type =
-                    self.ctx.type_id_to_wir_type(self.type_table, args[1].type_id);
+                let result_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, args[1].type_id);
                 Some(WirInstr::Select {
                     condition: Box::new(cond),
                     if_true: Box::new(a),
@@ -1800,8 +1772,13 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
             // Get the Array<T> struct type
             let array_struct_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
 
-            if let (Some(raw_type), WirType::Ref { type_id: struct_type, .. }) =
-                (raw_array_type, array_struct_wir)
+            if let (
+                Some(raw_type),
+                WirType::Ref {
+                    type_id: struct_type,
+                    ..
+                },
+            ) = (raw_array_type, array_struct_wir)
             {
                 let elem_instrs: Vec<WirInstr> =
                     elements.iter().map(|e| self.translate_expr(e)).collect();
@@ -1829,7 +1806,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
     // Switch translation
     // =========================================================================
 
-    /// Translate switch expression using br_table.
+    /// Translate switch expression using `br_table`.
     fn translate_switch(
         &mut self,
         scrutinee: &TirExpr,
@@ -1859,7 +1836,10 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                     Box::new(WirInstr::I64Const(min_value)),
                 )))
             } else {
-                WirInstr::I32Sub(Box::new(scrut), Box::new(WirInstr::I32Const(min_value as i32)))
+                WirInstr::I32Sub(
+                    Box::new(scrut),
+                    Box::new(WirInstr::I32Const(min_value as i32)),
+                )
             }
         } else if is_i64 {
             WirInstr::I32WrapI64(Box::new(scrut))
@@ -1870,9 +1850,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
         let num_arms = arms.len();
 
         // br_table targets: target[i] = num_arms - i (arm[0] is outermost block)
-        let targets: Vec<u32> = (0..num_arms as u32)
-            .map(|i| num_arms as u32 - i)
-            .collect();
+        let targets: Vec<u32> = (0..num_arms as u32).map(|i| num_arms as u32 - i).collect();
         let default_target = 0u32; // Default block is innermost
 
         let br_table = WirInstr::BrTable {
@@ -1995,8 +1973,11 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 instrs
             };
 
-            let condition =
-                self.translate_pattern_condition(&arm.pattern, &scrut_local_name, scrutinee.type_id);
+            let condition = self.translate_pattern_condition(
+                &arm.pattern,
+                &scrut_local_name,
+                scrutinee.type_id,
+            );
 
             // Apply guard if present
             let full_condition = if let Some(guard) = &arm.guard {
@@ -2012,10 +1993,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                     WirInstr::I32And(Box::new(condition), Box::new(guard_expr))
                 } else {
                     guard_instrs.push(guard_expr);
-                    WirInstr::I32And(
-                        Box::new(condition),
-                        Box::new(WirInstr::Seq(guard_instrs)),
-                    )
+                    WirInstr::I32And(Box::new(condition), Box::new(WirInstr::Seq(guard_instrs)))
                 }
             } else {
                 condition
@@ -2130,9 +2108,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                     if let crate::wir::WirTypeDef::Variant(vt) =
                         &self.ctx.types[variant_type_id.index() as usize]
                     {
-                        if let Some(case) =
-                            vt.cases.iter().find(|c| c.name == *variant_name)
-                        {
+                        if let Some(case) = vt.cases.iter().find(|c| c.name == *variant_name) {
                             if case.payload.is_empty() && bindings.is_empty() {
                                 // Unit variant: check discriminant
                                 let wir_type =
@@ -2296,7 +2272,10 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                     let cast_local = format!("__cast_{variant_name}");
                     instrs.push(WirInstr::DeclareLocal {
                         name: cast_local.clone(),
-                        ty: WirType::Ref { type_id: case_type_id.clone(), nullable: false },
+                        ty: WirType::Ref {
+                            type_id: case_type_id.clone(),
+                            nullable: false,
+                        },
                     });
                     instrs.push(WirInstr::LocalSet {
                         name: cast_local.clone(),
@@ -2388,10 +2367,10 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
 
         // Special handling for Option
         if variant_name == "Option" || variant_name.starts_with("Option<") {
-            if case_name == "Some" {
-                if let Some(payload_expr) = payload {
-                    return self.translate_expr(payload_expr);
-                }
+            if case_name == "Some"
+                && let Some(payload_expr) = payload
+            {
+                return self.translate_expr(payload_expr);
             }
             // Option::None — generate null ref
             let inner_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
@@ -2427,10 +2406,7 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
                 if let Some(payload_expr) = payload {
                     fields.push(self.translate_expr(payload_expr));
                 }
-                WirInstr::StructNew {
-                    type_id,
-                    fields,
-                }
+                WirInstr::StructNew { type_id, fields }
             } else {
                 WirInstr::Unreachable
             }
@@ -2483,36 +2459,33 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
         let fq = format!("{var_module}//{var_name}");
 
         // Check if this case has a payload
-        if let Some(variant_type_id) = self.ctx.type_map.get(&fq) {
-            if let crate::wir::WirTypeDef::Variant(vt) =
+        if let Some(variant_type_id) = self.ctx.type_map.get(&fq)
+            && let crate::wir::WirTypeDef::Variant(vt) =
                 &self.ctx.types[variant_type_id.index() as usize]
-            {
-                if let Some(case) = vt.cases.get(case_index as usize) {
-                    if case.payload.is_empty() {
-                        // Unit variant: check discriminant
-                        let wir_type =
-                            self.ctx.type_id_to_wir_type(self.type_table, inner.type_id);
-                        if let WirType::Ref { type_id, .. } = wir_type {
-                            return WirInstr::I32Eq(
-                                Box::new(WirInstr::StructGet {
-                                    type_id,
-                                    field_name: "discriminant".to_string(),
-                                    expr: Box::new(val),
-                                }),
-                                Box::new(WirInstr::I32Const(case_index as i32)),
-                            );
-                        }
-                    } else {
-                        // Payload variant: use ref.test
-                        let case_fq = format!("{fq}::{}", case.name);
-                        if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
-                            return WirInstr::RefTest {
-                                type_id: case_type_id.clone(),
-                                nullable: false,
-                                expr: Box::new(val),
-                            };
-                        }
-                    }
+            && let Some(case) = vt.cases.get(case_index as usize)
+        {
+            if case.payload.is_empty() {
+                // Unit variant: check discriminant
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, inner.type_id);
+                if let WirType::Ref { type_id, .. } = wir_type {
+                    return WirInstr::I32Eq(
+                        Box::new(WirInstr::StructGet {
+                            type_id,
+                            field_name: "discriminant".to_string(),
+                            expr: Box::new(val),
+                        }),
+                        Box::new(WirInstr::I32Const(case_index as i32)),
+                    );
+                }
+            } else {
+                // Payload variant: use ref.test
+                let case_fq = format!("{fq}::{}", case.name);
+                if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
+                    return WirInstr::RefTest {
+                        type_id: case_type_id.clone(),
+                        nullable: false,
+                        expr: Box::new(val),
+                    };
                 }
             }
         }
@@ -2565,31 +2538,28 @@ impl<'a, 'b> FunctionTranslator<'a, 'b> {
         let fq = format!("{var_module}//{var_name}");
 
         // Look up case info to get the case type
-        if let Some(variant_type_id) = self.ctx.type_map.get(&fq) {
-            if let crate::wir::WirTypeDef::Variant(vt) =
+        if let Some(variant_type_id) = self.ctx.type_map.get(&fq)
+            && let crate::wir::WirTypeDef::Variant(vt) =
                 &self.ctx.types[variant_type_id.index() as usize]
-            {
-                if let Some(case) = vt.cases.get(case_index as usize) {
-                    let case_fq = format!("{fq}::{}", case.name);
-                    if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
-                        // ref.cast to case type, then struct.get field 1 (payload)
-                        let cast = WirInstr::RefCast {
-                            type_id: case_type_id.clone(),
-                            nullable: false,
-                            expr: Box::new(val),
-                        };
-                        return WirInstr::StructGet {
-                            type_id: case_type_id.clone(),
-                            field_name: "payload_0".to_string(),
-                            expr: Box::new(cast),
-                        };
-                    }
-                }
+            && let Some(case) = vt.cases.get(case_index as usize)
+        {
+            let case_fq = format!("{fq}::{}", case.name);
+            if let Some(case_type_id) = self.ctx.type_map.get(&case_fq) {
+                // ref.cast to case type, then struct.get field 1 (payload)
+                let cast = WirInstr::RefCast {
+                    type_id: case_type_id.clone(),
+                    nullable: false,
+                    expr: Box::new(val),
+                };
+                return WirInstr::StructGet {
+                    type_id: case_type_id.clone(),
+                    field_name: "payload_0".to_string(),
+                    expr: Box::new(cast),
+                };
             }
         }
 
         // Fallback
         val
     }
-
 }

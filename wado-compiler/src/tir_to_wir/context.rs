@@ -1,5 +1,5 @@
 //! WIR builder context — accumulates types, functions, and other module-level
-//! entries during the tir_to_wir translation, then produces a final `WirModule`.
+//! entries during the `tir_to_wir` translation, then produces a final `WirModule`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,7 +15,7 @@ use crate::wir::{
     WirTypeDef, WirTypeId,
 };
 
-/// Builder context for the tir_to_wir translation.
+/// Builder context for the `tir_to_wir` translation.
 ///
 /// Accumulates all WIR entities and provides lookup maps for resolving
 /// type and function references during translation.
@@ -26,19 +26,19 @@ pub struct WirContext<'a> {
     // === Type Registry ===
     /// All type definitions in registration order.
     pub types: Vec<WirTypeDef>,
-    /// Map from fully-qualified type name to WirTypeId.
+    /// Map from fully-qualified type name to `WirTypeId`.
     pub type_map: IndexMap<String, WirTypeId>,
     /// Rec groups (mutually recursive types).
     pub rec_groups: Vec<WirRecGroup>,
-    /// Map from StructName to WirTypeId (for struct lookup by qualified name).
+    /// Map from `StructName` to `WirTypeId` (for struct lookup by qualified name).
     pub struct_type_map: IndexMap<StructName, WirTypeId>,
-    /// Map from element TypeId to WirTypeId for raw GC array types.
+    /// Map from element `TypeId` to `WirTypeId` for raw GC array types.
     pub array_type_map: IndexMap<TypeId, WirTypeId>,
-    /// Map from element type name to WirTypeId (dedup for arrays).
+    /// Map from element type name to `WirTypeId` (dedup for arrays).
     pub array_type_by_name: IndexMap<String, WirTypeId>,
-    /// Map from tuple element TypeIds to WirTypeId.
+    /// Map from tuple element `TypeIds` to `WirTypeId`.
     pub tuple_type_map: IndexMap<Vec<TypeId>, WirTypeId>,
-    /// Map from variant qualified name to WirTypeId.
+    /// Map from variant qualified name to `WirTypeId`.
     pub variant_type_map: IndexMap<String, WirTypeId>,
     /// Variant case type info: case WIR type index → (variant WIR type index, case index).
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
@@ -46,7 +46,7 @@ pub struct WirContext<'a> {
     // === Function Registry ===
     /// All function definitions (with optional bodies).
     pub functions: Vec<WirFunction>,
-    /// Map from fully-qualified function name to WirFuncId.
+    /// Map from fully-qualified function name to `WirFuncId`.
     pub func_map: IndexMap<String, WirFuncId>,
     /// Function type index for each function (into types vec).
     pub func_type_ids: Vec<WirTypeId>,
@@ -78,7 +78,7 @@ pub struct WirContext<'a> {
     pub available_wasi_funcs: IndexSet<String>,
 
     // === Function body translation helpers ===
-    /// Pending function bodies: (function index in self.functions, TirFunction ref, TypeTable ref)
+    /// Pending function bodies: (function index in self.functions, `TirFunction` ref, `TypeTable` ref)
     pub pending_bodies: Vec<PendingFunctionBody>,
 }
 
@@ -95,7 +95,7 @@ pub struct PendingFunctionBody {
 }
 
 impl<'a> WirContext<'a> {
-    /// Create a new WirContext from a Project.
+    /// Create a new `WirContext` from a Project.
     pub fn new(project: &'a Project) -> Self {
         // Collect string literals from all TIR modules (deduped)
         let mut string_literals = Vec::new();
@@ -137,7 +137,7 @@ impl<'a> WirContext<'a> {
 
     // === Type Registration ===
 
-    /// Register a type definition and return its WirTypeId.
+    /// Register a type definition and return its `WirTypeId`.
     pub fn register_type(&mut self, fq: String, typedef: WirTypeDef) -> WirTypeId {
         let index = u32::try_from(self.types.len()).expect("too many types");
         let fq_rc: Rc<str> = Rc::from(fq.as_str());
@@ -147,7 +147,7 @@ impl<'a> WirContext<'a> {
         type_id
     }
 
-    /// Register a function type definition and return its WirTypeId.
+    /// Register a function type definition and return its `WirTypeId`.
     pub fn register_func_type(
         &mut self,
         fq: String,
@@ -179,7 +179,7 @@ impl<'a> WirContext<'a> {
 
     // === Function Registration ===
 
-    /// Register a function import and return its WirFuncId.
+    /// Register a function import and return its `WirFuncId`.
     pub fn register_import_func(
         &mut self,
         module: String,
@@ -206,7 +206,7 @@ impl<'a> WirContext<'a> {
         func_id
     }
 
-    /// Register a defined function (with body) and return its WirFuncId.
+    /// Register a defined function (with body) and return its `WirFuncId`.
     pub fn register_function(&mut self, func: WirFunction) -> WirFuncId {
         let func_idx =
             self.import_func_count + u32::try_from(self.functions.len()).expect("too many funcs");
@@ -262,7 +262,7 @@ impl<'a> WirContext<'a> {
         self.entry_tir().type_table.borrow()
     }
 
-    /// Convert a TIR TypeId to a WirType.
+    /// Convert a TIR `TypeId` to a `WirType`.
     pub fn type_id_to_wir_type(&self, type_table: &TypeTable, type_id: TypeId) -> WirType {
         use crate::tir::{PrimitiveType, ResolvedType};
         match type_table.get(type_id) {
@@ -293,7 +293,10 @@ impl<'a> WirContext<'a> {
                 let struct_name = StructName::new(module_source.clone(), name.clone());
                 // Special case: String struct
                 let lookup_name = if name == "String" {
-                    StructName::new(ModuleSource::core("prelude/string.wado"), "String".to_string())
+                    StructName::new(
+                        ModuleSource::core("prelude/string.wado"),
+                        "String".to_string(),
+                    )
                 } else {
                     struct_name
                 };
@@ -315,9 +318,7 @@ impl<'a> WirContext<'a> {
             } if name == "Array" && type_args.len() == 1 => {
                 // Look up Array<T> struct type
                 let elem_type_name = type_table.mangle_type_name(type_args[0]);
-                let array_fq = format!(
-                    "core:prelude//Array<{elem_type_name}>"
-                );
+                let array_fq = format!("core:prelude//Array<{elem_type_name}>");
                 if let Some(type_id) = self.type_map.get(&array_fq) {
                     WirType::Ref {
                         type_id: type_id.clone(),
@@ -385,8 +386,12 @@ impl<'a> WirContext<'a> {
                     },
                 }
             }
-            ResolvedType::Enum { name, module_source, .. } => {
-                let fq = format!("{}//enum:{name}", module_source);
+            ResolvedType::Enum {
+                name,
+                module_source,
+                ..
+            } => {
+                let fq = format!("{module_source}//enum:{name}");
                 if let Some(type_id) = self.type_map.get(&fq) {
                     WirType::Enum {
                         type_id: type_id.clone(),
@@ -450,7 +455,7 @@ impl<'a> WirContext<'a> {
 
     // === Build Final WirModule ===
 
-    /// Consume this context and produce the final WirModule.
+    /// Consume this context and produce the final `WirModule`.
     pub fn into_wir_module(self) -> WirModule {
         WirModule {
             types: self.types,
