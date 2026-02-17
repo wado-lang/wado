@@ -881,11 +881,11 @@ After this phase: `wado dump --wir --unparse` works but shows an empty module.
 
 Set up the mechanism to run the same E2E test fixtures through the WIR pipeline.
 
-- [ ] **Step 2a**: Create `compile_with_wir(&Project) -> Vec<u8>` in a new module. This is the WIR pipeline entry point: calls `tir_to_wir` → `wir_emit` and returns Wasm bytes. Initially returns a minimal valid Wasm component (stub).
-- [ ] **Step 2b**: Create `tests/wir_e2e.rs` — a parallel E2E test harness that uses `compile_with_wir` instead of `Codegen::generate_wasm`. Same fixtures, same `__DATA__` specs. Gated by `WADO_WIR_TEST=1` so normal `make test` is unaffected.
-- [ ] **Step 2c**: Add a progress tracking mechanism — e.g., a test that counts how many fixtures pass vs. fail through the WIR pipeline, printed as a summary.
+- [x] **Step 2a**: Create `compile_with_wir(&Project) -> Vec<u8>` in `tir_to_wir/mod.rs`. Uses `CompilerOptions.use_wir_backend` flag to switch codegen path. Stub returns a minimal valid Wasm component (synchronous `run` → `result<_, _>`).
+- [x] **Step 2b**: Create `tests/wir_e2e.rs` — a parallel E2E test harness that uses `compile_with_wir` instead of `Codegen::generate_wasm`. Same fixtures, same `__DATA__` specs. Gated by `WADO_WIR_TEST=1` so normal `make test` is unaffected.
+- [x] **Step 2c**: Create `tests/wir_progress.rs` — progress tracker that runs all fixtures through the WIR pipeline and reports pass/fail counts. Initial result: 94/670 (14.0%) pass at O2 (tests expecting no output or compile errors before codegen).
 
-After this phase: `WADO_WIR_TEST=1 cargo test --test wir_e2e` runs but all tests fail. The scaffolding for incremental progress is in place.
+After this phase: `WADO_WIR_TEST=1 cargo test --test wir_e2e` runs. 94/670 fixtures pass through the stub (those expecting no output). The scaffolding for incremental progress is in place.
 
 ### Phase 3: Core Translation
 
