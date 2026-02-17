@@ -165,12 +165,30 @@ impl FunctionTranslator<'_, '_> {
     /// Check if a type requires value copy (struct, array, tuple, variant, option).
     fn needs_value_copy(&self, type_id: TypeId) -> bool {
         match self.type_table.get(type_id) {
-            ResolvedType::Struct { name, module_source, .. } => {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                base_name,
+                ..
+            } => {
                 // Internal Box<T> types are GC reference cells for primitive boxing.
                 // They should share the heap object on assignment, not deep-copy.
-                !(name.starts_with("Box<") && module_source.is_core_internal())
+                // Monomorphized Box<T> may have EntryPoint as module_source, so also
+                // check the base_name field.
+                let is_box = (name.starts_with("Box<") && module_source.is_core_internal())
+                    || base_name.as_deref() == Some("Box");
+                !is_box
             }
-            ResolvedType::GenericInstance { .. } | ResolvedType::Variant { .. } => true,
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => {
+                // Internal Box<T> types are GC reference cells for primitive boxing.
+                // They should share the heap object on assignment, not deep-copy.
+                !(name == "Box" && module_source.is_core_internal())
+            }
+            ResolvedType::Variant { .. } => true,
             ResolvedType::Tuple(elements) => !elements.is_empty(),
             ResolvedType::Option(inner) => self.needs_value_copy(*inner),
             _ => false,
@@ -384,8 +402,21 @@ impl FunctionTranslator<'_, '_> {
             }
             TirStmtKind::Expr(expr) => {
                 let instr = self.translate_expr(expr);
-                // If the expression has a non-unit type, drop it
-                if expr.type_id != TypeTable::UNIT && expr.type_id != TypeTable::NEVER {
+                // If the expression has a non-unit type, drop it.
+                // Exception: assignments to fields/indices produce void WIR instructions
+                // (StructSet/ArraySet), so don't wrap them in Drop.
+                let is_void_assign = matches!(
+                    &expr.kind,
+                    TirExprKind::Assign { target, .. }
+                        if matches!(
+                            &target.kind,
+                            TirExprKind::FieldAccess { .. } | TirExprKind::Index { .. }
+                        )
+                );
+                if !is_void_assign
+                    && expr.type_id != TypeTable::UNIT
+                    && expr.type_id != TypeTable::NEVER
+                {
                     Some(WirInstr::Drop(Box::new(instr)))
                 } else {
                     Some(instr)
@@ -1062,20 +1093,22 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
+        // Resolve newtypes to their base primitive type
+        let base_type_id = self.type_table.get_ultimate_base_type(left_type_id);
         let is_i64 = matches!(
-            self.type_table.get(left_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
         let is_f64 = matches!(
-            self.type_table.get(left_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::F64)
         );
         let is_f32 = matches!(
-            self.type_table.get(left_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::F32)
         );
         let is_unsigned = matches!(
-            self.type_table.get(left_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(
                 PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
             )
@@ -1300,16 +1333,18 @@ impl FunctionTranslator<'_, '_> {
         operand: Box<WirInstr>,
         operand_type_id: TypeId,
     ) -> WirInstr {
+        // Resolve newtypes to their base primitive type
+        let base_type_id = self.type_table.get_ultimate_base_type(operand_type_id);
         let is_i64 = matches!(
-            self.type_table.get(operand_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
         let is_f64 = matches!(
-            self.type_table.get(operand_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::F64)
         );
         let is_f32 = matches!(
-            self.type_table.get(operand_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::F32)
         );
 
@@ -1343,8 +1378,11 @@ impl FunctionTranslator<'_, '_> {
     /// Translate a type cast.
     fn translate_cast(&mut self, inner: &TirExpr, from_type: TypeId, to_type: TypeId) -> WirInstr {
         let inner_instr = self.translate_expr(inner);
-        let from = self.type_table.get(from_type);
-        let to = self.type_table.get(to_type);
+        // Resolve newtypes to their base types for cast operations
+        let from_base = self.type_table.get_ultimate_base_type(from_type);
+        let to_base = self.type_table.get_ultimate_base_type(to_type);
+        let from = self.type_table.get(from_base);
+        let to = self.type_table.get(to_base);
 
         // Simple numeric casts
         match (from, to) {
@@ -2338,6 +2376,18 @@ impl FunctionTranslator<'_, '_> {
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
                 };
+
+                // Special case: Option<T> — represented as nullable ref, not a variant struct
+                if let ResolvedType::Option(_) = self.type_table.get(scrut_type) {
+                    return if variant_name == "Some" {
+                        // Some(_) → not null
+                        WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(Box::new(scrut_get))))
+                    } else {
+                        // None → is null
+                        WirInstr::RefIsNull(Box::new(scrut_get))
+                    };
+                }
+
                 // Look up variant type info to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(scrut_type) {
                     ResolvedType::Variant {
@@ -2501,6 +2551,51 @@ impl FunctionTranslator<'_, '_> {
                 if bindings.is_empty() {
                     return;
                 }
+
+                // Special case: Option<T> — extract inner value from nullable ref
+                if let ResolvedType::Option(inner) = self.type_table.get(*enum_type) {
+                    if variant_name == "Some" {
+                        // For Some(x), the value is the scrutinee itself (already non-null in
+                        // the matched branch). For primitive types in Box<T>, extract .value.
+                        let inner_wir =
+                            self.ctx.type_id_to_wir_type(self.type_table, *inner);
+                        for binding in bindings {
+                            if let TirPattern::Binding { local_index, .. } = binding {
+                                let scrut_ref = WirInstr::LocalGet {
+                                    name: scrut_local.to_string(),
+                                };
+                                let extracted = match inner_wir {
+                                    WirType::I32
+                                    | WirType::I64
+                                    | WirType::F32
+                                    | WirType::F64 => {
+                                        // Primitive in Box<T>: extract .value field
+                                        let opt_wir = self.ctx.type_id_to_wir_type(
+                                            self.type_table,
+                                            *enum_type,
+                                        );
+                                        if let WirType::Ref { type_id, .. } = opt_wir {
+                                            WirInstr::StructGet {
+                                                type_id,
+                                                field_name: "value".to_string(),
+                                                expr: Box::new(scrut_ref),
+                                            }
+                                        } else {
+                                            scrut_ref
+                                        }
+                                    }
+                                    _ => scrut_ref,
+                                };
+                                instrs.push(WirInstr::LocalSet {
+                                    name: self.local_name(*local_index),
+                                    value: Box::new(extracted),
+                                });
+                            }
+                        }
+                    }
+                    return;
+                }
+
                 // Look up the variant type to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(*enum_type) {
                     ResolvedType::Variant {

@@ -697,6 +697,36 @@ impl<'a> WirEmitter<'a> {
                 };
                 let temp_name = format!("__copy_source_{}", type_id.index());
                 locals.push((temp_name, ValType::Ref(ref_type)));
+                // Declare temp locals for array field deep copies
+                if let Some(array_field_infos) =
+                    self.get_struct_array_field_infos(type_id.index())
+                {
+                    for (field_idx, arr_type_idx) in array_field_infos {
+                        let arr_wasm_idx = self.resolve_type_index(arr_type_idx);
+                        let arr_ref = RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(arr_wasm_idx),
+                        };
+                        let src_name = format!(
+                            "__copy_arr_src_{}_{}",
+                            type_id.index(),
+                            field_idx
+                        );
+                        let dst_name = format!(
+                            "__copy_arr_dst_{}_{}",
+                            type_id.index(),
+                            field_idx
+                        );
+                        let len_name = format!(
+                            "__copy_arr_len_{}_{}",
+                            type_id.index(),
+                            field_idx
+                        );
+                        locals.push((src_name, ValType::Ref(arr_ref)));
+                        locals.push((dst_name, ValType::Ref(arr_ref)));
+                        locals.push((len_name, ValType::I32));
+                    }
+                }
             }
             // For all other instructions, walk children generically
             other => {
@@ -1465,6 +1495,8 @@ impl<'a> WirEmitter<'a> {
         match source_type {
             WirCopyType::Struct { fields } => {
                 let wasm_type_idx = self.resolve_type_index(type_id.index());
+                // Collect array field info for deep copy
+                let array_fields = self.get_struct_array_field_infos(type_id.index());
                 // Emit source expression
                 self.emit_instr(f, expr);
                 // Look up the pre-declared temp local
@@ -1474,25 +1506,79 @@ impl<'a> WirEmitter<'a> {
                 f.instruction(&Instruction::LocalSet(temp_idx));
                 // For each field: load from temp, get field (handle packed fields)
                 for field in fields {
-                    f.instruction(&Instruction::LocalGet(temp_idx));
-                    match self.is_field_packed_by_index(type_id.index(), field.index) {
-                        Some(true) => {
-                            f.instruction(&Instruction::StructGetS {
-                                struct_type_index: wasm_type_idx,
-                                field_index: field.index,
-                            });
-                        }
-                        Some(false) => {
-                            f.instruction(&Instruction::StructGetU {
-                                struct_type_index: wasm_type_idx,
-                                field_index: field.index,
-                            });
-                        }
-                        None => {
-                            f.instruction(&Instruction::StructGet {
-                                struct_type_index: wasm_type_idx,
-                                field_index: field.index,
-                            });
+                    // Check if this field needs array deep copy
+                    let arr_info = array_fields.as_ref().and_then(|infos| {
+                        infos.iter().find(|(fi, _)| *fi == field.index)
+                    });
+                    if let Some(&(_, arr_wir_idx)) = arr_info {
+                        // Deep copy: create new array, copy elements
+                        let arr_wasm_idx = self.resolve_type_index(arr_wir_idx);
+                        let src_name = format!(
+                            "__copy_arr_src_{}_{}",
+                            type_id.index(),
+                            field.index
+                        );
+                        let dst_name = format!(
+                            "__copy_arr_dst_{}_{}",
+                            type_id.index(),
+                            field.index
+                        );
+                        let len_name = format!(
+                            "__copy_arr_len_{}_{}",
+                            type_id.index(),
+                            field.index
+                        );
+                        let src_local = self.resolve_local(&src_name);
+                        let dst_local = self.resolve_local(&dst_name);
+                        let len_local = self.resolve_local(&len_name);
+                        // Get source array from struct field
+                        f.instruction(&Instruction::LocalGet(temp_idx));
+                        f.instruction(&Instruction::StructGet {
+                            struct_type_index: wasm_type_idx,
+                            field_index: field.index,
+                        });
+                        f.instruction(&Instruction::LocalSet(src_local));
+                        // Get length
+                        f.instruction(&Instruction::LocalGet(src_local));
+                        f.instruction(&Instruction::ArrayLen);
+                        f.instruction(&Instruction::LocalSet(len_local));
+                        // Create new array with same length (default filled)
+                        f.instruction(&Instruction::LocalGet(len_local));
+                        f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
+                        f.instruction(&Instruction::LocalSet(dst_local));
+                        // Copy elements: array.copy dst 0 src 0 len
+                        f.instruction(&Instruction::LocalGet(dst_local));
+                        f.instruction(&Instruction::I32Const(0));
+                        f.instruction(&Instruction::LocalGet(src_local));
+                        f.instruction(&Instruction::I32Const(0));
+                        f.instruction(&Instruction::LocalGet(len_local));
+                        f.instruction(&Instruction::ArrayCopy {
+                            array_type_index_dst: arr_wasm_idx,
+                            array_type_index_src: arr_wasm_idx,
+                        });
+                        // Push the new array on stack (for struct.new)
+                        f.instruction(&Instruction::LocalGet(dst_local));
+                    } else {
+                        f.instruction(&Instruction::LocalGet(temp_idx));
+                        match self.is_field_packed_by_index(type_id.index(), field.index) {
+                            Some(true) => {
+                                f.instruction(&Instruction::StructGetS {
+                                    struct_type_index: wasm_type_idx,
+                                    field_index: field.index,
+                                });
+                            }
+                            Some(false) => {
+                                f.instruction(&Instruction::StructGetU {
+                                    struct_type_index: wasm_type_idx,
+                                    field_index: field.index,
+                                });
+                            }
+                            None => {
+                                f.instruction(&Instruction::StructGet {
+                                    struct_type_index: wasm_type_idx,
+                                    field_index: field.index,
+                                });
+                            }
                         }
                     }
                 }
@@ -1524,6 +1610,35 @@ impl<'a> WirEmitter<'a> {
                 // Variant and option copies are complex; pass through for now
                 self.emit_instr(f, expr);
             }
+        }
+    }
+
+    /// Get struct fields that reference raw array types.
+    /// Returns Vec of (field_index, array_wir_type_index) for fields whose type
+    /// is a ref to a WirTypeDef::Array.
+    fn get_struct_array_field_infos(&self, struct_wir_idx: u32) -> Option<Vec<(u32, u32)>> {
+        let idx = struct_wir_idx as usize;
+        if idx >= self.wir.types.len() {
+            return None;
+        }
+        let WirTypeDef::Struct(ref st) = self.wir.types[idx] else {
+            return None;
+        };
+        let mut result = Vec::new();
+        for (i, field) in st.fields.iter().enumerate() {
+            if let WirType::Ref { type_id: ref tid, .. } = field.ty {
+                let arr_idx = tid.index() as usize;
+                if arr_idx < self.wir.types.len()
+                    && matches!(self.wir.types[arr_idx], WirTypeDef::Array(_))
+                {
+                    result.push((u32::try_from(i).unwrap(), tid.index()));
+                }
+            }
+        }
+        if result.is_empty() {
+            None
+        } else {
+            Some(result)
         }
     }
 
