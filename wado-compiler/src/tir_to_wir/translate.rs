@@ -8,7 +8,7 @@ use crate::tir::{
     TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
     TypeTable,
 };
-use crate::wir::{WirAbstractHeapType, WirInstr, WirType};
+use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType};
 use indexmap::IndexMap;
 
 use super::context::WirContext;
@@ -162,6 +162,91 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Check if a type requires value copy (struct, array, tuple, variant, option).
+    fn needs_value_copy(&self, type_id: TypeId) -> bool {
+        match self.type_table.get(type_id) {
+            ResolvedType::Struct { name, module_source, .. } => {
+                // Internal Box<T> types are GC reference cells for primitive boxing.
+                // They should share the heap object on assignment, not deep-copy.
+                !(name.starts_with("Box<") && module_source.is_core_internal())
+            }
+            ResolvedType::GenericInstance { .. } | ResolvedType::Variant { .. } => true,
+            ResolvedType::Tuple(elements) => !elements.is_empty(),
+            ResolvedType::Option(inner) => self.needs_value_copy(*inner),
+            _ => false,
+        }
+    }
+
+    /// Check if an expression is "fresh" (doesn't need value copy).
+    fn is_fresh_value(expr: &TirExpr) -> bool {
+        matches!(
+            &expr.kind,
+            TirExprKind::Move { .. }
+                | TirExprKind::StructLiteral { .. }
+                | TirExprKind::TupleLiteral { .. }
+                | TirExprKind::ArrayLiteral { .. }
+                | TirExprKind::VariantConstruct { .. }
+                | TirExprKind::EnumConstruct { .. }
+                | TirExprKind::OptionSome { .. }
+                | TirExprKind::Null
+                | TirExprKind::Call { .. }
+                | TirExprKind::MethodCall { .. }
+                | TirExprKind::StaticCall { .. }
+        )
+    }
+
+    /// Wrap a translated value instruction in `ValueCopy` if needed.
+    fn maybe_value_copy(
+        &self,
+        value: &TirExpr,
+        translated: WirInstr,
+    ) -> WirInstr {
+        if self.needs_value_copy(value.type_id) && !Self::is_fresh_value(value) {
+            self.build_value_copy(value.type_id, translated)
+        } else {
+            translated
+        }
+    }
+
+    /// Build a ValueCopy instruction for the given type.
+    /// Uses the WIR type ID to identify the struct, and builds a shallow copy descriptor.
+    fn build_value_copy(&self, type_id: TypeId, expr: WirInstr) -> WirInstr {
+        use crate::wir::{WirCopyField, WirCopyType};
+        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, type_id);
+        if let WirType::Ref { type_id: wir_tid, .. } = wir_type {
+            // Look up the WIR struct type to get field count
+            let field_count = self.ctx.get_struct_field_count(&wir_tid);
+            let copy_fields: Vec<WirCopyField> = (0..field_count)
+                .map(|i| WirCopyField {
+                    index: i,
+                    needs_copy: false, // Shallow copy (field-by-field, like codegen)
+                    copy_type: None,
+                })
+                .collect();
+            WirInstr::ValueCopy {
+                type_id: wir_tid,
+                source_type: WirCopyType::Struct { fields: copy_fields },
+                expr: Box::new(expr),
+            }
+        } else {
+            expr
+        }
+    }
+
+    /// Build the qualified global name matching the codegen convention.
+    fn make_global_name(
+        &self,
+        module_source: &crate::name::ModuleSource,
+        name: &str,
+    ) -> String {
+        if module_source.is_entry_point() {
+            format!("global:{name}")
+        } else {
+            let module_path = module_source.to_path();
+            format!("global:{}::{name}", module_path.join("::"))
+        }
+    }
+
     /// Translate the top-level function body: declares locals and translates statements.
     fn translate_block(&mut self, block: &TirBlock) -> Vec<WirInstr> {
         let mut instrs = Vec::new();
@@ -291,6 +376,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let local_name = self.local_name(*local_index);
                 let value_instr = self.translate_expr(value);
+                let value_instr = self.maybe_value_copy(value, value_instr);
                 Some(WirInstr::LocalSet {
                     name: local_name,
                     value: Box::new(value_instr),
@@ -416,9 +502,10 @@ impl FunctionTranslator<'_, '_> {
                     body: body_instrs,
                 })
             }
-            TirStmtKind::LetPattern { .. } => {
-                // TODO: implement destructuring let
-                None
+            TirStmtKind::LetPattern {
+                pattern, value, ..
+            } => {
+                self.translate_let_pattern(pattern, value)
             }
         }
     }
@@ -455,14 +542,49 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Local { index, .. } => WirInstr::LocalGet {
                 name: self.local_name(*index),
             },
-            TirExprKind::Global { .. } | TirExprKind::GlobalVarGet { .. } => {
-                // TODO: proper global lookup
-                WirInstr::I32Const(0)
+            TirExprKind::Global {
+                module_source,
+                name,
+            } => {
+                // Global function references — currently emitting as i32 const placeholder
+                // (TirExprKind::Global is for function references, not global variables)
+                let full_name = if module_source.is_entry_point() {
+                    name.clone()
+                } else {
+                    format!("{module_source}::{name}")
+                };
+                if let Some(func_id) = self.ctx.func_map.get(&full_name) {
+                    WirInstr::I32Const(func_id.index() as i32)
+                } else {
+                    WirInstr::I32Const(0)
+                }
             }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                // TODO: proper global set
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
+                let global_name = self.make_global_name(module_source, name);
+                WirInstr::GlobalGet {
+                    name: WirName {
+                        display: name.clone(),
+                        fq: global_name,
+                    },
+                }
+            }
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } => {
+                let global_name = self.make_global_name(module_source, name);
                 let val = self.translate_expr(value);
-                WirInstr::Drop(Box::new(val))
+                WirInstr::GlobalSet {
+                    name: WirName {
+                        display: name.clone(),
+                        fq: global_name,
+                    },
+                    value: Box::new(val),
+                }
             }
 
             // === Binary Operations ===
@@ -591,10 +713,13 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Assign { target, value } => {
                 let val = self.translate_expr(value);
                 match &target.kind {
-                    TirExprKind::Local { index, .. } => WirInstr::LocalSet {
-                        name: self.local_name(*index),
-                        value: Box::new(val),
-                    },
+                    TirExprKind::Local { index, .. } => {
+                        let val = self.maybe_value_copy(value, val);
+                        WirInstr::LocalSet {
+                            name: self.local_name(*index),
+                            value: Box::new(val),
+                        }
+                    }
                     TirExprKind::FieldAccess {
                         expr: receiver,
                         field_name,
@@ -1988,6 +2113,74 @@ impl FunctionTranslator<'_, '_> {
 
     // =========================================================================
     // Match translation
+    /// Translate a LetPattern (tuple destructuring) statement.
+    /// Evaluates the tuple expression, stores it in a temp local,
+    /// then binds each element to its pattern binding local.
+    fn translate_let_pattern(
+        &mut self,
+        pattern: &TirPattern,
+        value: &TirExpr,
+    ) -> Option<WirInstr> {
+        let value_instr = self.translate_expr(value);
+        let value_instr = self.maybe_value_copy(value, value_instr);
+
+        match pattern {
+            TirPattern::Tuple(patterns) => {
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value.type_id);
+                if let WirType::Ref { ref type_id, .. } = wir_type {
+                    let mut instrs = Vec::new();
+
+                    // Declare and assign a temp local for the tuple
+                    let temp_name = format!(
+                        "__let_pattern_{}",
+                        self.match_counter
+                    );
+                    self.match_counter += 1;
+                    instrs.push(WirInstr::DeclareLocal {
+                        name: temp_name.clone(),
+                        ty: wir_type.clone(),
+                    });
+                    instrs.push(WirInstr::LocalSet {
+                        name: temp_name.clone(),
+                        value: Box::new(value_instr),
+                    });
+
+                    // Bind each element
+                    for (i, sub_pattern) in patterns.iter().enumerate() {
+                        if let TirPattern::Binding { local_index, .. } = sub_pattern {
+                            let local_name = self.local_name(*local_index);
+                            instrs.push(WirInstr::LocalSet {
+                                name: local_name,
+                                value: Box::new(WirInstr::StructGet {
+                                    type_id: type_id.clone(),
+                                    field_name: format!("{i}"),
+                                    expr: Box::new(WirInstr::LocalGet {
+                                        name: temp_name.clone(),
+                                    }),
+                                }),
+                            });
+                        }
+                        // Wildcard patterns: skip (no binding)
+                    }
+
+                    Some(WirInstr::Seq(instrs))
+                } else {
+                    // Non-ref tuple type — shouldn't happen for real tuples
+                    None
+                }
+            }
+            TirPattern::Binding { local_index, .. } => {
+                // Simple binding (not a tuple destructure)
+                let local_name = self.local_name(*local_index);
+                Some(WirInstr::LocalSet {
+                    name: local_name,
+                    value: Box::new(value_instr),
+                })
+            }
+            _ => None,
+        }
+    }
+
     // =========================================================================
 
     /// Translate match expression as nested if-else chain.

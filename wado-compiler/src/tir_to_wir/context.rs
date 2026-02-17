@@ -62,6 +62,8 @@ pub struct WirContext<'a> {
     // === Other sections ===
     /// Global variables.
     pub globals: Vec<WirGlobal>,
+    /// Map from qualified global name to index in `globals`.
+    pub global_map: IndexMap<String, u32>,
     /// Exports.
     pub exports: Vec<WirExport>,
     /// Data segments (string literals).
@@ -125,6 +127,7 @@ impl<'a> WirContext<'a> {
             import_func_count: 0,
             import_func_map: IndexMap::new(),
             globals: Vec::new(),
+            global_map: IndexMap::new(),
             exports: Vec::new(),
             data: Vec::new(),
             string_literal_map: IndexMap::new(),
@@ -484,6 +487,19 @@ impl<'a> WirContext<'a> {
                 // For any unhandled types, use i32 as placeholder
                 WirType::I32
             }
+        }
+    }
+
+    /// Get the number of fields in a WIR struct type.
+    pub fn get_struct_field_count(&self, type_id: &WirTypeId) -> u32 {
+        let idx = type_id.index() as usize;
+        if idx < self.types.len() {
+            match &self.types[idx] {
+                WirTypeDef::Struct(s) => u32::try_from(s.fields.len()).unwrap(),
+                _ => 0,
+            }
+        } else {
+            0
         }
     }
 

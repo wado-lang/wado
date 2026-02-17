@@ -6,8 +6,9 @@
 use indexmap::IndexMap;
 
 use crate::wir::{
-    WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirModule, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirAbstractHeapType, WirArrayType, WirCopyType, WirExportDesc, WirFuncType, WirFunction,
+    WirImportDesc, WirInstr, WirModule, WirStructType, WirType, WirTypeDef, WirTypeId,
+    WirVariantType,
 };
 
 use wasm_encoder::{
@@ -41,6 +42,8 @@ struct WirEmitter<'a> {
     func_index_offset: u32,
     /// Map from `WirFuncId` index → Wasm function index.
     func_index_map: IndexMap<u32, u32>,
+    /// Map from global fq name to Wasm global index.
+    global_name_map: IndexMap<String, u32>,
     /// Local name map for current function.
     current_locals: IndexMap<String, u32>,
     /// Next local index for current function.
@@ -58,6 +61,7 @@ impl<'a> WirEmitter<'a> {
             struct_field_map: IndexMap::new(),
             func_index_offset: 0,
             func_index_map: IndexMap::new(),
+            global_name_map: IndexMap::new(),
             current_locals: IndexMap::new(),
             next_local: 0,
             next_type_idx: 0,
@@ -89,6 +93,7 @@ impl<'a> WirEmitter<'a> {
         // Memory is imported from component level, not defined here
 
         // 5. Global section
+        self.build_global_name_map();
         if !self.wir.globals.is_empty() {
             let globals = self.emit_global_section();
             module.section(&globals);
@@ -406,6 +411,20 @@ impl<'a> WirEmitter<'a> {
         }
     }
 
+    fn build_global_name_map(&mut self) {
+        for (i, global) in self.wir.globals.iter().enumerate() {
+            let idx = u32::try_from(i).unwrap();
+            self.global_name_map.insert(global.name.fq.clone(), idx);
+        }
+    }
+
+    fn resolve_global(&self, name: &str) -> u32 {
+        self.global_name_map.get(name).copied().unwrap_or_else(|| {
+            eprintln!("[WIR emit] Warning: global '{name}' not found, using index 0");
+            0
+        })
+    }
+
     // === Global Section ===
 
     fn emit_global_section(&self) -> GlobalSection {
@@ -665,6 +684,20 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(if_true, locals);
                 self.collect_declared_locals_instr(if_false, locals);
             }
+            // Value copy needs a temp local for the source struct ref
+            WirInstr::ValueCopy {
+                type_id, expr, ..
+            } => {
+                self.collect_declared_locals_instr(expr, locals);
+                // Declare temp local for the struct copy source
+                let wasm_type_idx = self.resolve_type_index(type_id.index());
+                let ref_type = RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(wasm_type_idx),
+                };
+                let temp_name = format!("__copy_source_{}", type_id.index());
+                locals.push((temp_name, ValType::Ref(ref_type)));
+            }
             // For all other instructions, walk children generically
             other => {
                 other.for_each_child(&mut |child| {
@@ -675,7 +708,7 @@ impl<'a> WirEmitter<'a> {
     }
 
     /// Emit a single WIR instruction to the Wasm function.
-    fn emit_instr(&self, f: &mut Function, instr: &WirInstr) {
+    fn emit_instr(&mut self, f: &mut Function, instr: &WirInstr) {
         match instr {
             WirInstr::DeclareLocal { .. } => {
                 // Already handled in pre-allocation
@@ -694,14 +727,14 @@ impl<'a> WirEmitter<'a> {
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalTee(idx));
             }
-            WirInstr::GlobalGet { name: _ } => {
-                // TODO: resolve global index
-                f.instruction(&Instruction::GlobalGet(0));
+            WirInstr::GlobalGet { name } => {
+                let idx = self.resolve_global(&name.fq);
+                f.instruction(&Instruction::GlobalGet(idx));
             }
-            WirInstr::GlobalSet { name: _, value } => {
+            WirInstr::GlobalSet { name, value } => {
                 self.emit_instr(f, value);
-                // TODO: resolve global index
-                f.instruction(&Instruction::GlobalSet(0));
+                let idx = self.resolve_global(&name.fq);
+                f.instruction(&Instruction::GlobalSet(idx));
             }
 
             // Constants
@@ -1354,6 +1387,15 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
+            // Value copy — struct shallow copy (field-by-field)
+            WirInstr::ValueCopy {
+                type_id,
+                source_type,
+                expr,
+            } => {
+                self.emit_value_copy(f, type_id, source_type, expr);
+            }
+
             // Everything else - emit unreachable for unimplemented instructions
             other => {
                 eprintln!("[WIR-EMIT] unhandled instruction: {other:?}");
@@ -1396,7 +1438,7 @@ impl<'a> WirEmitter<'a> {
     // === Helpers ===
 
     fn emit_binary(
-        &self,
+        &mut self,
         f: &mut Function,
         left: &WirInstr,
         right: &WirInstr,
@@ -1407,9 +1449,95 @@ impl<'a> WirEmitter<'a> {
         f.instruction(&op);
     }
 
-    fn emit_unary(&self, f: &mut Function, operand: &WirInstr, op: Instruction<'_>) {
+    fn emit_unary(&mut self, f: &mut Function, operand: &WirInstr, op: Instruction<'_>) {
         self.emit_instr(f, operand);
         f.instruction(&op);
+    }
+
+    /// Emit a value copy instruction (struct shallow copy).
+    fn emit_value_copy(
+        &mut self,
+        f: &mut Function,
+        type_id: &WirTypeId,
+        source_type: &WirCopyType,
+        expr: &WirInstr,
+    ) {
+        match source_type {
+            WirCopyType::Struct { fields } => {
+                let wasm_type_idx = self.resolve_type_index(type_id.index());
+                // Emit source expression
+                self.emit_instr(f, expr);
+                // Look up the pre-declared temp local
+                let temp_name = format!("__copy_source_{}", type_id.index());
+                let temp_idx = self.resolve_local(&temp_name);
+                // Store source to temp
+                f.instruction(&Instruction::LocalSet(temp_idx));
+                // For each field: load from temp, get field (handle packed fields)
+                for field in fields {
+                    f.instruction(&Instruction::LocalGet(temp_idx));
+                    match self.is_field_packed_by_index(type_id.index(), field.index) {
+                        Some(true) => {
+                            f.instruction(&Instruction::StructGetS {
+                                struct_type_index: wasm_type_idx,
+                                field_index: field.index,
+                            });
+                        }
+                        Some(false) => {
+                            f.instruction(&Instruction::StructGetU {
+                                struct_type_index: wasm_type_idx,
+                                field_index: field.index,
+                            });
+                        }
+                        None => {
+                            f.instruction(&Instruction::StructGet {
+                                struct_type_index: wasm_type_idx,
+                                field_index: field.index,
+                            });
+                        }
+                    }
+                }
+                // Create new struct with all field values
+                f.instruction(&Instruction::StructNew(wasm_type_idx));
+            }
+            WirCopyType::Array { element_copy: _ } => {
+                // Array copy: pass through for now (shallow ref copy)
+                self.emit_instr(f, expr);
+            }
+            WirCopyType::Tuple { field_copies: _ } => {
+                // Tuple copy: same as struct copy (tuples are anonymous structs)
+                let wasm_type_idx = self.resolve_type_index(type_id.index());
+                self.emit_instr(f, expr);
+                let temp_name = format!("__copy_source_{}", type_id.index());
+                let temp_idx = self.resolve_local(&temp_name);
+                f.instruction(&Instruction::LocalSet(temp_idx));
+                let field_count = self.get_struct_field_count(type_id);
+                for i in 0..field_count {
+                    f.instruction(&Instruction::LocalGet(temp_idx));
+                    f.instruction(&Instruction::StructGet {
+                        struct_type_index: wasm_type_idx,
+                        field_index: i,
+                    });
+                }
+                f.instruction(&Instruction::StructNew(wasm_type_idx));
+            }
+            WirCopyType::Variant { .. } | WirCopyType::Option { .. } => {
+                // Variant and option copies are complex; pass through for now
+                self.emit_instr(f, expr);
+            }
+        }
+    }
+
+    /// Get the number of fields in a WIR struct type.
+    fn get_struct_field_count(&self, type_id: &WirTypeId) -> u32 {
+        let idx = type_id.index() as usize;
+        if idx < self.wir.types.len() {
+            match &self.wir.types[idx] {
+                WirTypeDef::Struct(s) => u32::try_from(s.fields.len()).unwrap(),
+                _ => 0,
+            }
+        } else {
+            0
+        }
     }
 
     fn emit_const_expr(&self, instr: &WirInstr) -> ConstExpr {
@@ -1461,6 +1589,23 @@ impl<'a> WirEmitter<'a> {
                 WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
                 _ => None,
             };
+        }
+        None
+    }
+
+    /// Check if a struct field (by index) has packed storage.
+    fn is_field_packed_by_index(&self, wir_type_idx: u32, field_index: u32) -> Option<bool> {
+        let idx = wir_type_idx as usize;
+        if idx < self.wir.types.len()
+            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
+        {
+            if let Some(field) = st.fields.get(field_index as usize) {
+                return match &field.ty {
+                    WirType::I8 | WirType::I16 => Some(true),
+                    WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
+                    _ => None,
+                };
+            }
         }
         None
     }

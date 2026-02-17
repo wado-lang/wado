@@ -3,7 +3,7 @@
 
 use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
 use crate::tir::{TirFunction, TypeTable};
-use crate::wir::{WirFunction, WirImport, WirImportDesc, WirMeta, WirName, WirType};
+use crate::wir::{WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType};
 
 use super::context::{PendingFunctionBody, WirContext};
 
@@ -17,6 +17,9 @@ pub fn collect_functions(ctx: &mut WirContext<'_>) {
 
     // Step 2.5: Register memory import from "mem" module
     register_memory_import(ctx);
+
+    // Step 2.7: Register global variables from all modules
+    register_globals(ctx);
 
     // Step 3: Collect and register entry module functions
     register_entry_functions(ctx);
@@ -458,6 +461,114 @@ fn register_exports(ctx: &mut WirContext<'_>) {
                     func_id: func_id.clone(),
                 },
             });
+        }
+    }
+}
+
+/// Register global variables from all TIR modules.
+///
+/// Global naming convention follows codegen:
+/// - Entry module: `"global:{name}"`
+/// - Other modules: `"global:{mod_path}::{name}"`
+fn register_globals(ctx: &mut WirContext<'_>) {
+    let entry_source = ctx.project.entry_module_source.clone();
+
+    for (module_source, tir_mod) in &ctx.project.tir_modules {
+        if module_source.is_wasi() {
+            continue;
+        }
+
+        let type_table = &*tir_mod.type_table.borrow();
+
+        for global in &tir_mod.globals {
+            let global_name = if *module_source == entry_source {
+                format!("global:{}", global.name)
+            } else {
+                let module_path = module_source.to_path();
+                format!("global:{}::{}", module_path.join("::"), global.name)
+            };
+
+            let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
+
+            // For nullable globals (lazy-init reference types), ensure the WIR type is nullable
+            if global.is_nullable {
+                if let WirType::Ref { type_id, .. } = wir_type {
+                    wir_type = WirType::Ref {
+                        type_id,
+                        nullable: true,
+                    };
+                }
+            }
+
+            // Convert the initializer to a WIR constant instruction
+            let init = translate_global_init(&global.initializer, type_table);
+
+            let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
+            ctx.global_map.insert(global_name.clone(), idx);
+
+            ctx.globals.push(WirGlobal {
+                name: WirName {
+                    display: global.name.clone(),
+                    fq: global_name,
+                },
+                ty: wir_type,
+                mutable: global.mutable,
+                init,
+                meta: WirMeta {
+                    module_source: Some(module_source.clone()),
+                    ..WirMeta::default()
+                },
+            });
+        }
+    }
+}
+
+/// Convert a TIR global initializer to a WIR constant instruction.
+fn translate_global_init(
+    init: &crate::tir::TirExpr,
+    type_table: &TypeTable,
+) -> crate::wir::WirInstr {
+    use crate::tir::{PrimitiveType, ResolvedType, TirExprKind};
+    use crate::wir::WirInstr;
+
+    match &init.kind {
+        TirExprKind::IntLiteral { value, .. } => {
+            let base_type = type_table.get_ultimate_base_type(init.type_id);
+            match type_table.get(base_type) {
+                ResolvedType::Primitive(prim) => match prim {
+                    PrimitiveType::I8
+                    | PrimitiveType::I16
+                    | PrimitiveType::I32
+                    | PrimitiveType::U8
+                    | PrimitiveType::U16
+                    | PrimitiveType::U32 => WirInstr::I32Const(*value as i32),
+                    PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Const(*value as i64),
+                    _ => WirInstr::I32Const(*value as i32),
+                },
+                _ => WirInstr::I32Const(*value as i32),
+            }
+        }
+        TirExprKind::FloatLiteral { value, .. } => {
+            let base_type = type_table.get_ultimate_base_type(init.type_id);
+            match type_table.get(base_type) {
+                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
+                _ => WirInstr::F64Const(*value),
+            }
+        }
+        TirExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
+        TirExprKind::Null | TirExprKind::Unit => WirInstr::RefNull {
+            heap_type: crate::wir::WirAbstractHeapType::None,
+        },
+        TirExprKind::Cast { expr: inner, .. } => {
+            // For casts, evaluate the inner expression with the cast's target type
+            let typed_inner = crate::tir::TirExpr::new(inner.kind.clone(), init.type_id, init.span);
+            translate_global_init(&typed_inner, type_table)
+        }
+        _ => {
+            // Non-constant initializers use null placeholder (lazy init at runtime)
+            WirInstr::RefNull {
+                heap_type: crate::wir::WirAbstractHeapType::None,
+            }
         }
     }
 }
