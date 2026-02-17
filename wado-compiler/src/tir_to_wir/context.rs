@@ -177,6 +177,16 @@ impl<'a> WirContext<'a> {
         self.type_map.get(fq)
     }
 
+    /// Look up a struct type by name only (ignoring module_source).
+    /// Used as fallback when module_source doesn't match (e.g., monomorphized
+    /// structs where the type's module_source is the use site, not the definition site).
+    fn lookup_struct_by_name(&self, name: &str) -> Option<&WirTypeId> {
+        self.struct_type_map
+            .iter()
+            .find(|(k, _)| k.name == name)
+            .map(|(_, v)| v)
+    }
+
     // === Function Registration ===
 
     /// Register a function import and return its `WirFuncId`.
@@ -305,6 +315,12 @@ impl<'a> WirContext<'a> {
                         type_id: type_id.clone(),
                         nullable: true,
                     }
+                } else if let Some(type_id) = self.lookup_struct_by_name(name) {
+                    // Fallback: monomorphized structs may have a different module_source
+                    WirType::Ref {
+                        type_id: type_id.clone(),
+                        nullable: true,
+                    }
                 } else {
                     // Fallback: use abstract struct ref
                     WirType::AbstractRef {
@@ -334,19 +350,37 @@ impl<'a> WirContext<'a> {
             ResolvedType::GenericInstance {
                 name,
                 module_source,
-                ..
+                type_args: _,
             } => {
-                // Look up as struct
-                let struct_name = StructName::new(module_source.clone(), name.clone());
-                if let Some(type_id) = self.struct_type_map.get(&struct_name) {
+                // GenericInstance.name is the base name (e.g., "Box"), but after
+                // monomorphization the struct is registered with the mangled name
+                // (e.g., "Box<i32>"). Build the mangled name to look up.
+                let mangled = type_table.mangle_type_name(type_id);
+                let struct_name = StructName::new(module_source.clone(), mangled.clone());
+                if let Some(tid) = self.struct_type_map.get(&struct_name) {
                     WirType::Ref {
-                        type_id: type_id.clone(),
+                        type_id: tid.clone(),
+                        nullable: true,
+                    }
+                } else if let Some(tid) = self.lookup_struct_by_name(&mangled) {
+                    // Fallback: monomorphized structs may have a different module_source
+                    WirType::Ref {
+                        type_id: tid.clone(),
                         nullable: true,
                     }
                 } else {
-                    WirType::AbstractRef {
-                        heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: true,
+                    // Try as variant (in type_map)
+                    let variant_fq = format!("{module_source}//{mangled}");
+                    if let Some(tid) = self.type_map.get(&variant_fq) {
+                        WirType::Ref {
+                            type_id: tid.clone(),
+                            nullable: true,
+                        }
+                    } else {
+                        WirType::AbstractRef {
+                            heap_type: crate::wir::WirAbstractHeapType::Struct,
+                            nullable: true,
+                        }
                     }
                 }
             }
