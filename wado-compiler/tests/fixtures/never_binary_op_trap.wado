@@ -1,0 +1,10 @@
+// `never` in binary operand position: the diverging expression (LHS) traps
+// before the binary operation is reached.
+use { Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let _ = panic("boom") + 1;
+}
+
+__DATA__
+{"stderr_contains": ["boom"], "trapped": true}

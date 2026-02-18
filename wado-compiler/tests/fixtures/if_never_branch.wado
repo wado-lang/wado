@@ -7,23 +7,43 @@ export fn run() with Stdout {
     let t = true;
 
     // else branch returns never - with type annotation
-    let a: i32 = if t { 1 } else { panic("unreachable") };
+    let a: i32 = if t {
+        1;
+    } else {
+        panic("unreachable");
+    };
     assert a == 1;
 
     // then branch returns never - with type annotation
-    let b: i32 = if !t { panic("unreachable") } else { 2 };
+    let b: i32 = if !t {
+        panic("unreachable");
+    } else {
+        2;
+    };
     assert b == 2;
 
     // else branch returns never - type inferred from then branch
-    let c = if t { 3 } else { panic("unreachable") };
+    let c = if t {
+        3;
+    } else {
+        panic("unreachable");
+    };
     assert c == 3;
 
     // then branch returns never - type inferred from else branch
-    let d = if !t { panic("unreachable") } else { 4 };
+    let d = if !t {
+        panic("unreachable");
+    } else {
+        4;
+    };
     assert d == 4;
 
     // unreachable() instead of panic
-    let e: i32 = if t { 5 } else { unreachable() };
+    let e: i32 = if t {
+        5;
+    } else {
+        unreachable();
+    };
     assert e == 5;
 
     println("ok");

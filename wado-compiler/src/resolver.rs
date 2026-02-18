@@ -2275,9 +2275,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Resolve the initializer expression with expected type for type inference
         let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
-        // Type check: initializer type must match declared type
+        // Type check: initializer type must match declared type.
+        // `never` (bottom type) is assignable to any type.
         if initializer.type_id != ty
             && initializer.type_id != TypeTable::UNKNOWN
+            && initializer.type_id != TypeTable::NEVER
             && ty != TypeTable::UNKNOWN
         {
             let _ = self.logger.error(TypeError::TypeMismatch {
@@ -2812,6 +2814,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             let resolved = self.resolve_expr(elem, ctx, Some(element_type));
                             if resolved.type_id != element_type
                                 && resolved.type_id != TypeTable::UNKNOWN
+                                && resolved.type_id != TypeTable::NEVER
                             {
                                 let _ = self.logger.error(TypeError::TypeMismatch {
                                     expected: self.type_table.borrow().type_name(element_type),
@@ -10593,8 +10596,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .iter()
                 .map(|elem| {
                     let resolved = self.resolve_expr(elem, ctx, Some(element_type));
-                    // Type check: each element must match Array element type
-                    if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
+                    // Type check: each element must match Array element type.
+                    // `never` (bottom type) is assignable to any type.
+                    if resolved.type_id != element_type
+                        && resolved.type_id != TypeTable::UNKNOWN
+                        && resolved.type_id != TypeTable::NEVER
+                    {
                         let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: self.type_table.borrow().type_name(element_type),
                             found: self.type_table.borrow().type_name(resolved.type_id),

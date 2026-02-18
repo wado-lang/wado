@@ -3,7 +3,11 @@ use { println, Stdout } from "core:cli";
 
 fn fmt_with(value: &i32, sign_plus: bool, zero_pad: bool, width: i32, align: Alignment) -> String {
     let mut buf = String::with_capacity(64);
-    let fill = if zero_pad { '0' } else { ' ' };
+    let fill = if zero_pad {
+        '0';
+    } else {
+        ' ';
+    };
     let mut f = Formatter {
         fill,
         align,

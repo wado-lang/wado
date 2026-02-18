@@ -511,11 +511,8 @@ impl FunctionTranslator<'_, '_> {
                 if let TirStmtKind::Expr(expr) = &stmt.kind {
                     let instr = self.translate_expr_as_value(expr);
                     instrs.push(instr);
-                    // `never`-typed expressions diverge; add unreachable so the Wasm
-                    // validator accepts this branch inside a value-producing if/match block.
-                    if expr.type_id == TypeTable::NEVER {
-                        instrs.push(WirInstr::Unreachable);
-                    }
+                    // Note: `translate_expr` already appends `unreachable` for
+                    // `never`-typed expressions, so no extra push is needed here.
                     continue;
                 }
                 // Statement-level If with else can produce a value
@@ -663,10 +660,11 @@ impl FunctionTranslator<'_, '_> {
                 let local_name = self.local_name(*local_index);
                 let value_instr = self.translate_expr(value);
                 // If the initializer diverges (`never`), no value reaches the stack,
-                // so LocalSet would be invalid. Emit the call + unreachable instead;
-                // the local is declared but never assigned (unreachable code follows).
+                // so LocalSet would be invalid. `translate_expr` already appends
+                // `unreachable` for `never`-typed expressions, so just emit the
+                // diverging instruction; the local is declared but never assigned.
                 if value.type_id == TypeTable::NEVER {
-                    Some(WirInstr::Seq(vec![value_instr, WirInstr::Unreachable]))
+                    Some(value_instr)
                 } else {
                     let value_instr = self.maybe_value_copy(value, value_instr);
                     Some(WirInstr::LocalSet {
@@ -811,7 +809,22 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate a TIR expression to a WIR instruction.
+    ///
+    /// When the expression has type `never` (bottom type), the returned instruction
+    /// diverges.  The `Seq([instr, Unreachable])` wrapper tells the Wasm validator
+    /// that any subsequent type expectations in the same block are vacuously satisfied,
+    /// so `never`-typed sub-expressions can appear in any value position (binary
+    /// operands, struct fields, array elements, function arguments, …).
     fn translate_expr(&mut self, expr: &TirExpr) -> WirInstr {
+        let instr = self.translate_expr_inner(expr);
+        if expr.type_id == TypeTable::NEVER {
+            WirInstr::Seq(vec![instr, WirInstr::Unreachable])
+        } else {
+            instr
+        }
+    }
+
+    fn translate_expr_inner(&mut self, expr: &TirExpr) -> WirInstr {
         match &expr.kind {
             // === Literals ===
             TirExprKind::IntLiteral { value, .. } => {
@@ -2578,7 +2591,7 @@ impl FunctionTranslator<'_, '_> {
         default: &TirBlock,
         result_type: TypeId,
     ) -> WirInstr {
-        let has_result = result_type != TypeTable::UNIT;
+        let has_result = result_type != TypeTable::UNIT && result_type != TypeTable::NEVER;
         let result_wir_type = if has_result {
             Some(self.ctx.type_id_to_wir_type(self.type_table, result_type))
         } else {
@@ -2795,11 +2808,8 @@ impl FunctionTranslator<'_, '_> {
                 );
                 let body = self.translate_expr(&arm.body);
                 instrs.push(body);
-                // `never`-typed arms never return a value. Add `unreachable` so the
-                // Wasm validator accepts the arm inside an if block that expects a result.
-                if arm.body.type_id == TypeTable::NEVER {
-                    instrs.push(WirInstr::Unreachable);
-                }
+                // Note: `translate_expr` already appends `unreachable` for
+                // `never`-typed arm bodies, so no extra push is needed here.
                 instrs
             };
 
