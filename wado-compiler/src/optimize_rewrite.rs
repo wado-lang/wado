@@ -38,8 +38,6 @@ use indexmap::IndexSet;
 /// 3. Value copy type collection (populate `needed_copy_types` for codegen)
 /// 4. Copy source type expansion (expand nested types for scratch locals)
 pub fn rewrite(project: &mut Project) {
-    use crate::copy_context::CopyContext;
-
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();
         for func_rc in &module.functions {
@@ -62,11 +60,55 @@ pub fn rewrite(project: &mut Project) {
             }
             func.needed_copy_types.extend(copy_types);
 
-            // 4. Expand copy source types
+            // 4. Expand copy source types (recursively expand nested types)
             if !func.needed_copy_types.is_empty() {
                 func.copy_source_types =
-                    CopyContext::expand_copy_types(&func.needed_copy_types, &type_table);
+                    expand_copy_types(&func.needed_copy_types, &type_table);
             }
+        }
+    }
+}
+
+/// Recursively expand types to include all nested types that need copy locals.
+///
+/// For example, `Option<Variant>` expands to include both the Option type
+/// and the Variant type, since copying an Option requires copying its inner value.
+fn expand_copy_types(types: &IndexSet<TypeId>, type_table: &TypeTable) -> IndexSet<TypeId> {
+    let mut expanded = IndexSet::new();
+    for &type_id in types {
+        expand_type_recursive(type_id, type_table, &mut expanded);
+    }
+    expanded
+}
+
+fn expand_type_recursive(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    expanded: &mut IndexSet<TypeId>,
+) {
+    if expanded.contains(&type_id) {
+        return;
+    }
+    match type_table.get(type_id) {
+        ResolvedType::Option(inner) => {
+            expanded.insert(type_id);
+            if needs_value_copy(*inner, type_table) {
+                expand_type_recursive(*inner, type_table, expanded);
+            }
+        }
+        ResolvedType::Struct { .. } | ResolvedType::Tuple(_) | ResolvedType::Variant { .. } => {
+            expanded.insert(type_id);
+        }
+        ResolvedType::GenericInstance { name, type_args, .. } if name == "Array" => {
+            expanded.insert(type_id);
+            if let Some(&elem_type) = type_args.first()
+                && needs_value_copy(elem_type, type_table)
+            {
+                expand_type_recursive(elem_type, type_table, expanded);
+            }
+        }
+        _ => {
+            expanded.insert(type_id);
         }
     }
 }

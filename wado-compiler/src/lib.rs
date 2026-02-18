@@ -79,7 +79,6 @@ pub mod comment;
 pub mod compiler_host;
 pub mod component_gen;
 pub mod component_model;
-pub mod copy_context;
 pub mod desugar;
 pub mod effect_check;
 pub mod lexer;
@@ -134,7 +133,6 @@ pub use parser::{ParseError, Parser};
 pub use project::Project;
 pub use resolver::{Resolver, TypeError, resolve_to_project};
 pub use token::Span;
-pub use wasm_plan::wasm_plan;
 
 use indexmap::IndexMap;
 
@@ -193,7 +191,7 @@ pub struct CompilerOptions {
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
 ///
 /// This is the main compilation entry point. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> codegen
+/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> tir_to_wir
 ///
 /// # Arguments
 /// * `source` - The entry module source code
@@ -255,7 +253,7 @@ fn to_pascal_case(s: &str) -> String {
 /// Compile Wado source code with full options.
 ///
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> codegen
+/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> tir_to_wir
 ///
 /// # Arguments
 /// * `source` - The entry module source code
@@ -360,24 +358,10 @@ pub async fn compile_with_options<H: CompilerHost>(
         optimize(project, options.opt_level)
     };
 
-    // === Phase 11: Wasm Plan (Project -> Project) ===
-    let project = {
-        let _span = logger.span("wasm-plan");
-        wasm_plan(project).map_err(|message| {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::UnsupportedFeature,
-                message,
-                span: None,
-            });
-            Bail
-        })?
-    };
-
-    // === Phase 12: WIR codegen ===
+    // === Phase 11: Code generation (planning + tir_to_wir + wir_emit) ===
     let wasm = {
         let _span = logger.span("tir_to_wir");
-        tir_to_wir::compile_with_wir(&project)
+        tir_to_wir::compile_with_wir(project)
     };
 
     // Return the original (non-desugared) entry AST for tooling
@@ -544,10 +528,11 @@ pub async fn dump_with_host<H: CompilerHost>(
             let _span = logger.span("optimize");
             optimize(project, opt_level)
         };
-        let optimized = wasm_plan(project).ok();
+        let project = tir_to_wir::plan_project(project);
 
         // WIR: Translate optimized Project to WirModule for inspection.
-        let wir_module = optimized.as_ref().map(tir_to_wir::build_wir_module);
+        let wir_module = Some(tir_to_wir::build_wir_module(&project));
+        let optimized = Some(project);
 
         (mono_snapshot, lower_snapshot, optimized, wir_module)
     } else {
