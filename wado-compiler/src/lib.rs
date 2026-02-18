@@ -77,7 +77,7 @@ pub mod cm_abi;
 pub mod cm_adapter_gen;
 pub mod comment;
 pub mod compiler_host;
-pub mod component_gen;
+pub mod codegen;
 pub mod component_model;
 pub mod desugar;
 pub mod effect_check;
@@ -103,13 +103,11 @@ pub mod stdlib;
 pub mod symbol;
 pub mod syntax;
 pub mod tir;
-pub mod tir_to_wir;
 pub mod token;
 pub mod unparse;
-pub mod wasm_builder;
 pub mod wasm_plan;
-pub mod wasm_postprocess;
 pub mod wir;
+pub mod wir_build;
 pub mod wir_unparse;
 pub mod world_registry;
 
@@ -358,10 +356,18 @@ pub async fn compile_with_options<H: CompilerHost>(
         optimize(project, options.opt_level)
     };
 
-    // === Phase 11: Code generation (planning + tir_to_wir + wir_emit) ===
+    // === Phase 11: Build WIR (planning + TIR → WirModule) ===
+    let (project, wir_module) = {
+        let _span = logger.span("wir_build");
+        let project = wir_build::plan_project(project);
+        let wir_module = wir_build::build_wir_module(&project);
+        (project, wir_module)
+    };
+
+    // === Phase 12: Emit Wasm (WirModule → Wasm component bytes) ===
     let wasm = {
-        let _span = logger.span("tir_to_wir");
-        tir_to_wir::compile_with_wir(project)
+        let _span = logger.span("codegen");
+        codegen::emit_wasm(&project, &wir_module)
     };
 
     // Return the original (non-desugared) entry AST for tooling
@@ -528,10 +534,10 @@ pub async fn dump_with_host<H: CompilerHost>(
             let _span = logger.span("optimize");
             optimize(project, opt_level)
         };
-        let project = tir_to_wir::plan_project(project);
+        let project = wir_build::plan_project(project);
 
         // WIR: Translate optimized Project to WirModule for inspection.
-        let wir_module = Some(tir_to_wir::build_wir_module(&project));
+        let wir_module = Some(wir_build::build_wir_module(&project));
         let optimized = Some(project);
 
         (mono_snapshot, lower_snapshot, optimized, wir_module)

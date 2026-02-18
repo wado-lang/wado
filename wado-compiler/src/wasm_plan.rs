@@ -1,10 +1,10 @@
 //! Wasm plan — Component Model planning types and builder.
 //!
-//! Contains `ComponentPlan` and related structs used by `tir_to_wir` and `component_gen`.
+//! Contains `ComponentPlan` and related structs used by `wir_build` and `codegen`.
 //! The planning logic (formerly the standalone `wasm_plan` pipeline phase) now runs
-//! inside `tir_to_wir::plan_project`, called at the start of `compile_with_wir`.
+//! inside `wir_build::plan_project`, called at the start of the WIR pipeline.
 //!
-//! Type-ordering utilities (topological sort) have moved to `tir_to_wir::types`.
+//! Type-ordering utilities (topological sort) have moved to `wir_build::types`.
 
 use crate::ast::Type;
 use crate::project::Project;
@@ -65,7 +65,7 @@ pub struct TestExportPlan {
 /// Build a `ComponentPlan` from the project.
 ///
 /// Scans TIR imports and world registry to determine what the component needs.
-/// Called by `tir_to_wir::plan_project` at the start of `compile_with_wir`.
+/// Called by `wir_build::plan_project` at the start of the WIR pipeline.
 pub fn build_component_plan(project: &Project) -> ComponentPlan {
     let entry_tir = project.entry_module();
 

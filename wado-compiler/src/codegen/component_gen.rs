@@ -14,8 +14,8 @@ use crate::ast::Type;
 use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
 use crate::project::Project;
-use crate::wasm_builder::ComponentModelContext;
-use crate::wasm_postprocess;
+use super::wasm_builder::ComponentModelContext;
+use super::wasm_postprocess;
 use heck::ToKebabCase;
 use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{
