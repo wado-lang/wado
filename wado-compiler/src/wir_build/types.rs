@@ -16,9 +16,6 @@ use indexmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
 
-// =============================================================================
-// Type-ordering utilities (topological sort for type registration)
-// =============================================================================
 
 /// A type declaration in topological order (struct or variant).
 pub enum TypeDecl<'a> {
@@ -146,9 +143,6 @@ fn sort_types_topologically<'a>(
         .collect()
 }
 
-// =============================================================================
-// Type registration
-// =============================================================================
 
 /// Register all types from the Project into the `WirContext`.
 ///

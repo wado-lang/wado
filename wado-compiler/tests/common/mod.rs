@@ -18,9 +18,6 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use wado_compiler::{Bail, CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
 
-// ============================================================================
-// Compiler Hosts
-// ============================================================================
 
 /// A filesystem-based CompilerHost for tests that need to load files
 pub struct FilesystemHost {
@@ -159,9 +156,6 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
     }
 }
 
-// ============================================================================
-// Tokio Runtime
-// ============================================================================
 
 /// Shared tokio runtime for all tests (initialized once)
 static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
@@ -184,9 +178,6 @@ pub fn new_runtime() -> tokio::runtime::Runtime {
         .expect("Failed to create tokio runtime")
 }
 
-// ============================================================================
-// Wasmtime Engine
-// ============================================================================
 
 /// Shared wasmtime Engine for CLI tests (initialized once)
 static CLI_ENGINE: OnceLock<Engine> = OnceLock::new();
@@ -231,9 +222,6 @@ pub fn http_engine() -> Engine {
     Engine::new(&config).expect("Failed to create wasmtime Engine")
 }
 
-// ============================================================================
-// WASI Context
-// ============================================================================
 
 /// WASI state for CLI tests
 pub struct CliWasiState {
@@ -282,9 +270,6 @@ pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<CliWasiState>> {
     Ok(linker)
 }
 
-// ============================================================================
-// Compilation Helpers
-// ============================================================================
 
 /// Compile source string using in-memory host
 pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, CompileError> {
@@ -376,9 +361,6 @@ pub async fn compile_file_async(
         .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
-// ============================================================================
-// Test Fixture Parsing
-// ============================================================================
 
 /// Extract __DATA__ section from source file content
 pub fn extract_data_section(source: &str) -> Option<&str> {
@@ -401,9 +383,6 @@ pub fn parse_data_section<T: serde::de::DeserializeOwned>(data_section: &str, co
     })
 }
 
-// ============================================================================
-// Optimization Level Helpers
-// ============================================================================
 
 /// Get human-readable name for optimization level
 pub fn opt_level_name(opt: OptLevel) -> &'static str {
@@ -416,9 +395,6 @@ pub fn opt_level_name(opt: OptLevel) -> &'static str {
     }
 }
 
-// ============================================================================
-// Wasm Execution
-// ============================================================================
 
 /// Result of running a Wasm component with captured output
 #[derive(Debug)]

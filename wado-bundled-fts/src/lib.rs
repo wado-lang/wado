@@ -20,9 +20,6 @@ unsafe fn copy_to_ptr(dest_ptr: i32, src: &[u8]) {
     }
 }
 
-// ============================================================================
-// Float-to-string formatting using fpfmt
-// ============================================================================
 
 /// Write the decimal digits of `d` into `buf[0..nd]`.
 fn write_digits(buf: &mut [u8], mut d: u64, nd: usize) {
@@ -166,9 +163,6 @@ fn f32_short(f: f32) -> (u64, i32) {
     fpfmt::fixed_width(f64_val, 9)
 }
 
-// ============================================================================
-// Internal formatting functions
-// ============================================================================
 
 /// Format an f64 using shortest representation into `buf`.
 ///
@@ -403,9 +397,6 @@ fn f64_fmt_exp(value: f64, precision: i32, upper: bool, buf: &mut [u8]) -> usize
     pos + len
 }
 
-// ============================================================================
-// Extern "C" API (Wasm linear memory interface)
-// ============================================================================
 
 /// Format an f64 value using shortest representation to the provided buffer.
 ///
@@ -497,9 +488,6 @@ pub extern "C" fn f32_to_buffer_exp(
     len as i32
 }
 
-// ============================================================================
-// Fixed-point formatting (for Display with precision specifier)
-// ============================================================================
 
 /// Format `(d, p, nd)` with exactly `precision` decimal places into `buf`.
 ///

@@ -13,9 +13,6 @@ use serde::Deserialize;
 use std::path::Path;
 use wado_compiler::OptLevel;
 
-// ============================================================================
-// Test Spec
-// ============================================================================
 
 /// Expected test results from __DATA__ section (JSON format)
 #[derive(Debug, Deserialize, Default)]
@@ -53,9 +50,6 @@ struct TestSpec {
     todo: bool,
 }
 
-// ============================================================================
-// Test Verification
-// ============================================================================
 
 /// Verify the actual result matches the expected spec
 fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: &str) {
@@ -101,9 +95,6 @@ fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: 
     }
 }
 
-// ============================================================================
-// Test Runner
-// ============================================================================
 
 /// Run a single fixture test at a specific optimization level
 fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLevel) {
@@ -203,9 +194,6 @@ fn run_normal_test(
     verify_result(&result, spec, test_id);
 }
 
-// ============================================================================
-// Test Entry Points
-// ============================================================================
 
 /// Test function for O0 (no optimization)
 fn fixture_test_o0(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {

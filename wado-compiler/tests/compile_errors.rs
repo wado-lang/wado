@@ -8,9 +8,6 @@ mod common;
 use std::path::Path;
 use wado_compiler::CompileError;
 
-// ============================================================================
-// I/O Errors
-// ============================================================================
 
 #[test]
 fn test_io_error_file_not_found() {
@@ -45,9 +42,6 @@ fn test_io_error_directory_instead_of_file() {
     }
 }
 
-// ============================================================================
-// Lexer Errors
-// ============================================================================
 
 #[test]
 fn test_lexer_error_unterminated_string() {
@@ -107,9 +101,6 @@ fn test_lexer_error_invalid_character() {
     }
 }
 
-// ============================================================================
-// Parser Errors
-// ============================================================================
 
 #[test]
 fn test_parser_error_missing_function_body() {
@@ -232,9 +223,6 @@ use;
     }
 }
 
-// ============================================================================
-// Analyzer Errors
-// ============================================================================
 
 #[test]
 fn test_analyzer_error_unknown_module() {
@@ -294,9 +282,6 @@ fn main() {
 // - Type checking
 // These tests should be added when the analyzer is extended.
 
-// ============================================================================
-// Comparison Chaining Errors
-// ============================================================================
 
 #[test]
 fn test_comparison_chain_error_not_equal_cannot_chain() {
@@ -484,9 +469,6 @@ fn run() {
     }
 }
 
-// ============================================================================
-// Error Display Format
-// ============================================================================
 
 #[test]
 fn test_error_display_with_filename() {

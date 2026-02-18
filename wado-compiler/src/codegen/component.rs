@@ -238,9 +238,6 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
     component_bytes
 }
 
-// =========================================================================
-// Helper functions
-// =========================================================================
 
 fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
@@ -341,9 +338,6 @@ fn wado_type_to_cm_result_type(
     }
 }
 
-// =========================================================================
-// Memory module
-// =========================================================================
 
 fn build_memory_module(strip_names: bool) -> Vec<u8> {
     use wasm_encoder::{
@@ -426,9 +420,6 @@ fn build_memory_module(strip_names: bool) -> Vec<u8> {
     module.finish()
 }
 
-// =========================================================================
-// Bundled modules (FTS and libm)
-// =========================================================================
 
 fn embed_bundled_modules(
     builder: &mut ComponentBuilder,
@@ -515,9 +506,6 @@ fn embed_bundled_modules(
     }
 }
 
-// =========================================================================
-// Future intrinsic types (HTTP response types)
-// =========================================================================
 
 fn build_future_intrinsic_types(
     builder: &mut ComponentBuilder,
@@ -584,9 +572,6 @@ fn build_future_intrinsic_types(
     trailers_future_type
 }
 
-// =========================================================================
-// Canonical intrinsics
-// =========================================================================
 
 fn emit_canonical_intrinsics(
     builder: &mut ComponentBuilder,
@@ -665,9 +650,6 @@ fn emit_canonical_intrinsics(
     }
 }
 
-// =========================================================================
-// World exports
-// =========================================================================
 
 fn emit_world_exports(
     builder: &mut ComponentBuilder,
@@ -770,9 +752,6 @@ fn emit_world_exports(
     }
 }
 
-// =========================================================================
-// WASI imports
-// =========================================================================
 
 /// Generate WASI imports dynamically from the registry.
 fn generate_wasi_imports(
@@ -1192,9 +1171,6 @@ fn generate_wasi_imports(
     }
 }
 
-// =========================================================================
-// HTTP types for Service world
-// =========================================================================
 
 fn import_http_types_for_service(
     project: &Project,
@@ -1622,9 +1598,6 @@ fn import_http_types_for_service(
     }
 }
 
-// =========================================================================
-// Resource interface imports
-// =========================================================================
 
 fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
@@ -1792,9 +1765,6 @@ fn import_interfaces_with_resources(
     }
 }
 
-// =========================================================================
-// WASI function lowering
-// =========================================================================
 
 fn lower_wasi_functions(
     project: &Project,
@@ -1836,9 +1806,6 @@ fn lower_wasi_functions(
     }
 }
 
-// =========================================================================
-// HTTP handler export
-// =========================================================================
 
 fn append_http_handler_export(component_bytes: &mut Vec<u8>, ctx: &ComponentModelContext) {
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};

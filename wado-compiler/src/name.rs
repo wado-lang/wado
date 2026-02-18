@@ -34,9 +34,6 @@ use fluent_uri::UriRef;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-// =============================================================================
-// Module Source Types
-// =============================================================================
 
 /// Source location of a module.
 ///
@@ -316,9 +313,6 @@ impl fmt::Display for ModuleSource {
     }
 }
 
-// =============================================================================
-// Function Identifier Types
-// =============================================================================
 
 /// A free function name (not a method on a struct).
 ///
@@ -730,9 +724,6 @@ impl From<MethodName> for FunctionId {
     }
 }
 
-// =============================================================================
-// Type Identifier Types
-// =============================================================================
 
 /// A qualified struct type name.
 ///
@@ -795,7 +786,6 @@ impl fmt::Display for StructName {
     }
 }
 
-// =============================================================================
 /// Build a core/internal function name.
 ///
 /// Format: `core/internal/{name}`
@@ -805,9 +795,6 @@ pub fn build_core_internal_name(name: &str) -> FreeFunctionName {
     FreeFunctionName::from_strs(&["core", "internal"], name)
 }
 
-// =============================================================================
-// Module Path Canonicalization
-// =============================================================================
 
 /// Validate that a module path is a valid URI reference.
 ///
@@ -1070,9 +1057,6 @@ fn remove_dot_segments(path: &str) -> String {
     }
 }
 
-// =============================================================================
-// Type Name Formatting
-// =============================================================================
 
 /// Information about a type for name formatting.
 ///
@@ -1138,9 +1122,6 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
     }
 }
 
-// =============================================================================
-// Name Mangling Utilities
-// =============================================================================
 
 /// Build a monomorphized type name from base name and type arguments.
 ///
@@ -1219,9 +1200,6 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
 mod tests {
     use super::*;
 
-    // =========================================================================
-    // Method Name Tests
-    // =========================================================================
 
     #[test]
     fn test_method_name_to_string_simple() {
@@ -1249,9 +1227,6 @@ mod tests {
         assert_eq!(method.to_string(), "./geometry.wado/Point^Display::fmt");
     }
 
-    // =========================================================================
-    // Free Function Name Tests
-    // =========================================================================
 
     #[test]
     fn test_free_function_name_to_string() {
@@ -1274,9 +1249,6 @@ mod tests {
         assert_eq!(func.to_string(), "main");
     }
 
-    // =========================================================================
-    // Struct Name Tests
-    // =========================================================================
 
     #[test]
     fn test_struct_name_to_string() {
@@ -1309,9 +1281,6 @@ mod tests {
         assert!(!set.contains(&s3));
     }
 
-    // =========================================================================
-    // Core Internal Name Tests
-    // =========================================================================
 
     #[test]
     fn test_build_core_internal_name() {
@@ -1321,9 +1290,6 @@ mod tests {
         assert_eq!(name.name, "log_stdout");
     }
 
-    // =========================================================================
-    // Module Path Canonicalization Tests
-    // =========================================================================
 
     #[test]
     fn test_normalize_simple_path() {
@@ -1450,9 +1416,6 @@ mod tests {
         assert_eq!(remove_dot_segments("a//b/c.wado"), "a/b/c.wado");
     }
 
-    // =========================================================================
-    // Module Path Validation Tests
-    // =========================================================================
 
     #[test]
     fn test_validate_module_path_valid() {
@@ -1472,9 +1435,6 @@ mod tests {
         assert!(validate_module_path("./file with\x00null.wado").is_err());
     }
 
-    // =========================================================================
-    // ModuleSource Tests
-    // =========================================================================
 
     #[test]
     fn test_module_source_from_path_core() {

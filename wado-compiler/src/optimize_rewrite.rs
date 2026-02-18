@@ -26,9 +26,6 @@ use crate::tir::{
 };
 use indexmap::IndexSet;
 
-// =============================================================================
-// Labeled Block Simplification
-// =============================================================================
 
 /// Run all post-optimization TIR rewrites in a single pass over all functions.
 ///
@@ -312,9 +309,6 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
     changed
 }
 
-// =============================================================================
-// Select Lowering (If → builtin::select)
-// =============================================================================
 
 /// Check if a TIR expression is side-effect-free and suitable for `select` operands.
 ///
@@ -394,9 +388,6 @@ fn try_lower_to_select(
     ))
 }
 
-// =============================================================================
-// Move Insertion Optimization
-// =============================================================================
 
 /// Check if an expression produces a fresh value that can be moved.
 /// Fresh values are those that don't need copying because they're newly created.
@@ -718,9 +709,6 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
     }
 }
 
-// =============================================================================
-// Value Copy Type Collection
-// =============================================================================
 
 /// Collect all types that need value copying in a function body.
 /// This is needed for codegen to pre-allocate scratch locals for copy operations.

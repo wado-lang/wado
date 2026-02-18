@@ -182,9 +182,6 @@ pub fn lower_modules_indexed(
     modules
 }
 
-// ============================================================================
-// Wide Integer Match Pattern Lowering
-// ============================================================================
 
 /// Helper to wrap an expression in a block (for if-else branches)
 fn expr_to_block(expr: &TirExpr, span: Span) -> TirBlock {
@@ -648,9 +645,6 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
     }
 }
 
-// ============================================================================
-// Switch Lowering (Match -> br_table optimization)
-// ============================================================================
 
 /// Minimum number of cases required for `br_table` optimization
 const SWITCH_MIN_CASES: usize = 8;
@@ -844,9 +838,6 @@ fn match_to_switch(
     )
 }
 
-// ============================================================================
-// Pattern Lowering
-// ============================================================================
 
 /// Lower patterns in a module
 ///
@@ -1865,9 +1856,6 @@ impl TypeTableExt for TypeTable {
     }
 }
 
-// ============================================================================
-// Global Variable Initialization Lowering
-// ============================================================================
 
 /// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
 fn is_constant_initializer(expr: &TirExpr) -> bool {
@@ -2411,9 +2399,6 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
     }
 }
 
-// ============================================================================
-// Boxing Lowering
-// ============================================================================
 
 /// Lowers primitive boxing to explicit `Box<T>` struct operations.
 ///
@@ -3184,9 +3169,6 @@ impl BoxLowerer {
         let span = expr.span;
 
         match &mut expr.kind {
-            // ================================================================
-            // Handle Unary(Ref/MutRef, ...) and Unary(Deref, ...)
-            // ================================================================
             TirExprKind::Unary { op, expr: inner } => {
                 // First recursively transform the inner expression
                 // (need to handle address-taken locals BEFORE general Ref/Deref)
@@ -3271,9 +3253,6 @@ impl BoxLowerer {
                 } // Already handled sub-expression recursion
             }
 
-            // ================================================================
-            // Handle Assign
-            // ================================================================
             TirExprKind::Assign { target, value } => {
                 self.transform_expr(value, address_taken, type_table);
 
@@ -3335,9 +3314,6 @@ impl BoxLowerer {
                 } // Already handled sub-expression recursion
             }
 
-            // ================================================================
-            // Handle Local reads for address-taken locals
-            // ================================================================
             TirExprKind::Local { index, name } => {
                 if address_taken.contains(index) {
                     let original_type = expr.type_id;
@@ -3361,9 +3337,6 @@ impl BoxLowerer {
                 }
             }
 
-            // ================================================================
-            // Handle OptionSome with primitive value
-            // ================================================================
             TirExprKind::OptionSome { value } => {
                 let value_type = value.type_id;
                 if let Some(&box_type_id) = self.box_struct_types.get(&value_type) {
@@ -3395,9 +3368,6 @@ impl BoxLowerer {
                 }
             }
 
-            // ================================================================
-            // Handle VariantConstruct for Option::Some with primitive payload
-            // ================================================================
             TirExprKind::VariantConstruct {
                 payload: Some(payload),
                 case_name,
@@ -3432,9 +3402,6 @@ impl BoxLowerer {
                 }
             }
 
-            // ================================================================
-            // Handle UnwrapOption for boxed primitives
-            // ================================================================
             TirExprKind::UnwrapOption { inner_type, .. } => {
                 // inner_type is the primitive TypeId (e.g., u8).
                 // Check if this primitive has a corresponding Box<T> struct type.
@@ -3463,9 +3430,6 @@ impl BoxLowerer {
     }
 }
 
-// ============================================================================
-// Closure Lowering
-// ============================================================================
 
 /// Information about a closure collected during the first pass
 #[derive(Debug, Clone)]
@@ -3675,9 +3639,6 @@ impl ClosureLowerer {
         }
     }
 
-    // ========================================================================
-    // First Pass: Collect Closures
-    // ========================================================================
 
     fn collect_closures_in_block(&mut self, block: &TirBlock) {
         for stmt in &block.stmts {
@@ -3880,9 +3841,6 @@ impl ClosureLowerer {
         }
     }
 
-    // ========================================================================
-    // Second Pass: Analyze Closure Safety
-    // ========================================================================
 
     /// Analyze a block to identify which closures are safe to transform
     fn analyze_closure_safety_block(&mut self, block: &TirBlock) {
@@ -4098,9 +4056,6 @@ impl ClosureLowerer {
         }
     }
 
-    // ========================================================================
-    // Generate Functor Structs and __call Methods
-    // ========================================================================
 
     fn generate_functor_items(&mut self, type_table: &mut TypeTable) {
         for collected in &self.collected_closures.clone() {
@@ -4982,9 +4937,6 @@ impl ClosureLowerer {
         }
     }
 
-    // ========================================================================
-    // Fn-Param Specialization
-    // ========================================================================
 
     /// Generate specialized functions for calls with closure arguments to fn-type parameters.
     ///
@@ -6541,9 +6493,6 @@ impl ClosureLowerer {
         }
     }
 
-    // ========================================================================
-    // Second Pass: Transform Closures and IndirectCalls
-    // ========================================================================
 
     fn transform_block(&mut self, block: &mut TirBlock, type_table: &mut TypeTable) {
         for stmt in &mut block.stmts {
@@ -7202,9 +7151,6 @@ impl ClosureLowerer {
     }
 }
 
-// ============================================================================
-// String Literal Collection
-// ============================================================================
 
 /// Collects all string literals from a TIR module for the data section,
 /// tracking which function each string comes from for DCE
@@ -8098,9 +8044,6 @@ impl<'a> EffectScratchAnalyzer<'a> {
     }
 }
 
-// ============================================================================
-// Auto-derived Enum Trait Implementations
-// ============================================================================
 
 /// Generate auto-derived trait implementations (Eq, Ord, Display) for enum types.
 ///

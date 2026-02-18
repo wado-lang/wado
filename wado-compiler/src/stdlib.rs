@@ -90,10 +90,6 @@ pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
 /// Embedded source for wasi:http
 pub const WASI_HTTP: &str = include_str!("../lib/wasi/http.wado");
 
-// ============================================================================
-// Module Resolution
-// ============================================================================
-
 /// Get embedded module source by import path.
 //
 /// # Arguments
@@ -132,9 +128,6 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
     }
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

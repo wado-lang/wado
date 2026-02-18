@@ -13,9 +13,6 @@ mod common;
 use std::path::{Path, PathBuf};
 use wado_compiler::OptLevel;
 
-// ============================================================================
-// Golden File Test Logic
-// ============================================================================
 
 /// Extract the entry module from the unparsed TIR modules
 fn extract_entry_module(project: &wado_compiler::Project) -> String {
@@ -114,9 +111,6 @@ fn run_golden_test(
     })
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
 
 datatest_mini::harness! {
     // Run golden file tests for all .lowered.wado files in tests/fixtures.golden/

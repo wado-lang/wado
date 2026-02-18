@@ -5,9 +5,6 @@
 
 use wado_compiler::{Lexer, Parser};
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
 
 /// Parse a simple expression and return the AST
 fn parse_expr(source: &str) -> Result<wado_compiler::ast::Module, String> {
@@ -37,9 +34,6 @@ fn extract_expr(module: &wado_compiler::ast::Module) -> Option<&wado_compiler::a
     Some(&let_stmt.value)
 }
 
-// ============================================================================
-// Basic Template String Tests
-// ============================================================================
 
 #[test]
 fn test_template_string_empty() {
@@ -181,9 +175,6 @@ fn test_template_string_expression_interpolation() {
     }
 }
 
-// ============================================================================
-// Format Specifier Tests
-// ============================================================================
 
 #[test]
 fn test_template_format_simple() {
@@ -247,9 +238,6 @@ fn test_template_format_width() {
     }
 }
 
-// ============================================================================
-// Double Colon (::) vs Format Specifier (:) Tests
-// ============================================================================
 
 #[test]
 fn test_template_double_colon_not_format() {
@@ -295,9 +283,6 @@ fn test_template_colon_alone_is_format() {
     }
 }
 
-// ============================================================================
-// Nested Template Tests
-// ============================================================================
 
 #[test]
 fn test_template_nested() {
@@ -329,9 +314,6 @@ fn test_template_nested() {
     }
 }
 
-// ============================================================================
-// Edge Cases
-// ============================================================================
 
 #[test]
 fn test_template_consecutive_interpolations() {
@@ -389,9 +371,6 @@ fn test_template_ends_with_interpolation() {
     }
 }
 
-// ============================================================================
-// Escape Sequences in Templates
-// ============================================================================
 
 #[test]
 fn test_template_escape_sequences() {
@@ -409,9 +388,6 @@ fn test_template_escape_sequences() {
     }
 }
 
-// ============================================================================
-// Error Cases
-// ============================================================================
 
 #[test]
 fn test_template_unterminated() {
@@ -433,9 +409,6 @@ fn test_template_unclosed_interpolation() {
     assert!(result.is_err(), "expected error for unclosed interpolation");
 }
 
-// ============================================================================
-// Complex Expression Tests
-// ============================================================================
 
 #[test]
 fn test_template_complex_expression() {

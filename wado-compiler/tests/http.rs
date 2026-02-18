@@ -19,9 +19,6 @@ use wasmtime_wasi_http::p3::{Request, WasiHttpCtx, WasiHttpCtxView, WasiHttpView
 
 use wado_compiler::{Bail, CompileError, CompilerOptions, OptLevel};
 
-// ============================================================================
-// HTTP-specific WASI Context
-// ============================================================================
 
 struct TestHttpCtx;
 
@@ -51,9 +48,6 @@ impl WasiHttpView for HttpTestState {
     }
 }
 
-// ============================================================================
-// HTTP Compilation
-// ============================================================================
 
 /// Compile a file targeting the Service world
 async fn compile_http_service(path: &Path) -> Result<Vec<u8>, CompileError> {
@@ -78,9 +72,6 @@ async fn compile_http_service(path: &Path) -> Result<Vec<u8>, CompileError> {
         .map_err(|_: Bail| common::bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
-// ============================================================================
-// HTTP Test Runner
-// ============================================================================
 
 /// Result of an HTTP request to the Wasm component
 #[derive(Debug)]
@@ -162,9 +153,6 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
     }
 }
 
-// ============================================================================
-// Test Spec
-// ============================================================================
 
 #[derive(Debug, Deserialize, Default)]
 struct HttpTestSpec {
@@ -182,9 +170,6 @@ struct HttpTestSpec {
     todo: bool,
 }
 
-// ============================================================================
-// Test Runner Helper
-// ============================================================================
 
 /// Run an HTTP fixture test, handling TODO tests properly
 async fn run_http_fixture_test(
@@ -285,9 +270,6 @@ async fn run_http_test_inner(
     Ok(())
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
 
 datatest_mini::harness! {
     { test = run_http_fixture_test, root = "tests/fixtures.http", pattern = r"\.wado$", async, attr = r#"tokio::test(flavor = "multi_thread")"# },

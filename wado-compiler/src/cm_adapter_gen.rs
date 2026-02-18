@@ -87,9 +87,6 @@ fn synth_span() -> Span {
     Span::new(0, 0, 1, 1)
 }
 
-// ============================================================================
-// TIR construction helpers
-// ============================================================================
 
 /// Create a call to a builtin function (e.g., `builtin::i32_load`).
 pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
@@ -236,9 +233,6 @@ pub fn cm_raw_call(local_name: &str, args: Vec<TirExpr>, return_type: TypeId) ->
     )
 }
 
-// ============================================================================
-// Lift / Lower synthesis
-// ============================================================================
 
 /// Create a mutable let statement.
 pub fn let_mut_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -> TirStmt {
@@ -1268,14 +1262,6 @@ pub fn synthesize_lower(
     }
 }
 
-// ============================================================================
-// Option<T> parameter lowering for adapter synthesis
-// ============================================================================
-
-// ============================================================================
-// Flat ABI parameter/result computation
-// ============================================================================
-
 /// Compute the flat ABI parameter types for a WASI function parameter.
 pub fn flatten_param_type(ty: &Type) -> Vec<TypeId> {
     match ty {
@@ -1306,9 +1292,6 @@ pub fn flatten_param_type(ty: &Type) -> Vec<TypeId> {
     }
 }
 
-// ============================================================================
-// Adapter function generation
-// ============================================================================
 
 /// Build the adapter function name for a WASI import.
 pub fn adapter_func_name(effect_name: &str, method_name: &str) -> String {
@@ -1320,9 +1303,6 @@ pub fn export_adapter_func_name(export_name: &str) -> String {
     format!("__cm_export__{export_name}")
 }
 
-// ============================================================================
-// Adapter TirFunction synthesis
-// ============================================================================
 
 /// Fixed async outptr address (matches codegen convention).
 const ASYNC_OUTPTR: i32 = 2048;
@@ -1891,9 +1871,6 @@ fn synthesize_adapter(
     )
 }
 
-// ============================================================================
-// Export flat type computation
-// ============================================================================
 
 /// Compute flat CM ABI types for an export return type, resolving variant and
 /// struct definitions from the TIR modules. This is signature-driven: it works
@@ -2153,9 +2130,6 @@ fn find_struct_decl(
     None
 }
 
-// ============================================================================
-// Export result lowering to flat CM ABI values
-// ============================================================================
 
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
 fn variant_tag(expr: TirExpr) -> TirExpr {
@@ -2535,9 +2509,6 @@ fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
-// ============================================================================
-// Export parameter lifting (flat CM params → Wado values)
-// ============================================================================
 
 /// Lift a single export parameter from flat CM params to a Wado-typed value.
 ///
@@ -2813,9 +2784,6 @@ fn export_needs_param_lifting(params: &[(String, Type)]) -> bool {
     params.iter().any(|(_, ty)| param_needs_lifting(ty))
 }
 
-// ============================================================================
-// Export adapter synthesis (signature-driven)
-// ============================================================================
 
 /// Synthesize a CM export adapter for an async export with a Result return type.
 ///
@@ -3386,9 +3354,6 @@ fn synthesize_variant_lower_to_flat(
     }
 }
 
-// ============================================================================
-// Export adapter synthesis
-// ============================================================================
 
 /// Synthesize a CM export adapter for a `() -> ()` async export.
 ///
@@ -3659,9 +3624,6 @@ fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
     adapter
 }
 
-// ============================================================================
-// Phase entry point
-// ============================================================================
 
 /// Phase entry point: generate CM adapter functions and rewrite call sites.
 ///
@@ -3935,9 +3897,6 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     Ok(project)
 }
 
-// ============================================================================
-// Adapter type fixup
-// ============================================================================
 
 /// Fix up the return expression's type in the adapter body to match the caller's
 /// expected return type. The adapter was created with placeholder `TypeId`s
@@ -4114,9 +4073,6 @@ fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut
     }
 }
 
-// ============================================================================
-// Call site rewriting
-// ============================================================================
 
 fn rewrite_calls_in_block(
     block: &mut TirBlock,
@@ -4494,9 +4450,6 @@ fn rewrite_calls_in_expr(
     }
 }
 
-// ============================================================================
-// Effect call collection
-// ============================================================================
 
 fn collect_effect_calls_in_block(
     block: &TirBlock,

@@ -119,9 +119,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> ServeOptions {
     }
 }
 
-// ============================================================================
-// HTTP WASI State
-// ============================================================================
 
 struct HttpWasiCtx;
 
@@ -151,9 +148,6 @@ impl WasiHttpView for HttpWasiState {
     }
 }
 
-// ============================================================================
-// HTTP Engine and Linker
-// ============================================================================
 
 fn create_http_linker(engine: &Engine) -> Result<Linker<HttpWasiState>> {
     let mut linker: Linker<HttpWasiState> = Linker::new(engine);
@@ -170,9 +164,6 @@ fn create_http_state() -> HttpWasiState {
     }
 }
 
-// ============================================================================
-// HTTP Handler
-// ============================================================================
 
 /// Handle a single HTTP request using the Wasm component
 async fn handle_http_request(
@@ -241,9 +232,6 @@ async fn handle_http_request(
     }
 }
 
-// ============================================================================
-// HTTP Server
-// ============================================================================
 
 async fn run_http_server(wasm: Vec<u8>, addr: &str) -> Result<()> {
     let engine = runtime::create_engine(wasmtime::OptLevel::Speed)?;

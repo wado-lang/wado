@@ -9,9 +9,6 @@
 use std::fs;
 use std::path::Path;
 
-// ============================================================================
-// Idempotency Tests
-// ============================================================================
 
 #[test]
 fn test_format_idempotent_simple() {
@@ -56,9 +53,6 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
-// ============================================================================
-// Comment Preservation Tests
-// ============================================================================
 
 #[test]
 fn test_format_preserves_line_comment() {
@@ -107,9 +101,6 @@ fn run() {
     );
 }
 
-// ============================================================================
-// Comment Edge Cases
-// ============================================================================
 
 #[test]
 fn test_format_comment_at_file_start() {
@@ -312,9 +303,6 @@ fn run() {
     assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
-// ============================================================================
-// Canonical Formatting Style Tests
-// ============================================================================
 
 #[test]
 fn test_format_use_braces_spacing() {
@@ -356,9 +344,6 @@ let y = 2;
     );
 }
 
-// ============================================================================
-// Wildcard Import Tests
-// ============================================================================
 
 #[test]
 fn test_format_wildcard_import() {
@@ -396,9 +381,6 @@ fn test_format_wildcard_import_not_braces() {
     );
 }
 
-// ============================================================================
-// Compound Assignment (+=, -=, etc.) Preservation Tests
-// ============================================================================
 
 #[test]
 fn test_format_preserves_compound_assign() {
@@ -436,9 +418,6 @@ fn run() {
     assert!(formatted.contains("a %= 5;"), "%=: {}", formatted);
 }
 
-// ============================================================================
-// Comparison Chain Preservation Tests
-// ============================================================================
 
 #[test]
 fn test_format_preserves_comparison_chain() {
@@ -458,9 +437,6 @@ fn run() {
     );
 }
 
-// ============================================================================
-// Struct Literal Shorthand Tests
-// ============================================================================
 
 #[test]
 fn test_format_preserves_struct_shorthand() {
@@ -485,9 +461,6 @@ fn run() {
     );
 }
 
-// ============================================================================
-// Method Self Parameter Tests
-// ============================================================================
 
 #[test]
 fn test_format_preserves_self_shorthand() {
@@ -603,9 +576,6 @@ impl Point {
     );
 }
 
-// ============================================================================
-// Data Section Preservation Tests
-// ============================================================================
 
 #[test]
 fn test_format_preserves_data_section() {
@@ -630,9 +600,6 @@ __DATA__
     );
 }
 
-// ============================================================================
-// Shebang Preservation Tests
-// ============================================================================
 
 #[test]
 fn test_format_preserves_shebang() {
@@ -692,9 +659,6 @@ __DATA__
     );
 }
 
-// ============================================================================
-// Number Literal Tests
-// ============================================================================
 
 // NOTE: Currently, all integer literals are normalized to decimal format.
 // This is a known limitation - preserving binary/hex/octal format would
@@ -858,9 +822,6 @@ fn test_format_float_negative_exponent_preserved() {
     );
 }
 
-// ============================================================================
-// E2E Fixture Idempotency Tests
-// ============================================================================
 
 #[test]
 fn test_format_idempotent_all_fixtures() {
@@ -923,9 +884,6 @@ fn test_format_idempotent_all_fixtures() {
     }
 }
 
-// ============================================================================
-// Labeled Block Tests - Break with Label and Value
-// ============================================================================
 
 #[test]
 fn test_format_break_with_label() {
