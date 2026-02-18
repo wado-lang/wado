@@ -1673,6 +1673,19 @@ impl<'a> WirEmitter<'a> {
                 let temp_idx = self.resolve_local(&temp_name);
                 // Store source to temp
                 f.instruction(&Instruction::LocalSet(temp_idx));
+                // Null guard: if source is null, skip copy and produce null.
+                // This handles Option<T> where the value may be null (None).
+                // Use if-else with typed result: (ref null $type).
+                let heap = HeapType::Concrete(wasm_type_idx);
+                let val_type = ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: heap,
+                });
+                f.instruction(&Instruction::LocalGet(temp_idx));
+                f.instruction(&Instruction::RefIsNull);
+                f.instruction(&Instruction::If(BlockType::Result(val_type)));
+                f.instruction(&Instruction::RefNull(heap));
+                f.instruction(&Instruction::Else);
                 // For each field: load from temp, get field (handle packed fields)
                 for field in fields {
                     // Check if this field needs array deep copy
@@ -1753,6 +1766,7 @@ impl<'a> WirEmitter<'a> {
                 }
                 // Create new struct with all field values
                 f.instruction(&Instruction::StructNew(wasm_type_idx));
+                f.instruction(&Instruction::End); // end of if-else null guard
             }
             WirCopyType::Array { element_copy: _ } => {
                 // Array copy: pass through for now (shallow ref copy)

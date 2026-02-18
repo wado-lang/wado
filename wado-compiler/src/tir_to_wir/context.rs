@@ -505,8 +505,11 @@ impl<'a> WirContext<'a> {
                         nullable: true,
                     },
                     _ => {
-                        // For primitive types, Option<T> maps to nullable ref Box<T>
-                        let inner_name = type_table.mangle_type_name(*inner);
+                        // For primitive types, Option<T> maps to nullable ref Box<T>.
+                        // Resolve through newtypes to find the base primitive name,
+                        // because Box<f64> is registered, not Box<Radians>.
+                        let base_inner = type_table.resolve_newtype_base(*inner);
+                        let inner_name = type_table.mangle_type_name(base_inner);
                         let box_name = crate::name::mangle_generic_name(
                             "Box",
                             std::slice::from_ref(&inner_name),
@@ -579,8 +582,10 @@ impl<'a> WirContext<'a> {
                 match &inner_wir {
                     WirType::Ref { .. } | WirType::AbstractRef { .. } => inner_wir,
                     _ => {
-                        // Value type: use Box<T> for reference semantics
-                        let inner_name = type_table.mangle_type_name(*inner);
+                        // Value type: use Box<T> for reference semantics.
+                        // Resolve through newtypes to find the base type name.
+                        let base_inner = type_table.resolve_newtype_base(*inner);
+                        let inner_name = type_table.mangle_type_name(base_inner);
                         let box_name = crate::name::mangle_generic_name(
                             "Box",
                             std::slice::from_ref(&inner_name),
@@ -615,6 +620,12 @@ impl<'a> WirContext<'a> {
                 WirType::I32
             }
         }
+    }
+
+    /// Check if a WIR type ID refers to a variant type.
+    pub fn is_variant_type(&self, type_id: &WirTypeId) -> bool {
+        let idx = type_id.index() as usize;
+        idx < self.types.len() && matches!(&self.types[idx], WirTypeDef::Variant(_))
     }
 
     /// Get the number of fields in a WIR struct type.

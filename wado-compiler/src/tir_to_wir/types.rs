@@ -126,10 +126,9 @@ fn register_struct(
                 .iter()
                 .map(|&ta| {
                     // TypeIds may have been removed by DCE; use fallback
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        type_table.mangle_type_name(ta)
-                    }))
-                    .unwrap_or_else(|_| format!("?{}", ta.0))
+                    type_table
+                        .try_mangle_type_name(ta)
+                        .unwrap_or_else(|| format!("?{}", ta.0))
                 })
                 .collect(),
         });

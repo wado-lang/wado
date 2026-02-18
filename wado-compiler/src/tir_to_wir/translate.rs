@@ -363,6 +363,16 @@ impl FunctionTranslator<'_, '_> {
         use crate::wir::{WirCopyField, WirCopyType};
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, type_id);
         if let WirType::Ref { type_id: wir_tid, .. } = wir_type {
+            // Variants use pass-through copy (immutable structs in the rec group)
+            if self.ctx.is_variant_type(&wir_tid) {
+                return WirInstr::ValueCopy {
+                    type_id: wir_tid,
+                    source_type: WirCopyType::Variant {
+                        cases: Vec::new(),
+                    },
+                    expr: Box::new(expr),
+                };
+            }
             // Look up the WIR struct type to get field count
             let field_count = self.ctx.get_struct_field_count(&wir_tid);
             let copy_fields: Vec<WirCopyField> = (0..field_count)
