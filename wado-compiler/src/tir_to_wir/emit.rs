@@ -50,6 +50,8 @@ struct WirEmitter<'a> {
     next_local: u32,
     /// Wasm type section counter.
     next_type_idx: u32,
+    /// Pre-assigned variant type info: `wir_type_idx` → (base_wasm_idx, vec of (case_idx, wasm_idx)).
+    variant_pre_assigned: IndexMap<u32, (u32, Vec<(u32, u32)>)>,
 }
 
 impl<'a> WirEmitter<'a> {
@@ -65,6 +67,7 @@ impl<'a> WirEmitter<'a> {
             current_locals: IndexMap::new(),
             next_local: 0,
             next_type_idx: 0,
+            variant_pre_assigned: IndexMap::new(),
         }
     }
 
@@ -141,38 +144,147 @@ impl<'a> WirEmitter<'a> {
     fn emit_type_section(&mut self) -> TypeSection {
         let mut types = TypeSection::new();
 
+        // Pre-assign Wasm type indices for ALL WIR types before emission.
+        // This ensures `resolve_type_index` returns correct indices even for
+        // forward references (e.g., array<Pair> referencing a Pair struct
+        // that hasn't been emitted yet).
+        self.pre_assign_type_indices();
+
+        // Emit GC types (structs, arrays, variants) in a single `rec` group
+        // so that forward references between them are allowed by the Wasm GC type system.
+        // Function types must be standalone (outside rec group) for component model
+        // compatibility — types in a rec group are not structurally equivalent to
+        // standalone types, which breaks import/export matching.
+        let mut gc_subtypes: Vec<SubType> = Vec::new();
+
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             match typedef {
                 WirTypeDef::Struct(_) if self.wir.variant_case_info.contains_key(&wir_idx) => {
-                    // Variant case struct — already emitted as part of the variant's rec group.
-                    // Type index mapping is set up in emit_variant_type.
+                    // Variant case struct — emitted inline as part of its parent variant
                 }
                 WirTypeDef::Struct(s) => {
-                    self.emit_struct_type(&mut types, s, wir_idx);
+                    self.build_struct_subtype(s, wir_idx, &mut gc_subtypes);
                 }
                 WirTypeDef::Variant(v) => {
-                    self.emit_variant_type(&mut types, v, wir_idx);
-                }
-                WirTypeDef::Enum(_) | WirTypeDef::Flags(_) => {
-                    // Enums and flags don't produce Wasm type section entries
+                    self.build_variant_subtypes(v, wir_idx, &mut gc_subtypes);
                 }
                 WirTypeDef::Array(a) => {
-                    self.emit_array_type(&mut types, a, wir_idx);
+                    self.build_array_subtype(a, wir_idx, &mut gc_subtypes);
                 }
-                WirTypeDef::Func(f) => {
-                    self.emit_func_type(&mut types, f, wir_idx);
-                }
+                WirTypeDef::Enum(_) | WirTypeDef::Flags(_) | WirTypeDef::Func(_) => {}
+            }
+        }
+
+        if !gc_subtypes.is_empty() {
+            types.ty().rec(gc_subtypes);
+        }
+
+        // Emit function types standalone (outside rec group)
+        for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
+            let wir_idx = u32::try_from(wir_idx).unwrap();
+            if let WirTypeDef::Func(f) = typedef {
+                self.emit_standalone_func_type(&mut types, f, wir_idx);
             }
         }
 
         types
     }
 
-    fn emit_struct_type(&mut self, types: &mut TypeSection, s: &WirStructType, wir_idx: u32) {
-        let type_idx = self.next_type_idx;
-        self.next_type_idx += 1;
-        self.type_index_map.insert(wir_idx, type_idx);
+    /// Pre-assign Wasm type indices for all WIR types.
+    ///
+    /// GC types (structs, arrays, variants) are assigned first (they go in a rec group),
+    /// then function types (standalone). This matches the emission order in `emit_type_section`.
+    fn pre_assign_type_indices(&mut self) {
+        let mut next_idx = 0u32;
+
+        // Pass 1: GC types (structs, arrays, variants) — in the rec group
+        for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
+            let wir_idx = u32::try_from(wir_idx).unwrap();
+            match typedef {
+                WirTypeDef::Struct(_)
+                    if self.wir.variant_case_info.contains_key(&wir_idx) =>
+                {
+                    // Variant case struct — index assigned by the parent variant below
+                }
+                WirTypeDef::Struct(_) | WirTypeDef::Array(_) => {
+                    self.type_index_map.insert(wir_idx, next_idx);
+                    next_idx += 1;
+                }
+                WirTypeDef::Variant(v) => {
+                    // Base type
+                    self.type_index_map.insert(wir_idx, next_idx);
+                    let base_idx = next_idx;
+                    next_idx += 1;
+
+                    // Case subtypes
+                    let mut case_types = Vec::new();
+                    for case in &v.cases {
+                        case_types.push((case.index, next_idx));
+                        next_idx += 1;
+                    }
+
+                    // Map variant case WIR type indices to their Wasm type indices
+                    for (&case_wir_idx, &(variant_wir_idx, case_idx)) in
+                        &self.wir.variant_case_info
+                    {
+                        if variant_wir_idx == wir_idx {
+                            if let Some(&(_, wasm_idx)) =
+                                case_types.iter().find(|(idx, _)| *idx == case_idx)
+                            {
+                                self.type_index_map.insert(case_wir_idx, wasm_idx);
+                            }
+                        }
+                    }
+
+                    self.variant_pre_assigned
+                        .insert(wir_idx, (base_idx, case_types));
+                }
+                WirTypeDef::Enum(_) | WirTypeDef::Flags(_) | WirTypeDef::Func(_) => {
+                    // Enums/Flags: no type section entry
+                    // Funcs: assigned in pass 2
+                }
+            }
+        }
+
+        // Pass 2: Function types — standalone, after the rec group
+        for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
+            let wir_idx = u32::try_from(wir_idx).unwrap();
+            if let WirTypeDef::Func(_) = typedef {
+                self.type_index_map.insert(wir_idx, next_idx);
+                next_idx += 1;
+            }
+        }
+
+        self.next_type_idx = next_idx;
+    }
+
+    fn emit_standalone_func_type(
+        &mut self,
+        types: &mut TypeSection,
+        f: &WirFuncType,
+        _wir_idx: u32,
+    ) {
+        let params: Vec<ValType> = f
+            .params
+            .iter()
+            .map(|t| self.wir_type_to_val_type(t))
+            .collect();
+        let results: Vec<ValType> = f
+            .results
+            .iter()
+            .map(|t| self.wir_type_to_val_type(t))
+            .collect();
+        types.ty().function(params, results);
+    }
+
+    fn build_struct_subtype(
+        &mut self,
+        s: &WirStructType,
+        wir_idx: u32,
+        subtypes: &mut Vec<SubType>,
+    ) {
+        debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
         let mut field_map = IndexMap::new();
         let fields: Vec<FieldType> = s
@@ -190,7 +302,7 @@ impl<'a> WirEmitter<'a> {
         self.struct_field_map.insert(wir_idx, field_map);
 
         // Use is_final: false so (ref (exact $T)) from struct.new is a subtype of (ref null $T)
-        types.ty().subtype(&SubType {
+        subtypes.push(SubType {
             is_final: false,
             supertype_idx: None,
             composite_type: CompositeType {
@@ -204,18 +316,24 @@ impl<'a> WirEmitter<'a> {
         });
     }
 
-    fn emit_variant_type(&mut self, types: &mut TypeSection, v: &WirVariantType, wir_idx: u32) {
-        // Base type: struct with just discriminant field
-        let base_type_idx = self.next_type_idx;
-        self.type_index_map.insert(wir_idx, base_type_idx);
+    fn build_variant_subtypes(
+        &mut self,
+        v: &WirVariantType,
+        wir_idx: u32,
+        subtypes: &mut Vec<SubType>,
+    ) {
+        // Type indices already pre-assigned by pre_assign_type_indices
+        let base_type_idx = self.type_index_map[&wir_idx];
+        let case_types = self
+            .variant_pre_assigned
+            .get(&wir_idx)
+            .map(|(_, ct)| ct.clone())
+            .unwrap_or_default();
 
         // Build field map for the base type
         let mut field_map = IndexMap::new();
         field_map.insert("discriminant".to_string(), 0);
         self.struct_field_map.insert(wir_idx, field_map);
-
-        // Build all subtypes for the rec group
-        let mut subtypes: Vec<SubType> = Vec::new();
 
         // Base struct type (non-final, no supertype)
         subtypes.push(SubType {
@@ -233,14 +351,9 @@ impl<'a> WirEmitter<'a> {
                 describes: None,
             },
         });
-        self.next_type_idx += 1;
 
         // Case subtypes
-        let mut case_types = Vec::new();
         for case in &v.cases {
-            let case_type_idx = self.next_type_idx;
-            self.next_type_idx += 1;
-
             let mut fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
@@ -264,18 +377,12 @@ impl<'a> WirEmitter<'a> {
                     describes: None,
                 },
             });
-
-            case_types.push((case.index, case_type_idx));
         }
         self.variant_case_types.insert(wir_idx, case_types.clone());
 
-        // Map variant case WIR type indices to their Wasm type indices
+        // Register field maps for variant case structs
         for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info {
-            if variant_wir_idx == wir_idx
-                && let Some(&(_, wasm_idx)) = case_types.iter().find(|(idx, _)| *idx == case_idx)
-            {
-                self.type_index_map.insert(case_wir_idx, wasm_idx);
-                // Register field map for case struct
+            if variant_wir_idx == wir_idx {
                 let mut case_field_map = IndexMap::new();
                 case_field_map.insert("discriminant".to_string(), 0);
                 if let Some(case_def) = v.cases.get(case_idx as usize) {
@@ -287,18 +394,18 @@ impl<'a> WirEmitter<'a> {
                 self.struct_field_map.insert(case_wir_idx, case_field_map);
             }
         }
-
-        // Emit all types in a single rec group
-        types.ty().rec(subtypes);
     }
 
-    fn emit_array_type(&mut self, types: &mut TypeSection, a: &WirArrayType, wir_idx: u32) {
-        let type_idx = self.next_type_idx;
-        self.next_type_idx += 1;
-        self.type_index_map.insert(wir_idx, type_idx);
+    fn build_array_subtype(
+        &mut self,
+        a: &WirArrayType,
+        wir_idx: u32,
+        subtypes: &mut Vec<SubType>,
+    ) {
+        debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
         let storage_type = self.wir_type_to_storage_type(&a.element_type);
-        types.ty().subtype(&SubType {
+        subtypes.push(SubType {
             is_final: true,
             supertype_idx: None,
             composite_type: CompositeType {
@@ -313,10 +420,13 @@ impl<'a> WirEmitter<'a> {
         });
     }
 
-    fn emit_func_type(&mut self, types: &mut TypeSection, f: &WirFuncType, wir_idx: u32) {
-        let type_idx = self.next_type_idx;
-        self.next_type_idx += 1;
-        self.type_index_map.insert(wir_idx, type_idx);
+    fn build_func_subtype(
+        &mut self,
+        f: &WirFuncType,
+        wir_idx: u32,
+        subtypes: &mut Vec<SubType>,
+    ) {
+        debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
         let params: Vec<ValType> = f
             .params
@@ -328,7 +438,16 @@ impl<'a> WirEmitter<'a> {
             .iter()
             .map(|t| self.wir_type_to_val_type(t))
             .collect();
-        types.ty().function(params, results);
+        subtypes.push(SubType {
+            is_final: true,
+            supertype_idx: None,
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Func(wasm_encoder::FuncType::new(params, results)),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
+        });
     }
 
     // === Import Section ===

@@ -66,15 +66,11 @@ fn validate_core_module(wasm: &[u8]) {
     let features = wasmparser::WasmFeatures::all();
     let mut validator = wasmparser::Validator::new_with_features(features);
     if let Err(e) = validator.validate_all(wasm) {
-        // Write WAT for analysis (first error only)
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static DUMPED: AtomicBool = AtomicBool::new(false);
-        if !DUMPED.swap(true, Ordering::Relaxed) {
-            if let Ok(wat) = wasmprinter::print_bytes(wasm) {
-                let _ = std::fs::write("/tmp/wir_debug_core.wat", &wat);
-            }
-            let _ = std::fs::write("/tmp/wir_debug_error.txt", format!("{e}"));
+        // Always write WAT for analysis
+        if let Ok(wat) = wasmprinter::print_bytes(wasm) {
+            let _ = std::fs::write("/tmp/wir_debug_core.wat", &wat);
         }
+        let _ = std::fs::write("/tmp/wir_debug_error.txt", format!("{e}"));
         panic!(
             "Internal compiler error: WIR pipeline generated invalid core Wasm module\n\
              Validation error: {e}"

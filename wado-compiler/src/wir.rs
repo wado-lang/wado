@@ -528,7 +528,7 @@ pub struct WirFunction {
 /// WIR instructions are tree-structured where operands are child nodes,
 /// not stack values. This makes the structure inspectable and allows inline
 /// local declaration.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum WirInstr {
     // === Locals ===
     /// Declare a new local variable inline (not in Wasm; lowered to pre-allocated local).
@@ -1283,7 +1283,7 @@ impl WirInstr {
 // =============================================================================
 
 /// What kind of value copy to perform.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum WirCopyType {
     Struct {
         fields: Vec<WirCopyField>,
@@ -1303,7 +1303,7 @@ pub enum WirCopyType {
 }
 
 /// A field in a struct copy.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WirCopyField {
     pub index: u32,
     pub needs_copy: bool,
@@ -1311,7 +1311,7 @@ pub struct WirCopyField {
 }
 
 /// A case in a variant copy.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WirCopyCase {
     pub index: u32,
     pub name: String,

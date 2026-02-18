@@ -366,6 +366,8 @@ impl FunctionTranslator<'_, '_> {
     ///
     /// Used for if-expression branches and labeled-block-expression bodies.
     /// The last `Expr` statement is NOT dropped; it stays on the Wasm stack as the result.
+    /// Also handles statement-level If/IfPattern as value-producing when they're the
+    /// last statement (TIR stores these as statements, not expressions).
     fn translate_stmts_as_value(&mut self, stmts: &[TirStmt]) -> Vec<WirInstr> {
         let mut instrs = Vec::new();
         let len = stmts.len();
@@ -374,9 +376,69 @@ impl FunctionTranslator<'_, '_> {
             if is_last {
                 // Last statement: if it's an Expr, translate without drop
                 if let TirStmtKind::Expr(expr) = &stmt.kind {
-                    let instr = self.translate_expr(expr);
+                    let instr = self.translate_expr_as_value(expr);
                     instrs.push(instr);
                     continue;
+                }
+                // Statement-level If with else can produce a value
+                if let TirStmtKind::If {
+                    condition,
+                    then_block,
+                    else_block: Some(else_block),
+                    ..
+                } = &stmt.kind
+                {
+                    if let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
+                    {
+                        let cond = self.translate_expr(condition);
+                        self.label_stack.push(LabelEntry {
+                            label: None,
+                            is_loop_break: false,
+                            is_loop_continue: false,
+                        });
+                        let then_body =
+                            self.translate_stmts_as_value(&then_block.stmts);
+                        let else_body =
+                            Some(self.translate_stmts_as_value(&else_block.stmts));
+                        self.label_stack.pop();
+                        instrs.push(WirInstr::If {
+                            condition: Box::new(cond),
+                            result: Some(result_type),
+                            then_body,
+                            else_body,
+                        });
+                        continue;
+                    }
+                }
+                // Statement-level IfPattern with else can produce a value
+                if let TirStmtKind::IfPattern {
+                    scrutinee,
+                    then_block,
+                    else_block: Some(else_block),
+                    ..
+                } = &stmt.kind
+                {
+                    if let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
+                    {
+                        let scrut = self.translate_expr(scrutinee);
+                        self.label_stack.push(LabelEntry {
+                            label: None,
+                            is_loop_break: false,
+                            is_loop_continue: false,
+                        });
+                        let then_body =
+                            self.translate_stmts_as_value(&then_block.stmts);
+                        let else_body =
+                            Some(self.translate_stmts_as_value(&else_block.stmts));
+                        self.label_stack.pop();
+                        instrs.push(WirInstr::If {
+                            condition: Box::new(scrut),
+                            result: Some(result_type),
+                            then_body,
+                            else_body,
+                        });
+                        continue;
+                    }
                 }
             }
             if let Some(instr) = self.translate_stmt(stmt) {
@@ -384,6 +446,85 @@ impl FunctionTranslator<'_, '_> {
             }
         }
         instrs
+    }
+
+    /// Infer the WIR result type from the last statement in a list.
+    /// Returns `Some(type)` if the last statement can produce a value, `None` otherwise.
+    fn infer_stmts_result_type(&self, stmts: &[TirStmt]) -> Option<WirType> {
+        stmts.last().and_then(|stmt| match &stmt.kind {
+            TirStmtKind::Expr(expr) => {
+                if expr.type_id != TypeTable::UNIT && expr.type_id != TypeTable::NEVER {
+                    Some(self.ctx.type_id_to_wir_type(self.type_table, expr.type_id))
+                } else {
+                    None
+                }
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block: Some(_),
+                ..
+            } => self.infer_stmts_result_type(&then_block.stmts),
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block: Some(_),
+                ..
+            } => self.infer_stmts_result_type(&then_block.stmts),
+            _ => None,
+        })
+    }
+
+    /// Translate an expression in "value position" — the result stays on the Wasm stack.
+    ///
+    /// Handles cases where TIR assigns UNIT type to expressions that actually produce
+    /// values in a given context (e.g., nested if expressions, chained assignments).
+    fn translate_expr_as_value(&mut self, expr: &TirExpr) -> WirInstr {
+        // If the expression already has a non-UNIT type, translate normally
+        if expr.type_id != TypeTable::UNIT {
+            return self.translate_expr(expr);
+        }
+
+        match &expr.kind {
+            // If expression with UNIT type but value-producing branches
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                if let Some(result_type) =
+                    self.infer_stmts_result_type(&then_branch.stmts)
+                {
+                    let cond = self.translate_expr(condition);
+                    self.label_stack.push(LabelEntry {
+                        label: None,
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                    let then_body =
+                        self.translate_stmts_as_value(&then_branch.stmts);
+                    let else_body = else_branch.as_ref().map(|b| {
+                        self.translate_stmts_as_value(&b.stmts)
+                    });
+                    self.label_stack.pop();
+                    return WirInstr::If {
+                        condition: Box::new(cond),
+                        result: Some(result_type),
+                        then_body,
+                        else_body,
+                    };
+                }
+                self.translate_expr(expr)
+            }
+            // Block with UNIT type but value-producing last expression
+            TirExprKind::Block(block) => {
+                if self.infer_stmts_result_type(&block.stmts).is_some() {
+                    let body = self.translate_stmts_as_value(&block.stmts);
+                    WirInstr::Seq(body)
+                } else {
+                    self.translate_expr(expr)
+                }
+            }
+            _ => self.translate_expr(expr),
+        }
     }
 
     /// Translate a TIR statement to a WIR instruction.
@@ -403,17 +544,13 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::Expr(expr) => {
                 let instr = self.translate_expr(expr);
                 // If the expression has a non-unit type, drop it.
-                // Exception: assignments to fields/indices produce void WIR instructions
-                // (StructSet/ArraySet), so don't wrap them in Drop.
-                let is_void_assign = matches!(
+                // Exception: assignments and global-var-sets produce void WIR instructions
+                // (LocalSet/StructSet/ArraySet/GlobalSet), so don't wrap them in Drop.
+                let is_void_instr = matches!(
                     &expr.kind,
-                    TirExprKind::Assign { target, .. }
-                        if matches!(
-                            &target.kind,
-                            TirExprKind::FieldAccess { .. } | TirExprKind::Index { .. }
-                        )
+                    TirExprKind::Assign { .. } | TirExprKind::GlobalVarSet { .. }
                 );
-                if !is_void_assign
+                if !is_void_instr
                     && expr.type_id != TypeTable::UNIT
                     && expr.type_id != TypeTable::NEVER
                 {
@@ -545,16 +682,26 @@ impl FunctionTranslator<'_, '_> {
     fn translate_expr(&mut self, expr: &TirExpr) -> WirInstr {
         match &expr.kind {
             // === Literals ===
-            TirExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-                    WirInstr::I64Const(*value as i64)
+            TirExprKind::IntLiteral { value, .. } => {
+                // Resolve newtypes to their base primitive type
+                let base_type_id = self.type_table.get_ultimate_base_type(expr.type_id);
+                match self.type_table.get(base_type_id) {
+                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+                        WirInstr::I64Const(*value as i64)
+                    }
+                    _ => WirInstr::I32Const(*value as i32),
                 }
-                _ => WirInstr::I32Const(*value as i32),
-            },
-            TirExprKind::FloatLiteral { value, .. } => match self.type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
-                _ => WirInstr::F64Const(*value),
-            },
+            }
+            TirExprKind::FloatLiteral { value, .. } => {
+                // Resolve newtypes to their base primitive type
+                let base_type_id = self.type_table.get_ultimate_base_type(expr.type_id);
+                match self.type_table.get(base_type_id) {
+                    ResolvedType::Primitive(PrimitiveType::F32) => {
+                        WirInstr::F32Const(*value as f32)
+                    }
+                    _ => WirInstr::F64Const(*value),
+                }
+            }
             TirExprKind::BoolLiteral(value) => WirInstr::I32Const(i32::from(*value)),
             TirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
             TirExprKind::StringLiteral(s) => {
@@ -620,6 +767,29 @@ impl FunctionTranslator<'_, '_> {
 
             // === Binary Operations ===
             TirExprKind::Binary { op, left, right } => {
+                // Short-circuit logical operators: defer right-side evaluation
+                if matches!(op, TirBinaryOp::And) {
+                    let l = self.translate_expr(left);
+                    let r = self.translate_expr(right);
+                    // if left { right } else { 0 }
+                    return WirInstr::If {
+                        condition: Box::new(l),
+                        result: Some(WirType::I32),
+                        then_body: vec![r],
+                        else_body: Some(vec![WirInstr::I32Const(0)]),
+                    };
+                }
+                if matches!(op, TirBinaryOp::Or) {
+                    let l = self.translate_expr(left);
+                    let r = self.translate_expr(right);
+                    // if left { 1 } else { right }
+                    return WirInstr::If {
+                        condition: Box::new(l),
+                        result: Some(WirType::I32),
+                        then_body: vec![WirInstr::I32Const(1)],
+                        else_body: Some(vec![r]),
+                    };
+                }
                 let l = Box::new(self.translate_expr(left));
                 let r = Box::new(self.translate_expr(right));
                 self.translate_binary_op(op, l, r, left.type_id)
@@ -745,6 +915,19 @@ impl FunctionTranslator<'_, '_> {
                 let val = self.translate_expr(value);
                 match &target.kind {
                     TirExprKind::Local { index, .. } => {
+                        // If the value is a LocalSet from nested chained assignment
+                        // (e.g., `h = i = 42`), convert it to LocalTee so it leaves
+                        // the assigned value on the stack for the outer assignment.
+                        let val = match val {
+                            WirInstr::LocalSet {
+                                name: inner_name,
+                                value: inner_val,
+                            } => WirInstr::LocalTee {
+                                name: inner_name,
+                                value: inner_val,
+                            },
+                            other => other,
+                        };
                         let val = self.maybe_value_copy(value, val);
                         WirInstr::LocalSet {
                             name: self.local_name(*index),
@@ -1468,6 +1651,12 @@ impl FunctionTranslator<'_, '_> {
                     if let Some(id) = self.ctx.func_map.get(&fq2) {
                         return Some(id.clone());
                     }
+                    // Newtype fallback: if struct name is a newtype, try the base type name
+                    if let Some(id) =
+                        self.resolve_newtype_method(module_source, &method_info)
+                    {
+                        return Some(id);
+                    }
                 }
                 // Try searching all modules
                 for key in self.ctx.func_map.keys() {
@@ -1480,6 +1669,7 @@ impl FunctionTranslator<'_, '_> {
             FunctionRef::External {
                 module_source,
                 name,
+                method_info,
                 ..
             } => {
                 // Try direct name lookup
@@ -1492,6 +1682,14 @@ impl FunctionTranslator<'_, '_> {
                 if let Some(id) = self.ctx.func_map.get(&alias) {
                     return Some(id.clone());
                 }
+                // Newtype fallback: if struct name is a newtype, try the base type name
+                if let Some(method_info) = method_info {
+                    if let Some(id) =
+                        self.resolve_newtype_method(module_source, method_info)
+                    {
+                        return Some(id);
+                    }
+                }
                 // Try suffix match
                 let suffix = format!("/{name}");
                 for key in self.ctx.func_map.keys() {
@@ -1502,6 +1700,57 @@ impl FunctionTranslator<'_, '_> {
                 None
             }
         }
+    }
+
+    /// Try to resolve a method call on a newtype by substituting the base type name.
+    /// For example, `Location::sum` → `Point::sum` when `type Location = Point`.
+    /// Follows the newtype chain for chained newtypes (C → B → A → Point).
+    fn resolve_newtype_method(
+        &self,
+        module_source: &crate::name::ModuleSource,
+        method_info: &crate::name::LocalMethodName,
+    ) -> Option<crate::wir::WirFuncId> {
+        let struct_name = &method_info.base_struct_name;
+        // Find a Newtype in the type table with this name
+        let base_name = self.resolve_newtype_to_base_struct_name(struct_name)?;
+        // Build a new method name with the base type's struct name
+        let mut resolved_info = method_info.clone();
+        resolved_info.struct_name = base_name.clone();
+        resolved_info.base_struct_name = base_name;
+        let mangled = resolved_info.to_mangled_name();
+        let fq = format!("{module_source}/{mangled}");
+        if let Some(id) = self.ctx.func_map.get(&fq) {
+            return Some(id.clone());
+        }
+        // Try suffix match with the resolved name
+        let suffix = format!("/{mangled}");
+        for key in self.ctx.func_map.keys() {
+            if key.ends_with(&suffix) {
+                return self.ctx.func_map.get(key).cloned();
+            }
+        }
+        None
+    }
+
+    /// Resolve a newtype name to the ultimate base struct/primitive name.
+    /// Returns `None` if the name is not a newtype.
+    fn resolve_newtype_to_base_struct_name(&self, name: &str) -> Option<String> {
+        // Search the type table for a Newtype with the given name
+        for type_id in self.type_table.iter_type_ids() {
+            if let ResolvedType::Newtype {
+                name: newtype_name,
+                base_type,
+                ..
+            } = self.type_table.get(type_id)
+            {
+                if newtype_name == name {
+                    // Follow the chain to the ultimate base type
+                    let ultimate = self.type_table.get_ultimate_base_type(*base_type);
+                    return Some(self.type_table.type_name(ultimate));
+                }
+            }
+        }
+        None
     }
 
     /// Translate a builtin intrinsic call to a WIR instruction.
@@ -2279,26 +2528,6 @@ impl FunctionTranslator<'_, '_> {
                 scrutinee.type_id,
             );
 
-            // Apply guard if present
-            let full_condition = if let Some(guard) = &arm.guard {
-                let mut guard_instrs = Vec::new();
-                self.emit_pattern_bindings(
-                    &arm.pattern,
-                    &scrut_local_name,
-                    scrutinee.type_id,
-                    &mut guard_instrs,
-                );
-                let guard_expr = self.translate_expr(guard);
-                if guard_instrs.is_empty() {
-                    WirInstr::I32And(Box::new(condition), Box::new(guard_expr))
-                } else {
-                    guard_instrs.push(guard_expr);
-                    WirInstr::I32And(Box::new(condition), Box::new(WirInstr::Seq(guard_instrs)))
-                }
-            } else {
-                condition
-            };
-
             // For irrefutable patterns (wildcard, binding), just use the body
             let is_irrefutable = matches!(
                 arm.pattern,
@@ -2312,11 +2541,39 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     result = WirInstr::Seq(body_instrs);
                 }
+            } else if let Some(guard) = &arm.guard {
+                // Guard present: use nested if to avoid eager evaluation.
+                // Outer if checks the pattern condition; inner if checks the guard.
+                // This prevents pattern bindings (ref.cast etc.) from executing
+                // when the pattern doesn't match.
+                let mut inner_then = Vec::new();
+                self.emit_pattern_bindings(
+                    &arm.pattern,
+                    &scrut_local_name,
+                    scrutinee.type_id,
+                    &mut inner_then,
+                );
+                let guard_expr = self.translate_expr(guard);
+                // Inner if: check guard, run body or fall through to remaining arms
+                let inner_if = WirInstr::If {
+                    condition: Box::new(guard_expr),
+                    result: result_wir_type.clone(),
+                    then_body: body_instrs,
+                    else_body: Some(vec![result.clone()]),
+                };
+                inner_then.push(inner_if);
+                // Outer if: check pattern condition
+                result = WirInstr::If {
+                    condition: Box::new(condition),
+                    result: result_wir_type.clone(),
+                    then_body: inner_then,
+                    else_body: Some(vec![result]),
+                };
             } else {
                 let then_body = body_instrs;
                 let else_body = Some(vec![result]);
                 result = WirInstr::If {
-                    condition: Box::new(full_condition),
+                    condition: Box::new(condition),
                     result: result_wir_type.clone(),
                     then_body,
                     else_body,
@@ -2646,17 +2903,55 @@ impl FunctionTranslator<'_, '_> {
                     });
                     // Extract each payload binding via struct.get from the cast local
                     for (i, binding) in bindings.iter().enumerate() {
+                        let payload_get = WirInstr::StructGet {
+                            type_id: case_type_id.clone(),
+                            field_name: format!("payload_{i}"),
+                            expr: Box::new(WirInstr::LocalGet {
+                                name: cast_local.clone(),
+                            }),
+                        };
                         if let TirPattern::Binding { local_index, .. } = binding {
                             instrs.push(WirInstr::LocalSet {
                                 name: self.local_name(*local_index),
-                                value: Box::new(WirInstr::StructGet {
-                                    type_id: case_type_id.clone(),
-                                    field_name: format!("payload_{i}"),
-                                    expr: Box::new(WirInstr::LocalGet {
-                                        name: cast_local.clone(),
-                                    }),
-                                }),
+                                value: Box::new(payload_get),
                             });
+                        } else if let TirPattern::Tuple(sub_patterns) = binding {
+                            // Tuple payload: payload_i is a ref to a tuple struct.
+                            // Extract each tuple field into the corresponding local.
+                            if let Some(tuple_type_id) =
+                                self.get_case_payload_ref_type(&case_type_id, i)
+                            {
+                                let tuple_local =
+                                    format!("__tuple_payload_{variant_name}_{i}");
+                                instrs.push(WirInstr::DeclareLocal {
+                                    name: tuple_local.clone(),
+                                    ty: WirType::Ref {
+                                        type_id: tuple_type_id.clone(),
+                                        nullable: true,
+                                    },
+                                });
+                                instrs.push(WirInstr::LocalSet {
+                                    name: tuple_local.clone(),
+                                    value: Box::new(payload_get),
+                                });
+                                for (j, sub) in sub_patterns.iter().enumerate() {
+                                    if let TirPattern::Binding {
+                                        local_index, ..
+                                    } = sub
+                                    {
+                                        instrs.push(WirInstr::LocalSet {
+                                            name: self.local_name(*local_index),
+                                            value: Box::new(WirInstr::StructGet {
+                                                type_id: tuple_type_id.clone(),
+                                                field_name: format!("{j}"),
+                                                expr: Box::new(WirInstr::LocalGet {
+                                                    name: tuple_local.clone(),
+                                                }),
+                                            }),
+                                        });
+                                    }
+                                }
+                            }
                         }
                     }
                 } else {
@@ -2682,6 +2977,25 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
         }
+    }
+
+    /// Look up a variant case struct's payload field type, extracting the inner
+    /// ref type ID. For `payload_i` of a tuple type, this returns the `WirTypeId`
+    /// of the tuple struct.
+    fn get_case_payload_ref_type(
+        &self,
+        case_type_id: &crate::wir::WirTypeId,
+        payload_index: usize,
+    ) -> Option<crate::wir::WirTypeId> {
+        let type_def = self.ctx.types.get(case_type_id.index() as usize)?;
+        if let crate::wir::WirTypeDef::Struct(s) = type_def {
+            // Fields are: [discriminant, payload_0, payload_1, ...]
+            let field = s.fields.get(payload_index + 1)?;
+            if let WirType::Ref { type_id, .. } = &field.ty {
+                return Some(type_id.clone());
+            }
+        }
+        None
     }
 
     // =========================================================================
