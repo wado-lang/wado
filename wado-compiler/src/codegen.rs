@@ -9,10 +9,9 @@ use crate::project::Project;
 use crate::wir::WirModule;
 
 mod component;
-mod component_gen;
+mod component_context;
 mod emit;
-mod wasm_builder;
-mod wasm_postprocess;
+mod postprocess;
 
 /// Emit a Wasm component binary from a planned project and its WIR module.
 pub fn emit_wasm(project: &Project, wir_module: &WirModule) -> Vec<u8> {
@@ -25,7 +24,7 @@ pub fn emit_wasm(project: &Project, wir_module: &WirModule) -> Vec<u8> {
     }
 
     // Step 3: Wrap in Component Model
-    let wasm = component::build_component(project, &core_module, wir_module);
+    let wasm = component::build_component(project, &core_module);
 
     // Step 4: Validate
     if !project.skip_validation {

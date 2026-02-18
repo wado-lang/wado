@@ -1,7 +1,8 @@
-//! Wasm building utilities for code generation
+//! Component Model index tracking context.
 //!
-//! This module provides index-tracking wrappers around wasm-encoder types,
-//! eliminating hardcoded magic numbers in codegen.
+//! Provides `ComponentModelContext`, which tracks component-level indices
+//! (types, instances, core functions, modules) to eliminate hardcoded magic
+//! numbers when building Wasm Components with wasm-encoder.
 
 use indexmap::IndexMap;
 
