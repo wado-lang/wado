@@ -20,13 +20,17 @@ pub fn emit_wasm(project: &Project, wir_module: &WirModule) -> Vec<u8> {
     let core_module = emit::emit_core_module(wir_module);
 
     // Step 2: Validate core module (catch errors before component wrapping)
-    validate_core_module(&core_module);
+    if !project.skip_validation {
+        validate_core_module(&core_module);
+    }
 
     // Step 3: Wrap in Component Model
     let wasm = component::build_component(project, &core_module, wir_module);
 
     // Step 4: Validate
-    validate_wasm(&wasm);
+    if !project.skip_validation {
+        validate_wasm(&wasm);
+    }
 
     wasm
 }

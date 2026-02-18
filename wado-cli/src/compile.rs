@@ -64,6 +64,7 @@ pub struct CompileOptions {
     pub wat_to_stdout: bool,
     pub log_level: LogLevel,
     pub target_world: Option<String>,
+    pub skip_validation: bool,
 }
 
 pub fn print_usage() {
@@ -79,6 +80,7 @@ pub fn print_usage() {
     );
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
+    eprintln!("  --no-validate    Skip Wasm validation (output raw bytes even if invalid)");
     eprintln!("  --help           Show this help message");
 }
 
@@ -102,6 +104,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     let mut wat_to_stdout = false;
     let mut log_level = LogLevel::default();
     let mut target_world: Option<String> = None;
+    let mut skip_validation = false;
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
@@ -110,6 +113,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
             }
             Long("wat-to-stdout") => {
                 wat_to_stdout = true;
+            }
+            Long("no-validate") => {
+                skip_validation = true;
             }
             Long("world") => {
                 target_world = Some(require_string(&mut parser));
@@ -173,6 +179,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
         wat_to_stdout,
         log_level,
         target_world,
+        skip_validation,
     }
 }
 
@@ -198,7 +205,7 @@ pub async fn compile_with_opts(
     opt_level: OptLevel,
     log_level: LogLevel,
 ) -> Vec<u8> {
-    compile_with_full_opts(filename, opt_level, log_level, None).await
+    compile_with_full_opts(filename, opt_level, log_level, None, false).await
 }
 
 /// Compile a Wado source file with full options including target world
@@ -207,6 +214,7 @@ pub async fn compile_with_full_opts(
     opt_level: OptLevel,
     log_level: LogLevel,
     target_world: Option<String>,
+    skip_validation: bool,
 ) -> Vec<u8> {
     let path = Path::new(filename);
 
@@ -230,6 +238,7 @@ pub async fn compile_with_full_opts(
     let options = wado_compiler::CompilerOptions {
         opt_level: to_compiler_opt_level(opt_level),
         target_world,
+        skip_validation,
     };
 
     // Compile using async API
@@ -264,6 +273,7 @@ pub async fn run(opts: CompileOptions) {
         opts.opt_level,
         opts.log_level,
         opts.target_world,
+        opts.skip_validation,
     )
     .await;
 

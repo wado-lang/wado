@@ -184,6 +184,10 @@ pub struct CompilerOptions {
     /// Target world name (e.g., "Command", "Service")
     /// Defaults to "Command" if not specified
     pub target_world: Option<String>,
+    /// Skip Wasm validation after code generation.
+    /// When true, the compiler returns raw Wasm bytes even if they fail validation.
+    /// Useful for debugging the code generator.
+    pub skip_validation: bool,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -317,12 +321,13 @@ pub async fn compile_with_options<H: CompilerHost>(
         check_effects(&project.tir_modules, &logger)?;
     }
 
-    // Apply target world from options (must be before CM adapter synthesis)
-    // Convert WIT-style world specifier (e.g., "wasi:http/service") to internal name (e.g., "Service")
+    // Apply options to project (must be before CM adapter synthesis)
     let mut project = project;
     if let Some(world) = options.target_world {
+        // Convert WIT-style world specifier (e.g., "wasi:http/service") to internal name (e.g., "Service")
         project.target_world = normalize_world_name(&world);
     }
+    project.skip_validation = options.skip_validation;
 
     // === Phase 7b: CM Adapter Synthesis (Project -> Project) ===
     let project = {
