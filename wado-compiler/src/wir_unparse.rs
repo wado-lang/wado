@@ -1137,6 +1137,12 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(expr);
                 self.write(")");
             }
+            WirInstr::MultiValueStructNew { type_id, instr } => {
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("multivalue_struct_new {tid}("));
+                self.unparse_instr_inline(instr);
+                self.write(")");
+            }
 
             WirInstr::Seq(instrs) => {
                 for (i, instr) in instrs.iter().enumerate() {

@@ -647,6 +647,14 @@ pub enum WirInstr {
     I64MulWideU(Box<WirInstr>, Box<WirInstr>),
     I64MulWideS(Box<WirInstr>, Box<WirInstr>),
 
+    /// Emit a multi-value instruction and wrap the results in a struct.
+    /// Used for i64.add128, i64.sub128, i64.mul_wide_u/s which push two i64
+    /// values on the stack, then StructNew wraps them into a tuple struct.
+    MultiValueStructNew {
+        type_id: WirTypeId,
+        instr: Box<WirInstr>,
+    },
+
     // === Arithmetic (f32) ===
     F32Add(Box<WirInstr>, Box<WirInstr>),
     F32Sub(Box<WirInstr>, Box<WirInstr>),
@@ -1202,6 +1210,7 @@ impl WirInstr {
                 f(c);
                 f(d);
             }
+            Self::MultiValueStructNew { instr, .. } => f(instr),
             Self::TableGet { index, .. } => f(index),
             Self::TableSet { index, value, .. } => {
                 f(index);

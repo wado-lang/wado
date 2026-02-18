@@ -1571,12 +1571,36 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-            // 128-bit integer operations (not yet implemented at Wasm level)
-            WirInstr::I64Add128(..)
-            | WirInstr::I64Sub128(..)
-            | WirInstr::I64MulWideU(..)
-            | WirInstr::I64MulWideS(..) => {
-                f.instruction(&Instruction::Unreachable);
+            // 128-bit integer multi-value operations
+            WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi) => {
+                self.emit_instr(f, a_lo);
+                self.emit_instr(f, a_hi);
+                self.emit_instr(f, b_lo);
+                self.emit_instr(f, b_hi);
+                f.instruction(&Instruction::I64Add128);
+            }
+            WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi) => {
+                self.emit_instr(f, a_lo);
+                self.emit_instr(f, a_hi);
+                self.emit_instr(f, b_lo);
+                self.emit_instr(f, b_hi);
+                f.instruction(&Instruction::I64Sub128);
+            }
+            WirInstr::I64MulWideU(a, b) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                f.instruction(&Instruction::I64MulWideU);
+            }
+            WirInstr::I64MulWideS(a, b) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                f.instruction(&Instruction::I64MulWideS);
+            }
+            // Multi-value struct new: emit the multi-value instr, then struct.new
+            WirInstr::MultiValueStructNew { type_id, instr } => {
+                self.emit_instr(f, instr);
+                let wasm_idx = self.resolve_type_index(type_id.index());
+                f.instruction(&Instruction::StructNew(wasm_idx));
             }
 
             // Sequence

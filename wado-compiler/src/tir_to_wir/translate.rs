@@ -1941,6 +1941,15 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
+            "builtin::i64_load" => {
+                let addr = self.translate_expr(&args[0]);
+                Some(WirInstr::I64Load {
+                    offset: 0,
+                    align: 3,
+                    addr: Box::new(addr),
+                })
+            }
+
             // === Memory Store Instructions ===
             "builtin::i32_store" => {
                 let addr = self.translate_expr(&args[0]);
@@ -1968,6 +1977,16 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::I32Store16 {
                     offset: 0,
                     align: 1,
+                    addr: Box::new(addr),
+                    value: Box::new(val),
+                })
+            }
+            "builtin::i64_store" => {
+                let addr = self.translate_expr(&args[0]);
+                let val = self.translate_expr(&args[1]);
+                Some(WirInstr::I64Store {
+                    offset: 0,
+                    align: 3,
                     addr: Box::new(addr),
                     value: Box::new(val),
                 })
@@ -2191,6 +2210,44 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
+            // === Multi-value 128-bit integer operations ===
+            "builtin::i64_add128" => {
+                let a_lo = Box::new(self.translate_expr(&args[0]));
+                let a_hi = Box::new(self.translate_expr(&args[1]));
+                let b_lo = Box::new(self.translate_expr(&args[2]));
+                let b_hi = Box::new(self.translate_expr(&args[3]));
+                Some(self.wrap_multivalue_i64(
+                    WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi),
+                    result_type_id,
+                ))
+            }
+            "builtin::i64_sub128" => {
+                let a_lo = Box::new(self.translate_expr(&args[0]));
+                let a_hi = Box::new(self.translate_expr(&args[1]));
+                let b_lo = Box::new(self.translate_expr(&args[2]));
+                let b_hi = Box::new(self.translate_expr(&args[3]));
+                Some(self.wrap_multivalue_i64(
+                    WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi),
+                    result_type_id,
+                ))
+            }
+            "builtin::i64_mul_wide_u" => {
+                let a = Box::new(self.translate_expr(&args[0]));
+                let b = Box::new(self.translate_expr(&args[1]));
+                Some(self.wrap_multivalue_i64(
+                    WirInstr::I64MulWideU(a, b),
+                    result_type_id,
+                ))
+            }
+            "builtin::i64_mul_wide_s" => {
+                let a = Box::new(self.translate_expr(&args[0]));
+                let b = Box::new(self.translate_expr(&args[1]));
+                Some(self.wrap_multivalue_i64(
+                    WirInstr::I64MulWideS(a, b),
+                    result_type_id,
+                ))
+            }
+
             // === No-op casts ===
             "builtin::i32_as_char" => Some(self.translate_expr(&args[0])),
 
@@ -2221,6 +2278,25 @@ impl FunctionTranslator<'_, '_> {
 
             // Not an instruction-builtin; fall through to function call resolution
             _ => None,
+        }
+    }
+
+    /// Wrap a multi-value [i64, i64] instruction in a tuple struct.
+    /// The Wasm instruction pushes two i64s on the stack; we wrap them
+    /// in a StructNew for the result tuple type [i64, i64].
+    fn wrap_multivalue_i64(&self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
+        let wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+        if let WirType::Ref { type_id, .. } = wir_type {
+            // The multi-value instr pushes two i64s, then StructNew wraps them
+            WirInstr::MultiValueStructNew {
+                type_id,
+                instr: Box::new(instr),
+            }
+        } else {
+            // Fallback: just emit the instruction (shouldn't happen)
+            instr
         }
     }
 
