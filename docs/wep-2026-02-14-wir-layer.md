@@ -133,86 +133,24 @@ Created `wir.rs` (data structures), `wir_unparse.rs` (pseudo-Wado output), and `
 
 ### Phase 2: Parallel E2E Test Infrastructure (complete)
 
-Created `compile_with_wir(&Project) -> Vec<u8>` in `tir_to_wir/mod.rs` with `CompilerOptions.use_wir_backend` flag. Created parallel test harnesses:
+Created `compile_with_wir(&Project) -> Vec<u8>` in `tir_to_wir/mod.rs`. Created parallel test harnesses (`wir_e2e.rs`, `wir_progress.rs`) gated by `WADO_WIR_TEST=1` to track incremental progress. Both harnesses were removed after cutover; `tests/e2e.rs` is now the sole E2E test.
 
-- `tests/wir_e2e.rs` — runs individual fixtures through the WIR pipeline (gated by `WADO_WIR_TEST=1`)
-- `tests/wir_progress.rs` — runs all fixtures and reports aggregate pass/fail counts
+### Phase 3: Core Translation (complete)
 
-### Phase 3: Core Translation (in progress)
+All translation steps implemented: type registration (structs, variants, enums, flags, arrays, tuples, closures, function types, rec groups), module skeleton (imports, globals, data, elements, exports, name section), function body translation (constants, locals, arithmetic, comparisons, casts, control flow, calls, GC ops, value copy, match, closures, globals), and Component Model wrapper (WASI imports, bundled modules, world exports). CM adapter functions are handled as ordinary TIR functions via [TIR-Level CM Adapter Synthesis](./wep-2026-02-15-cm-adapter-synthesis.md).
 
-The main implementation work. Build `tir_to_wir` and `wir_emit` incrementally.
+### Phase 4: Cutover (complete)
 
-#### Step 3a: Type Registration
+- [x] Verified behavioral equivalence: all 3380 E2E tests pass via the WIR pipeline
+- [x] Replaced `Codegen::generate_wasm` with `compile_with_wir`
+- [x] Deleted `codegen.rs`
+- [x] Promoted `tests/e2e.rs` as the sole E2E test (removed `wir_e2e.rs` and `wir_progress.rs`)
 
-- [x] Struct types (fields, mutability, GC layout)
-- [x] Variant types (base struct + case subtypes)
-- [x] Enum types (i32 discriminant, no Wasm type entry)
-- [ ] Flags types (i32 bitfield, no Wasm type entry)
-- [x] Array types (element type, mutability)
-- [x] Tuple types (anonymous structs)
-- [ ] Closure types (funcref + captured environment struct)
-- [x] Function types
-- [x] Rec groups and topological sorting
+Remaining cleanup:
 
-#### Step 3b: Module Skeleton
-
-- [x] Import section (WASI functions, bundled modules)
-- [x] Global variables
-- [x] Data section (string literals)
-- [x] Element section (funcref tables)
-- [x] Export section
-- [x] Name section
-
-#### Step 3c: Function Bodies — Basics
-
-- [x] Constants (i32, i64, f32, f64)
-- [x] Local variables (get, set, tee, declare)
-- [x] Arithmetic (i32, i64, f32, f64 — all operators)
-- [x] Comparison and logical operators
-- [x] Type casts and conversions
-- [x] Block, Loop, If/Else, Br, BrIf, BrTable
-- [x] Return, Unreachable, Nop, Drop
-- [x] Function calls (direct)
-
-#### Step 3d: Function Bodies — GC and Compound
-
-- [x] Struct construction (struct.new)
-- [x] Field access (struct.get) and assignment (struct.set)
-- [x] Array operations (new, get, set, len, copy, fill)
-- [x] Reference operations (ref.null, ref.test, ref.cast, ref.eq)
-- [ ] Value copy (ValueCopy compound instruction)
-- [x] Match expressions (pattern dispatch, br_table)
-- [ ] Closure creation and call_ref
-- [x] Global get/set
-
-#### Step 3e: Function Bodies — WASI and CM
-
-If [TIR-Level CM Adapter Synthesis](./wep-2026-02-15-cm-adapter-synthesis.md) is completed before this step, CM adapter functions are already ordinary TIR functions — `tir_to_wir` handles them like any other function. Only the raw CM call builtins (`builtin::cm_raw_call__*`) need WIR-level support.
-
-Without CM adapter synthesis:
-
-- [ ] CM effect calls (canonical lift/lower)
-- [ ] CM resource method calls
-- [ ] CM payload lowering (string, list, record, variant, option, result)
-- [ ] CM export glue functions
-- [ ] Async CM (subtask handling, waitable sets)
-
-#### Step 3f: Component Model Wrapper
-
-- [x] WASI interface imports
-- [x] Bundled module instantiation (fts, libm)
-- [x] Core module + component composition
-- [x] World export declarations
-
-### Phase 4: Cutover
-
-Once all E2E tests pass via the WIR pipeline:
-
-- [ ] Verify behavioral equivalence across all fixtures and optimization levels
-- [ ] Replace `Codegen::generate_wasm` calls with `compile_with_wir`
-- [ ] Delete `codegen.rs` and `copy_context.rs`
-- [ ] Promote `tests/wir_e2e.rs` to primary E2E test (or merge with `e2e.rs`)
-- [ ] Merge `wasm_plan` into `tir_to_wir`. Pipeline becomes: `optimize → tir_to_wir → wir_emit`
+- [ ] Remove debug file writes (`/tmp/wir_debug_core.wat`) from `tir_to_wir/mod.rs`
+- [ ] Merge `wasm_plan` into `tir_to_wir` — currently still called as a separate pipeline phase from `lib.rs`. Pipeline becomes: `optimize → tir_to_wir → wir_emit`
+- [ ] Delete `copy_context.rs` — only used by `optimize_rewrite.rs` for `needed_copy_types` expansion
 
 ### Phase 5 (Future): Optimizer Migration
 
