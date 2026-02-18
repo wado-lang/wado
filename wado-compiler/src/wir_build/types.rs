@@ -2,16 +2,153 @@
 //!
 //! Follows a multi-phase registration order to handle type dependencies
 //! correctly.
+//!
+//! Also contains type-ordering utilities (topological sort) used during registration.
 
 use crate::name::{ModuleSource, StructName};
-use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeTable};
-use crate::wasm_plan::{TypeDecl, sort_types_topologically};
+use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeId, TypeTable};
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
     WirStructType, WirTypeDef, WirVariantCase, WirVariantType,
 };
 
+use indexmap::{IndexMap, IndexSet};
+
 use super::context::WirContext;
+
+// =============================================================================
+// Type-ordering utilities (topological sort for type registration)
+// =============================================================================
+
+/// A type declaration in topological order (struct or variant).
+pub enum TypeDecl<'a> {
+    Struct(&'a TirStruct),
+    Variant(&'a TirVariantDecl),
+}
+
+/// Get type dependencies (struct and variant names) for a given type.
+fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
+    match type_table.get(type_id) {
+        ResolvedType::Struct { name, .. } => vec![name.clone()],
+        ResolvedType::Variant { name, .. } => vec![name.clone()],
+        ResolvedType::GenericInstance { type_args, .. } => {
+            let mangled_name = type_table.mangle_type_name(type_id);
+            let mut deps = vec![mangled_name];
+            for arg in type_args {
+                deps.extend(get_type_dependencies(type_table, *arg));
+            }
+            deps
+        }
+        ResolvedType::BuiltinArray(inner)
+        | ResolvedType::Option(inner)
+        | ResolvedType::Ref(inner)
+        | ResolvedType::MutRef(inner)
+        | ResolvedType::Stream(inner)
+        | ResolvedType::Future(inner)
+        | ResolvedType::Reactive(inner) => get_type_dependencies(type_table, *inner),
+        ResolvedType::Tuple(elems) => elems
+            .iter()
+            .flat_map(|e| get_type_dependencies(type_table, *e))
+            .collect(),
+        _ => vec![],
+    }
+}
+
+/// Sort structs and variants together topologically so dependencies are registered
+/// before dependents. This handles mutual dependencies between structs and variants
+/// (e.g., struct with variant field, variant with struct payload).
+fn sort_types_topologically<'a>(
+    structs: &'a [TirStruct],
+    variants: &'a [TirVariantDecl],
+    type_table: &TypeTable,
+) -> Vec<TypeDecl<'a>> {
+    let struct_names: IndexSet<String> = structs.iter().map(|s| s.name.clone()).collect();
+    let variant_names: IndexSet<String> = variants.iter().map(|v| v.name.clone()).collect();
+    let all_names: IndexSet<String> = struct_names.union(&variant_names).cloned().collect();
+
+    let mut deps: IndexMap<String, Vec<String>> = IndexMap::new();
+
+    for s in structs {
+        let mut type_deps = Vec::new();
+        for field in &s.fields {
+            for dep in get_type_dependencies(type_table, field.type_id) {
+                if all_names.contains(&dep) && dep != s.name {
+                    type_deps.push(dep);
+                }
+            }
+        }
+        deps.insert(s.name.clone(), type_deps);
+    }
+
+    for v in variants {
+        let mut type_deps = Vec::new();
+        for case in &v.cases {
+            for dep in get_type_dependencies(type_table, case.payload) {
+                if all_names.contains(&dep) && dep != v.name {
+                    type_deps.push(dep);
+                }
+            }
+        }
+        deps.insert(v.name.clone(), type_deps);
+    }
+
+    let mut in_degree: IndexMap<String, usize> = IndexMap::new();
+    for name in &all_names {
+        in_degree.insert(name.clone(), deps.get(name).map(Vec::len).unwrap_or(0));
+    }
+
+    let mut dependents: IndexMap<String, Vec<String>> = IndexMap::new();
+    for (name, type_deps) in &deps {
+        for dep in type_deps {
+            dependents
+                .entry(dep.clone())
+                .or_default()
+                .push(name.clone());
+        }
+    }
+
+    let mut queue: Vec<String> = in_degree
+        .iter()
+        .filter(|&(_, deg)| *deg == 0)
+        .map(|(name, _)| name.clone())
+        .collect();
+
+    let mut sorted_names = Vec::new();
+    while let Some(name) = queue.pop() {
+        sorted_names.push(name.clone());
+        if let Some(deps_on_name) = dependents.get(&name) {
+            for dependent in deps_on_name {
+                let deg = in_degree.get_mut(dependent).unwrap();
+                *deg -= 1;
+                if *deg == 0 {
+                    queue.push(dependent.clone());
+                }
+            }
+        }
+    }
+
+    let name_to_struct: IndexMap<&str, &TirStruct> =
+        structs.iter().map(|s| (s.name.as_str(), s)).collect();
+    let name_to_variant: IndexMap<&str, &TirVariantDecl> =
+        variants.iter().map(|v| (v.name.as_str(), v)).collect();
+
+    sorted_names
+        .iter()
+        .filter_map(|name| {
+            if let Some(s) = name_to_struct.get(name.as_str()) {
+                Some(TypeDecl::Struct(s))
+            } else {
+                name_to_variant
+                    .get(name.as_str())
+                    .map(|v| TypeDecl::Variant(v))
+            }
+        })
+        .collect()
+}
+
+// =============================================================================
+// Type registration
+// =============================================================================
 
 /// Register all types from the Project into the `WirContext`.
 ///

@@ -8,11 +8,10 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::name::{ModuleSource, StructName};
 use crate::project::Project;
-use crate::tir::{TirFunction, TirModule, TypeId, TypeTable};
+use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
-    WirComponent, WirData, WirExport, WirExportDesc, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType,
-    WirTypeDef, WirTypeId,
+    WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction, WirGlobal, WirImport,
+    WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType, WirTypeDef, WirTypeId,
 };
 
 /// Builder context for the `tir_to_wir` translation.
@@ -102,8 +101,6 @@ pub struct PendingFunctionBody {
     pub tir_func: Rc<RefCell<TirFunction>>,
     /// The type table for this function's module
     pub type_table: Rc<RefCell<TypeTable>>,
-    /// The module source for this function
-    pub module_source: ModuleSource,
 }
 
 impl<'a> WirContext<'a> {
@@ -188,11 +185,6 @@ impl<'a> WirContext<'a> {
         )
     }
 
-    /// Look up a type by fully-qualified name.
-    pub fn lookup_type(&self, fq: &str) -> Option<&WirTypeId> {
-        self.type_map.get(fq)
-    }
-
     /// Look up a struct type by name only (ignoring `module_source`).
     /// Used as fallback when `module_source` doesn't match (e.g., monomorphized
     /// structs where the type's `module_source` is the use site, not the definition site).
@@ -245,11 +237,6 @@ impl<'a> WirContext<'a> {
         func_id
     }
 
-    /// Look up a function by fully-qualified name.
-    pub fn lookup_func(&self, fq: &str) -> Option<&WirFuncId> {
-        self.func_map.get(fq)
-    }
-
     // === Data Section ===
 
     /// Register a string literal and return its data segment index.
@@ -266,27 +253,7 @@ impl<'a> WirContext<'a> {
         idx
     }
 
-    // === Export Registration ===
-
-    /// Register a function export.
-    pub fn register_export(&mut self, name: String, func_id: WirFuncId) {
-        self.exports.push(WirExport {
-            name,
-            desc: WirExportDesc::Func { func_id },
-        });
-    }
-
     // === Helpers ===
-
-    /// Get the entry module TIR.
-    pub fn entry_tir(&self) -> &TirModule {
-        self.project.entry_module()
-    }
-
-    /// Get the entry module's type table (borrowed).
-    pub fn entry_type_table(&self) -> std::cell::Ref<'_, TypeTable> {
-        self.entry_tir().type_table.borrow()
-    }
 
     /// Build a string key for canonical closure type lookup.
     pub fn canonical_closure_key(params: &[WirType], results: &[WirType]) -> String {

@@ -235,7 +235,6 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 ctx,
                 type_table: &type_table,
                 tir_func: &tir_func,
-                module_source: &pending_body.module_source,
                 label_stack: Vec::new(),
                 match_counter: 0,
                 local_counter: 0,
@@ -264,7 +263,6 @@ struct FunctionTranslator<'a, 'b> {
     ctx: &'a WirContext<'b>,
     type_table: &'a TypeTable,
     tir_func: &'a TirFunction,
-    module_source: &'a crate::name::ModuleSource,
     /// Stack of Wasm block scopes for computing br depths.
     label_stack: Vec<LabelEntry>,
     /// Counter for generating unique match scrutinee local names.

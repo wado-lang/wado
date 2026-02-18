@@ -1,32 +1,14 @@
-//! Wasm Plan Phase - Prepares TIR for WebAssembly code generation
+//! Wasm plan — Component Model planning types and builder.
 //!
-//! This phase runs between optimize and codegen:
-//! ```text
-//! lower -> optimize -> wasm_plan -> codegen
-//! ```
+//! Contains `ComponentPlan` and related structs used by `wir_build` and `codegen`.
+//! The planning logic (formerly the standalone `wasm_plan` pipeline phase) now runs
+//! inside `wir_build::plan_project`, called at the start of the WIR pipeline.
 //!
-//! Responsibilities:
-//! 1. Set project flags based on world analysis (e.g., `has_http_handler_export`)
-//! 2. Build `ComponentPlan` for codegen (structure, imports, exports)
-//! 3. Type ordering analysis - Topological sort and dependency analysis for type registration
-//!
-//! Note: CM export adapter synthesis (task-return wrapping, Result lowering) is handled
-//! by `cm_adapter_gen` at the TIR level. This phase focuses on metadata and planning.
-//!
-//! Design principles:
-//! - Keep codegen simple: codegen should just convert TIR to Wasm without
-//!   needing to analyze world definitions or export signatures
-//! - Centralize Wasm-related analysis: All pre-codegen analysis should be in this
-//!   module to avoid duplication between optimize and codegen phases
-//! - Pure analysis functions: Topological sort, dependency analysis, and self-referential
-//!   detection are pure functions that don't depend on codegen state
+//! Type-ordering utilities (topological sort) have moved to `wir_build::types`.
 
 use crate::ast::Type;
 use crate::project::Project;
-use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeId, TypeTable};
 use crate::world_registry::WorldExportInfo;
-use indexmap::IndexMap;
-use indexmap::IndexSet;
 
 // =============================================================================
 // Component Plan
@@ -83,7 +65,8 @@ pub struct TestExportPlan {
 /// Build a `ComponentPlan` from the project.
 ///
 /// Scans TIR imports and world registry to determine what the component needs.
-fn build_component_plan(project: &Project) -> ComponentPlan {
+/// Called by `wir_build::plan_project` at the start of the WIR pipeline.
+pub fn build_component_plan(project: &Project) -> ComponentPlan {
     let entry_tir = project.entry_module();
 
     // Collect canonical intrinsics from TIR imports with namespace "wasi"
@@ -177,214 +160,6 @@ fn build_world_export_plans(project: &Project) -> Vec<WorldExportPlan> {
             }
         })
         .collect()
-}
-
-// =============================================================================
-// Type Ordering Analysis
-// =============================================================================
-
-/// A type declaration in topological order (struct or variant).
-pub enum TypeDecl<'a> {
-    Struct(&'a TirStruct),
-    Variant(&'a TirVariantDecl),
-}
-
-/// Get type dependencies (struct and variant names) for a given type.
-/// Used for topological sorting of type declarations.
-///
-/// Returns mangled names for `GenericInstance` types (e.g., "`BTreeNode<String,i32>`").
-pub fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
-    match type_table.get(type_id) {
-        ResolvedType::Struct { name, .. } => vec![name.clone()],
-        ResolvedType::Variant { name, .. } => vec![name.clone()],
-        ResolvedType::GenericInstance { type_args, .. } => {
-            let mangled_name = type_table.mangle_type_name(type_id);
-            let mut deps = vec![mangled_name];
-            for arg in type_args {
-                deps.extend(get_type_dependencies(type_table, *arg));
-            }
-            deps
-        }
-        ResolvedType::BuiltinArray(inner)
-        | ResolvedType::Option(inner)
-        | ResolvedType::Ref(inner)
-        | ResolvedType::MutRef(inner)
-        | ResolvedType::Stream(inner)
-        | ResolvedType::Future(inner)
-        | ResolvedType::Reactive(inner) => get_type_dependencies(type_table, *inner),
-        ResolvedType::Tuple(elems) => elems
-            .iter()
-            .flat_map(|e| get_type_dependencies(type_table, *e))
-            .collect(),
-        _ => vec![],
-    }
-}
-
-/// Check if a struct has self-referential fields (directly or through Array/Ref/MutRef).
-/// Returns the list of field type IDs that create the self-reference cycle.
-pub fn get_self_referential_field_types(
-    struct_name: &str,
-    tir_struct: &TirStruct,
-    type_table: &TypeTable,
-) -> Vec<TypeId> {
-    let mut self_ref_fields = Vec::new();
-    for field in &tir_struct.fields {
-        if type_references_struct(field.type_id, struct_name, type_table) {
-            self_ref_fields.push(field.type_id);
-        }
-    }
-    self_ref_fields
-}
-
-/// Check if a type references a struct by name (transitively through Array/Ref/MutRef).
-/// The `struct_name` should be the full mangled name (e.g., "`AANode<String,i32>`").
-pub fn type_references_struct(type_id: TypeId, struct_name: &str, type_table: &TypeTable) -> bool {
-    match type_table.get(type_id) {
-        ResolvedType::Struct { name, .. } => name == struct_name,
-        ResolvedType::GenericInstance { type_args, .. } => {
-            let mangled_name = type_table.mangle_type_name(type_id);
-            if mangled_name == struct_name {
-                return true;
-            }
-            type_args
-                .iter()
-                .any(|arg| type_references_struct(*arg, struct_name, type_table))
-        }
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            type_references_struct(*inner, struct_name, type_table)
-        }
-        ResolvedType::BuiltinArray(inner) => {
-            type_references_struct(*inner, struct_name, type_table)
-        }
-        ResolvedType::Option(inner) => type_references_struct(*inner, struct_name, type_table),
-        _ => false,
-    }
-}
-
-/// Sort structs and variants together topologically so dependencies are registered
-/// before dependents. This handles mutual dependencies between structs and variants
-/// (e.g., struct with variant field, variant with struct payload).
-pub fn sort_types_topologically<'a>(
-    structs: &'a [TirStruct],
-    variants: &'a [TirVariantDecl],
-    type_table: &TypeTable,
-) -> Vec<TypeDecl<'a>> {
-    // Collect all type names
-    let struct_names: IndexSet<String> = structs.iter().map(|s| s.name.clone()).collect();
-    let variant_names: IndexSet<String> = variants.iter().map(|v| v.name.clone()).collect();
-    let all_names: IndexSet<String> = struct_names.union(&variant_names).cloned().collect();
-
-    // Build dependency graph: deps[A] = [B] means A depends on B (B must come before A)
-    let mut deps: IndexMap<String, Vec<String>> = IndexMap::new();
-
-    for s in structs {
-        let mut type_deps = Vec::new();
-        for field in &s.fields {
-            let field_deps = get_type_dependencies(type_table, field.type_id);
-            for dep in field_deps {
-                if all_names.contains(&dep) && dep != s.name {
-                    type_deps.push(dep);
-                }
-            }
-        }
-        deps.insert(s.name.clone(), type_deps);
-    }
-
-    for v in variants {
-        let mut type_deps = Vec::new();
-        for case in &v.cases {
-            let payload_deps = get_type_dependencies(type_table, case.payload);
-            for dep in payload_deps {
-                if all_names.contains(&dep) && dep != v.name {
-                    type_deps.push(dep);
-                }
-            }
-        }
-        deps.insert(v.name.clone(), type_deps);
-    }
-
-    // Topological sort using Kahn's algorithm
-    let mut in_degree: IndexMap<String, usize> = IndexMap::new();
-    for name in &all_names {
-        let type_deps = deps.get(name).map(std::vec::Vec::len).unwrap_or(0);
-        in_degree.insert(name.clone(), type_deps);
-    }
-
-    let mut dependents: IndexMap<String, Vec<String>> = IndexMap::new();
-    for (name, type_deps) in &deps {
-        for dep in type_deps {
-            dependents
-                .entry(dep.clone())
-                .or_default()
-                .push(name.clone());
-        }
-    }
-
-    let mut queue: Vec<String> = in_degree
-        .iter()
-        .filter(|&(_, deg)| *deg == 0)
-        .map(|(name, _)| name.clone())
-        .collect();
-
-    let mut sorted_names = Vec::new();
-    while let Some(name) = queue.pop() {
-        sorted_names.push(name.clone());
-        if let Some(deps_on_name) = dependents.get(&name) {
-            for dependent in deps_on_name {
-                let deg = in_degree.get_mut(dependent).unwrap();
-                *deg -= 1;
-                if *deg == 0 {
-                    queue.push(dependent.clone());
-                }
-            }
-        }
-    }
-
-    // Map names back to TypeDecl
-    let name_to_struct: IndexMap<&str, &TirStruct> =
-        structs.iter().map(|s| (s.name.as_str(), s)).collect();
-    let name_to_variant: IndexMap<&str, &TirVariantDecl> =
-        variants.iter().map(|v| (v.name.as_str(), v)).collect();
-
-    sorted_names
-        .iter()
-        .filter_map(|name| {
-            if let Some(s) = name_to_struct.get(name.as_str()) {
-                Some(TypeDecl::Struct(s))
-            } else {
-                name_to_variant
-                    .get(name.as_str())
-                    .map(|v| TypeDecl::Variant(v))
-            }
-        })
-        .collect()
-}
-
-// =============================================================================
-// Main wasm_plan phase
-// =============================================================================
-
-/// Run the `wasm_plan` phase on a Project
-///
-/// This analyzes world exports and attaches `CmExportInfo` to the corresponding
-/// `TirFunctions`. It also builds the `ComponentPlan` for codegen.
-///
-/// Returns an error if a required world export function is missing or not marked with `export`.
-pub fn wasm_plan(mut project: Project) -> Result<Project, String> {
-    // Look up the target world from the registry in Project
-    let world_info = project.world_registry.get(&project.target_world).cloned();
-
-    if let Some(world_info) = world_info {
-        // Update project's HTTP handler flag based on world analysis
-        project.has_http_handler_export = world_info.has_http_handler_export();
-        // All world exports are handled by CM adapter synthesis (cm_adapter_gen).
-        // The adapter functions contain task-return calls in their TIR bodies.
-    }
-
-    // Build ComponentPlan
-    project.component_plan = Some(build_component_plan(&project));
-
-    Ok(project)
 }
 
 /// Convert a test function name (e.g., `__test_0_my_name`) to a valid kebab-case

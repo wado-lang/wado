@@ -294,6 +294,7 @@ pub async fn run(opts: ServeOptions) {
         opts.opt_level,
         opts.log_level,
         Some("wasi:http/service".to_string()),
+        false,
     )
     .await;
 

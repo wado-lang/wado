@@ -60,6 +60,9 @@ pub struct Project {
     // ========================================
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
+    /// When true, skip Wasm validation after code generation.
+    /// Returns raw bytes even if invalid — useful for debugging codegen.
+    pub skip_validation: bool,
     /// Target world for Component Model export (e.g., "Command", "Service")
     /// Defaults to "Command" (wasi:cli/command)
     pub target_world: String,
@@ -116,6 +119,7 @@ impl Project {
             used_wasi_functions: IndexSet::new(),
             // Codegen options
             strip_names: false,
+            skip_validation: false,
             target_world: "Command".to_string(),
             // CM export characteristics
             has_http_handler_export: false,
