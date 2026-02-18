@@ -2948,10 +2948,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             (value.clone(), value.type_id)
         };
 
-        // Type check: if type annotation is present, verify value type matches
+        // Type check: if type annotation is present, verify value type matches.
+        // `never` (bottom type) is assignable to any type, so skip the check for it.
         if let Some(_annotated_type) = &let_stmt.ty
             && value.type_id != type_id
             && value.type_id != TypeTable::UNKNOWN
+            && value.type_id != TypeTable::NEVER
         {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
@@ -9613,7 +9615,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 } => {
                     let then_type = Self::block_result_type(then_block);
                     let else_type = Self::block_result_type(else_block);
+                    // `never` is the bottom type: compatible with any other type.
                     if then_type == else_type {
+                        Some(then_type)
+                    } else if then_type == TypeTable::NEVER {
+                        Some(else_type)
+                    } else if else_type == TypeTable::NEVER {
                         Some(then_type)
                     } else {
                         None
@@ -9627,7 +9634,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 } => {
                     let then_type = Self::block_result_type(then_block);
                     let else_type = Self::block_result_type(else_block);
+                    // `never` is the bottom type: compatible with any other type.
                     if then_type == else_type {
+                        Some(then_type)
+                    } else if then_type == TypeTable::NEVER {
+                        Some(else_type)
+                    } else if else_type == TypeTable::NEVER {
                         Some(then_type)
                     } else {
                         None
@@ -9679,7 +9691,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .as_ref()
                 .map_or(TypeTable::UNIT, Self::block_result_type);
 
+            // `never` is the bottom type: a branch returning `never` is compatible
+            // with any type, so the result type comes from the non-never branch.
             if then_type == else_type {
+                then_type
+            } else if then_type == TypeTable::NEVER {
+                else_type
+            } else if else_type == TypeTable::NEVER {
                 then_type
             } else if else_block.is_none() {
                 if then_type != TypeTable::UNIT {

@@ -511,6 +511,11 @@ impl FunctionTranslator<'_, '_> {
                 if let TirStmtKind::Expr(expr) = &stmt.kind {
                     let instr = self.translate_expr_as_value(expr);
                     instrs.push(instr);
+                    // `never`-typed expressions diverge; add unreachable so the Wasm
+                    // validator accepts this branch inside a value-producing if/match block.
+                    if expr.type_id == TypeTable::NEVER {
+                        instrs.push(WirInstr::Unreachable);
+                    }
                     continue;
                 }
                 // Statement-level If with else can produce a value
@@ -657,11 +662,18 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let local_name = self.local_name(*local_index);
                 let value_instr = self.translate_expr(value);
-                let value_instr = self.maybe_value_copy(value, value_instr);
-                Some(WirInstr::LocalSet {
-                    name: local_name,
-                    value: Box::new(value_instr),
-                })
+                // If the initializer diverges (`never`), no value reaches the stack,
+                // so LocalSet would be invalid. Emit the call + unreachable instead;
+                // the local is declared but never assigned (unreachable code follows).
+                if value.type_id == TypeTable::NEVER {
+                    Some(WirInstr::Seq(vec![value_instr, WirInstr::Unreachable]))
+                } else {
+                    let value_instr = self.maybe_value_copy(value, value_instr);
+                    Some(WirInstr::LocalSet {
+                        name: local_name,
+                        value: Box::new(value_instr),
+                    })
+                }
             }
             TirStmtKind::Expr(expr) => {
                 let instr = self.translate_expr(expr);
