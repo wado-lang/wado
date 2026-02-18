@@ -238,7 +238,6 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
     component_bytes
 }
 
-
 fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
 }
@@ -338,7 +337,6 @@ fn wado_type_to_cm_result_type(
     }
 }
 
-
 fn build_memory_module(strip_names: bool) -> Vec<u8> {
     use wasm_encoder::{
         CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection,
@@ -419,7 +417,6 @@ fn build_memory_module(strip_names: bool) -> Vec<u8> {
 
     module.finish()
 }
-
 
 fn embed_bundled_modules(
     builder: &mut ComponentBuilder,
@@ -506,7 +503,6 @@ fn embed_bundled_modules(
     }
 }
 
-
 fn build_future_intrinsic_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -571,7 +567,6 @@ fn build_future_intrinsic_types(
 
     trailers_future_type
 }
-
 
 fn emit_canonical_intrinsics(
     builder: &mut ComponentBuilder,
@@ -649,7 +644,6 @@ fn emit_canonical_intrinsics(
         }
     }
 }
-
 
 fn emit_world_exports(
     builder: &mut ComponentBuilder,
@@ -751,7 +745,6 @@ fn emit_world_exports(
         ctx.skip_comp_func_idx();
     }
 }
-
 
 /// Generate WASI imports dynamically from the registry.
 fn generate_wasi_imports(
@@ -1170,7 +1163,6 @@ fn generate_wasi_imports(
         import_http_types_for_service(project, builder, ctx);
     }
 }
-
 
 fn import_http_types_for_service(
     project: &Project,
@@ -1598,7 +1590,6 @@ fn import_http_types_for_service(
     }
 }
 
-
 fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1765,7 +1756,6 @@ fn import_interfaces_with_resources(
     }
 }
 
-
 fn lower_wasi_functions(
     project: &Project,
     builder: &mut ComponentBuilder,
@@ -1805,7 +1795,6 @@ fn lower_wasi_functions(
         }
     }
 }
-
 
 fn append_http_handler_export(component_bytes: &mut Vec<u8>, ctx: &ComponentModelContext) {
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};

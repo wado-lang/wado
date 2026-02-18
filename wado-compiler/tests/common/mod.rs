@@ -18,7 +18,6 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use wado_compiler::{Bail, CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
 
-
 /// A filesystem-based CompilerHost for tests that need to load files
 pub struct FilesystemHost {
     base_path: PathBuf,
@@ -156,7 +155,6 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
     }
 }
 
-
 /// Shared tokio runtime for all tests (initialized once)
 static TOKIO_RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
@@ -177,7 +175,6 @@ pub fn new_runtime() -> tokio::runtime::Runtime {
         .build()
         .expect("Failed to create tokio runtime")
 }
-
 
 /// Shared wasmtime Engine for CLI tests (initialized once)
 static CLI_ENGINE: OnceLock<Engine> = OnceLock::new();
@@ -221,7 +218,6 @@ pub fn http_engine() -> Engine {
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
     Engine::new(&config).expect("Failed to create wasmtime Engine")
 }
-
 
 /// WASI state for CLI tests
 pub struct CliWasiState {
@@ -269,7 +265,6 @@ pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<CliWasiState>> {
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     Ok(linker)
 }
-
 
 /// Compile source string using in-memory host
 pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, CompileError> {
@@ -361,7 +356,6 @@ pub async fn compile_file_async(
         .map_err(|_: Bail| bail_to_compile_error(&host.diagnostics(), Some(&filename)))
 }
 
-
 /// Extract __DATA__ section from source file content
 pub fn extract_data_section(source: &str) -> Option<&str> {
     let marker = "\n__DATA__\n";
@@ -383,7 +377,6 @@ pub fn parse_data_section<T: serde::de::DeserializeOwned>(data_section: &str, co
     })
 }
 
-
 /// Get human-readable name for optimization level
 pub fn opt_level_name(opt: OptLevel) -> &'static str {
     match opt {
@@ -394,7 +387,6 @@ pub fn opt_level_name(opt: OptLevel) -> &'static str {
         OptLevel::Os => "Os",
     }
 }
-
 
 /// Result of running a Wasm component with captured output
 #[derive(Debug)]

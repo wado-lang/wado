@@ -1181,7 +1181,6 @@ fn is_generic_func_reachable(
     false
 }
 
-
 /// Compute the set of reachable types from reachable functions.
 /// A type is reachable if it's used in any reachable function's signature,
 /// locals, or expressions.

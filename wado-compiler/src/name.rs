@@ -34,7 +34,6 @@ use fluent_uri::UriRef;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-
 /// Source location of a module.
 ///
 /// This enum provides a structured representation of module paths,
@@ -312,7 +311,6 @@ impl fmt::Display for ModuleSource {
         }
     }
 }
-
 
 /// A free function name (not a method on a struct).
 ///
@@ -724,7 +722,6 @@ impl From<MethodName> for FunctionId {
     }
 }
 
-
 /// A qualified struct type name.
 ///
 /// Format: `{module_path}/{name}`
@@ -794,7 +791,6 @@ impl fmt::Display for StructName {
 pub fn build_core_internal_name(name: &str) -> FreeFunctionName {
     FreeFunctionName::from_strs(&["core", "internal"], name)
 }
-
 
 /// Validate that a module path is a valid URI reference.
 ///
@@ -1057,7 +1053,6 @@ fn remove_dot_segments(path: &str) -> String {
     }
 }
 
-
 /// Information about a type for name formatting.
 ///
 /// This enum represents the structure of a type without requiring
@@ -1121,7 +1116,6 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
         TypeNameInfo::Unknown => "unknown".to_string(),
     }
 }
-
 
 /// Build a monomorphized type name from base name and type arguments.
 ///
@@ -1200,7 +1194,6 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_method_name_to_string_simple() {
         let method = MethodName::new(
@@ -1227,7 +1220,6 @@ mod tests {
         assert_eq!(method.to_string(), "./geometry.wado/Point^Display::fmt");
     }
 
-
     #[test]
     fn test_free_function_name_to_string() {
         let func = FreeFunctionName::from_path_and_name(
@@ -1248,7 +1240,6 @@ mod tests {
         let func = FreeFunctionName::from_strs(&[], "main");
         assert_eq!(func.to_string(), "main");
     }
-
 
     #[test]
     fn test_struct_name_to_string() {
@@ -1281,7 +1272,6 @@ mod tests {
         assert!(!set.contains(&s3));
     }
 
-
     #[test]
     fn test_build_core_internal_name() {
         let name = build_core_internal_name("log_stdout");
@@ -1289,7 +1279,6 @@ mod tests {
         assert_eq!(name.module_source, ModuleSource::core("internal"));
         assert_eq!(name.name, "log_stdout");
     }
-
 
     #[test]
     fn test_normalize_simple_path() {
@@ -1416,7 +1405,6 @@ mod tests {
         assert_eq!(remove_dot_segments("a//b/c.wado"), "a/b/c.wado");
     }
 
-
     #[test]
     fn test_validate_module_path_valid() {
         assert!(validate_module_path("./geometry.wado").is_ok());
@@ -1434,7 +1422,6 @@ mod tests {
         // so we test with control characters or invalid sequences
         assert!(validate_module_path("./file with\x00null.wado").is_err());
     }
-
 
     #[test]
     fn test_module_source_from_path_core() {

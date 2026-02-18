@@ -10,7 +10,6 @@ use crate::ast::Type;
 use crate::project::Project;
 use crate::world_registry::WorldExportInfo;
 
-
 /// Plan for the Component Model structure.
 ///
 /// Computed by `wasm_plan`, consumed by codegen. Contains all the structural

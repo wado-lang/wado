@@ -20,7 +20,6 @@ unsafe fn copy_to_ptr(dest_ptr: i32, src: &[u8]) {
     }
 }
 
-
 /// Write the decimal digits of `d` into `buf[0..nd]`.
 fn write_digits(buf: &mut [u8], mut d: u64, nd: usize) {
     for i in (0..nd).rev() {
@@ -162,7 +161,6 @@ fn f32_short(f: f32) -> (u64, i32) {
     // Fallback: 9 digits always suffices for f32
     fpfmt::fixed_width(f64_val, 9)
 }
-
 
 /// Format an f64 using shortest representation into `buf`.
 ///
@@ -397,7 +395,6 @@ fn f64_fmt_exp(value: f64, precision: i32, upper: bool, buf: &mut [u8]) -> usize
     pos + len
 }
 
-
 /// Format an f64 value using shortest representation to the provided buffer.
 ///
 /// # Safety
@@ -487,7 +484,6 @@ pub extern "C" fn f32_to_buffer_exp(
     unsafe { copy_to_ptr(buffer_ptr, &buf[..len]) };
     len as i32
 }
-
 
 /// Format `(d, p, nd)` with exactly `precision` decimal places into `buf`.
 ///

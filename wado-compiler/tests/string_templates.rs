@@ -5,7 +5,6 @@
 
 use wado_compiler::{Lexer, Parser};
 
-
 /// Parse a simple expression and return the AST
 fn parse_expr(source: &str) -> Result<wado_compiler::ast::Module, String> {
     // Wrap the expression in a function to make it a valid module
@@ -33,7 +32,6 @@ fn extract_expr(module: &wado_compiler::ast::Module) -> Option<&wado_compiler::a
     };
     Some(&let_stmt.value)
 }
-
 
 #[test]
 fn test_template_string_empty() {
@@ -175,7 +173,6 @@ fn test_template_string_expression_interpolation() {
     }
 }
 
-
 #[test]
 fn test_template_format_simple() {
     let module = parse_expr("`Pi: {pi:.2f}`").expect("parse failed");
@@ -238,7 +235,6 @@ fn test_template_format_width() {
     }
 }
 
-
 #[test]
 fn test_template_double_colon_not_format() {
     // Module::function() should parse :: as scope resolution, not format spec
@@ -283,7 +279,6 @@ fn test_template_colon_alone_is_format() {
     }
 }
 
-
 #[test]
 fn test_template_nested() {
     // Nested template: `Outer {`Inner {x}`}`
@@ -313,7 +308,6 @@ fn test_template_nested() {
         other => panic!("expected TemplateString, got {:?}", other),
     }
 }
-
 
 #[test]
 fn test_template_consecutive_interpolations() {
@@ -371,7 +365,6 @@ fn test_template_ends_with_interpolation() {
     }
 }
 
-
 #[test]
 fn test_template_escape_sequences() {
     let module = parse_expr(r#"`Line 1\nLine 2\ttab`"#).expect("parse failed");
@@ -387,7 +380,6 @@ fn test_template_escape_sequences() {
         other => panic!("expected TemplateString, got {:?}", other),
     }
 }
-
 
 #[test]
 fn test_template_unterminated() {
@@ -408,7 +400,6 @@ fn test_template_unclosed_interpolation() {
     let result = parse_expr("`unclosed {x`");
     assert!(result.is_err(), "expected error for unclosed interpolation");
 }
-
 
 #[test]
 fn test_template_complex_expression() {

@@ -182,7 +182,6 @@ pub fn lower_modules_indexed(
     modules
 }
 
-
 /// Helper to wrap an expression in a block (for if-else branches)
 fn expr_to_block(expr: &TirExpr, span: Span) -> TirBlock {
     TirBlock {
@@ -645,7 +644,6 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
     }
 }
 
-
 /// Minimum number of cases required for `br_table` optimization
 const SWITCH_MIN_CASES: usize = 8;
 
@@ -837,7 +835,6 @@ fn match_to_switch(
         span,
     )
 }
-
 
 /// Lower patterns in a module
 ///
@@ -1856,7 +1853,6 @@ impl TypeTableExt for TypeTable {
     }
 }
 
-
 /// Check if an expression is a constant initializer (can be evaluated at Wasm instantiation time)
 fn is_constant_initializer(expr: &TirExpr) -> bool {
     match &expr.kind {
@@ -2398,7 +2394,6 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         }
     }
 }
-
 
 /// Lowers primitive boxing to explicit `Box<T>` struct operations.
 ///
@@ -3430,7 +3425,6 @@ impl BoxLowerer {
     }
 }
 
-
 /// Information about a closure collected during the first pass
 #[derive(Debug, Clone)]
 struct CollectedClosure {
@@ -3639,7 +3633,6 @@ impl ClosureLowerer {
         }
     }
 
-
     fn collect_closures_in_block(&mut self, block: &TirBlock) {
         for stmt in &block.stmts {
             self.collect_closures_in_stmt(stmt);
@@ -3840,7 +3833,6 @@ impl ClosureLowerer {
             | TirExprKind::EnumConstruct { .. } => {}
         }
     }
-
 
     /// Analyze a block to identify which closures are safe to transform
     fn analyze_closure_safety_block(&mut self, block: &TirBlock) {
@@ -4055,7 +4047,6 @@ impl ClosureLowerer {
             | TirExprKind::EnumConstruct { .. } => {}
         }
     }
-
 
     fn generate_functor_items(&mut self, type_table: &mut TypeTable) {
         for collected in &self.collected_closures.clone() {
@@ -4936,7 +4927,6 @@ impl ClosureLowerer {
             },
         }
     }
-
 
     /// Generate specialized functions for calls with closure arguments to fn-type parameters.
     ///
@@ -6493,7 +6483,6 @@ impl ClosureLowerer {
         }
     }
 
-
     fn transform_block(&mut self, block: &mut TirBlock, type_table: &mut TypeTable) {
         for stmt in &mut block.stmts {
             self.transform_stmt(stmt, type_table);
@@ -7150,7 +7139,6 @@ impl ClosureLowerer {
         }
     }
 }
-
 
 /// Collects all string literals from a TIR module for the data section,
 /// tracking which function each string comes from for DCE
@@ -8043,7 +8031,6 @@ impl<'a> EffectScratchAnalyzer<'a> {
         }
     }
 }
-
 
 /// Generate auto-derived trait implementations (Eq, Ord, Display) for enum types.
 ///

@@ -406,7 +406,6 @@ pub fn generic_type(name: &str, args: Vec<Type>) -> Type {
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_primitive_sizes() {
         assert_eq!(cm_size(&named_type("bool")), 1);
@@ -448,7 +447,6 @@ mod tests {
         assert_eq!(cm_size(&Type::Tuple(vec![])), 0);
     }
 
-
     #[test]
     fn test_primitive_alignments() {
         assert_eq!(cm_align(&named_type("bool")), 1);
@@ -459,7 +457,6 @@ mod tests {
         assert_eq!(cm_align(&named_type("i64")), 8);
         assert_eq!(cm_align(&named_type("f64")), 8);
     }
-
 
     #[test]
     fn test_align_to() {
@@ -473,7 +470,6 @@ mod tests {
         assert_eq!(align_to(1, 8), 8);
         assert_eq!(align_to(9, 8), 16);
     }
-
 
     #[test]
     fn test_option_i32() {
@@ -536,7 +532,6 @@ mod tests {
         assert_eq!(cm_align(&opt), 4);
     }
 
-
     #[test]
     fn test_result_unit_unit() {
         // result<(), ()>: disc(4 bytes) + max(0, 0) = 4 bytes, align 4
@@ -582,7 +577,6 @@ mod tests {
         assert_eq!(cm_size(&result), 12);
         assert_eq!(cm_align(&result), 4);
     }
-
 
     #[test]
     fn test_tuple_i32_i32() {
@@ -633,7 +627,6 @@ mod tests {
         assert_eq!(layout.offsets, vec![0, 2, 4]);
     }
 
-
     #[test]
     fn test_list_option_string() {
         // list<option<string>> is still just (ptr, len) = 8 bytes
@@ -663,7 +656,6 @@ mod tests {
         assert_eq!(cm_size(&result), 16);
         assert_eq!(cm_align(&result), 4);
     }
-
 
     #[test]
     fn test_flat_primitives() {
@@ -702,7 +694,6 @@ mod tests {
         assert_eq!(cm_flat_types(&tuple), vec![CmValType::I32, CmValType::F64]);
     }
 
-
     #[test]
     fn test_record_simple() {
         // record { x: i32, y: i32 }
@@ -735,7 +726,6 @@ mod tests {
         assert_eq!(layout.align, 4);
         assert_eq!(layout.offsets, vec![0, 8]);
     }
-
 
     #[test]
     fn test_consistency_string_return() {

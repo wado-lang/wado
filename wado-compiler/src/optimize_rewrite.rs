@@ -26,7 +26,6 @@ use crate::tir::{
 };
 use indexmap::IndexSet;
 
-
 /// Run all post-optimization TIR rewrites in a single pass over all functions.
 ///
 /// For each function, this performs (in order):
@@ -309,7 +308,6 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
     changed
 }
 
-
 /// Check if a TIR expression is side-effect-free and suitable for `select` operands.
 ///
 /// The Wasm `select` instruction evaluates both operands eagerly, so both must be
@@ -387,7 +385,6 @@ fn try_lower_to_select(
         span,
     ))
 }
-
 
 /// Check if an expression produces a fresh value that can be moved.
 /// Fresh values are those that don't need copying because they're newly created.
@@ -708,7 +705,6 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         | TirExprKind::EnumConstruct { .. } => {}
     }
 }
-
 
 /// Collect all types that need value copying in a function body.
 /// This is needed for codegen to pre-allocate scratch locals for copy operations.

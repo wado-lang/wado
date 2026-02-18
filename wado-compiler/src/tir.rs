@@ -17,7 +17,6 @@ use indexmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, ModuleSource, TypeNameInfo, format_type_name};
 use crate::token::Span;
 
-
 /// Identifies the scope where a type parameter is defined
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TypeParamScope {
@@ -178,7 +177,6 @@ impl SubstitutionContext {
         self.substitutions.is_empty()
     }
 }
-
 
 /// Type identifier for resolved types in TIR.
 /// This is a newtype wrapper to prevent misuse of raw integers as `TypeId`s.
@@ -935,7 +933,6 @@ impl TypeTable {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct TirExpr {
     pub kind: TirExprKind,
@@ -952,7 +949,6 @@ impl TirExpr {
         }
     }
 }
-
 
 /// Reference to a function, either resolved to TIR or external
 #[derive(Debug, Clone)]
@@ -1497,7 +1493,6 @@ pub struct TirCapture {
     pub is_mut: bool,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct TirBlock {
     pub stmts: Vec<TirStmt>,
@@ -1587,7 +1582,6 @@ pub enum TirStmtKind {
     },
 }
 
-
 /// Generic type parameter in TIR (from AST `GenericParam`)
 #[derive(Debug, Clone)]
 pub struct TirTypeParam {
@@ -1622,7 +1616,6 @@ pub struct TirGlobal {
     /// Set by lower phase for lazy-initialized reference type globals.
     pub is_nullable: bool,
 }
-
 
 /// A scratch local to be allocated during codegen.
 /// Lower phase computes what scratch locals a function needs, and codegen
@@ -1861,7 +1854,6 @@ pub struct TirImpl {
     pub span: Span,
 }
 
-
 /// Metadata about a closure for optimization (especially inlining).
 ///
 /// This is populated by the lower phase and used by the optimizer to inline
@@ -1883,7 +1875,6 @@ pub struct ClosureFunctor {
     /// Captures from the original closure
     pub captures: Vec<TirCapture>,
 }
-
 
 /// External function import from Component Model canonical builtins.
 /// These are functions that need to be imported at the Wasm level.
@@ -2096,7 +2087,6 @@ impl TirProgram {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
