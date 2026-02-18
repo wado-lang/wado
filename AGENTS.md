@@ -118,6 +118,15 @@ cargo run --bin wado -- run file.wado                     # run CLI program usin
 cargo run --bin wado -- serve file.wado                   # serve HTTP service using wasmtime
 ```
 
+To inspect invalid Wasm when debugging codegen bugs, use `--no-validate`:
+
+```sh
+# Skip validation and output raw Wasm bytes even if invalid
+wado compile --no-validate -o output.wasm file.wado
+# Combine with --wat-to-stdout to inspect the generated WAT
+wado compile --no-validate --wat-to-stdout file.wado
+```
+
 ### Serve Command
 
 Use `wado serve` to run a Wado HTTP service (wasi:http/service world):
