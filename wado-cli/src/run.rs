@@ -15,7 +15,6 @@ pub struct RunOptions {
     pub input: String,
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
-    pub use_wir: bool,
 }
 
 pub fn print_usage() {
@@ -26,7 +25,6 @@ pub fn print_usage() {
     eprintln!("Options:");
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
-    eprintln!("  --wir            Use WIR backend (also enabled by WADO_WIR=1 env var)");
     eprintln!("  --help           Show this help message");
 }
 
@@ -46,16 +44,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
     let mut input: Option<String> = None;
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
-    let mut use_wir = std::env::var("WADO_WIR").is_ok();
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
                 print_usage();
                 process::exit(0);
-            }
-            Long("wir") => {
-                use_wir = true;
             }
             Short('O') => {
                 let val = parser.optional_value();
@@ -100,7 +94,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
         input: require_input(input, print_usage),
         opt_level,
         log_level,
-        use_wir,
     }
 }
 
@@ -120,9 +113,7 @@ async fn run_cli_component(wasm: &[u8]) -> Result<()> {
 }
 
 pub async fn run(opts: RunOptions) {
-    let wasm =
-        compile::compile_with_opts(&opts.input, opts.opt_level, opts.log_level, opts.use_wir)
-            .await;
+    let wasm = compile::compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
 
     if let Err(e) = run_cli_component(&wasm).await {
         eprintln!("Runtime error: {e}");

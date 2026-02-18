@@ -182,16 +182,26 @@ pub struct DumpResult {
 }
 
 /// Compilation options for the compiler
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct CompilerOptions {
     /// Optimization level
     pub opt_level: OptLevel,
     /// Target world name (e.g., "Command", "Service")
     /// Defaults to "Command" if not specified
     pub target_world: Option<String>,
-    /// Use the WIR backend instead of the legacy codegen.
+    /// Use the WIR backend (default: true).
     /// When true, the compiler uses `tir_to_wir` → `wir_emit` instead of `Codegen::generate_wasm`.
     pub use_wir_backend: bool,
+}
+
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        Self {
+            opt_level: OptLevel::default(),
+            target_world: None,
+            use_wir_backend: true,
+        }
+    }
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -219,7 +229,7 @@ pub async fn compile_with_host<H: CompilerHost>(
     let options = CompilerOptions {
         opt_level,
         target_world: None,
-        use_wir_backend: false,
+        ..CompilerOptions::default()
     };
     compile_with_options(source, host, filename, options).await
 }

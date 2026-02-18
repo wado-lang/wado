@@ -31,7 +31,6 @@ pub struct ServeOptions {
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
     pub addr: String,
-    pub use_wir: bool,
 }
 
 pub fn print_usage() {
@@ -43,7 +42,6 @@ pub fn print_usage() {
     eprintln!("  --addr <addr>    Address to listen on (default: 0.0.0.0:8080)");
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
-    eprintln!("  --wir            Use WIR backend (also enabled by WADO_WIR=1 env var)");
     eprintln!("  --help           Show this help message");
 }
 
@@ -64,16 +62,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> ServeOptions {
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
     let mut addr = "0.0.0.0:8080".to_string();
-    let mut use_wir = std::env::var("WADO_WIR").is_ok();
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
                 print_usage();
                 process::exit(0);
-            }
-            Long("wir") => {
-                use_wir = true;
             }
             Long("addr") => {
                 addr = require_string(&mut parser);
@@ -122,7 +116,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> ServeOptions {
         opt_level,
         log_level,
         addr,
-        use_wir,
     }
 }
 
@@ -301,7 +294,6 @@ pub async fn run(opts: ServeOptions) {
         opts.opt_level,
         opts.log_level,
         Some("wasi:http/service".to_string()),
-        opts.use_wir,
     )
     .await;
 

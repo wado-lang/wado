@@ -832,6 +832,13 @@ pub enum WirInstr {
         then_body: Vec<WirInstr>,
         else_body: Option<Vec<WirInstr>>,
     },
+    /// Branch hint annotation (from `builtin::likely`/`builtin::unlikely`).
+    /// Wraps a condition expression; consumed by the emitter when it appears
+    /// as the condition of an `If` instruction.
+    BranchHint {
+        likely: bool,
+        expr: Box<WirInstr>,
+    },
     /// Branch to label.
     Br {
         depth: u32,
@@ -963,6 +970,16 @@ pub enum WirInstr {
         expr: Box<WirInstr>,
     },
 
+    /// Multi-value instruction with direct local binding (tuple elision).
+    /// The instruction pushes N values on the stack; they are bound directly
+    /// to locals without intermediate struct allocation.
+    /// Locals are in source order (index 0 = bottom of stack).
+    /// `None` entries represent wildcards (dropped values).
+    MultiValueLocalBind {
+        instr: Box<WirInstr>,
+        locals: Vec<Option<String>>,
+    },
+
     /// Sequence of instructions (for statement blocks).
     Seq(Vec<WirInstr>),
 }
@@ -1000,7 +1017,9 @@ impl WirInstr {
             | Self::RefCast { expr, .. }
             | Self::RefTest { expr, .. }
             | Self::ValueCopy { expr, .. } => f(expr),
-            Self::BrIf { condition, .. } => f(condition),
+            Self::BrIf { condition, .. } | Self::BranchHint { expr: condition, .. } => {
+                f(condition);
+            }
             Self::BrTable { index, .. } => f(index),
             Self::ArrayNewDefault { len, .. } => f(len),
             Self::Drop(o)
@@ -1210,7 +1229,8 @@ impl WirInstr {
                 f(c);
                 f(d);
             }
-            Self::MultiValueStructNew { instr, .. } => f(instr),
+            Self::MultiValueStructNew { instr, .. }
+            | Self::MultiValueLocalBind { instr, .. } => f(instr),
             Self::TableGet { index, .. } => f(index),
             Self::TableSet { index, value, .. } => {
                 f(index);

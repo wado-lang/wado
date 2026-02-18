@@ -2199,8 +2199,12 @@ impl FunctionTranslator<'_, '_> {
             // === Control ===
             "builtin::unreachable" => Some(WirInstr::Unreachable),
             "builtin::likely" | "builtin::unlikely" => {
-                // Branch hints: just pass through the value
-                Some(self.translate_expr(&args[0]))
+                let likely = builtin_name == "builtin::likely";
+                let expr = self.translate_expr(&args[0]);
+                Some(WirInstr::BranchHint {
+                    likely,
+                    expr: Box::new(expr),
+                })
             }
             "builtin::select" => {
                 let cond = self.translate_expr(&args[0]);
@@ -2647,6 +2651,22 @@ impl FunctionTranslator<'_, '_> {
 
         match pattern {
             TirPattern::Tuple(patterns) => {
+                // Tuple elision: if the value is a multi-value instruction (e.g. i64.add128),
+                // bind results directly to locals without intermediate struct allocation.
+                if let WirInstr::MultiValueStructNew { instr, .. } = value_instr {
+                    let locals: Vec<Option<String>> = patterns
+                        .iter()
+                        .map(|p| {
+                            if let TirPattern::Binding { local_index, .. } = p {
+                                Some(self.local_name(*local_index))
+                            } else {
+                                None // wildcard
+                            }
+                        })
+                        .collect();
+                    return Some(WirInstr::MultiValueLocalBind { instr, locals });
+                }
+
                 let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value.type_id);
                 if let WirType::Ref { ref type_id, .. } = wir_type {
                     let mut instrs = Vec::new();

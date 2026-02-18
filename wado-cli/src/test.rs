@@ -16,7 +16,6 @@ pub struct TestOptions {
     pub paths: Vec<String>,
     pub filter: Option<String>,
     pub jobs: usize,
-    pub use_wir: bool,
 }
 
 pub fn print_usage() {
@@ -27,7 +26,6 @@ pub fn print_usage() {
     eprintln!("Options:");
     eprintln!("  -f, --filter <pattern>  Filter tests by name pattern");
     eprintln!("  -p, --parallel <N>      Number of parallel workers (default: num CPUs)");
-    eprintln!("  --wir                   Use WIR backend (also: WADO_WIR=1)");
     eprintln!("  --help                  Show this help message");
 }
 
@@ -56,16 +54,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
     let mut paths: Vec<String> = Vec::new();
     let mut filter: Option<String> = None;
     let mut jobs: Option<usize> = None;
-    let mut use_wir = std::env::var("WADO_WIR").is_ok_and(|v| v == "1" || v == "true");
-
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
                 print_usage();
                 process::exit(0);
-            }
-            Long("wir") => {
-                use_wir = true;
             }
             Short('f') | Long("filter") => {
                 filter = Some(parser.value().unwrap().to_string_lossy().into_owned());
@@ -107,7 +100,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
         paths,
         filter,
         jobs,
-        use_wir,
     }
 }
 
@@ -153,7 +145,6 @@ fn extract_display_name(test_name: &str) -> String {
 async fn collect_test_jobs(
     paths: &[String],
     filter: Option<&str>,
-    use_wir: bool,
 ) -> Result<(Vec<Arc<CompiledTestModule>>, Vec<TestJob>)> {
     let mut modules = Vec::new();
     let mut jobs = Vec::new();
@@ -163,7 +154,6 @@ async fn collect_test_jobs(
             path,
             crate::compile::OptLevel::default(),
             wado_compiler::LogLevel::default(),
-            use_wir,
         )
         .await;
         let engine = Arc::new(runtime::create_engine(wasmtime::OptLevel::None)?);
@@ -317,7 +307,7 @@ async fn execute_tests_parallel(
 pub async fn run(opts: TestOptions) {
     // Phase 1: Compile all files and collect test jobs
     let (modules, jobs) =
-        match collect_test_jobs(&opts.paths, opts.filter.as_deref(), opts.use_wir).await {
+        match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
         Ok(result) => result,
         Err(e) => {
             eprintln!("Error collecting tests: {e}");

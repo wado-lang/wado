@@ -12,11 +12,11 @@ use crate::wir::{
 };
 
 use wasm_encoder::{
-    AbstractHeapType, BlockType, CodeSection, CompositeInnerType, CompositeType, ConstExpr,
-    DataCountSection, DataSection, ElementSection, Elements, ExportKind, ExportSection, FieldType,
-    Function, FunctionSection, GlobalSection, GlobalType, HeapType, ImportSection, Instruction,
-    MemArg, Module, NameMap, NameSection, RefType, StorageType, StructType, SubType, TypeSection,
-    ValType,
+    AbstractHeapType, BlockType, BranchHint, BranchHints, CodeSection, CompositeInnerType,
+    CompositeType, ConstExpr, DataCountSection, DataSection, ElementSection, Elements,
+    ExportKind, ExportSection, FieldType, Function, FunctionSection, GlobalSection, GlobalType,
+    HeapType, ImportSection, Instruction, MemArg, Module, NameMap, NameSection, RefType,
+    StorageType, StructType, SubType, TypeSection, ValType,
 };
 
 /// Emit a core Wasm module from a `WirModule`.
@@ -53,6 +53,10 @@ struct WirEmitter<'a> {
     next_type_idx: u32,
     /// Pre-assigned variant type info: `wir_type_idx` → (base_wasm_idx, vec of (case_idx, wasm_idx)).
     variant_pre_assigned: IndexMap<u32, (u32, Vec<(u32, u32)>)>,
+    /// Branch hints for the current function being emitted.
+    current_branch_hints: Vec<(u32, bool)>,
+    /// All collected branch hints: (func_index, vec of (instr_offset, likely)).
+    all_branch_hints: Vec<(u32, Vec<(u32, bool)>)>,
 }
 
 impl<'a> WirEmitter<'a> {
@@ -69,6 +73,8 @@ impl<'a> WirEmitter<'a> {
             next_local: 0,
             next_type_idx: 0,
             variant_pre_assigned: IndexMap::new(),
+            current_branch_hints: Vec::new(),
+            all_branch_hints: Vec::new(),
         }
     }
 
@@ -127,6 +133,22 @@ impl<'a> WirEmitter<'a> {
 
         // 9. Code section
         let code = self.emit_code_section();
+
+        // Branch hints section (must appear before code section)
+        if !self.all_branch_hints.is_empty() {
+            let mut hints = BranchHints::new();
+            for (func_idx, func_hints) in &self.all_branch_hints {
+                hints.function_hints(
+                    *func_idx,
+                    func_hints.iter().map(|(offset, likely)| BranchHint {
+                        branch_func_offset: *offset,
+                        branch_hint_value: u32::from(*likely),
+                    }),
+                );
+            }
+            module.section(&hints);
+        }
+
         module.section(&code);
 
         // 10. Data section
@@ -644,9 +666,15 @@ impl<'a> WirEmitter<'a> {
     fn emit_code_section(&mut self) -> CodeSection {
         let mut code = CodeSection::new();
 
-        for func in &self.wir.functions {
+        for (i, func) in self.wir.functions.iter().enumerate() {
+            self.current_branch_hints.clear();
             let wasm_func = self.emit_function(func);
             code.function(&wasm_func);
+            if !self.current_branch_hints.is_empty() {
+                let func_idx = self.func_index_offset + u32::try_from(i).unwrap();
+                self.all_branch_hints
+                    .push((func_idx, std::mem::take(&mut self.current_branch_hints)));
+            }
         }
 
         code
@@ -840,7 +868,8 @@ impl<'a> WirEmitter<'a> {
             WirInstr::BrTable { index, .. } => {
                 self.collect_declared_locals_instr(index, locals);
             }
-            WirInstr::BrIf { condition, .. } => {
+            WirInstr::BrIf { condition, .. }
+            | WirInstr::BranchHint { expr: condition, .. } => {
                 self.collect_declared_locals_instr(condition, locals);
             }
             WirInstr::Select {
@@ -1239,7 +1268,18 @@ impl<'a> WirEmitter<'a> {
                 then_body,
                 else_body,
             } => {
-                self.emit_instr(f, condition);
+                // Check for branch hint wrapper on the condition
+                let (actual_condition, hint) =
+                    if let WirInstr::BranchHint { likely, expr } = condition.as_ref() {
+                        (expr.as_ref(), Some(*likely))
+                    } else {
+                        (condition.as_ref(), None)
+                    };
+                self.emit_instr(f, actual_condition);
+                if let Some(likely) = hint {
+                    self.current_branch_hints
+                        .push((f.byte_len() as u32, likely));
+                }
                 let bt = self.wir_type_to_block_type(result);
                 f.instruction(&Instruction::If(bt));
                 for instr in then_body {
@@ -1252,6 +1292,10 @@ impl<'a> WirEmitter<'a> {
                     }
                 }
                 f.instruction(&Instruction::End);
+            }
+            WirInstr::BranchHint { expr, .. } => {
+                // Standalone branch hint (not consumed by If) — just emit the inner expr
+                self.emit_instr(f, expr);
             }
             WirInstr::Br { depth } => {
                 f.instruction(&Instruction::Br(*depth));
@@ -1601,6 +1645,19 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, instr);
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::StructNew(wasm_idx));
+            }
+            // Multi-value local bind (tuple elision): emit the multi-value instr,
+            // then local.set for each target in reverse order (top of stack first).
+            WirInstr::MultiValueLocalBind { instr, locals } => {
+                self.emit_instr(f, instr);
+                for local_opt in locals.iter().rev() {
+                    if let Some(name) = local_opt {
+                        let idx = self.resolve_local(name);
+                        f.instruction(&Instruction::LocalSet(idx));
+                    } else {
+                        f.instruction(&Instruction::Drop);
+                    }
+                }
             }
 
             // Sequence
