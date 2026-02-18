@@ -9891,7 +9891,7 @@ impl Codegen<'_> {
         scrutinee_local: u32,
         arms: &[TirMatchArm],
         analysis: BrTableAnalysis,
-        result_valtype: ValType,
+        block_type: BlockType,
         _result_type_id: TypeId,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -9919,7 +9919,7 @@ impl Codegen<'_> {
         // - To reach $arm_i from dispatch block, we need depth = num_arms - i
 
         // Open $done block with result type
-        func.instruction(&Instruction::Block(BlockType::Result(result_valtype)));
+        func.instruction(&Instruction::Block(block_type));
 
         // Open blocks for each arm (in reverse order, so arm 0's block is outermost)
         for _ in 0..num_arms {
@@ -10046,7 +10046,13 @@ impl Codegen<'_> {
         let scrutinee_local = ctx.alloc_local(&local_name, scrutinee_valtype);
         func.instruction(&Instruction::LocalSet(scrutinee_local));
 
-        let result_valtype = self.type_id_to_valtype(type_table, result_type_id);
+        let block_type = if result_type_id == TypeTable::UNIT
+            || result_type_id == TypeTable::NEVER
+        {
+            BlockType::Empty
+        } else {
+            BlockType::Result(self.type_id_to_valtype(type_table, result_type_id))
+        };
 
         // Try br_table optimization for integer matches
         let scrutinee_type = type_table.get(scrutinee.type_id);
@@ -10056,7 +10062,7 @@ impl Codegen<'_> {
                 scrutinee_local,
                 arms,
                 analysis,
-                result_valtype,
+                block_type,
                 result_type_id,
                 type_table,
                 ctx,
@@ -10072,7 +10078,7 @@ impl Codegen<'_> {
             scrutinee.type_id,
             arms,
             0,
-            result_valtype,
+            block_type,
             result_type_id,
             type_table,
             ctx,
@@ -10089,7 +10095,7 @@ impl Codegen<'_> {
         scrutinee_type_id: TypeId,
         arms: &[TirMatchArm],
         arm_index: usize,
-        result_valtype: ValType,
+        block_type: BlockType,
         result_type_id: TypeId,
         type_table: &TypeTable,
         ctx: &mut FunctionContext,
@@ -10123,9 +10129,7 @@ impl Codegen<'_> {
             if let Some(guard) = &arm.guard {
                 // Guard present: evaluate guard, branch on result
                 self.generate_expr(func, guard, type_table, ctx, builder);
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                    result_valtype,
-                )));
+                func.instruction(&Instruction::If(block_type));
                 if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra += 1;
                 }
@@ -10139,7 +10143,7 @@ impl Codegen<'_> {
                     scrutinee_type_id,
                     arms,
                     arm_index + 1,
-                    result_valtype,
+                    block_type,
                     result_type_id,
                     type_table,
                     ctx,
@@ -10165,9 +10169,7 @@ impl Codegen<'_> {
 
             if condition_generated {
                 // Open if block with result type
-                func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                    result_valtype,
-                )));
+                func.instruction(&Instruction::If(block_type));
                 if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                     *extra += 1;
                 }
@@ -10186,9 +10188,7 @@ impl Codegen<'_> {
                 if let Some(guard) = &arm.guard {
                     // Guard present: evaluate guard, branch on result
                     self.generate_expr(func, guard, type_table, ctx, builder);
-                    func.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                        result_valtype,
-                    )));
+                    func.instruction(&Instruction::If(block_type));
                     if let Some((_, extra, _, _, _)) = ctx.loop_info.last_mut() {
                         *extra += 1;
                     }
@@ -10202,7 +10202,7 @@ impl Codegen<'_> {
                         scrutinee_type_id,
                         arms,
                         arm_index + 1,
-                        result_valtype,
+                        block_type,
                         result_type_id,
                         type_table,
                         ctx,
@@ -10226,7 +10226,7 @@ impl Codegen<'_> {
                     scrutinee_type_id,
                     arms,
                     arm_index + 1,
-                    result_valtype,
+                    block_type,
                     result_type_id,
                     type_table,
                     ctx,
@@ -10246,7 +10246,7 @@ impl Codegen<'_> {
                     scrutinee_type_id,
                     arms,
                     arm_index + 1,
-                    result_valtype,
+                    block_type,
                     result_type_id,
                     type_table,
                     ctx,
