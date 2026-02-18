@@ -7,7 +7,7 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Monomorphize → Lower → Optimize → Wasm Plan → Codegen → Emit
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → CM Adapter → Monomorphize → Lower → Optimize → WIR Build → Codegen
 ```
 
 ### Compilation Pipeline
@@ -20,56 +20,59 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Load         | AST           | All modules     | Load dependencies; each module: parse → bind → desugar          |
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                            |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                                |
-| Effect Check | Project       | Errors          | Validate function effect requirements                           |
+| Effect Check | Project       | Project         | Validate function effect requirements                           |
+| CM Adapter   | Project       | Project         | Synthesize TIR adapter functions for CM boundary crossing       |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                        |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering       |
-| Optimize     | Project       | Project         | DCE, usage analysis, feature flags                              |
-| Wasm Plan    | Project       | Project         | Wasm pre-codegen planning, CM boundary analysis                 |
-| Codegen      | Project       | Wasm bytes      | Generate Wasm module (types, imports, globals, function bodies) |
+| Optimize     | Project       | Project         | Inlining, copy-prop, LICM, DCE, post-opt rewrite                |
+| WIR Build    | Project       | WirModule       | Planning + TIR → WIR (Wasm IR) translation                      |
+| Codegen      | WirModule     | Wasm bytes      | WIR emission to core Wasm + Component Model wrapping            |
 
 **Note:** The Desugar phase is integrated into the Load phase. Each module goes through the same frontend pipeline: `lexer → parser → bind → desugar`.
 
 ### Modules
 
-| Module           | File                    | Description                                           |
-| ---------------- | ----------------------- | ----------------------------------------------------- |
-| Lexer            | `lexer.rs`              | Tokenizes source code, extracts `__DATA__` section    |
-| Parser           | `parser.rs`             | Recursive descent parser, builds AST                  |
-| AST              | `ast.rs`                | AST node definitions, `Module::data_section()` API    |
-| Token            | `token.rs`              | Token types and spans                                 |
-| Comment          | `comment.rs`            | Comment collection and CommentMap for formatting      |
-| Bind             | `bind.rs`               | Local name binding, scope analysis, mutability check  |
-| Loader           | `loader.rs`             | Module loading, dependency resolution                 |
-| Desugar          | `desugar.rs`            | AST transformations (compound assign, etc.)           |
-| EffectCheck      | `effect_check.rs`       | Validates effect requirements for function calls      |
-| Unparser         | `unparse.rs`            | Converts AST/TIR back to source code                  |
-| Analyzer         | `analyze.rs`            | Semantic analysis, symbol table construction          |
-| Symbol           | `symbol.rs`             | Symbol table data structures                          |
-| Name             | `name.rs`               | Name mangling utilities for methods and symbols       |
-| ModuleLoader     | `module_loader.rs`      | Module path resolution, loads core library            |
-| Resolver         | `resolver.rs`           | Type resolution, AST to TIR, produces Project         |
-| TIR              | `tir.rs`                | Typed Intermediate Representation                     |
-| Monomorphize     | `monomorphize.rs`       | Generic type/function instantiation (Project→Project) |
-| Lower            | `lower.rs`              | Closure, i128 match, global init, string lowering     |
-| Project          | `project.rs`            | Project: compilation context passed through pipeline  |
-| Optimize         | `optimize.rs`           | Optimization coordinator, dispatches to sub-modules   |
-| OptimizeDCE      | `optimize_dce.rs`       | Dead code elimination via reachability analysis       |
-| OptimizeInline   | `optimize_inline.rs`    | Function inlining for small, pure functions           |
-| OptimizeRefElim  | `optimize_ref_elim.rs`  | Reference elimination after inlining                  |
-| OptimizeCopyProp | `optimize_copy_prop.rs` | Copy propagation for trivial bindings                 |
-| OptimizeLICM     | `optimize_licm.rs`      | Loop-invariant code motion                            |
-| OptimizeRewrite  | `optimize_rewrite.rs`   | Select lowering, move insertion, copy type collection |
-| WasmPlan         | `wasm_plan.rs`          | CM boundary analysis, ComponentPlan, type ordering    |
-| Stdlib           | `stdlib.rs`             | Embedded core library sources                         |
-| WasiRegistry     | `wasi_registry.rs`      | WASI import registry, WASI type resolution            |
-| BuiltinRegistry  | `builtin_registry.rs`   | Builtin function registry from `core:builtin`         |
-| WorldRegistry    | `world_registry.rs`     | World definitions registry for export signatures      |
-| WasmBuilder      | `wasm_builder.rs`       | Tracks Wasm indices, builds wasm-encoder sections     |
-| Codegen          | `codegen.rs`            | Generates Component Model Wasm from TIR               |
-| WIR              | `wir.rs`                | Wasm IR data structures (WEP: wir-layer)              |
-| WIR Unparse      | `wir_unparse.rs`        | WIR → pseudo-Wado source code for debugging           |
-| Bundled          | `bundled.rs`            | Loads pre-compiled Wasm builtins (wado-bundled)       |
-| Postproc         | `wasm_postprocess.rs`   | Wasm binary transformations                           |
+| Module             | File                    | Description                                            |
+| ------------------ | ----------------------- | ------------------------------------------------------ |
+| Lexer              | `lexer.rs`              | Tokenizes source code, extracts `__DATA__` section     |
+| Parser             | `parser.rs`             | Recursive descent parser, builds AST                   |
+| AST                | `ast.rs`                | AST node definitions, `Module::data_section()` API     |
+| Token              | `token.rs`              | Token types and spans                                  |
+| Comment            | `comment.rs`            | Comment collection and CommentMap for formatting       |
+| Bind               | `bind.rs`               | Local name binding, scope analysis, mutability check   |
+| Loader             | `loader.rs`             | Module loading, dependency resolution                  |
+| Desugar            | `desugar.rs`            | AST transformations (compound assign, etc.)            |
+| EffectCheck        | `effect_check.rs`       | Validates effect requirements for function calls       |
+| Unparser           | `unparse.rs`            | Converts AST/TIR back to source code                   |
+| Analyzer           | `analyze.rs`            | Semantic analysis, symbol table construction           |
+| Symbol             | `symbol.rs`             | Symbol table data structures                           |
+| Name               | `name.rs`               | Name mangling utilities for methods and symbols        |
+| Resolver           | `resolver.rs`           | Type resolution, AST to TIR, produces Project          |
+| TIR                | `tir.rs`                | Typed Intermediate Representation                      |
+| CmAdapterGen       | `cm_adapter_gen.rs`     | CM boundary adapter synthesis (TIR functions)          |
+| CmAbi              | `cm_abi.rs`             | Canonical ABI layout computation                       |
+| Monomorphize       | `monomorphize.rs`       | Generic type/function instantiation (Project→Project)  |
+| Lower              | `lower.rs`              | Closure, i128 match, global init, string lowering      |
+| Project            | `project.rs`            | Project: compilation context passed through pipeline   |
+| Optimize           | `optimize.rs`           | Optimization coordinator, dispatches to sub-modules    |
+| OptimizeConstFold  | `optimize_const_fold.rs`| Constant folding for integer arithmetic                |
+| OptimizeDCE        | `optimize_dce.rs`       | Dead code elimination via reachability analysis        |
+| OptimizeInline     | `optimize_inline.rs`    | Function inlining for small, pure functions            |
+| OptimizeRefElim    | `optimize_ref_elim.rs`  | Reference elimination after inlining                   |
+| OptimizeCopyProp   | `optimize_copy_prop.rs` | Copy propagation for trivial bindings                  |
+| OptimizeLICM       | `optimize_licm.rs`      | Loop-invariant code motion                             |
+| OptimizeRewrite    | `optimize_rewrite.rs`   | Select lowering, move insertion, copy type collection  |
+| OptimizeSROA       | `optimize_sroa.rs`      | Scalar replacement of aggregates (struct/tuple elim)   |
+| WasmPlan           | `wasm_plan.rs`          | `ComponentPlan` types and `build_component_plan`       |
+| Stdlib             | `stdlib.rs`             | Embedded core library sources                          |
+| ComponentModel     | `component_model.rs`    | WASI import registry and CM ABI type support           |
+| BuiltinRegistry    | `builtin_registry.rs`   | Builtin function registry from `core:builtin`          |
+| WorldRegistry      | `world_registry.rs`     | World definitions registry for export signatures       |
+| WIR                | `wir.rs`                | Wasm IR data structures                                |
+| WIR Unparse        | `wir_unparse.rs`        | WIR → pseudo-Wado source code for debugging            |
+| WIR Build          | `wir_build.rs`          | Planning + TIR→WIR translation (`wir_build/`)          |
+| Codegen            | `codegen.rs`            | WIR→Wasm emission + Component Model wrapping (`codegen/`) |
+| Bundled            | `bundled.rs`            | Loads pre-compiled Wasm builtins (wado-bundled)        |
 
 ---
 
@@ -197,14 +200,16 @@ The `optimize.rs` module coordinates multiple optimization passes on TIR. The op
 
 **Optimization Passes:**
 
-| Module                | File                    | Description                                           |
-| --------------------- | ----------------------- | ----------------------------------------------------- |
-| DCE                   | `optimize_dce.rs`       | Dead code elimination via reachability analysis       |
-| Function Inlining     | `optimize_inline.rs`    | Inline small, pure functions                          |
-| Reference Elimination | `optimize_ref_elim.rs`  | Eliminate unnecessary `&local` bindings after inline  |
-| Copy Propagation      | `optimize_copy_prop.rs` | Propagate trivial copies like `let x = y`             |
-| LICM                  | `optimize_licm.rs`      | Hoist loop-invariant field accesses                   |
-| Post-opt Rewrite      | `optimize_rewrite.rs`   | Select lowering, move insertion, copy type collection |
+| Module                | File                     | Description                                           |
+| --------------------- | ------------------------ | ----------------------------------------------------- |
+| Constant Folding      | `optimize_const_fold.rs` | Fold compile-time-known integer arithmetic            |
+| DCE                   | `optimize_dce.rs`        | Dead code elimination via reachability analysis       |
+| Function Inlining     | `optimize_inline.rs`     | Inline small, pure functions                          |
+| Reference Elimination | `optimize_ref_elim.rs`   | Eliminate unnecessary `&local` bindings after inline  |
+| Copy Propagation      | `optimize_copy_prop.rs`  | Propagate trivial copies like `let x = y`             |
+| LICM                  | `optimize_licm.rs`       | Hoist loop-invariant field accesses                   |
+| SROA                  | `optimize_sroa.rs`       | Scalar replacement of aggregates (elim struct allocs) |
+| Post-opt Rewrite      | `optimize_rewrite.rs`    | Select lowering, move insertion, copy type collection |
 
 **Optimization Order:**
 
@@ -221,15 +226,11 @@ For `-O2` and `-Os`:
 
 **Usage Analysis Fields (populated in Project):**
 
-| Field                 | Type                               | Description                                 |
-| --------------------- | ---------------------------------- | ------------------------------------------- |
-| `reachable_functions` | `HashSet<FunctionId>`              | Functions reachable from entry point (DCE)  |
-| `used_effects`        | `HashSet<WasiEffect>`              | WASI effects used (Stdout, Stderr, etc.)    |
-| `used_wasi_functions` | `HashSet<String>`                  | WASI functions called                       |
-| `used_builtins`       | `HashSet<CanonBuiltin>`            | Canonical builtins used (stream ops, etc.)  |
-| `used_box_primitives` | `HashSet<PrimitiveType>`           | Primitives needing box types for references |
-| `strip_names`         | `bool`                             | Whether to strip debug name sections        |
-| `needed_copy_types`   | `HashMap<String, HashSet<TypeId>>` | Types requiring value copy per function     |
+| Field                 | Type                    | Description                                |
+| --------------------- | ----------------------- | ------------------------------------------ |
+| `reachable_functions` | `IndexSet<FunctionId>`  | Functions reachable from entry point (DCE) |
+| `used_wasi_functions` | `IndexSet<String>`      | WASI functions called (e.g. `Stdout::write_via_stream`) |
+| `strip_names`         | `bool`                  | Whether to strip debug name sections (`-Os`) |
 
 **CLI Control:**
 
@@ -300,7 +301,7 @@ Test names can contain any characters (parentheses, dashes, etc.) — the compil
 
 ### WASI Registry
 
-The `WasiRegistry` module (`wasi_registry.rs`) collects WASI import information from `lib/wasi/*.wado` files and provides it to the code generator for dynamic Component Model generation.
+The `WasiRegistry` module (`component_model.rs`) collects WASI import information from `lib/wasi/*.wado` files and provides it to the code generator for dynamic Component Model generation.
 
 **Purpose:**
 
@@ -1068,7 +1069,7 @@ pub struct FormatSpec {
 }
 ```
 
-**Codegen (`codegen.rs`):**
+**WIR codegen (`codegen/emit.rs`):**
 
 - String literal parts are collected and embedded in data section
 - Interpolation expressions are evaluated
@@ -1564,30 +1565,6 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 - Value semantics for Variant (copy tag + all fields)
 - Template string array concatenation
 
-### Current Capabilities
-
-The compiler can currently:
-
-1. **Parse** basic Wado programs with:
-   - `use` imports from `core::cli`
-   - `fn main()` with effect declarations
-   - `println("...")` calls
-
-2. **Generate** Component Model Wasm that:
-   - Imports WASI P3 `wasi:cli/stdout` and `wasi:cli/types`
-   - Uses async stream intrinsics for stdout
-   - Runs successfully on wasmtime with P3 support
-
-**Example Working Program:**
-
-```wado
-use {println, Stdout} from "core:cli";
-
-fn run() with Stdout {
-    println("Hello, world!");
-}
-```
-
 ---
 
 ## In Progress
@@ -1614,14 +1591,8 @@ fn run() with Stdout {
 
 ## Not Yet Implemented
 
-### Parser
-
-- `#[data]` attribute for data section injection
-- `match` statements
-
 ### Expressions
 
-- `match` expressions
 - Range expressions
 - `?` operator (error propagation)
 
@@ -1641,7 +1612,6 @@ fn run() with Stdout {
 ### Code Generation
 
 - Custom variant pattern matching (struct payloads, see WEP)
-- Match expressions (see WEP)
 - Closures - with captures (see WEP)
 - Effect handlers
 - Template string format specifiers (`.2f`, etc.)
