@@ -146,12 +146,6 @@ All translation steps implemented: type registration (structs, variants, enums, 
 - [x] Deleted `codegen.rs`
 - [x] Promoted `tests/e2e.rs` as the sole E2E test (removed `wir_e2e.rs` and `wir_progress.rs`)
 
-Remaining cleanup:
-
-- [ ] Remove debug file writes (`/tmp/wir_debug_core.wat`) from `tir_to_wir/mod.rs`
-- [ ] Merge `wasm_plan` into `tir_to_wir` — currently still called as a separate pipeline phase from `lib.rs`. Pipeline becomes: `optimize → tir_to_wir → wir_emit`
-- [ ] Delete `copy_context.rs` — only used by `optimize_rewrite.rs` for `needed_copy_types` expansion
-
 ### Phase 5 (Future): Optimizer Migration
 
 After WIR is stable, split optimizations into two levels:
