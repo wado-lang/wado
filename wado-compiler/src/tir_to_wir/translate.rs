@@ -994,7 +994,14 @@ impl FunctionTranslator<'_, '_> {
                         args: translated_args,
                     }
                 } else {
-                    eprintln!("[WIR] unresolved MethodCall: name={:?}", func.name());
+                    if let Some(mi) = func.method_info() {
+                        eprintln!(
+                            "[WIR] unresolved MethodCall: name={:?} method_info={:?}",
+                            func.name(), mi
+                        );
+                    } else {
+                        eprintln!("[WIR] unresolved MethodCall: name={:?}", func.name());
+                    }
                     WirInstr::Unreachable
                 }
             }

@@ -648,8 +648,8 @@ pub enum WirInstr {
     I64MulWideS(Box<WirInstr>, Box<WirInstr>),
 
     /// Emit a multi-value instruction and wrap the results in a struct.
-    /// Used for i64.add128, i64.sub128, i64.mul_wide_u/s which push two i64
-    /// values on the stack, then StructNew wraps them into a tuple struct.
+    /// Used for `i64.add128`, `i64.sub128`, `i64.mul_wide_u/s` which push two i64
+    /// values on the stack, then `StructNew` wraps them into a tuple struct.
     MultiValueStructNew {
         type_id: WirTypeId,
         instr: Box<WirInstr>,

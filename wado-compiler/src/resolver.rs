@@ -3217,8 +3217,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             return TirPattern::Wildcard;
                         }
                         // Check if scrutinee type is unsigned
+                        let scrutinee_resolved =
+                            self.type_table.borrow().get(scrutinee_type).clone();
                         let is_unsigned = matches!(
-                            self.type_table.borrow().get(scrutinee_type),
+                            scrutinee_resolved,
                             ResolvedType::Primitive(
                                 PrimitiveType::U8
                                     | PrimitiveType::U16
@@ -3226,6 +3228,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     | PrimitiveType::U64
                                     | PrimitiveType::U128
                             )
+                        ) || matches!(
+                            scrutinee_resolved,
+                            ResolvedType::Struct { ref name, .. } if name == "u128"
                         );
                         if is_unsigned {
                             match Self::parse_u128_literal(&n.repr) {
