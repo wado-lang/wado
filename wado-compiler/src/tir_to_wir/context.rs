@@ -73,6 +73,16 @@ pub struct WirContext<'a> {
     /// Name section entries.
     pub names: WirNames,
 
+    // === Canonical Closure Types ===
+    /// Map from function signature string to canonical closure info.
+    /// Key: stringified signature (e.g., "(i32, i32) -> i32")
+    /// Value: (canonical_fn_type_id, canonical_closure_struct_type_id)
+    pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId)>,
+    /// Map from closure functor_id to canonical wrapper function WirFuncId.
+    pub closure_wrapper_funcs: IndexMap<u32, WirFuncId>,
+    /// Counter for canonical closure type naming.
+    pub canonical_closure_counter: u32,
+
     // === Scratch state ===
     /// Collected string literals (from all TIR modules).
     pub string_literals: Vec<String>,
@@ -132,6 +142,9 @@ impl<'a> WirContext<'a> {
             data: Vec::new(),
             string_literal_map: IndexMap::new(),
             names: WirNames::default(),
+            canonical_closure_types: IndexMap::new(),
+            closure_wrapper_funcs: IndexMap::new(),
+            canonical_closure_counter: 0,
             string_literals,
             available_wasi_funcs: IndexSet::new(),
             pending_bodies: Vec::new(),
@@ -273,6 +286,80 @@ impl<'a> WirContext<'a> {
     /// Get the entry module's type table (borrowed).
     pub fn entry_type_table(&self) -> std::cell::Ref<'_, TypeTable> {
         self.entry_tir().type_table.borrow()
+    }
+
+    /// Build a string key for canonical closure type lookup.
+    pub fn canonical_closure_key(params: &[WirType], results: &[WirType]) -> String {
+        format!("({}) -> ({})",
+            params.iter().map(|t| format!("{t:?}")).collect::<Vec<_>>().join(", "),
+            results.iter().map(|t| format!("{t:?}")).collect::<Vec<_>>().join(", "),
+        )
+    }
+
+    /// Get or create a canonical closure type pair (func type + closure struct) for a
+    /// function signature. Returns `(fn_type_id, closure_struct_type_id)`.
+    pub fn get_or_create_canonical_closure_type(
+        &mut self,
+        param_wirs: Vec<WirType>,
+        result_wirs: Vec<WirType>,
+    ) -> (WirTypeId, WirTypeId) {
+        let key = Self::canonical_closure_key(&param_wirs, &result_wirs);
+        if let Some(existing) = self.canonical_closure_types.get(&key) {
+            return existing.clone();
+        }
+
+        let id = self.canonical_closure_counter;
+        self.canonical_closure_counter += 1;
+
+        // Create canonical function type: (ref null struct, params...) -> results
+        // The env param must be nullable to accept any struct ref subtype.
+        let mut fn_params = vec![WirType::AbstractRef {
+            heap_type: crate::wir::WirAbstractHeapType::Struct,
+            nullable: true,
+        }];
+        fn_params.extend(param_wirs.iter().cloned());
+
+        let fn_type_fq = format!("functype/$canonical_closure_fn_{id}");
+        let fn_type_id = self.register_func_type(fn_type_fq, fn_params, result_wirs.clone());
+
+        // Create canonical closure struct: { env: (ref null struct), func: (ref $fn_type) }
+        let struct_fq = format!("canonical//CanonicalClosure_{id}");
+        use crate::wir::{WirField, WirMeta, WirName, WirStructType};
+        let struct_type_id = self.register_type(
+            struct_fq.clone(),
+            WirTypeDef::Struct(WirStructType {
+                name: WirName {
+                    display: format!("CanonicalClosure_{id}"),
+                    fq: struct_fq,
+                },
+                fields: vec![
+                    WirField {
+                        name: "env".to_string(),
+                        ty: WirType::AbstractRef {
+                            heap_type: crate::wir::WirAbstractHeapType::Struct,
+                            nullable: true,
+                        },
+                        mutable: false,
+                    },
+                    WirField {
+                        name: "func".to_string(),
+                        ty: WirType::Ref {
+                            type_id: fn_type_id.clone(),
+                            nullable: false,
+                        },
+                        mutable: false,
+                    },
+                ],
+                meta: WirMeta::default(),
+                generic_origin: None,
+                newtype_origin: None,
+            }),
+        );
+
+        self.canonical_closure_types
+            .insert(key, (fn_type_id.clone(), struct_type_id.clone()));
+
+        (fn_type_id, struct_type_id)
     }
 
     /// Convert a TIR `TypeId` to a `WirType`.
@@ -511,9 +598,11 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::Function { .. } => {
-                // Function references use abstract funcref
+                // Function-typed values are canonical closure structs at runtime.
+                // Use abstract structref so any concrete closure struct is a valid subtype.
+                // IndirectCall will RefCast to the specific canonical closure struct.
                 WirType::AbstractRef {
-                    heap_type: crate::wir::WirAbstractHeapType::Func,
+                    heap_type: crate::wir::WirAbstractHeapType::Struct,
                     nullable: true,
                 }
             }

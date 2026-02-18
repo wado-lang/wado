@@ -3,7 +3,7 @@
 //! This module handles the mechanical translation from WIR's tree-structured
 //! representation to flat Wasm instructions and binary encoding.
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirCopyType, WirExportDesc, WirFuncType, WirFunction,
@@ -13,9 +13,10 @@ use crate::wir::{
 
 use wasm_encoder::{
     AbstractHeapType, BlockType, CodeSection, CompositeInnerType, CompositeType, ConstExpr,
-    DataCountSection, DataSection, ExportKind, ExportSection, FieldType, Function, FunctionSection,
-    GlobalSection, GlobalType, HeapType, ImportSection, Instruction, MemArg, Module, NameMap,
-    NameSection, RefType, StorageType, StructType, SubType, TypeSection, ValType,
+    DataCountSection, DataSection, ElementSection, Elements, ExportKind, ExportSection, FieldType,
+    Function, FunctionSection, GlobalSection, GlobalType, HeapType, ImportSection, Instruction,
+    MemArg, Module, NameMap, NameSection, RefType, StorageType, StructType, SubType, TypeSection,
+    ValType,
 };
 
 /// Emit a core Wasm module from a `WirModule`.
@@ -107,9 +108,13 @@ impl<'a> WirEmitter<'a> {
         module.section(&exports);
 
         // 7. Element section (declarative for ref.func)
-        if !self.wir.functions.is_empty() {
-            // Emit declarative element segment for any ref.func usage
-            // This allows function references to be created
+        let ref_func_indices = self.collect_ref_func_indices();
+        if !ref_func_indices.is_empty() {
+            let mut elements = ElementSection::new();
+            elements.declared(Elements::Functions(std::borrow::Cow::Borrowed(
+                &ref_func_indices,
+            )));
+            module.section(&elements);
         }
 
         // 8. Data count section (for passive data segments)
@@ -150,11 +155,16 @@ impl<'a> WirEmitter<'a> {
         // that hasn't been emitted yet).
         self.pre_assign_type_indices();
 
+        // Find func types that must go in the rec group (referenced from struct fields)
+        let gc_func_types = self.find_gc_referenced_func_types();
+
         // Emit GC types (structs, arrays, variants) in a single `rec` group
         // so that forward references between them are allowed by the Wasm GC type system.
-        // Function types must be standalone (outside rec group) for component model
+        // Function types are normally standalone (outside rec group) for component model
         // compatibility — types in a rec group are not structurally equivalent to
         // standalone types, which breaks import/export matching.
+        // Exception: func types referenced from struct fields (e.g., canonical closure
+        // func types) must be in the rec group to avoid forward reference errors.
         let mut gc_subtypes: Vec<SubType> = Vec::new();
 
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
@@ -172,6 +182,10 @@ impl<'a> WirEmitter<'a> {
                 WirTypeDef::Array(a) => {
                     self.build_array_subtype(a, wir_idx, &mut gc_subtypes);
                 }
+                WirTypeDef::Func(f) if gc_func_types.contains(&wir_idx) => {
+                    // Func type referenced from a GC struct — include in rec group
+                    self.build_func_subtype(f, wir_idx, &mut gc_subtypes);
+                }
                 WirTypeDef::Enum(_) | WirTypeDef::Flags(_) | WirTypeDef::Func(_) => {}
             }
         }
@@ -180,11 +194,13 @@ impl<'a> WirEmitter<'a> {
             types.ty().rec(gc_subtypes);
         }
 
-        // Emit function types standalone (outside rec group)
+        // Emit function types standalone (outside rec group), excluding gc-referenced ones
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             if let WirTypeDef::Func(f) = typedef {
-                self.emit_standalone_func_type(&mut types, f, wir_idx);
+                if !gc_func_types.contains(&wir_idx) {
+                    self.emit_standalone_func_type(&mut types, f, wir_idx);
+                }
             }
         }
 
@@ -195,10 +211,16 @@ impl<'a> WirEmitter<'a> {
     ///
     /// GC types (structs, arrays, variants) are assigned first (they go in a rec group),
     /// then function types (standalone). This matches the emission order in `emit_type_section`.
+    ///
+    /// Exception: func types referenced by struct fields (e.g., canonical closure func types)
+    /// must also go in the rec group to avoid invalid forward references.
     fn pre_assign_type_indices(&mut self) {
         let mut next_idx = 0u32;
 
-        // Pass 1: GC types (structs, arrays, variants) — in the rec group
+        // Find func types referenced from struct fields — these must go in the rec group
+        let gc_func_types = self.find_gc_referenced_func_types();
+
+        // Pass 1: GC types (structs, arrays, variants) + func types referenced from GC types
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             match typedef {
@@ -240,9 +262,14 @@ impl<'a> WirEmitter<'a> {
                     self.variant_pre_assigned
                         .insert(wir_idx, (base_idx, case_types));
                 }
+                WirTypeDef::Func(_) if gc_func_types.contains(&wir_idx) => {
+                    // Func type referenced from a GC struct field — must be in rec group
+                    self.type_index_map.insert(wir_idx, next_idx);
+                    next_idx += 1;
+                }
                 WirTypeDef::Enum(_) | WirTypeDef::Flags(_) | WirTypeDef::Func(_) => {
                     // Enums/Flags: no type section entry
-                    // Funcs: assigned in pass 2
+                    // Funcs: assigned in pass 2 (unless in gc_func_types)
                 }
             }
         }
@@ -251,12 +278,35 @@ impl<'a> WirEmitter<'a> {
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             if let WirTypeDef::Func(_) = typedef {
-                self.type_index_map.insert(wir_idx, next_idx);
-                next_idx += 1;
+                if !gc_func_types.contains(&wir_idx) {
+                    self.type_index_map.insert(wir_idx, next_idx);
+                    next_idx += 1;
+                }
             }
         }
 
         self.next_type_idx = next_idx;
+    }
+
+    /// Find func type indices that are referenced from struct fields.
+    /// These must go in the rec group to avoid forward reference errors.
+    fn find_gc_referenced_func_types(&self) -> IndexSet<u32> {
+        let mut gc_func_types = IndexSet::new();
+        for typedef in &self.wir.types {
+            if let WirTypeDef::Struct(s) = typedef {
+                for field in &s.fields {
+                    if let WirType::Ref { type_id, .. } = &field.ty {
+                        let ref_idx = type_id.index();
+                        if (ref_idx as usize) < self.wir.types.len()
+                            && matches!(self.wir.types[ref_idx as usize], WirTypeDef::Func(_))
+                        {
+                            gc_func_types.insert(ref_idx);
+                        }
+                    }
+                }
+            }
+        }
+        gc_func_types
     }
 
     fn emit_standalone_func_type(
@@ -1949,5 +1999,34 @@ impl<'a> WirEmitter<'a> {
 
     fn wir_abstract_heap_to_wasm_heap(&self, ht: &WirAbstractHeapType) -> HeapType {
         self.wir_abstract_heap_to_wasm(ht)
+    }
+
+    /// Collect all function indices referenced by `RefFunc` instructions.
+    /// These need to be declared in a declarative element segment.
+    fn collect_ref_func_indices(&self) -> Vec<u32> {
+        let mut indices = IndexSet::new();
+        for func in &self.wir.functions {
+            if let Some(ref body) = func.body {
+                self.scan_ref_func_instrs(body, &mut indices);
+            }
+        }
+        indices.into_iter().collect()
+    }
+
+    fn scan_ref_func_instrs(&self, body: &[WirInstr], indices: &mut IndexSet<u32>) {
+        for instr in body {
+            self.scan_ref_func_instr(instr, indices);
+        }
+    }
+
+    fn scan_ref_func_instr(&self, instr: &WirInstr, indices: &mut IndexSet<u32>) {
+        if let WirInstr::RefFunc { func_id } = instr {
+            let wasm_idx = self.resolve_func_index(func_id.index());
+            indices.insert(wasm_idx);
+        }
+        // Recursively scan children
+        instr.for_each_child(&mut |child| {
+            self.scan_ref_func_instr(child, indices);
+        });
     }
 }

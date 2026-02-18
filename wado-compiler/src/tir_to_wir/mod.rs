@@ -54,6 +54,9 @@ pub fn build_wir_module(project: &Project) -> WirModule {
     // Step 2: Collect and register all functions
     functions::collect_functions(&mut ctx);
 
+    // Step 2.5: Register canonical closure wrapper functions
+    translate::register_closure_wrappers(&mut ctx);
+
     // Step 3: Translate function bodies
     translate::translate_function_bodies(&mut ctx);
 

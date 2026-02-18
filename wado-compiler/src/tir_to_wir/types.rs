@@ -61,6 +61,9 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     // Register flags from all modules
     register_flags(ctx);
 
+    // Phase 5: Canonical closure types for function-typed values
+    register_canonical_closure_types(ctx);
+
     // Final pass: fix up struct fields that resolved to AbstractRef(Struct)
     // because of self-referential or forward-referenced types
     fixup_abstract_struct_fields(ctx);
@@ -672,6 +675,74 @@ fn register_enums(ctx: &mut WirContext<'_>) {
 
 fn register_flags(_ctx: &mut WirContext<'_>) {
     // Flags are not yet supported in TIR; this is a placeholder
+}
+
+/// Register canonical closure types for all `Function` types found in type tables.
+/// Each unique function signature `fn(P1, P2, ...) -> R` gets:
+/// - A canonical func type: `(ref struct, P1, P2, ...) -> R`
+/// - A canonical closure struct: `{ env: ref struct, func: ref $func_type }`
+fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
+    use crate::tir::{PrimitiveType, ResolvedType};
+    use crate::wir::WirType;
+
+    // Collect all unique function signatures from all modules
+    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>)> = Vec::new();
+    let mut seen_keys: indexmap::IndexSet<String> = indexmap::IndexSet::new();
+
+    for tir_mod in ctx.project.tir_modules.values() {
+        let type_table = &*tir_mod.type_table.borrow();
+        for type_id in type_table.iter_type_ids() {
+            if let ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } = type_table.get(type_id)
+            {
+                // Skip if any param/return contains type params (unmonomorphized)
+                if params.iter().any(|p| type_table.contains_type_param(*p))
+                    || type_table.contains_type_param(*return_type)
+                {
+                    continue;
+                }
+
+                // Skip i128/u128 params/returns
+                let has_i128 = params.iter().any(|p| {
+                    matches!(
+                        type_table.get(*p),
+                        ResolvedType::Primitive(PrimitiveType::I128 | PrimitiveType::U128)
+                    )
+                }) || matches!(
+                    type_table.get(*return_type),
+                    ResolvedType::Primitive(PrimitiveType::I128 | PrimitiveType::U128)
+                );
+                if has_i128 {
+                    continue;
+                }
+
+                let param_wirs: Vec<WirType> = params
+                    .iter()
+                    .map(|p| ctx.type_id_to_wir_type(type_table, *p))
+                    .collect();
+                let result_wirs: Vec<WirType> =
+                    if *return_type == crate::tir::TypeTable::UNIT
+                        || *return_type == crate::tir::TypeTable::NEVER
+                    {
+                        vec![]
+                    } else {
+                        vec![ctx.type_id_to_wir_type(type_table, *return_type)]
+                    };
+                let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
+                if seen_keys.insert(key) {
+                    fn_sigs.push((param_wirs, result_wirs));
+                }
+            }
+        }
+    }
+
+    // Register canonical closure types for each signature
+    for (param_wirs, result_wirs) in fn_sigs {
+        ctx.get_or_create_canonical_closure_type(param_wirs, result_wirs);
+    }
 }
 
 /// Register Array<T> wrapper structs for all `GenericInstance("Array", [T])` types

@@ -64,6 +64,7 @@ pub struct CompileOptions {
     pub wat_to_stdout: bool,
     pub log_level: LogLevel,
     pub target_world: Option<String>,
+    pub use_wir: bool,
 }
 
 pub fn print_usage() {
@@ -79,6 +80,7 @@ pub fn print_usage() {
     );
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
+    eprintln!("  --wir            Use WIR backend (also enabled by WADO_WIR=1 env var)");
     eprintln!("  --help           Show this help message");
 }
 
@@ -102,6 +104,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     let mut wat_to_stdout = false;
     let mut log_level = LogLevel::default();
     let mut target_world: Option<String> = None;
+    let mut use_wir = std::env::var("WADO_WIR").is_ok();
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
@@ -111,6 +114,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
             }
             Long("wat-to-stdout") => {
                 wat_to_stdout = true;
+            }
+            Long("wir") => {
+                use_wir = true;
             }
             Long("world") => {
                 target_world = Some(require_string(&mut parser));
@@ -174,6 +180,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
         wat_to_stdout,
         log_level,
         target_world,
+        use_wir,
     }
 }
 
@@ -190,7 +197,7 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
 
 /// Compile a Wado source file and return the Wasm binary
 pub async fn compile(filename: &str) -> Vec<u8> {
-    compile_with_opts(filename, OptLevel::default(), LogLevel::default()).await
+    compile_with_opts(filename, OptLevel::default(), LogLevel::default(), false).await
 }
 
 /// Compile a Wado source file with optimization options
@@ -198,8 +205,9 @@ pub async fn compile_with_opts(
     filename: &str,
     opt_level: OptLevel,
     log_level: LogLevel,
+    use_wir: bool,
 ) -> Vec<u8> {
-    compile_with_full_opts(filename, opt_level, log_level, None).await
+    compile_with_full_opts(filename, opt_level, log_level, None, use_wir).await
 }
 
 /// Compile a Wado source file with full options including target world
@@ -208,6 +216,7 @@ pub async fn compile_with_full_opts(
     opt_level: OptLevel,
     log_level: LogLevel,
     target_world: Option<String>,
+    use_wir: bool,
 ) -> Vec<u8> {
     let path = Path::new(filename);
 
@@ -231,7 +240,7 @@ pub async fn compile_with_full_opts(
     let options = wado_compiler::CompilerOptions {
         opt_level: to_compiler_opt_level(opt_level),
         target_world,
-        use_wir_backend: false,
+        use_wir_backend: use_wir,
     };
 
     // Compile using async API
@@ -266,6 +275,7 @@ pub async fn run(opts: CompileOptions) {
         opts.opt_level,
         opts.log_level,
         opts.target_world,
+        opts.use_wir,
     )
     .await;
 

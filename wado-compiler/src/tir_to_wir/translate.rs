@@ -87,6 +87,134 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
     }
 }
 
+/// Register canonical closure wrapper functions for all closure functors.
+/// Must be called before `translate_function_bodies` so wrappers are available
+/// for `ClosureToCanonical` references.
+pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
+    use crate::wir::{WirFunction, WirName, WirType};
+
+    for tir_mod in ctx.project.tir_modules.values() {
+        let type_table = &*tir_mod.type_table.borrow();
+        for functor in &tir_mod.closure_functors {
+            if ctx.closure_wrapper_funcs.contains_key(&functor.id) {
+                continue;
+            }
+
+            // Get the __call method's param/result types (excluding self)
+            let call_func = functor.call_method.borrow();
+            let user_param_count = call_func.params.len() - 1; // skip self
+            let user_params: Vec<WirType> = call_func
+                .params
+                .iter()
+                .skip(1) // skip self parameter
+                .map(|p| ctx.type_id_to_wir_type(type_table, p.type_id))
+                .collect();
+            let result_wirs: Vec<WirType> = if call_func.return_type == crate::tir::TypeTable::UNIT
+                || call_func.return_type == crate::tir::TypeTable::NEVER
+            {
+                vec![]
+            } else {
+                vec![ctx.type_id_to_wir_type(type_table, call_func.return_type)]
+            };
+            let has_result = !result_wirs.is_empty();
+
+            // Get canonical func type
+            let (fn_type_id, _) =
+                ctx.get_or_create_canonical_closure_type(user_params, result_wirs);
+
+            // Get functor struct type ID
+            let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);
+            let functor_struct_type_id = match &functor_wir_type {
+                WirType::Ref { type_id, .. } => type_id.clone(),
+                _ => continue,
+            };
+
+            // Look up the __call func_id
+            let functor_name = &functor.struct_name;
+            let call_method_suffix = format!("/{}::__call", functor_name);
+            let call_func_id = ctx
+                .func_map
+                .iter()
+                .find(|(k, _)| k.ends_with(&call_method_suffix))
+                .map(|(_, v)| v.clone());
+
+            // Build wrapper function body
+            let env_local = "__env".to_string();
+            let typed_env_local = "__typed_env".to_string();
+
+            let mut body = vec![
+                WirInstr::DeclareLocal {
+                    name: typed_env_local.clone(),
+                    ty: WirType::Ref {
+                        type_id: functor_struct_type_id.clone(),
+                        nullable: true,
+                    },
+                },
+                WirInstr::LocalSet {
+                    name: typed_env_local.clone(),
+                    value: Box::new(WirInstr::RefCast {
+                        type_id: functor_struct_type_id,
+                        nullable: true,
+                        expr: Box::new(WirInstr::LocalGet {
+                            name: env_local.clone(),
+                        }),
+                    }),
+                },
+            ];
+
+            let mut call_args = vec![WirInstr::LocalGet {
+                name: typed_env_local,
+            }];
+            for i in 0..user_param_count {
+                call_args.push(WirInstr::LocalGet {
+                    name: format!("__p{i}"),
+                });
+            }
+
+            if let Some(call_fid) = call_func_id {
+                let call_instr = WirInstr::Call {
+                    func_id: call_fid,
+                    args: call_args,
+                };
+                if has_result {
+                    body.push(WirInstr::Return {
+                        value: Some(Box::new(call_instr)),
+                    });
+                } else {
+                    body.push(call_instr);
+                }
+            } else {
+                body.push(WirInstr::Unreachable);
+            }
+
+            let mut param_names = vec![env_local];
+            for i in 0..user_param_count {
+                param_names.push(format!("__p{i}"));
+            }
+
+            let wrapper_name = format!("__closure_wrapper_{}", functor.id);
+            let wrapper_fq = format!("closure//{wrapper_name}");
+
+            let func = WirFunction {
+                name: WirName {
+                    display: wrapper_name,
+                    fq: wrapper_fq,
+                },
+                type_id: fn_type_id,
+                param_names,
+                body: Some(body),
+                meta: crate::wir::WirMeta::default(),
+                generic_origin: None,
+                effects: Vec::new(),
+            };
+
+            let func_id = ctx.register_function(func);
+            ctx.closure_wrapper_funcs
+                .insert(functor.id, func_id);
+        }
+    }
+}
+
 /// Translate all pending function bodies from TIR to WIR instructions.
 pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     let pending: Vec<_> = std::mem::take(&mut ctx.pending_bodies);
@@ -111,6 +239,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 module_source: &pending_body.module_source,
                 label_stack: Vec::new(),
                 match_counter: 0,
+                local_counter: 0,
                 local_names,
             };
             let wir_body = translator.translate_block(body);
@@ -141,6 +270,8 @@ struct FunctionTranslator<'a, 'b> {
     label_stack: Vec<LabelEntry>,
     /// Counter for generating unique match scrutinee local names.
     match_counter: u32,
+    /// Counter for generating unique temporary local names.
+    local_counter: u32,
     /// Map from local index to variable name (built from params + Let stmts).
     local_names: IndexMap<u32, String>,
 }
@@ -1145,14 +1276,14 @@ impl FunctionTranslator<'_, '_> {
                 // Capture should be lowered to FieldAccess before reaching this point.
                 WirInstr::Unreachable
             }
-            TirExprKind::IndirectCall { .. } => {
-                // TODO: proper indirect call needs closure infrastructure (call_ref)
-                WirInstr::Unreachable
+            TirExprKind::IndirectCall { callee, args } => {
+                self.translate_indirect_call(callee, args, expr.type_id)
             }
-            TirExprKind::ClosureToCanonical { .. } => {
-                // TODO: closure-to-canonical needs wrapper function lookup
-                WirInstr::Unreachable
-            }
+            TirExprKind::ClosureToCanonical {
+                functor,
+                functor_id,
+                target_fn_type,
+            } => self.translate_closure_to_canonical(functor, *functor_id, *target_fn_type),
 
             // === Labeled Block Expression ===
             TirExprKind::LabeledBlock { label, block, .. } => {
@@ -1560,10 +1691,20 @@ impl FunctionTranslator<'_, '_> {
 
     /// Translate a type cast.
     fn translate_cast(&mut self, inner: &TirExpr, from_type: TypeId, to_type: TypeId) -> WirInstr {
+        // Optimize: IntLiteral cast to i64/u64 → emit I64Const directly to avoid i32 truncation
+        let to_base = self.type_table.get_ultimate_base_type(to_type);
+        if let TirExprKind::IntLiteral { value, .. } = &inner.kind
+            && matches!(
+                self.type_table.get(to_base),
+                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
+            )
+        {
+            return WirInstr::I64Const(*value as i64);
+        }
+
         let inner_instr = self.translate_expr(inner);
         // Resolve newtypes to their base types for cast operations
         let from_base = self.type_table.get_ultimate_base_type(from_type);
-        let to_base = self.type_table.get_ultimate_base_type(to_type);
         let from = self.type_table.get(from_base);
         let to = self.type_table.get(to_base);
 
@@ -3232,5 +3373,178 @@ impl FunctionTranslator<'_, '_> {
 
         // Fallback
         val
+    }
+
+    // =========================================================================
+    // Closure translations
+    // =========================================================================
+
+    /// Translate `IndirectCall { callee, args }` to `call_ref` through canonical closure.
+    fn translate_indirect_call(
+        &mut self,
+        callee: &TirExpr,
+        args: &[TirExpr],
+        result_type: TypeId,
+    ) -> WirInstr {
+        let callee_wir = self.translate_expr(callee);
+
+        // Look up the Function type to get param/result info
+        let fn_type = self.type_table.get(callee.type_id);
+        let (param_types, return_type) = match fn_type {
+            crate::tir::ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => (params.clone(), *return_type),
+            _ => return WirInstr::Unreachable,
+        };
+
+        // Compute canonical closure types directly by signature key
+        let param_wirs: Vec<WirType> = param_types
+            .iter()
+            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
+            .collect();
+        let result_wirs: Vec<WirType> = if return_type == TypeTable::UNIT
+            || return_type == TypeTable::NEVER
+        {
+            vec![]
+        } else {
+            vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
+        };
+        let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
+        let (fn_type_id, closure_struct_type_id) =
+            if let Some((ftid, stid)) = self.ctx.canonical_closure_types.get(&key) {
+                (ftid.clone(), stid.clone())
+            } else {
+                return WirInstr::Unreachable;
+            };
+
+        // Generate a temp local for the callee as canonical closure struct ref
+        let temp_name = format!("__indirect_call_{}", self.local_counter);
+        self.local_counter += 1;
+        let callee_ref_type = WirType::Ref {
+            type_id: closure_struct_type_id.clone(),
+            nullable: true,
+        };
+
+        // Build: declare temp, cast callee from abstract structref to canonical closure,
+        // store, extract env + args + funcref, call_ref
+        let mut stmts = vec![
+            WirInstr::DeclareLocal {
+                name: temp_name.clone(),
+                ty: callee_ref_type,
+            },
+            WirInstr::LocalSet {
+                name: temp_name.clone(),
+                value: Box::new(WirInstr::RefCast {
+                    type_id: closure_struct_type_id.clone(),
+                    nullable: true,
+                    expr: Box::new(callee_wir),
+                }),
+            },
+        ];
+
+        // Build args: env, then user args
+        let env_arg = WirInstr::StructGet {
+            type_id: closure_struct_type_id.clone(),
+            field_name: "env".to_string(),
+            expr: Box::new(WirInstr::LocalGet {
+                name: temp_name.clone(),
+            }),
+        };
+
+        let mut call_args = vec![env_arg];
+        for arg in args {
+            call_args.push(self.translate_expr(arg));
+        }
+
+        // func_ref = struct.get $closure "func"
+        let func_ref = WirInstr::StructGet {
+            type_id: closure_struct_type_id,
+            field_name: "func".to_string(),
+            expr: Box::new(WirInstr::LocalGet { name: temp_name }),
+        };
+
+        let call_ref = WirInstr::CallRef {
+            type_id: fn_type_id,
+            func_ref: Box::new(func_ref),
+            args: call_args,
+        };
+
+        if result_type == TypeTable::UNIT || result_type == TypeTable::NEVER {
+            stmts.push(call_ref);
+            WirInstr::Seq(stmts)
+        } else {
+            // Need to return the call result as the block value
+            stmts.push(call_ref);
+            let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
+            WirInstr::Block {
+                label: None,
+                result: Some(result_wir),
+                body: stmts,
+            }
+        }
+    }
+
+    /// Translate `ClosureToCanonical` — convert a functor struct to canonical closure.
+    fn translate_closure_to_canonical(
+        &mut self,
+        functor: &TirExpr,
+        functor_id: u32,
+        target_fn_type: TypeId,
+    ) -> WirInstr {
+        let functor_instr = self.translate_expr(functor);
+
+        // Look up the canonical closure struct type for the target function type
+        let fn_resolved = self.type_table.get(target_fn_type);
+        let (param_types, return_type) = match fn_resolved {
+            crate::tir::ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => (params.clone(), *return_type),
+            _ => return WirInstr::Unreachable,
+        };
+
+        let param_wirs: Vec<WirType> = param_types
+            .iter()
+            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
+            .collect();
+        let result_wirs: Vec<WirType> = if return_type == TypeTable::UNIT
+            || return_type == TypeTable::NEVER
+        {
+            vec![]
+        } else {
+            vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
+        };
+
+        // Get canonical closure type
+        let key =
+            WirContext::canonical_closure_key(&param_wirs, &result_wirs);
+        let struct_type_id =
+            if let Some((_, stid)) = self.ctx.canonical_closure_types.get(&key) {
+                stid.clone()
+            } else {
+                return WirInstr::Unreachable;
+            };
+
+        // Look up the pre-registered wrapper function for this functor
+        let wrapper_func_id =
+            if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_id) {
+                id.clone()
+            } else {
+                return WirInstr::Unreachable;
+            };
+
+        // Build: CanonicalClosure { env: functor_as_structref, func: ref.func $wrapper }
+        WirInstr::StructNew {
+            type_id: struct_type_id,
+            fields: vec![
+                functor_instr,
+                WirInstr::RefFunc {
+                    func_id: wrapper_func_id,
+                },
+            ],
+        }
     }
 }

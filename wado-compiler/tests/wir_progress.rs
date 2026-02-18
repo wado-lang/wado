@@ -148,7 +148,11 @@ fn wir_pipeline_progress() {
         .collect();
     entries.sort_by_key(std::fs::DirEntry::file_name);
 
-    let opt_level = OptLevel::O2;
+    let opt_level = if std::env::var("WADO_WIR_O0").is_ok() {
+        OptLevel::O0
+    } else {
+        OptLevel::O2
+    };
     let mut stats = ProgressStats::default();
     let mut failures: Vec<(String, String)> = Vec::new();
 
@@ -227,7 +231,7 @@ fn wir_pipeline_progress() {
 
     eprintln!();
     eprintln!("═══════════════════════════════════════════════════════");
-    eprintln!("  WIR Pipeline Progress (O2)");
+    eprintln!("  WIR Pipeline Progress ({opt_level:?})");
     eprintln!("═══════════════════════════════════════════════════════");
     eprintln!(
         "  Passed:  {:>4} / {:<4} ({pct:.1}%)",
