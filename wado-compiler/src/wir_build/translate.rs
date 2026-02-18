@@ -2752,7 +2752,7 @@ impl FunctionTranslator<'_, '_> {
         arms: &[TirMatchArm],
         result_type: TypeId,
     ) -> WirInstr {
-        let has_result = result_type != TypeTable::UNIT;
+        let has_result = result_type != TypeTable::UNIT && result_type != TypeTable::NEVER;
         let result_wir_type = if has_result {
             Some(self.ctx.type_id_to_wir_type(self.type_table, result_type))
         } else {
@@ -2772,7 +2772,7 @@ impl FunctionTranslator<'_, '_> {
         let mut result = WirInstr::Unreachable; // fallback: non-exhaustive
 
         for arm in arms.iter().rev() {
-            let body_instrs = if has_result {
+            let body_instrs = {
                 let mut instrs = Vec::new();
                 // Bind pattern variables
                 self.emit_pattern_bindings(
@@ -2783,17 +2783,11 @@ impl FunctionTranslator<'_, '_> {
                 );
                 let body = self.translate_expr(&arm.body);
                 instrs.push(body);
-                instrs
-            } else {
-                let mut instrs = Vec::new();
-                self.emit_pattern_bindings(
-                    &arm.pattern,
-                    &scrut_local_name,
-                    scrutinee.type_id,
-                    &mut instrs,
-                );
-                let body = self.translate_expr(&arm.body);
-                instrs.push(body);
+                // `never`-typed arms never return a value. Add `unreachable` so the
+                // Wasm validator accepts the arm inside an if block that expects a result.
+                if arm.body.type_id == TypeTable::NEVER {
+                    instrs.push(WirInstr::Unreachable);
+                }
                 instrs
             };
 

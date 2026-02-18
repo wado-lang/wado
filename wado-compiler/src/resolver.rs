@@ -9737,9 +9737,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .collect();
 
         let type_id = expected_type.unwrap_or_else(|| {
-            arms.first()
+            // Skip `never`-typed arms: `never` is the bottom type and is compatible
+            // with any type, so the match result type is determined by the non-never arms.
+            arms.iter()
                 .map(|a| a.body.type_id)
-                .unwrap_or(TypeTable::UNIT)
+                .find(|&t| t != TypeTable::NEVER)
+                .unwrap_or_else(|| {
+                    // All arms return `never` — the match itself is `never`.
+                    arms.first()
+                        .map(|a| a.body.type_id)
+                        .unwrap_or(TypeTable::UNIT)
+                })
         });
 
         TirExpr::new(
