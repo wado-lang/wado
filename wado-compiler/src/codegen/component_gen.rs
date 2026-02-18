@@ -10,12 +10,12 @@
 //! - Canonical lifting for world exports
 //! - HTTP handler export
 
+use super::wasm_builder::ComponentModelContext;
+use super::wasm_postprocess;
 use crate::ast::Type;
 use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
 use crate::project::Project;
-use super::wasm_builder::ComponentModelContext;
-use super::wasm_postprocess;
 use heck::ToKebabCase;
 use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{

@@ -62,8 +62,7 @@ pub fn rewrite(project: &mut Project) {
 
             // 4. Expand copy source types (recursively expand nested types)
             if !func.needed_copy_types.is_empty() {
-                func.copy_source_types =
-                    expand_copy_types(&func.needed_copy_types, &type_table);
+                func.copy_source_types = expand_copy_types(&func.needed_copy_types, &type_table);
             }
         }
     }
@@ -81,11 +80,7 @@ fn expand_copy_types(types: &IndexSet<TypeId>, type_table: &TypeTable) -> IndexS
     expanded
 }
 
-fn expand_type_recursive(
-    type_id: TypeId,
-    type_table: &TypeTable,
-    expanded: &mut IndexSet<TypeId>,
-) {
+fn expand_type_recursive(type_id: TypeId, type_table: &TypeTable, expanded: &mut IndexSet<TypeId>) {
     if expanded.contains(&type_id) {
         return;
     }
@@ -99,7 +94,9 @@ fn expand_type_recursive(
         ResolvedType::Struct { .. } | ResolvedType::Tuple(_) | ResolvedType::Variant { .. } => {
             expanded.insert(type_id);
         }
-        ResolvedType::GenericInstance { name, type_args, .. } if name == "Array" => {
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } if name == "Array" => {
             expanded.insert(type_id);
             if let Some(&elem_type) = type_args.first()
                 && needs_value_copy(elem_type, type_table)

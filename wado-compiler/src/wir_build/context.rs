@@ -10,9 +10,8 @@ use crate::name::{ModuleSource, StructName};
 use crate::project::Project;
 use crate::tir::{TirFunction, TypeId, TypeTable};
 use crate::wir::{
-    WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction,
-    WirGlobal, WirImport, WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType,
-    WirTypeDef, WirTypeId,
+    WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction, WirGlobal, WirImport,
+    WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType, WirTypeDef, WirTypeId,
 };
 
 /// Builder context for the `tir_to_wir` translation.

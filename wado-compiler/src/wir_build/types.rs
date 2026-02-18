@@ -100,7 +100,10 @@ fn sort_types_topologically<'a>(
     let mut dependents: IndexMap<String, Vec<String>> = IndexMap::new();
     for (name, type_deps) in &deps {
         for dep in type_deps {
-            dependents.entry(dep.clone()).or_default().push(name.clone());
+            dependents
+                .entry(dep.clone())
+                .or_default()
+                .push(name.clone());
         }
     }
 

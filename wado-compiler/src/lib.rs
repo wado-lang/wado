@@ -75,9 +75,9 @@ pub mod builtin_registry;
 pub mod bundled;
 pub mod cm_abi;
 pub mod cm_adapter_gen;
+pub mod codegen;
 pub mod comment;
 pub mod compiler_host;
-pub mod codegen;
 pub mod component_model;
 pub mod desugar;
 pub mod effect_check;
@@ -193,7 +193,7 @@ pub struct CompilerOptions {
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
 ///
 /// This is the main compilation entry point. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> tir_to_wir
+/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> `tir_to_wir`
 ///
 /// # Arguments
 /// * `source` - The entry module source code
@@ -255,7 +255,7 @@ fn to_pascal_case(s: &str) -> String {
 /// Compile Wado source code with full options.
 ///
 /// This is the main compilation entry point with all options. It runs the full compilation pipeline:
-/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> tir_to_wir
+/// lexer -> parser -> binder -> loader -> analyzer -> resolver -> lower -> optimize -> `tir_to_wir`
 ///
 /// # Arguments
 /// * `source` - The entry module source code

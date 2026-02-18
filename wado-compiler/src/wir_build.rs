@@ -2,7 +2,7 @@
 //!
 //! Pipeline: `Project` → planning → `build_wir_module` → `WirModule`
 //!
-//! Emission (WirModule → Wasm bytes) is handled by `codegen`.
+//! Emission (`WirModule` → Wasm bytes) is handled by `codegen`.
 
 use crate::project::Project;
 use crate::wir::WirModule;
