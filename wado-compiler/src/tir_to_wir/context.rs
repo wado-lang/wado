@@ -62,6 +62,8 @@ pub struct WirContext<'a> {
     // === Other sections ===
     /// Global variables.
     pub globals: Vec<WirGlobal>,
+    /// Map from qualified global name to index in `globals`.
+    pub global_map: IndexMap<String, u32>,
     /// Exports.
     pub exports: Vec<WirExport>,
     /// Data segments (string literals).
@@ -70,6 +72,16 @@ pub struct WirContext<'a> {
     pub string_literal_map: IndexMap<String, u32>,
     /// Name section entries.
     pub names: WirNames,
+
+    // === Canonical Closure Types ===
+    /// Map from function signature string to canonical closure info.
+    /// Key: stringified signature (e.g., "(i32, i32) -> i32")
+    /// Value: (`canonical_fn_type_id`, `canonical_closure_struct_type_id`)
+    pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId)>,
+    /// Map from closure `functor_id` to canonical wrapper function `WirFuncId`.
+    pub closure_wrapper_funcs: IndexMap<u32, WirFuncId>,
+    /// Counter for canonical closure type naming.
+    pub canonical_closure_counter: u32,
 
     // === Scratch state ===
     /// Collected string literals (from all TIR modules).
@@ -125,10 +137,14 @@ impl<'a> WirContext<'a> {
             import_func_count: 0,
             import_func_map: IndexMap::new(),
             globals: Vec::new(),
+            global_map: IndexMap::new(),
             exports: Vec::new(),
             data: Vec::new(),
             string_literal_map: IndexMap::new(),
             names: WirNames::default(),
+            canonical_closure_types: IndexMap::new(),
+            closure_wrapper_funcs: IndexMap::new(),
+            canonical_closure_counter: 0,
             string_literals,
             available_wasi_funcs: IndexSet::new(),
             pending_bodies: Vec::new(),
@@ -180,7 +196,7 @@ impl<'a> WirContext<'a> {
     /// Look up a struct type by name only (ignoring `module_source`).
     /// Used as fallback when `module_source` doesn't match (e.g., monomorphized
     /// structs where the type's `module_source` is the use site, not the definition site).
-    fn lookup_struct_by_name(&self, name: &str) -> Option<&WirTypeId> {
+    pub fn lookup_struct_by_name(&self, name: &str) -> Option<&WirTypeId> {
         self.struct_type_map
             .iter()
             .find(|(k, _)| k.name == name)
@@ -270,6 +286,89 @@ impl<'a> WirContext<'a> {
     /// Get the entry module's type table (borrowed).
     pub fn entry_type_table(&self) -> std::cell::Ref<'_, TypeTable> {
         self.entry_tir().type_table.borrow()
+    }
+
+    /// Build a string key for canonical closure type lookup.
+    pub fn canonical_closure_key(params: &[WirType], results: &[WirType]) -> String {
+        format!(
+            "({}) -> ({})",
+            params
+                .iter()
+                .map(|t| format!("{t:?}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            results
+                .iter()
+                .map(|t| format!("{t:?}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        )
+    }
+
+    /// Get or create a canonical closure type pair (func type + closure struct) for a
+    /// function signature. Returns `(fn_type_id, closure_struct_type_id)`.
+    pub fn get_or_create_canonical_closure_type(
+        &mut self,
+        param_wirs: Vec<WirType>,
+        result_wirs: Vec<WirType>,
+    ) -> (WirTypeId, WirTypeId) {
+        let key = Self::canonical_closure_key(&param_wirs, &result_wirs);
+        if let Some(existing) = self.canonical_closure_types.get(&key) {
+            return existing.clone();
+        }
+
+        let id = self.canonical_closure_counter;
+        self.canonical_closure_counter += 1;
+
+        // Create canonical function type: (ref null struct, params...) -> results
+        // The env param must be nullable to accept any struct ref subtype.
+        let mut fn_params = vec![WirType::AbstractRef {
+            heap_type: crate::wir::WirAbstractHeapType::Struct,
+            nullable: true,
+        }];
+        fn_params.extend(param_wirs.iter().cloned());
+
+        let fn_type_fq = format!("functype/$canonical_closure_fn_{id}");
+        let fn_type_id = self.register_func_type(fn_type_fq, fn_params, result_wirs.clone());
+
+        // Create canonical closure struct: { env: (ref null struct), func: (ref $fn_type) }
+        let struct_fq = format!("canonical//CanonicalClosure_{id}");
+        use crate::wir::{WirField, WirMeta, WirName, WirStructType};
+        let struct_type_id = self.register_type(
+            struct_fq.clone(),
+            WirTypeDef::Struct(WirStructType {
+                name: WirName {
+                    display: format!("CanonicalClosure_{id}"),
+                    fq: struct_fq,
+                },
+                fields: vec![
+                    WirField {
+                        name: "env".to_string(),
+                        ty: WirType::AbstractRef {
+                            heap_type: crate::wir::WirAbstractHeapType::Struct,
+                            nullable: true,
+                        },
+                        mutable: false,
+                    },
+                    WirField {
+                        name: "func".to_string(),
+                        ty: WirType::Ref {
+                            type_id: fn_type_id.clone(),
+                            nullable: false,
+                        },
+                        mutable: false,
+                    },
+                ],
+                meta: WirMeta::default(),
+                generic_origin: None,
+                newtype_origin: None,
+            }),
+        );
+
+        self.canonical_closure_types
+            .insert(key, (fn_type_id.clone(), struct_type_id.clone()));
+
+        (fn_type_id, struct_type_id)
     }
 
     /// Convert a TIR `TypeId` to a `WirType`.
@@ -409,15 +508,63 @@ impl<'a> WirContext<'a> {
             ResolvedType::Option(inner) => {
                 // Option<T> is nullable ref at Wasm level
                 let inner_wir = self.type_id_to_wir_type(type_table, *inner);
-                match inner_wir {
-                    WirType::Ref { type_id, .. } => WirType::Ref {
+                if let WirType::Ref { type_id, .. } = inner_wir {
+                    WirType::Ref {
                         type_id,
                         nullable: true,
-                    },
-                    _ => WirType::AbstractRef {
-                        heap_type: crate::wir::WirAbstractHeapType::Struct,
-                        nullable: true,
-                    },
+                    }
+                } else {
+                    // For primitive types, Option<T> maps to nullable ref Box<T>.
+                    // Resolve through newtypes to find the base primitive name,
+                    // because Box<f64> is registered, not Box<Radians>.
+                    let base_inner = type_table.resolve_newtype_base(*inner);
+                    let inner_name = type_table.mangle_type_name(base_inner);
+                    let box_name =
+                        crate::name::mangle_generic_name("Box", std::slice::from_ref(&inner_name));
+                    if let Some(tid) = self.lookup_struct_by_name(&box_name) {
+                        WirType::Ref {
+                            type_id: tid.clone(),
+                            nullable: true,
+                        }
+                    } else {
+                        // Fallback: for types like resources (which are i32 handles at Wasm
+                        // level), use Box based on the WIR primitive type name.
+                        let wir_prim_name = match &inner_wir {
+                            WirType::I32 => Some("i32"),
+                            WirType::I64 => Some("i64"),
+                            WirType::F32 => Some("f32"),
+                            WirType::F64 => Some("f64"),
+                            WirType::U8 | WirType::Bool => Some("u8"),
+                            WirType::U16 => Some("u16"),
+                            WirType::U32 | WirType::Char => Some("u32"),
+                            WirType::U64 => Some("u64"),
+                            WirType::I8 => Some("i8"),
+                            WirType::I16 => Some("i16"),
+                            _ => None,
+                        };
+                        if let Some(prim_name) = wir_prim_name {
+                            let box_prim = crate::name::mangle_generic_name(
+                                "Box",
+                                std::slice::from_ref(&prim_name.to_string()),
+                            );
+                            if let Some(tid) = self.lookup_struct_by_name(&box_prim) {
+                                WirType::Ref {
+                                    type_id: tid.clone(),
+                                    nullable: true,
+                                }
+                            } else {
+                                WirType::AbstractRef {
+                                    heap_type: crate::wir::WirAbstractHeapType::Struct,
+                                    nullable: true,
+                                }
+                            }
+                        } else {
+                            WirType::AbstractRef {
+                                heap_type: crate::wir::WirAbstractHeapType::Struct,
+                                nullable: true,
+                            }
+                        }
+                    }
                 }
             }
             ResolvedType::Enum {
@@ -466,13 +613,40 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                // References are the same as the inner type at Wasm level
-                self.type_id_to_wir_type(type_table, *inner)
+                // For reference types (structs, variants, strings, arrays), the inner type
+                // is already a ref type in Wasm GC, so &T = T at the Wasm level.
+                // For value types (primitives, enums), we need Box<T> to provide
+                // a mutable location for &mut T semantics.
+                let inner_wir = self.type_id_to_wir_type(type_table, *inner);
+                match &inner_wir {
+                    WirType::Ref { .. } | WirType::AbstractRef { .. } => inner_wir,
+                    _ => {
+                        // Value type: use Box<T> for reference semantics.
+                        // Resolve through newtypes to find the base type name.
+                        let base_inner = type_table.resolve_newtype_base(*inner);
+                        let inner_name = type_table.mangle_type_name(base_inner);
+                        let box_name = crate::name::mangle_generic_name(
+                            "Box",
+                            std::slice::from_ref(&inner_name),
+                        );
+                        if let Some(tid) = self.lookup_struct_by_name(&box_name) {
+                            WirType::Ref {
+                                type_id: tid.clone(),
+                                nullable: true,
+                            }
+                        } else {
+                            // Fallback: treat as value type (no boxing available)
+                            inner_wir
+                        }
+                    }
+                }
             }
             ResolvedType::Function { .. } => {
-                // Function references use abstract funcref
+                // Function-typed values are canonical closure structs at runtime.
+                // Use abstract structref so any concrete closure struct is a valid subtype.
+                // IndirectCall will RefCast to the specific canonical closure struct.
                 WirType::AbstractRef {
-                    heap_type: crate::wir::WirAbstractHeapType::Func,
+                    heap_type: crate::wir::WirAbstractHeapType::Struct,
                     nullable: true,
                 }
             }
@@ -484,6 +658,25 @@ impl<'a> WirContext<'a> {
                 // For any unhandled types, use i32 as placeholder
                 WirType::I32
             }
+        }
+    }
+
+    /// Check if a WIR type ID refers to a variant type.
+    pub fn is_variant_type(&self, type_id: &WirTypeId) -> bool {
+        let idx = type_id.index() as usize;
+        idx < self.types.len() && matches!(&self.types[idx], WirTypeDef::Variant(_))
+    }
+
+    /// Get the number of fields in a WIR struct type.
+    pub fn get_struct_field_count(&self, type_id: &WirTypeId) -> u32 {
+        let idx = type_id.index() as usize;
+        if idx < self.types.len() {
+            match &self.types[idx] {
+                WirTypeDef::Struct(s) => u32::try_from(s.fields.len()).unwrap(),
+                _ => 0,
+            }
+        } else {
+            0
         }
     }
 

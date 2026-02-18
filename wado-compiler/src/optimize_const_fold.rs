@@ -313,7 +313,7 @@ fn get_int_primitive(type_id: crate::tir::TypeId, type_table: &TypeTable) -> Opt
 ///
 /// For unsigned types, zero-extends (masks to width).
 /// For signed types, sign-extends back to 64 bits,
-/// so that codegen's `*value as i32` / `*value as i64` produces the correct signed value.
+/// so that WIR emission's `*value as i32` / `*value as i64` produces the correct signed value.
 #[allow(clippy::cast_sign_loss)]
 fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
     match prim {

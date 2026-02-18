@@ -75,9 +75,9 @@ pub mod builtin_registry;
 pub mod bundled;
 pub mod cm_abi;
 pub mod cm_adapter_gen;
-pub mod codegen;
 pub mod comment;
 pub mod compiler_host;
+pub mod component_gen;
 pub mod component_model;
 pub mod copy_context;
 pub mod desugar;
@@ -116,7 +116,6 @@ pub mod world_registry;
 
 pub use analyze::Analyzer;
 pub use bind::{BindError, Binder};
-pub use codegen::Codegen;
 pub use compiler_host::{
     Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SourceError,
 };
@@ -189,9 +188,6 @@ pub struct CompilerOptions {
     /// Target world name (e.g., "Command", "Service")
     /// Defaults to "Command" if not specified
     pub target_world: Option<String>,
-    /// Use the WIR backend instead of the legacy codegen.
-    /// When true, the compiler uses `tir_to_wir` → `wir_emit` instead of `Codegen::generate_wasm`.
-    pub use_wir_backend: bool,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -219,7 +215,7 @@ pub async fn compile_with_host<H: CompilerHost>(
     let options = CompilerOptions {
         opt_level,
         target_world: None,
-        use_wir_backend: false,
+        ..CompilerOptions::default()
     };
     compile_with_options(source, host, filename, options).await
 }
@@ -378,13 +374,10 @@ pub async fn compile_with_options<H: CompilerHost>(
         })?
     };
 
-    // === Phase 12: Codegen ===
-    let wasm = if options.use_wir_backend {
+    // === Phase 12: WIR codegen ===
+    let wasm = {
         let _span = logger.span("tir_to_wir");
         tir_to_wir::compile_with_wir(&project)
-    } else {
-        let _span = logger.span("codegen");
-        Codegen::generate_wasm(&project)
     };
 
     // Return the original (non-desugared) entry AST for tooling

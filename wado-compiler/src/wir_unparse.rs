@@ -931,6 +931,11 @@ impl<'a> WirUnparser<'a> {
                 self.write_indent();
                 self.write("}");
             }
+            WirInstr::BranchHint { likely, expr } => {
+                let hint = if *likely { "likely" } else { "unlikely" };
+                self.write(&format!("branch_hint.{hint} "));
+                self.unparse_instr_inline(expr);
+            }
             WirInstr::Br { depth } => {
                 self.write(&format!("br {depth}"));
             }
@@ -1136,6 +1141,17 @@ impl<'a> WirUnparser<'a> {
                 self.write(&format!("value_copy {tid}("));
                 self.unparse_instr_inline(expr);
                 self.write(")");
+            }
+            WirInstr::MultiValueStructNew { type_id, instr } => {
+                let tid = self.shorten_fq(&type_id.to_string());
+                self.write(&format!("multivalue_struct_new {tid}("));
+                self.unparse_instr_inline(instr);
+                self.write(")");
+            }
+            WirInstr::MultiValueLocalBind { instr, locals } => {
+                let names: Vec<_> = locals.iter().map(|l| l.as_deref().unwrap_or("_")).collect();
+                self.write(&format!("multivalue_bind [{}] = ", names.join(", ")));
+                self.unparse_instr_inline(instr);
             }
 
             WirInstr::Seq(instrs) => {

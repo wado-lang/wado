@@ -3,18 +3,20 @@
 //! This module handles the mechanical translation from WIR's tree-structured
 //! representation to flat Wasm instructions and binary encoding.
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::wir::{
-    WirAbstractHeapType, WirArrayType, WirExportDesc, WirFuncType, WirFunction, WirImportDesc,
-    WirInstr, WirModule, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirAbstractHeapType, WirArrayType, WirCopyType, WirExportDesc, WirFuncType, WirFunction,
+    WirImportDesc, WirInstr, WirModule, WirStructType, WirType, WirTypeDef, WirTypeId,
+    WirVariantType,
 };
 
 use wasm_encoder::{
-    AbstractHeapType, BlockType, CodeSection, CompositeInnerType, CompositeType, ConstExpr,
-    DataCountSection, DataSection, ExportKind, ExportSection, FieldType, Function, FunctionSection,
-    GlobalSection, GlobalType, HeapType, ImportSection, Instruction, MemArg, Module, NameMap,
-    NameSection, RefType, StorageType, StructType, SubType, TypeSection, ValType,
+    AbstractHeapType, BlockType, BranchHint, BranchHints, CodeSection, CompositeInnerType,
+    CompositeType, ConstExpr, DataCountSection, DataSection, ElementSection, Elements, ExportKind,
+    ExportSection, FieldType, Function, FunctionSection, GlobalSection, GlobalType, HeapType,
+    ImportSection, Instruction, MemArg, Module, NameMap, NameSection, RefType, StorageType,
+    StructType, SubType, TypeSection, ValType,
 };
 
 /// Emit a core Wasm module from a `WirModule`.
@@ -41,12 +43,20 @@ struct WirEmitter<'a> {
     func_index_offset: u32,
     /// Map from `WirFuncId` index → Wasm function index.
     func_index_map: IndexMap<u32, u32>,
+    /// Map from global fq name to Wasm global index.
+    global_name_map: IndexMap<String, u32>,
     /// Local name map for current function.
     current_locals: IndexMap<String, u32>,
     /// Next local index for current function.
     next_local: u32,
     /// Wasm type section counter.
     next_type_idx: u32,
+    /// Pre-assigned variant type info: `wir_type_idx` → (`base_wasm_idx`, vec of (`case_idx`, `wasm_idx`)).
+    variant_pre_assigned: IndexMap<u32, (u32, Vec<(u32, u32)>)>,
+    /// Branch hints for the current function being emitted.
+    current_branch_hints: Vec<(u32, bool)>,
+    /// All collected branch hints: (`func_index`, vec of (`instr_offset`, likely)).
+    all_branch_hints: Vec<(u32, Vec<(u32, bool)>)>,
 }
 
 impl<'a> WirEmitter<'a> {
@@ -58,9 +68,13 @@ impl<'a> WirEmitter<'a> {
             struct_field_map: IndexMap::new(),
             func_index_offset: 0,
             func_index_map: IndexMap::new(),
+            global_name_map: IndexMap::new(),
             current_locals: IndexMap::new(),
             next_local: 0,
             next_type_idx: 0,
+            variant_pre_assigned: IndexMap::new(),
+            current_branch_hints: Vec::new(),
+            all_branch_hints: Vec::new(),
         }
     }
 
@@ -89,6 +103,7 @@ impl<'a> WirEmitter<'a> {
         // Memory is imported from component level, not defined here
 
         // 5. Global section
+        self.build_global_name_map();
         if !self.wir.globals.is_empty() {
             let globals = self.emit_global_section();
             module.section(&globals);
@@ -99,9 +114,13 @@ impl<'a> WirEmitter<'a> {
         module.section(&exports);
 
         // 7. Element section (declarative for ref.func)
-        if !self.wir.functions.is_empty() {
-            // Emit declarative element segment for any ref.func usage
-            // This allows function references to be created
+        let ref_func_indices = self.collect_ref_func_indices();
+        if !ref_func_indices.is_empty() {
+            let mut elements = ElementSection::new();
+            elements.declared(Elements::Functions(std::borrow::Cow::Borrowed(
+                &ref_func_indices,
+            )));
+            module.section(&elements);
         }
 
         // 8. Data count section (for passive data segments)
@@ -114,6 +133,22 @@ impl<'a> WirEmitter<'a> {
 
         // 9. Code section
         let code = self.emit_code_section();
+
+        // Branch hints section (must appear before code section)
+        if !self.all_branch_hints.is_empty() {
+            let mut hints = BranchHints::new();
+            for (func_idx, func_hints) in &self.all_branch_hints {
+                hints.function_hints(
+                    *func_idx,
+                    func_hints.iter().map(|(offset, likely)| BranchHint {
+                        branch_func_offset: *offset,
+                        branch_hint_value: u32::from(*likely),
+                    }),
+                );
+            }
+            module.section(&hints);
+        }
+
         module.section(&code);
 
         // 10. Data section
@@ -136,38 +171,188 @@ impl<'a> WirEmitter<'a> {
     fn emit_type_section(&mut self) -> TypeSection {
         let mut types = TypeSection::new();
 
+        // Pre-assign Wasm type indices for ALL WIR types before emission.
+        // This ensures `resolve_type_index` returns correct indices even for
+        // forward references (e.g., array<Pair> referencing a Pair struct
+        // that hasn't been emitted yet).
+        self.pre_assign_type_indices();
+
+        // Find func types that must go in the rec group (referenced from struct fields)
+        let gc_func_types = self.find_gc_referenced_func_types();
+
+        // Emit GC types (structs, arrays, variants) in a single `rec` group
+        // so that forward references between them are allowed by the Wasm GC type system.
+        // Function types are normally standalone (outside rec group) for component model
+        // compatibility — types in a rec group are not structurally equivalent to
+        // standalone types, which breaks import/export matching.
+        // Exception: func types referenced from struct fields (e.g., canonical closure
+        // func types) must be in the rec group to avoid forward reference errors.
+        let mut gc_subtypes: Vec<SubType> = Vec::new();
+
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             match typedef {
                 WirTypeDef::Struct(_) if self.wir.variant_case_info.contains_key(&wir_idx) => {
-                    // Variant case struct — already emitted as part of the variant's rec group.
-                    // Type index mapping is set up in emit_variant_type.
+                    // Variant case struct — emitted inline as part of its parent variant
                 }
                 WirTypeDef::Struct(s) => {
-                    self.emit_struct_type(&mut types, s, wir_idx);
+                    self.build_struct_subtype(s, wir_idx, &mut gc_subtypes);
                 }
                 WirTypeDef::Variant(v) => {
-                    self.emit_variant_type(&mut types, v, wir_idx);
-                }
-                WirTypeDef::Enum(_) | WirTypeDef::Flags(_) => {
-                    // Enums and flags don't produce Wasm type section entries
+                    self.build_variant_subtypes(v, wir_idx, &mut gc_subtypes);
                 }
                 WirTypeDef::Array(a) => {
-                    self.emit_array_type(&mut types, a, wir_idx);
+                    self.build_array_subtype(a, wir_idx, &mut gc_subtypes);
                 }
-                WirTypeDef::Func(f) => {
-                    self.emit_func_type(&mut types, f, wir_idx);
+                WirTypeDef::Func(f) if gc_func_types.contains(&wir_idx) => {
+                    // Func type referenced from a GC struct — include in rec group
+                    self.build_func_subtype(f, wir_idx, &mut gc_subtypes);
                 }
+                WirTypeDef::Enum(_) | WirTypeDef::Flags(_) | WirTypeDef::Func(_) => {}
+            }
+        }
+
+        if !gc_subtypes.is_empty() {
+            types.ty().rec(gc_subtypes);
+        }
+
+        // Emit function types standalone (outside rec group), excluding gc-referenced ones
+        for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
+            let wir_idx = u32::try_from(wir_idx).unwrap();
+            if let WirTypeDef::Func(f) = typedef
+                && !gc_func_types.contains(&wir_idx)
+            {
+                self.emit_standalone_func_type(&mut types, f, wir_idx);
             }
         }
 
         types
     }
 
-    fn emit_struct_type(&mut self, types: &mut TypeSection, s: &WirStructType, wir_idx: u32) {
-        let type_idx = self.next_type_idx;
-        self.next_type_idx += 1;
-        self.type_index_map.insert(wir_idx, type_idx);
+    /// Pre-assign Wasm type indices for all WIR types.
+    ///
+    /// GC types (structs, arrays, variants) are assigned first (they go in a rec group),
+    /// then function types (standalone). This matches the emission order in `emit_type_section`.
+    ///
+    /// Exception: func types referenced by struct fields (e.g., canonical closure func types)
+    /// must also go in the rec group to avoid invalid forward references.
+    fn pre_assign_type_indices(&mut self) {
+        let mut next_idx = 0u32;
+
+        // Find func types referenced from struct fields — these must go in the rec group
+        let gc_func_types = self.find_gc_referenced_func_types();
+
+        // Pass 1: GC types (structs, arrays, variants) + func types referenced from GC types
+        for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
+            let wir_idx = u32::try_from(wir_idx).unwrap();
+            match typedef {
+                WirTypeDef::Struct(_) if self.wir.variant_case_info.contains_key(&wir_idx) => {
+                    // Variant case struct — index assigned by the parent variant below
+                }
+                WirTypeDef::Struct(_) | WirTypeDef::Array(_) => {
+                    self.type_index_map.insert(wir_idx, next_idx);
+                    next_idx += 1;
+                }
+                WirTypeDef::Variant(v) => {
+                    // Base type
+                    self.type_index_map.insert(wir_idx, next_idx);
+                    let base_idx = next_idx;
+                    next_idx += 1;
+
+                    // Case subtypes
+                    let mut case_types = Vec::new();
+                    for case in &v.cases {
+                        case_types.push((case.index, next_idx));
+                        next_idx += 1;
+                    }
+
+                    // Map variant case WIR type indices to their Wasm type indices
+                    for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info
+                    {
+                        if variant_wir_idx == wir_idx
+                            && let Some(&(_, wasm_idx)) =
+                                case_types.iter().find(|(idx, _)| *idx == case_idx)
+                        {
+                            self.type_index_map.insert(case_wir_idx, wasm_idx);
+                        }
+                    }
+
+                    self.variant_pre_assigned
+                        .insert(wir_idx, (base_idx, case_types));
+                }
+                WirTypeDef::Func(_) if gc_func_types.contains(&wir_idx) => {
+                    // Func type referenced from a GC struct field — must be in rec group
+                    self.type_index_map.insert(wir_idx, next_idx);
+                    next_idx += 1;
+                }
+                WirTypeDef::Enum(_) | WirTypeDef::Flags(_) | WirTypeDef::Func(_) => {
+                    // Enums/Flags: no type section entry
+                    // Funcs: assigned in pass 2 (unless in gc_func_types)
+                }
+            }
+        }
+
+        // Pass 2: Function types — standalone, after the rec group
+        for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
+            let wir_idx = u32::try_from(wir_idx).unwrap();
+            if let WirTypeDef::Func(_) = typedef
+                && !gc_func_types.contains(&wir_idx)
+            {
+                self.type_index_map.insert(wir_idx, next_idx);
+                next_idx += 1;
+            }
+        }
+
+        self.next_type_idx = next_idx;
+    }
+
+    /// Find func type indices that are referenced from struct fields.
+    /// These must go in the rec group to avoid forward reference errors.
+    fn find_gc_referenced_func_types(&self) -> IndexSet<u32> {
+        let mut gc_func_types = IndexSet::new();
+        for typedef in &self.wir.types {
+            if let WirTypeDef::Struct(s) = typedef {
+                for field in &s.fields {
+                    if let WirType::Ref { type_id, .. } = &field.ty {
+                        let ref_idx = type_id.index();
+                        if (ref_idx as usize) < self.wir.types.len()
+                            && matches!(self.wir.types[ref_idx as usize], WirTypeDef::Func(_))
+                        {
+                            gc_func_types.insert(ref_idx);
+                        }
+                    }
+                }
+            }
+        }
+        gc_func_types
+    }
+
+    fn emit_standalone_func_type(
+        &mut self,
+        types: &mut TypeSection,
+        f: &WirFuncType,
+        _wir_idx: u32,
+    ) {
+        let params: Vec<ValType> = f
+            .params
+            .iter()
+            .map(|t| self.wir_type_to_val_type(t))
+            .collect();
+        let results: Vec<ValType> = f
+            .results
+            .iter()
+            .map(|t| self.wir_type_to_val_type(t))
+            .collect();
+        types.ty().function(params, results);
+    }
+
+    fn build_struct_subtype(
+        &mut self,
+        s: &WirStructType,
+        wir_idx: u32,
+        subtypes: &mut Vec<SubType>,
+    ) {
+        debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
         let mut field_map = IndexMap::new();
         let fields: Vec<FieldType> = s
@@ -185,7 +370,7 @@ impl<'a> WirEmitter<'a> {
         self.struct_field_map.insert(wir_idx, field_map);
 
         // Use is_final: false so (ref (exact $T)) from struct.new is a subtype of (ref null $T)
-        types.ty().subtype(&SubType {
+        subtypes.push(SubType {
             is_final: false,
             supertype_idx: None,
             composite_type: CompositeType {
@@ -199,18 +384,24 @@ impl<'a> WirEmitter<'a> {
         });
     }
 
-    fn emit_variant_type(&mut self, types: &mut TypeSection, v: &WirVariantType, wir_idx: u32) {
-        // Base type: struct with just discriminant field
-        let base_type_idx = self.next_type_idx;
-        self.type_index_map.insert(wir_idx, base_type_idx);
+    fn build_variant_subtypes(
+        &mut self,
+        v: &WirVariantType,
+        wir_idx: u32,
+        subtypes: &mut Vec<SubType>,
+    ) {
+        // Type indices already pre-assigned by pre_assign_type_indices
+        let base_type_idx = self.type_index_map[&wir_idx];
+        let case_types = self
+            .variant_pre_assigned
+            .get(&wir_idx)
+            .map(|(_, ct)| ct.clone())
+            .unwrap_or_default();
 
         // Build field map for the base type
         let mut field_map = IndexMap::new();
         field_map.insert("discriminant".to_string(), 0);
         self.struct_field_map.insert(wir_idx, field_map);
-
-        // Build all subtypes for the rec group
-        let mut subtypes: Vec<SubType> = Vec::new();
 
         // Base struct type (non-final, no supertype)
         subtypes.push(SubType {
@@ -228,14 +419,9 @@ impl<'a> WirEmitter<'a> {
                 describes: None,
             },
         });
-        self.next_type_idx += 1;
 
         // Case subtypes
-        let mut case_types = Vec::new();
         for case in &v.cases {
-            let case_type_idx = self.next_type_idx;
-            self.next_type_idx += 1;
-
             let mut fields = vec![FieldType {
                 element_type: StorageType::Val(ValType::I32),
                 mutable: false,
@@ -259,18 +445,12 @@ impl<'a> WirEmitter<'a> {
                     describes: None,
                 },
             });
-
-            case_types.push((case.index, case_type_idx));
         }
         self.variant_case_types.insert(wir_idx, case_types.clone());
 
-        // Map variant case WIR type indices to their Wasm type indices
+        // Register field maps for variant case structs
         for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info {
-            if variant_wir_idx == wir_idx
-                && let Some(&(_, wasm_idx)) = case_types.iter().find(|(idx, _)| *idx == case_idx)
-            {
-                self.type_index_map.insert(case_wir_idx, wasm_idx);
-                // Register field map for case struct
+            if variant_wir_idx == wir_idx {
                 let mut case_field_map = IndexMap::new();
                 case_field_map.insert("discriminant".to_string(), 0);
                 if let Some(case_def) = v.cases.get(case_idx as usize) {
@@ -282,18 +462,13 @@ impl<'a> WirEmitter<'a> {
                 self.struct_field_map.insert(case_wir_idx, case_field_map);
             }
         }
-
-        // Emit all types in a single rec group
-        types.ty().rec(subtypes);
     }
 
-    fn emit_array_type(&mut self, types: &mut TypeSection, a: &WirArrayType, wir_idx: u32) {
-        let type_idx = self.next_type_idx;
-        self.next_type_idx += 1;
-        self.type_index_map.insert(wir_idx, type_idx);
+    fn build_array_subtype(&mut self, a: &WirArrayType, wir_idx: u32, subtypes: &mut Vec<SubType>) {
+        debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
         let storage_type = self.wir_type_to_storage_type(&a.element_type);
-        types.ty().subtype(&SubType {
+        subtypes.push(SubType {
             is_final: true,
             supertype_idx: None,
             composite_type: CompositeType {
@@ -308,10 +483,8 @@ impl<'a> WirEmitter<'a> {
         });
     }
 
-    fn emit_func_type(&mut self, types: &mut TypeSection, f: &WirFuncType, wir_idx: u32) {
-        let type_idx = self.next_type_idx;
-        self.next_type_idx += 1;
-        self.type_index_map.insert(wir_idx, type_idx);
+    fn build_func_subtype(&mut self, f: &WirFuncType, wir_idx: u32, subtypes: &mut Vec<SubType>) {
+        debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
         let params: Vec<ValType> = f
             .params
@@ -323,7 +496,16 @@ impl<'a> WirEmitter<'a> {
             .iter()
             .map(|t| self.wir_type_to_val_type(t))
             .collect();
-        types.ty().function(params, results);
+        subtypes.push(SubType {
+            is_final: true,
+            supertype_idx: None,
+            composite_type: CompositeType {
+                inner: CompositeInnerType::Func(wasm_encoder::FuncType::new(params, results)),
+                shared: false,
+                descriptor: None,
+                describes: None,
+            },
+        });
     }
 
     // === Import Section ===
@@ -406,6 +588,20 @@ impl<'a> WirEmitter<'a> {
         }
     }
 
+    fn build_global_name_map(&mut self) {
+        for (i, global) in self.wir.globals.iter().enumerate() {
+            let idx = u32::try_from(i).unwrap();
+            self.global_name_map.insert(global.name.fq.clone(), idx);
+        }
+    }
+
+    fn resolve_global(&self, name: &str) -> u32 {
+        self.global_name_map.get(name).copied().unwrap_or_else(|| {
+            eprintln!("[WIR emit] Warning: global '{name}' not found, using index 0");
+            0
+        })
+    }
+
     // === Global Section ===
 
     fn emit_global_section(&self) -> GlobalSection {
@@ -456,9 +652,15 @@ impl<'a> WirEmitter<'a> {
     fn emit_code_section(&mut self) -> CodeSection {
         let mut code = CodeSection::new();
 
-        for func in &self.wir.functions {
+        for (i, func) in self.wir.functions.iter().enumerate() {
+            self.current_branch_hints.clear();
             let wasm_func = self.emit_function(func);
             code.function(&wasm_func);
+            if !self.current_branch_hints.is_empty() {
+                let func_idx = self.func_index_offset + u32::try_from(i).unwrap();
+                self.all_branch_hints
+                    .push((func_idx, std::mem::take(&mut self.current_branch_hints)));
+            }
         }
 
         code
@@ -652,7 +854,10 @@ impl<'a> WirEmitter<'a> {
             WirInstr::BrTable { index, .. } => {
                 self.collect_declared_locals_instr(index, locals);
             }
-            WirInstr::BrIf { condition, .. } => {
+            WirInstr::BrIf { condition, .. }
+            | WirInstr::BranchHint {
+                expr: condition, ..
+            } => {
                 self.collect_declared_locals_instr(condition, locals);
             }
             WirInstr::Select {
@@ -665,6 +870,35 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(if_true, locals);
                 self.collect_declared_locals_instr(if_false, locals);
             }
+            // Value copy needs a temp local for the source struct ref
+            WirInstr::ValueCopy { type_id, expr, .. } => {
+                self.collect_declared_locals_instr(expr, locals);
+                // Declare temp local for the struct copy source
+                let wasm_type_idx = self.resolve_type_index(type_id.index());
+                let ref_type = RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(wasm_type_idx),
+                };
+                let temp_name = format!("__copy_source_{}", type_id.index());
+                locals.push((temp_name, ValType::Ref(ref_type)));
+                // Declare temp locals for array field deep copies
+                if let Some(array_field_infos) = self.get_struct_array_field_infos(type_id.index())
+                {
+                    for (field_idx, arr_type_idx) in array_field_infos {
+                        let arr_wasm_idx = self.resolve_type_index(arr_type_idx);
+                        let arr_ref = RefType {
+                            nullable: true,
+                            heap_type: HeapType::Concrete(arr_wasm_idx),
+                        };
+                        let src_name = format!("__copy_arr_src_{}_{}", type_id.index(), field_idx);
+                        let dst_name = format!("__copy_arr_dst_{}_{}", type_id.index(), field_idx);
+                        let len_name = format!("__copy_arr_len_{}_{}", type_id.index(), field_idx);
+                        locals.push((src_name, ValType::Ref(arr_ref)));
+                        locals.push((dst_name, ValType::Ref(arr_ref)));
+                        locals.push((len_name, ValType::I32));
+                    }
+                }
+            }
             // For all other instructions, walk children generically
             other => {
                 other.for_each_child(&mut |child| {
@@ -675,7 +909,7 @@ impl<'a> WirEmitter<'a> {
     }
 
     /// Emit a single WIR instruction to the Wasm function.
-    fn emit_instr(&self, f: &mut Function, instr: &WirInstr) {
+    fn emit_instr(&mut self, f: &mut Function, instr: &WirInstr) {
         match instr {
             WirInstr::DeclareLocal { .. } => {
                 // Already handled in pre-allocation
@@ -694,14 +928,14 @@ impl<'a> WirEmitter<'a> {
                 let idx = self.resolve_local(name);
                 f.instruction(&Instruction::LocalTee(idx));
             }
-            WirInstr::GlobalGet { name: _ } => {
-                // TODO: resolve global index
-                f.instruction(&Instruction::GlobalGet(0));
+            WirInstr::GlobalGet { name } => {
+                let idx = self.resolve_global(&name.fq);
+                f.instruction(&Instruction::GlobalGet(idx));
             }
-            WirInstr::GlobalSet { name: _, value } => {
+            WirInstr::GlobalSet { name, value } => {
                 self.emit_instr(f, value);
-                // TODO: resolve global index
-                f.instruction(&Instruction::GlobalSet(0));
+                let idx = self.resolve_global(&name.fq);
+                f.instruction(&Instruction::GlobalSet(idx));
             }
 
             // Constants
@@ -1007,7 +1241,18 @@ impl<'a> WirEmitter<'a> {
                 then_body,
                 else_body,
             } => {
-                self.emit_instr(f, condition);
+                // Check for branch hint wrapper on the condition
+                let (actual_condition, hint) =
+                    if let WirInstr::BranchHint { likely, expr } = condition.as_ref() {
+                        (expr.as_ref(), Some(*likely))
+                    } else {
+                        (condition.as_ref(), None)
+                    };
+                self.emit_instr(f, actual_condition);
+                if let Some(likely) = hint {
+                    self.current_branch_hints
+                        .push((f.byte_len() as u32, likely));
+                }
                 let bt = self.wir_type_to_block_type(result);
                 f.instruction(&Instruction::If(bt));
                 for instr in then_body {
@@ -1020,6 +1265,10 @@ impl<'a> WirEmitter<'a> {
                     }
                 }
                 f.instruction(&Instruction::End);
+            }
+            WirInstr::BranchHint { expr, .. } => {
+                // Standalone branch hint (not consumed by If) — just emit the inner expr
+                self.emit_instr(f, expr);
             }
             WirInstr::Br { depth } => {
                 f.instruction(&Instruction::Br(*depth));
@@ -1339,12 +1588,49 @@ impl<'a> WirEmitter<'a> {
                 }
             }
 
-            // 128-bit integer operations (not yet implemented at Wasm level)
-            WirInstr::I64Add128(..)
-            | WirInstr::I64Sub128(..)
-            | WirInstr::I64MulWideU(..)
-            | WirInstr::I64MulWideS(..) => {
-                f.instruction(&Instruction::Unreachable);
+            // 128-bit integer multi-value operations
+            WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi) => {
+                self.emit_instr(f, a_lo);
+                self.emit_instr(f, a_hi);
+                self.emit_instr(f, b_lo);
+                self.emit_instr(f, b_hi);
+                f.instruction(&Instruction::I64Add128);
+            }
+            WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi) => {
+                self.emit_instr(f, a_lo);
+                self.emit_instr(f, a_hi);
+                self.emit_instr(f, b_lo);
+                self.emit_instr(f, b_hi);
+                f.instruction(&Instruction::I64Sub128);
+            }
+            WirInstr::I64MulWideU(a, b) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                f.instruction(&Instruction::I64MulWideU);
+            }
+            WirInstr::I64MulWideS(a, b) => {
+                self.emit_instr(f, a);
+                self.emit_instr(f, b);
+                f.instruction(&Instruction::I64MulWideS);
+            }
+            // Multi-value struct new: emit the multi-value instr, then struct.new
+            WirInstr::MultiValueStructNew { type_id, instr } => {
+                self.emit_instr(f, instr);
+                let wasm_idx = self.resolve_type_index(type_id.index());
+                f.instruction(&Instruction::StructNew(wasm_idx));
+            }
+            // Multi-value local bind (tuple elision): emit the multi-value instr,
+            // then local.set for each target in reverse order (top of stack first).
+            WirInstr::MultiValueLocalBind { instr, locals } => {
+                self.emit_instr(f, instr);
+                for local_opt in locals.iter().rev() {
+                    if let Some(name) = local_opt {
+                        let idx = self.resolve_local(name);
+                        f.instruction(&Instruction::LocalSet(idx));
+                    } else {
+                        f.instruction(&Instruction::Drop);
+                    }
+                }
             }
 
             // Sequence
@@ -1352,6 +1638,15 @@ impl<'a> WirEmitter<'a> {
                 for instr in body {
                     self.emit_instr(f, instr);
                 }
+            }
+
+            // Value copy — struct shallow copy (field-by-field)
+            WirInstr::ValueCopy {
+                type_id,
+                source_type,
+                expr,
+            } => {
+                self.emit_value_copy(f, type_id, source_type, expr);
             }
 
             // Everything else - emit unreachable for unimplemented instructions
@@ -1396,7 +1691,7 @@ impl<'a> WirEmitter<'a> {
     // === Helpers ===
 
     fn emit_binary(
-        &self,
+        &mut self,
         f: &mut Function,
         left: &WirInstr,
         right: &WirInstr,
@@ -1407,9 +1702,188 @@ impl<'a> WirEmitter<'a> {
         f.instruction(&op);
     }
 
-    fn emit_unary(&self, f: &mut Function, operand: &WirInstr, op: Instruction<'_>) {
+    fn emit_unary(&mut self, f: &mut Function, operand: &WirInstr, op: Instruction<'_>) {
         self.emit_instr(f, operand);
         f.instruction(&op);
+    }
+
+    /// Emit a value copy instruction (struct shallow copy).
+    fn emit_value_copy(
+        &mut self,
+        f: &mut Function,
+        type_id: &WirTypeId,
+        source_type: &WirCopyType,
+        expr: &WirInstr,
+    ) {
+        match source_type {
+            WirCopyType::Struct { fields } => {
+                let wasm_type_idx = self.resolve_type_index(type_id.index());
+                // Collect array field info for deep copy
+                let array_fields = self.get_struct_array_field_infos(type_id.index());
+                // Emit source expression
+                self.emit_instr(f, expr);
+                // Look up the pre-declared temp local
+                let temp_name = format!("__copy_source_{}", type_id.index());
+                let temp_idx = self.resolve_local(&temp_name);
+                // Store source to temp
+                f.instruction(&Instruction::LocalSet(temp_idx));
+                // Null guard: if source is null, skip copy and produce null.
+                // This handles Option<T> where the value may be null (None).
+                // Use if-else with typed result: (ref null $type).
+                let heap = HeapType::Concrete(wasm_type_idx);
+                let val_type = ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: heap,
+                });
+                f.instruction(&Instruction::LocalGet(temp_idx));
+                f.instruction(&Instruction::RefIsNull);
+                f.instruction(&Instruction::If(BlockType::Result(val_type)));
+                f.instruction(&Instruction::RefNull(heap));
+                f.instruction(&Instruction::Else);
+                // For each field: load from temp, get field (handle packed fields)
+                for field in fields {
+                    // Check if this field needs array deep copy
+                    let arr_info = array_fields
+                        .as_ref()
+                        .and_then(|infos| infos.iter().find(|(fi, _)| *fi == field.index));
+                    if let Some(&(_, arr_wir_idx)) = arr_info {
+                        // Deep copy: create new array, copy elements
+                        let arr_wasm_idx = self.resolve_type_index(arr_wir_idx);
+                        let src_name =
+                            format!("__copy_arr_src_{}_{}", type_id.index(), field.index);
+                        let dst_name =
+                            format!("__copy_arr_dst_{}_{}", type_id.index(), field.index);
+                        let len_name =
+                            format!("__copy_arr_len_{}_{}", type_id.index(), field.index);
+                        let src_local = self.resolve_local(&src_name);
+                        let dst_local = self.resolve_local(&dst_name);
+                        let len_local = self.resolve_local(&len_name);
+                        // Get source array from struct field
+                        f.instruction(&Instruction::LocalGet(temp_idx));
+                        f.instruction(&Instruction::StructGet {
+                            struct_type_index: wasm_type_idx,
+                            field_index: field.index,
+                        });
+                        f.instruction(&Instruction::LocalSet(src_local));
+                        // Get length
+                        f.instruction(&Instruction::LocalGet(src_local));
+                        f.instruction(&Instruction::ArrayLen);
+                        f.instruction(&Instruction::LocalSet(len_local));
+                        // Create new array with same length (default filled)
+                        f.instruction(&Instruction::LocalGet(len_local));
+                        f.instruction(&Instruction::ArrayNewDefault(arr_wasm_idx));
+                        f.instruction(&Instruction::LocalSet(dst_local));
+                        // Copy elements: array.copy dst 0 src 0 len
+                        f.instruction(&Instruction::LocalGet(dst_local));
+                        f.instruction(&Instruction::I32Const(0));
+                        f.instruction(&Instruction::LocalGet(src_local));
+                        f.instruction(&Instruction::I32Const(0));
+                        f.instruction(&Instruction::LocalGet(len_local));
+                        f.instruction(&Instruction::ArrayCopy {
+                            array_type_index_dst: arr_wasm_idx,
+                            array_type_index_src: arr_wasm_idx,
+                        });
+                        // Push the new array on stack (for struct.new)
+                        f.instruction(&Instruction::LocalGet(dst_local));
+                    } else {
+                        f.instruction(&Instruction::LocalGet(temp_idx));
+                        match self.is_field_packed_by_index(type_id.index(), field.index) {
+                            Some(true) => {
+                                f.instruction(&Instruction::StructGetS {
+                                    struct_type_index: wasm_type_idx,
+                                    field_index: field.index,
+                                });
+                            }
+                            Some(false) => {
+                                f.instruction(&Instruction::StructGetU {
+                                    struct_type_index: wasm_type_idx,
+                                    field_index: field.index,
+                                });
+                            }
+                            None => {
+                                f.instruction(&Instruction::StructGet {
+                                    struct_type_index: wasm_type_idx,
+                                    field_index: field.index,
+                                });
+                            }
+                        }
+                    }
+                }
+                // Create new struct with all field values
+                f.instruction(&Instruction::StructNew(wasm_type_idx));
+                f.instruction(&Instruction::End); // end of if-else null guard
+            }
+            WirCopyType::Array { element_copy: _ } => {
+                // Array copy: pass through for now (shallow ref copy)
+                self.emit_instr(f, expr);
+            }
+            WirCopyType::Tuple { field_copies: _ } => {
+                // Tuple copy: same as struct copy (tuples are anonymous structs)
+                let wasm_type_idx = self.resolve_type_index(type_id.index());
+                self.emit_instr(f, expr);
+                let temp_name = format!("__copy_source_{}", type_id.index());
+                let temp_idx = self.resolve_local(&temp_name);
+                f.instruction(&Instruction::LocalSet(temp_idx));
+                let field_count = self.get_struct_field_count(type_id);
+                for i in 0..field_count {
+                    f.instruction(&Instruction::LocalGet(temp_idx));
+                    f.instruction(&Instruction::StructGet {
+                        struct_type_index: wasm_type_idx,
+                        field_index: i,
+                    });
+                }
+                f.instruction(&Instruction::StructNew(wasm_type_idx));
+            }
+            WirCopyType::Variant { .. } | WirCopyType::Option { .. } => {
+                // Variant and option copies are complex; pass through for now
+                self.emit_instr(f, expr);
+            }
+        }
+    }
+
+    /// Get struct fields that reference raw array types.
+    /// Returns Vec of (`field_index`, `array_wir_type_index`) for fields whose type
+    /// is a ref to a `WirTypeDef::Array`.
+    fn get_struct_array_field_infos(&self, struct_wir_idx: u32) -> Option<Vec<(u32, u32)>> {
+        let idx = struct_wir_idx as usize;
+        if idx >= self.wir.types.len() {
+            return None;
+        }
+        let WirTypeDef::Struct(ref st) = self.wir.types[idx] else {
+            return None;
+        };
+        let mut result = Vec::new();
+        for (i, field) in st.fields.iter().enumerate() {
+            if let WirType::Ref {
+                type_id: ref tid, ..
+            } = field.ty
+            {
+                let arr_idx = tid.index() as usize;
+                if arr_idx < self.wir.types.len()
+                    && matches!(self.wir.types[arr_idx], WirTypeDef::Array(_))
+                {
+                    result.push((u32::try_from(i).unwrap(), tid.index()));
+                }
+            }
+        }
+        if result.is_empty() {
+            None
+        } else {
+            Some(result)
+        }
+    }
+
+    /// Get the number of fields in a WIR struct type.
+    fn get_struct_field_count(&self, type_id: &WirTypeId) -> u32 {
+        let idx = type_id.index() as usize;
+        if idx < self.wir.types.len() {
+            match &self.wir.types[idx] {
+                WirTypeDef::Struct(s) => u32::try_from(s.fields.len()).unwrap(),
+                _ => 0,
+            }
+        } else {
+            0
+        }
     }
 
     fn emit_const_expr(&self, instr: &WirInstr) -> ConstExpr {
@@ -1457,6 +1931,22 @@ impl<'a> WirEmitter<'a> {
             && let WirTypeDef::Array(ref arr) = self.wir.types[idx]
         {
             return match &arr.element_type {
+                WirType::I8 | WirType::I16 => Some(true),
+                WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
+                _ => None,
+            };
+        }
+        None
+    }
+
+    /// Check if a struct field (by index) has packed storage.
+    fn is_field_packed_by_index(&self, wir_type_idx: u32, field_index: u32) -> Option<bool> {
+        let idx = wir_type_idx as usize;
+        if idx < self.wir.types.len()
+            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
+            && let Some(field) = st.fields.get(field_index as usize)
+        {
+            return match &field.ty {
                 WirType::I8 | WirType::I16 => Some(true),
                 WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
                 _ => None,
@@ -1570,5 +2060,34 @@ impl<'a> WirEmitter<'a> {
 
     fn wir_abstract_heap_to_wasm_heap(&self, ht: &WirAbstractHeapType) -> HeapType {
         self.wir_abstract_heap_to_wasm(ht)
+    }
+
+    /// Collect all function indices referenced by `RefFunc` instructions.
+    /// These need to be declared in a declarative element segment.
+    fn collect_ref_func_indices(&self) -> Vec<u32> {
+        let mut indices = IndexSet::new();
+        for func in &self.wir.functions {
+            if let Some(ref body) = func.body {
+                self.scan_ref_func_instrs(body, &mut indices);
+            }
+        }
+        indices.into_iter().collect()
+    }
+
+    fn scan_ref_func_instrs(&self, body: &[WirInstr], indices: &mut IndexSet<u32>) {
+        for instr in body {
+            self.scan_ref_func_instr(instr, indices);
+        }
+    }
+
+    fn scan_ref_func_instr(&self, instr: &WirInstr, indices: &mut IndexSet<u32>) {
+        if let WirInstr::RefFunc { func_id } = instr {
+            let wasm_idx = self.resolve_func_index(func_id.index());
+            indices.insert(wasm_idx);
+        }
+        // Recursively scan children
+        instr.for_each_child(&mut |child| {
+            self.scan_ref_func_instr(child, indices);
+        });
     }
 }

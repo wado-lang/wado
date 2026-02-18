@@ -3,7 +3,9 @@
 
 use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
 use crate::tir::{TirFunction, TypeTable};
-use crate::wir::{WirFunction, WirImport, WirImportDesc, WirMeta, WirName, WirType};
+use crate::wir::{
+    WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr, WirMeta, WirName, WirType,
+};
 
 use super::context::{PendingFunctionBody, WirContext};
 
@@ -17,6 +19,9 @@ pub fn collect_functions(ctx: &mut WirContext<'_>) {
 
     // Step 2.5: Register memory import from "mem" module
     register_memory_import(ctx);
+
+    // Step 2.7: Register global variables from all modules
+    register_globals(ctx);
 
     // Step 3: Collect and register entry module functions
     register_entry_functions(ctx);
@@ -81,7 +86,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
 ///
 /// WASI functions are already lowered at the component level;
 /// the core module imports them from the "wasi" namespace.
-/// Uses the same type conversion as codegen's `wasi_func_to_core_params`/`wasi_func_to_core_results`.
+/// Uses `flatten_wasi_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
 fn register_wasi_imports(ctx: &mut WirContext<'_>) {
     let wasi_registry = ctx.project.wasi_registry;
 
@@ -89,13 +94,23 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
         for func in &interface_info.functions {
             let local_name = func.local_alias_name();
 
-            // Only register functions that are actually used
-            if !ctx.project.has_effect(&func.effect_name) {
+            // Only register functions that are actually used (per-function check).
+            // This is more precise than has_effect() which includes ALL functions
+            // for a used effect. Per-function filtering avoids importing unused
+            // WASI functions that the component builder doesn't support (e.g.,
+            // [static] HTTP functions like consume_body).
+            let wasi_func_key = format!("{}::{}", func.effect_name, func.method_name);
+            if !ctx.project.used_wasi_functions.contains(&wasi_func_key) {
                 continue;
             }
 
-            // Skip unsupported functions
-            if !wasi_registry.is_function_supported(func) {
+            // Skip unsupported functions (for non-HTTP interfaces).
+            // HTTP functions are handled separately by import_http_types_for_service
+            // in the component builder, which has its own type support (ast_type_to_cm).
+            // The general is_function_supported check would reject HTTP [method] functions
+            // like Fields::append because their &Resource params aren't supported
+            // in the general type checker.
+            if func.package != "http" && !wasi_registry.is_function_supported(func) {
                 continue;
             }
 
@@ -104,7 +119,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
-            // Build param types matching codegen's wasi_func_to_core_params
+            // Build param types using CM ABI type flattening
             let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
             for (_, ty) in &func.params {
                 let resolved_ty = wasi_registry.resolve_type(ty);
@@ -125,7 +140,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
 
             let params: Vec<WirType> = param_vts.into_iter().map(valtype_to_wir_type).collect();
 
-            // Build result types matching codegen's wasi_func_to_core_results
+            // Build result types using CM ABI type flattening
             let results: Vec<WirType> = if func.is_async {
                 // Async functions always return i32 (subtask handle)
                 vec![WirType::I32]
@@ -390,7 +405,12 @@ fn register_single_function(
                 type_args: info
                     .type_args
                     .iter()
-                    .map(|&ta| type_table.mangle_type_name(ta))
+                    .map(|&ta| {
+                        // TypeIds may have been removed by DCE; use fallback
+                        type_table
+                            .try_mangle_type_name(ta)
+                            .unwrap_or_else(|| format!("?{}", ta.0))
+                    })
                     .collect(),
             }),
         effects,
@@ -458,6 +478,133 @@ fn register_exports(ctx: &mut WirContext<'_>) {
                     func_id: func_id.clone(),
                 },
             });
+        }
+    }
+}
+
+/// Register global variables from all TIR modules.
+///
+/// Global naming convention:
+/// - Entry module: `"global:{name}"`
+/// - Other modules: `"global:{mod_path}::{name}"`
+fn register_globals(ctx: &mut WirContext<'_>) {
+    let entry_source = ctx.project.entry_module_source.clone();
+
+    for (module_source, tir_mod) in &ctx.project.tir_modules {
+        if module_source.is_wasi() {
+            continue;
+        }
+
+        let type_table = &*tir_mod.type_table.borrow();
+
+        for global in &tir_mod.globals {
+            let global_name = if *module_source == entry_source {
+                format!("global:{}", global.name)
+            } else {
+                let module_path = module_source.to_path();
+                format!("global:{}::{}", module_path.join("::"), global.name)
+            };
+
+            let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
+
+            // For nullable globals (lazy-init reference types), ensure the WIR type is nullable
+            if global.is_nullable
+                && let WirType::Ref { type_id, .. } = wir_type
+            {
+                wir_type = WirType::Ref {
+                    type_id,
+                    nullable: true,
+                };
+            }
+
+            // Convert the initializer to a WIR constant instruction
+            let init = translate_global_init(&global.initializer, type_table);
+
+            let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
+            ctx.global_map.insert(global_name.clone(), idx);
+
+            ctx.globals.push(WirGlobal {
+                name: WirName {
+                    display: global.name.clone(),
+                    fq: global_name,
+                },
+                ty: wir_type,
+                mutable: global.mutable,
+                init,
+                meta: WirMeta {
+                    module_source: Some(module_source.clone()),
+                    ..WirMeta::default()
+                },
+            });
+        }
+    }
+
+    // HTTP handler exports need a global to save the trailers future tx handle.
+    // The future_create_pair builtin stores the tx here, and the export adapter
+    // reads it back with global_get_pending_trailers_tx after task-return.
+    if ctx.project.has_http_handler_export {
+        let fq = "global:__pending_trailers_tx".to_string();
+        let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
+        ctx.global_map.insert(fq.clone(), idx);
+        ctx.globals.push(WirGlobal {
+            name: WirName {
+                display: "__pending_trailers_tx".to_string(),
+                fq,
+            },
+            ty: WirType::I32,
+            mutable: true,
+            init: WirInstr::I32Const(0),
+            meta: WirMeta::default(),
+        });
+    }
+}
+
+/// Convert a TIR global initializer to a WIR constant instruction.
+fn translate_global_init(
+    init: &crate::tir::TirExpr,
+    type_table: &TypeTable,
+) -> crate::wir::WirInstr {
+    use crate::tir::{PrimitiveType, ResolvedType, TirExprKind};
+    use crate::wir::WirInstr;
+
+    match &init.kind {
+        TirExprKind::IntLiteral { value, .. } => {
+            let base_type = type_table.get_ultimate_base_type(init.type_id);
+            match type_table.get(base_type) {
+                ResolvedType::Primitive(prim) => match prim {
+                    PrimitiveType::I8
+                    | PrimitiveType::I16
+                    | PrimitiveType::I32
+                    | PrimitiveType::U8
+                    | PrimitiveType::U16
+                    | PrimitiveType::U32 => WirInstr::I32Const(*value as i32),
+                    PrimitiveType::I64 | PrimitiveType::U64 => WirInstr::I64Const(*value as i64),
+                    _ => WirInstr::I32Const(*value as i32),
+                },
+                _ => WirInstr::I32Const(*value as i32),
+            }
+        }
+        TirExprKind::FloatLiteral { value, .. } => {
+            let base_type = type_table.get_ultimate_base_type(init.type_id);
+            match type_table.get(base_type) {
+                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
+                _ => WirInstr::F64Const(*value),
+            }
+        }
+        TirExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
+        TirExprKind::Null | TirExprKind::Unit => WirInstr::RefNull {
+            heap_type: crate::wir::WirAbstractHeapType::None,
+        },
+        TirExprKind::Cast { expr: inner, .. } => {
+            // For casts, evaluate the inner expression with the cast's target type
+            let typed_inner = crate::tir::TirExpr::new(inner.kind.clone(), init.type_id, init.span);
+            translate_global_init(&typed_inner, type_table)
+        }
+        _ => {
+            // Non-constant initializers use null placeholder (lazy init at runtime)
+            WirInstr::RefNull {
+                heap_type: crate::wir::WirAbstractHeapType::None,
+            }
         }
     }
 }

@@ -408,6 +408,19 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// Try to get a type by ID, returning `None` if the type doesn't exist.
+    /// Useful when types may have been removed by DCE.
+    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
+        self.types.get(&id)
+    }
+
+    /// Try to mangle a type name, returning `None` if the type doesn't exist.
+    /// Useful when types may have been removed by DCE.
+    pub fn try_mangle_type_name(&self, id: TypeId) -> Option<String> {
+        self.try_get(id)?;
+        Some(self.mangle_type_name(id))
+    }
+
     pub fn is_integer(&self, id: TypeId) -> bool {
         // Follow newtype chain to get ultimate base type
         let base_id = self.get_ultimate_base_type(id);
@@ -853,6 +866,19 @@ impl TypeTable {
     /// - Function: `Fn<paramCount,returnType>`
     /// - `GenericInstance`: `Name<T1,T2,...>`
     /// - Ref/MutRef: inner type (references are stripped for mangling)
+    /// Resolve through newtypes to find the base type.
+    /// Returns the original `TypeId` if not a newtype.
+    #[must_use]
+    pub fn resolve_newtype_base(&self, id: TypeId) -> TypeId {
+        let mut current = id;
+        loop {
+            match self.get(current) {
+                ResolvedType::Newtype { base_type, .. } => current = *base_type,
+                _ => return current,
+            }
+        }
+    }
+
     #[must_use]
     pub fn mangle_type_name(&self, id: TypeId) -> String {
         let info = self.get_type_name_info(id);

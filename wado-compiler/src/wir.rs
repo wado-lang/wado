@@ -528,7 +528,7 @@ pub struct WirFunction {
 /// WIR instructions are tree-structured where operands are child nodes,
 /// not stack values. This makes the structure inspectable and allows inline
 /// local declaration.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum WirInstr {
     // === Locals ===
     /// Declare a new local variable inline (not in Wasm; lowered to pre-allocated local).
@@ -646,6 +646,14 @@ pub enum WirInstr {
     I64Sub128(Box<WirInstr>, Box<WirInstr>, Box<WirInstr>, Box<WirInstr>),
     I64MulWideU(Box<WirInstr>, Box<WirInstr>),
     I64MulWideS(Box<WirInstr>, Box<WirInstr>),
+
+    /// Emit a multi-value instruction and wrap the results in a struct.
+    /// Used for `i64.add128`, `i64.sub128`, `i64.mul_wide_u/s` which push two i64
+    /// values on the stack, then `StructNew` wraps them into a tuple struct.
+    MultiValueStructNew {
+        type_id: WirTypeId,
+        instr: Box<WirInstr>,
+    },
 
     // === Arithmetic (f32) ===
     F32Add(Box<WirInstr>, Box<WirInstr>),
@@ -824,6 +832,13 @@ pub enum WirInstr {
         then_body: Vec<WirInstr>,
         else_body: Option<Vec<WirInstr>>,
     },
+    /// Branch hint annotation (from `builtin::likely`/`builtin::unlikely`).
+    /// Wraps a condition expression; consumed by the emitter when it appears
+    /// as the condition of an `If` instruction.
+    BranchHint {
+        likely: bool,
+        expr: Box<WirInstr>,
+    },
     /// Branch to label.
     Br {
         depth: u32,
@@ -955,6 +970,16 @@ pub enum WirInstr {
         expr: Box<WirInstr>,
     },
 
+    /// Multi-value instruction with direct local binding (tuple elision).
+    /// The instruction pushes N values on the stack; they are bound directly
+    /// to locals without intermediate struct allocation.
+    /// Locals are in source order (index 0 = bottom of stack).
+    /// `None` entries represent wildcards (dropped values).
+    MultiValueLocalBind {
+        instr: Box<WirInstr>,
+        locals: Vec<Option<String>>,
+    },
+
     /// Sequence of instructions (for statement blocks).
     Seq(Vec<WirInstr>),
 }
@@ -992,7 +1017,12 @@ impl WirInstr {
             | Self::RefCast { expr, .. }
             | Self::RefTest { expr, .. }
             | Self::ValueCopy { expr, .. } => f(expr),
-            Self::BrIf { condition, .. } => f(condition),
+            Self::BrIf { condition, .. }
+            | Self::BranchHint {
+                expr: condition, ..
+            } => {
+                f(condition);
+            }
             Self::BrTable { index, .. } => f(index),
             Self::ArrayNewDefault { len, .. } => f(len),
             Self::Drop(o)
@@ -1202,6 +1232,9 @@ impl WirInstr {
                 f(c);
                 f(d);
             }
+            Self::MultiValueStructNew { instr, .. } | Self::MultiValueLocalBind { instr, .. } => {
+                f(instr);
+            }
             Self::TableGet { index, .. } => f(index),
             Self::TableSet { index, value, .. } => {
                 f(index);
@@ -1283,7 +1316,7 @@ impl WirInstr {
 // =============================================================================
 
 /// What kind of value copy to perform.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum WirCopyType {
     Struct {
         fields: Vec<WirCopyField>,
@@ -1303,7 +1336,7 @@ pub enum WirCopyType {
 }
 
 /// A field in a struct copy.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WirCopyField {
     pub index: u32,
     pub needs_copy: bool,
@@ -1311,7 +1344,7 @@ pub struct WirCopyField {
 }
 
 /// A case in a variant copy.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WirCopyCase {
     pub index: u32,
     pub name: String,

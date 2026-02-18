@@ -102,7 +102,7 @@ pub fn analyze_project(project: &mut Project) {
 
     // HTTP handler exports need cm_lower_string for ErrorCode payload lowering
     // (ErrorCode variant cases can contain Option<String> payloads).
-    // This is used in codegen's export path, not via TIR call graph.
+    // This is used in the component export path, not via TIR call graph.
     let has_http_handler_export_early = project
         .world_registry
         .get(&project.target_world)
@@ -212,8 +212,25 @@ pub fn analyze_project(project: &mut Project) {
         .get(&project.target_world)
         .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
     if has_async_export {
-        // TaskReturn is always needed for async exports
-        add_import_by_name(&mut imports, "task_return");
+        // TaskReturn is always needed for async exports.
+        // For Result-returning exports (e.g., HTTP handler), cm_adapter_gen computes
+        // the correct flattened CM ABI params. Override the builtin registry's default
+        // single-i32 signature with the correct flat params.
+        if let Some(flat_params) = project.task_return_flat_params.clone() {
+            if let Some(info) = project.builtin_registry.get("task_return")
+                && let Some(canonical_name) = &info.canonical_name
+            {
+                imports.insert(TirImport {
+                    namespace: info.namespace.clone(),
+                    canonical_name: canonical_name.clone(),
+                    func_name: "task_return".to_string(),
+                    params: flat_params,
+                    return_type: info.return_type,
+                });
+            }
+        } else {
+            add_import_by_name(&mut imports, "task_return");
+        }
 
         // Waitable-set builtins (waitable_set_new, waitable_join, waitable_set_wait, subtask_drop)
         // are added automatically via reachability from internal::wait_for_subtask
@@ -815,7 +832,7 @@ fn analyze_expr(
                 // Check if this is a method call (contains "::") or a regular function
                 if let Some(sep_pos) = func_name.find("::") {
                     // This is a static method call (e.g., "Uint128::from_u64")
-                    // Track as FunctionId::Method to match codegen's registration
+                    // Track as FunctionId::Method to match WIR registration
                     let prefix = &func_name[..sep_pos];
                     let method_name = &func_name[sep_pos + 2..];
                     // Parse struct name and optional trait name from prefix

@@ -570,12 +570,17 @@ impl WasiRegistry {
     /// This uses the registry's known enums and resources to determine if
     /// all types in the function signature are supported.
     pub fn is_function_supported(&self, func: &WasiFunctionInfo) -> bool {
-        // Build sets of known enum and resource names
-        let enums: IndexSet<&str> = self.enums.keys().map(String::as_str).collect();
+        // Build sets of known enum, variant, and resource names
+        let enums: IndexSet<&str> = self
+            .enums
+            .keys()
+            .chain(self.variants.keys())
+            .map(String::as_str)
+            .collect();
         let resources: IndexSet<&str> = self.resources.keys().map(String::as_str).collect();
 
         // Check all parameter types
-        for (_, ty) in &func.params {
+        for (_name, ty) in &func.params {
             if !is_param_type_supported_with_types(ty, &enums, &resources) {
                 return false;
             }
@@ -1209,6 +1214,19 @@ pub fn wasi_type_to_valtype(ty: &Type) -> ValType {
     }
 }
 
+/// Join two `ValType` options following CM union rules.
+///
+/// If both sides have the same type, use that. Otherwise, widen to i64.
+/// If only one side is present, use that side's type.
+fn join_val_types(a: Option<ValType>, b: Option<ValType>) -> ValType {
+    match (a, b) {
+        (Some(a), Some(b)) if a == b => a,
+        (Some(_), Some(_)) => ValType::I64,
+        (Some(a), None) | (None, Some(a)) => a,
+        (None, None) => ValType::I32,
+    }
+}
+
 /// Flatten a pre-resolved AST type into CM core-level `ValType`s.
 ///
 /// Compound types like String and `Array<T>` are lowered to (ptr: i32, len: i32)
@@ -1228,6 +1246,8 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>) {
             "i64" | "u64" => out.push(ValType::I64),
             "f32" => out.push(ValType::F32),
             "f64" => out.push(ValType::F64),
+            // Unit type — no core values
+            "()" => {}
             // Resource handles, enums, etc.
             _ => out.push(ValType::I32),
         },
@@ -1237,8 +1257,27 @@ pub fn flatten_wasi_param_type(ty: &Type, out: &mut Vec<ValType>) {
                 out.push(ValType::I32); // ptr
                 out.push(ValType::I32); // len
             }
-            // Stream, Future, Result, Option are handles or discriminants
-            "Stream" | "Future" | "Result" | "Option" => out.push(ValType::I32),
+            // Stream and Future are single i32 handles
+            "Stream" | "Future" => out.push(ValType::I32),
+            // option<T> flattens to: discriminant i32 + flatten(T)
+            "Option" if generic.args.len() == 1 => {
+                out.push(ValType::I32); // discriminant
+                flatten_wasi_param_type(&generic.args[0], out);
+            }
+            // result<T, E> flattens to: discriminant i32 + union(flatten(T), flatten(E))
+            "Result" if generic.args.len() == 2 => {
+                out.push(ValType::I32); // discriminant
+                let mut ok_flat = Vec::new();
+                let mut err_flat = Vec::new();
+                flatten_wasi_param_type(&generic.args[0], &mut ok_flat);
+                flatten_wasi_param_type(&generic.args[1], &mut err_flat);
+                let max_len = ok_flat.len().max(err_flat.len());
+                for i in 0..max_len {
+                    let ok_val = ok_flat.get(i).copied();
+                    let err_val = err_flat.get(i).copied();
+                    out.push(join_val_types(ok_val, err_val));
+                }
+            }
             _ => out.push(ValType::I32),
         },
         // borrow<resource> - i32 handle
@@ -1316,7 +1355,12 @@ fn is_param_type_supported_with_types(
             ) || enums.contains(name)
                 || resources.contains(name)
         }
-        Type::Generic(generic) => matches!(generic.name.as_str(), "Stream" | "Result"),
+        Type::Generic(generic) => {
+            matches!(
+                generic.name.as_str(),
+                "Stream" | "Result" | "Future" | "Option" | "Array"
+            )
+        }
         _ => false,
     }
 }
@@ -1354,7 +1398,7 @@ fn is_return_type_supported_with_types(
                 || resources.contains(name)
         }
         Type::Generic(generic) => match generic.name.as_str() {
-            "Stream" => true,
+            "Stream" | "Future" => true,
             "Result" => {
                 // Result<T, E> - both T and E must be supported
                 generic
@@ -1370,11 +1414,11 @@ fn is_return_type_supported_with_types(
                     .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
             }
             "Tuple" => {
-                // All tuple elements must be supported primitives (Tuple<...> syntax)
+                // All tuple elements must be supported return types
                 generic
                     .args
                     .iter()
-                    .all(|arg| is_primitive_type_supported_with_types(arg, enums, resources))
+                    .all(|arg| is_return_type_supported_with_types(arg, enums, resources))
             }
             _ => false,
         },
@@ -1386,7 +1430,7 @@ fn is_return_type_supported_with_types(
             }
             elements
                 .iter()
-                .all(|el| is_primitive_type_supported_with_types(el, enums, resources))
+                .all(|el| is_return_type_supported_with_types(el, enums, resources))
         }
         _ => false,
     }
@@ -1443,12 +1487,6 @@ pub fn is_param_type_supported(ty: &Type) -> bool {
 /// Check if a return type is supported (without enum/resource knowledge)
 pub fn is_return_type_supported(ty: &Type) -> bool {
     is_return_type_supported_with_types(ty, &IndexSet::new(), &IndexSet::new())
-}
-
-/// Check if a type is a supported primitive type (for inner types of Array/Option/Tuple)
-#[allow(dead_code)]
-fn is_primitive_type_supported(ty: &Type) -> bool {
-    is_primitive_type_supported_with_types(ty, &IndexSet::new(), &IndexSet::new())
 }
 
 /// Check if all types in a WASI function are supported for Component Model generation

@@ -8,7 +8,7 @@ use crate::tir::{
     TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
     TypeTable,
 };
-use crate::wir::{WirAbstractHeapType, WirInstr, WirType};
+use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType};
 use indexmap::IndexMap;
 
 use super::context::WirContext;
@@ -87,6 +87,133 @@ fn collect_let_names(names: &mut IndexMap<u32, String>, stmts: &[TirStmt]) {
     }
 }
 
+/// Register canonical closure wrapper functions for all closure functors.
+/// Must be called before `translate_function_bodies` so wrappers are available
+/// for `ClosureToCanonical` references.
+pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
+    use crate::wir::{WirFunction, WirName, WirType};
+
+    for tir_mod in ctx.project.tir_modules.values() {
+        let type_table = &*tir_mod.type_table.borrow();
+        for functor in &tir_mod.closure_functors {
+            if ctx.closure_wrapper_funcs.contains_key(&functor.id) {
+                continue;
+            }
+
+            // Get the __call method's param/result types (excluding self)
+            let call_func = functor.call_method.borrow();
+            let user_param_count = call_func.params.len() - 1; // skip self
+            let user_params: Vec<WirType> = call_func
+                .params
+                .iter()
+                .skip(1) // skip self parameter
+                .map(|p| ctx.type_id_to_wir_type(type_table, p.type_id))
+                .collect();
+            let result_wirs: Vec<WirType> = if call_func.return_type == crate::tir::TypeTable::UNIT
+                || call_func.return_type == crate::tir::TypeTable::NEVER
+            {
+                vec![]
+            } else {
+                vec![ctx.type_id_to_wir_type(type_table, call_func.return_type)]
+            };
+            let has_result = !result_wirs.is_empty();
+
+            // Get canonical func type
+            let (fn_type_id, _) =
+                ctx.get_or_create_canonical_closure_type(user_params, result_wirs);
+
+            // Get functor struct type ID
+            let functor_wir_type = ctx.type_id_to_wir_type(type_table, functor.ref_type_id);
+            let functor_struct_type_id = match &functor_wir_type {
+                WirType::Ref { type_id, .. } => type_id.clone(),
+                _ => continue,
+            };
+
+            // Look up the __call func_id
+            let functor_name = &functor.struct_name;
+            let call_method_suffix = format!("/{functor_name}::__call");
+            let call_func_id = ctx
+                .func_map
+                .iter()
+                .find(|(k, _)| k.ends_with(&call_method_suffix))
+                .map(|(_, v)| v.clone());
+
+            // Build wrapper function body
+            let env_local = "__env".to_string();
+            let typed_env_local = "__typed_env".to_string();
+
+            let mut body = vec![
+                WirInstr::DeclareLocal {
+                    name: typed_env_local.clone(),
+                    ty: WirType::Ref {
+                        type_id: functor_struct_type_id.clone(),
+                        nullable: true,
+                    },
+                },
+                WirInstr::LocalSet {
+                    name: typed_env_local.clone(),
+                    value: Box::new(WirInstr::RefCast {
+                        type_id: functor_struct_type_id,
+                        nullable: true,
+                        expr: Box::new(WirInstr::LocalGet {
+                            name: env_local.clone(),
+                        }),
+                    }),
+                },
+            ];
+
+            let mut call_args = vec![WirInstr::LocalGet {
+                name: typed_env_local,
+            }];
+            for i in 0..user_param_count {
+                call_args.push(WirInstr::LocalGet {
+                    name: format!("__p{i}"),
+                });
+            }
+
+            if let Some(call_fid) = call_func_id {
+                let call_instr = WirInstr::Call {
+                    func_id: call_fid,
+                    args: call_args,
+                };
+                if has_result {
+                    body.push(WirInstr::Return {
+                        value: Some(Box::new(call_instr)),
+                    });
+                } else {
+                    body.push(call_instr);
+                }
+            } else {
+                body.push(WirInstr::Unreachable);
+            }
+
+            let mut param_names = vec![env_local];
+            for i in 0..user_param_count {
+                param_names.push(format!("__p{i}"));
+            }
+
+            let wrapper_name = format!("__closure_wrapper_{}", functor.id);
+            let wrapper_fq = format!("closure//{wrapper_name}");
+
+            let func = WirFunction {
+                name: WirName {
+                    display: wrapper_name,
+                    fq: wrapper_fq,
+                },
+                type_id: fn_type_id,
+                param_names,
+                body: Some(body),
+                meta: crate::wir::WirMeta::default(),
+                generic_origin: None,
+                effects: Vec::new(),
+            };
+
+            let func_id = ctx.register_function(func);
+            ctx.closure_wrapper_funcs.insert(functor.id, func_id);
+        }
+    }
+}
+
 /// Translate all pending function bodies from TIR to WIR instructions.
 pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     let pending: Vec<_> = std::mem::take(&mut ctx.pending_bodies);
@@ -111,6 +238,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 module_source: &pending_body.module_source,
                 label_stack: Vec::new(),
                 match_counter: 0,
+                local_counter: 0,
                 local_names,
             };
             let wir_body = translator.translate_block(body);
@@ -141,6 +269,8 @@ struct FunctionTranslator<'a, 'b> {
     label_stack: Vec<LabelEntry>,
     /// Counter for generating unique match scrutinee local names.
     match_counter: u32,
+    /// Counter for generating unique temporary local names.
+    local_counter: u32,
     /// Map from local index to variable name (built from params + Let stmts).
     local_names: IndexMap<u32, String>,
 }
@@ -159,6 +289,114 @@ impl FunctionTranslator<'_, '_> {
             }
         } else {
             format!("__local_{index}")
+        }
+    }
+
+    /// Check if a type requires value copy (struct, array, tuple, variant, option).
+    fn needs_value_copy(&self, type_id: TypeId) -> bool {
+        match self.type_table.get(type_id) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                base_name,
+                ..
+            } => {
+                // Internal Box<T> types are GC reference cells for primitive boxing.
+                // They should share the heap object on assignment, not deep-copy.
+                // Monomorphized Box<T> may have EntryPoint as module_source, so also
+                // check the base_name field.
+                let is_box = (name.starts_with("Box<") && module_source.is_core_internal())
+                    || base_name.as_deref() == Some("Box");
+                !is_box
+            }
+            ResolvedType::GenericInstance {
+                name,
+                module_source,
+                ..
+            } => {
+                // Internal Box<T> types are GC reference cells for primitive boxing.
+                // They should share the heap object on assignment, not deep-copy.
+                !(name == "Box" && module_source.is_core_internal())
+            }
+            ResolvedType::Variant { .. } => true,
+            ResolvedType::Tuple(elements) => !elements.is_empty(),
+            ResolvedType::Option(inner) => self.needs_value_copy(*inner),
+            _ => false,
+        }
+    }
+
+    /// Check if an expression is "fresh" (doesn't need value copy).
+    fn is_fresh_value(expr: &TirExpr) -> bool {
+        matches!(
+            &expr.kind,
+            TirExprKind::Move { .. }
+                | TirExprKind::StructLiteral { .. }
+                | TirExprKind::TupleLiteral { .. }
+                | TirExprKind::ArrayLiteral { .. }
+                | TirExprKind::VariantConstruct { .. }
+                | TirExprKind::EnumConstruct { .. }
+                | TirExprKind::OptionSome { .. }
+                | TirExprKind::Null
+                | TirExprKind::Call { .. }
+                | TirExprKind::MethodCall { .. }
+                | TirExprKind::StaticCall { .. }
+        )
+    }
+
+    /// Wrap a translated value instruction in `ValueCopy` if needed.
+    fn maybe_value_copy(&self, value: &TirExpr, translated: WirInstr) -> WirInstr {
+        if self.needs_value_copy(value.type_id) && !Self::is_fresh_value(value) {
+            self.build_value_copy(value.type_id, translated)
+        } else {
+            translated
+        }
+    }
+
+    /// Build a `ValueCopy` instruction for the given type.
+    /// Uses the WIR type ID to identify the struct, and builds a shallow copy descriptor.
+    fn build_value_copy(&self, type_id: TypeId, expr: WirInstr) -> WirInstr {
+        use crate::wir::{WirCopyField, WirCopyType};
+        let wir_type = self.ctx.type_id_to_wir_type(self.type_table, type_id);
+        if let WirType::Ref {
+            type_id: wir_tid, ..
+        } = wir_type
+        {
+            // Variants use pass-through copy (immutable structs in the rec group)
+            if self.ctx.is_variant_type(&wir_tid) {
+                return WirInstr::ValueCopy {
+                    type_id: wir_tid,
+                    source_type: WirCopyType::Variant { cases: Vec::new() },
+                    expr: Box::new(expr),
+                };
+            }
+            // Look up the WIR struct type to get field count
+            let field_count = self.ctx.get_struct_field_count(&wir_tid);
+            let copy_fields: Vec<WirCopyField> = (0..field_count)
+                .map(|i| WirCopyField {
+                    index: i,
+                    needs_copy: false, // Shallow copy (field-by-field)
+                    copy_type: None,
+                })
+                .collect();
+            WirInstr::ValueCopy {
+                type_id: wir_tid,
+                source_type: WirCopyType::Struct {
+                    fields: copy_fields,
+                },
+                expr: Box::new(expr),
+            }
+        } else {
+            expr
+        }
+    }
+
+    /// Build the qualified global name.
+    fn make_global_name(&self, module_source: &crate::name::ModuleSource, name: &str) -> String {
+        if module_source.is_entry_point() {
+            format!("global:{name}")
+        } else {
+            let module_path = module_source.to_path();
+            format!("global:{}::{name}", module_path.join("::"))
         }
     }
 
@@ -263,6 +501,8 @@ impl FunctionTranslator<'_, '_> {
     ///
     /// Used for if-expression branches and labeled-block-expression bodies.
     /// The last `Expr` statement is NOT dropped; it stays on the Wasm stack as the result.
+    /// Also handles statement-level If/IfPattern as value-producing when they're the
+    /// last statement (TIR stores these as statements, not expressions).
     fn translate_stmts_as_value(&mut self, stmts: &[TirStmt]) -> Vec<WirInstr> {
         let mut instrs = Vec::new();
         let len = stmts.len();
@@ -271,8 +511,60 @@ impl FunctionTranslator<'_, '_> {
             if is_last {
                 // Last statement: if it's an Expr, translate without drop
                 if let TirStmtKind::Expr(expr) = &stmt.kind {
-                    let instr = self.translate_expr(expr);
+                    let instr = self.translate_expr_as_value(expr);
                     instrs.push(instr);
+                    continue;
+                }
+                // Statement-level If with else can produce a value
+                if let TirStmtKind::If {
+                    condition,
+                    then_block,
+                    else_block: Some(else_block),
+                    ..
+                } = &stmt.kind
+                    && let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
+                {
+                    let cond = self.translate_expr(condition);
+                    self.label_stack.push(LabelEntry {
+                        label: None,
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                    let then_body = self.translate_stmts_as_value(&then_block.stmts);
+                    let else_body = Some(self.translate_stmts_as_value(&else_block.stmts));
+                    self.label_stack.pop();
+                    instrs.push(WirInstr::If {
+                        condition: Box::new(cond),
+                        result: Some(result_type),
+                        then_body,
+                        else_body,
+                    });
+                    continue;
+                }
+                // Statement-level IfPattern with else can produce a value
+                if let TirStmtKind::IfPattern {
+                    scrutinee,
+                    then_block,
+                    else_block: Some(else_block),
+                    ..
+                } = &stmt.kind
+                    && let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
+                {
+                    let scrut = self.translate_expr(scrutinee);
+                    self.label_stack.push(LabelEntry {
+                        label: None,
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                    let then_body = self.translate_stmts_as_value(&then_block.stmts);
+                    let else_body = Some(self.translate_stmts_as_value(&else_block.stmts));
+                    self.label_stack.pop();
+                    instrs.push(WirInstr::If {
+                        condition: Box::new(scrut),
+                        result: Some(result_type),
+                        then_body,
+                        else_body,
+                    });
                     continue;
                 }
             }
@@ -283,6 +575,82 @@ impl FunctionTranslator<'_, '_> {
         instrs
     }
 
+    /// Infer the WIR result type from the last statement in a list.
+    /// Returns `Some(type)` if the last statement can produce a value, `None` otherwise.
+    fn infer_stmts_result_type(&self, stmts: &[TirStmt]) -> Option<WirType> {
+        stmts.last().and_then(|stmt| match &stmt.kind {
+            TirStmtKind::Expr(expr) => {
+                if expr.type_id != TypeTable::UNIT && expr.type_id != TypeTable::NEVER {
+                    Some(self.ctx.type_id_to_wir_type(self.type_table, expr.type_id))
+                } else {
+                    None
+                }
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block: Some(_),
+                ..
+            } => self.infer_stmts_result_type(&then_block.stmts),
+            TirStmtKind::IfPattern {
+                then_block,
+                else_block: Some(_),
+                ..
+            } => self.infer_stmts_result_type(&then_block.stmts),
+            _ => None,
+        })
+    }
+
+    /// Translate an expression in "value position" — the result stays on the Wasm stack.
+    ///
+    /// Handles cases where TIR assigns UNIT type to expressions that actually produce
+    /// values in a given context (e.g., nested if expressions, chained assignments).
+    fn translate_expr_as_value(&mut self, expr: &TirExpr) -> WirInstr {
+        // If the expression already has a non-UNIT type, translate normally
+        if expr.type_id != TypeTable::UNIT {
+            return self.translate_expr(expr);
+        }
+
+        match &expr.kind {
+            // If expression with UNIT type but value-producing branches
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                if let Some(result_type) = self.infer_stmts_result_type(&then_branch.stmts) {
+                    let cond = self.translate_expr(condition);
+                    self.label_stack.push(LabelEntry {
+                        label: None,
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                    let then_body = self.translate_stmts_as_value(&then_branch.stmts);
+                    let else_body = else_branch
+                        .as_ref()
+                        .map(|b| self.translate_stmts_as_value(&b.stmts));
+                    self.label_stack.pop();
+                    return WirInstr::If {
+                        condition: Box::new(cond),
+                        result: Some(result_type),
+                        then_body,
+                        else_body,
+                    };
+                }
+                self.translate_expr(expr)
+            }
+            // Block with UNIT type but value-producing last expression
+            TirExprKind::Block(block) => {
+                if self.infer_stmts_result_type(&block.stmts).is_some() {
+                    let body = self.translate_stmts_as_value(&block.stmts);
+                    WirInstr::Seq(body)
+                } else {
+                    self.translate_expr(expr)
+                }
+            }
+            _ => self.translate_expr(expr),
+        }
+    }
+
     /// Translate a TIR statement to a WIR instruction.
     fn translate_stmt(&mut self, stmt: &TirStmt) -> Option<WirInstr> {
         match &stmt.kind {
@@ -291,6 +659,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let local_name = self.local_name(*local_index);
                 let value_instr = self.translate_expr(value);
+                let value_instr = self.maybe_value_copy(value, value_instr);
                 Some(WirInstr::LocalSet {
                     name: local_name,
                     value: Box::new(value_instr),
@@ -298,8 +667,17 @@ impl FunctionTranslator<'_, '_> {
             }
             TirStmtKind::Expr(expr) => {
                 let instr = self.translate_expr(expr);
-                // If the expression has a non-unit type, drop it
-                if expr.type_id != TypeTable::UNIT && expr.type_id != TypeTable::NEVER {
+                // If the expression has a non-unit type, drop it.
+                // Exception: assignments and global-var-sets produce void WIR instructions
+                // (LocalSet/StructSet/ArraySet/GlobalSet), so don't wrap them in Drop.
+                let is_void_instr = matches!(
+                    &expr.kind,
+                    TirExprKind::Assign { .. } | TirExprKind::GlobalVarSet { .. }
+                );
+                if !is_void_instr
+                    && expr.type_id != TypeTable::UNIT
+                    && expr.type_id != TypeTable::NEVER
+                {
                     Some(WirInstr::Drop(Box::new(instr)))
                 } else {
                     Some(instr)
@@ -416,9 +794,8 @@ impl FunctionTranslator<'_, '_> {
                     body: body_instrs,
                 })
             }
-            TirStmtKind::LetPattern { .. } => {
-                // TODO: implement destructuring let
-                None
+            TirStmtKind::LetPattern { pattern, value, .. } => {
+                self.translate_let_pattern(pattern, value)
             }
         }
     }
@@ -427,16 +804,26 @@ impl FunctionTranslator<'_, '_> {
     fn translate_expr(&mut self, expr: &TirExpr) -> WirInstr {
         match &expr.kind {
             // === Literals ===
-            TirExprKind::IntLiteral { value, .. } => match self.type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
-                    WirInstr::I64Const(*value as i64)
+            TirExprKind::IntLiteral { value, .. } => {
+                // Resolve newtypes to their base primitive type
+                let base_type_id = self.type_table.get_ultimate_base_type(expr.type_id);
+                match self.type_table.get(base_type_id) {
+                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {
+                        WirInstr::I64Const(*value as i64)
+                    }
+                    _ => WirInstr::I32Const(*value as i32),
                 }
-                _ => WirInstr::I32Const(*value as i32),
-            },
-            TirExprKind::FloatLiteral { value, .. } => match self.type_table.get(expr.type_id) {
-                ResolvedType::Primitive(PrimitiveType::F32) => WirInstr::F32Const(*value as f32),
-                _ => WirInstr::F64Const(*value),
-            },
+            }
+            TirExprKind::FloatLiteral { value, .. } => {
+                // Resolve newtypes to their base primitive type
+                let base_type_id = self.type_table.get_ultimate_base_type(expr.type_id);
+                match self.type_table.get(base_type_id) {
+                    ResolvedType::Primitive(PrimitiveType::F32) => {
+                        WirInstr::F32Const(*value as f32)
+                    }
+                    _ => WirInstr::F64Const(*value),
+                }
+            }
             TirExprKind::BoolLiteral(value) => WirInstr::I32Const(i32::from(*value)),
             TirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
             TirExprKind::StringLiteral(s) => {
@@ -455,18 +842,76 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Local { index, .. } => WirInstr::LocalGet {
                 name: self.local_name(*index),
             },
-            TirExprKind::Global { .. } | TirExprKind::GlobalVarGet { .. } => {
-                // TODO: proper global lookup
-                WirInstr::I32Const(0)
+            TirExprKind::Global {
+                module_source,
+                name,
+            } => {
+                // Global function references — currently emitting as i32 const placeholder
+                // (TirExprKind::Global is for function references, not global variables)
+                let full_name = if module_source.is_entry_point() {
+                    name.clone()
+                } else {
+                    format!("{module_source}::{name}")
+                };
+                if let Some(func_id) = self.ctx.func_map.get(&full_name) {
+                    WirInstr::I32Const(func_id.index() as i32)
+                } else {
+                    WirInstr::I32Const(0)
+                }
             }
-            TirExprKind::GlobalVarSet { value, .. } => {
-                // TODO: proper global set
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
+                let global_name = self.make_global_name(module_source, name);
+                WirInstr::GlobalGet {
+                    name: WirName {
+                        display: name.clone(),
+                        fq: global_name,
+                    },
+                }
+            }
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } => {
+                let global_name = self.make_global_name(module_source, name);
                 let val = self.translate_expr(value);
-                WirInstr::Drop(Box::new(val))
+                WirInstr::GlobalSet {
+                    name: WirName {
+                        display: name.clone(),
+                        fq: global_name,
+                    },
+                    value: Box::new(val),
+                }
             }
 
             // === Binary Operations ===
             TirExprKind::Binary { op, left, right } => {
+                // Short-circuit logical operators: defer right-side evaluation
+                if matches!(op, TirBinaryOp::And) {
+                    let l = self.translate_expr(left);
+                    let r = self.translate_expr(right);
+                    // if left { right } else { 0 }
+                    return WirInstr::If {
+                        condition: Box::new(l),
+                        result: Some(WirType::I32),
+                        then_body: vec![r],
+                        else_body: Some(vec![WirInstr::I32Const(0)]),
+                    };
+                }
+                if matches!(op, TirBinaryOp::Or) {
+                    let l = self.translate_expr(left);
+                    let r = self.translate_expr(right);
+                    // if left { 1 } else { right }
+                    return WirInstr::If {
+                        condition: Box::new(l),
+                        result: Some(WirType::I32),
+                        then_body: vec![WirInstr::I32Const(1)],
+                        else_body: Some(vec![r]),
+                    };
+                }
                 let l = Box::new(self.translate_expr(left));
                 let r = Box::new(self.translate_expr(right));
                 self.translate_binary_op(op, l, r, left.type_id)
@@ -530,7 +975,15 @@ impl FunctionTranslator<'_, '_> {
                         args: translated_args,
                     }
                 } else {
-                    eprintln!("[WIR] unresolved MethodCall: name={:?}", func.name());
+                    if let Some(mi) = func.method_info() {
+                        eprintln!(
+                            "[WIR] unresolved MethodCall: name={:?} method_info={:?}",
+                            func.name(),
+                            mi
+                        );
+                    } else {
+                        eprintln!("[WIR] unresolved MethodCall: name={:?}", func.name());
+                    }
                     WirInstr::Unreachable
                 }
             }
@@ -591,10 +1044,26 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Assign { target, value } => {
                 let val = self.translate_expr(value);
                 match &target.kind {
-                    TirExprKind::Local { index, .. } => WirInstr::LocalSet {
-                        name: self.local_name(*index),
-                        value: Box::new(val),
-                    },
+                    TirExprKind::Local { index, .. } => {
+                        // If the value is a LocalSet from nested chained assignment
+                        // (e.g., `h = i = 42`), convert it to LocalTee so it leaves
+                        // the assigned value on the stack for the outer assignment.
+                        let val = match val {
+                            WirInstr::LocalSet {
+                                name: inner_name,
+                                value: inner_val,
+                            } => WirInstr::LocalTee {
+                                name: inner_name,
+                                value: inner_val,
+                            },
+                            other => other,
+                        };
+                        let val = self.maybe_value_copy(value, val);
+                        WirInstr::LocalSet {
+                            name: self.local_name(*index),
+                            value: Box::new(val),
+                        }
+                    }
                     TirExprKind::FieldAccess {
                         expr: receiver,
                         field_name,
@@ -806,14 +1275,14 @@ impl FunctionTranslator<'_, '_> {
                 // Capture should be lowered to FieldAccess before reaching this point.
                 WirInstr::Unreachable
             }
-            TirExprKind::IndirectCall { .. } => {
-                // TODO: proper indirect call needs closure infrastructure (call_ref)
-                WirInstr::Unreachable
+            TirExprKind::IndirectCall { callee, args } => {
+                self.translate_indirect_call(callee, args, expr.type_id)
             }
-            TirExprKind::ClosureToCanonical { .. } => {
-                // TODO: closure-to-canonical needs wrapper function lookup
-                WirInstr::Unreachable
-            }
+            TirExprKind::ClosureToCanonical {
+                functor,
+                functor_id,
+                target_fn_type,
+            } => self.translate_closure_to_canonical(functor, *functor_id, *target_fn_type),
 
             // === Labeled Block Expression ===
             TirExprKind::LabeledBlock { label, block, .. } => {
@@ -937,20 +1406,22 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
+        // Resolve newtypes to their base primitive type
+        let base_type_id = self.type_table.get_ultimate_base_type(left_type_id);
         let is_i64 = matches!(
-            self.type_table.get(left_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
         let is_f64 = matches!(
-            self.type_table.get(left_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::F64)
         );
         let is_f32 = matches!(
-            self.type_table.get(left_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::F32)
         );
         let is_unsigned = matches!(
-            self.type_table.get(left_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(
                 PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
             )
@@ -1175,16 +1646,18 @@ impl FunctionTranslator<'_, '_> {
         operand: Box<WirInstr>,
         operand_type_id: TypeId,
     ) -> WirInstr {
+        // Resolve newtypes to their base primitive type
+        let base_type_id = self.type_table.get_ultimate_base_type(operand_type_id);
         let is_i64 = matches!(
-            self.type_table.get(operand_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
         );
         let is_f64 = matches!(
-            self.type_table.get(operand_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::F64)
         );
         let is_f32 = matches!(
-            self.type_table.get(operand_type_id),
+            self.type_table.get(base_type_id),
             ResolvedType::Primitive(PrimitiveType::F32)
         );
 
@@ -1217,9 +1690,22 @@ impl FunctionTranslator<'_, '_> {
 
     /// Translate a type cast.
     fn translate_cast(&mut self, inner: &TirExpr, from_type: TypeId, to_type: TypeId) -> WirInstr {
+        // Optimize: IntLiteral cast to i64/u64 → emit I64Const directly to avoid i32 truncation
+        let to_base = self.type_table.get_ultimate_base_type(to_type);
+        if let TirExprKind::IntLiteral { value, .. } = &inner.kind
+            && matches!(
+                self.type_table.get(to_base),
+                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
+            )
+        {
+            return WirInstr::I64Const(*value as i64);
+        }
+
         let inner_instr = self.translate_expr(inner);
-        let from = self.type_table.get(from_type);
-        let to = self.type_table.get(to_type);
+        // Resolve newtypes to their base types for cast operations
+        let from_base = self.type_table.get_ultimate_base_type(from_type);
+        let from = self.type_table.get(from_base);
+        let to = self.type_table.get(to_base);
 
         // Simple numeric casts
         match (from, to) {
@@ -1305,6 +1791,10 @@ impl FunctionTranslator<'_, '_> {
                     if let Some(id) = self.ctx.func_map.get(&fq2) {
                         return Some(id.clone());
                     }
+                    // Newtype fallback: if struct name is a newtype, try the base type name
+                    if let Some(id) = self.resolve_newtype_method(module_source, &method_info) {
+                        return Some(id);
+                    }
                 }
                 // Try searching all modules
                 for key in self.ctx.func_map.keys() {
@@ -1317,6 +1807,7 @@ impl FunctionTranslator<'_, '_> {
             FunctionRef::External {
                 module_source,
                 name,
+                method_info,
                 ..
             } => {
                 // Try direct name lookup
@@ -1329,6 +1820,12 @@ impl FunctionTranslator<'_, '_> {
                 if let Some(id) = self.ctx.func_map.get(&alias) {
                     return Some(id.clone());
                 }
+                // Newtype fallback: if struct name is a newtype, try the base type name
+                if let Some(method_info) = method_info
+                    && let Some(id) = self.resolve_newtype_method(module_source, method_info)
+                {
+                    return Some(id);
+                }
                 // Try suffix match
                 let suffix = format!("/{name}");
                 for key in self.ctx.func_map.keys() {
@@ -1339,6 +1836,56 @@ impl FunctionTranslator<'_, '_> {
                 None
             }
         }
+    }
+
+    /// Try to resolve a method call on a newtype by substituting the base type name.
+    /// For example, `Location::sum` → `Point::sum` when `type Location = Point`.
+    /// Follows the newtype chain for chained newtypes (C → B → A → Point).
+    fn resolve_newtype_method(
+        &self,
+        module_source: &crate::name::ModuleSource,
+        method_info: &crate::name::LocalMethodName,
+    ) -> Option<crate::wir::WirFuncId> {
+        let struct_name = &method_info.base_struct_name;
+        // Find a Newtype in the type table with this name
+        let base_name = self.resolve_newtype_to_base_struct_name(struct_name)?;
+        // Build a new method name with the base type's struct name
+        let mut resolved_info = method_info.clone();
+        resolved_info.struct_name = base_name.clone();
+        resolved_info.base_struct_name = base_name;
+        let mangled = resolved_info.to_mangled_name();
+        let fq = format!("{module_source}/{mangled}");
+        if let Some(id) = self.ctx.func_map.get(&fq) {
+            return Some(id.clone());
+        }
+        // Try suffix match with the resolved name
+        let suffix = format!("/{mangled}");
+        for key in self.ctx.func_map.keys() {
+            if key.ends_with(&suffix) {
+                return self.ctx.func_map.get(key).cloned();
+            }
+        }
+        None
+    }
+
+    /// Resolve a newtype name to the ultimate base struct/primitive name.
+    /// Returns `None` if the name is not a newtype.
+    fn resolve_newtype_to_base_struct_name(&self, name: &str) -> Option<String> {
+        // Search the type table for a Newtype with the given name
+        for type_id in self.type_table.iter_type_ids() {
+            if let ResolvedType::Newtype {
+                name: newtype_name,
+                base_type,
+                ..
+            } = self.type_table.get(type_id)
+                && newtype_name == name
+            {
+                // Follow the chain to the ultimate base type
+                let ultimate = self.type_table.get_ultimate_base_type(*base_type);
+                return Some(self.type_table.type_name(ultimate));
+            }
+        }
+        None
     }
 
     /// Translate a builtin intrinsic call to a WIR instruction.
@@ -1378,6 +1925,15 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
+            "builtin::i64_load" => {
+                let addr = self.translate_expr(&args[0]);
+                Some(WirInstr::I64Load {
+                    offset: 0,
+                    align: 3,
+                    addr: Box::new(addr),
+                })
+            }
+
             // === Memory Store Instructions ===
             "builtin::i32_store" => {
                 let addr = self.translate_expr(&args[0]);
@@ -1405,6 +1961,16 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::I32Store16 {
                     offset: 0,
                     align: 1,
+                    addr: Box::new(addr),
+                    value: Box::new(val),
+                })
+            }
+            "builtin::i64_store" => {
+                let addr = self.translate_expr(&args[0]);
+                let val = self.translate_expr(&args[1]);
+                Some(WirInstr::I64Store {
+                    offset: 0,
+                    align: 3,
                     addr: Box::new(addr),
                     value: Box::new(val),
                 })
@@ -1610,8 +2176,12 @@ impl FunctionTranslator<'_, '_> {
             // === Control ===
             "builtin::unreachable" => Some(WirInstr::Unreachable),
             "builtin::likely" | "builtin::unlikely" => {
-                // Branch hints: just pass through the value
-                Some(self.translate_expr(&args[0]))
+                let likely = builtin_name == "builtin::likely";
+                let expr = self.translate_expr(&args[0]);
+                Some(WirInstr::BranchHint {
+                    likely,
+                    expr: Box::new(expr),
+                })
             }
             "builtin::select" => {
                 let cond = self.translate_expr(&args[0]);
@@ -1626,6 +2196,38 @@ impl FunctionTranslator<'_, '_> {
                     if_false: Box::new(b),
                     ty: Some(result_type),
                 })
+            }
+
+            // === Multi-value 128-bit integer operations ===
+            "builtin::i64_add128" => {
+                let a_lo = Box::new(self.translate_expr(&args[0]));
+                let a_hi = Box::new(self.translate_expr(&args[1]));
+                let b_lo = Box::new(self.translate_expr(&args[2]));
+                let b_hi = Box::new(self.translate_expr(&args[3]));
+                Some(self.wrap_multivalue_i64(
+                    WirInstr::I64Add128(a_lo, a_hi, b_lo, b_hi),
+                    result_type_id,
+                ))
+            }
+            "builtin::i64_sub128" => {
+                let a_lo = Box::new(self.translate_expr(&args[0]));
+                let a_hi = Box::new(self.translate_expr(&args[1]));
+                let b_lo = Box::new(self.translate_expr(&args[2]));
+                let b_hi = Box::new(self.translate_expr(&args[3]));
+                Some(self.wrap_multivalue_i64(
+                    WirInstr::I64Sub128(a_lo, a_hi, b_lo, b_hi),
+                    result_type_id,
+                ))
+            }
+            "builtin::i64_mul_wide_u" => {
+                let a = Box::new(self.translate_expr(&args[0]));
+                let b = Box::new(self.translate_expr(&args[1]));
+                Some(self.wrap_multivalue_i64(WirInstr::I64MulWideU(a, b), result_type_id))
+            }
+            "builtin::i64_mul_wide_s" => {
+                let a = Box::new(self.translate_expr(&args[0]));
+                let b = Box::new(self.translate_expr(&args[1]));
+                Some(self.wrap_multivalue_i64(WirInstr::I64MulWideS(a, b), result_type_id))
             }
 
             // === No-op casts ===
@@ -1656,8 +2258,102 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
+            // === Future/Stream create pair ===
+            // Calls future_new/stream_new (returns i64), splits into [rx_i32, tx_i32] tuple
+            "builtin::future_create_pair" | "builtin::stream_create_pair" => {
+                let is_future = builtin_name == "builtin::future_create_pair";
+                let import_name = if is_future {
+                    "future_new"
+                } else {
+                    "stream_new"
+                };
+                let alias = format!("builtin/{import_name}");
+                let func_id = self.ctx.func_map.get(&alias)?.clone();
+
+                // Resolve the result tuple type for StructNew
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, result_type_id);
+                let type_id = match wir_type {
+                    WirType::Ref { type_id, .. } => type_id,
+                    _ => return None,
+                };
+
+                // Declare a temp local, call import → i64, split into [rx, tx] tuple
+                self.local_counter += 1;
+                let temp = format!("__pair_temp_{}", self.local_counter);
+                let declare = WirInstr::DeclareLocal {
+                    name: temp.clone(),
+                    ty: WirType::I64,
+                };
+                let call = WirInstr::Call {
+                    func_id,
+                    args: vec![],
+                };
+                let set_temp = WirInstr::LocalSet {
+                    name: temp.clone(),
+                    value: Box::new(call),
+                };
+                let get_low =
+                    WirInstr::I32WrapI64(Box::new(WirInstr::LocalGet { name: temp.clone() }));
+                let get_high = WirInstr::I32WrapI64(Box::new(WirInstr::I64ShrU(
+                    Box::new(WirInstr::LocalGet { name: temp }),
+                    Box::new(WirInstr::I64Const(32)),
+                )));
+
+                let mut instrs = vec![declare, set_temp];
+                // For futures, store the tx handle (high 32 bits) in the pending_trailers_tx
+                // global so the export adapter can write Ok(None) trailers after task-return.
+                if is_future
+                    && self
+                        .ctx
+                        .global_map
+                        .contains_key("global:__pending_trailers_tx")
+                {
+                    instrs.push(WirInstr::GlobalSet {
+                        name: WirName {
+                            display: "__pending_trailers_tx".to_string(),
+                            fq: "global:__pending_trailers_tx".to_string(),
+                        },
+                        value: Box::new(get_high.clone()),
+                    });
+                }
+                instrs.push(WirInstr::StructNew {
+                    type_id,
+                    fields: vec![get_low, get_high],
+                });
+                Some(WirInstr::Seq(instrs))
+            }
+
+            // === Global get pending trailers tx ===
+            "builtin::global_get_pending_trailers_tx" => Some(WirInstr::GlobalGet {
+                name: WirName {
+                    display: "__pending_trailers_tx".to_string(),
+                    fq: "global:__pending_trailers_tx".to_string(),
+                },
+            }),
+
             // Not an instruction-builtin; fall through to function call resolution
             _ => None,
+        }
+    }
+
+    /// Wrap a multi-value [i64, i64] instruction in a tuple struct.
+    /// The Wasm instruction pushes two i64s on the stack; we wrap them
+    /// in a `StructNew` for the result tuple type [i64, i64].
+    fn wrap_multivalue_i64(&self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
+        let wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+        if let WirType::Ref { type_id, .. } = wir_type {
+            // The multi-value instr pushes two i64s, then StructNew wraps them
+            WirInstr::MultiValueStructNew {
+                type_id,
+                instr: Box::new(instr),
+            }
+        } else {
+            // Fallback: just emit the instruction (shouldn't happen)
+            instr
         }
     }
 
@@ -1988,6 +2684,83 @@ impl FunctionTranslator<'_, '_> {
 
     // =========================================================================
     // Match translation
+    /// Translate a `LetPattern` (tuple destructuring) statement.
+    /// Evaluates the tuple expression, stores it in a temp local,
+    /// then binds each element to its pattern binding local.
+    fn translate_let_pattern(&mut self, pattern: &TirPattern, value: &TirExpr) -> Option<WirInstr> {
+        let value_instr = self.translate_expr(value);
+        let value_instr = self.maybe_value_copy(value, value_instr);
+
+        match pattern {
+            TirPattern::Tuple(patterns) => {
+                // Tuple elision: if the value is a multi-value instruction (e.g. i64.add128),
+                // bind results directly to locals without intermediate struct allocation.
+                if let WirInstr::MultiValueStructNew { instr, .. } = value_instr {
+                    let locals: Vec<Option<String>> = patterns
+                        .iter()
+                        .map(|p| {
+                            if let TirPattern::Binding { local_index, .. } = p {
+                                Some(self.local_name(*local_index))
+                            } else {
+                                None // wildcard
+                            }
+                        })
+                        .collect();
+                    return Some(WirInstr::MultiValueLocalBind { instr, locals });
+                }
+
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, value.type_id);
+                if let WirType::Ref { ref type_id, .. } = wir_type {
+                    let mut instrs = Vec::new();
+
+                    // Declare and assign a temp local for the tuple
+                    let temp_name = format!("__let_pattern_{}", self.match_counter);
+                    self.match_counter += 1;
+                    instrs.push(WirInstr::DeclareLocal {
+                        name: temp_name.clone(),
+                        ty: wir_type.clone(),
+                    });
+                    instrs.push(WirInstr::LocalSet {
+                        name: temp_name.clone(),
+                        value: Box::new(value_instr),
+                    });
+
+                    // Bind each element
+                    for (i, sub_pattern) in patterns.iter().enumerate() {
+                        if let TirPattern::Binding { local_index, .. } = sub_pattern {
+                            let local_name = self.local_name(*local_index);
+                            instrs.push(WirInstr::LocalSet {
+                                name: local_name,
+                                value: Box::new(WirInstr::StructGet {
+                                    type_id: type_id.clone(),
+                                    field_name: format!("{i}"),
+                                    expr: Box::new(WirInstr::LocalGet {
+                                        name: temp_name.clone(),
+                                    }),
+                                }),
+                            });
+                        }
+                        // Wildcard patterns: skip (no binding)
+                    }
+
+                    Some(WirInstr::Seq(instrs))
+                } else {
+                    // Non-ref tuple type — shouldn't happen for real tuples
+                    None
+                }
+            }
+            TirPattern::Binding { local_index, .. } => {
+                // Simple binding (not a tuple destructure)
+                let local_name = self.local_name(*local_index);
+                Some(WirInstr::LocalSet {
+                    name: local_name,
+                    value: Box::new(value_instr),
+                })
+            }
+            _ => None,
+        }
+    }
+
     // =========================================================================
 
     /// Translate match expression as nested if-else chain.
@@ -2048,26 +2821,6 @@ impl FunctionTranslator<'_, '_> {
                 scrutinee.type_id,
             );
 
-            // Apply guard if present
-            let full_condition = if let Some(guard) = &arm.guard {
-                let mut guard_instrs = Vec::new();
-                self.emit_pattern_bindings(
-                    &arm.pattern,
-                    &scrut_local_name,
-                    scrutinee.type_id,
-                    &mut guard_instrs,
-                );
-                let guard_expr = self.translate_expr(guard);
-                if guard_instrs.is_empty() {
-                    WirInstr::I32And(Box::new(condition), Box::new(guard_expr))
-                } else {
-                    guard_instrs.push(guard_expr);
-                    WirInstr::I32And(Box::new(condition), Box::new(WirInstr::Seq(guard_instrs)))
-                }
-            } else {
-                condition
-            };
-
             // For irrefutable patterns (wildcard, binding), just use the body
             let is_irrefutable = matches!(
                 arm.pattern,
@@ -2081,11 +2834,39 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     result = WirInstr::Seq(body_instrs);
                 }
+            } else if let Some(guard) = &arm.guard {
+                // Guard present: use nested if to avoid eager evaluation.
+                // Outer if checks the pattern condition; inner if checks the guard.
+                // This prevents pattern bindings (ref.cast etc.) from executing
+                // when the pattern doesn't match.
+                let mut inner_then = Vec::new();
+                self.emit_pattern_bindings(
+                    &arm.pattern,
+                    &scrut_local_name,
+                    scrutinee.type_id,
+                    &mut inner_then,
+                );
+                let guard_expr = self.translate_expr(guard);
+                // Inner if: check guard, run body or fall through to remaining arms
+                let inner_if = WirInstr::If {
+                    condition: Box::new(guard_expr),
+                    result: result_wir_type.clone(),
+                    then_body: body_instrs,
+                    else_body: Some(vec![result.clone()]),
+                };
+                inner_then.push(inner_if);
+                // Outer if: check pattern condition
+                result = WirInstr::If {
+                    condition: Box::new(condition),
+                    result: result_wir_type.clone(),
+                    then_body: inner_then,
+                    else_body: Some(vec![result]),
+                };
             } else {
                 let then_body = body_instrs;
                 let else_body = Some(vec![result]);
                 result = WirInstr::If {
-                    condition: Box::new(full_condition),
+                    condition: Box::new(condition),
                     result: result_wir_type.clone(),
                     then_body,
                     else_body,
@@ -2145,6 +2926,18 @@ impl FunctionTranslator<'_, '_> {
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
                 };
+
+                // Special case: Option<T> — represented as nullable ref, not a variant struct
+                if let ResolvedType::Option(_) = self.type_table.get(scrut_type) {
+                    return if variant_name == "Some" {
+                        // Some(_) → not null
+                        WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(Box::new(scrut_get))))
+                    } else {
+                        // None → is null
+                        WirInstr::RefIsNull(Box::new(scrut_get))
+                    };
+                }
+
                 // Look up variant type info to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(scrut_type) {
                     ResolvedType::Variant {
@@ -2308,6 +3101,57 @@ impl FunctionTranslator<'_, '_> {
                 if bindings.is_empty() {
                     return;
                 }
+
+                // Special case: Option<T> — extract inner value from nullable ref
+                if let ResolvedType::Option(inner) = self.type_table.get(*enum_type) {
+                    if variant_name == "Some" {
+                        // For Some(x), the value is the scrutinee itself (already non-null in
+                        // the matched branch). For primitive types in Box<T>, extract .value.
+                        let inner_wir = self.ctx.type_id_to_wir_type(self.type_table, *inner);
+                        for binding in bindings {
+                            if let TirPattern::Binding { local_index, .. } = binding {
+                                let scrut_ref = WirInstr::LocalGet {
+                                    name: scrut_local.to_string(),
+                                };
+                                let extracted = match inner_wir {
+                                    WirType::I8
+                                    | WirType::I16
+                                    | WirType::I32
+                                    | WirType::I64
+                                    | WirType::U8
+                                    | WirType::U16
+                                    | WirType::U32
+                                    | WirType::U64
+                                    | WirType::F32
+                                    | WirType::F64
+                                    | WirType::Bool
+                                    | WirType::Char => {
+                                        // Primitive in Box<T>: extract .value field
+                                        let opt_wir = self
+                                            .ctx
+                                            .type_id_to_wir_type(self.type_table, *enum_type);
+                                        if let WirType::Ref { type_id, .. } = opt_wir {
+                                            WirInstr::StructGet {
+                                                type_id,
+                                                field_name: "value".to_string(),
+                                                expr: Box::new(scrut_ref),
+                                            }
+                                        } else {
+                                            scrut_ref
+                                        }
+                                    }
+                                    _ => scrut_ref,
+                                };
+                                instrs.push(WirInstr::LocalSet {
+                                    name: self.local_name(*local_index),
+                                    value: Box::new(extracted),
+                                });
+                            }
+                        }
+                    }
+                    return;
+                }
+
                 // Look up the variant type to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(*enum_type) {
                     ResolvedType::Variant {
@@ -2358,17 +3202,51 @@ impl FunctionTranslator<'_, '_> {
                     });
                     // Extract each payload binding via struct.get from the cast local
                     for (i, binding) in bindings.iter().enumerate() {
+                        let payload_get = WirInstr::StructGet {
+                            type_id: case_type_id.clone(),
+                            field_name: format!("payload_{i}"),
+                            expr: Box::new(WirInstr::LocalGet {
+                                name: cast_local.clone(),
+                            }),
+                        };
                         if let TirPattern::Binding { local_index, .. } = binding {
                             instrs.push(WirInstr::LocalSet {
                                 name: self.local_name(*local_index),
-                                value: Box::new(WirInstr::StructGet {
-                                    type_id: case_type_id.clone(),
-                                    field_name: format!("payload_{i}"),
-                                    expr: Box::new(WirInstr::LocalGet {
-                                        name: cast_local.clone(),
-                                    }),
-                                }),
+                                value: Box::new(payload_get),
                             });
+                        } else if let TirPattern::Tuple(sub_patterns) = binding {
+                            // Tuple payload: payload_i is a ref to a tuple struct.
+                            // Extract each tuple field into the corresponding local.
+                            if let Some(tuple_type_id) =
+                                self.get_case_payload_ref_type(&case_type_id, i)
+                            {
+                                let tuple_local = format!("__tuple_payload_{variant_name}_{i}");
+                                instrs.push(WirInstr::DeclareLocal {
+                                    name: tuple_local.clone(),
+                                    ty: WirType::Ref {
+                                        type_id: tuple_type_id.clone(),
+                                        nullable: true,
+                                    },
+                                });
+                                instrs.push(WirInstr::LocalSet {
+                                    name: tuple_local.clone(),
+                                    value: Box::new(payload_get),
+                                });
+                                for (j, sub) in sub_patterns.iter().enumerate() {
+                                    if let TirPattern::Binding { local_index, .. } = sub {
+                                        instrs.push(WirInstr::LocalSet {
+                                            name: self.local_name(*local_index),
+                                            value: Box::new(WirInstr::StructGet {
+                                                type_id: tuple_type_id.clone(),
+                                                field_name: format!("{j}"),
+                                                expr: Box::new(WirInstr::LocalGet {
+                                                    name: tuple_local.clone(),
+                                                }),
+                                            }),
+                                        });
+                                    }
+                                }
+                            }
                         }
                     }
                 } else {
@@ -2394,6 +3272,25 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
         }
+    }
+
+    /// Look up a variant case struct's payload field type, extracting the inner
+    /// ref type ID. For `payload_i` of a tuple type, this returns the `WirTypeId`
+    /// of the tuple struct.
+    fn get_case_payload_ref_type(
+        &self,
+        case_type_id: &crate::wir::WirTypeId,
+        payload_index: usize,
+    ) -> Option<crate::wir::WirTypeId> {
+        let type_def = self.ctx.types.get(case_type_id.index() as usize)?;
+        if let crate::wir::WirTypeDef::Struct(s) = type_def {
+            // Fields are: [discriminant, payload_0, payload_1, ...]
+            let field = s.fields.get(payload_index + 1)?;
+            if let WirType::Ref { type_id, .. } = &field.ty {
+                return Some(type_id.clone());
+            }
+        }
+        None
     }
 
     // =========================================================================
@@ -2630,5 +3527,173 @@ impl FunctionTranslator<'_, '_> {
 
         // Fallback
         val
+    }
+
+    // =========================================================================
+    // Closure translations
+    // =========================================================================
+
+    /// Translate `IndirectCall { callee, args }` to `call_ref` through canonical closure.
+    fn translate_indirect_call(
+        &mut self,
+        callee: &TirExpr,
+        args: &[TirExpr],
+        result_type: TypeId,
+    ) -> WirInstr {
+        let callee_wir = self.translate_expr(callee);
+
+        // Look up the Function type to get param/result info
+        let fn_type = self.type_table.get(callee.type_id);
+        let (param_types, return_type) = match fn_type {
+            crate::tir::ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => (params.clone(), *return_type),
+            _ => return WirInstr::Unreachable,
+        };
+
+        // Compute canonical closure types directly by signature key
+        let param_wirs: Vec<WirType> = param_types
+            .iter()
+            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
+            .collect();
+        let result_wirs: Vec<WirType> =
+            if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
+                vec![]
+            } else {
+                vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
+            };
+        let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
+        let (fn_type_id, closure_struct_type_id) =
+            if let Some((ftid, stid)) = self.ctx.canonical_closure_types.get(&key) {
+                (ftid.clone(), stid.clone())
+            } else {
+                return WirInstr::Unreachable;
+            };
+
+        // Generate a temp local for the callee as canonical closure struct ref
+        let temp_name = format!("__indirect_call_{}", self.local_counter);
+        self.local_counter += 1;
+        let callee_ref_type = WirType::Ref {
+            type_id: closure_struct_type_id.clone(),
+            nullable: true,
+        };
+
+        // Build: declare temp, cast callee from abstract structref to canonical closure,
+        // store, extract env + args + funcref, call_ref
+        let mut stmts = vec![
+            WirInstr::DeclareLocal {
+                name: temp_name.clone(),
+                ty: callee_ref_type,
+            },
+            WirInstr::LocalSet {
+                name: temp_name.clone(),
+                value: Box::new(WirInstr::RefCast {
+                    type_id: closure_struct_type_id.clone(),
+                    nullable: true,
+                    expr: Box::new(callee_wir),
+                }),
+            },
+        ];
+
+        // Build args: env, then user args
+        let env_arg = WirInstr::StructGet {
+            type_id: closure_struct_type_id.clone(),
+            field_name: "env".to_string(),
+            expr: Box::new(WirInstr::LocalGet {
+                name: temp_name.clone(),
+            }),
+        };
+
+        let mut call_args = vec![env_arg];
+        for arg in args {
+            call_args.push(self.translate_expr(arg));
+        }
+
+        // func_ref = struct.get $closure "func"
+        let func_ref = WirInstr::StructGet {
+            type_id: closure_struct_type_id,
+            field_name: "func".to_string(),
+            expr: Box::new(WirInstr::LocalGet { name: temp_name }),
+        };
+
+        let call_ref = WirInstr::CallRef {
+            type_id: fn_type_id,
+            func_ref: Box::new(func_ref),
+            args: call_args,
+        };
+
+        if result_type == TypeTable::UNIT || result_type == TypeTable::NEVER {
+            stmts.push(call_ref);
+            WirInstr::Seq(stmts)
+        } else {
+            // Need to return the call result as the block value
+            stmts.push(call_ref);
+            let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
+            WirInstr::Block {
+                label: None,
+                result: Some(result_wir),
+                body: stmts,
+            }
+        }
+    }
+
+    /// Translate `ClosureToCanonical` — convert a functor struct to canonical closure.
+    fn translate_closure_to_canonical(
+        &mut self,
+        functor: &TirExpr,
+        functor_id: u32,
+        target_fn_type: TypeId,
+    ) -> WirInstr {
+        let functor_instr = self.translate_expr(functor);
+
+        // Look up the canonical closure struct type for the target function type
+        let fn_resolved = self.type_table.get(target_fn_type);
+        let (param_types, return_type) = match fn_resolved {
+            crate::tir::ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => (params.clone(), *return_type),
+            _ => return WirInstr::Unreachable,
+        };
+
+        let param_wirs: Vec<WirType> = param_types
+            .iter()
+            .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
+            .collect();
+        let result_wirs: Vec<WirType> =
+            if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
+                vec![]
+            } else {
+                vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
+            };
+
+        // Get canonical closure type
+        let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
+        let struct_type_id = if let Some((_, stid)) = self.ctx.canonical_closure_types.get(&key) {
+            stid.clone()
+        } else {
+            return WirInstr::Unreachable;
+        };
+
+        // Look up the pre-registered wrapper function for this functor
+        let wrapper_func_id = if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_id) {
+            id.clone()
+        } else {
+            return WirInstr::Unreachable;
+        };
+
+        // Build: CanonicalClosure { env: functor_as_structref, func: ref.func $wrapper }
+        WirInstr::StructNew {
+            type_id: struct_type_id,
+            fields: vec![
+                functor_instr,
+                WirInstr::RefFunc {
+                    func_id: wrapper_func_id,
+                },
+            ],
+        }
     }
 }
