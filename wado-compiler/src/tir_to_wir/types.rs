@@ -871,6 +871,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             let struct_name_str = &s.name.display;
 
             let mut resolved = None;
+
+            // Try resolving from TIR structs
             for tir_mod in ctx.project.tir_modules.values() {
                 let type_table = &*tir_mod.type_table.borrow();
                 for tir_struct in &tir_mod.structs {
@@ -884,7 +886,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     }
                     if field_idx < tir_struct.fields.len() {
                         let wir_type =
-                            ctx.type_id_to_wir_type(&type_table, tir_struct.fields[field_idx].type_id);
+                            ctx.type_id_to_wir_type(type_table, tir_struct.fields[field_idx].type_id);
                         if !is_abstract_ref(&wir_type) {
                             resolved = Some(wir_type);
                             break;
@@ -893,6 +895,33 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 }
                 if resolved.is_some() {
                     break;
+                }
+            }
+
+            // Try resolving from TIR tuple types (tuples have display names like "[T, U]")
+            if resolved.is_none() && struct_name_str.starts_with('[') {
+                for tir_mod in ctx.project.tir_modules.values() {
+                    let type_table = &*tir_mod.type_table.borrow();
+                    for type_id in type_table.iter_type_ids() {
+                        if let ResolvedType::Tuple(elements) = type_table.get(type_id) {
+                            if field_idx < elements.len() {
+                                // Check if this tuple maps to the same WIR type
+                                if let Some(wir_tid) = ctx.tuple_type_map.get(elements) {
+                                    if wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX) {
+                                        let wir_type =
+                                            ctx.type_id_to_wir_type(type_table, elements[field_idx]);
+                                        if !is_abstract_ref(&wir_type) {
+                                            resolved = Some(wir_type);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if resolved.is_some() {
+                        break;
+                    }
                 }
             }
 

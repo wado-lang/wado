@@ -1,0 +1,35 @@
+// Test: tuple return types containing struct-typed fields (String is a struct)
+// Exercises WIR tuple type registration where struct element types
+// require fixup from abstract structref to concrete types.
+
+use { println, Stdout } from "core:cli";
+
+fn make_labeled(x: i32) -> [String, i32] {
+    return [`value={x}`, x];
+}
+
+fn swap_strings(a: String, b: String) -> [String, String] {
+    return [b, a];
+}
+
+export fn run() with Stdout {
+    // Tuple with String and i32
+    let [s, n] = make_labeled(42);
+    assert s == "value=42";
+    assert n == 42;
+
+    // Tuple with two Strings
+    let [a, b] = swap_strings("hello", "world");
+    assert a == "world";
+    assert b == "hello";
+
+    // Access via index
+    let result = make_labeled(99);
+    assert result.0 == "value=99";
+    assert result.1 == 99;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
