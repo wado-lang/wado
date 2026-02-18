@@ -1,0 +1,22 @@
+// matches operator with Option guard - WIR min repro for json.wado bug
+// The pattern `opt matches { Some(c) && c == '.' }` must extract Box<char>.value
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    let c = char::from_i32(46);  // '.'
+    if c matches { Some(ch) && ch == '.' } {
+        assert true;
+    } else {
+        assert false, "should match";
+    }
+
+    let d = char::from_i32(65);  // 'A'
+    if d matches { Some(ch) && ch == '.' } {
+        assert false, "should not match";
+    }
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

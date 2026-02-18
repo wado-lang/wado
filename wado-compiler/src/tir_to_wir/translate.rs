@@ -3056,10 +3056,18 @@ impl FunctionTranslator<'_, '_> {
                                     name: scrut_local.to_string(),
                                 };
                                 let extracted = match inner_wir {
-                                    WirType::I32
+                                    WirType::I8
+                                    | WirType::I16
+                                    | WirType::I32
                                     | WirType::I64
+                                    | WirType::U8
+                                    | WirType::U16
+                                    | WirType::U32
+                                    | WirType::U64
                                     | WirType::F32
-                                    | WirType::F64 => {
+                                    | WirType::F64
+                                    | WirType::Bool
+                                    | WirType::Char => {
                                         // Primitive in Box<T>: extract .value field
                                         let opt_wir = self.ctx.type_id_to_wir_type(
                                             self.type_table,
