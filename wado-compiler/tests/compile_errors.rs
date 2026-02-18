@@ -8,10 +8,6 @@ mod common;
 use std::path::Path;
 use wado_compiler::CompileError;
 
-// ============================================================================
-// I/O Errors
-// ============================================================================
-
 #[test]
 fn test_io_error_file_not_found() {
     let result = common::compile_file(Path::new("nonexistent_file.wado"));
@@ -44,10 +40,6 @@ fn test_io_error_directory_instead_of_file() {
         other => panic!("Expected Io error, got: {other}"),
     }
 }
-
-// ============================================================================
-// Lexer Errors
-// ============================================================================
 
 #[test]
 fn test_lexer_error_unterminated_string() {
@@ -106,10 +98,6 @@ fn test_lexer_error_invalid_character() {
         other => panic!("Expected Lexer error, got: {other}"),
     }
 }
-
-// ============================================================================
-// Parser Errors
-// ============================================================================
 
 #[test]
 fn test_parser_error_missing_function_body() {
@@ -232,10 +220,6 @@ use;
     }
 }
 
-// ============================================================================
-// Analyzer Errors
-// ============================================================================
-
 #[test]
 fn test_analyzer_error_unknown_module() {
     let source = r#"
@@ -293,10 +277,6 @@ fn main() {
 // - Missing effect declarations (e.g., calling println without `with Stdout`)
 // - Type checking
 // These tests should be added when the analyzer is extended.
-
-// ============================================================================
-// Comparison Chaining Errors
-// ============================================================================
 
 #[test]
 fn test_comparison_chain_error_not_equal_cannot_chain() {
@@ -483,10 +463,6 @@ fn run() {
         other => panic!("Expected Parser error, got: {other}"),
     }
 }
-
-// ============================================================================
-// Error Display Format
-// ============================================================================
 
 #[test]
 fn test_error_display_with_filename() {

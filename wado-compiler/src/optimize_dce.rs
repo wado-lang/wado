@@ -1181,10 +1181,6 @@ fn is_generic_func_reachable(
     false
 }
 
-// =============================================================================
-// Type DCE - Remove unreachable types from TypeTable
-// =============================================================================
-
 /// Compute the set of reachable types from reachable functions.
 /// A type is reachable if it's used in any reachable function's signature,
 /// locals, or expressions.

@@ -2355,10 +2355,6 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    // =========================================================================
-    // Index translation
-    // =========================================================================
-
     /// Translate array index read: `arr[i]`
     fn translate_index(&mut self, array_expr: &TirExpr, index_expr: &TirExpr) -> WirInstr {
         let arr = self.translate_expr(array_expr);
@@ -2516,10 +2512,6 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    // =========================================================================
-    // Array Literal translation
-    // =========================================================================
-
     /// Translate array literal: `[1, 2, 3]`
     fn translate_array_literal(&mut self, elements: &[TirExpr], result_type: TypeId) -> WirInstr {
         if let Some(element_type_id) = self.type_table.as_array(result_type) {
@@ -2564,10 +2556,6 @@ impl FunctionTranslator<'_, '_> {
             WirInstr::Unreachable
         }
     }
-
-    // =========================================================================
-    // Switch translation
-    // =========================================================================
 
     /// Translate switch expression using `br_table`.
     fn translate_switch(
@@ -2680,8 +2668,6 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    // =========================================================================
-    // Match translation
     /// Translate a `LetPattern` (tuple destructuring) statement.
     /// Evaluates the tuple expression, stores it in a temp local,
     /// then binds each element to its pattern binding local.
@@ -2758,8 +2744,6 @@ impl FunctionTranslator<'_, '_> {
             _ => None,
         }
     }
-
-    // =========================================================================
 
     /// Translate match expression as nested if-else chain.
     fn translate_match(
@@ -3291,10 +3275,6 @@ impl FunctionTranslator<'_, '_> {
         None
     }
 
-    // =========================================================================
-    // Variant translation
-    // =========================================================================
-
     /// Translate variant construction: `Shape::Circle(5.0)`
     fn translate_variant_construct(
         &mut self,
@@ -3526,10 +3506,6 @@ impl FunctionTranslator<'_, '_> {
         // Fallback
         val
     }
-
-    // =========================================================================
-    // Closure translations
-    // =========================================================================
 
     /// Translate `IndirectCall { callee, args }` to `call_ref` through canonical closure.
     fn translate_indirect_call(

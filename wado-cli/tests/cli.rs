@@ -22,10 +22,6 @@ fn wado() -> assert_cmd::Command {
     cmd.into()
 }
 
-// =============================================================================
-// Root command tests
-// =============================================================================
-
 #[test]
 fn test_help() {
     wado()
@@ -63,10 +59,6 @@ fn test_unknown_command() {
         .failure()
         .stderr(predicate::str::contains("unknown command"));
 }
-
-// =============================================================================
-// Compile subcommand tests
-// =============================================================================
 
 #[test]
 fn test_compile_help() {
@@ -278,10 +270,6 @@ fn test_compile_opt_level_invalid() {
         .stderr(predicate::str::contains("unknown optimization level"));
 }
 
-// =============================================================================
-// Run subcommand tests
-// =============================================================================
-
 #[test]
 fn test_run_help() {
     wado()
@@ -326,10 +314,6 @@ fn test_run_unknown_option() {
         .failure()
         .stderr(predicate::str::contains("invalid option"));
 }
-
-// =============================================================================
-// Test subcommand tests
-// =============================================================================
 
 #[test]
 fn test_test_help() {

@@ -23,17 +23,11 @@
 //   let decompressed = inflate_zlib(&compressed);
 //   let decompressed_gz = inflate_gzip(&gzipped_data);
 
-// ============================================================================
-// Version
-// ============================================================================
 
 pub fn zlib_version() -> String {
     return "1.3.1.wado";
 }
 
-// ============================================================================
-// Public Constants
-// ============================================================================
 
 // Return codes
 pub global Z_OK: i32 = 0;
@@ -79,9 +73,6 @@ pub global Z_DEFLATED: i32 = 8;
 // Window size
 pub global MAX_WBITS: i32 = 15;
 
-// ============================================================================
-// Adler-32
-// ============================================================================
 
 pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     let base: u32 = 65521 as u32;
@@ -143,9 +134,6 @@ pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
     return sum1 | (sum2 << 16 as u32);
 }
 
-// ============================================================================
-// CRC-32
-// ============================================================================
 
 // Cached CRC32 table (lazy initialized)
 global mut CRC_TABLE: Array<u32> = [];
@@ -254,9 +242,6 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
     return c1 ^ crc2;
 }
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
 
 // Upper bound on compressed size for compress/compress2
 pub fn compress_bound(source_len: i32) -> i32 {
@@ -272,9 +257,6 @@ pub fn compress_bound(source_len: i32) -> i32 {
     return classic_bound;
 }
 
-// ============================================================================
-// Huffman Code Table Entry
-// ============================================================================
 
 struct Code {
     op: u8,     // operation, extra bits, table bits
@@ -288,9 +270,6 @@ impl Code {
     }
 }
 
-// ============================================================================
-// inflate_table - Build Huffman decoding tables
-// ============================================================================
 
 // Code type constants
 global CODES_TYPE: i32 = 0;
@@ -553,9 +532,6 @@ fn inflate_table(
     return [0, root, table_start + used];
 }
 
-// ============================================================================
-// Inflate (Decompression)
-// ============================================================================
 
 // Inflate mode constants
 global INF_HEAD: i32 = 0;
@@ -1348,9 +1324,6 @@ pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
     return result;
 }
 
-// ============================================================================
-// Deflate (Compression) - Simplified stored-block only for testing
-// ============================================================================
 
 // Simple deflate using stored blocks (no compression, for testing)
 pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
@@ -1415,9 +1388,6 @@ pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
     return output;
 }
 
-// ============================================================================
-// Deflate (Compression) with Fixed Huffman Codes + LZ77
-// ============================================================================
 
 // Bit-reverse a value of `len` bits
 fn bi_reverse(code: u32, len: i32) -> u32 {
@@ -1697,9 +1667,6 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
     return bw.output;
 }
 
-// ============================================================================
-// Dynamic Huffman Compression
-// ============================================================================
 
 // Huffman tree node for building optimal trees
 struct HuffNode {
@@ -2758,9 +2725,6 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
     return bw.output;
 }
 
-// ============================================================================
-// High-Level Compression API
-// ============================================================================
 
 // Wrap raw deflate data in zlib format
 fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
@@ -2809,9 +2773,6 @@ pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> A
     return zlib_wrap(input, &deflated, level);
 }
 
-// ============================================================================
-// Gzip Format Support
-// ============================================================================
 
 // Gzip header constants
 global GZIP_MAGIC1: u8 = 0x1F as u8;
@@ -2996,9 +2957,6 @@ pub fn uncompress(input: &Array<u8>) -> Array<u8> {
     return inflate_zlib(input);
 }
 
-// ============================================================================
-// Raw Deflate / Inflate API (no zlib/gzip wrapper)
-// ============================================================================
 
 // Deflate raw (no zlib/gzip header or trailer)
 pub fn deflate_raw(input: &Array<u8>) -> Array<u8> {
@@ -3019,9 +2977,6 @@ pub fn uncompress2(input: &Array<u8>, max_output: i32) -> Array<u8> {
     return result;
 }
 
-// ============================================================================
-// Gzip Header
-// ============================================================================
 
 // Gzip header fields for customization (deflateSetHeader / inflateGetHeader)
 pub struct GzipHeader {
@@ -3243,9 +3198,6 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
     return header;
 }
 
-// ============================================================================
-// Streaming API
-// ============================================================================
 
 // Format selection for streaming API
 pub global ZLIB_FORMAT: i32 = 0;    // zlib format (default)
@@ -3711,9 +3663,6 @@ impl InflateStream {
     }
 }
 
-// ============================================================================
-// Inflate Sync (Error Recovery)
-// ============================================================================
 
 // Scan for a valid deflate block in corrupted data
 // Returns the offset where a potential valid block starts, or -1 if not found

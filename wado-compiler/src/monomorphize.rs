@@ -243,10 +243,6 @@ impl Monomorphizer {
 
     /// Perform monomorphization on a module
     fn monomorphize(&mut self, mut module: TirModule) -> TirModule {
-        // ========================
-        // Struct Monomorphization
-        // ========================
-
         // Phase 1: Collect all generic struct definitions
         let generic_structs: IndexMap<String, TirStruct> = module
             .structs
@@ -300,10 +296,6 @@ impl Monomorphizer {
 
         // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
         self.rewrite_types_in_module(&mut module);
-
-        // ============================
-        // Function Monomorphization
-        // ============================
 
         // Phase 7: Collect all generic function definitions
         // Include both functions with method-level type params AND methods from generic impl blocks
@@ -421,10 +413,6 @@ impl Monomorphizer {
         external_generic_functions: &IndexMap<String, Rc<RefCell<TirFunction>>>,
         external_generic_structs: &IndexMap<String, TirStruct>,
     ) -> TirModule {
-        // ========================
-        // Struct Monomorphization
-        // ========================
-
         // Phase 1: Collect all generic struct definitions
         // Include both local structs AND external generic structs from other modules
         let mut generic_structs: IndexMap<String, TirStruct> = external_generic_structs.clone();
@@ -481,10 +469,6 @@ impl Monomorphizer {
 
         // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
         self.rewrite_types_in_module(&mut module);
-
-        // ============================
-        // Function Monomorphization
-        // ============================
 
         // Phase 7: Collect all generic function definitions
         // Include both local functions AND external generic functions from other modules
@@ -1245,10 +1229,6 @@ impl Monomorphizer {
             _ => type_id,
         }
     }
-
-    // ========================================================================
-    // Function Monomorphization
-    // ========================================================================
 
     /// Collect function instantiation sites from Call/MethodCall/StaticCall expressions
     fn collect_function_instantiation_sites(

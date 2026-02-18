@@ -386,9 +386,6 @@ pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
     return buf;
 }
 
-// ============================================================================
-// Format Specifier Types (Rust-compatible)
-// ============================================================================
 
 /// Alignment mode for formatted output
 pub enum Align {
@@ -490,9 +487,6 @@ impl FormatSpec {
     }
 }
 
-// ============================================================================
-// Format with Precision (core implementation)
-// ============================================================================
 
 /// Format f64 to decimal string with specified precision (digits after decimal point)
 /// precision < 0 means use shortest representation
@@ -668,9 +662,6 @@ pub fn format_exp_prec(d: i64, p: i32, nd: i32, precision: i32, upper: bool) -> 
     return buf;
 }
 
-// ============================================================================
-// Padding and Alignment
-// ============================================================================
 
 /// Apply padding and alignment to a string
 pub fn apply_padding(s: String, spec: FormatSpec, is_neg: bool) -> String {
@@ -756,9 +747,6 @@ pub fn add_sign_prefix(s: String, is_neg: bool, sign: Sign) -> String {
     };
 }
 
-// ============================================================================
-// Main Format Function with FormatSpec
-// ============================================================================
 
 /// Format f64 with full format specification
 pub fn format_f64(f: f64, spec: FormatSpec) -> String {
@@ -895,9 +883,6 @@ pub fn format_f64(f: f64, spec: FormatSpec) -> String {
     return apply_padding(with_sign, spec, is_neg);
 }
 
-// ============================================================================
-// Convenience Functions with Format Spec
-// ============================================================================
 
 /// Format f64 with precision only
 pub fn f64_to_string_prec(f: f64, precision: i32) -> String {
@@ -970,9 +955,6 @@ pub fn f64_to_string_fill(f: f64, width: i32, fill: char, align: Align) -> Strin
     return format_f64(f, spec);
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
 
 // Helper: check for special values (zero, infinity, NaN)
 // Returns: [is_special, is_neg, special_string_or_empty]
@@ -1095,9 +1077,6 @@ pub fn f64_to_string_auto(f: f64) -> String {
     return formatted;
 }
 
-// ============================================================================
-// f32 wrappers (cast to f64)
-// ============================================================================
 
 // Convert f32 to decimal string
 pub fn f32_to_string(f: f32) -> String {

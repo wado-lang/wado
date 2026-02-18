@@ -22,10 +22,6 @@ use indexmap::IndexMap;
 use crate::name::ModuleSource;
 use crate::token::Span;
 
-// =============================================================================
-// Module Level
-// =============================================================================
-
 /// A complete Wasm module in WIR form.
 /// Contains all information needed to emit a valid Wasm binary.
 #[derive(Debug)]
@@ -81,10 +77,6 @@ impl WirModule {
     }
 }
 
-// =============================================================================
-// Names
-// =============================================================================
-
 /// A globally-scoped name in WIR.
 ///
 /// Carries both forms needed by different consumers:
@@ -108,10 +100,6 @@ impl fmt::Display for WirName {
         write!(f, "{}", self.display)
     }
 }
-
-// =============================================================================
-// Type and Function IDs
-// =============================================================================
 
 /// Lightweight reference to a type definition in `WirModule.types`.
 ///
@@ -221,10 +209,6 @@ impl fmt::Display for WirFuncId {
     }
 }
 
-// =============================================================================
-// Metadata
-// =============================================================================
-
 /// Source location and origin metadata, carried through from TIR.
 #[derive(Debug, Clone, Default)]
 pub struct WirMeta {
@@ -261,10 +245,6 @@ pub struct WirNewtypeOrigin {
     pub module_source: ModuleSource,
 }
 
-// =============================================================================
-// Type Definitions
-// =============================================================================
-
 /// A Wado-level type definition.
 /// The emit phase expands these into Wasm type section entries:
 ///   Struct → 1 Wasm struct type
@@ -288,10 +268,6 @@ pub enum WirTypeDef {
     /// Function type.
     Func(WirFuncType),
 }
-
-// =============================================================================
-// Struct
-// =============================================================================
 
 /// A struct type with named fields.
 #[derive(Debug)]
@@ -318,10 +294,6 @@ pub struct WirField {
     /// Whether this field is mutable.
     pub mutable: bool,
 }
-
-// =============================================================================
-// Variant
-// =============================================================================
 
 /// A variant type (sum type with payloads).
 /// At the Wasm level, expands to a subtype hierarchy: a base struct with a
@@ -351,10 +323,6 @@ pub struct WirVariantCase {
     pub payload: Vec<WirType>,
 }
 
-// =============================================================================
-// Enum
-// =============================================================================
-
 /// An enum type (discriminated values without payloads).
 /// No Wasm type section entry — values are i32 discriminants.
 #[derive(Debug)]
@@ -376,10 +344,6 @@ pub struct WirEnumCase {
     pub discriminant: i32,
 }
 
-// =============================================================================
-// Flags
-// =============================================================================
-
 /// A flags type (bitfield).
 /// No Wasm type section entry — values are i32 bitfields.
 #[derive(Debug)]
@@ -400,10 +364,6 @@ pub struct WirFlagBit {
     /// Bit position (0-indexed).
     pub position: u32,
 }
-
-// =============================================================================
-// Array and Func Types
-// =============================================================================
 
 /// An array type (maps to 1 Wasm array type).
 #[derive(Debug)]
@@ -430,10 +390,6 @@ pub struct WirFuncType {
     /// Result types.
     pub results: Vec<WirType>,
 }
-
-// =============================================================================
-// WIR Type System
-// =============================================================================
 
 /// WIR type — Wado-level primitives + GC references.
 ///
@@ -498,10 +454,6 @@ pub enum WirAbstractHeapType {
     Extern,
 }
 
-// =============================================================================
-// Functions
-// =============================================================================
-
 /// A function declaration with optional body.
 #[derive(Debug)]
 pub struct WirFunction {
@@ -520,10 +472,6 @@ pub struct WirFunction {
     /// Effect requirements (for unparse display).
     pub effects: Vec<String>,
 }
-
-// =============================================================================
-// Instructions
-// =============================================================================
 
 /// WIR instructions are tree-structured where operands are child nodes,
 /// not stack values. This makes the structure inspectable and allows inline
@@ -1311,10 +1259,6 @@ impl WirInstr {
     }
 }
 
-// =============================================================================
-// Copy Types
-// =============================================================================
-
 /// What kind of value copy to perform.
 #[derive(Debug, Clone)]
 pub enum WirCopyType {
@@ -1350,10 +1294,6 @@ pub struct WirCopyCase {
     pub name: String,
     pub payload_copy: Option<WirCopyType>,
 }
-
-// =============================================================================
-// Module-level Sections
-// =============================================================================
 
 /// Rec group: a set of mutually-recursive type definitions.
 #[derive(Debug)]
@@ -1473,10 +1413,6 @@ pub struct WirNames {
     /// Global names: index → name.
     pub global_names: Vec<(u32, String)>,
 }
-
-// =============================================================================
-// Component Model
-// =============================================================================
 
 /// Component Model wrapper information.
 #[derive(Debug, Default)]

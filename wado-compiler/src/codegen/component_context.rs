@@ -6,10 +6,6 @@
 
 use indexmap::IndexMap;
 
-// ============================================================================
-// ComponentModelContext - Tracks component-level indices
-// ============================================================================
-
 /// Tracks component-level indices for types, instances, and core functions.
 /// Used alongside wasm-encoder's `ComponentBuilder` to eliminate magic numbers.
 pub struct ComponentModelContext {

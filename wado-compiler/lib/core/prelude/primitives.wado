@@ -15,9 +15,6 @@ fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     return arr;
 }
 
-// ============================================================
-// Format helper functions
-// ============================================================
 // These write formatted values directly to a Formatter's buffer,
 // avoiding intermediate GC String allocations in the common case.
 
@@ -354,9 +351,6 @@ fn fmt_int_base(abs_val: i64, is_negative: bool, f: &mut Formatter, base: i32, u
     write_base_digits(f.buf.internal_raw_bytes(), offset, abs_val, digit_count, base, upper);
 }
 
-// ============================================================
-// Primitive type methods
-// ============================================================
 
 impl bool {
     pub fn to_string(self) -> String {
@@ -770,9 +764,6 @@ impl f64 {
     /// Floating-point remainder of x/y
     pub fn fmod(x: f64, y: f64) -> f64 { return builtin::f64_fmod(x, y); }
 }
-// ============================================================
-// Display trait implementations
-// ============================================================
 
 impl Display for bool {
     pub fn fmt(&self, f: &mut Formatter) {
@@ -852,9 +843,6 @@ impl Display for f64 {
     }
 }
 
-// ============================================================
-// LowerExp / UpperExp trait implementations (TODO)
-// ============================================================
 
 impl LowerExp for f32 {
     pub fn fmt(&self, f: &mut Formatter) {
@@ -880,9 +868,6 @@ impl UpperExp for f64 {
     }
 }
 
-// ============================================================
-// Binary trait implementations (base 2)
-// ============================================================
 
 impl Binary for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
@@ -955,9 +940,6 @@ impl Binary for i64 {
     }
 }
 
-// ============================================================
-// Octal trait implementations (base 8)
-// ============================================================
 
 impl Octal for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
@@ -1028,9 +1010,6 @@ impl Octal for i64 {
     }
 }
 
-// ============================================================
-// LowerHex trait implementations (base 16, lowercase)
-// ============================================================
 
 impl LowerHex for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
@@ -1101,9 +1080,6 @@ impl LowerHex for i64 {
     }
 }
 
-// ============================================================
-// UpperHex trait implementations (base 16, uppercase)
-// ============================================================
 
 impl UpperHex for i8 {
     pub fn fmt(&self, f: &mut Formatter) {
@@ -1174,9 +1150,6 @@ impl UpperHex for i64 {
     }
 }
 
-// ============================================================
-// u64 Binary/Octal/Hex trait implementations (unsigned, power-of-2 bases)
-// ============================================================
 
 impl Binary for u64 {
     pub fn fmt(&self, f: &mut Formatter) {

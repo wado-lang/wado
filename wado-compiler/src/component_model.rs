@@ -819,10 +819,6 @@ impl WasiRegistry {
         })
     }
 
-    // ============================================================================
-    // Type Conversion (AST types to Wasm types)
-    // ============================================================================
-
     /// Resolve newtypes in a Type recursively
     ///
     /// This resolves newtypes like `Instant` -> `u64` throughout the type tree,
@@ -884,10 +880,6 @@ impl WasiRegistry {
         }
     }
 }
-
-// ============================================================================
-// CM Instance Type Generation
-// ============================================================================
 
 use wasm_encoder::{ComponentValType, InstanceType, PrimitiveValType, TypeBounds};
 
@@ -1167,10 +1159,6 @@ impl CmInstanceTypeGen {
     }
 }
 
-// ============================================================================
-// Type Conversion (AST Type to Wasm ValType)
-// ============================================================================
-
 /// Convert a pre-resolved AST type to Wasm `ValType`
 ///
 /// This is a pure conversion function - newtypes must already be resolved
@@ -1317,10 +1305,6 @@ pub fn type_id_to_valtype(type_id: TypeId) -> ValType {
         }
     }
 }
-
-// ============================================================================
-// Type Support Checking (for Component Model generation)
-// ============================================================================
 
 /// Check if a parameter type is supported for Component Model generation
 ///
@@ -1542,10 +1526,6 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
         _ => false,
     }
 }
-
-// ============================================================================
-// Component Model Call Convention
-// ============================================================================
 
 /// Primitive type for CM tuple return handling
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

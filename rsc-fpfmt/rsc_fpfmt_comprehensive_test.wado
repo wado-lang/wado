@@ -16,9 +16,6 @@ fn f64_from_bits(bits: i64) -> f64 {
     return builtin::f64_reinterpret_i64(bits);
 }
 
-// ============================================================================
-// Test runner for data-driven tests
-// ============================================================================
 
 fn run_test_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: String) -> i32 with Stdout {
     let mut failures = 0;
@@ -40,9 +37,6 @@ fn run_test_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: Strin
     return failures;
 }
 
-// ============================================================================
-// Main tests
-// ============================================================================
 
 test "comprehensive testFloats" {
     let bits = test_floats_bits();
@@ -58,10 +52,6 @@ test "comprehensive hardFloats" {
     assert failures == 0, `hardFloats: {failures} failures`;
 }
 
-// ============================================================================
-// Test data - testFloats (8180 values)
-// Powers of 2, powers of 10, and nextafter values
-// ============================================================================
 
 fn test_floats_bits() -> Array<i64> {
     return [

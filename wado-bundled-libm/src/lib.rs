@@ -8,9 +8,6 @@
 #[cfg(target_arch = "wasm32")]
 use core::panic::PanicInfo;
 
-// ============================================================================
-// Math functions (libm)
-// ============================================================================
 // Note: sqrt, abs, ceil, floor, trunc, nearest, min, max, copysign are already
 // provided as builtin functions (direct Wasm instructions) in builtin.wado.
 

@@ -17,10 +17,6 @@ fn compile_fixture(fixture: &str) -> wado_compiler::CompileResult {
         .unwrap_or_else(|e| panic!("Compilation failed: {e}"))
 }
 
-// ============================================================================
-// Branch Hints Test
-// ============================================================================
-
 /// Test that branch hints are correctly emitted for likely/unlikely builtins
 #[test]
 fn test_branch_hints_emitted() {
@@ -65,10 +61,6 @@ fn test_branch_hints_values() {
         "Branch hints section appears to be empty or too short"
     );
 }
-
-// ============================================================================
-// Tuple Elision Optimization Test
-// ============================================================================
 
 /// Test that multi-value builtin calls with destructuring do not generate tuple structs.
 /// When `let [lo, hi] = builtin::i64_add128(...)` is used, the codegen should directly

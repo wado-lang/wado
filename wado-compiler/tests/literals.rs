@@ -5,10 +5,6 @@
 
 use wado_compiler::{Lexer, Parser};
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
 /// Parse a simple expression and return the AST
 fn parse_expr(source: &str) -> Result<wado_compiler::ast::Module, String> {
     // Wrap the expression in a function to make it a valid module
@@ -40,10 +36,6 @@ fn extract_literal(module: &wado_compiler::ast::Module) -> Option<&wado_compiler
     Some(&lit_expr.value)
 }
 
-// ============================================================================
-// Boolean Literals
-// ============================================================================
-
 #[test]
 fn test_bool_true() {
     let module = parse_expr("true").expect("parse failed");
@@ -65,10 +57,6 @@ fn test_bool_false() {
         other => panic!("expected Bool(false), got {:?}", other),
     }
 }
-
-// ============================================================================
-// Integer Literals
-// ============================================================================
 
 #[test]
 fn test_integer_zero() {
@@ -143,10 +131,6 @@ fn test_integer_octal() {
     }
 }
 
-// ============================================================================
-// Floating-Point Literals
-// ============================================================================
-
 #[test]
 fn test_float_simple() {
     let module = parse_expr("3.25").expect("parse failed");
@@ -210,10 +194,6 @@ fn test_float_with_separator() {
         other => panic!("expected Number(1_000_000.5), got {:?}", other),
     }
 }
-
-// ============================================================================
-// String Literals
-// ============================================================================
 
 #[test]
 fn test_string_empty() {
@@ -444,10 +424,6 @@ fn test_string_surrogate_pair() {
     }
 }
 
-// ============================================================================
-// Unit Literal
-// ============================================================================
-
 #[test]
 fn test_unit_literal() {
     let module = parse_expr("()").expect("parse failed");
@@ -458,10 +434,6 @@ fn test_unit_literal() {
         other => panic!("expected Unit, got {:?}", other),
     }
 }
-
-// ============================================================================
-// Error Cases
-// ============================================================================
 
 #[test]
 fn test_string_unterminated() {
@@ -477,10 +449,6 @@ fn test_string_invalid_escape() {
         "expected error for invalid escape sequence"
     );
 }
-
-// ============================================================================
-// Character Literals
-// ============================================================================
 
 #[test]
 fn test_char_simple() {
@@ -511,10 +479,6 @@ fn test_char_unicode() {
         other => panic!("expected Char('A'), got {:?}", other),
     }
 }
-
-// ============================================================================
-// Null Literal
-// ============================================================================
 
 #[test]
 fn test_null_literal() {

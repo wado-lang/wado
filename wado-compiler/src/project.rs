@@ -24,9 +24,6 @@ use indexmap::{IndexMap, IndexSet};
 /// including the results of optimization analysis.
 #[derive(Debug)]
 pub struct Project {
-    // ========================================
-    // Source artifacts
-    // ========================================
     /// The entry module source
     pub entry_module_source: ModuleSource,
     /// All TIR modules indexed by module source
@@ -38,9 +35,6 @@ pub struct Project {
     /// Module name for the output (derived from filename)
     pub module_name: String,
 
-    // ========================================
-    // Registries (built once, shared across phases)
-    // ========================================
     /// Registry of WASI imports from lib/wasi/*.wado
     pub wasi_registry: &'static WasiRegistry,
     /// Registry of world definitions from lib/wasi/*.wado
@@ -48,16 +42,10 @@ pub struct Project {
     /// Registry of builtin function signatures from lib/core/builtin.wado
     pub builtin_registry: BuiltinRegistry,
 
-    // ========================================
-    // Usage analysis results (what the project contains)
-    // ========================================
     /// Set of reachable functions (from DCE analysis)
     pub reachable_functions: IndexSet<FunctionId>,
     /// Set of used WASI functions (e.g., "`Stdout::write_via_stream`")
     pub used_wasi_functions: IndexSet<String>,
-    // ========================================
-    // Codegen options
-    // ========================================
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
     /// When true, skip Wasm validation after code generation.
@@ -67,16 +55,10 @@ pub struct Project {
     /// Defaults to "Command" (wasi:cli/command)
     pub target_world: String,
 
-    // ========================================
-    // CM export characteristics (derived from target_world)
-    // ========================================
     /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
     /// This determines whether HTTP-related glue code is needed.
     pub has_http_handler_export: bool,
 
-    // ========================================
-    // CM export adapter mapping (populated by cm_adapter_gen)
-    // ========================================
     /// Maps world export name → adapter function name.
     /// Populated by `cm_adapter_gen` when export adapters are synthesized.
     /// For example: `"run"` → `"__cm_export__run"`.
@@ -86,9 +68,6 @@ pub struct Project {
     /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
     pub task_return_flat_params: Option<Vec<TypeId>>,
 
-    // ========================================
-    // Wasm plan (populated by wasm_plan phase, consumed by codegen)
-    // ========================================
     /// Component Model structure plan. Populated by the `wasm_plan` phase.
     pub component_plan: Option<ComponentPlan>,
 }

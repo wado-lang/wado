@@ -48,10 +48,6 @@ impl Drop for WasmGuard {
     }
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
 /// Format a byte slice as Wado array literal elements: "72,101,..."
 fn bytes_to_wado_array(data: &[u8]) -> String {
     data.iter()
@@ -293,10 +289,6 @@ fn test_data_pseudorandom(size: usize) -> Vec<u8> {
     data
 }
 
-// ============================================================================
-// Tests: Wado compress -> zlib-rs decompress (all levels)
-// ============================================================================
-
 #[test]
 fn wado_compress_hello_decompressed_by_zlib_rs() {
     let input = b"Hello";
@@ -348,10 +340,6 @@ fn wado_compress_all_levels_decompressed_by_zlib_rs() {
     }
 }
 
-// ============================================================================
-// Tests: Wado compress with strategies -> zlib-rs decompress
-// ============================================================================
-
 #[test]
 fn wado_compress_strategy_filtered_decompressed_by_zlib_rs() {
     let input = test_data_sequential(500);
@@ -392,10 +380,6 @@ fn wado_compress_strategy_fixed_decompressed_by_zlib_rs() {
     assert_eq!(decompressed, input, "cross-inflate Z_FIXED failed");
 }
 
-// ============================================================================
-// Tests: zlib-rs compress -> Wado decompress (all levels)
-// ============================================================================
-
 #[test]
 fn zlib_rs_all_levels_inflated_by_wado() {
     let input = test_data_sequential(500);
@@ -433,10 +417,6 @@ fn zlib_rs_pseudorandom_data_inflated_by_wado() {
         "Wado inflate failed for pseudo-random data"
     );
 }
-
-// ============================================================================
-// Tests: Raw deflate cross-validation (via flate2)
-// ============================================================================
 
 #[test]
 fn wado_raw_deflate_decompressed_by_flate2() {
@@ -479,10 +459,6 @@ fn flate2_raw_deflate_all_levels_inflated_by_wado() {
     }
 }
 
-// ============================================================================
-// Tests: Gzip format cross-validation (via flate2)
-// ============================================================================
-
 #[test]
 fn wado_gzip_compress_decompressed_by_flate2() {
     let input = test_data_text(5);
@@ -523,10 +499,6 @@ fn flate2_gzip_all_levels_inflated_by_wado() {
         );
     }
 }
-
-// ============================================================================
-// Tests: Checksum compatibility
-// ============================================================================
 
 #[test]
 fn adler32_crc32_hello_matches_zlib_rs() {
@@ -693,10 +665,6 @@ export fn run() with Stdout {{
     assert_eq!(wado_combined, rs_combined, "crc32_combine mismatch");
 }
 
-// ============================================================================
-// Tests: Bit-exact stored block comparison
-// ============================================================================
-
 #[test]
 fn stored_block_bit_exact_hello() {
     let input = b"Hello";
@@ -752,10 +720,6 @@ export fn run() with Stdout {{
         "stored block bit-exact mismatch for sequential bytes"
     );
 }
-
-// ============================================================================
-// Tests: Edge cases
-// ============================================================================
 
 #[test]
 fn cross_validate_single_byte() {
@@ -839,10 +803,6 @@ export fn run() with Stdout {{
     );
 }
 
-// ============================================================================
-// Tests: compress_bound cross-validation
-// ============================================================================
-
 #[test]
 fn compress_bound_matches_zlib_rs() {
     let source = r#"use { println, Stdout } from "core:cli";
@@ -870,10 +830,6 @@ export fn run() with Stdout {
         );
     }
 }
-
-// ============================================================================
-// Tests: Streaming API with preset dictionary
-// ============================================================================
 
 #[test]
 fn wado_streaming_preset_dict_decompressed_by_zlib_rs() {
@@ -923,10 +879,6 @@ export fn run() with Stdout {
     );
 }
 
-// ============================================================================
-// Tests: Version string
-// ============================================================================
-
 #[test]
 fn wado_zlib_version() {
     let source = r#"use { println, Stdout } from "core:cli";
@@ -942,10 +894,6 @@ export fn run() with Stdout {
         "zlib_version should return '1.3.1.wado'"
     );
 }
-
-// ============================================================================
-// Tests: GzipHeader customization
-// ============================================================================
 
 #[test]
 fn wado_gzip_custom_header_decompressed_by_flate2() {
@@ -984,10 +932,6 @@ export fn run() with Stdout {
         "custom gzip header round-trip failed"
     );
 }
-
-// ============================================================================
-// Tests: DeflateStream format selection
-// ============================================================================
 
 #[test]
 fn wado_deflate_stream_raw_format_decompressed_by_flate2() {
@@ -1051,10 +995,6 @@ export fn run() with Stdout {
         "DeflateStream GZIP_FORMAT cross-inflate failed"
     );
 }
-
-// ============================================================================
-// Tests: InflateStream format selection
-// ============================================================================
 
 #[test]
 fn wado_inflate_stream_raw_format_from_flate2() {
@@ -1168,10 +1108,6 @@ export fn run() with Stdout {{
     );
 }
 
-// ============================================================================
-// Tests: DeflateStream reset/copy
-// ============================================================================
-
 #[test]
 fn wado_deflate_stream_reset() {
     let source = r#"use { print, println, Stdout } from "core:cli";
@@ -1251,10 +1187,6 @@ export fn run() with Stdout {
     assert_eq!(stdout.trim(), "copy ok");
 }
 
-// ============================================================================
-// Tests: InflateStream reset/copy
-// ============================================================================
-
 #[test]
 fn wado_inflate_stream_reset() {
     let input1 = b"First data";
@@ -1293,10 +1225,6 @@ export fn run() with Stdout {{
     assert_eq!(stdout.trim(), "inflate reset ok");
 }
 
-// ============================================================================
-// Tests: DeflateStream params (level/strategy change)
-// ============================================================================
-
 #[test]
 fn wado_deflate_stream_params() {
     let source = r#"use { print, println, Stdout } from "core:cli";
@@ -1325,10 +1253,6 @@ export fn run() with Stdout {
     assert_eq!(stdout.trim(), "params ok");
 }
 
-// ============================================================================
-// Tests: total_in / total_out tracking
-// ============================================================================
-
 #[test]
 fn wado_deflate_stream_totals() {
     let source = r#"use { println, Stdout } from "core:cli";
@@ -1352,10 +1276,6 @@ export fn run() with Stdout {
     assert_eq!(lines[0], "100");
     assert_eq!(lines.last().unwrap(), &"totals ok");
 }
-
-// ============================================================================
-// Tests: Compression size comparison (Wado within 10% of zlib-rs)
-// ============================================================================
 
 fn assert_size_within_10_percent(wado_len: usize, rs_len: usize, label: &str) {
     let max_len = wado_len.max(rs_len);

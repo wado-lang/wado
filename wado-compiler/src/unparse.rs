@@ -1947,10 +1947,6 @@ fn escape_char(c: char) -> String {
     }
 }
 
-// ============================================================================
-// Simple AST Expression Unparser (for desugaring)
-// ============================================================================
-
 /// Unparse an AST expression to a string without comments.
 /// Used by the desugar phase for generating error messages.
 pub fn unparse_expr_simple(expr: &Expr) -> String {
@@ -2118,10 +2114,6 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
         Literal::LocationFunction => output.push_str("#function"),
     }
 }
-
-// ============================================================================
-// TIR Unparser
-// ============================================================================
 
 use crate::lexer::is_valid_ident;
 use crate::tir::{

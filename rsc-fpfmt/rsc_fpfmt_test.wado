@@ -25,9 +25,6 @@ use {
 use {println, Stdout} from "core:cli";
 use {now, MonotonicClock} from "core:clocks";
 
-// ============================================================================
-// Helper function tests
-// ============================================================================
 
 test "log10_pow2 approximation" {
     // log10(2^x) = x * log10(2) ≈ x * 0.30103
@@ -88,9 +85,6 @@ test "digits count" {
     assert digits(10000000000000000 as u64) == 17;
 }
 
-// ============================================================================
-// Bit manipulation tests
-// ============================================================================
 
 test "rotate_right" {
     // Rotate 1 right by 1 puts it in MSB
@@ -148,9 +142,6 @@ test "trim_zeros with initial exponent" {
     assert t2.1 == 0;  // -2 + 2 = 0
 }
 
-// ============================================================================
-// Float unpacking tests
-// ============================================================================
 
 test "unpack64 normal numbers" {
     // 1.0 = 0x3FF0000000000000
@@ -187,9 +178,6 @@ test "unpack64 zero" {
     assert r0.exponent == 0;
 }
 
-// ============================================================================
-// Short formatting tests - basic values
-// ============================================================================
 
 test "short integers 1-9" {
     let r1 = short(1.0);
@@ -372,9 +360,6 @@ test "short euler number" {
     assert digits(r.digits) <= 17;
 }
 
-// ============================================================================
-// Short formatting tests - negative values
-// ============================================================================
 
 test "short negative values symmetry" {
     // Negative values should produce same digits
@@ -394,9 +379,6 @@ test "short negative values symmetry" {
     assert pos_123.exponent == neg_123.exponent;
 }
 
-// ============================================================================
-// Fixed width formatting tests
-// ============================================================================
 
 test "fixed_width 1 digit" {
     let r1 = fixed_width(1.0, 1);
@@ -467,9 +449,6 @@ test "fixed_width powers of 10" {
     assert r01.exponent == -1;
 }
 
-// ============================================================================
-// f64_to_string_exp tests - special values
-// ============================================================================
 
 test "f64_to_string_exp zero" {
     let s0 = f64_to_string_exp(0.0, false);
@@ -495,9 +474,6 @@ test "f64_to_string_exp NaN" {
     assert s_nan == "NaN";
 }
 
-// ============================================================================
-// f64_to_string_exp tests - basic values
-// ============================================================================
 
 test "f64_to_string_exp single digit integers" {
     assert f64_to_string_exp(1.0, false) == "1e+00";
@@ -559,9 +535,6 @@ test "f64_to_string_exp three digit exponent" {
     assert small.len() > 0;
 }
 
-// ============================================================================
-// f64_to_string_exp tests - precision
-// ============================================================================
 
 test "f64_to_string_exp pi precision" {
     let pi = 3.141592653589793;
@@ -591,9 +564,6 @@ test "f64_to_string_exp round trip consistency" {
     assert str_result.get_byte(0) == ('0' as i32) + (first_digit as i32);
 }
 
-// ============================================================================
-// IEEE 754 bit pattern tests
-// ============================================================================
 
 test "IEEE 754 specific bit patterns" {
     // 1.0 exactly: bit pattern 0x3FF0000000000000
@@ -649,9 +619,6 @@ test "nextafter 1.0" {
     assert r_below.digits > 0 as i64;
 }
 
-// ============================================================================
-// Subnormal number tests
-// ============================================================================
 
 test "smallest subnormal" {
     // 2^-1074 = 0x0000000000000001
@@ -673,9 +640,6 @@ test "largest subnormal" {
     assert r.exponent < -300;
 }
 
-// ============================================================================
-// Boundary value tests (from Go hard table)
-// ============================================================================
 
 test "hard boundary case 1" {
     // p=-100, xmin=0x19ee1f3aff15ee
@@ -718,9 +682,6 @@ test "hard boundary near powers of 10" {
     assert r1001.exponent == 0;
 }
 
-// ============================================================================
-// format_exp tests
-// ============================================================================
 
 test "format_exp basic" {
     // 1 digit
@@ -764,9 +725,6 @@ test "format_exp positive exponent" {
     assert s3 == "1e+100";
 }
 
-// ============================================================================
-// Extreme value tests
-// ============================================================================
 
 test "extreme large values" {
     // 10^200
@@ -792,9 +750,6 @@ test "extreme small values" {
     assert s_smaller.len() > 0;
 }
 
-// ============================================================================
-// Additional tests from existing fts.wado
-// ============================================================================
 
 test "f64_to_string_exp extended precision" {
     // Very large value
@@ -824,9 +779,6 @@ test "specific hard values from Go tests" {
     assert r3.digits > 0 as i64;
 }
 
-// ============================================================================
-// Power of 2 comprehensive tests (from Go testFloats)
-// ============================================================================
 
 test "powers of 2 negative exponents" {
     // 2^-1 = 0.5
@@ -872,9 +824,6 @@ test "powers of 2 positive exponents" {
     assert r.digits > 0 as i64;
 }
 
-// ============================================================================
-// Power of 10 comprehensive tests
-// ============================================================================
 
 test "powers of 10 positive" {
     assert short(1.0).exponent == 0;
@@ -900,9 +849,6 @@ test "powers of 10 negative" {
     assert r0001.exponent <= -3;
 }
 
-// ============================================================================
-// Stress tests
-// ============================================================================
 
 test "many consecutive integers" {
     // Test integers from 1 to 20
@@ -923,11 +869,6 @@ test "many powers of 2" {
     }
 }
 
-// ============================================================================
-// EXACT OUTPUT COMPARISON TESTS
-// These tests compare Wado output against known-good Go fpfmt output.
-// Any difference indicates a bug in the Wado implementation.
-// ============================================================================
 
 // Helper to construct f64 from bits
 fn f64_from_bits(bits: i64) -> f64 {
@@ -1098,9 +1039,6 @@ test "exact output hard table scaled values" {
     assert f64_to_string_exp(f64_from_bits(0x2F1D1F405433CFCD as i64), false) == "9.594083833149982e-82";
 }
 
-// ============================================================================
-// f64_to_string (decimal) tests
-// ============================================================================
 
 test "f64_to_string decimal basic" {
     assert f64_to_string(0.0) == "0";
@@ -1151,9 +1089,6 @@ test "f64_to_string decimal large integers" {
     assert f64_to_string(12345678.0) == "12345678";
 }
 
-// ============================================================================
-// f64_to_string_auto tests
-// ============================================================================
 
 test "f64_to_string_auto uses decimal for normal range" {
     // Values in normal range (-4 <= exp < 16) use decimal notation
@@ -1215,9 +1150,6 @@ test "f64_to_string_auto special values" {
     assert f64_to_string_auto(nan) == "NaN";
 }
 
-// ============================================================================
-// format_decimal tests
-// ============================================================================
 
 test "format_decimal basic" {
     // digits=314, exponent=-2, nd=3 → "3.14"
@@ -1263,9 +1195,6 @@ test "format_decimal decimal in middle" {
     assert format_decimal(12345 as i64, -4, 5) == "1.2345";
 }
 
-// ============================================================================
-// f64_to_string_exp upper case tests
-// ============================================================================
 
 test "f64_to_string_exp upper case" {
     assert f64_to_string_exp(1.0, true) == "1E+00";
@@ -1280,9 +1209,6 @@ test "f64_to_string_exp upper case zero" {
     assert f64_to_string_exp(-0.0, true) == "-0E+00";
 }
 
-// ============================================================================
-// f32 wrapper tests
-// ============================================================================
 
 test "f32_to_string basic" {
     // f32 values that are exactly representable
@@ -1305,9 +1231,6 @@ test "f32_to_string_auto basic" {
     assert f32_to_string_auto(1.0e30 as f32) == "1.0000000150474662e+30";
 }
 
-// ============================================================================
-// Format Specifier Tests (Rust-compatible)
-// ============================================================================
 
 test "FormatSpec default" {
     let spec = FormatSpec::default();
@@ -1447,9 +1370,6 @@ test "negative zero formatting" {
     assert format_f64(neg_zero, spec) == "-0.00e+00";  // precision 2 adds decimal places
 }
 
-// ============================================================================
-// Benchmark helper functions
-// ============================================================================
 
 fn truncate_str(s: String, max_len: i32) -> String {
     if s.len() <= max_len {
