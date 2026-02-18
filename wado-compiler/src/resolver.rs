@@ -2275,9 +2275,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Resolve the initializer expression with expected type for type inference
         let initializer = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
-        // Type check: initializer type must match declared type
+        // Type check: initializer type must match declared type.
+        // `never` (bottom type) is assignable to any type.
         if initializer.type_id != ty
             && initializer.type_id != TypeTable::UNKNOWN
+            && initializer.type_id != TypeTable::NEVER
             && ty != TypeTable::UNKNOWN
         {
             let _ = self.logger.error(TypeError::TypeMismatch {
@@ -2812,6 +2814,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             let resolved = self.resolve_expr(elem, ctx, Some(element_type));
                             if resolved.type_id != element_type
                                 && resolved.type_id != TypeTable::UNKNOWN
+                                && resolved.type_id != TypeTable::NEVER
                             {
                                 let _ = self.logger.error(TypeError::TypeMismatch {
                                     expected: self.type_table.borrow().type_name(element_type),
@@ -2948,10 +2951,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             (value.clone(), value.type_id)
         };
 
-        // Type check: if type annotation is present, verify value type matches
+        // Type check: if type annotation is present, verify value type matches.
+        // `never` (bottom type) is assignable to any type, so skip the check for it.
         if let Some(_annotated_type) = &let_stmt.ty
             && value.type_id != type_id
             && value.type_id != TypeTable::UNKNOWN
+            && value.type_id != TypeTable::NEVER
         {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
@@ -9613,7 +9618,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 } => {
                     let then_type = Self::block_result_type(then_block);
                     let else_type = Self::block_result_type(else_block);
+                    // `never` is the bottom type: compatible with any other type.
                     if then_type == else_type {
+                        Some(then_type)
+                    } else if then_type == TypeTable::NEVER {
+                        Some(else_type)
+                    } else if else_type == TypeTable::NEVER {
                         Some(then_type)
                     } else {
                         None
@@ -9627,7 +9637,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 } => {
                     let then_type = Self::block_result_type(then_block);
                     let else_type = Self::block_result_type(else_block);
+                    // `never` is the bottom type: compatible with any other type.
                     if then_type == else_type {
+                        Some(then_type)
+                    } else if then_type == TypeTable::NEVER {
+                        Some(else_type)
+                    } else if else_type == TypeTable::NEVER {
                         Some(then_type)
                     } else {
                         None
@@ -9679,7 +9694,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .as_ref()
                 .map_or(TypeTable::UNIT, Self::block_result_type);
 
+            // `never` is the bottom type: a branch returning `never` is compatible
+            // with any type, so the result type comes from the non-never branch.
             if then_type == else_type {
+                then_type
+            } else if then_type == TypeTable::NEVER {
+                else_type
+            } else if else_type == TypeTable::NEVER {
                 then_type
             } else if else_block.is_none() {
                 if then_type != TypeTable::UNIT {
@@ -9737,9 +9758,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .collect();
 
         let type_id = expected_type.unwrap_or_else(|| {
-            arms.first()
+            // Skip `never`-typed arms: `never` is the bottom type and is compatible
+            // with any type, so the match result type is determined by the non-never arms.
+            arms.iter()
                 .map(|a| a.body.type_id)
-                .unwrap_or(TypeTable::UNIT)
+                .find(|&t| t != TypeTable::NEVER)
+                .unwrap_or_else(|| {
+                    // All arms return `never` — the match itself is `never`.
+                    arms.first()
+                        .map(|a| a.body.type_id)
+                        .unwrap_or(TypeTable::UNIT)
+                })
         });
 
         TirExpr::new(
@@ -10567,8 +10596,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .iter()
                 .map(|elem| {
                     let resolved = self.resolve_expr(elem, ctx, Some(element_type));
-                    // Type check: each element must match Array element type
-                    if resolved.type_id != element_type && resolved.type_id != TypeTable::UNKNOWN {
+                    // Type check: each element must match Array element type.
+                    // `never` (bottom type) is assignable to any type.
+                    if resolved.type_id != element_type
+                        && resolved.type_id != TypeTable::UNKNOWN
+                        && resolved.type_id != TypeTable::NEVER
+                    {
                         let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: self.type_table.borrow().type_name(element_type),
                             found: self.type_table.borrow().type_name(resolved.type_id),

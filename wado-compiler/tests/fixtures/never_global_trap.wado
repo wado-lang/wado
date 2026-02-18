@@ -1,0 +1,11 @@
+// `global x: T = <never-expr>` is valid because `never` is the bottom type.
+// The diverging initializer traps before `run` is ever called.
+use { Stdout } from "core:cli";
+
+global _X: i32 = panic("global boom");
+
+export fn run() with Stdout {
+}
+
+__DATA__
+{"stderr_contains": ["global boom"], "trapped": true}

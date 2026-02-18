@@ -1393,7 +1393,26 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_method_call(&mut self, m: &MethodCallExpr) {
+        // Expressions with lower operator precedence than `.` need parentheses
+        // when used as a method receiver, otherwise the formatter produces
+        // semantically different code:
+        //   `-128.to_string()`    → parsed as `-(128.to_string())`  (wrong)
+        //   `127 as i8.to_string()` → parsed as `127 as (i8.to_string())` (wrong)
+        let needs_parens = matches!(
+            &m.receiver,
+            Expr::Unary(_)
+                | Expr::Binary(_)
+                | Expr::Cast(_)
+                | Expr::Assign(_)
+                | Expr::CompoundAssign(_)
+        );
+        if needs_parens {
+            self.output.push('(');
+        }
         self.unparse_expr(&m.receiver);
+        if needs_parens {
+            self.output.push(')');
+        }
         self.output.push('.');
         self.output.push_str(&m.method);
         // Output turbofish syntax if there are type arguments
