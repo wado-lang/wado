@@ -12,7 +12,7 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::component_model::WasiRegistry;
 use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
-use crate::tir::TirModule;
+use crate::tir::{TirModule, TypeId};
 use crate::wasm_plan::ComponentPlan;
 use crate::world_registry::WorldRegistry;
 use indexmap::{IndexMap, IndexSet};
@@ -78,6 +78,10 @@ pub struct Project {
     /// Populated by `cm_adapter_gen` when export adapters are synthesized.
     /// For example: `"run"` → `"__cm_export__run"`.
     pub export_adapter_names: IndexMap<String, String>,
+    /// Flattened CM ABI parameter types for the `task-return` canonical intrinsic.
+    /// Populated by `cm_adapter_gen` when an export returns a Result type.
+    /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
+    pub task_return_flat_params: Option<Vec<TypeId>>,
 
     // ========================================
     // Wasm plan (populated by wasm_plan phase, consumed by codegen)
@@ -117,6 +121,7 @@ impl Project {
             has_http_handler_export: false,
             // CM export adapter mapping
             export_adapter_names: IndexMap::new(),
+            task_return_flat_params: None,
             // Wasm plan
             component_plan: None,
         }

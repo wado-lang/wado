@@ -1017,7 +1017,10 @@ impl WirInstr {
             | Self::RefCast { expr, .. }
             | Self::RefTest { expr, .. }
             | Self::ValueCopy { expr, .. } => f(expr),
-            Self::BrIf { condition, .. } | Self::BranchHint { expr: condition, .. } => {
+            Self::BrIf { condition, .. }
+            | Self::BranchHint {
+                expr: condition, ..
+            } => {
                 f(condition);
             }
             Self::BrTable { index, .. } => f(index),
@@ -1229,8 +1232,9 @@ impl WirInstr {
                 f(c);
                 f(d);
             }
-            Self::MultiValueStructNew { instr, .. }
-            | Self::MultiValueLocalBind { instr, .. } => f(instr),
+            Self::MultiValueStructNew { instr, .. } | Self::MultiValueLocalBind { instr, .. } => {
+                f(instr);
+            }
             Self::TableGet { index, .. } => f(index),
             Self::TableSet { index, value, .. } => {
                 f(index);

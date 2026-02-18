@@ -3,7 +3,9 @@
 
 use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
 use crate::tir::{TirFunction, TypeTable};
-use crate::wir::{WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType};
+use crate::wir::{
+    WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr, WirMeta, WirName, WirType,
+};
 
 use super::context::{PendingFunctionBody, WirContext};
 
@@ -84,7 +86,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
 ///
 /// WASI functions are already lowered at the component level;
 /// the core module imports them from the "wasi" namespace.
-/// Uses the same type conversion as codegen's `wasi_func_to_core_params`/`wasi_func_to_core_results`.
+/// Uses `flatten_wasi_param_type` / `return_type_requires_outptr` for CM ABI type flattening.
 fn register_wasi_imports(ctx: &mut WirContext<'_>) {
     let wasi_registry = ctx.project.wasi_registry;
 
@@ -92,13 +94,23 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
         for func in &interface_info.functions {
             let local_name = func.local_alias_name();
 
-            // Only register functions that are actually used
-            if !ctx.project.has_effect(&func.effect_name) {
+            // Only register functions that are actually used (per-function check).
+            // This is more precise than has_effect() which includes ALL functions
+            // for a used effect. Per-function filtering avoids importing unused
+            // WASI functions that the component builder doesn't support (e.g.,
+            // [static] HTTP functions like consume_body).
+            let wasi_func_key = format!("{}::{}", func.effect_name, func.method_name);
+            if !ctx.project.used_wasi_functions.contains(&wasi_func_key) {
                 continue;
             }
 
-            // Skip unsupported functions
-            if !wasi_registry.is_function_supported(func) {
+            // Skip unsupported functions (for non-HTTP interfaces).
+            // HTTP functions are handled separately by import_http_types_for_service
+            // in the component builder, which has its own type support (ast_type_to_cm).
+            // The general is_function_supported check would reject HTTP [method] functions
+            // like Fields::append because their &Resource params aren't supported
+            // in the general type checker.
+            if func.package != "http" && !wasi_registry.is_function_supported(func) {
                 continue;
             }
 
@@ -107,7 +119,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
-            // Build param types matching codegen's wasi_func_to_core_params
+            // Build param types using CM ABI type flattening
             let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
             for (_, ty) in &func.params {
                 let resolved_ty = wasi_registry.resolve_type(ty);
@@ -128,7 +140,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
 
             let params: Vec<WirType> = param_vts.into_iter().map(valtype_to_wir_type).collect();
 
-            // Build result types matching codegen's wasi_func_to_core_results
+            // Build result types using CM ABI type flattening
             let results: Vec<WirType> = if func.is_async {
                 // Async functions always return i32 (subtask handle)
                 vec![WirType::I32]
@@ -472,7 +484,7 @@ fn register_exports(ctx: &mut WirContext<'_>) {
 
 /// Register global variables from all TIR modules.
 ///
-/// Global naming convention follows codegen:
+/// Global naming convention:
 /// - Entry module: `"global:{name}"`
 /// - Other modules: `"global:{mod_path}::{name}"`
 fn register_globals(ctx: &mut WirContext<'_>) {
@@ -496,13 +508,13 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             let mut wir_type = ctx.type_id_to_wir_type(type_table, global.ty);
 
             // For nullable globals (lazy-init reference types), ensure the WIR type is nullable
-            if global.is_nullable {
-                if let WirType::Ref { type_id, .. } = wir_type {
-                    wir_type = WirType::Ref {
-                        type_id,
-                        nullable: true,
-                    };
-                }
+            if global.is_nullable
+                && let WirType::Ref { type_id, .. } = wir_type
+            {
+                wir_type = WirType::Ref {
+                    type_id,
+                    nullable: true,
+                };
             }
 
             // Convert the initializer to a WIR constant instruction
@@ -525,6 +537,25 @@ fn register_globals(ctx: &mut WirContext<'_>) {
                 },
             });
         }
+    }
+
+    // HTTP handler exports need a global to save the trailers future tx handle.
+    // The future_create_pair builtin stores the tx here, and the export adapter
+    // reads it back with global_get_pending_trailers_tx after task-return.
+    if ctx.project.has_http_handler_export {
+        let fq = "global:__pending_trailers_tx".to_string();
+        let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
+        ctx.global_map.insert(fq.clone(), idx);
+        ctx.globals.push(WirGlobal {
+            name: WirName {
+                display: "__pending_trailers_tx".to_string(),
+                fq,
+            },
+            ty: WirType::I32,
+            mutable: true,
+            init: WirInstr::I32Const(0),
+            meta: WirMeta::default(),
+        });
     }
 }
 

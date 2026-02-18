@@ -3872,6 +3872,28 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             }
         }
 
+        // Compute the correct task-return params from the export's flat return types.
+        // The builtin registry defines task_return with a single i32 param, but for
+        // Result-returning exports the task-return call passes the full flattened type.
+        // Store on Project so optimize_dce can use it when creating the import.
+        for export in &world_info.exports {
+            if export.return_type.is_some() {
+                let tt = entry_type_table.borrow();
+                let flat_types = compute_export_flat_return_types(
+                    export.return_type.as_ref().unwrap(),
+                    &project.tir_modules,
+                    &tt,
+                );
+                project.task_return_flat_params = Some(
+                    flat_types
+                        .iter()
+                        .map(|&vt| cm_val_type_to_type_id(vt))
+                        .collect(),
+                );
+                break; // One export is enough — all share the same task-return
+            }
+        }
+
         // Push adapters with mutable access
         let entry_module = project
             .tir_modules

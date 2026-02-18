@@ -85,6 +85,9 @@ fn validate_core_module(wasm: &[u8]) {
 fn validate_wasm(wasm: &[u8]) {
     let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
     if let Err(e) = validator.validate_all(wasm) {
+        if let Ok(wat) = wasmprinter::print_bytes(wasm) {
+            let _ = std::fs::write("/tmp/wir_debug_component.wat", &wat);
+        }
         panic!(
             "Internal compiler error: WIR pipeline generated invalid Wasm\n\
              This is a bug in the Wado compiler. Please report it.\n\

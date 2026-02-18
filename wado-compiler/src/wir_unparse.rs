@@ -1149,10 +1149,7 @@ impl<'a> WirUnparser<'a> {
                 self.write(")");
             }
             WirInstr::MultiValueLocalBind { instr, locals } => {
-                let names: Vec<_> = locals
-                    .iter()
-                    .map(|l| l.as_deref().unwrap_or("_"))
-                    .collect();
+                let names: Vec<_> = locals.iter().map(|l| l.as_deref().unwrap_or("_")).collect();
                 self.write(&format!("multivalue_bind [{}] = ", names.join(", ")));
                 self.unparse_instr_inline(instr);
             }

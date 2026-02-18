@@ -306,8 +306,7 @@ async fn execute_tests_parallel(
 
 pub async fn run(opts: TestOptions) {
     // Phase 1: Compile all files and collect test jobs
-    let (modules, jobs) =
-        match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
+    let (modules, jobs) = match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
         Ok(result) => result,
         Err(e) => {
             eprintln!("Error collecting tests: {e}");

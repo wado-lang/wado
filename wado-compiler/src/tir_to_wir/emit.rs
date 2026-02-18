@@ -13,10 +13,10 @@ use crate::wir::{
 
 use wasm_encoder::{
     AbstractHeapType, BlockType, BranchHint, BranchHints, CodeSection, CompositeInnerType,
-    CompositeType, ConstExpr, DataCountSection, DataSection, ElementSection, Elements,
-    ExportKind, ExportSection, FieldType, Function, FunctionSection, GlobalSection, GlobalType,
-    HeapType, ImportSection, Instruction, MemArg, Module, NameMap, NameSection, RefType,
-    StorageType, StructType, SubType, TypeSection, ValType,
+    CompositeType, ConstExpr, DataCountSection, DataSection, ElementSection, Elements, ExportKind,
+    ExportSection, FieldType, Function, FunctionSection, GlobalSection, GlobalType, HeapType,
+    ImportSection, Instruction, MemArg, Module, NameMap, NameSection, RefType, StorageType,
+    StructType, SubType, TypeSection, ValType,
 };
 
 /// Emit a core Wasm module from a `WirModule`.
@@ -51,11 +51,11 @@ struct WirEmitter<'a> {
     next_local: u32,
     /// Wasm type section counter.
     next_type_idx: u32,
-    /// Pre-assigned variant type info: `wir_type_idx` → (base_wasm_idx, vec of (case_idx, wasm_idx)).
+    /// Pre-assigned variant type info: `wir_type_idx` → (`base_wasm_idx`, vec of (`case_idx`, `wasm_idx`)).
     variant_pre_assigned: IndexMap<u32, (u32, Vec<(u32, u32)>)>,
     /// Branch hints for the current function being emitted.
     current_branch_hints: Vec<(u32, bool)>,
-    /// All collected branch hints: (func_index, vec of (instr_offset, likely)).
+    /// All collected branch hints: (`func_index`, vec of (`instr_offset`, likely)).
     all_branch_hints: Vec<(u32, Vec<(u32, bool)>)>,
 }
 
@@ -219,10 +219,10 @@ impl<'a> WirEmitter<'a> {
         // Emit function types standalone (outside rec group), excluding gc-referenced ones
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
-            if let WirTypeDef::Func(f) = typedef {
-                if !gc_func_types.contains(&wir_idx) {
-                    self.emit_standalone_func_type(&mut types, f, wir_idx);
-                }
+            if let WirTypeDef::Func(f) = typedef
+                && !gc_func_types.contains(&wir_idx)
+            {
+                self.emit_standalone_func_type(&mut types, f, wir_idx);
             }
         }
 
@@ -246,9 +246,7 @@ impl<'a> WirEmitter<'a> {
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
             match typedef {
-                WirTypeDef::Struct(_)
-                    if self.wir.variant_case_info.contains_key(&wir_idx) =>
-                {
+                WirTypeDef::Struct(_) if self.wir.variant_case_info.contains_key(&wir_idx) => {
                     // Variant case struct — index assigned by the parent variant below
                 }
                 WirTypeDef::Struct(_) | WirTypeDef::Array(_) => {
@@ -269,15 +267,13 @@ impl<'a> WirEmitter<'a> {
                     }
 
                     // Map variant case WIR type indices to their Wasm type indices
-                    for (&case_wir_idx, &(variant_wir_idx, case_idx)) in
-                        &self.wir.variant_case_info
+                    for (&case_wir_idx, &(variant_wir_idx, case_idx)) in &self.wir.variant_case_info
                     {
-                        if variant_wir_idx == wir_idx {
-                            if let Some(&(_, wasm_idx)) =
+                        if variant_wir_idx == wir_idx
+                            && let Some(&(_, wasm_idx)) =
                                 case_types.iter().find(|(idx, _)| *idx == case_idx)
-                            {
-                                self.type_index_map.insert(case_wir_idx, wasm_idx);
-                            }
+                        {
+                            self.type_index_map.insert(case_wir_idx, wasm_idx);
                         }
                     }
 
@@ -299,11 +295,11 @@ impl<'a> WirEmitter<'a> {
         // Pass 2: Function types — standalone, after the rec group
         for (wir_idx, typedef) in self.wir.types.iter().enumerate() {
             let wir_idx = u32::try_from(wir_idx).unwrap();
-            if let WirTypeDef::Func(_) = typedef {
-                if !gc_func_types.contains(&wir_idx) {
-                    self.type_index_map.insert(wir_idx, next_idx);
-                    next_idx += 1;
-                }
+            if let WirTypeDef::Func(_) = typedef
+                && !gc_func_types.contains(&wir_idx)
+            {
+                self.type_index_map.insert(wir_idx, next_idx);
+                next_idx += 1;
             }
         }
 
@@ -468,12 +464,7 @@ impl<'a> WirEmitter<'a> {
         }
     }
 
-    fn build_array_subtype(
-        &mut self,
-        a: &WirArrayType,
-        wir_idx: u32,
-        subtypes: &mut Vec<SubType>,
-    ) {
+    fn build_array_subtype(&mut self, a: &WirArrayType, wir_idx: u32, subtypes: &mut Vec<SubType>) {
         debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
         let storage_type = self.wir_type_to_storage_type(&a.element_type);
@@ -492,12 +483,7 @@ impl<'a> WirEmitter<'a> {
         });
     }
 
-    fn build_func_subtype(
-        &mut self,
-        f: &WirFuncType,
-        wir_idx: u32,
-        subtypes: &mut Vec<SubType>,
-    ) {
+    fn build_func_subtype(&mut self, f: &WirFuncType, wir_idx: u32, subtypes: &mut Vec<SubType>) {
         debug_assert!(self.type_index_map.contains_key(&wir_idx));
 
         let params: Vec<ValType> = f
@@ -869,7 +855,9 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(index, locals);
             }
             WirInstr::BrIf { condition, .. }
-            | WirInstr::BranchHint { expr: condition, .. } => {
+            | WirInstr::BranchHint {
+                expr: condition, ..
+            } => {
                 self.collect_declared_locals_instr(condition, locals);
             }
             WirInstr::Select {
@@ -883,9 +871,7 @@ impl<'a> WirEmitter<'a> {
                 self.collect_declared_locals_instr(if_false, locals);
             }
             // Value copy needs a temp local for the source struct ref
-            WirInstr::ValueCopy {
-                type_id, expr, ..
-            } => {
+            WirInstr::ValueCopy { type_id, expr, .. } => {
                 self.collect_declared_locals_instr(expr, locals);
                 // Declare temp local for the struct copy source
                 let wasm_type_idx = self.resolve_type_index(type_id.index());
@@ -896,8 +882,7 @@ impl<'a> WirEmitter<'a> {
                 let temp_name = format!("__copy_source_{}", type_id.index());
                 locals.push((temp_name, ValType::Ref(ref_type)));
                 // Declare temp locals for array field deep copies
-                if let Some(array_field_infos) =
-                    self.get_struct_array_field_infos(type_id.index())
+                if let Some(array_field_infos) = self.get_struct_array_field_infos(type_id.index())
                 {
                     for (field_idx, arr_type_idx) in array_field_infos {
                         let arr_wasm_idx = self.resolve_type_index(arr_type_idx);
@@ -905,21 +890,9 @@ impl<'a> WirEmitter<'a> {
                             nullable: true,
                             heap_type: HeapType::Concrete(arr_wasm_idx),
                         };
-                        let src_name = format!(
-                            "__copy_arr_src_{}_{}",
-                            type_id.index(),
-                            field_idx
-                        );
-                        let dst_name = format!(
-                            "__copy_arr_dst_{}_{}",
-                            type_id.index(),
-                            field_idx
-                        );
-                        let len_name = format!(
-                            "__copy_arr_len_{}_{}",
-                            type_id.index(),
-                            field_idx
-                        );
+                        let src_name = format!("__copy_arr_src_{}_{}", type_id.index(), field_idx);
+                        let dst_name = format!("__copy_arr_dst_{}_{}", type_id.index(), field_idx);
+                        let len_name = format!("__copy_arr_len_{}_{}", type_id.index(), field_idx);
                         locals.push((src_name, ValType::Ref(arr_ref)));
                         locals.push((dst_name, ValType::Ref(arr_ref)));
                         locals.push((len_name, ValType::I32));
@@ -1770,27 +1743,18 @@ impl<'a> WirEmitter<'a> {
                 // For each field: load from temp, get field (handle packed fields)
                 for field in fields {
                     // Check if this field needs array deep copy
-                    let arr_info = array_fields.as_ref().and_then(|infos| {
-                        infos.iter().find(|(fi, _)| *fi == field.index)
-                    });
+                    let arr_info = array_fields
+                        .as_ref()
+                        .and_then(|infos| infos.iter().find(|(fi, _)| *fi == field.index));
                     if let Some(&(_, arr_wir_idx)) = arr_info {
                         // Deep copy: create new array, copy elements
                         let arr_wasm_idx = self.resolve_type_index(arr_wir_idx);
-                        let src_name = format!(
-                            "__copy_arr_src_{}_{}",
-                            type_id.index(),
-                            field.index
-                        );
-                        let dst_name = format!(
-                            "__copy_arr_dst_{}_{}",
-                            type_id.index(),
-                            field.index
-                        );
-                        let len_name = format!(
-                            "__copy_arr_len_{}_{}",
-                            type_id.index(),
-                            field.index
-                        );
+                        let src_name =
+                            format!("__copy_arr_src_{}_{}", type_id.index(), field.index);
+                        let dst_name =
+                            format!("__copy_arr_dst_{}_{}", type_id.index(), field.index);
+                        let len_name =
+                            format!("__copy_arr_len_{}_{}", type_id.index(), field.index);
                         let src_local = self.resolve_local(&src_name);
                         let dst_local = self.resolve_local(&dst_name);
                         let len_local = self.resolve_local(&len_name);
@@ -1878,8 +1842,8 @@ impl<'a> WirEmitter<'a> {
     }
 
     /// Get struct fields that reference raw array types.
-    /// Returns Vec of (field_index, array_wir_type_index) for fields whose type
-    /// is a ref to a WirTypeDef::Array.
+    /// Returns Vec of (`field_index`, `array_wir_type_index`) for fields whose type
+    /// is a ref to a `WirTypeDef::Array`.
     fn get_struct_array_field_infos(&self, struct_wir_idx: u32) -> Option<Vec<(u32, u32)>> {
         let idx = struct_wir_idx as usize;
         if idx >= self.wir.types.len() {
@@ -1890,7 +1854,10 @@ impl<'a> WirEmitter<'a> {
         };
         let mut result = Vec::new();
         for (i, field) in st.fields.iter().enumerate() {
-            if let WirType::Ref { type_id: ref tid, .. } = field.ty {
+            if let WirType::Ref {
+                type_id: ref tid, ..
+            } = field.ty
+            {
                 let arr_idx = tid.index() as usize;
                 if arr_idx < self.wir.types.len()
                     && matches!(self.wir.types[arr_idx], WirTypeDef::Array(_))
@@ -1977,14 +1944,13 @@ impl<'a> WirEmitter<'a> {
         let idx = wir_type_idx as usize;
         if idx < self.wir.types.len()
             && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
+            && let Some(field) = st.fields.get(field_index as usize)
         {
-            if let Some(field) = st.fields.get(field_index as usize) {
-                return match &field.ty {
-                    WirType::I8 | WirType::I16 => Some(true),
-                    WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
-                    _ => None,
-                };
-            }
+            return match &field.ty {
+                WirType::I8 | WirType::I16 => Some(true),
+                WirType::U8 | WirType::U16 | WirType::Bool => Some(false),
+                _ => None,
+            };
         }
         None
     }

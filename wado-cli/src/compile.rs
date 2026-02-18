@@ -187,11 +187,6 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
     }
 }
 
-/// Returns true if the legacy codegen should be used (via `WADO_LEGACY_CODEGEN` env var).
-pub fn use_legacy_codegen() -> bool {
-    std::env::var("WADO_LEGACY_CODEGEN").is_ok()
-}
-
 /// Compile a Wado source file and return the Wasm binary
 pub async fn compile(filename: &str) -> Vec<u8> {
     compile_with_opts(filename, OptLevel::default(), LogLevel::default()).await
@@ -235,7 +230,6 @@ pub async fn compile_with_full_opts(
     let options = wado_compiler::CompilerOptions {
         opt_level: to_compiler_opt_level(opt_level),
         target_world,
-        use_wir_backend: !use_legacy_codegen(),
     };
 
     // Compile using async API

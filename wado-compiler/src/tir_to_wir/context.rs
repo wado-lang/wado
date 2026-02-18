@@ -76,9 +76,9 @@ pub struct WirContext<'a> {
     // === Canonical Closure Types ===
     /// Map from function signature string to canonical closure info.
     /// Key: stringified signature (e.g., "(i32, i32) -> i32")
-    /// Value: (canonical_fn_type_id, canonical_closure_struct_type_id)
+    /// Value: (`canonical_fn_type_id`, `canonical_closure_struct_type_id`)
     pub canonical_closure_types: IndexMap<String, (WirTypeId, WirTypeId)>,
-    /// Map from closure functor_id to canonical wrapper function WirFuncId.
+    /// Map from closure `functor_id` to canonical wrapper function `WirFuncId`.
     pub closure_wrapper_funcs: IndexMap<u32, WirFuncId>,
     /// Counter for canonical closure type naming.
     pub canonical_closure_counter: u32,
@@ -290,9 +290,18 @@ impl<'a> WirContext<'a> {
 
     /// Build a string key for canonical closure type lookup.
     pub fn canonical_closure_key(params: &[WirType], results: &[WirType]) -> String {
-        format!("({}) -> ({})",
-            params.iter().map(|t| format!("{t:?}")).collect::<Vec<_>>().join(", "),
-            results.iter().map(|t| format!("{t:?}")).collect::<Vec<_>>().join(", "),
+        format!(
+            "({}) -> ({})",
+            params
+                .iter()
+                .map(|t| format!("{t:?}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            results
+                .iter()
+                .map(|t| format!("{t:?}"))
+                .collect::<Vec<_>>()
+                .join(", "),
         )
     }
 
@@ -499,25 +508,55 @@ impl<'a> WirContext<'a> {
             ResolvedType::Option(inner) => {
                 // Option<T> is nullable ref at Wasm level
                 let inner_wir = self.type_id_to_wir_type(type_table, *inner);
-                match inner_wir {
-                    WirType::Ref { type_id, .. } => WirType::Ref {
+                if let WirType::Ref { type_id, .. } = inner_wir {
+                    WirType::Ref {
                         type_id,
                         nullable: true,
-                    },
-                    _ => {
-                        // For primitive types, Option<T> maps to nullable ref Box<T>.
-                        // Resolve through newtypes to find the base primitive name,
-                        // because Box<f64> is registered, not Box<Radians>.
-                        let base_inner = type_table.resolve_newtype_base(*inner);
-                        let inner_name = type_table.mangle_type_name(base_inner);
-                        let box_name = crate::name::mangle_generic_name(
-                            "Box",
-                            std::slice::from_ref(&inner_name),
-                        );
-                        if let Some(tid) = self.lookup_struct_by_name(&box_name) {
-                            WirType::Ref {
-                                type_id: tid.clone(),
-                                nullable: true,
+                    }
+                } else {
+                    // For primitive types, Option<T> maps to nullable ref Box<T>.
+                    // Resolve through newtypes to find the base primitive name,
+                    // because Box<f64> is registered, not Box<Radians>.
+                    let base_inner = type_table.resolve_newtype_base(*inner);
+                    let inner_name = type_table.mangle_type_name(base_inner);
+                    let box_name =
+                        crate::name::mangle_generic_name("Box", std::slice::from_ref(&inner_name));
+                    if let Some(tid) = self.lookup_struct_by_name(&box_name) {
+                        WirType::Ref {
+                            type_id: tid.clone(),
+                            nullable: true,
+                        }
+                    } else {
+                        // Fallback: for types like resources (which are i32 handles at Wasm
+                        // level), use Box based on the WIR primitive type name.
+                        let wir_prim_name = match &inner_wir {
+                            WirType::I32 => Some("i32"),
+                            WirType::I64 => Some("i64"),
+                            WirType::F32 => Some("f32"),
+                            WirType::F64 => Some("f64"),
+                            WirType::U8 | WirType::Bool => Some("u8"),
+                            WirType::U16 => Some("u16"),
+                            WirType::U32 | WirType::Char => Some("u32"),
+                            WirType::U64 => Some("u64"),
+                            WirType::I8 => Some("i8"),
+                            WirType::I16 => Some("i16"),
+                            _ => None,
+                        };
+                        if let Some(prim_name) = wir_prim_name {
+                            let box_prim = crate::name::mangle_generic_name(
+                                "Box",
+                                std::slice::from_ref(&prim_name.to_string()),
+                            );
+                            if let Some(tid) = self.lookup_struct_by_name(&box_prim) {
+                                WirType::Ref {
+                                    type_id: tid.clone(),
+                                    nullable: true,
+                                }
+                            } else {
+                                WirType::AbstractRef {
+                                    heap_type: crate::wir::WirAbstractHeapType::Struct,
+                                    nullable: true,
+                                }
                             }
                         } else {
                             WirType::AbstractRef {

@@ -1,7 +1,7 @@
 //! Type registration — translates TIR type definitions to WIR type definitions.
 //!
-//! Follows the same multi-phase registration order as codegen.rs to handle
-//! type dependencies correctly.
+//! Follows a multi-phase registration order to handle type dependencies
+//! correctly.
 
 use crate::name::{ModuleSource, StructName};
 use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeTable};
@@ -15,8 +15,8 @@ use super::context::WirContext;
 
 /// Register all types from the Project into the `WirContext`.
 ///
-/// This follows the multi-phase registration order from codegen to ensure
-/// type dependencies are satisfied.
+/// This follows a multi-phase registration order to ensure type dependencies
+/// are satisfied.
 pub fn register_types(ctx: &mut WirContext<'_>) {
     let entry_tir = ctx.project.entry_module();
     let _type_table = &*entry_tir.type_table.borrow();
@@ -88,11 +88,11 @@ fn register_struct(
     // definition module and the entry module. Only register the first occurrence.
     // Only applies to monomorphized structs — non-mono structs with the same name
     // from different modules (e.g., two modules defining `Pair`) are distinct types.
-    if tir_struct.monomorph_info.is_some() {
-        if let Some(existing) = ctx.lookup_struct_by_name(&tir_struct.name).cloned() {
-            ctx.struct_type_map.insert(struct_name, existing);
-            return;
-        }
+    if tir_struct.monomorph_info.is_some()
+        && let Some(existing) = ctx.lookup_struct_by_name(&tir_struct.name).cloned()
+    {
+        ctx.struct_type_map.insert(struct_name, existing);
+        return;
     }
 
     let fq = format!("{module_source}//{}", tir_struct.name);
@@ -299,12 +299,53 @@ fn register_box_structs(ctx: &mut WirContext<'_>) {
             }
         }
     }
+
+    // Pre-register Box<i32> if not already present. This is needed for Option<Resource>,
+    // Option<Stream>, Option<Future>, etc., where the inner type maps to i32 at the
+    // Wasm level but there's no explicit Option<i32> usage in the source code.
+    ensure_box_type(ctx, "i32", crate::wir::WirType::I32);
+}
+
+/// Ensure a `Box<T>` struct type exists for the given primitive name.
+fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::wir::WirType) {
+    let box_name =
+        crate::name::mangle_generic_name("Box", std::slice::from_ref(&prim_name.to_string()));
+    if ctx.lookup_struct_by_name(&box_name).is_some() {
+        return;
+    }
+    let module_source = ModuleSource::core("prelude");
+    let struct_name = StructName::new(module_source.clone(), box_name.clone());
+    let fq = format!("{module_source}//{box_name}");
+    let type_id = ctx.register_type(
+        fq.clone(),
+        WirTypeDef::Struct(WirStructType {
+            name: WirName {
+                display: box_name.clone(),
+                fq,
+            },
+            fields: vec![WirField {
+                name: "value".to_string(),
+                ty: wir_type,
+                mutable: true,
+            }],
+            meta: WirMeta {
+                module_source: Some(module_source),
+                ..WirMeta::default()
+            },
+            generic_origin: Some(WirGenericOrigin {
+                base_name: "Box".to_string(),
+                type_args: vec![prim_name.to_string()],
+            }),
+            newtype_origin: None,
+        }),
+    );
+    ctx.struct_type_map.insert(struct_name, type_id);
 }
 
 fn register_library_types(ctx: &mut WirContext<'_>) {
     let entry_source = &ctx.project.entry_module_source;
     for (module_source, tir_mod) in &ctx.project.tir_modules {
-        if module_source == entry_source || module_source.is_wasi() {
+        if module_source == entry_source {
             continue;
         }
         let type_table = &*tir_mod.type_table.borrow();
@@ -417,7 +458,7 @@ fn register_nonmono_arrays(ctx: &mut WirContext<'_>) {
 fn register_mono_library_types(ctx: &mut WirContext<'_>) {
     let entry_source = &ctx.project.entry_module_source;
     for (module_source, tir_mod) in &ctx.project.tir_modules {
-        if module_source == entry_source || module_source.is_wasi() {
+        if module_source == entry_source {
             continue;
         }
         let type_table = &*tir_mod.type_table.borrow();
@@ -475,8 +516,8 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
     // Find generic variant instances in all type tables (e.g., Result<i32, String>)
     // and register them as WIR variant types.
     let mut to_register: Vec<(
-        String,            // mangled name (e.g., "Result<i32, String>")
-        ModuleSource,      // module source of the base variant
+        String,                                  // mangled name (e.g., "Result<i32, String>")
+        ModuleSource,                            // module source of the base variant
         Vec<(String, Vec<crate::wir::WirType>)>, // cases: (name, payload types)
     )> = Vec::new();
 
@@ -515,38 +556,43 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         // Build a type param substitution map:
                         // base.type_params[i].name -> type_args[i]
                         let type_args = type_args.clone();
-                        let cases: Vec<(String, Vec<crate::wir::WirType>)> = base
-                            .cases
-                            .iter()
-                            .map(|case| {
-                                // Resolve the payload through type param substitution
-                                let payload_resolved =
-                                    source_type_table.get(case.payload);
-                                let payload = match payload_resolved {
-                                    ResolvedType::Unit => Vec::new(),
-                                    ResolvedType::TypeParam { index, .. } => {
-                                        // Substitute type param with concrete type arg
-                                        let idx = *index as usize;
-                                        if idx < type_args.len() {
-                                            vec![ctx.type_id_to_wir_type(
-                                                type_table,
-                                                type_args[idx],
-                                            )]
-                                        } else {
-                                            Vec::new()
+                        let cases: Vec<(String, Vec<crate::wir::WirType>)> =
+                            base.cases
+                                .iter()
+                                .map(|case| {
+                                    // Resolve the payload through type param substitution
+                                    let payload_resolved = source_type_table.get(case.payload);
+                                    let payload = match payload_resolved {
+                                        ResolvedType::Unit => Vec::new(),
+                                        ResolvedType::TypeParam { index, .. } => {
+                                            // Substitute type param with concrete type arg
+                                            let idx = *index as usize;
+                                            if idx < type_args.len() {
+                                                // Check if the substituted type is unit
+                                                let sub_ty = type_table.get(type_args[idx]);
+                                                if matches!(sub_ty, ResolvedType::Unit) {
+                                                    Vec::new()
+                                                } else {
+                                                    vec![ctx.type_id_to_wir_type(
+                                                        type_table,
+                                                        type_args[idx],
+                                                    )]
+                                                }
+                                            } else {
+                                                Vec::new()
+                                            }
                                         }
-                                    }
-                                    _ => {
-                                        // Non-param payload (e.g., concrete type)
-                                        vec![ctx.type_id_to_wir_type(
-                                            source_type_table,
-                                            case.payload,
-                                        )]
-                                    }
-                                };
-                                (case.name.clone(), payload)
-                            })
-                            .collect();
+                                        _ => {
+                                            // Non-param payload (e.g., concrete type)
+                                            vec![ctx.type_id_to_wir_type(
+                                                source_type_table,
+                                                case.payload,
+                                            )]
+                                        }
+                                    };
+                                    (case.name.clone(), payload)
+                                })
+                                .collect();
                         to_register.push((mangled, module_source.clone(), cases));
                     }
                 }
@@ -722,14 +768,13 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                     .iter()
                     .map(|p| ctx.type_id_to_wir_type(type_table, *p))
                     .collect();
-                let result_wirs: Vec<WirType> =
-                    if *return_type == crate::tir::TypeTable::UNIT
-                        || *return_type == crate::tir::TypeTable::NEVER
-                    {
-                        vec![]
-                    } else {
-                        vec![ctx.type_id_to_wir_type(type_table, *return_type)]
-                    };
+                let result_wirs: Vec<WirType> = if *return_type == crate::tir::TypeTable::UNIT
+                    || *return_type == crate::tir::TypeTable::NEVER
+                {
+                    vec![]
+                } else {
+                    vec![ctx.type_id_to_wir_type(type_table, *return_type)]
+                };
                 let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
                 if seen_keys.insert(key) {
                     fn_sigs.push((param_wirs, result_wirs));
@@ -748,8 +793,8 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
 /// found in any module's type table.
 ///
 /// In the TIR, `Array<T>` is `GenericInstance { name: "Array", type_args: [T] }`,
-/// not a struct definition. The old codegen creates wrapper structs on-the-fly
-/// via `get_or_create_array_struct_type`. We replicate that here.
+/// not a struct definition. We create wrapper structs here to provide the
+/// underlying GC array types that the WIR emitter needs.
 fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
     use crate::tir::ResolvedType;
 
@@ -758,26 +803,24 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
     for tir_mod in ctx.project.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
         for type_id in type_table.iter_type_ids() {
-            if let ResolvedType::GenericInstance { name, type_args, .. } = type_table.get(type_id) {
-                if name == "Array" && type_args.len() == 1 {
-                    let elem_name = type_table.mangle_type_name(type_args[0]);
-                    if !array_elem_types.iter().any(|(_, n, _)| n == &elem_name) {
-                        // Ensure raw array type is registered
-                        register_raw_array_type(ctx, type_args[0], type_table);
-                        array_elem_types.push((
-                            type_args[0],
-                            elem_name,
-                            tir_mod.module_source.clone(),
-                        ));
-                    }
+            if let ResolvedType::GenericInstance {
+                name, type_args, ..
+            } = type_table.get(type_id)
+                && name == "Array"
+                && type_args.len() == 1
+            {
+                let elem_name = type_table.mangle_type_name(type_args[0]);
+                if !array_elem_types.iter().any(|(_, n, _)| n == &elem_name) {
+                    // Ensure raw array type is registered
+                    register_raw_array_type(ctx, type_args[0], type_table);
+                    array_elem_types.push((type_args[0], elem_name, tir_mod.module_source.clone()));
                 }
             }
         }
     }
 
     for (_, elem_name, _module_source) in &array_elem_types {
-        let mangled =
-            crate::name::mangle_generic_name("Array", std::slice::from_ref(elem_name));
+        let mangled = crate::name::mangle_generic_name("Array", std::slice::from_ref(elem_name));
 
         // Skip if already registered (by name)
         if ctx.lookup_struct_by_name(&mangled).is_some() {
@@ -833,7 +876,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Check if a WirType is an unresolved abstract struct/array reference.
+/// Check if a `WirType` is an unresolved abstract struct/array reference.
 fn is_abstract_ref(ty: &crate::wir::WirType) -> bool {
     matches!(
         ty,
@@ -879,14 +922,14 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     if &tir_struct.name != struct_name_str {
                         continue;
                     }
-                    if let Some(ms) = module_source {
-                        if &tir_mod.module_source != ms {
-                            continue;
-                        }
+                    if let Some(ms) = module_source
+                        && &tir_mod.module_source != ms
+                    {
+                        continue;
                     }
                     if field_idx < tir_struct.fields.len() {
-                        let wir_type =
-                            ctx.type_id_to_wir_type(type_table, tir_struct.fields[field_idx].type_id);
+                        let wir_type = ctx
+                            .type_id_to_wir_type(type_table, tir_struct.fields[field_idx].type_id);
                         if !is_abstract_ref(&wir_type) {
                             resolved = Some(wir_type);
                             break;
@@ -903,18 +946,18 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 for tir_mod in ctx.project.tir_modules.values() {
                     let type_table = &*tir_mod.type_table.borrow();
                     for type_id in type_table.iter_type_ids() {
-                        if let ResolvedType::Tuple(elements) = type_table.get(type_id) {
-                            if field_idx < elements.len() {
-                                // Check if this tuple maps to the same WIR type
-                                if let Some(wir_tid) = ctx.tuple_type_map.get(elements) {
-                                    if wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX) {
-                                        let wir_type =
-                                            ctx.type_id_to_wir_type(type_table, elements[field_idx]);
-                                        if !is_abstract_ref(&wir_type) {
-                                            resolved = Some(wir_type);
-                                            break;
-                                        }
-                                    }
+                        if let ResolvedType::Tuple(elements) = type_table.get(type_id)
+                            && field_idx < elements.len()
+                        {
+                            // Check if this tuple maps to the same WIR type
+                            if let Some(wir_tid) = ctx.tuple_type_map.get(elements)
+                                && wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX)
+                            {
+                                let wir_type =
+                                    ctx.type_id_to_wir_type(type_table, elements[field_idx]);
+                                if !is_abstract_ref(&wir_type) {
+                                    resolved = Some(wir_type);
+                                    break;
                                 }
                             }
                         }
@@ -940,25 +983,22 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
     // Phase 2: Fix array element types
     let mut array_fixups: Vec<(usize, WirType)> = Vec::new();
     for (wir_idx, typedef) in ctx.types.iter().enumerate() {
-        if let WirTypeDef::Array(a) = typedef {
-            if is_abstract_ref(&a.element_type) {
-                // Try to resolve via TIR BuiltinArray types
-                for tir_mod in ctx.project.tir_modules.values() {
-                    let type_table = &*tir_mod.type_table.borrow();
-                    for type_id in type_table.iter_type_ids() {
-                        if let crate::tir::ResolvedType::BuiltinArray(elem_tid) =
-                            type_table.get(type_id)
-                        {
-                            if let Some(arr_wir_id) = ctx.array_type_map.get(elem_tid) {
-                                if arr_wir_id.index() == u32::try_from(wir_idx).unwrap() {
-                                    let wir_type =
-                                        ctx.type_id_to_wir_type(&type_table, *elem_tid);
-                                    if !is_abstract_ref(&wir_type) {
-                                        array_fixups.push((wir_idx, wir_type));
-                                        break;
-                                    }
-                                }
-                            }
+        if let WirTypeDef::Array(a) = typedef
+            && is_abstract_ref(&a.element_type)
+        {
+            // Try to resolve via TIR BuiltinArray types
+            for tir_mod in ctx.project.tir_modules.values() {
+                let type_table = &*tir_mod.type_table.borrow();
+                for type_id in type_table.iter_type_ids() {
+                    if let crate::tir::ResolvedType::BuiltinArray(elem_tid) =
+                        type_table.get(type_id)
+                        && let Some(arr_wir_id) = ctx.array_type_map.get(elem_tid)
+                        && arr_wir_id.index() == u32::try_from(wir_idx).unwrap()
+                    {
+                        let wir_type = ctx.type_id_to_wir_type(type_table, *elem_tid);
+                        if !is_abstract_ref(&wir_type) {
+                            array_fixups.push((wir_idx, wir_type));
+                            break;
                         }
                     }
                 }
@@ -991,26 +1031,23 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             for body in &ctx.pending_bodies {
                 let tir_func = body.tir_func.borrow();
                 let tt = body.type_table.borrow();
-                if fq.contains(&tir_func.name.to_string()) {
+                if fq.contains(&tir_func.name.clone()) {
                     let params: Vec<WirType> = tir_func
                         .params
                         .iter()
                         .map(|p| ctx.type_id_to_wir_type(&tt, p.type_id))
                         .collect();
-                    let results: Vec<WirType> = if tt.get(tir_func.return_type)
-                        != &crate::tir::ResolvedType::Unit
-                    {
-                        vec![ctx.type_id_to_wir_type(&tt, tir_func.return_type)]
-                    } else {
-                        Vec::new()
-                    };
+                    let results: Vec<WirType> =
+                        if tt.get(tir_func.return_type) == &crate::tir::ResolvedType::Unit {
+                            Vec::new()
+                        } else {
+                            vec![ctx.type_id_to_wir_type(&tt, tir_func.return_type)]
+                        };
                     // Only accept if it actually resolves more types
-                    let new_abstract_count =
-                        params.iter().filter(|t| is_abstract_ref(t)).count()
-                            + results.iter().filter(|t| is_abstract_ref(t)).count();
-                    let old_abstract_count =
-                        f.params.iter().filter(|t| is_abstract_ref(t)).count()
-                            + f.results.iter().filter(|t| is_abstract_ref(t)).count();
+                    let new_abstract_count = params.iter().filter(|t| is_abstract_ref(t)).count()
+                        + results.iter().filter(|t| is_abstract_ref(t)).count();
+                    let old_abstract_count = f.params.iter().filter(|t| is_abstract_ref(t)).count()
+                        + f.results.iter().filter(|t| is_abstract_ref(t)).count();
                     if new_abstract_count < old_abstract_count {
                         resolved_params = Some(params);
                         resolved_results = Some(results);
@@ -1050,8 +1087,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                                 if tt.get(payload_type_id) != &crate::tir::ResolvedType::Unit {
                                     let wir_type = ctx.type_id_to_wir_type(&tt, payload_type_id);
                                     if !is_abstract_ref(&wir_type) {
-                                        variant_fixups
-                                            .push((wir_idx, case_idx, vec![wir_type]));
+                                        variant_fixups.push((wir_idx, case_idx, vec![wir_type]));
                                         break;
                                     }
                                 }

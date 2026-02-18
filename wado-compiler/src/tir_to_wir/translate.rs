@@ -131,7 +131,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
 
             // Look up the __call func_id
             let functor_name = &functor.struct_name;
-            let call_method_suffix = format!("/{}::__call", functor_name);
+            let call_method_suffix = format!("/{functor_name}::__call");
             let call_func_id = ctx
                 .func_map
                 .iter()
@@ -209,8 +209,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             };
 
             let func_id = ctx.register_function(func);
-            ctx.closure_wrapper_funcs
-                .insert(functor.id, func_id);
+            ctx.closure_wrapper_funcs.insert(functor.id, func_id);
         }
     }
 }
@@ -345,11 +344,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Wrap a translated value instruction in `ValueCopy` if needed.
-    fn maybe_value_copy(
-        &self,
-        value: &TirExpr,
-        translated: WirInstr,
-    ) -> WirInstr {
+    fn maybe_value_copy(&self, value: &TirExpr, translated: WirInstr) -> WirInstr {
         if self.needs_value_copy(value.type_id) && !Self::is_fresh_value(value) {
             self.build_value_copy(value.type_id, translated)
         } else {
@@ -357,19 +352,20 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Build a ValueCopy instruction for the given type.
+    /// Build a `ValueCopy` instruction for the given type.
     /// Uses the WIR type ID to identify the struct, and builds a shallow copy descriptor.
     fn build_value_copy(&self, type_id: TypeId, expr: WirInstr) -> WirInstr {
         use crate::wir::{WirCopyField, WirCopyType};
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, type_id);
-        if let WirType::Ref { type_id: wir_tid, .. } = wir_type {
+        if let WirType::Ref {
+            type_id: wir_tid, ..
+        } = wir_type
+        {
             // Variants use pass-through copy (immutable structs in the rec group)
             if self.ctx.is_variant_type(&wir_tid) {
                 return WirInstr::ValueCopy {
                     type_id: wir_tid,
-                    source_type: WirCopyType::Variant {
-                        cases: Vec::new(),
-                    },
+                    source_type: WirCopyType::Variant { cases: Vec::new() },
                     expr: Box::new(expr),
                 };
             }
@@ -378,13 +374,15 @@ impl FunctionTranslator<'_, '_> {
             let copy_fields: Vec<WirCopyField> = (0..field_count)
                 .map(|i| WirCopyField {
                     index: i,
-                    needs_copy: false, // Shallow copy (field-by-field, like codegen)
+                    needs_copy: false, // Shallow copy (field-by-field)
                     copy_type: None,
                 })
                 .collect();
             WirInstr::ValueCopy {
                 type_id: wir_tid,
-                source_type: WirCopyType::Struct { fields: copy_fields },
+                source_type: WirCopyType::Struct {
+                    fields: copy_fields,
+                },
                 expr: Box::new(expr),
             }
         } else {
@@ -392,12 +390,8 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Build the qualified global name matching the codegen convention.
-    fn make_global_name(
-        &self,
-        module_source: &crate::name::ModuleSource,
-        name: &str,
-    ) -> String {
+    /// Build the qualified global name.
+    fn make_global_name(&self, module_source: &crate::name::ModuleSource, name: &str) -> String {
         if module_source.is_entry_point() {
             format!("global:{name}")
         } else {
@@ -528,28 +522,24 @@ impl FunctionTranslator<'_, '_> {
                     else_block: Some(else_block),
                     ..
                 } = &stmt.kind
+                    && let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
                 {
-                    if let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
-                    {
-                        let cond = self.translate_expr(condition);
-                        self.label_stack.push(LabelEntry {
-                            label: None,
-                            is_loop_break: false,
-                            is_loop_continue: false,
-                        });
-                        let then_body =
-                            self.translate_stmts_as_value(&then_block.stmts);
-                        let else_body =
-                            Some(self.translate_stmts_as_value(&else_block.stmts));
-                        self.label_stack.pop();
-                        instrs.push(WirInstr::If {
-                            condition: Box::new(cond),
-                            result: Some(result_type),
-                            then_body,
-                            else_body,
-                        });
-                        continue;
-                    }
+                    let cond = self.translate_expr(condition);
+                    self.label_stack.push(LabelEntry {
+                        label: None,
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                    let then_body = self.translate_stmts_as_value(&then_block.stmts);
+                    let else_body = Some(self.translate_stmts_as_value(&else_block.stmts));
+                    self.label_stack.pop();
+                    instrs.push(WirInstr::If {
+                        condition: Box::new(cond),
+                        result: Some(result_type),
+                        then_body,
+                        else_body,
+                    });
+                    continue;
                 }
                 // Statement-level IfPattern with else can produce a value
                 if let TirStmtKind::IfPattern {
@@ -558,28 +548,24 @@ impl FunctionTranslator<'_, '_> {
                     else_block: Some(else_block),
                     ..
                 } = &stmt.kind
+                    && let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
                 {
-                    if let Some(result_type) = self.infer_stmts_result_type(&then_block.stmts)
-                    {
-                        let scrut = self.translate_expr(scrutinee);
-                        self.label_stack.push(LabelEntry {
-                            label: None,
-                            is_loop_break: false,
-                            is_loop_continue: false,
-                        });
-                        let then_body =
-                            self.translate_stmts_as_value(&then_block.stmts);
-                        let else_body =
-                            Some(self.translate_stmts_as_value(&else_block.stmts));
-                        self.label_stack.pop();
-                        instrs.push(WirInstr::If {
-                            condition: Box::new(scrut),
-                            result: Some(result_type),
-                            then_body,
-                            else_body,
-                        });
-                        continue;
-                    }
+                    let scrut = self.translate_expr(scrutinee);
+                    self.label_stack.push(LabelEntry {
+                        label: None,
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                    let then_body = self.translate_stmts_as_value(&then_block.stmts);
+                    let else_body = Some(self.translate_stmts_as_value(&else_block.stmts));
+                    self.label_stack.pop();
+                    instrs.push(WirInstr::If {
+                        condition: Box::new(scrut),
+                        result: Some(result_type),
+                        then_body,
+                        else_body,
+                    });
+                    continue;
                 }
             }
             if let Some(instr) = self.translate_stmt(stmt) {
@@ -631,20 +617,17 @@ impl FunctionTranslator<'_, '_> {
                 then_branch,
                 else_branch,
             } => {
-                if let Some(result_type) =
-                    self.infer_stmts_result_type(&then_branch.stmts)
-                {
+                if let Some(result_type) = self.infer_stmts_result_type(&then_branch.stmts) {
                     let cond = self.translate_expr(condition);
                     self.label_stack.push(LabelEntry {
                         label: None,
                         is_loop_break: false,
                         is_loop_continue: false,
                     });
-                    let then_body =
-                        self.translate_stmts_as_value(&then_branch.stmts);
-                    let else_body = else_branch.as_ref().map(|b| {
-                        self.translate_stmts_as_value(&b.stmts)
-                    });
+                    let then_body = self.translate_stmts_as_value(&then_branch.stmts);
+                    let else_body = else_branch
+                        .as_ref()
+                        .map(|b| self.translate_stmts_as_value(&b.stmts));
                     self.label_stack.pop();
                     return WirInstr::If {
                         condition: Box::new(cond),
@@ -811,9 +794,7 @@ impl FunctionTranslator<'_, '_> {
                     body: body_instrs,
                 })
             }
-            TirStmtKind::LetPattern {
-                pattern, value, ..
-            } => {
+            TirStmtKind::LetPattern { pattern, value, .. } => {
                 self.translate_let_pattern(pattern, value)
             }
         }
@@ -997,7 +978,8 @@ impl FunctionTranslator<'_, '_> {
                     if let Some(mi) = func.method_info() {
                         eprintln!(
                             "[WIR] unresolved MethodCall: name={:?} method_info={:?}",
-                            func.name(), mi
+                            func.name(),
+                            mi
                         );
                     } else {
                         eprintln!("[WIR] unresolved MethodCall: name={:?}", func.name());
@@ -1810,9 +1792,7 @@ impl FunctionTranslator<'_, '_> {
                         return Some(id.clone());
                     }
                     // Newtype fallback: if struct name is a newtype, try the base type name
-                    if let Some(id) =
-                        self.resolve_newtype_method(module_source, &method_info)
-                    {
+                    if let Some(id) = self.resolve_newtype_method(module_source, &method_info) {
                         return Some(id);
                     }
                 }
@@ -1841,12 +1821,10 @@ impl FunctionTranslator<'_, '_> {
                     return Some(id.clone());
                 }
                 // Newtype fallback: if struct name is a newtype, try the base type name
-                if let Some(method_info) = method_info {
-                    if let Some(id) =
-                        self.resolve_newtype_method(module_source, method_info)
-                    {
-                        return Some(id);
-                    }
+                if let Some(method_info) = method_info
+                    && let Some(id) = self.resolve_newtype_method(module_source, method_info)
+                {
+                    return Some(id);
                 }
                 // Try suffix match
                 let suffix = format!("/{name}");
@@ -1900,12 +1878,11 @@ impl FunctionTranslator<'_, '_> {
                 base_type,
                 ..
             } = self.type_table.get(type_id)
+                && newtype_name == name
             {
-                if newtype_name == name {
-                    // Follow the chain to the ultimate base type
-                    let ultimate = self.type_table.get_ultimate_base_type(*base_type);
-                    return Some(self.type_table.type_name(ultimate));
-                }
+                // Follow the chain to the ultimate base type
+                let ultimate = self.type_table.get_ultimate_base_type(*base_type);
+                return Some(self.type_table.type_name(ultimate));
             }
         }
         None
@@ -2245,18 +2222,12 @@ impl FunctionTranslator<'_, '_> {
             "builtin::i64_mul_wide_u" => {
                 let a = Box::new(self.translate_expr(&args[0]));
                 let b = Box::new(self.translate_expr(&args[1]));
-                Some(self.wrap_multivalue_i64(
-                    WirInstr::I64MulWideU(a, b),
-                    result_type_id,
-                ))
+                Some(self.wrap_multivalue_i64(WirInstr::I64MulWideU(a, b), result_type_id))
             }
             "builtin::i64_mul_wide_s" => {
                 let a = Box::new(self.translate_expr(&args[0]));
                 let b = Box::new(self.translate_expr(&args[1]));
-                Some(self.wrap_multivalue_i64(
-                    WirInstr::I64MulWideS(a, b),
-                    result_type_id,
-                ))
+                Some(self.wrap_multivalue_i64(WirInstr::I64MulWideS(a, b), result_type_id))
             }
 
             // === No-op casts ===
@@ -2287,6 +2258,81 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
 
+            // === Future/Stream create pair ===
+            // Calls future_new/stream_new (returns i64), splits into [rx_i32, tx_i32] tuple
+            "builtin::future_create_pair" | "builtin::stream_create_pair" => {
+                let is_future = builtin_name == "builtin::future_create_pair";
+                let import_name = if is_future {
+                    "future_new"
+                } else {
+                    "stream_new"
+                };
+                let alias = format!("builtin/{import_name}");
+                let func_id = self.ctx.func_map.get(&alias)?.clone();
+
+                // Resolve the result tuple type for StructNew
+                let wir_type = self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, result_type_id);
+                let type_id = match wir_type {
+                    WirType::Ref { type_id, .. } => type_id,
+                    _ => return None,
+                };
+
+                // Declare a temp local, call import → i64, split into [rx, tx] tuple
+                self.local_counter += 1;
+                let temp = format!("__pair_temp_{}", self.local_counter);
+                let declare = WirInstr::DeclareLocal {
+                    name: temp.clone(),
+                    ty: WirType::I64,
+                };
+                let call = WirInstr::Call {
+                    func_id,
+                    args: vec![],
+                };
+                let set_temp = WirInstr::LocalSet {
+                    name: temp.clone(),
+                    value: Box::new(call),
+                };
+                let get_low =
+                    WirInstr::I32WrapI64(Box::new(WirInstr::LocalGet { name: temp.clone() }));
+                let get_high = WirInstr::I32WrapI64(Box::new(WirInstr::I64ShrU(
+                    Box::new(WirInstr::LocalGet { name: temp }),
+                    Box::new(WirInstr::I64Const(32)),
+                )));
+
+                let mut instrs = vec![declare, set_temp];
+                // For futures, store the tx handle (high 32 bits) in the pending_trailers_tx
+                // global so the export adapter can write Ok(None) trailers after task-return.
+                if is_future
+                    && self
+                        .ctx
+                        .global_map
+                        .contains_key("global:__pending_trailers_tx")
+                {
+                    instrs.push(WirInstr::GlobalSet {
+                        name: WirName {
+                            display: "__pending_trailers_tx".to_string(),
+                            fq: "global:__pending_trailers_tx".to_string(),
+                        },
+                        value: Box::new(get_high.clone()),
+                    });
+                }
+                instrs.push(WirInstr::StructNew {
+                    type_id,
+                    fields: vec![get_low, get_high],
+                });
+                Some(WirInstr::Seq(instrs))
+            }
+
+            // === Global get pending trailers tx ===
+            "builtin::global_get_pending_trailers_tx" => Some(WirInstr::GlobalGet {
+                name: WirName {
+                    display: "__pending_trailers_tx".to_string(),
+                    fq: "global:__pending_trailers_tx".to_string(),
+                },
+            }),
+
             // Not an instruction-builtin; fall through to function call resolution
             _ => None,
         }
@@ -2294,7 +2340,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Wrap a multi-value [i64, i64] instruction in a tuple struct.
     /// The Wasm instruction pushes two i64s on the stack; we wrap them
-    /// in a StructNew for the result tuple type [i64, i64].
+    /// in a `StructNew` for the result tuple type [i64, i64].
     fn wrap_multivalue_i64(&self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
         let wir_type = self
             .ctx
@@ -2638,14 +2684,10 @@ impl FunctionTranslator<'_, '_> {
 
     // =========================================================================
     // Match translation
-    /// Translate a LetPattern (tuple destructuring) statement.
+    /// Translate a `LetPattern` (tuple destructuring) statement.
     /// Evaluates the tuple expression, stores it in a temp local,
     /// then binds each element to its pattern binding local.
-    fn translate_let_pattern(
-        &mut self,
-        pattern: &TirPattern,
-        value: &TirExpr,
-    ) -> Option<WirInstr> {
+    fn translate_let_pattern(&mut self, pattern: &TirPattern, value: &TirExpr) -> Option<WirInstr> {
         let value_instr = self.translate_expr(value);
         let value_instr = self.maybe_value_copy(value, value_instr);
 
@@ -2672,10 +2714,7 @@ impl FunctionTranslator<'_, '_> {
                     let mut instrs = Vec::new();
 
                     // Declare and assign a temp local for the tuple
-                    let temp_name = format!(
-                        "__let_pattern_{}",
-                        self.match_counter
-                    );
+                    let temp_name = format!("__let_pattern_{}", self.match_counter);
                     self.match_counter += 1;
                     instrs.push(WirInstr::DeclareLocal {
                         name: temp_name.clone(),
@@ -3068,8 +3107,7 @@ impl FunctionTranslator<'_, '_> {
                     if variant_name == "Some" {
                         // For Some(x), the value is the scrutinee itself (already non-null in
                         // the matched branch). For primitive types in Box<T>, extract .value.
-                        let inner_wir =
-                            self.ctx.type_id_to_wir_type(self.type_table, *inner);
+                        let inner_wir = self.ctx.type_id_to_wir_type(self.type_table, *inner);
                         for binding in bindings {
                             if let TirPattern::Binding { local_index, .. } = binding {
                                 let scrut_ref = WirInstr::LocalGet {
@@ -3089,10 +3127,9 @@ impl FunctionTranslator<'_, '_> {
                                     | WirType::Bool
                                     | WirType::Char => {
                                         // Primitive in Box<T>: extract .value field
-                                        let opt_wir = self.ctx.type_id_to_wir_type(
-                                            self.type_table,
-                                            *enum_type,
-                                        );
+                                        let opt_wir = self
+                                            .ctx
+                                            .type_id_to_wir_type(self.type_table, *enum_type);
                                         if let WirType::Ref { type_id, .. } = opt_wir {
                                             WirInstr::StructGet {
                                                 type_id,
@@ -3183,8 +3220,7 @@ impl FunctionTranslator<'_, '_> {
                             if let Some(tuple_type_id) =
                                 self.get_case_payload_ref_type(&case_type_id, i)
                             {
-                                let tuple_local =
-                                    format!("__tuple_payload_{variant_name}_{i}");
+                                let tuple_local = format!("__tuple_payload_{variant_name}_{i}");
                                 instrs.push(WirInstr::DeclareLocal {
                                     name: tuple_local.clone(),
                                     ty: WirType::Ref {
@@ -3197,10 +3233,7 @@ impl FunctionTranslator<'_, '_> {
                                     value: Box::new(payload_get),
                                 });
                                 for (j, sub) in sub_patterns.iter().enumerate() {
-                                    if let TirPattern::Binding {
-                                        local_index, ..
-                                    } = sub
-                                    {
+                                    if let TirPattern::Binding { local_index, .. } = sub {
                                         instrs.push(WirInstr::LocalSet {
                                             name: self.local_name(*local_index),
                                             value: Box::new(WirInstr::StructGet {
@@ -3525,13 +3558,12 @@ impl FunctionTranslator<'_, '_> {
             .iter()
             .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
             .collect();
-        let result_wirs: Vec<WirType> = if return_type == TypeTable::UNIT
-            || return_type == TypeTable::NEVER
-        {
-            vec![]
-        } else {
-            vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
-        };
+        let result_wirs: Vec<WirType> =
+            if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
+                vec![]
+            } else {
+                vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
+            };
         let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
         let (fn_type_id, closure_struct_type_id) =
             if let Some((ftid, stid)) = self.ctx.canonical_closure_types.get(&key) {
@@ -3631,31 +3663,27 @@ impl FunctionTranslator<'_, '_> {
             .iter()
             .map(|p| self.ctx.type_id_to_wir_type(self.type_table, *p))
             .collect();
-        let result_wirs: Vec<WirType> = if return_type == TypeTable::UNIT
-            || return_type == TypeTable::NEVER
-        {
-            vec![]
-        } else {
-            vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
-        };
+        let result_wirs: Vec<WirType> =
+            if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
+                vec![]
+            } else {
+                vec![self.ctx.type_id_to_wir_type(self.type_table, return_type)]
+            };
 
         // Get canonical closure type
-        let key =
-            WirContext::canonical_closure_key(&param_wirs, &result_wirs);
-        let struct_type_id =
-            if let Some((_, stid)) = self.ctx.canonical_closure_types.get(&key) {
-                stid.clone()
-            } else {
-                return WirInstr::Unreachable;
-            };
+        let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
+        let struct_type_id = if let Some((_, stid)) = self.ctx.canonical_closure_types.get(&key) {
+            stid.clone()
+        } else {
+            return WirInstr::Unreachable;
+        };
 
         // Look up the pre-registered wrapper function for this functor
-        let wrapper_func_id =
-            if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_id) {
-                id.clone()
-            } else {
-                return WirInstr::Unreachable;
-            };
+        let wrapper_func_id = if let Some(id) = self.ctx.closure_wrapper_funcs.get(&functor_id) {
+            id.clone()
+        } else {
+            return WirInstr::Unreachable;
+        };
 
         // Build: CanonicalClosure { env: functor_as_structref, func: ref.func $wrapper }
         WirInstr::StructNew {
