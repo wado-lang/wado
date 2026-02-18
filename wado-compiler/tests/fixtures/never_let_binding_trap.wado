@@ -1,0 +1,10 @@
+// `let x: T = panic(...)` compiles and traps at runtime.
+// `never` is assignable to any type (bottom type rule).
+use { Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let _x: i32 = panic("boom");
+}
+
+__DATA__
+{"stderr_contains": ["boom"], "trapped": true}

@@ -1286,6 +1286,35 @@ let unit: () = ();    // Unit type/value
 let empty: [] = [];   // Empty tuple (rarely used)
 ```
 
+**The `never` type (`!`) — bottom type:**
+
+`never` is the bottom type: it is a subtype of every type. An expression of type `never` never returns — it always diverges (traps). `panic()` and `unreachable()` both return `!`.
+
+Because `never` is assignable to any type, a `never`-typed expression may appear in any value position without a type mismatch:
+
+```wado
+// In a match arm — the None branch panics, so the match has type i32
+let opt: Option<i32> = Option::<i32>::Some(5);
+let x = match opt {
+    Some(v) => v,
+    None => panic("unexpected none"),
+};
+
+// In a let binding with explicit type annotation
+let y: i32 = panic("unreachable");
+
+// In a binary expression — execution diverges before the addition
+let z: i32 = panic("boom") + 1;
+```
+
+The `!` type can be written explicitly as a return type:
+
+```wado
+fn fail(msg: String) -> ! {
+    panic(msg);
+}
+```
+
 #### Array Literals
 
 Arrays require explicit conversion from tuple literals using `as` or implicit coercion when the target type is known at compile time.
