@@ -558,7 +558,7 @@ fn try_lift_wasi_variant_or_enum(
 fn synthesize_lift_wasi_variant(
     _name: &str,
     variant_type: TypeId,
-    cases: &[(String, bool)],
+    cases: &[(String, Option<crate::ast::Type>)],
     addr: TirExpr,
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
@@ -587,7 +587,7 @@ fn synthesize_lift_wasi_variant(
     let case_count = cases.len();
     let mut current_else: Option<TirBlock> = None;
 
-    for (i, (cm_case_name, _has_payload)) in cases.iter().enumerate().rev() {
+    for (i, (cm_case_name, _payload)) in cases.iter().enumerate().rev() {
         // Convert kebab-case CM name to PascalCase Wado name
         let case_name = kebab_to_pascal(cm_case_name);
         let construct = TirExpr::new(

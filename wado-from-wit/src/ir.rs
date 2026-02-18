@@ -51,6 +51,8 @@ pub struct WadoEnum {
 pub struct WadoEnumVariant {
     pub name: String,
     pub doc_comment: Option<String>,
+    /// Original WIT kebab-case name for the `#[wasi("...")]` attribute
+    pub wasi_attr: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +97,8 @@ pub struct WadoVariantCase {
     pub name: String,
     pub payload: Option<WadoType>,
     pub doc_comment: Option<String>,
+    /// Original WIT kebab-case name for the `#[wasi("...")]` attribute
+    pub wasi_attr: Option<String>,
 }
 
 #[derive(Debug, Clone)]

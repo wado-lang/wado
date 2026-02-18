@@ -378,6 +378,7 @@ impl<'a> Transformer<'a> {
                     .map(|case| WadoEnumVariant {
                         name: to_upper_camel_case(&case.name),
                         doc_comment: case.docs.contents.clone(),
+                        wasi_attr: Some(case.name.clone()),
                     })
                     .collect();
 
@@ -434,6 +435,7 @@ impl<'a> Transformer<'a> {
                             name: to_upper_camel_case(&case.name),
                             payload: case.ty.map(|t| self.transform_type(t)).transpose()?,
                             doc_comment: case.docs.contents.clone(),
+                            wasi_attr: Some(case.name.clone()),
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;
