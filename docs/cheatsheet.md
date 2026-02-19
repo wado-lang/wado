@@ -1023,6 +1023,23 @@ test {
     let result = fib(10);
     assert result == 55;
 }
+
+// Expect-trap test: passes when the body traps (panics/unreachable/failed assert)
+#[expect_trap]
+test "panics on invalid input" {
+    panic("bad input");
+}
+
+#[expect_trap]
+test {
+    unreachable();
+}
+
+// TODO test: like #[expect_trap] but with a distinct runner message when it passes
+#[TODO]
+test "not yet implemented" {
+    panic("TODO: implement this");
+}
 ```
 
 Run tests with the CLI:
@@ -1436,6 +1453,17 @@ fn log_debug(message: String) with Stdout {
 struct Foo {
     #[hidden]
     secret: String, // won't be shown in debug stringify
+}
+
+// Test attributes
+#[expect_trap]
+test "should panic" {
+    panic("intentional");  // test passes because it traps
+}
+
+#[TODO]
+test "not yet implemented" {
+    panic("TODO");  // passes while trapping; runner warns when it stops trapping
 }
 ```
 

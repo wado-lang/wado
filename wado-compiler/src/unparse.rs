@@ -782,6 +782,11 @@ impl<'a> Unparser<'a> {
 
     fn unparse_test(&mut self, t: &TestDecl) {
         self.write_indent();
+        for attr in &t.attributes {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
         self.output.push_str("test ");
         if let Some(name) = &t.name {
             self.output.push('"');

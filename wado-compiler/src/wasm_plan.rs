@@ -50,12 +50,17 @@ pub struct WorldExportPlan {
 /// A test function to export from the component.
 #[derive(Debug, Clone)]
 pub struct TestExportPlan {
-    /// Internal function name (e.g., "__`test_0_simple`")
+    /// Internal function name (e.g., "__`test_0_simple`", "__`test_trap_0_panics`", or "__`test_todo_0_not_yet`")
     pub function_name: String,
     /// Core function name in Wasm module (adapter name if adapter exists, otherwise same as `function_name`)
     pub core_func_name: String,
-    /// Component export name in kebab-case (e.g., "test-0-simple")
+    /// Component export name in kebab-case (e.g., "test-0-simple", "test-trap-0-panics", "test-todo-0-not-yet")
     pub export_name: String,
+    /// Whether this test is expected to trap (derived from the `#[expect_trap]` attribute)
+    pub expect_trap: bool,
+    /// Whether this is a TODO placeholder test (derived from the `#[TODO]` attribute).
+    /// Like `expect_trap`, passes when the body traps, but the runner emits a distinct message.
+    pub is_todo: bool,
 }
 
 /// Build a `ComponentPlan` from the project.
@@ -113,6 +118,8 @@ pub fn build_component_plan(project: &Project) -> ComponentPlan {
                     function_name: test.function_name.clone(),
                     core_func_name,
                     export_name,
+                    expect_trap: test.expect_trap,
+                    is_todo: test.is_todo,
                 }
             })
             .collect()
@@ -224,5 +231,17 @@ mod tests {
         );
         // Unnamed test (no name part)
         assert_eq!(sanitize_kebab_export_name("__test_5"), "test-5");
+        // expect_trap tests
+        assert_eq!(
+            sanitize_kebab_export_name("__test_trap_0_panics_on_zero"),
+            "test-trap-0-panics-on-zero"
+        );
+        assert_eq!(sanitize_kebab_export_name("__test_trap_3"), "test-trap-3");
+        // TODO tests
+        assert_eq!(
+            sanitize_kebab_export_name("__test_todo_0_not_yet_implemented"),
+            "test-todo-0-not-yet-implemented"
+        );
+        assert_eq!(sanitize_kebab_export_name("__test_todo_2"), "test-todo-2");
     }
 }

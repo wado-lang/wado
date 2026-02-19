@@ -2554,7 +2554,19 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         test_decl: &ast::TestDecl,
         test_index: usize,
     ) -> Option<(TirFunction, TirTest)> {
+        let expect_trap = test_decl.attributes.iter().any(|a| a.name == "expect_trap");
+        let is_todo = test_decl.attributes.iter().any(|a| a.name == "TODO");
+
         // Generate function name: __test_{index} or __test_{name_snake_case}
+        // For expect_trap tests: __test_trap_{index} or __test_trap_{index}_{name_snake_case}
+        // For TODO tests:        __test_todo_{index} or __test_todo_{index}_{name_snake_case}
+        let prefix = if is_todo {
+            "__test_todo"
+        } else if expect_trap {
+            "__test_trap"
+        } else {
+            "__test"
+        };
         let function_name = match &test_decl.name {
             Some(name) => {
                 // Convert test name to snake_case for function name
@@ -2563,9 +2575,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     .map(|c| if c.is_alphanumeric() { c } else { '_' })
                     .collect::<String>()
                     .to_lowercase();
-                format!("__test_{test_index}_{snake_name}")
+                format!("{prefix}_{test_index}_{snake_name}")
             }
-            None => format!("__test_{test_index}"),
+            None => format!("{prefix}_{test_index}"),
         };
 
         // Create function context - tests have no parameters and return unit
@@ -2605,6 +2617,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             function_name,
             line: test_decl.span.line,
             span: test_decl.span,
+            expect_trap,
+            is_todo,
         };
 
         Some((tir_func, tir_test))
