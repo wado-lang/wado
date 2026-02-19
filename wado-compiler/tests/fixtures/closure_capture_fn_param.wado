@@ -1,0 +1,49 @@
+// Test closure capturing function parameters
+use { println, Stdout } from "core:cli";
+
+fn apply_with_offset(x: i32, offset: i32) -> i32 {
+    let add_offset = |v: i32| v + offset;
+    return add_offset(x);
+}
+
+fn clamp(value: i32, min_val: i32, max_val: i32) -> i32 {
+    let is_above_min = |v: i32| v >= min_val;
+    let is_below_max = |v: i32| v <= max_val;
+    if !is_above_min(value) {
+        return min_val;
+    }
+    if !is_below_max(value) {
+        return max_val;
+    }
+    return value;
+}
+
+fn scale_and_add(items: Array<i32>, scale: i32, base: i32) -> i32 {
+    let mut total = 0;
+    let transform = |x: i32| x * scale + base;
+    for let item of items {
+        total += transform(item);
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let r1 = apply_with_offset(5, 10);
+    println(`{r1}`);  // 15
+
+    let r2 = clamp(15, 0, 10);
+    println(`{r2}`);  // 10
+
+    let r3 = clamp(5, 0, 10);
+    println(`{r3}`);  // 5
+
+    let r4 = clamp(-5, 0, 10);
+    println(`{r4}`);  // 0
+
+    let items: Array<i32> = [1, 2, 3];
+    let r5 = scale_and_add(items, 2, 1);
+    println(`{r5}`);  // (1*2+1) + (2*2+1) + (3*2+1) = 3+5+7 = 15
+}
+
+__DATA__
+{"stdout": "15\n10\n5\n0\n15\n"}

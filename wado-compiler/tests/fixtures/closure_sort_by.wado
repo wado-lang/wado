@@ -1,0 +1,43 @@
+// Test Array sort_by and sorted_by with closure comparators
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut nums: Array<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+
+    // Sort ascending in-place using sort_by
+    nums.sort_by(|a: &i32, b: &i32| {
+        if *a < *b { return Ordering::Less; }
+        if *a > *b { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    for let x of nums {
+        println(`{x}`);
+    }
+    // Expected: 1,2,3,4,5,6,7,8,9
+
+    // Sort descending in-place
+    nums.sort_by(|a: &i32, b: &i32| {
+        if *a > *b { return Ordering::Less; }
+        if *a < *b { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    for let x of nums {
+        println(`{x}`);
+    }
+    // Expected: 9,8,7,6,5,4,3,2,1
+
+    // sorted_by returns a new array (original unchanged)
+    let original: Array<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
+    let asc = original.sorted_by(|a: &i32, b: &i32| {
+        if *a < *b { return Ordering::Less; }
+        if *a > *b { return Ordering::Greater; }
+        return Ordering::Equal;
+    });
+    for let x of asc {
+        println(`{x}`);
+    }
+    // Expected: 1,1,2,3,4,5,6,9
+}
+
+__DATA__
+{"stdout": "1\n2\n3\n4\n5\n6\n7\n8\n9\n9\n8\n7\n6\n5\n4\n3\n2\n1\n1\n1\n2\n3\n4\n5\n6\n9\n"}

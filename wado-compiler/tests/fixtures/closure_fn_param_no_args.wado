@@ -1,0 +1,31 @@
+// Test zero-argument closure passed as fn parameter
+use { println, Stdout } from "core:cli";
+
+fn call_twice(f: fn() -> i32) -> i32 {
+    return f() + f();
+}
+
+fn call_and_get_bool(f: fn() -> bool) -> bool {
+    return f();
+}
+
+fn run_and_check(label: String, f: fn() -> i32) with Stdout {
+    let result = f();
+    println(`{label}: {result}`);
+}
+
+export fn run() with Stdout {
+    let value = 21;
+    let result = call_twice(|| value);
+    println(`{result}`);  // 42
+
+    let flag = true;
+    let b = call_and_get_bool(|| flag);
+    println(`{b}`);  // true
+
+    let x = 100;
+    run_and_check("x", || x);  // x: 100
+}
+
+__DATA__
+{"stdout": "42\ntrue\nx: 100\n"}

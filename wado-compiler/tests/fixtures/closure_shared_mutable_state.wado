@@ -1,0 +1,22 @@
+// TODO: Two closures sharing the same mutable captured variable
+// This tests the core WEP feature: multiple closures sharing a single environment struct.
+// inc() increments count, get() reads it - both see the same state.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut count = 0;
+    let inc = &mut || {
+        count += 1;
+    };
+    let get = || count;
+
+    inc();
+    inc();
+    println(`{get()}`);  // 2
+
+    inc();
+    println(`{get()}`);  // 3
+}
+
+__DATA__
+{"TODO": true, "stdout": "2\n3\n"}

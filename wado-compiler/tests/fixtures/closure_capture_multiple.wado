@@ -1,0 +1,31 @@
+// Test closure capturing multiple variables simultaneously
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Capture three integer variables
+    let a = 10;
+    let b = 20;
+    let c = 30;
+    let sum = || a + b + c;
+    println(`{sum()}`);  // 60
+
+    // Capture variables used in a template string
+    let first = 1;
+    let second = 2;
+    let third = 3;
+    let format_all = || `{first},{second},{third}`;
+    println(format_all());  // 1,2,3
+
+    // Each closure captures different subsets
+    let x = 100;
+    let y = 200;
+    let get_x = || x;
+    let get_y = || y;
+    let get_sum = || x + y;
+    println(`{get_x()}`);    // 100
+    println(`{get_y()}`);    // 200
+    println(`{get_sum()}`);  // 300
+}
+
+__DATA__
+{"stdout": "60\n1,2,3\n100\n200\n300\n"}
