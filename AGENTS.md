@@ -269,6 +269,7 @@ Wado is designed with the following Wasm features:
 
 ## General Rules
 
+- Don't be anchored by existing implementations or conventions. Always design from first principles toward the optimal solution.
 - All the documents and comments must be written in English.
 - When referring to WAT, use folded style syntax.
 - Do not commit changes unless the user requests so. When commit, no need to explain the implementation details.
