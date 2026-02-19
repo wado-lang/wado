@@ -34,15 +34,18 @@ Each test fixture group has the same prefix in their filenames.
 
 #### Data Section Schema
 
-| Field             | Type       | Description                                                |
-| ----------------- | ---------- | ---------------------------------------------------------- |
-| `stdout`          | `string`   | Expected stdout (exact match)                              |
-| `stderr`          | `string`   | Expected stderr (exact match)                              |
-| `stdout_contains` | `string[]` | Strings that must appear in stdout                         |
-| `stderr_contains` | `string[]` | Strings that must appear in stderr                         |
-| `trapped`         | `bool`     | Whether the program should trap                            |
-| `compile_error`   | `string`   | Expected compile error (substring match)                   |
-| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented |
+| Field             | Type       | Description                                                  |
+| ----------------- | ---------- | ------------------------------------------------------------ |
+| `world`           | `string`   | Target world (`"wasi:http/service"`, `"test"`; omit for CLI) |
+| `stdout`          | `string`   | Expected stdout (exact match)                                |
+| `stderr`          | `string`   | Expected stderr (exact match)                                |
+| `stdout_contains` | `string[]` | Strings that must appear in stdout                           |
+| `stderr_contains` | `string[]` | Strings that must appear in stderr                           |
+| `trapped`         | `bool`     | Whether the program should trap                              |
+| `compile_error`   | `string`   | Expected compile error (substring match)                     |
+| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented   |
+| `http_status`     | `number`   | Expected HTTP status code (HTTP world only)                  |
+| `body`            | `string`   | Expected HTTP response body (HTTP world only)                |
 
 #### Examples
 
@@ -82,6 +85,31 @@ export fn run() {
 
 __DATA__
 {"TODO": true, "stdout": "value\n"}
+```
+
+```wado
+// Test world - test blocks are compiled and executed
+test "addition" {
+    assert 1 + 1 == 2;
+}
+
+__DATA__
+{"world": "test"}
+```
+
+```wado
+// HTTP world - compiled as wasi:http/service
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    return Result::<Response, ErrorCode>::Ok(response);
+}
+
+__DATA__
+{"world": "wasi:http/service", "http_status": 200}
 ```
 
 ### Adding New Test Fixtures

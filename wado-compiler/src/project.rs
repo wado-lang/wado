@@ -14,7 +14,7 @@ use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::wasm_plan::ComponentPlan;
-use crate::world_registry::WorldRegistry;
+use crate::world_registry::{self, WorldRegistry};
 use indexmap::{IndexMap, IndexSet};
 
 /// A Wado project ready for code generation.
@@ -51,8 +51,7 @@ pub struct Project {
     /// When true, skip Wasm validation after code generation.
     /// Returns raw bytes even if invalid — useful for debugging codegen.
     pub skip_validation: bool,
-    /// Target world for Component Model export (e.g., "Command", "Service")
-    /// Defaults to "Command" (wasi:cli/command)
+    /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
 
     /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
@@ -99,7 +98,7 @@ impl Project {
             // Codegen options
             strip_names: false,
             skip_validation: false,
-            target_world: "Command".to_string(),
+            target_world: "wasi:cli/command".to_string(),
             // CM export characteristics
             has_http_handler_export: false,
             // CM export adapter mapping
@@ -120,6 +119,14 @@ impl Project {
     /// Check if a function is reachable (should be included in the binary)
     pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
         self.reachable_functions.contains(func_id)
+    }
+
+    /// Check if the project targets the synthetic test world.
+    ///
+    /// When true, test functions are the component's exports and everything
+    /// else (including world exports like `run`) is subject to DCE.
+    pub fn is_test_world(&self) -> bool {
+        self.target_world == world_registry::TEST_WORLD
     }
 
     /// Check if any function from the given WASI effect is used.

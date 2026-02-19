@@ -200,23 +200,27 @@ pub fn cli_engine() -> &'static Engine {
     })
 }
 
-/// Create a wasmtime Engine for HTTP (wasi:http/service) tests
-///
-/// HTTP tests require additional features and cannot share the CLI engine
-/// because they need `wasm_component_model_async_stackful` and other settings.
-pub fn http_engine() -> Engine {
-    let mut config = Config::new();
-    config.async_support(true);
-    config.wasm_component_model(true);
-    config.wasm_component_model_async(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_component_model_gc(true);
-    config.wasm_gc(true);
-    config.wasm_function_references(true);
-    config.wasm_wide_arithmetic(true);
-    config.wasm_threads(true);
-    config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
-    Engine::new(&config).expect("Failed to create wasmtime Engine")
+/// Shared wasmtime Engine for HTTP (wasi:http/service) tests (initialized once)
+static HTTP_ENGINE: OnceLock<Engine> = OnceLock::new();
+
+/// Get or initialize the shared wasmtime Engine for HTTP tests
+pub fn http_engine() -> &'static Engine {
+    HTTP_ENGINE.get_or_init(|| {
+        let mut config = Config::new();
+        config.async_support(true);
+        config.wasm_component_model(true);
+        config.wasm_component_model_async(true);
+        config.wasm_component_model_async_stackful(true);
+        config.wasm_component_model_gc(true);
+        config.wasm_gc(true);
+        config.wasm_function_references(true);
+        config.wasm_wide_arithmetic(true);
+        config.wasm_threads(true);
+        config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
+        // Use minimal optimization for faster compilation in tests
+        config.cranelift_opt_level(wasmtime::OptLevel::None);
+        Engine::new(&config).expect("Failed to create wasmtime Engine")
+    })
 }
 
 /// WASI state for CLI tests
@@ -323,9 +327,25 @@ pub fn compile_source_with_compiler_options(
     source: &str,
     options: wado_compiler::CompilerOptions,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
+    compile_source_with_compiler_options_and_filename(path, source, options, None)
+}
+
+/// Compile source code with full compiler options and an explicit display filename.
+///
+/// When `display_filename` is provided, it is used as the filename passed to the compiler
+/// (for `#file` and assertion messages) instead of `path`. The `path` is still used for
+/// module resolution (its parent directory becomes the filesystem host's base path).
+pub fn compile_source_with_compiler_options_and_filename(
+    path: &std::path::Path,
+    source: &str,
+    options: wado_compiler::CompilerOptions,
+    display_filename: Option<&str>,
+) -> Result<wado_compiler::CompileResult, CompileError> {
     let base_path = path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
-    let filename = path.to_string_lossy();
+    let filename = display_filename
+        .map(std::borrow::Cow::Borrowed)
+        .unwrap_or_else(|| path.to_string_lossy());
 
     runtime()
         .block_on(wado_compiler::compile_with_options(

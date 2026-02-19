@@ -206,6 +206,7 @@ pub struct ResourceDecl {
 #[derive(Debug, Clone)]
 pub struct WorldDecl {
     pub name: String,
+    pub attrs: Vec<Attribute>,
     pub imports: Vec<WorldImport>,
     pub exports: Vec<WorldExport>,
     pub span: Span,

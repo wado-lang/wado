@@ -40,12 +40,18 @@ pub fn analyze_project(project: &mut Project) {
     // Build call graph and effect usage from all modules
     let (call_graph, effect_usage) = build_analysis_graph(&project.tir_modules);
 
-    // Determine entry functions from world exports
-    let mut entry_func_names: Vec<String> = project
-        .world_registry
-        .get(&project.target_world)
-        .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
-        .unwrap_or_else(|| vec!["run".to_string()]);
+    // Determine entry functions from world exports.
+    // For the test world, test functions are the sole entry points; world exports
+    // (like `run`) are only reachable if tests transitively call them.
+    let mut entry_func_names: Vec<String> = if project.is_test_world() {
+        vec![]
+    } else {
+        project
+            .world_registry
+            .get(&project.target_world)
+            .map(|w| w.exports.iter().map(|e| e.name.clone()).collect())
+            .unwrap_or_else(|| vec!["run".to_string()])
+    };
 
     // Include export adapter functions as additional entry points
     // (they wrap the user's export functions with CM boundary logic)
@@ -63,9 +69,12 @@ pub fn analyze_project(project: &mut Project) {
         let entry_reachable = compute_reachable(&call_graph, &entry_func);
         reachable.extend(entry_reachable);
     }
-    // Add test functions as additional entry points
-    // Test functions are also roots for reachability analysis
-    if let Some(entry_module) = project.tir_modules.get(&project.entry_module_source) {
+
+    // Add test functions as entry points only when targeting the test world.
+    // For non-test worlds (command, service, …), tests are dead code.
+    if project.is_test_world()
+        && let Some(entry_module) = project.tir_modules.get(&project.entry_module_source)
+    {
         for test in &entry_module.tests {
             let test_func = FunctionId::Free(FreeFunctionName::from_module_source(
                 &project.entry_module_source,
@@ -202,11 +211,13 @@ pub fn analyze_project(project: &mut Project) {
         add_import_by_name(&mut imports, "f32_to_buffer");
     }
 
-    // Async exports require task-return and potentially other canonical intrinsics
-    let has_async_export = project
-        .world_registry
-        .get(&project.target_world)
-        .is_some_and(super::world_registry::WorldInfo::has_async_export);
+    // Async exports require task-return and potentially other canonical intrinsics.
+    // The test world always has async exports (each test is an async component export).
+    let has_async_export = project.is_test_world()
+        || project
+            .world_registry
+            .get(&project.target_world)
+            .is_some_and(super::world_registry::WorldInfo::has_async_export);
     let has_http_handler_export = project
         .world_registry
         .get(&project.target_world)
@@ -1059,10 +1070,6 @@ pub fn remove_unreachable_functions(project: &mut Project) {
         module.functions.retain(|func_rc| {
             let func = func_rc.borrow();
 
-            // Always retain test functions (they are entry points for the test runner)
-            if func.name.starts_with("__test_") {
-                return true;
-            }
             // Use TirFunction's method_info to check if this is a method
             if let Some(ref info) = func.method_info {
                 // Could be either:

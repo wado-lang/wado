@@ -3860,7 +3860,8 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
     }
 
     // Step 6: Synthesize export adapters for test functions (__test_*)
-    {
+    // Only when targeting the test world — in other worlds, tests are dead code.
+    if project.is_test_world() {
         let entry_module = project
             .tir_modules
             .get_mut(&entry_source)

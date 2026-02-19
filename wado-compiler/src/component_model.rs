@@ -478,7 +478,7 @@ impl WasiRegistry {
     ///
     /// Use this for modules with resource types that aren't fully supported
     /// for Component Model lowering yet. This registers the world definitions
-    /// so they can be used for targeting (e.g., --world Service), but skips
+    /// so they can be used for targeting (e.g., --world wasi:http/service), but skips
     /// effect/function registration.
     fn register_world_definitions(
         &mut self,

@@ -89,27 +89,36 @@ pub fn build_component_plan(project: &Project) -> ComponentPlan {
         .map(|i| i.canonical_name.clone())
         .collect();
 
-    // Build world exports from registry
-    let world_exports = build_world_export_plans(project);
+    // Build world exports from registry.
+    // For the test world, there are no world exports — only test exports.
+    let world_exports = if project.is_test_world() {
+        vec![]
+    } else {
+        build_world_export_plans(project)
+    };
 
-    // Build test exports
-    let test_exports: Vec<TestExportPlan> = entry_tir
-        .tests
-        .iter()
-        .map(|test| {
-            let export_name = sanitize_kebab_export_name(&test.function_name);
-            let core_func_name = project
-                .export_adapter_names
-                .get(&test.function_name)
-                .cloned()
-                .unwrap_or_else(|| test.function_name.clone());
-            TestExportPlan {
-                function_name: test.function_name.clone(),
-                core_func_name,
-                export_name,
-            }
-        })
-        .collect();
+    // Build test exports (only when targeting the test world)
+    let test_exports: Vec<TestExportPlan> = if project.is_test_world() {
+        entry_tir
+            .tests
+            .iter()
+            .map(|test| {
+                let export_name = sanitize_kebab_export_name(&test.function_name);
+                let core_func_name = project
+                    .export_adapter_names
+                    .get(&test.function_name)
+                    .cloned()
+                    .unwrap_or_else(|| test.function_name.clone());
+                TestExportPlan {
+                    function_name: test.function_name.clone(),
+                    core_func_name,
+                    export_name,
+                }
+            })
+            .collect()
+    } else {
+        vec![]
+    };
 
     ComponentPlan {
         canonical_intrinsics,
