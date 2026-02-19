@@ -19,6 +19,30 @@ fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
 }
 
+/// Extract the CM name from a `#[wasi("...")]` attribute.
+///
+/// Handles two formats:
+/// - Type-level: `#[wasi("wasi:pkg/iface@ver#cm-name")]` → takes the fragment after `#`
+/// - Case-level: `#[wasi("cm-name")]` → uses the whole arg directly
+///
+/// Preserves acronym casing from the WIT source (e.g., `DNS-timeout`, `TLS-protocol-error`).
+/// Falls back to `to_kebab_case(wado_name)` when no `#[wasi]` attribute is present.
+fn wasi_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
+    attrs
+        .iter()
+        .find(|a| a.name == "wasi")
+        .and_then(|a| a.args.first())
+        .map(|s| {
+            // Type-level attrs contain a `#` separator; case-level attrs do not
+            if let Some(fragment) = s.split('#').nth(1) {
+                fragment.to_owned()
+            } else {
+                s.clone()
+            }
+        })
+        .unwrap_or_else(|| to_kebab_case(wado_name))
+}
+
 /// Information about a WASI function from an effect method
 #[derive(Debug, Clone)]
 pub struct WasiFunctionInfo {
@@ -169,8 +193,13 @@ pub struct WasiRegistry {
     enums: IndexMap<String, (String, Vec<String>)>,
 
     /// Variant types collected from WASI modules (e.g., `HeaderError`)
-    /// Maps Wado variant name -> (CM variant name kebab-case, cases: Vec<(`case_cm_name`, `has_payload`)>)
-    variants: IndexMap<String, (String, Vec<(String, bool)>)>,
+    /// Maps Wado variant name -> (CM variant name kebab-case, cases: Vec<(`case_cm_name`, `payload_type`)>)
+    variants: IndexMap<String, (String, Vec<(String, Option<Type>)>)>,
+
+    /// Struct types collected from WASI modules (e.g., `DnsErrorPayload`)
+    /// Maps Wado struct name -> (CM record name kebab-case, source interface path, fields)
+    /// e.g., "`DnsErrorPayload`" -> ("DNS-error-payload", "wasi:http/types@...", [("rcode", Option<String>), ...])
+    structs: IndexMap<String, (String, String, Vec<(String, Type)>)>,
 }
 
 impl WasiRegistry {
@@ -258,8 +287,8 @@ impl WasiRegistry {
         // Collect resource types from this module
         for item in &module.items {
             if let Item::Resource(resource) = item {
-                // Convert PascalCase to kebab-case for CM
-                let cm_name = to_kebab_case(&resource.name);
+                // Use the #[wasi] fragment as the CM name (preserves acronym casing like DNS, TLS)
+                let cm_name = wasi_attr_cm_name(&resource.attrs, &resource.name);
                 // Extract source interface path from #[wasi] attribute
                 // Format: #[wasi("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
                 let source_interface = resource
@@ -275,17 +304,41 @@ impl WasiRegistry {
             }
         }
 
+        // Collect struct types from this module (e.g., DnsErrorPayload -> DNS-error-payload)
+        for item in &module.items {
+            if let Item::Struct(struct_def) = item {
+                // Use the #[wasi] fragment as the CM name (preserves acronym casing)
+                let cm_name = wasi_attr_cm_name(&struct_def.attrs, &struct_def.name);
+                // Extract source interface path (part before #) from #[wasi] attribute
+                let source_interface = struct_def
+                    .attrs
+                    .iter()
+                    .find(|a| a.name == "wasi")
+                    .and_then(|a| a.args.first())
+                    .and_then(|s| s.split('#').next())
+                    .unwrap_or("")
+                    .to_string();
+                let fields: Vec<(String, Type)> = struct_def
+                    .fields
+                    .iter()
+                    .map(|f| (to_kebab_case(&f.name), f.ty.clone()))
+                    .collect();
+                self.structs
+                    .insert(struct_def.name.clone(), (cm_name, source_interface, fields));
+            }
+        }
+
         // Collect enum types from this module
         // Use interface path from #[wasi] attribute as key to distinguish same-named enums
         for item in &module.items {
             if let Item::Enum(enum_def) = item {
-                // Convert PascalCase to kebab-case for CM
-                let cm_name = to_kebab_case(&enum_def.name);
-                // Also collect variant names in kebab-case
+                // Use the #[wasi] fragment as the CM name (preserves acronym casing)
+                let cm_name = wasi_attr_cm_name(&enum_def.attrs, &enum_def.name);
+                // Use per-case #[wasi] attr for CM name; fall back to to_kebab_case
                 let variant_names: Vec<String> = enum_def
                     .cases
                     .iter()
-                    .map(|c| to_kebab_case(&c.name))
+                    .map(|c| wasi_attr_cm_name(&c.attrs, &c.name))
                     .collect();
 
                 // Extract interface path from #[wasi] attribute if present
@@ -316,11 +369,13 @@ impl WasiRegistry {
         // Collect variant types from this module (e.g., HeaderError)
         for item in &module.items {
             if let Item::Variant(variant_def) = item {
-                let cm_name = to_kebab_case(&variant_def.name);
-                let cases: Vec<(String, bool)> = variant_def
+                // Use the #[wasi] fragment as the CM name (preserves acronym casing)
+                let cm_name = wasi_attr_cm_name(&variant_def.attrs, &variant_def.name);
+                // Use per-case #[wasi] attr for CM name; store actual payload type for codegen
+                let cases: Vec<(String, Option<Type>)> = variant_def
                     .cases
                     .iter()
-                    .map(|c| (to_kebab_case(&c.name), c.payload.is_some()))
+                    .map(|c| (wasi_attr_cm_name(&c.attrs, &c.name), c.payload.clone()))
                     .collect();
 
                 self.variants
@@ -435,7 +490,7 @@ impl WasiRegistry {
         // Collect resource types (needed for type checking)
         for item in &module.items {
             if let Item::Resource(resource) = item {
-                let cm_name = to_kebab_case(&resource.name);
+                let cm_name = wasi_attr_cm_name(&resource.attrs, &resource.name);
                 let source_interface = resource
                     .attrs
                     .iter()
@@ -539,9 +594,66 @@ impl WasiRegistry {
         self.variants.get(name).map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Get the variant cases (CM kebab-case name, `has_payload`)
-    pub fn get_variant_cases(&self, name: &str) -> Option<&[(String, bool)]> {
+    /// Get the variant cases (CM kebab-case name, payload type if any)
+    pub fn get_variant_cases(&self, name: &str) -> Option<&[(String, Option<Type>)]> {
         self.variants.get(name).map(|(_, cases)| cases.as_slice())
+    }
+
+    /// Check if a type name is a registered struct (WIT record)
+    pub fn is_struct(&self, name: &str) -> bool {
+        self.structs.contains_key(name)
+    }
+
+    /// Get the CM kebab-case name for a struct (WIT record)
+    pub fn get_struct_cm_name(&self, name: &str) -> Option<&str> {
+        self.structs
+            .get(name)
+            .map(|(cm_name, _, _)| cm_name.as_str())
+    }
+
+    /// Get the fields of a struct (CM kebab-case field name, field type)
+    pub fn get_struct_fields(&self, name: &str) -> Option<&[(String, Type)]> {
+        self.structs
+            .get(name)
+            .map(|(_, _, fields)| fields.as_slice())
+    }
+
+    /// Iterate over all structs from a specific interface (matched by prefix)
+    /// Returns (`wado_name`, `cm_name`, fields) in insertion order.
+    pub fn structs_for_interface(
+        &self,
+        interface_prefix: &str,
+    ) -> impl Iterator<Item = (&str, &str, &[(String, Type)])> {
+        self.structs
+            .iter()
+            .filter_map(move |(name, (cm_name, source, fields))| {
+                if source.starts_with(interface_prefix) {
+                    Some((name.as_str(), cm_name.as_str(), fields.as_slice()))
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Iterate over variants from a specific interface using full-key entries.
+    /// Full-key format: `"interface_path#WadoName"` (inserted by `register_module`).
+    /// Returns (`wado_name`, `cm_name`, cases) in insertion order.
+    pub fn variants_for_interface(
+        &self,
+        interface_prefix: &str,
+    ) -> impl Iterator<Item = (&str, &str, &[(String, Option<Type>)])> {
+        let prefix = format!("{interface_prefix}#");
+        self.variants
+            .iter()
+            .filter_map(move |(key, (cm_name, cases))| {
+                if key.starts_with(&prefix) {
+                    // key = "interface_path#WadoName"
+                    let wado_name = key.split('#').nth(1).unwrap_or(key.as_str());
+                    Some((wado_name, cm_name.as_str(), cases.as_slice()))
+                } else {
+                    None
+                }
+            })
     }
 
     /// Get the resource type from a return type (if it's Option<ResourceName>)
@@ -931,20 +1043,36 @@ impl CmInstanceTypeGen {
     }
 
     /// Define a variant type and its named export, returning the exported type index.
+    ///
+    /// Handles payload types recursively via `ast_type_to_cm`.
     fn define_variant(
         &mut self,
         instance_type: &mut InstanceType,
         cm_name: &str,
-        cases: &[(String, bool)],
+        cases: &[(String, Option<Type>)],
+        wasi_registry: &WasiRegistry,
+        resource_exports: &IndexMap<&str, u32>,
     ) -> u32 {
         let cache_key = format!("variant:{cm_name}");
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
 
+        // Build payload CM types first (before emitting the variant, to maintain type order)
+        let payload_cm_types: Vec<Option<ComponentValType>> = cases
+            .iter()
+            .map(|(_, payload)| {
+                payload.as_ref().map(|ty| {
+                    let resolved = wasi_registry.resolve_type(ty);
+                    self.ast_type_to_cm(&resolved, instance_type, wasi_registry, resource_exports)
+                })
+            })
+            .collect();
+
         let variant_cases: Vec<(&str, Option<ComponentValType>, Option<u32>)> = cases
             .iter()
-            .map(|(name, _has_payload)| (name.as_str(), None, None))
+            .zip(payload_cm_types.iter())
+            .map(|((name, _), payload_cm)| (name.as_str(), *payload_cm, None))
             .collect();
         instance_type.ty().defined_type().variant(variant_cases);
         let variant_idx = self.alloc_idx();
@@ -958,6 +1086,100 @@ impl CmInstanceTypeGen {
 
         self.cache.insert(cache_key, export_idx);
         export_idx
+    }
+
+    /// Define a record (struct) type and its named export, returning the exported type index.
+    fn define_record(
+        &mut self,
+        instance_type: &mut InstanceType,
+        cm_name: &str,
+        fields: &[(String, Type)],
+        wasi_registry: &WasiRegistry,
+        resource_exports: &IndexMap<&str, u32>,
+    ) -> u32 {
+        let cache_key = format!("record:{cm_name}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+
+        // Build field CM types first
+        let field_cm_types: Vec<(String, ComponentValType)> = fields
+            .iter()
+            .map(|(field_name, field_ty)| {
+                let resolved = wasi_registry.resolve_type(field_ty);
+                let cm_type =
+                    self.ast_type_to_cm(&resolved, instance_type, wasi_registry, resource_exports);
+                (field_name.clone(), cm_type)
+            })
+            .collect();
+
+        let field_refs: Vec<(&str, ComponentValType)> = field_cm_types
+            .iter()
+            .map(|(n, t)| (n.as_str(), *t))
+            .collect();
+        instance_type.ty().defined_type().record(field_refs);
+        let record_idx = self.alloc_idx();
+
+        // Export the record type (required by CM spec)
+        instance_type.export(
+            cm_name,
+            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(record_idx)),
+        );
+        let export_idx = self.alloc_idx();
+
+        self.cache.insert(cache_key, export_idx);
+        export_idx
+    }
+
+    /// Define an option<T> type, returning the type index.
+    fn define_option(
+        &mut self,
+        instance_type: &mut InstanceType,
+        inner: ComponentValType,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("option:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type.ty().defined_type().option(inner);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a stream<T> type, returning the type index.
+    fn define_stream(
+        &mut self,
+        instance_type: &mut InstanceType,
+        elem: Option<ComponentValType>,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("stream:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type.ty().defined_type().stream(elem);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
+    }
+
+    /// Define a future<T> type, returning the type index.
+    fn define_future(
+        &mut self,
+        instance_type: &mut InstanceType,
+        inner: Option<ComponentValType>,
+        key_suffix: &str,
+    ) -> u32 {
+        let cache_key = format!("future:{key_suffix}");
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return idx;
+        }
+        instance_type.ty().defined_type().future(inner);
+        let idx = self.alloc_idx();
+        self.cache.insert(cache_key, idx);
+        idx
     }
 
     /// Define a borrow type, returning the type index.
@@ -1073,7 +1295,24 @@ impl CmInstanceTypeGen {
                     } else if wasi_registry.is_variant(name) {
                         let cm_name = wasi_registry.get_variant_cm_name(name).unwrap().to_string();
                         let cases = wasi_registry.get_variant_cases(name).unwrap().to_vec();
-                        let idx = self.define_variant(instance_type, &cm_name, &cases);
+                        let idx = self.define_variant(
+                            instance_type,
+                            &cm_name,
+                            &cases,
+                            wasi_registry,
+                            resource_exports,
+                        );
+                        ComponentValType::Type(idx)
+                    } else if wasi_registry.is_struct(name) {
+                        let cm_name = wasi_registry.get_struct_cm_name(name).unwrap().to_string();
+                        let fields = wasi_registry.get_struct_fields(name).unwrap().to_vec();
+                        let idx = self.define_record(
+                            instance_type,
+                            &cm_name,
+                            &fields,
+                            wasi_registry,
+                            resource_exports,
+                        );
                         ComponentValType::Type(idx)
                     } else {
                         panic!("unsupported named type for CM instance: {name}")
@@ -1134,6 +1373,47 @@ impl CmInstanceTypeGen {
                         Self::type_key(&generic.args[1])
                     );
                     let idx = self.define_result(instance_type, ok_type, err_type, &key);
+                    ComponentValType::Type(idx)
+                }
+                "Option" => {
+                    let inner_cm = self.ast_type_to_cm(
+                        &generic.args[0],
+                        instance_type,
+                        wasi_registry,
+                        resource_exports,
+                    );
+                    let key = Self::type_key(&generic.args[0]);
+                    let idx = self.define_option(instance_type, inner_cm, &key);
+                    ComponentValType::Type(idx)
+                }
+                "Stream" => {
+                    let (elem, key) = if generic.args.is_empty() {
+                        (None, "unit".to_string())
+                    } else {
+                        let cm = self.ast_type_to_cm(
+                            &generic.args[0],
+                            instance_type,
+                            wasi_registry,
+                            resource_exports,
+                        );
+                        (Some(cm), Self::type_key(&generic.args[0]))
+                    };
+                    let idx = self.define_stream(instance_type, elem, &key);
+                    ComponentValType::Type(idx)
+                }
+                "Future" => {
+                    let (inner, key) = if generic.args.is_empty() {
+                        (None, "unit".to_string())
+                    } else {
+                        let cm = self.ast_type_to_cm(
+                            &generic.args[0],
+                            instance_type,
+                            wasi_registry,
+                            resource_exports,
+                        );
+                        (Some(cm), Self::type_key(&generic.args[0]))
+                    };
+                    let idx = self.define_future(instance_type, inner, &key);
                     ComponentValType::Type(idx)
                 }
                 _ => panic!("unsupported generic type for CM instance: {}", generic.name),

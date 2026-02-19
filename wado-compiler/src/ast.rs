@@ -1042,6 +1042,8 @@ pub struct StructDecl {
     /// Generic type parameters: `struct Pair<T, U> { ... }`
     pub type_params: Vec<GenericParam>,
     pub fields: Vec<StructField>,
+    /// Attributes like `#[wasi("...")]`
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 
@@ -1069,6 +1071,8 @@ pub struct EnumDecl {
 #[derive(Debug, Clone)]
 pub struct EnumCase {
     pub name: String,
+    /// Attributes like `#[wasi("wit-kebab-name")]` for CM name override
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 
@@ -1127,6 +1131,8 @@ pub struct VariantCase {
     /// Payload type for this case. None for unit variants like `None`.
     /// At TIR level, unit variants are normalized to have `()` payload.
     pub payload: Option<Type>,
+    /// Attributes like `#[wasi("wit-kebab-name")]` for CM name override
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 

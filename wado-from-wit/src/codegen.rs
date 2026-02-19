@@ -105,6 +105,9 @@ impl WadoCodeGenerator {
 
         for variant in &e.variants {
             self.write_doc_comment(variant.doc_comment.as_ref());
+            if let Some(ref attr) = variant.wasi_attr {
+                self.writeln(&format!("#[wasi(\"{attr}\")]"));
+            }
             self.writeln(&format!("{},", variant.name));
         }
 
@@ -160,6 +163,9 @@ impl WadoCodeGenerator {
 
         for case in &v.cases {
             self.write_doc_comment(case.doc_comment.as_ref());
+            if let Some(ref attr) = case.wasi_attr {
+                self.writeln(&format!("#[wasi(\"{attr}\")]"));
+            }
             match &case.payload {
                 Some(ty) => self.writeln(&format!("{}({}),", case.name, Self::format_type(ty))),
                 None => self.writeln(&format!("{},", case.name)),

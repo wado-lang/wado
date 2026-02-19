@@ -1187,257 +1187,80 @@ fn import_http_types_for_service(
             wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
         );
 
-        // Payload types for error-code variant
-        // Type 3: option<string>
-        instance_type
-            .ty()
-            .defined_type()
-            .option(ComponentValType::Primitive(PrimitiveValType::String));
-        // Type 4: option<u16>
-        instance_type
-            .ty()
-            .defined_type()
-            .option(ComponentValType::Primitive(PrimitiveValType::U16));
-        // Type 5: DNS-error-payload record
-        instance_type.ty().defined_type().record([
-            ("rcode", ComponentValType::Type(3)),
-            ("info-code", ComponentValType::Type(4)),
-        ]);
-        instance_type.export(
-            "DNS-error-payload",
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(5)),
-        );
-        // Type 7: option<u8>
-        instance_type
-            .ty()
-            .defined_type()
-            .option(ComponentValType::Primitive(PrimitiveValType::U8));
-        // Type 8: TLS-alert-received-payload record
-        instance_type.ty().defined_type().record([
-            ("alert-id", ComponentValType::Type(7)),
-            ("alert-message", ComponentValType::Type(3)),
-        ]);
-        instance_type.export(
-            "TLS-alert-received-payload",
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(8)),
-        );
-        // Type 10: option<u32>
-        instance_type
-            .ty()
-            .defined_type()
-            .option(ComponentValType::Primitive(PrimitiveValType::U32));
-        // Type 11: field-size-payload record
-        instance_type.ty().defined_type().record([
-            ("field-name", ComponentValType::Type(3)),
-            ("field-size", ComponentValType::Type(10)),
-        ]);
-        instance_type.export(
-            "field-size-payload",
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(11)),
-        );
-        // Type 13: option<u64>
-        instance_type
-            .ty()
-            .defined_type()
-            .option(ComponentValType::Primitive(PrimitiveValType::U64));
-        // Type 14: option<field-size-payload>
-        instance_type
-            .ty()
-            .defined_type()
-            .option(ComponentValType::Type(12));
-
-        // Type 15: error-code variant
-        instance_type.ty().defined_type().variant([
-            ("DNS-timeout", None, None),
-            ("DNS-error", Some(ComponentValType::Type(6)), None),
-            ("destination-not-found", None, None),
-            ("destination-unavailable", None, None),
-            ("destination-IP-prohibited", None, None),
-            ("destination-IP-unroutable", None, None),
-            ("connection-refused", None, None),
-            ("connection-terminated", None, None),
-            ("connection-timeout", None, None),
-            ("connection-read-timeout", None, None),
-            ("connection-write-timeout", None, None),
-            ("connection-limit-reached", None, None),
-            ("TLS-protocol-error", None, None),
-            ("TLS-certificate-error", None, None),
-            ("TLS-alert-received", Some(ComponentValType::Type(9)), None),
-            ("HTTP-request-denied", None, None),
-            ("HTTP-request-length-required", None, None),
-            (
-                "HTTP-request-body-size",
-                Some(ComponentValType::Type(13)),
-                None,
-            ),
-            ("HTTP-request-method-invalid", None, None),
-            ("HTTP-request-URI-invalid", None, None),
-            ("HTTP-request-URI-too-long", None, None),
-            (
-                "HTTP-request-header-section-size",
-                Some(ComponentValType::Type(10)),
-                None,
-            ),
-            (
-                "HTTP-request-header-size",
-                Some(ComponentValType::Type(14)),
-                None,
-            ),
-            (
-                "HTTP-request-trailer-section-size",
-                Some(ComponentValType::Type(10)),
-                None,
-            ),
-            (
-                "HTTP-request-trailer-size",
-                Some(ComponentValType::Type(12)),
-                None,
-            ),
-            ("HTTP-response-incomplete", None, None),
-            (
-                "HTTP-response-header-section-size",
-                Some(ComponentValType::Type(10)),
-                None,
-            ),
-            (
-                "HTTP-response-header-size",
-                Some(ComponentValType::Type(12)),
-                None,
-            ),
-            (
-                "HTTP-response-body-size",
-                Some(ComponentValType::Type(13)),
-                None,
-            ),
-            (
-                "HTTP-response-trailer-section-size",
-                Some(ComponentValType::Type(10)),
-                None,
-            ),
-            (
-                "HTTP-response-trailer-size",
-                Some(ComponentValType::Type(12)),
-                None,
-            ),
-            (
-                "HTTP-response-transfer-coding",
-                Some(ComponentValType::Type(3)),
-                None,
-            ),
-            (
-                "HTTP-response-content-coding",
-                Some(ComponentValType::Type(3)),
-                None,
-            ),
-            ("HTTP-response-timeout", None, None),
-            ("HTTP-upgrade-failed", None, None),
-            ("HTTP-protocol-error", None, None),
-            ("loop-detected", None, None),
-            ("configuration-error", None, None),
-            ("internal-error", Some(ComponentValType::Type(3)), None),
-        ]);
-        instance_type.export(
-            "error-code",
-            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(15)),
-        );
-
-        // Type 17: stream<u8>
-        instance_type
-            .ty()
-            .defined_type()
-            .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
-        // Type 18: option<stream<u8>>
-        instance_type
-            .ty()
-            .defined_type()
-            .option(ComponentValType::Type(17));
-        // Type 19: result<_, error-code>
-        instance_type
-            .ty()
-            .defined_type()
-            .result(None, Some(ComponentValType::Type(16)));
-        // Type 20: future<result<_, error-code>>
-        instance_type
-            .ty()
-            .defined_type()
-            .future(Some(ComponentValType::Type(19)));
-
-        // Type 21: own<fields>
-        instance_type.ty().defined_type().own(2);
-        // Type 22: own<response>
-        instance_type.ty().defined_type().own(1);
-        // Type 23: option<own<fields>>
-        instance_type
-            .ty()
-            .defined_type()
-            .option(ComponentValType::Type(21));
-        // Type 24: result<option<own<fields>>, error-code>
-        instance_type.ty().defined_type().result(
-            Some(ComponentValType::Type(23)),
-            Some(ComponentValType::Type(16)),
-        );
-        // Type 25: future<result<option<own<fields>>, error-code>>
-        instance_type
-            .ty()
-            .defined_type()
-            .future(Some(ComponentValType::Type(24)));
-        // Type 26: tuple<own<response>, future<result<_, error-code>>>
-        instance_type
-            .ty()
-            .defined_type()
-            .tuple([ComponentValType::Type(22), ComponentValType::Type(20)]);
-
-        // Type 27: [constructor]fields function type
-        let params: [(&str, ComponentValType); 0] = [];
-        instance_type
-            .ty()
-            .function()
-            .params(params)
-            .result(Some(ComponentValType::Type(21)));
-        // Type 28: [static]response.new function type
-        instance_type
-            .ty()
-            .function()
-            .params([
-                ("headers", ComponentValType::Type(21)),
-                ("contents", ComponentValType::Type(18)),
-                ("trailers", ComponentValType::Type(25)),
-            ])
-            .result(Some(ComponentValType::Type(26)));
-
-        instance_type.export(
-            "[constructor]fields",
-            wasm_encoder::ComponentTypeRef::Func(27),
-        );
-        instance_type.export(
-            "[static]response.new",
-            wasm_encoder::ComponentTypeRef::Func(28),
-        );
-
-        // Resource methods (metadata-driven)
-        let mut type_gen = CmInstanceTypeGen::new(29);
-        type_gen.register_existing("own:fields", 21);
-        type_gen.register_existing("own:response", 22);
+        // Type generation starts at index 3 (after the 3 SubResource exports).
+        // CmInstanceTypeGen emits error-code and its payload structs
+        // (DNS-error-payload, TLS-alert-received-payload, field-size-payload)
+        // on demand when the parameter/return types of [static]response.new are processed.
+        let mut type_gen = CmInstanceTypeGen::new(3);
         let resource_exports: IndexMap<&str, u32> =
-            [("fields", 2), ("response", 1), ("request", 0)]
+            [("request", 0), ("response", 1), ("fields", 2)]
                 .into_iter()
                 .collect();
 
-        let resource_methods: Vec<WasiFunctionInfo> = project
+        let all_funcs: Vec<WasiFunctionInfo> = project
             .wasi_registry
             .interfaces()
             .find(|i| i.package == "http" && i.interface == "types")
-            .map(|i| {
-                i.functions
-                    .into_iter()
-                    .filter(|f| {
-                        (f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]"))
-                            || (f.effect_name == "Response"
-                                && f.wasi_func_name.starts_with("[method]"))
-                    })
-                    .collect()
-            })
+            .map(|i| i.functions)
             .unwrap_or_default();
+
+        // Emit [constructor]fields and [static]response.new from registry metadata.
+        // Processing their parameter and return types triggers on-demand emission of
+        // all dependent types (error-code variant and its payload record types).
+        for func in all_funcs.iter().filter(|f| {
+            f.wasi_func_name == "[constructor]fields" || f.wasi_func_name == "[static]response.new"
+        }) {
+            let resolved_return = func
+                .return_type
+                .as_ref()
+                .map(|ty| project.wasi_registry.resolve_type(ty));
+
+            let cm_params: Vec<(String, ComponentValType)> = func
+                .params
+                .iter()
+                .map(|(name, ty)| {
+                    let cm_type = type_gen.ast_type_to_cm(
+                        ty,
+                        &mut instance_type,
+                        project.wasi_registry,
+                        &resource_exports,
+                    );
+                    (to_kebab_case(name), cm_type)
+                })
+                .collect();
+
+            let cm_result = resolved_return.as_ref().map(|ty| {
+                type_gen.ast_type_to_cm(
+                    ty,
+                    &mut instance_type,
+                    project.wasi_registry,
+                    &resource_exports,
+                )
+            });
+
+            let param_refs: Vec<(&str, ComponentValType)> =
+                cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
+            instance_type
+                .ty()
+                .function()
+                .params(param_refs)
+                .result(cm_result);
+            let func_type_idx = type_gen.alloc_idx();
+
+            instance_type.export(
+                &func.wasi_func_name,
+                wasm_encoder::ComponentTypeRef::Func(func_type_idx),
+            );
+        }
+
+        let resource_methods: Vec<WasiFunctionInfo> = all_funcs
+            .iter()
+            .filter(|f| {
+                (f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]"))
+                    || (f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]"))
+            })
+            .cloned()
+            .collect();
 
         for func in &resource_methods {
             let resolved_return = func

@@ -298,6 +298,12 @@ impl<'a> Unparser<'a> {
     fn unparse_struct(&mut self, s: &StructDecl) {
         self.write_indent();
 
+        for attr in &s.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
         if s.is_pub {
             self.output.push_str("pub ");
         }
@@ -387,6 +393,11 @@ impl<'a> Unparser<'a> {
 
     fn unparse_enum_case(&mut self, case: &EnumCase) {
         self.write_indent();
+        for attr in &case.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
         self.output.push_str(&case.name);
         // Enum cases have no payload (unlike variant cases)
         self.output.push_str(",\n");
@@ -426,6 +437,11 @@ impl<'a> Unparser<'a> {
 
     fn unparse_variant_case(&mut self, case: &VariantCase) {
         self.write_indent();
+        for attr in &case.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
         self.output.push_str(&case.name);
         if let Some(payload) = &case.payload {
             self.output.push('(');

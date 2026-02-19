@@ -307,7 +307,7 @@ impl Parser {
                 .parse_function(is_pub, is_export, attrs)
                 .map(Item::Function),
             TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
-            TokenKind::Struct => self.parse_struct_decl(is_pub).map(Item::Struct),
+            TokenKind::Struct => self.parse_struct_decl(is_pub, attrs).map(Item::Struct),
             TokenKind::Enum => self.parse_enum_decl(is_pub, attrs).map(Item::Enum),
             TokenKind::Variant => self.parse_variant_decl(is_pub, attrs).map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(is_pub, attrs).map(Item::Flags),
@@ -2970,7 +2970,11 @@ impl Parser {
         Ok(types)
     }
 
-    fn parse_struct_decl(&mut self, is_pub: bool) -> ParseResult<StructDecl> {
+    fn parse_struct_decl(
+        &mut self,
+        is_pub: bool,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<StructDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::Struct)?;
         let name = self.consume_ident()?;
@@ -2989,6 +2993,7 @@ impl Parser {
             is_pub,
             type_params,
             fields,
+            attrs,
             span: start_span.merge(&end_span),
         })
     }
@@ -3029,7 +3034,8 @@ impl Parser {
 
         let mut cases = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            cases.push(self.parse_enum_case()?);
+            let case_attrs = self.parse_attributes()?;
+            cases.push(self.parse_enum_case(case_attrs)?);
             if !self.check(&TokenKind::RBrace) {
                 self.expect(&TokenKind::Comma)?;
             }
@@ -3047,13 +3053,14 @@ impl Parser {
         })
     }
 
-    fn parse_enum_case(&mut self) -> ParseResult<EnumCase> {
+    fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
         let start_span = self.peek().span;
         let name = self.consume_ident()?;
 
         // Enum cases have no payload (unlike variant cases)
         Ok(EnumCase {
             name,
+            attrs,
             span: start_span,
         })
     }
@@ -3122,7 +3129,8 @@ impl Parser {
 
         let mut cases = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            cases.push(self.parse_variant_case()?);
+            let case_attrs = self.parse_attributes()?;
+            cases.push(self.parse_variant_case(case_attrs)?);
             if !self.check(&TokenKind::RBrace) {
                 self.expect(&TokenKind::Comma)?;
             }
@@ -3140,7 +3148,7 @@ impl Parser {
         })
     }
 
-    fn parse_variant_case(&mut self) -> ParseResult<VariantCase> {
+    fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
         let start_span = self.peek().span;
         let name = self.consume_ident()?;
 
@@ -3168,6 +3176,7 @@ impl Parser {
         Ok(VariantCase {
             name,
             payload,
+            attrs,
             span: start_span,
         })
     }
