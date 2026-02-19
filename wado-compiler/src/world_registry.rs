@@ -10,6 +10,14 @@ use indexmap::IndexMap;
 
 use crate::ast::{Type, WorldDecl, WorldExport};
 
+/// Well-known world name for the test world.
+///
+/// When `--world test` is specified, the compiler treats test functions as the
+/// component's exports and DCEs everything else. This is a synthetic world
+/// that is not registered in the `WorldRegistry` (its exports are derived
+/// dynamically from the entry module's `TirTest` declarations).
+pub const TEST_WORLD: &str = "test";
+
 /// Information about a world export function
 #[derive(Debug, Clone)]
 pub struct WorldExportInfo {
@@ -93,7 +101,7 @@ impl WorldInfo {
 /// Worlds are keyed by fully-qualified name (e.g., "wasi:cli/command").
 #[derive(Debug, Clone, Default)]
 pub struct WorldRegistry {
-    /// fq_name -> world info (e.g., "wasi:cli/command" -> WorldInfo)
+    /// `fq_name` -> world info (e.g., "wasi:cli/command" -> `WorldInfo`)
     worlds: IndexMap<String, WorldInfo>,
 }
 
@@ -126,8 +134,7 @@ impl WorldRegistry {
     /// The world is keyed by its fully-qualified name from the `#[wasi("...")]` attribute.
     /// If no attribute is present, the `PascalCase` name is used as fallback.
     pub fn register(&mut self, world: &WorldDecl) {
-        let fq_name =
-            fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
+        let fq_name = fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
 
         let exports = world
             .exports
@@ -218,9 +225,7 @@ mod tests {
         assert_eq!(info.fq_name, "wasi:cli/command");
         assert_eq!(info.exports.len(), 1);
 
-        let run_export = registry
-            .get_export("wasi:cli/command", "run")
-            .unwrap();
+        let run_export = registry.get_export("wasi:cli/command", "run").unwrap();
         assert_eq!(run_export.name, "run");
         assert!(run_export.is_async);
         assert!(run_export.params.is_empty());

@@ -150,10 +150,14 @@ async fn collect_test_jobs(
     let mut jobs = Vec::new();
 
     for (module_idx, path) in paths.iter().enumerate() {
-        let wasm = compile::compile_with_opts(
+        // Compile with --world test so test functions become component exports
+        // and non-test code is subject to DCE.
+        let wasm = compile::compile_with_full_opts(
             path,
             crate::compile::OptLevel::default(),
             wado_compiler::LogLevel::default(),
+            Some("test".to_string()),
+            false,
         )
         .await;
         let engine = Arc::new(runtime::create_engine(wasmtime::OptLevel::None)?);

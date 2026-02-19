@@ -70,18 +70,20 @@ pub struct CompileOptions {
 pub fn print_usage() {
     eprintln!("Usage: wado compile [options] <file.wado>");
     eprintln!();
-    eprintln!("Compile a Wado source file to WebAssembly (wasi:cli/command world).");
+    eprintln!("Compile a Wado source file to WebAssembly.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -o <file>        Output file path (default: <input>.wasm)");
-    eprintln!("  --format <fmt>   Output format: wasm, wat (default: guessed from -o extension)");
+    eprintln!("  -o <file>         Output file path (default: <input>.wasm)");
+    eprintln!("  --format <fmt>    Output format: wasm, wat (default: guessed from -o extension)");
     eprintln!(
-        "  --wat-to-stdout  Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
+        "  --wat-to-stdout   Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
     );
-    eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
-    eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
-    eprintln!("  --no-validate    Skip Wasm validation (output raw bytes even if invalid)");
-    eprintln!("  --help           Show this help message");
+    eprintln!("  --world <name>    Target world (default: wasi:cli/command)");
+    eprintln!("                    Use 'test' to export test functions only");
+    eprintln!("  -O<n>             Optimization level: -O0, -O1, -O2, -O3, -Os");
+    eprintln!("  --log-level <l>   Log level: debug, info, warn, error, off (default: info)");
+    eprintln!("  --no-validate     Skip Wasm validation (output raw bytes even if invalid)");
+    eprintln!("  --help            Show this help message");
 }
 
 /// Parse log level from string

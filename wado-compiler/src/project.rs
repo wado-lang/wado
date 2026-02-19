@@ -14,7 +14,7 @@ use crate::name::{FunctionId, ModuleSource};
 use crate::symbol::SymbolTable;
 use crate::tir::{TirModule, TypeId};
 use crate::wasm_plan::ComponentPlan;
-use crate::world_registry::WorldRegistry;
+use crate::world_registry::{self, WorldRegistry};
 use indexmap::{IndexMap, IndexSet};
 
 /// A Wado project ready for code generation.
@@ -119,6 +119,14 @@ impl Project {
     /// Check if a function is reachable (should be included in the binary)
     pub fn is_reachable(&self, func_id: &FunctionId) -> bool {
         self.reachable_functions.contains(func_id)
+    }
+
+    /// Check if the project targets the synthetic test world.
+    ///
+    /// When true, test functions are the component's exports and everything
+    /// else (including world exports like `run`) is subject to DCE.
+    pub fn is_test_world(&self) -> bool {
+        self.target_world == world_registry::TEST_WORLD
     }
 
     /// Check if any function from the given WASI effect is used.
