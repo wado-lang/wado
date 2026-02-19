@@ -8,8 +8,6 @@ Read @docs/cheatsheet.md to understand Wado syntax and standard library.
 
 If you need detailed specification, read docs/spec.md.
 
-When updating docs/spec.md, keep it mutually exclusive and collectively exhaustive (MECE).
-
 ## The Compiler
 
 The compiler is implemented in `wado-compiler/`.
