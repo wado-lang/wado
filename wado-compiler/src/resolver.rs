@@ -427,6 +427,12 @@ struct FunctionContext {
     active_labels: Vec<String>,
     /// Current function name for `#function` compile-time literal
     function_name: String,
+    /// Deref overrides for mutable closures: maps original var name -> (ref var name, inner type)
+    /// When a variable is in this map, lookups return `*__ref_name` instead of the value.
+    deref_overrides: IndexMap<String, (String, TypeId)>,
+    /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
+    /// When capturing such a variable, use `DerefCapture` to read through the box.
+    outer_box_types: IndexMap<String, TypeId>,
 }
 
 impl FunctionContext {
@@ -442,16 +448,36 @@ impl FunctionContext {
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
+            deref_overrides: IndexMap::new(),
+            outer_box_types: IndexMap::new(),
         }
     }
 
-    /// Create a closure context with outer scope access for capture detection
-    fn new_closure(return_type: TypeId, outer_ctx: &FunctionContext) -> Self {
+    /// Create a closure context with outer scope access for capture detection.
+    ///
+    /// `type_table` is used to compute `&mut T` types for address-taken outer locals,
+    /// enabling correct `DerefCapture` behaviour when those locals are captured.
+    fn new_closure(
+        return_type: TypeId,
+        outer_ctx: &FunctionContext,
+        type_table: &RefCell<crate::tir::TypeTable>,
+    ) -> Self {
         // Snapshot all locals from outer context
         let mut outer_locals = IndexMap::new();
         for scope in &outer_ctx.scopes {
             for (name, local) in scope {
                 outer_locals.insert(name.clone(), local.clone());
+            }
+        }
+
+        // Compute box types for address-taken outer locals
+        let mut outer_box_types = IndexMap::new();
+        for scope in &outer_ctx.scopes {
+            for (name, local) in scope {
+                if outer_ctx.address_taken_locals.contains(&local.index) {
+                    let ref_type = type_table.borrow_mut().make_mut_ref(local.type_id);
+                    outer_box_types.insert(name.clone(), ref_type);
+                }
             }
         }
 
@@ -469,6 +495,8 @@ impl FunctionContext {
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
+            deref_overrides: IndexMap::new(),
+            outer_box_types,
         }
     }
 
@@ -524,13 +552,49 @@ impl FunctionContext {
             }
         }
 
+        // Check deref overrides (for mutable closures: `count` -> `*__ref_count`)
+        if let Some((ref_name, inner_type_id)) = self.deref_overrides.get(name).cloned() {
+            if let Some(ref_local) = self.outer_locals.get(&ref_name).cloned() {
+                let capture_index = if let Some(&idx) = self.captured_vars.get(&ref_name) {
+                    idx
+                } else {
+                    let idx = self.captured_vars.len() as u32;
+                    self.captured_vars.insert(ref_name.clone(), idx);
+                    idx
+                };
+                return Some(VarRef::DerefCapture {
+                    index: capture_index,
+                    ref_type_id: ref_local.type_id,
+                    inner_type_id,
+                });
+            }
+        }
+
         // Check outer context (for closures)
         if let Some(outer_local) = self.outer_locals.get(name) {
+            let inner_type_id = outer_local.type_id;
+
+            // If this outer local has been address-taken (boxed), capture via DerefCapture
+            if let Some(&ref_type_id) = self.outer_box_types.get(name) {
+                let capture_index = if let Some(&idx) = self.captured_vars.get(name) {
+                    idx
+                } else {
+                    let idx = self.captured_vars.len() as u32;
+                    self.captured_vars.insert(name.to_string(), idx);
+                    idx
+                };
+                return Some(VarRef::DerefCapture {
+                    index: capture_index,
+                    ref_type_id,
+                    inner_type_id,
+                });
+            }
+
             // Check if we already captured this variable
             if let Some(&capture_index) = self.captured_vars.get(name) {
                 return Some(VarRef::Capture {
                     index: capture_index,
-                    type_id: outer_local.type_id,
+                    type_id: inner_type_id,
                 });
             }
 
@@ -540,22 +604,35 @@ impl FunctionContext {
 
             return Some(VarRef::Capture {
                 index: capture_index,
-                type_id: outer_local.type_id,
+                type_id: inner_type_id,
             });
         }
 
         None
     }
 
-    /// Get the list of captures for building `TirCapture` entries
-    fn get_captures(&self) -> Vec<(String, u32, &LocalVar)> {
+    /// Get the list of captures for building `TirCapture` entries.
+    /// For address-taken outer locals, the `LocalVar.type_id` is the box type (`&mut T`).
+    fn get_captures(&self) -> Vec<(String, u32, LocalVar)> {
         let mut captures: Vec<_> = self
             .captured_vars
             .iter()
             .filter_map(|(name, &index)| {
-                self.outer_locals
-                    .get(name)
-                    .map(|local| (name.clone(), index, local))
+                self.outer_locals.get(name).map(|local| {
+                    // Use box type if the outer variable has its address taken
+                    let effective_type_id = self
+                        .outer_box_types
+                        .get(name)
+                        .copied()
+                        .unwrap_or(local.type_id);
+                    let effective_local = LocalVar {
+                        name: local.name.clone(),
+                        type_id: effective_type_id,
+                        index: local.index,
+                        is_mut: local.is_mut,
+                    };
+                    (name.clone(), index, effective_local)
+                })
             })
             .collect();
         // Sort by capture index for consistent ordering
@@ -568,6 +645,12 @@ impl FunctionContext {
 enum VarRef {
     Local { index: u32, type_id: TypeId },
     Capture { index: u32, type_id: TypeId },
+    /// Captured by mutable reference: `*self.__capture_N` (dereferenced)
+    DerefCapture {
+        index: u32,
+        ref_type_id: TypeId,
+        inner_type_id: TypeId,
+    },
 }
 
 /// The resolver converts AST to TIR with resolved types
@@ -3765,6 +3848,29 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         ident.span,
                     );
                 }
+                VarRef::DerefCapture {
+                    index,
+                    ref_type_id,
+                    inner_type_id,
+                } => {
+                    // Deref capture: `*self.__capture_N` where the field holds `&mut T`
+                    let capture_expr = TirExpr::new(
+                        TirExprKind::Capture {
+                            index,
+                            name: format!("__deref_cap_{index}"),
+                        },
+                        ref_type_id,
+                        ident.span,
+                    );
+                    return TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Deref,
+                            expr: Box::new(capture_expr),
+                        },
+                        inner_type_id,
+                        ident.span,
+                    );
+                }
             }
         }
 
@@ -4344,6 +4450,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve a unary expression
     fn resolve_unary(&mut self, unary: &ast::UnaryExpr, ctx: &mut FunctionContext) -> TirExpr {
+        // Special case: `&mut || { body }` - mutable closure desugaring
+        if unary.op == UnaryOp::MutRef {
+            if let ast::Expr::Closure(closure_expr) = &unary.expr {
+                return self.resolve_mutable_closure(closure_expr, ctx, unary.span);
+            }
+        }
+
         let expr = self.resolve_expr(&unary.expr, ctx, None);
         let op = convert_unary_op(unary.op);
 
@@ -9807,6 +9920,236 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
+    /// Collect variable names that are directly assigned inside an expression,
+    /// but NOT inside nested closures.
+    fn collect_mutated_vars(expr: &ast::Expr, result: &mut IndexSet<String>) {
+        match expr {
+            ast::Expr::Assign(a) => {
+                if let ast::Expr::Ident(id) = &a.target {
+                    result.insert(id.name.clone());
+                }
+                Self::collect_mutated_vars(&a.value, result);
+            }
+            ast::Expr::CompoundAssign(ca) => {
+                if let ast::Expr::Ident(id) = &ca.target {
+                    result.insert(id.name.clone());
+                }
+                Self::collect_mutated_vars(&ca.value, result);
+            }
+            ast::Expr::Closure(_) => {
+                // Do NOT recurse into nested closures
+            }
+            ast::Expr::Block(block) => {
+                for stmt in &block.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+            }
+            ast::Expr::If(if_expr) => {
+                if let Some(init) = &if_expr.init {
+                    Self::collect_mutated_vars(&init.value, result);
+                }
+                if let ast::Condition::Expr(cond) = &if_expr.condition {
+                    Self::collect_mutated_vars(cond, result);
+                }
+                for stmt in &if_expr.then_block.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+                if let Some(else_block) = &if_expr.else_block {
+                    for stmt in &else_block.stmts {
+                        Self::collect_mutated_vars_stmt(stmt, result);
+                    }
+                }
+            }
+            ast::Expr::Binary(b) => {
+                Self::collect_mutated_vars(&b.left, result);
+                Self::collect_mutated_vars(&b.right, result);
+            }
+            ast::Expr::Unary(u) => {
+                Self::collect_mutated_vars(&u.expr, result);
+            }
+            ast::Expr::Call(c) => {
+                for arg in &c.args {
+                    Self::collect_mutated_vars(arg, result);
+                }
+            }
+            ast::Expr::MethodCall(mc) => {
+                Self::collect_mutated_vars(&mc.receiver, result);
+                for arg in &mc.args {
+                    Self::collect_mutated_vars(arg, result);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_mutated_vars_stmt(stmt: &ast::Stmt, result: &mut IndexSet<String>) {
+        match stmt {
+            ast::Stmt::Expr(es) => Self::collect_mutated_vars(&es.expr, result),
+            ast::Stmt::Let(ls) => {
+                Self::collect_mutated_vars(&ls.value, result);
+            }
+            ast::Stmt::If(is) => {
+                if let Some(init) = &is.init {
+                    Self::collect_mutated_vars(&init.value, result);
+                }
+                if let ast::Condition::Expr(cond) = &is.condition {
+                    Self::collect_mutated_vars(cond, result);
+                }
+                for stmt in &is.then_block.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+                if let Some(else_block) = &is.else_block {
+                    for stmt in &else_block.stmts {
+                        Self::collect_mutated_vars_stmt(stmt, result);
+                    }
+                }
+            }
+            ast::Stmt::Loop(ls) => {
+                for stmt in &ls.body.stmts {
+                    Self::collect_mutated_vars_stmt(stmt, result);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Resolve `&mut || { body }` - desugars mutable captures.
+    ///
+    /// For each outer mutable variable `v` assigned inside the body:
+    /// - Creates `let __ref_v = &mut v;` in the outer scope
+    /// - Inside the closure, `v` is accessed as `*__ref_v` (deref of the captured reference)
+    ///
+    /// This allows the closure to mutate the outer variable via the shared reference.
+    fn resolve_mutable_closure(
+        &mut self,
+        closure: &ast::ClosureExpr,
+        ctx: &mut FunctionContext,
+        span: Span,
+    ) -> TirExpr {
+        // Step 1: Find all directly-assigned outer mutable variables
+        let mut assigned_names: IndexSet<String> = IndexSet::new();
+        Self::collect_mutated_vars(&closure.body, &mut assigned_names);
+
+        // Step 2: For each assigned name that is an outer mutable variable,
+        // create a `&mut T` reference in the outer context
+        let mut ref_stmts: Vec<TirStmt> = Vec::new();
+        let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::new();
+
+        for var_name in &assigned_names {
+            if let Some(local) = ctx.lookup(var_name) {
+                if local.is_mut {
+                    let inner_type = local.type_id;
+                    let outer_index = local.index;
+                    let ref_type = self.type_table.borrow_mut().make_mut_ref(inner_type);
+                    let ref_name = format!("__ref_{var_name}");
+                    let ref_index = ctx.add_local(ref_name.clone(), ref_type, false);
+                    ctx.address_taken_locals.insert(outer_index);
+
+                    // Emit: let __ref_name = &mut var_name
+                    ref_stmts.push(TirStmt::new(
+                        TirStmtKind::Let {
+                            name: ref_name.clone(),
+                            local_index: ref_index,
+                            is_mut: false,
+                            is_reactive: false,
+                            type_id: ref_type,
+                            value: TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::MutRef,
+                                    expr: Box::new(TirExpr::new(
+                                        TirExprKind::Local {
+                                            index: outer_index,
+                                            name: var_name.clone(),
+                                        },
+                                        inner_type,
+                                        span,
+                                    )),
+                                },
+                                ref_type,
+                                span,
+                            ),
+                        },
+                        span,
+                    ));
+
+                    deref_overrides.insert(var_name.clone(), (ref_name, inner_type));
+                }
+            }
+        }
+
+        // Step 3: Create closure context with deref overrides
+        let mut closure_ctx = FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.type_table);
+        closure_ctx.deref_overrides = deref_overrides;
+
+        // Step 4: Add closure parameters
+        let params: Vec<(String, TypeId)> = closure
+            .params
+            .iter()
+            .map(|p| {
+                let type_id = p
+                    .ty
+                    .as_ref()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or(TypeTable::UNKNOWN);
+                closure_ctx.add_local(p.name.clone(), type_id, false);
+                (p.name.clone(), type_id)
+            })
+            .collect();
+
+        // Step 5: Resolve body with modified context
+        let body = self.resolve_expr(&closure.body, &mut closure_ctx, None);
+
+        // Step 6: Build capture list
+        let captures: Vec<TirCapture> = closure_ctx
+            .get_captures()
+            .into_iter()
+            .map(|(name, _index, local)| TirCapture {
+                name,
+                outer_index: local.index,
+                type_id: local.type_id,
+                is_mut: local.is_mut,
+            })
+            .collect();
+
+        // Step 7: Determine return type
+        let return_type = if let TirExprKind::Block(ref block) = body.kind {
+            Self::find_return_type_in_block(block).unwrap_or(body.type_id)
+        } else {
+            body.type_id
+        };
+
+        // Step 8: Create function type
+        let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
+        let func_type =
+            self.type_table
+                .borrow_mut()
+                .make_function(param_types, return_type, Vec::new());
+
+        let closure_tir = TirExpr::new(
+            TirExprKind::Closure {
+                params,
+                body: Box::new(body),
+                captures,
+                functor_id: None,
+            },
+            func_type,
+            closure.span,
+        );
+
+        // Step 9: Wrap in a block if we injected ref statements
+        if ref_stmts.is_empty() {
+            return closure_tir;
+        }
+
+        let mut stmts = ref_stmts;
+        stmts.push(TirStmt::new(TirStmtKind::Expr(closure_tir), span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            func_type,
+            span,
+        )
+    }
+
     /// Resolve a closure
     fn resolve_closure(
         &mut self,
@@ -9814,7 +10157,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         // Create a closure context with access to outer scope for capture detection
-        let mut closure_ctx = FunctionContext::new_closure(TypeTable::UNKNOWN, ctx);
+        let mut closure_ctx = FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.type_table);
 
         // Add closure parameters
         let params: Vec<(String, TypeId)> = closure

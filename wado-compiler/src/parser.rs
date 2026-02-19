@@ -2701,10 +2701,18 @@ impl Parser {
                 })
             };
 
+            // Parse effects (optional): with Effect1, Effect2
+            let effects = if self.check(&TokenKind::With) {
+                self.advance();
+                self.parse_effect_list()?
+            } else {
+                Vec::new()
+            };
+
             return Ok(Type::Function(Box::new(FunctionType {
                 params,
                 return_type,
-                effects: Vec::new(),
+                effects,
             })));
         }
 

@@ -385,4 +385,56 @@ impl FilterIter<T> {
         }
         return acc;
     }
+
+    pub fn map<U>(&self, f: fn(T) -> U) -> FilterMapIter<T, U> {
+        return FilterMapIter {
+            repr: self.repr,
+            used: self.used,
+            index: self.index,
+            pred: self.pred,
+            f,
+        };
+    }
+}
+
+pub struct FilterMapIter<T, U> {
+    repr: builtin::array<T>,
+    used: i32,
+    index: i32,
+    pred: fn(T) -> bool,
+    f: fn(T) -> U,
+}
+
+impl Iterator for FilterMapIter<T, U> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.index >= self.used {
+                return null;
+            }
+            let item = builtin::array_get::<T>(self.repr, self.index);
+            self.index += 1;
+            if (self.pred)(item) {
+                return Option::<U>::Some((self.f)(item));
+            }
+        }
+    }
+
+}
+
+impl FilterMapIter<T, U> {
+    // collect() uses Iterator::collect() default method
+
+    pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, U) -> Acc) -> Acc {
+        let mut acc = init;
+        loop {
+            if let Some(item) = self.next() {
+                acc = f(acc, item);
+            } else {
+                break;
+            }
+        }
+        return acc;
+    }
 }
