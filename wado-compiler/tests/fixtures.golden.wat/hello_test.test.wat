@@ -130,35 +130,35 @@
                 (call 24
                   (local.get 2)
                   (struct.new 2
-                    (array.new_data 1 0
+                    (array.new_data 1 1
                       (i32.const 0)
                       (i32.const 20))
                     (i32.const 20)))
                 (call 24
                   (local.get 2)
                   (struct.new 2
-                    (array.new_data 1 1
+                    (array.new_data 1 2
                       (i32.const 0)
                       (i32.const 17))
                     (i32.const 17)))
                 (call 24
                   (local.get 2)
                   (struct.new 2
-                    (array.new_data 1 2
+                    (array.new_data 1 3
                       (i32.const 0)
                       (i32.const 4))
                     (i32.const 4)))
                 (call 24
                   (local.get 2)
                   (struct.new 2
-                    (array.new_data 1 3
+                    (array.new_data 1 4
                       (i32.const 0)
-                      (i32.const 60))
-                    (i32.const 60)))
+                      (i32.const 44))
+                    (i32.const 44)))
                 (call 24
                   (local.get 2)
                   (struct.new 2
-                    (array.new_data 1 4
+                    (array.new_data 1 5
                       (i32.const 0)
                       (i32.const 1))
                     (i32.const 1)))
@@ -213,14 +213,14 @@
                 (call 24
                   (local.get 2)
                   (struct.new 2
-                    (array.new_data 1 5
+                    (array.new_data 1 6
                       (i32.const 0)
                       (i32.const 23))
                     (i32.const 23)))
                 (call 24
                   (local.get 2)
                   (struct.new 2
-                    (array.new_data 1 6
+                    (array.new_data 1 7
                       (i32.const 0)
                       (i32.const 7))
                     (i32.const 7)))
@@ -275,7 +275,7 @@
                 (call 24
                   (local.get 2)
                   (struct.new 2
-                    (array.new_data 1 7
+                    (array.new_data 1 8
                       (i32.const 0)
                       (i32.const 1))
                     (i32.const 1)))
@@ -300,35 +300,35 @@
                 (call 24
                   (local.get 1)
                   (struct.new 2
-                    (array.new_data 1 0
+                    (array.new_data 1 1
                       (i32.const 0)
                       (i32.const 20))
                     (i32.const 20)))
                 (call 24
                   (local.get 1)
                   (struct.new 2
-                    (array.new_data 1 8
+                    (array.new_data 1 9
                       (i32.const 0)
                       (i32.const 8))
                     (i32.const 8)))
                 (call 24
                   (local.get 1)
                   (struct.new 2
-                    (array.new_data 1 2
+                    (array.new_data 1 3
                       (i32.const 0)
                       (i32.const 4))
                     (i32.const 4)))
                 (call 24
                   (local.get 1)
                   (struct.new 2
-                    (array.new_data 1 3
+                    (array.new_data 1 4
                       (i32.const 0)
-                      (i32.const 60))
-                    (i32.const 60)))
+                      (i32.const 44))
+                    (i32.const 44)))
                 (call 24
                   (local.get 1)
                   (struct.new 2
-                    (array.new_data 1 4
+                    (array.new_data 1 5
                       (i32.const 0)
                       (i32.const 1))
                     (i32.const 1)))
@@ -383,7 +383,7 @@
                 (call 24
                   (local.get 1)
                   (struct.new 2
-                    (array.new_data 1 9
+                    (array.new_data 1 10
                       (i32.const 0)
                       (i32.const 17))
                     (i32.const 17)))
@@ -1280,17 +1280,17 @@
                   (local.get 3)))))))
       (unreachable)
     )
-    (data (;0;) "Assertion failed in ")
-    (data (;1;) "__test_0_greeting")
-    (data (;2;) " at ")
-    (data (;3;) "/home/user/wado/wado-compiler/tests/fixtures/hello_test.wado")
-    (data (;4;) ":")
-    (data (;5;) "\0acondition: 1 + 1 == 2\0a")
-    (data (;6;) "1 + 1: ")
-    (data (;7;) "\0a")
-    (data (;8;) "__test_1")
-    (data (;9;) "\0acondition: true\0a")
-    (data (;10;) "")
+    (data (;0;) "")
+    (data (;1;) "Assertion failed in ")
+    (data (;2;) "__test_0_greeting")
+    (data (;3;) " at ")
+    (data (;4;) "wado-compiler/tests/fixtures/hello_test.wado")
+    (data (;5;) ":")
+    (data (;6;) "\0acondition: 1 + 1 == 2\0a")
+    (data (;7;) "1 + 1: ")
+    (data (;8;) "\0a")
+    (data (;9;) "__test_1")
+    (data (;10;) "\0acondition: true\0a")
     (data (;11;) "-")
     (data (;12;) "+")
   )

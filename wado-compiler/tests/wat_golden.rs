@@ -45,8 +45,15 @@ fn compile_to_wat(source_filename: &str, world: Option<&str>) -> String {
         skip_validation: false,
     };
 
-    let result = common::compile_source_with_compiler_options(&source_path, &source, options)
-        .unwrap_or_else(|e| panic!("Compilation failed for {}: {e}", source_path.display()));
+    // Use a stable relative filename so the WAT output matches golden files across environments
+    let display_filename = format!("wado-compiler/tests/fixtures/{source_filename}");
+    let result = common::compile_source_with_compiler_options_and_filename(
+        &source_path,
+        &source,
+        options,
+        Some(&display_filename),
+    )
+    .unwrap_or_else(|e| panic!("Compilation failed for {}: {e}", source_path.display()));
 
     wasm_to_wat(&result.wasm)
 }
