@@ -34,10 +34,15 @@ fn wasm_to_wat(wasm: &[u8]) -> String {
 /// Compile a fixture and return WAT output
 fn compile_to_wat(source_filename: &str, world: Option<&str>) -> String {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let source_path = PathBuf::from(manifest_dir).join(format!("tests/fixtures/{source_filename}"));
+    let source_path =
+        PathBuf::from(manifest_dir).join(format!("tests/fixtures/{source_filename}"));
 
-    let source = std::fs::read_to_string(&source_path)
-        .unwrap_or_else(|e| panic!("Failed to read source file {}: {e}", source_path.display()));
+    let source = std::fs::read_to_string(&source_path).unwrap_or_else(|e| {
+        panic!(
+            "Failed to read source file {}: {e}",
+            source_path.display()
+        )
+    });
 
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
@@ -46,7 +51,12 @@ fn compile_to_wat(source_filename: &str, world: Option<&str>) -> String {
     };
 
     let result = common::compile_source_with_compiler_options(&source_path, &source, options)
-        .unwrap_or_else(|e| panic!("Compilation failed for {}: {e}", source_path.display()));
+        .unwrap_or_else(|e| {
+            panic!(
+                "Compilation failed for {}: {e}",
+                source_path.display()
+            )
+        });
 
     wasm_to_wat(&result.wasm)
 }
@@ -104,7 +114,10 @@ fn run_wat_golden_test(
             eprintln!("{:>4} | {line}", i + 1);
         }
         if actual_wat.lines().count() > 50 {
-            eprintln!("     ... ({} more lines)", actual_wat.lines().count() - 50);
+            eprintln!(
+                "     ... ({} more lines)",
+                actual_wat.lines().count() - 50
+            );
         }
         eprintln!("=== END ===");
         return Err(format!(
