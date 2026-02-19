@@ -200,23 +200,27 @@ pub fn cli_engine() -> &'static Engine {
     })
 }
 
-/// Create a wasmtime Engine for HTTP (wasi:http/service) tests
-///
-/// HTTP tests require additional features and cannot share the CLI engine
-/// because they need `wasm_component_model_async_stackful` and other settings.
-pub fn http_engine() -> Engine {
-    let mut config = Config::new();
-    config.async_support(true);
-    config.wasm_component_model(true);
-    config.wasm_component_model_async(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_component_model_gc(true);
-    config.wasm_gc(true);
-    config.wasm_function_references(true);
-    config.wasm_wide_arithmetic(true);
-    config.wasm_threads(true);
-    config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
-    Engine::new(&config).expect("Failed to create wasmtime Engine")
+/// Shared wasmtime Engine for HTTP (wasi:http/service) tests (initialized once)
+static HTTP_ENGINE: OnceLock<Engine> = OnceLock::new();
+
+/// Get or initialize the shared wasmtime Engine for HTTP tests
+pub fn http_engine() -> &'static Engine {
+    HTTP_ENGINE.get_or_init(|| {
+        let mut config = Config::new();
+        config.async_support(true);
+        config.wasm_component_model(true);
+        config.wasm_component_model_async(true);
+        config.wasm_component_model_async_stackful(true);
+        config.wasm_component_model_gc(true);
+        config.wasm_gc(true);
+        config.wasm_function_references(true);
+        config.wasm_wide_arithmetic(true);
+        config.wasm_threads(true);
+        config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
+        // Use minimal optimization for faster compilation in tests
+        config.cranelift_opt_level(wasmtime::OptLevel::None);
+        Engine::new(&config).expect("Failed to create wasmtime Engine")
+    })
 }
 
 /// WASI state for CLI tests
