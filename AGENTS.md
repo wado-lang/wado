@@ -2,14 +2,6 @@
 
 This is the specification and the toolchain of Wado, a programming language targeting Wasm/WASI.
 
-## The Spec
-
-Read @docs/cheatsheet.md to understand Wado syntax and standard library.
-
-If you need detailed specification, read docs/spec.md.
-
-When updating docs/spec.md, keep it mutually exclusive and collectively exhaustive (MECE).
-
 ## The Compiler
 
 The compiler is implemented in `wado-compiler/`.
@@ -294,11 +286,6 @@ Wado is designed with the following Wasm features:
 - Do not parse mangled / formatted names even in `name.rs`. Use parsed objects instead.
 - Minimize hard-coded logic for compiler builtins. Define builtin and internal functions in Wado source files in `lib/core/*.wado`.
 - Minimize hard-coded logic for WASI. Use metadata extracted from `lib/wasi/*.wado`.
-
-## Rules for Markdown
-
-- Do not use `**...**` (bold) for sub-sections. Use markdown sections instead.
-- Use markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`), instead of `~~...~~` (strike-through) and emojis.
 
 ## Wado Evolution Proposals (WEP)
 
