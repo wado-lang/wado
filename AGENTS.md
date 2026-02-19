@@ -6,9 +6,9 @@ This is the specification and the toolchain of Wado, a programming language targ
 
 Read @docs/cheatsheet.md to understand Wado syntax and standard library.
 
-If you need detailed specification, read spec.md.
+If you need detailed specification, read docs/spec.md.
 
-When updating spec.md, keep it mutually exclusive and collectively exhaustive (MECE).
+When updating docs/spec.md, keep it mutually exclusive and collectively exhaustive (MECE).
 
 ## The Compiler
 
@@ -439,7 +439,7 @@ This syncs `vendor/wasmtime` to the exact version in `Cargo.lock` (required for 
 When you have completed a task, make sure everything is up-to-date and tested:
 
 - Update docs if necessary:
-  - spec.md if the language specification is updated.
+  - docs/spec.md if the language specification is updated.
   - docs/compiler.md if the new features are implemented.
   - docs/cheatsheet.md if the syntax/stdlib is updated.
 - Run `make on-task-done` to format, clippy-fix, update-bundled, update-golden-fixtures, and test.

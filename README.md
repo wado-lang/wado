@@ -173,7 +173,7 @@ The result: a language where common agentic coding pitfalls are eliminated by de
 ## Documentation
 
 - [Cheatsheet](docs/cheatsheet.md) - Quick syntax reference
-- [Language Specification](spec.md) - Full language reference
+- [Language Specification](docs/spec.md) - Full language reference
 - [Compiler Implementation](docs/compiler.md) - Compiler internals and feature checklist
 - [Benchmarks](benchmark/README.md) - Performance benchmarks vs C and JavaScript, and so on
 - [Other Documentation](docs) - WEP, research notes, TODOs, etc.
