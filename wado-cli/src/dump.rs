@@ -375,10 +375,19 @@ async fn generate_output_params(
         .unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
-    // Dump using async API
-    let result = wado_compiler::dump_with_host(&source, &host, Some(input), opt_level)
-        .await
-        .map_err(|_bail| "compilation failed".to_string())?;
+    // Extract target world from __DATA__ section if present
+    let target_world = extract_world_from_data_section(&source);
+
+    // Dump using async API with target world
+    let result = wado_compiler::dump_with_host_and_world(
+        &source,
+        &host,
+        Some(input),
+        opt_level,
+        target_world.as_deref(),
+    )
+    .await
+    .map_err(|_bail| "compilation failed".to_string())?;
 
     let mut output = Vec::new();
 
@@ -743,4 +752,18 @@ async fn run_single(opts: &DumpOptions, input: &str) {
             println!();
         }
     }
+}
+
+/// Extract the `"world"` field from the `__DATA__` JSON section of a source file.
+fn extract_world_from_data_section(source: &str) -> Option<String> {
+    let marker = "\n__DATA__\n";
+    let data = if let Some(pos) = source.find(marker) {
+        &source[pos + marker.len()..]
+    } else if source.starts_with("__DATA__\n") {
+        &source["__DATA__\n".len()..]
+    } else {
+        return None;
+    };
+    let json: serde_json::Value = serde_json::from_str(data.trim()).ok()?;
+    json.get("world")?.as_str().map(String::from)
 }

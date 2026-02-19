@@ -4,9 +4,71 @@
 
 // Imports
 // mem::realloc (realloc)
+// wasi::stream-drop-writable (stream_drop_writable)
+// wasi::stream-new (stream_new)
+// wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
-export fn __cm_export__run() {
+struct "Box<i32>" {
+    value: i32,
+}
+
+fn __test_0_if_let_some_on_index_value_returning_option() {
+    let b: Box<i32> = move Box<i32> { value: 42 };
+    let __pattern_temp_0: Option<i32> = b."Box<i32>^IndexValue::index_value"(0);
+    if __is_not_null(__pattern_temp_0) {
+        let val: i32 = __unwrap_option(__pattern_temp_0).value;
+        __assert_0: {
+            let __cond: bool = (val == 42);
+            if !__cond {
+                core::internal::panic(__tmpl: {
+                    let mut __r: String = move String { repr: "array_new<u8>"(117), used: 0 };
+                    __r.String::append(move "Assertion failed in ");
+                    __r.String::append(move "__test_0_if_let_some_on_index_value_returning_option");
+                    __r.String::append(move " at ");
+                    __r.String::append(move "wado-compiler/tests/fixtures/index-value-option-pattern.wado");
+                    __r.String::append(move ":");
+                    let mut __f: Formatter = __inline_Formatter__new_1: {
+                        let buf: &mut String = &mut __r;
+                        break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    __inline_i32_Display__fmt_2: {
+                        let self: Box<i32> = move Box<i32> { value: 22 };
+                        let f: &mut Formatter = &mut __f;
+                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    };
+                    __r.String::append(move "\ncondition: val == 42\n");
+                    __r.String::append(move "val: ");
+                    __f = __inline_Formatter__new_3: {
+                        let buf: &mut String = &mut __r;
+                        break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    };
+                    __inline_i32_Display__fmt_4: {
+                        let self: Box<i32> = move Box<i32> { value: val };
+                        let f: &mut Formatter = &mut __f;
+                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                    };
+                    __r.String::append(move "\n");
+                    break __tmpl: __r;
+                });
+            }
+        }
+    }
+}
+
+export fn __cm_export____test_0_if_let_some_on_index_value_returning_option() {
+    __test_0_if_let_some_on_index_value_returning_option();
     cm_raw_call task-return(0);
+}
+
+fn "Box<i32>^IndexValue::index_value"(self: &Box<i32>, index: i32) -> Option<i32> {
+    if (index == 0) {
+        return Option::Some(Box<i32> { value: self.value });
+    }
+    return null;
 }
 

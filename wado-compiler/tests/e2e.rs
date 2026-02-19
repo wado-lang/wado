@@ -263,7 +263,8 @@ fn verify_http_result(result: &HttpTestResult, spec: &TestSpec, fixture_name: &s
     if let Some(expected_body) = &spec.body {
         let actual_body = String::from_utf8_lossy(&result.body);
         assert_eq!(
-            actual_body, expected_body.as_str(),
+            actual_body,
+            expected_body.as_str(),
             "[{fixture_name}] body mismatch"
         );
     }
@@ -314,21 +315,18 @@ fn run_test_world(wasm: &[u8], test_id: &str) -> anyhow::Result<common::WasmRunR
             let mut store = Store::new(engine, state);
 
             let instance = linker.instantiate_async(&mut store, &component).await?;
-            let func =
-                instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, test_name)?;
+            let func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, test_name)?;
 
             match func.call_async(&mut store, ()).await {
                 Ok((Ok(()),)) => {} // passed
                 Ok((Err(()),)) => {
-                    let stderr_text =
-                        String::from_utf8_lossy(&stderr_clone.contents()).to_string();
+                    let stderr_text = String::from_utf8_lossy(&stderr_clone.contents()).to_string();
                     anyhow::bail!(
                         "[{test_id}] test '{test_name}' returned error. stderr: {stderr_text}"
                     );
                 }
                 Err(e) => {
-                    let stderr_text =
-                        String::from_utf8_lossy(&stderr_clone.contents()).to_string();
+                    let stderr_text = String::from_utf8_lossy(&stderr_clone.contents()).to_string();
                     anyhow::bail!(
                         "[{test_id}] test '{test_name}' trapped: {e}. stderr: {stderr_text}"
                     );

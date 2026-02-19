@@ -9,10 +9,8 @@ use std::path::PathBuf;
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// WAT fixture definitions: (`source_file`, `target_world`)
-const FIXTURES: &[(&str, Option<&str>)] = &[
-    ("hello.wado", None),
-    ("hello_test.wado", Some("test")),
-];
+const FIXTURES: &[(&str, Option<&str>)] =
+    &[("hello.wado", None), ("hello_test.wado", Some("test"))];
 
 fn wasm_to_wat(wasm: &[u8]) -> String {
     let mut config = wasmprinter::Config::new();
@@ -38,15 +36,10 @@ fn world_suffix(world: Option<&str>) -> &str {
 
 fn compile_to_wat(source_filename: &str, world: Option<&str>) -> String {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let source_path =
-        PathBuf::from(manifest_dir).join(format!("tests/fixtures/{source_filename}"));
+    let source_path = PathBuf::from(manifest_dir).join(format!("tests/fixtures/{source_filename}"));
 
-    let source = std::fs::read_to_string(&source_path).unwrap_or_else(|e| {
-        panic!(
-            "Failed to read source file {}: {e}",
-            source_path.display()
-        )
-    });
+    let source = std::fs::read_to_string(&source_path)
+        .unwrap_or_else(|e| panic!("Failed to read source file {}: {e}", source_path.display()));
 
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
@@ -55,12 +48,7 @@ fn compile_to_wat(source_filename: &str, world: Option<&str>) -> String {
     };
 
     let result = common::compile_source_with_compiler_options(&source_path, &source, options)
-        .unwrap_or_else(|e| {
-            panic!(
-                "Compilation failed for {}: {e}",
-                source_path.display()
-            )
-        });
+        .unwrap_or_else(|e| panic!("Compilation failed for {}: {e}", source_path.display()));
 
     wasm_to_wat(&result.wasm)
 }
@@ -70,12 +58,8 @@ fn compile_to_wat(source_filename: &str, world: Option<&str>) -> String {
 fn generate_all() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let output_dir = PathBuf::from(manifest_dir).join("tests/fixtures.golden.wat");
-    std::fs::create_dir_all(&output_dir).unwrap_or_else(|e| {
-        panic!(
-            "Failed to create output dir {}: {e}",
-            output_dir.display()
-        )
-    });
+    std::fs::create_dir_all(&output_dir)
+        .unwrap_or_else(|e| panic!("Failed to create output dir {}: {e}", output_dir.display()));
 
     for &(source_filename, world) in FIXTURES {
         let wat = compile_to_wat(source_filename, world);
@@ -95,12 +79,8 @@ fn generate_all() {
             source_filename,
         );
         let content = format!("{header}\n{wat}\n");
-        std::fs::write(&output_path, content).unwrap_or_else(|e| {
-            panic!(
-                "Failed to write {}: {e}",
-                output_path.display()
-            )
-        });
+        std::fs::write(&output_path, content)
+            .unwrap_or_else(|e| panic!("Failed to write {}: {e}", output_path.display()));
 
         eprintln!("Generated: {output_filename}");
     }

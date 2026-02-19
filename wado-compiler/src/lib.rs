@@ -360,6 +360,20 @@ pub async fn dump_with_host<H: CompilerHost>(
     filename: Option<&str>,
     opt_level: OptLevel,
 ) -> Result<DumpResult, Bail> {
+    dump_with_host_and_world(source, host, filename, opt_level, None).await
+}
+
+/// Dump compiler internal state with an explicit target world.
+///
+/// Like [`dump_with_host`] but allows specifying the target world so that
+/// DCE and other world-aware passes produce the correct output.
+pub async fn dump_with_host_and_world<H: CompilerHost>(
+    source: &str,
+    host: &H,
+    filename: Option<&str>,
+    opt_level: OptLevel,
+    target_world: Option<&str>,
+) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
     if let Some(ref f) = filename {
@@ -461,7 +475,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         let builtin_registry =
             builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-        let project = Project::new(
+        let mut project = Project::new(
             load_result.entry_module_source.clone(),
             resolved_modules,
             symbols.clone(),
@@ -471,6 +485,11 @@ pub async fn dump_with_host<H: CompilerHost>(
             world_registry,
             builtin_registry,
         );
+
+        // Apply target world override (must be before CM adapter synthesis)
+        if let Some(world) = target_world {
+            project.target_world = world.to_string();
+        }
 
         // CM Adapter Synthesis (must run before monomorphize)
         let project = {

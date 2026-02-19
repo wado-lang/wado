@@ -52,17 +52,24 @@ fn run_golden_test(
         let source = std::fs::read_to_string(&source_path)
             .unwrap_or_else(|e| panic!("Failed to read source file {:?}: {}", source_path, e));
 
+        // Extract target world from __DATA__ section
+        let target_world = common::extract_data_section(&source).and_then(|data| {
+            let json: serde_json::Value = serde_json::from_str(data.trim()).ok()?;
+            json.get("world")?.as_str().map(String::from)
+        });
+
         // Create compiler host
         let base_path = source_path.parent().unwrap().to_path_buf();
         let host = common::FilesystemHost::new(base_path);
 
-        // Run dump_with_host with O2 optimization
+        // Run dump with O2 optimization and the target world from __DATA__
         // Use the original path from header to match expected #file output
-        let result = wado_compiler::dump_with_host(
+        let result = wado_compiler::dump_with_host_and_world(
             &source,
             &host,
             Some(source_from_header),
             OptLevel::O2,
+            target_world.as_deref(),
         )
         .await
         .unwrap_or_else(|e| panic!("Compilation failed for {:?}: {}", source_path, e));

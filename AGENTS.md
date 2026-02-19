@@ -34,18 +34,18 @@ Each test fixture group has the same prefix in their filenames.
 
 #### Data Section Schema
 
-| Field             | Type       | Description                                                |
-| ----------------- | ---------- | ---------------------------------------------------------- |
+| Field             | Type       | Description                                                  |
+| ----------------- | ---------- | ------------------------------------------------------------ |
 | `world`           | `string`   | Target world (`"wasi:http/service"`, `"test"`; omit for CLI) |
-| `stdout`          | `string`   | Expected stdout (exact match)                              |
-| `stderr`          | `string`   | Expected stderr (exact match)                              |
-| `stdout_contains` | `string[]` | Strings that must appear in stdout                         |
-| `stderr_contains` | `string[]` | Strings that must appear in stderr                         |
-| `trapped`         | `bool`     | Whether the program should trap                            |
-| `compile_error`   | `string`   | Expected compile error (substring match)                   |
-| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented |
-| `http_status`     | `number`   | Expected HTTP status code (HTTP world only)                |
-| `body`            | `string`   | Expected HTTP response body (HTTP world only)              |
+| `stdout`          | `string`   | Expected stdout (exact match)                                |
+| `stderr`          | `string`   | Expected stderr (exact match)                                |
+| `stdout_contains` | `string[]` | Strings that must appear in stdout                           |
+| `stderr_contains` | `string[]` | Strings that must appear in stderr                           |
+| `trapped`         | `bool`     | Whether the program should trap                              |
+| `compile_error`   | `string`   | Expected compile error (substring match)                     |
+| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented   |
+| `http_status`     | `number`   | Expected HTTP status code (HTTP world only)                  |
+| `body`            | `string`   | Expected HTTP response body (HTTP world only)                |
 
 #### Examples
 
