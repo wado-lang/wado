@@ -1,0 +1,31 @@
+// Test Array iterator fold combinator with closure
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let nums: Array<i32> = [1, 2, 3, 4, 5];
+
+    // Sum
+    let sum = nums.iter().fold(0, |acc: i32, x: i32| acc + x);
+    println(`{sum}`);  // 15
+
+    // Product
+    let product = nums.iter().fold(1, |acc: i32, x: i32| acc * x);
+    println(`{product}`);  // 120
+
+    // Maximum
+    let max = nums.iter().fold(i32::MIN, |acc: i32, x: i32| {
+        if x > acc { return x; }
+        return acc;
+    });
+    println(`{max}`);  // 5
+
+    // Count elements greater than 2 (using fold as filter+count)
+    let count = nums.iter().fold(0, |acc: i32, x: i32| {
+        if x > 2 { return acc + 1; }
+        return acc;
+    });
+    println(`{count}`);  // 3
+}
+
+__DATA__
+{"stdout": "15\n120\n5\n3\n"}

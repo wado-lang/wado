@@ -4464,6 +4464,27 @@ impl ClosureLowerer {
                     expr.span,
                 )
             }
+            TirExprKind::LabeledBlock {
+                label,
+                block,
+                result_type,
+            } => {
+                let transformed_block = self.transform_closure_body_block(
+                    block,
+                    captures,
+                    struct_type_id,
+                    self_ref_type,
+                );
+                TirExpr::new(
+                    TirExprKind::LabeledBlock {
+                        label: label.clone(),
+                        block: transformed_block,
+                        result_type: *result_type,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
             TirExprKind::If {
                 condition,
                 then_branch,
@@ -4562,6 +4583,28 @@ impl ClosureLowerer {
                     TirExprKind::Call {
                         func: func.clone(),
                         type_args: type_args.clone(),
+                        args: new_args,
+                    },
+                    expr.type_id,
+                    expr.span,
+                )
+            }
+            TirExprKind::StaticCall { func, args } => {
+                let new_args = args
+                    .iter()
+                    .map(|a| {
+                        self.transform_closure_body(
+                            a,
+                            captures,
+                            struct_type_id,
+                            self_ref_type,
+                            span,
+                        )
+                    })
+                    .collect();
+                TirExpr::new(
+                    TirExprKind::StaticCall {
+                        func: func.clone(),
                         args: new_args,
                     },
                     expr.type_id,

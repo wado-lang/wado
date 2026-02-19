@@ -1,0 +1,19 @@
+// TODO: Closure with effects passed as fn parameter
+// Requires: fn(T) with Effect syntax in type positions (effect system integration)
+use { println, Stdout } from "core:cli";
+
+fn for_each(items: Array<i32>, f: fn(i32) with Stdout) with Stdout {
+    for let item of items {
+        f(item);
+    }
+}
+
+export fn run() with Stdout {
+    let items: Array<i32> = [1, 2, 3];
+    for_each(items, |x: i32| {
+        println(`item: {x}`);
+    });
+}
+
+__DATA__
+{"stdout": "item: 1\nitem: 2\nitem: 3\n"}

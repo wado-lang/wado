@@ -1070,6 +1070,13 @@ fn main() with Stdout, FileSystem {
 fn add(a: i32, b: i32) -> i32 {
     return a + b;
 }
+
+// Effect in function type position (higher-order functions)
+fn for_each(items: Array<i32>, f: fn(i32) with Stdout) with Stdout {
+    for let item of items {
+        f(item);
+    }
+}
 ```
 
 ## Reference Storage (`stores`)
@@ -1235,6 +1242,21 @@ let make_point = |x: i32, y: i32| Point { x, y };
 let multiplier = 10;
 let scale = |x: i32| x * multiplier;  // Captures `multiplier` by value
 let result = scale(5);  // 50
+
+// Mutable capture: use &mut || to mutate captured variables
+let mut count = 0;
+let inc = &mut || { count += 1; };
+inc();
+inc();
+println(`{count}`);  // 2
+
+// Multiple closures sharing the same mutable variable
+let mut count = 0;
+let inc = &mut || { count += 1; };
+let get = || count;
+inc();
+inc();
+println(`{get()}`);  // 2
 ```
 
 ## Iterators
