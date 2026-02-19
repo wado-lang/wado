@@ -51,8 +51,7 @@ pub struct Project {
     /// When true, skip Wasm validation after code generation.
     /// Returns raw bytes even if invalid — useful for debugging codegen.
     pub skip_validation: bool,
-    /// Target world for Component Model export (e.g., "Command", "Service")
-    /// Defaults to "Command" (wasi:cli/command)
+    /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
     pub target_world: String,
 
     /// When true, the target world exports an HTTP handler (returns Result<Response, `ErrorCode`>).
@@ -99,7 +98,7 @@ impl Project {
             // Codegen options
             strip_names: false,
             skip_validation: false,
-            target_world: "Command".to_string(),
+            target_world: "wasi:cli/command".to_string(),
             // CM export characteristics
             has_http_handler_export: false,
             // CM export adapter mapping

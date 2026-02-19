@@ -719,6 +719,13 @@ impl<'a> Unparser<'a> {
 
     fn unparse_world(&mut self, w: &WorldDecl) {
         self.write_indent();
+
+        for attr in &w.attrs {
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+            self.write_indent();
+        }
+
         self.output.push_str("world ");
         self.output.push_str(&w.name);
         self.output.push_str(" {\n");

@@ -315,7 +315,7 @@ impl Parser {
             TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(is_pub).map(Item::Trait),
             TokenKind::Resource => self.parse_resource_decl(is_pub, attrs).map(Item::Resource),
-            TokenKind::World => self.parse_world_decl().map(Item::World),
+            TokenKind::World => self.parse_world_decl(attrs).map(Item::World),
             TokenKind::Global => self.parse_global_decl(is_pub, attrs).map(Item::Global),
             _ => Err(ParseError {
                 message: format!("expected item, found {:?}", self.peek_kind()),
@@ -3403,7 +3403,7 @@ impl Parser {
     ///     export async fn run() -> Result<(), ()>;
     /// }
     /// ```
-    fn parse_world_decl(&mut self) -> ParseResult<WorldDecl> {
+    fn parse_world_decl(&mut self, attrs: Vec<Attribute>) -> ParseResult<WorldDecl> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::World)?;
         let name = self.consume_ident()?;
@@ -3436,6 +3436,7 @@ impl Parser {
 
         Ok(WorldDecl {
             name,
+            attrs,
             imports,
             exports,
             span: start_span.merge(&end_span),

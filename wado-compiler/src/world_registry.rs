@@ -2,6 +2,9 @@
 //!
 //! This module collects world definitions from lib/wasi/*.wado
 //! and provides export signature information for code generation.
+//!
+//! Worlds are keyed by their fully-qualified name (e.g., "wasi:cli/command",
+//! "wasi:http/service") derived from the `#[wasi("...")]` attribute.
 
 use indexmap::IndexMap;
 
@@ -60,8 +63,8 @@ impl WorldExportInfo {
 /// Information about a world definition
 #[derive(Debug, Clone)]
 pub struct WorldInfo {
-    /// World name (e.g., "Command")
-    pub name: String,
+    /// Fully-qualified world name (e.g., "wasi:cli/command")
+    pub fq_name: String,
     /// Exported functions
     pub exports: Vec<WorldExportInfo>,
 }
@@ -86,10 +89,30 @@ impl WorldInfo {
 ///
 /// Collects world definitions from wasi/*.wado and provides:
 /// - Export signature lookup for component generation
+///
+/// Worlds are keyed by fully-qualified name (e.g., "wasi:cli/command").
 #[derive(Debug, Clone, Default)]
 pub struct WorldRegistry {
-    /// `world_name` -> world info
+    /// fq_name -> world info (e.g., "wasi:cli/command" -> WorldInfo)
     worlds: IndexMap<String, WorldInfo>,
+}
+
+/// Extract the fully-qualified world name (without version) from `#[wasi("...")]` attribute.
+///
+/// For example, `#[wasi("wasi:cli/command@0.3.0-rc-2026-01-06")]` returns `"wasi:cli/command"`.
+fn fq_name_from_attrs(attrs: &[crate::ast::Attribute]) -> Option<String> {
+    attrs
+        .iter()
+        .find(|a| a.name == "wasi")
+        .and_then(|a| a.args.first())
+        .map(|s| {
+            // Strip version suffix (e.g., "@0.3.0-rc-2026-01-06")
+            if let Some(at_pos) = s.find('@') {
+                s[..at_pos].to_string()
+            } else {
+                s.clone()
+            }
+        })
 }
 
 impl WorldRegistry {
@@ -98,8 +121,14 @@ impl WorldRegistry {
         Self::default()
     }
 
-    /// Register a world from a parsed world declaration
+    /// Register a world from a parsed world declaration.
+    ///
+    /// The world is keyed by its fully-qualified name from the `#[wasi("...")]` attribute.
+    /// If no attribute is present, the `PascalCase` name is used as fallback.
     pub fn register(&mut self, world: &WorldDecl) {
+        let fq_name =
+            fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
+
         let exports = world
             .exports
             .iter()
@@ -107,28 +136,28 @@ impl WorldRegistry {
             .collect();
 
         let info = WorldInfo {
-            name: world.name.clone(),
+            fq_name: fq_name.clone(),
             exports,
         };
 
-        self.worlds.insert(world.name.clone(), info);
+        self.worlds.insert(fq_name, info);
     }
 
-    /// Get world info by name
-    pub fn get(&self, name: &str) -> Option<&WorldInfo> {
-        self.worlds.get(name)
+    /// Get world info by fully-qualified name (e.g., "wasi:cli/command")
+    pub fn get(&self, fq_name: &str) -> Option<&WorldInfo> {
+        self.worlds.get(fq_name)
     }
 
     /// Get an export from a specific world
-    pub fn get_export(&self, world_name: &str, export_name: &str) -> Option<&WorldExportInfo> {
+    pub fn get_export(&self, fq_name: &str, export_name: &str) -> Option<&WorldExportInfo> {
         self.worlds
-            .get(world_name)
+            .get(fq_name)
             .and_then(|w| w.exports.iter().find(|e| e.name == export_name))
     }
 
     /// Check if a world is registered
-    pub fn has_world(&self, name: &str) -> bool {
-        self.worlds.contains_key(name)
+    pub fn has_world(&self, fq_name: &str) -> bool {
+        self.worlds.contains_key(fq_name)
     }
 
     /// Get the number of registered worlds
@@ -145,6 +174,7 @@ impl WorldRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::Attribute;
     use crate::token::Span;
 
     fn make_span() -> Span {
@@ -157,6 +187,12 @@ mod tests {
 
         let world = WorldDecl {
             name: "Command".to_string(),
+            attrs: vec![Attribute {
+                name: "wasi".to_string(),
+                args: vec!["wasi:cli/command@0.3.0".to_string()],
+                wasi_import: None,
+                span: make_span(),
+            }],
             imports: vec![],
             exports: vec![WorldExport {
                 name: "run".to_string(),
@@ -174,14 +210,17 @@ mod tests {
 
         registry.register(&world);
 
-        assert!(registry.has_world("Command"));
+        assert!(registry.has_world("wasi:cli/command"));
+        assert!(!registry.has_world("Command"));
         assert!(!registry.has_world("Unknown"));
 
-        let info = registry.get("Command").unwrap();
-        assert_eq!(info.name, "Command");
+        let info = registry.get("wasi:cli/command").unwrap();
+        assert_eq!(info.fq_name, "wasi:cli/command");
         assert_eq!(info.exports.len(), 1);
 
-        let run_export = registry.get_export("Command", "run").unwrap();
+        let run_export = registry
+            .get_export("wasi:cli/command", "run")
+            .unwrap();
         assert_eq!(run_export.name, "run");
         assert!(run_export.is_async);
         assert!(run_export.params.is_empty());
@@ -209,12 +248,15 @@ mod tests {
             }
         }
 
-        // Verify Command world is registered
-        assert!(registry.has_world("Command"), "Command world not found");
+        // Verify Command world is registered by fq name
+        assert!(
+            registry.has_world("wasi:cli/command"),
+            "wasi:cli/command world not found"
+        );
 
         // Verify run export
         let run_export = registry
-            .get_export("Command", "run")
+            .get_export("wasi:cli/command", "run")
             .expect("run export not found");
         assert!(run_export.is_async, "run should be async");
         assert!(run_export.params.is_empty(), "run should have no params");
