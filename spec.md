@@ -2534,6 +2534,24 @@ test "string operations" {
     assert s.len() == 5;
     assert s + " world" == "hello world";
 }
+
+// Expect-trap test: the test passes when the body traps
+#[expect_trap]
+test "panics on bad input" {
+    panic("intentional panic");
+}
+
+#[expect_trap]
+test {
+    unreachable();
+}
+
+// TODO test: passes while the feature is unimplemented (body traps).
+// When it stops trapping, the runner warns to remove the attribute.
+#[TODO]
+test "not yet implemented" {
+    panic("TODO: implement this feature");
+}
 ```
 
 **Syntax Rules:**
@@ -2543,6 +2561,7 @@ test "string operations" {
 - Test body is a block containing statements
 - No return type or effect declarations needed
 - Tests can use any effects (side effects are allowed in tests)
+- Attributes (e.g., `#[expect_trap]`, `#[TODO]`) may appear before the `test` keyword
 
 **Test Identification:**
 
@@ -2556,7 +2575,29 @@ test "string operations" {
 - Each test runs in isolation with fresh state
 - Test order is deterministic (declaration order within a file)
 - A test passes if it completes without panicking or trapping
-- A test fails if `assert` fails, `panic!` is called, or a trap occurs
+- A test fails if `assert` fails, `panic` is called, or a trap occurs
+
+**`#[expect_trap]` Attribute:**
+
+The `#[expect_trap]` attribute inverts the pass/fail condition for a test:
+
+- The test passes if the body traps (calls `panic`, `unreachable`, or fails an `assert`)
+- The test fails if the body completes normally without trapping
+
+This is useful for verifying that invalid operations are correctly rejected at runtime:
+
+```wado
+#[expect_trap]
+test "panics on null dereference" {
+    let opt: Option<i32> = null;
+    // force a trap by accessing None without checking
+    panic("expected None but got value");
+}
+```
+
+**`#[TODO]` Attribute:**
+
+The `#[TODO]` attribute marks a test as a placeholder for a feature not yet implemented. It has the same trap-expectation semantics as `#[expect_trap]`, but the runner emits a distinct failure message when the body unexpectedly passes, reminding the developer to remove the attribute.
 
 **Effects:**
 

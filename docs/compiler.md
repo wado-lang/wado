@@ -299,6 +299,16 @@ cargo run --bin wado -- test wado-compiler/lib/core/zlib_test.wado  # run one fi
 
 Test names can contain any characters (parentheses, dashes, etc.) — the compiler sanitizes them into valid kebab-case CM export names.
 
+The `#[expect_trap]` and `#[TODO]` attributes mark tests as expected to trap. The compiler encodes this in the export name prefix:
+
+```
+test-0-simple            # normal test export
+test-trap-1-panics       # #[expect_trap]: passes when body traps
+test-todo-2-wip          # #[TODO]: passes when body traps; distinct failure message when it doesn't
+```
+
+Both `wado test` and the e2e test runner detect these prefixes and handle pass/fail accordingly.
+
 ### WASI Registry
 
 The `WasiRegistry` module (`component_model.rs`) collects WASI import information from `lib/wasi/*.wado` files and provides it to the code generator for dynamic Component Model generation.

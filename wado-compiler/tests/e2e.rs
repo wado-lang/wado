@@ -306,6 +306,9 @@ fn run_test_world(wasm: &[u8], test_id: &str) -> anyhow::Result<common::WasmRunR
         let mut all_stderr = String::new();
 
         for test_name in &test_names {
+            let expect_trap = test_name.starts_with("test-trap-");
+            let is_todo = test_name.starts_with("test-todo-");
+
             let stdout_pipe = MemoryOutputPipe::new(65536);
             let stdout_clone = stdout_pipe.clone();
             let stderr_pipe = MemoryOutputPipe::new(65536);
@@ -318,7 +321,19 @@ fn run_test_world(wasm: &[u8], test_id: &str) -> anyhow::Result<common::WasmRunR
             let func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, test_name)?;
 
             match func.call_async(&mut store, ()).await {
-                Ok((Ok(()),)) => {} // passed
+                Ok((Ok(()),)) => {
+                    if is_todo {
+                        anyhow::bail!(
+                            "[{test_id}] TODO test '{test_name}' passed unexpectedly — \
+                             the feature may be implemented; remove the #[TODO] attribute"
+                        );
+                    } else if expect_trap {
+                        anyhow::bail!(
+                            "[{test_id}] test '{test_name}' was expected to trap but returned Ok(())"
+                        );
+                    }
+                    // passed
+                }
                 Ok((Err(()),)) => {
                     let stderr_text = String::from_utf8_lossy(&stderr_clone.contents()).to_string();
                     anyhow::bail!(
@@ -326,10 +341,14 @@ fn run_test_world(wasm: &[u8], test_id: &str) -> anyhow::Result<common::WasmRunR
                     );
                 }
                 Err(e) => {
-                    let stderr_text = String::from_utf8_lossy(&stderr_clone.contents()).to_string();
-                    anyhow::bail!(
-                        "[{test_id}] test '{test_name}' trapped: {e}. stderr: {stderr_text}"
-                    );
+                    if !expect_trap && !is_todo {
+                        let stderr_text =
+                            String::from_utf8_lossy(&stderr_clone.contents()).to_string();
+                        anyhow::bail!(
+                            "[{test_id}] test '{test_name}' trapped: {e}. stderr: {stderr_text}"
+                        );
+                    }
+                    // expected trap (expect_trap or TODO): pass
                 }
             }
 

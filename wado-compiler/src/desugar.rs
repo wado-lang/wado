@@ -97,6 +97,7 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
 
 fn desugar_test(test: &TestDecl, ctx: &mut DesugarContext) -> TestDecl {
     TestDecl {
+        attributes: test.attributes.clone(),
         name: test.name.clone(),
         body: desugar_block(&test.body, ctx),
         span: test.span,

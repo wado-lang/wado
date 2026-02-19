@@ -1800,11 +1800,18 @@ pub struct TirNewtype {
 pub struct TirTest {
     /// The original test name from source (None if unnamed)
     pub name: Option<String>,
-    /// Generated function name (e.g., "__`test_0`" or "__`test_addition_works`")
+    /// Generated function name (e.g., "__`test_0`", "__`test_trap_0`", or "__`test_todo_0`")
     pub function_name: String,
     /// Source line number for unnamed test identification
     pub line: usize,
     pub span: Span,
+    /// Whether this test is expected to trap (from `#[expect_trap]` attribute)
+    pub expect_trap: bool,
+    /// Whether this test is a TODO placeholder (from `#[TODO]` attribute).
+    /// Like `expect_trap`, the test passes when the body traps, but the runner emits
+    /// a distinct message when the body unexpectedly passes, reminding the developer
+    /// to remove the `#[TODO]` attribute.
+    pub is_todo: bool,
 }
 
 #[derive(Debug, Clone)]

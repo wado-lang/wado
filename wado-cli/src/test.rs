@@ -115,6 +115,8 @@ struct TestJob {
     module_idx: usize,
     test_name: String,
     display_name: String,
+    expect_trap: bool,
+    is_todo: bool,
 }
 
 /// Result from a test execution
@@ -126,18 +128,25 @@ struct TestResult {
     error: Option<String>,
 }
 
-/// Extract display name from test function name
-/// test-0-simple -> "simple"
-/// test-1 -> "<test 1>"
+/// Extract display name from test export name.
+///
+/// - `test-0-simple` → `"simple"`
+/// - `test-1` → `"<test 1>"`
+/// - `test-trap-0-panics` → `"panics"` (`expect_trap` tests use the same display convention)
+/// - `test-trap-3` → `"<test 3>"`
+/// - `test-todo-0-not-yet` → `"not_yet"` (`TODO` tests use the same display convention)
+/// - `test-todo-2` → `"<test 2>"`
 fn extract_display_name(test_name: &str) -> String {
-    if let Some(name_part) = test_name.strip_prefix("test-") {
-        if let Some(idx) = name_part.find('-') {
-            name_part[idx + 1..].replace('-', "_")
-        } else {
-            format!("<test {name_part}>")
-        }
+    // Strip "test-trap-", "test-todo-", or "test-" prefix to get the "index[-name]" part
+    let name_part = test_name
+        .strip_prefix("test-trap-")
+        .or_else(|| test_name.strip_prefix("test-todo-"))
+        .or_else(|| test_name.strip_prefix("test-"))
+        .unwrap_or(test_name);
+    if let Some(idx) = name_part.find('-') {
+        name_part[idx + 1..].replace('-', "_")
     } else {
-        test_name.to_string()
+        format!("<test {name_part}>")
     }
 }
 
@@ -180,10 +189,14 @@ async fn collect_test_jobs(
         }
 
         for test_name in &test_names {
+            let expect_trap = test_name.starts_with("test-trap-");
+            let is_todo = test_name.starts_with("test-todo-");
             jobs.push(TestJob {
                 module_idx,
                 test_name: test_name.clone(),
                 display_name: extract_display_name(test_name),
+                expect_trap,
+                is_todo,
             });
         }
 
@@ -236,9 +249,33 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
 
     let (passed, error) = match test_func {
         Ok(func) => match func.call_async(&mut store, ()).await {
-            Ok((Ok(()),)) => (true, None),
+            Ok((Ok(()),)) => {
+                if job.is_todo {
+                    (
+                        false,
+                        Some(
+                            "TODO test passed unexpectedly — \
+                             the feature may be implemented; remove the #[TODO] attribute"
+                                .to_string(),
+                        ),
+                    )
+                } else if job.expect_trap {
+                    (
+                        false,
+                        Some("expected trap but test returned Ok(())".to_string()),
+                    )
+                } else {
+                    (true, None)
+                }
+            }
             Ok((Err(()),)) => (false, Some("test returned error".to_string())),
-            Err(e) => (false, Some(format!("{e}"))),
+            Err(e) => {
+                if job.expect_trap || job.is_todo {
+                    (true, None) // expected trap: pass
+                } else {
+                    (false, Some(format!("{e}")))
+                }
+            }
         },
         Err(e) => (false, Some(format!("failed to get test function: {e}"))),
     };

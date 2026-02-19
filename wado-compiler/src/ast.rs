@@ -89,6 +89,8 @@ pub enum Item {
 /// Test declaration: `test "name" { ... }` or `test { ... }`
 #[derive(Debug, Clone)]
 pub struct TestDecl {
+    /// Attributes applied to this test (e.g., `#[expect_trap]`).
+    pub attributes: Vec<Attribute>,
     /// Optional test name (string literal). If None, identified by <file:line>.
     pub name: Option<String>,
     pub body: Block,

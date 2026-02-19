@@ -298,7 +298,7 @@ impl Parser {
         if let TokenKind::Ident(name) = self.peek_kind()
             && name == "test"
         {
-            return self.parse_test_decl().map(Item::Test);
+            return self.parse_test_decl(attrs).map(Item::Test);
         }
 
         match self.peek_kind() {
@@ -324,8 +324,8 @@ impl Parser {
         }
     }
 
-    /// Parse test declaration: `test "name" { ... }` or `test { ... }`
-    fn parse_test_decl(&mut self) -> ParseResult<TestDecl> {
+    /// Parse test declaration: `[#[attr]] test "name" { ... }` or `[#[attr]] test { ... }`
+    fn parse_test_decl(&mut self, attributes: Vec<Attribute>) -> ParseResult<TestDecl> {
         let start_span = self.peek().span;
         // Consume the "test" identifier (contextual keyword)
         self.advance();
@@ -343,6 +343,7 @@ impl Parser {
         let end_span = body.span;
 
         Ok(TestDecl {
+            attributes,
             name,
             body,
             span: start_span.merge(&end_span),
