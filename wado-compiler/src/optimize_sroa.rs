@@ -225,6 +225,9 @@ fn collect_candidates_in_stmt(
         TirStmtKind::LetPattern { value, .. } => {
             collect_candidates_in_expr(value, type_table, candidates);
         }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     }
 }
 
@@ -345,6 +348,9 @@ fn check_escape_in_stmt(stmt: &TirStmt, candidates: &IndexSet<u32>, escaped: &mu
         TirStmtKind::Continue => {}
         TirStmtKind::LetPattern { value, .. } => {
             check_escape_in_expr(value, candidates, escaped);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
         }
     }
 }
@@ -689,6 +695,9 @@ fn rewrite_stmt(
         TirStmtKind::Continue => {}
         TirStmtKind::LetPattern { value, .. } => {
             rewrite_expr(value, safe_set, field_map, info_map, candidate_mut);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
         }
     }
 }

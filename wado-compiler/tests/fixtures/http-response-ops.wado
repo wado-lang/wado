@@ -17,7 +17,7 @@ use {
     Trailers,
 } from "wasi:http";
 
-export fn handle(request: Request) -> Result<Response, ErrorCode> {
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // 1. Create a trailers future pair
     let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
@@ -39,7 +39,7 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> {
     assert new_status == 404;
 
     // Return the response with status 404
-    return Result::<Response, ErrorCode>::Ok(response);
+    task return Result::<Response, ErrorCode>::Ok(response);
 }
 
 __DATA__

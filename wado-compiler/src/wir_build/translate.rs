@@ -805,6 +805,9 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::LetPattern { pattern, value, .. } => {
                 self.translate_let_pattern(pattern, value)
             }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         }
     }
 

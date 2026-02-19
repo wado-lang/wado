@@ -490,6 +490,9 @@ fn analyze_block(
             TirStmtKind::LetPattern { value, .. } => {
                 analyze_expr(value, current_module, type_table, analysis);
             }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         }
     }
 }
@@ -1418,6 +1421,9 @@ fn collect_types_from_block(
             TirStmtKind::LetPattern { pattern, value, .. } => {
                 collect_types_from_pattern(pattern, type_table, reachable);
                 collect_types_from_expr(value, type_table, reachable);
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
             }
         }
     }

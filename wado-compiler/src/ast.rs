@@ -298,6 +298,10 @@ pub struct Function {
     pub is_pub: bool,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
+    /// Whether this is an async function (`export async fn`).
+    /// Async functions use `task return` instead of `return` to deliver results
+    /// without terminating the function.
+    pub is_async: bool,
     /// Generic type parameters: `fn swap<T>(a: T, b: T) -> T`
     pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
@@ -337,6 +341,9 @@ pub enum Stmt {
     Let(LetStmt),
     Expr(ExprStmt),
     Return(ReturnStmt),
+    /// `task return expr;` — delivers the async task result without terminating the function.
+    /// Only valid inside `export async fn` bodies.
+    TaskReturn(TaskReturnStmt),
     If(IfStmt),
     While(WhileStmt),
     For(ForStmt),
@@ -386,6 +393,14 @@ pub struct ExprStmt {
 #[derive(Debug, Clone)]
 pub struct ReturnStmt {
     pub value: Option<Expr>,
+    pub span: Span,
+}
+
+/// `task return expr;` — delivers the async task result without terminating the function.
+/// Only valid inside `export async fn` bodies.
+#[derive(Debug, Clone)]
+pub struct TaskReturnStmt {
+    pub value: Expr,
     pub span: Span,
 }
 

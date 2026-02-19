@@ -135,6 +135,9 @@ fn count_block_exprs(block: &TirBlock) -> usize {
                 count_block_exprs(body)
             }
             TirStmtKind::Break { .. } | TirStmtKind::Continue => 0,
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         })
         .sum()
 }
@@ -369,6 +372,9 @@ fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> boo
             .is_some_and(|e| expr_has_complex_generic_types(e, type_table)),
         TirStmtKind::Continue => false,
         TirStmtKind::LetPattern { value, .. } => expr_has_complex_generic_types(value, type_table),
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     }
 }
 
@@ -565,6 +571,9 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
         TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
         TirStmtKind::LetPattern { value, .. } => {
             collect_callees_from_expr(value, callees);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
         }
     }
 }
@@ -1248,6 +1257,9 @@ fn inline_calls_in_block(
                     },
                     stmt.span,
                 ));
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
             }
         }
     }
@@ -1935,6 +1947,9 @@ fn remap_stmt_with_label(
                 source_module,
             ),
         },
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     };
 
     TirStmt::new(kind, stmt.span)
@@ -2703,6 +2718,9 @@ fn remap_stmt(
                 source_module,
             ),
         },
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     };
 
     TirStmt::new(kind, stmt.span)

@@ -391,6 +391,106 @@ fn alloc_local(next_local: &mut u32, local_types: &mut Vec<TypeId>, ty: TypeId) 
     idx
 }
 
+/// Generate TIR statements to resolve the pending HTTP trailers future.
+///
+/// After `task-return`, if a trailers future tx was saved in the
+/// `__pending_trailers_tx` global, write `Ok(None)` to it and drop the
+/// writable end so the CM runtime can complete the HTTP response.
+fn resolve_pending_trailers_stmts(
+    next_local: &mut u32,
+    local_types: &mut Vec<TypeId>,
+) -> Vec<TirStmt> {
+    let mut stmts: Vec<TirStmt> = Vec::new();
+
+    // let __trailers_tx: i32 = core::builtin::global_get_pending_trailers_tx();
+    let tx_local = alloc_local(next_local, local_types, TypeTable::I32);
+    stmts.push(let_stmt(
+        "__trailers_tx",
+        tx_local,
+        TypeTable::I32,
+        builtin_call("global_get_pending_trailers_tx", vec![], TypeTable::I32),
+    ));
+
+    // if (__trailers_tx != 0) { ... }
+    let mut if_stmts: Vec<TirStmt> = Vec::new();
+
+    // let __trailers_ptr: i32 = core::builtin::realloc(0, 0, 8, 8);
+    let ptr_local = alloc_local(next_local, local_types, TypeTable::I32);
+    if_stmts.push(let_stmt(
+        "__trailers_ptr",
+        ptr_local,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![i32_const(0), i32_const(0), i32_const(8), i32_const(8)],
+            TypeTable::I32,
+        ),
+    ));
+
+    // core::builtin::i32_store(__trailers_ptr, 0); // Ok discriminant
+    if_stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
+            i32_const(0),
+        ],
+        TypeTable::UNIT,
+    )));
+
+    // core::builtin::i32_store((__trailers_ptr + 4), 0); // None
+    if_stmts.push(expr_stmt(builtin_call(
+        "i32_store",
+        vec![
+            binary_add(
+                local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
+                i32_const(4),
+            ),
+            i32_const(0),
+        ],
+        TypeTable::UNIT,
+    )));
+
+    // core::builtin::future_write(__trailers_tx, __trailers_ptr);
+    if_stmts.push(expr_stmt(builtin_call(
+        "future_write",
+        vec![
+            local_ref(tx_local, "__trailers_tx", TypeTable::I32),
+            local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
+        ],
+        TypeTable::I32,
+    )));
+
+    // core::builtin::realloc(__trailers_ptr, 8, 8, 0);
+    if_stmts.push(expr_stmt(builtin_call(
+        "realloc",
+        vec![
+            local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
+            i32_const(8),
+            i32_const(8),
+            i32_const(0),
+        ],
+        TypeTable::I32,
+    )));
+
+    // core::builtin::future_drop_writable(__trailers_tx);
+    if_stmts.push(expr_stmt(builtin_call(
+        "future_drop_writable",
+        vec![local_ref(tx_local, "__trailers_tx", TypeTable::I32)],
+        TypeTable::UNIT,
+    )));
+
+    stmts.push(if_stmt(
+        binary_ne(
+            local_ref(tx_local, "__trailers_tx", TypeTable::I32),
+            i32_const(0),
+        ),
+        block(if_stmts),
+        None,
+    ));
+
+    stmts
+}
+
 /// Synthesize a TIR expression that loads a CM value from linear memory.
 ///
 /// For primitives, returns a single expression (no setup statements).
@@ -1455,6 +1555,7 @@ fn make_adapter_function(
         name,
         is_pub: false,
         is_export: false,
+        is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
         monomorph_info: None,
@@ -2797,7 +2898,6 @@ fn synthesize_result_export_adapter(
     flat_return_types: &[cm_abi::CmValType],
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
-    is_http_handler: bool,
     world_params: &[(String, Type)],
 ) -> Rc<RefCell<TirFunction>> {
     let adapter_name = export_adapter_func_name(export_name);
@@ -3012,108 +3112,6 @@ fn synthesize_result_export_adapter(
         task_return_args,
         TypeTable::UNIT,
     )));
-
-    // After task.return, resolve the pending trailers future with Ok(None).
-    // The trailers tx handle was saved to a global by Future::new codegen.
-    // future.write must happen post-task-return because the host doesn't start
-    // reading the trailers future until it receives the response.
-    if is_http_handler {
-        let tx_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
-        let ptr_local = alloc_local(&mut next_local, &mut local_types, TypeTable::I32);
-
-        // Read the pending trailers tx from global
-        ok_stmts.push(let_stmt(
-            "__trailers_tx",
-            tx_local,
-            TypeTable::I32,
-            builtin_call("global_get_pending_trailers_tx", vec![], TypeTable::I32),
-        ));
-
-        // if tx != 0 (a trailers future was created)
-        let mut then_stmts: Vec<TirStmt> = Vec::new();
-
-        // Allocate 8 bytes for the Ok(None) payload: [result_disc=0, option_disc=0]
-        // Alignment must be 8 because error-code contains u64 fields, and
-        // result alignment = max(alignment(ok_type), alignment(err_type)).
-        then_stmts.push(let_stmt(
-            "__trailers_ptr",
-            ptr_local,
-            TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![i32_const(0), i32_const(0), i32_const(8), i32_const(8)],
-                TypeTable::I32,
-            ),
-        ));
-
-        // Write result disc = 0 (Ok)
-        then_stmts.push(expr_stmt(builtin_call(
-            "i32_store",
-            vec![
-                local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
-                i32_const(0),
-            ],
-            TypeTable::UNIT,
-        )));
-
-        // Write option disc = 0 (None)
-        then_stmts.push(expr_stmt(builtin_call(
-            "i32_store",
-            vec![
-                binary_add(
-                    local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
-                    i32_const(4),
-                ),
-                i32_const(0),
-            ],
-            TypeTable::UNIT,
-        )));
-
-        // future.write(tx, ptr)
-        then_stmts.push(expr_stmt(builtin_call(
-            "future_write",
-            vec![
-                local_ref(tx_local, "__trailers_tx", TypeTable::I32),
-                local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
-            ],
-            TypeTable::I32,
-        )));
-
-        // Free the payload memory
-        then_stmts.push(expr_stmt(builtin_call(
-            "realloc",
-            vec![
-                local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
-                i32_const(8),
-                i32_const(8),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        )));
-
-        // future.drop_writable(tx) — close the writable end
-        then_stmts.push(expr_stmt(builtin_call(
-            "future_drop_writable",
-            vec![local_ref(tx_local, "__trailers_tx", TypeTable::I32)],
-            TypeTable::UNIT,
-        )));
-
-        // if (tx != 0) { ... }
-        ok_stmts.push(TirStmt {
-            kind: TirStmtKind::If {
-                condition: binary_ne(
-                    local_ref(tx_local, "__trailers_tx", TypeTable::I32),
-                    i32_const(0),
-                ),
-                then_block: TirBlock {
-                    stmts: then_stmts,
-                    span: Span::new(0, 0, 1, 1),
-                },
-                else_block: None,
-            },
-            span: Span::new(0, 0, 1, 1),
-        });
-    }
 
     ok_stmts.push(return_stmt(None));
 
@@ -3615,6 +3613,517 @@ fn synthesize_void_stub_adapter(export_name: &str) -> Rc<RefCell<TirFunction>> {
     adapter
 }
 
+/// Synthesize an export adapter for `export async fn` functions.
+///
+/// The user function calls `task-return` internally via `task return expr` stmts
+/// (which are expanded by `expand_task_returns_in_func`). The adapter only needs to
+/// lift flat CM params to Wado types and call the user function.
+///
+/// Generated TIR (for `export async fn handle(request: Request)`):
+/// ```text
+/// fn __cm_export__handle(__p0: i32, ...) {
+///     let __request = lift_request(__p0, ...);
+///     handle(__request);  // user fn calls task-return internally
+/// }
+/// ```
+#[allow(clippy::too_many_arguments)]
+fn synthesize_async_export_adapter(
+    export_name: &str,
+    user_func: Rc<RefCell<TirFunction>>,
+    entry_source: &ModuleSource,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+    world_params: &[(String, Type)],
+) -> Rc<RefCell<TirFunction>> {
+    let adapter_name = export_adapter_func_name(export_name);
+    let mut body_stmts: Vec<TirStmt> = Vec::new();
+    let mut local_types: Vec<TypeId> = Vec::new();
+
+    let user_func_ref = user_func.borrow();
+    let needs_lifting = export_needs_param_lifting(world_params);
+
+    let (adapter_params, call_args) = if needs_lifting {
+        let tt = type_table.borrow();
+        let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
+        drop(tt);
+
+        let flat_params: Vec<TirParam> = flat_param_types
+            .iter()
+            .enumerate()
+            .map(|(i, &vt)| TirParam {
+                name: format!("__p{i}"),
+                type_id: cm_val_type_to_type_id(vt),
+                local_index: i as u32,
+                span: synth_span(),
+            })
+            .collect();
+
+        let flat_count = flat_params.len() as u32;
+        for p in &flat_params {
+            local_types.push(p.type_id);
+        }
+
+        let mut next_local_tmp = flat_count;
+        let flat_param_locals: Vec<u32> = (0..flat_count).collect();
+
+        let tt = type_table.borrow();
+        let mut lifted_args = Vec::new();
+        let mut flat_offset = 0;
+        for (i, (_name, param_ty)) in world_params.iter().enumerate() {
+            let user_type_id = user_func_ref
+                .params
+                .get(i)
+                .map(|p| p.type_id)
+                .unwrap_or(TypeTable::I32);
+            let (lifted, consumed) = synthesize_lift_from_flat_params(
+                param_ty,
+                &flat_param_locals[flat_offset..],
+                &flat_param_types[flat_offset..],
+                user_type_id,
+                &mut next_local_tmp,
+                &mut body_stmts,
+                &mut local_types,
+                tir_modules,
+                &tt,
+            );
+            lifted_args.push(lifted);
+            flat_offset += consumed;
+        }
+        drop(tt);
+
+        (flat_params, lifted_args)
+    } else {
+        let params: Vec<TirParam> = user_func_ref
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| TirParam {
+                name: p.name.clone(),
+                type_id: p.type_id,
+                local_index: i as u32,
+                span: synth_span(),
+            })
+            .collect();
+
+        for p in &params {
+            local_types.push(p.type_id);
+        }
+
+        let args: Vec<TirExpr> = params
+            .iter()
+            .map(|p| local_ref(p.local_index, &p.name, p.type_id))
+            .collect();
+
+        (params, args)
+    };
+
+    // Call user function (it returns unit; task-return is called internally)
+    let call_user = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::Resolved {
+                func: user_func.clone(),
+                module_source: entry_source.clone(),
+            },
+            type_args: vec![],
+            args: call_args,
+        },
+        TypeTable::UNIT,
+        synth_span(),
+    );
+    body_stmts.push(expr_stmt(call_user));
+    // No task-return here: user function handles it via task return stmts.
+
+    let body = block(body_stmts);
+    let local_count = local_types.len() as u32;
+
+    let adapter = make_adapter_function(
+        adapter_name,
+        adapter_params,
+        TypeTable::UNIT,
+        body,
+        local_count,
+        local_types,
+    );
+    adapter.borrow_mut().is_export = true;
+    adapter
+}
+
+/// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
+///
+/// Walks the function body and replaces each `TirStmtKind::TaskReturn { value }` with
+/// the flat lowering + `cm_raw_call("task-return", flat_args)` sequence.
+/// New locals are appended to the function's `local_types` and `local_count` is updated.
+fn expand_task_returns_in_func(
+    user_func: &Rc<RefCell<TirFunction>>,
+    flat_return_types: &[cm_abi::CmValType],
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+    resolve_http_trailers: bool,
+) {
+    let mut func = user_func.borrow_mut();
+    let mut next_local = func.local_count;
+    let mut extra_local_types: Vec<TypeId> = Vec::new();
+    // Take the body out to avoid simultaneous mutable/immutable borrows of func
+    let Some(mut body) = func.body.take() else {
+        return;
+    };
+    expand_task_return_in_block(
+        &mut body,
+        flat_return_types,
+        &mut next_local,
+        &mut extra_local_types,
+        tir_modules,
+        type_table,
+        resolve_http_trailers,
+    );
+    func.body = Some(body);
+    func.local_count = next_local;
+    func.local_types.extend(extra_local_types);
+}
+
+fn expand_task_return_in_block(
+    blk: &mut TirBlock,
+    flat_return_types: &[cm_abi::CmValType],
+    next_local: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+    resolve_http_trailers: bool,
+) {
+    let stmts = std::mem::take(&mut blk.stmts);
+    let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
+    for mut stmt in stmts {
+        if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
+            if let TirStmtKind::TaskReturn { value } =
+                std::mem::replace(&mut stmt.kind, TirStmtKind::Continue)
+            {
+                let expanded = generate_inline_task_return(
+                    value,
+                    flat_return_types,
+                    next_local,
+                    local_types,
+                    tir_modules,
+                    type_table,
+                    resolve_http_trailers,
+                );
+                new_stmts.extend(expanded);
+            }
+        } else {
+            expand_task_return_in_stmt(
+                &mut stmt,
+                flat_return_types,
+                next_local,
+                local_types,
+                tir_modules,
+                type_table,
+                resolve_http_trailers,
+            );
+            new_stmts.push(stmt);
+        }
+    }
+    blk.stmts = new_stmts;
+}
+
+fn expand_task_return_in_stmt(
+    stmt: &mut TirStmt,
+    flat_return_types: &[cm_abi::CmValType],
+    next_local: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+    resolve_http_trailers: bool,
+) {
+    match &mut stmt.kind {
+        TirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        } => {
+            expand_task_return_in_block(
+                then_block,
+                flat_return_types,
+                next_local,
+                local_types,
+                tir_modules,
+                type_table,
+                resolve_http_trailers,
+            );
+            if let Some(blk) = else_block {
+                expand_task_return_in_block(
+                    blk,
+                    flat_return_types,
+                    next_local,
+                    local_types,
+                    tir_modules,
+                    type_table,
+                    resolve_http_trailers,
+                );
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            expand_task_return_in_block(
+                body,
+                flat_return_types,
+                next_local,
+                local_types,
+                tir_modules,
+                type_table,
+                resolve_http_trailers,
+            );
+        }
+        TirStmtKind::IfPattern {
+            then_block,
+            else_block,
+            ..
+        } => {
+            expand_task_return_in_block(
+                then_block,
+                flat_return_types,
+                next_local,
+                local_types,
+                tir_modules,
+                type_table,
+                resolve_http_trailers,
+            );
+            if let Some(blk) = else_block {
+                expand_task_return_in_block(
+                    blk,
+                    flat_return_types,
+                    next_local,
+                    local_types,
+                    tir_modules,
+                    type_table,
+                    resolve_http_trailers,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Generate the inline task-return sequence for `task return value`.
+///
+/// For `Result<T, E>` values, generates:
+/// - Ok arm: flatten T → call task-return(0, ...`flat_ok_values`)
+/// - Err arm: flatten E → call task-return(1, ...`flat_err_values`)
+///
+/// For other types, generates task-return(0, ...`flat_values`).
+fn generate_inline_task_return(
+    value: TirExpr,
+    flat_return_types: &[cm_abi::CmValType],
+    next_local: &mut u32,
+    local_types: &mut Vec<TypeId>,
+    tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
+    type_table: &Rc<RefCell<TypeTable>>,
+    resolve_http_trailers: bool,
+) -> Vec<TirStmt> {
+    let mut stmts: Vec<TirStmt> = Vec::new();
+    let value_type_id = value.type_id;
+
+    let tt = type_table.borrow();
+    let is_result = matches!(
+        tt.get(value_type_id),
+        crate::tir::ResolvedType::GenericInstance { name, .. } if name == "Result"
+    );
+
+    if is_result && !flat_return_types.is_empty() {
+        let (ok_type_id, err_type_id) = match tt.get(value_type_id) {
+            crate::tir::ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
+                (type_args[0], type_args[1])
+            }
+            _ => panic!("Expected Result<T, E> type"),
+        };
+        drop(tt);
+
+        // Store result in local
+        let result_local = alloc_local(next_local, local_types, value_type_id);
+        stmts.push(let_stmt("__task_ret", result_local, value_type_id, value));
+
+        // Allocate mutable flat value locals (initialized to zero)
+        let flat_locals: Vec<u32> = flat_return_types
+            .iter()
+            .map(|&vt| {
+                let type_id = cm_val_type_to_type_id(vt);
+                let local = alloc_local(next_local, local_types, type_id);
+                stmts.push(let_mut_stmt("__tv", local, type_id, cm_zero(vt)));
+                local
+            })
+            .collect();
+
+        let task_return_args: Vec<TirExpr> = flat_locals
+            .iter()
+            .zip(flat_return_types.iter())
+            .map(|(&local, &vt)| local_ref(local, "__tv", cm_val_type_to_type_id(vt)))
+            .collect();
+
+        // === Ok case ===
+        let mut ok_stmts: Vec<TirStmt> = Vec::new();
+        ok_stmts.push(expr_stmt(assign(
+            local_ref(
+                flat_locals[0],
+                "__tv",
+                cm_val_type_to_type_id(flat_return_types[0]),
+            ),
+            i32_const(0),
+        )));
+        let ok_value = variant_payload(
+            local_ref(result_local, "__task_ret", value_type_id),
+            0,
+            ok_type_id,
+        );
+        let tt = type_table.borrow();
+        let ok_flat_types = flat_types_from_type_id(ok_type_id, tir_modules, &tt);
+        drop(tt);
+        if !ok_flat_types.is_empty() {
+            let ok_local = alloc_local(next_local, local_types, ok_type_id);
+            ok_stmts.push(let_stmt("__ok_val", ok_local, ok_type_id, ok_value));
+            let tt = type_table.borrow();
+            let ok_lowered = synthesize_lower_to_flat(
+                local_ref(ok_local, "__ok_val", ok_type_id),
+                ok_type_id,
+                next_local,
+                &mut ok_stmts,
+                local_types,
+                tir_modules,
+                &tt,
+            );
+            drop(tt);
+            for (i, flat_val) in ok_lowered.iter().enumerate() {
+                if 1 + i < flat_locals.len() {
+                    let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
+                    let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                    let mut val = local_ref(flat_val.index, "__flat", source_type);
+                    if flat_val.cm_type != flat_return_types[1 + i] {
+                        val = cast(val, target_type);
+                    }
+                    ok_stmts.push(expr_stmt(assign(
+                        local_ref(flat_locals[1 + i], "__tv", target_type),
+                        val,
+                    )));
+                }
+            }
+        }
+        ok_stmts.push(expr_stmt(cm_raw_call(
+            "task-return",
+            task_return_args.clone(),
+            TypeTable::UNIT,
+        )));
+        if resolve_http_trailers {
+            ok_stmts.extend(resolve_pending_trailers_stmts(next_local, local_types));
+        }
+        ok_stmts.push(return_stmt(None));
+
+        // === Err case ===
+        let mut err_stmts: Vec<TirStmt> = Vec::new();
+        err_stmts.push(expr_stmt(assign(
+            local_ref(
+                flat_locals[0],
+                "__tv",
+                cm_val_type_to_type_id(flat_return_types[0]),
+            ),
+            i32_const(1),
+        )));
+        let err_value = variant_payload(
+            local_ref(result_local, "__task_ret", value_type_id),
+            1,
+            err_type_id,
+        );
+        let err_local = alloc_local(next_local, local_types, err_type_id);
+        err_stmts.push(let_stmt("__err_val", err_local, err_type_id, err_value));
+        let tt = type_table.borrow();
+        let err_resolved = tt.get(err_type_id);
+        if let crate::tir::ResolvedType::Variant { name, .. } = &err_resolved {
+            if let Some(variant_decl) = find_variant_decl(name, tir_modules) {
+                synthesize_variant_lower_to_flat(
+                    err_local,
+                    err_type_id,
+                    &variant_decl,
+                    &flat_locals[1..],
+                    &flat_return_types[1..],
+                    next_local,
+                    &mut err_stmts,
+                    local_types,
+                    tir_modules,
+                    &tt,
+                );
+            } else if flat_locals.len() > 1 {
+                err_stmts.push(expr_stmt(assign(
+                    local_ref(
+                        flat_locals[1],
+                        "__tv",
+                        cm_val_type_to_type_id(flat_return_types[1]),
+                    ),
+                    local_ref(err_local, "__err_val", err_type_id),
+                )));
+            }
+        } else {
+            let err_lowered = synthesize_lower_to_flat(
+                local_ref(err_local, "__err_val", err_type_id),
+                err_type_id,
+                next_local,
+                &mut err_stmts,
+                local_types,
+                tir_modules,
+                &tt,
+            );
+            for (i, flat_val) in err_lowered.iter().enumerate() {
+                if 1 + i < flat_locals.len() {
+                    let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
+                    let source_type = cm_val_type_to_type_id(flat_val.cm_type);
+                    let mut val = local_ref(flat_val.index, "__flat", source_type);
+                    if flat_val.cm_type != flat_return_types[1 + i] {
+                        val = cast(val, target_type);
+                    }
+                    err_stmts.push(expr_stmt(assign(
+                        local_ref(flat_locals[1 + i], "__tv", target_type),
+                        val,
+                    )));
+                }
+            }
+        }
+        drop(tt);
+        err_stmts.push(expr_stmt(cm_raw_call(
+            "task-return",
+            task_return_args,
+            TypeTable::UNIT,
+        )));
+        if resolve_http_trailers {
+            err_stmts.extend(resolve_pending_trailers_stmts(next_local, local_types));
+        }
+        err_stmts.push(return_stmt(None));
+
+        // Combine Ok/Err branches
+        stmts.push(if_stmt(
+            variant_test(
+                local_ref(result_local, "__task_ret", value_type_id),
+                0,
+                "Ok",
+            ),
+            block(ok_stmts),
+            Some(block(err_stmts)),
+        ));
+
+        // Fallthrough (unreachable; emit safe task-return)
+        let fallthrough_args: Vec<TirExpr> =
+            flat_return_types.iter().map(|&vt| cm_zero(vt)).collect();
+        stmts.push(expr_stmt(cm_raw_call(
+            "task-return",
+            fallthrough_args,
+            TypeTable::UNIT,
+        )));
+    } else {
+        drop(tt);
+        // Non-Result (or empty flat types): just emit task-return(0)
+        stmts.push(expr_stmt(cm_raw_call(
+            "task-return",
+            vec![i32_const(0)],
+            TypeTable::UNIT,
+        )));
+    }
+
+    stmts
+}
+
 /// Phase entry point: generate CM adapter functions and rewrite call sites.
 ///
 /// For each WASI import function used in the program:
@@ -3753,67 +4262,103 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                         }
                     }
 
-                    // Check the user function's actual return type (signature-driven)
-                    let user_returns_result = {
+                    // Check if user function is `export async fn`
+                    let is_async_export = {
                         let user_func = user_func_rc.borrow();
-                        let tt = entry_type_table.borrow();
-                        matches!(
-                            tt.get(user_func.return_type),
-                            crate::tir::ResolvedType::GenericInstance { name, .. }
-                                if name == "Result"
-                        )
+                        user_func.is_async
                     };
 
-                    if user_returns_result {
-                        // Result<T, E> return: full lowering adapter (signature-driven)
-                        let tt = entry_type_table.borrow();
-                        let flat_types = compute_export_flat_return_types(
-                            export.return_type.as_ref().unwrap(),
-                            &project.tir_modules,
-                            &tt,
-                        );
-                        drop(tt);
-                        synthesize_result_export_adapter(
+                    if is_async_export {
+                        // Async export: the user function calls task-return internally via
+                        // `task return expr` stmts. Expand those stmts into CM task-return
+                        // calls and synthesize a simple lifting adapter.
+                        if export.return_type.is_some() {
+                            let tt = entry_type_table.borrow();
+                            let flat_types = compute_export_flat_return_types(
+                                export.return_type.as_ref().unwrap(),
+                                &project.tir_modules,
+                                &tt,
+                            );
+                            drop(tt);
+                            let resolve_http_trailers = world_info.has_http_handler_export();
+                            expand_task_returns_in_func(
+                                &user_func_rc,
+                                &flat_types,
+                                &project.tir_modules,
+                                &entry_type_table,
+                                resolve_http_trailers,
+                            );
+                        }
+                        synthesize_async_export_adapter(
                             &export.name,
                             user_func_rc,
                             &entry_source,
-                            export.return_type.as_ref().unwrap(),
-                            &flat_types,
                             &project.tir_modules,
                             &entry_type_table,
-                            export.returns_http_response(),
                             &export.params,
                         )
                     } else {
-                        // Non-Result return: check if we can use the simple void adapter
-                        // (only when no params AND unit return type)
-                        let is_void_no_params = export.params.is_empty() && {
+                        // Check the user function's actual return type (signature-driven)
+                        let user_returns_result = {
                             let user_func = user_func_rc.borrow();
                             let tt = entry_type_table.borrow();
                             matches!(
                                 tt.get(user_func.return_type),
-                                crate::tir::ResolvedType::Unit
+                                crate::tir::ResolvedType::GenericInstance { name, .. }
+                                    if name == "Result"
                             )
                         };
 
-                        if is_void_no_params {
-                            // Simple void adapter for () -> ()
-                            synthesize_void_export_adapter(
+                        if user_returns_result {
+                            // Result<T, E> return: full lowering adapter (signature-driven)
+                            let tt = entry_type_table.borrow();
+                            let flat_types = compute_export_flat_return_types(
+                                export.return_type.as_ref().unwrap(),
+                                &project.tir_modules,
+                                &tt,
+                            );
+                            drop(tt);
+                            synthesize_result_export_adapter(
                                 &export.name,
                                 user_func_rc,
                                 &entry_source,
-                            )
-                        } else {
-                            // General adapter: handles params (with lifting if needed)
-                            // and non-void return types
-                            synthesize_general_export_adapter(
-                                &export.name,
-                                user_func_rc,
-                                &entry_source,
+                                export.return_type.as_ref().unwrap(),
+                                &flat_types,
                                 &project.tir_modules,
                                 &entry_type_table,
                                 &export.params,
                             )
+                        } else {
+                            // Non-Result return: check if we can use the simple void adapter
+                            // (only when no params AND unit return type)
+                            let is_void_no_params = export.params.is_empty() && {
+                                let user_func = user_func_rc.borrow();
+                                let tt = entry_type_table.borrow();
+                                matches!(
+                                    tt.get(user_func.return_type),
+                                    crate::tir::ResolvedType::Unit
+                                )
+                            };
+
+                            if is_void_no_params {
+                                // Simple void adapter for () -> ()
+                                synthesize_void_export_adapter(
+                                    &export.name,
+                                    user_func_rc,
+                                    &entry_source,
+                                )
+                            } else {
+                                // General adapter: handles params (with lifting if needed)
+                                // and non-void return types
+                                synthesize_general_export_adapter(
+                                    &export.name,
+                                    user_func_rc,
+                                    &entry_source,
+                                    &project.tir_modules,
+                                    &entry_type_table,
+                                    &export.params,
+                                )
+                            }
                         }
                     }
                 } else {
@@ -4124,6 +4669,9 @@ fn rewrite_calls_in_stmt(
             rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::TaskReturn { value } => {
+            rewrite_calls_in_expr(value, adapters, entry_source, wasi_registry);
+        }
     }
 }
 
@@ -4498,6 +5046,9 @@ fn collect_effect_calls_in_stmt(
             collect_effect_calls_in_expr(value, effects, wasi_registry);
         }
         TirStmtKind::Continue => {}
+        TirStmtKind::TaskReturn { value } => {
+            collect_effect_calls_in_expr(value, effects, wasi_registry);
+        }
     }
 }
 

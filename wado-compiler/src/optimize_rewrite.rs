@@ -153,6 +153,9 @@ fn simplify_labeled_blocks_in_stmt(stmt: &mut TirStmt) -> bool {
         }
         TirStmtKind::Continue => false,
         TirStmtKind::LetPattern { value, .. } => simplify_labeled_blocks_in_expr(value),
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     }
 }
 
@@ -529,6 +532,9 @@ fn insert_moves_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) {
                 insert_moves_in_block(eb, type_table);
             }
         }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     }
 }
 
@@ -789,6 +795,9 @@ fn collect_value_copy_types_in_stmt(
         }
         TirStmtKind::LabeledBlock { block, .. } => {
             collect_value_copy_types_in_block(block, type_table, copy_types);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
         }
     }
 }

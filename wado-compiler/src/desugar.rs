@@ -12,8 +12,8 @@ use crate::ast::{
     Function, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, IndexExpr, Item, LabeledBlockStmt,
     LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module, Newtype,
     Pattern, ReturnStmt, StaticMethodCallExpr, Stmt, StructDecl, StructLiteralExpr,
-    StructLiteralField, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr,
-    UnaryExpr, UnaryOp, WhileStmt,
+    StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
+    TupleLiteralExpr, UnaryExpr, UnaryOp, WhileStmt,
 };
 use crate::unparse::unparse_expr_simple;
 
@@ -85,6 +85,7 @@ fn desugar_function(func: &Function, ctx: &mut DesugarContext) -> Function {
         name: func.name.clone(),
         is_pub: func.is_pub,
         is_export: func.is_export,
+        is_async: func.is_async,
         type_params: func.type_params.clone(),
         attrs: func.attrs.clone(),
         params: func.params.clone(),
@@ -204,6 +205,10 @@ fn desugar_stmt(stmt: &Stmt, ctx: &mut DesugarContext) -> Stmt {
         Stmt::Return(r) => Stmt::Return(ReturnStmt {
             value: r.value.as_ref().map(desugar_expr),
             span: r.span,
+        }),
+        Stmt::TaskReturn(tr) => Stmt::TaskReturn(TaskReturnStmt {
+            value: desugar_expr(&tr.value),
+            span: tr.span,
         }),
         Stmt::If(i) => Stmt::If(IfStmt {
             init: i.init.as_ref().map(|ls| Box::new(desugar_let_stmt(ls))),

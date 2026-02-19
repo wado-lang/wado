@@ -44,6 +44,10 @@ fn future_drop_writable(tx: i32);
 /// Drop the readable end of a future
 #[canonical("wasi", "future-drop-readable")]
 fn future_drop_readable(rx: i32);
+/// Read and clear the pending HTTP trailers future tx handle.
+/// Returns the saved tx handle (or 0 if none was saved).
+/// Used internally by the compiler to resolve response trailers after task-return.
+fn global_get_pending_trailers_tx() -> i32;
 /// Signal task completion with a result value
 /// Used internally by the compiler to complete async exports
 #[canonical("wasi", "task-return")]

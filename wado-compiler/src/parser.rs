@@ -11,9 +11,9 @@ use crate::ast::{
     Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
     MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, NumberLiteral,
     Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral,
-    StructDecl, StructField, StructLiteralExpr, StructLiteralField, TestDecl, TraitDecl,
-    TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TestDecl,
+    TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -294,6 +294,14 @@ impl Parser {
             false
         };
 
+        // Parse optional `async` modifier after `export` (only valid on exported fns)
+        let is_async = if is_export && self.check(&TokenKind::Async) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
         // Check for contextual keyword "test" (identifier followed by string or block)
         if let TokenKind::Ident(name) = self.peek_kind()
             && name == "test"
@@ -304,7 +312,7 @@ impl Parser {
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(is_pub).map(Item::Use),
             TokenKind::Fn => self
-                .parse_function(is_pub, is_export, attrs)
+                .parse_function(is_pub, is_export, is_async, attrs)
                 .map(Item::Function),
             TokenKind::Effect => self.parse_effect_decl(is_pub, attrs).map(Item::Effect),
             TokenKind::Struct => self.parse_struct_decl(is_pub, attrs).map(Item::Struct),
@@ -702,6 +710,7 @@ impl Parser {
         &mut self,
         is_pub: bool,
         is_export: bool,
+        is_async: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<Function> {
         let start_span = self.peek().span;
@@ -747,6 +756,7 @@ impl Parser {
             name,
             is_pub,
             is_export,
+            is_async,
             type_params,
             attrs,
             params,
@@ -894,6 +904,14 @@ impl Parser {
             return self.parse_labeled_block_stmt();
         }
 
+        // Check for `task return expr;` — identifier "task" followed by keyword `return`
+        if let TokenKind::Ident(name) = self.peek_kind()
+            && name == "task"
+            && matches!(self.peek_nth(1).kind, TokenKind::Return)
+        {
+            return self.parse_task_return_stmt();
+        }
+
         match self.peek_kind() {
             TokenKind::Let | TokenKind::Reactive => self.parse_let_stmt(),
             TokenKind::Return => self.parse_return_stmt(),
@@ -1038,6 +1056,23 @@ impl Parser {
         self.expect(&TokenKind::Semicolon)?;
 
         Ok(Stmt::Return(ReturnStmt {
+            value,
+            span: start_span,
+        }))
+    }
+
+    /// Parse `task return expr;` — delivers the async task result without terminating the function.
+    fn parse_task_return_stmt(&mut self) -> ParseResult<Stmt> {
+        let start_span = self.peek().span;
+        // Consume the `task` identifier
+        self.advance();
+        // Consume the `return` keyword
+        self.expect(&TokenKind::Return)?;
+
+        let value = self.parse_expr()?;
+        self.expect(&TokenKind::Semicolon)?;
+
+        Ok(Stmt::TaskReturn(TaskReturnStmt {
             value,
             span: start_span,
         }))
@@ -3275,7 +3310,7 @@ impl Parser {
                     });
                 } else {
                     // Methods cannot be exported at the CM boundary
-                    methods.push(self.parse_function(is_pub, false, Vec::new())?);
+                    methods.push(self.parse_function(is_pub, false, false, Vec::new())?);
                 }
             }
         }
@@ -3379,7 +3414,7 @@ impl Parser {
                 // Trait methods are not pub (visibility comes from trait itself)
                 // Trait methods cannot be exported at the CM boundary
                 let _ = attrs; // attrs currently unused for trait methods
-                methods.push(self.parse_function(false, false, Vec::new())?);
+                methods.push(self.parse_function(false, false, false, Vec::new())?);
             }
         }
 
