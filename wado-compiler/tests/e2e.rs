@@ -28,6 +28,44 @@ use wasmtime_wasi_http::p3::{Request, WasiHttpCtx, WasiHttpCtxView, WasiHttpView
 use wado_compiler::{CompilerOptions, OptLevel};
 
 // ---------------------------------------------------------------------------
+// Fixture flags (parsed from filename)
+// ---------------------------------------------------------------------------
+
+/// Known fixture flags extracted from filenames.
+///
+/// Convention: `{group}-{flags}-{number}-{description}.wado`
+/// Flags are known keywords (e.g. `trap`) that appear as `-`-separated segments
+/// before the first purely-numeric segment in the filename.
+///
+/// Examples:
+///   `array-bounds-check-trap-0-empty.wado`  →  trapped = true
+///   `array-bounds-check-0-get.wado`         →  trapped = false
+struct FixtureFlags {
+    trapped: bool,
+}
+
+/// Parse fixture flags from a filename.
+fn parse_fixture_flags(filename: &str) -> FixtureFlags {
+    let stem = filename.strip_suffix(".wado").unwrap_or(filename);
+    let segments: Vec<&str> = stem.split('-').collect();
+
+    // Find the first purely numeric segment (the test number).
+    let first_numeric = segments
+        .iter()
+        .position(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()));
+
+    // Flag region: everything before the first numeric segment.
+    let flag_region = match first_numeric {
+        Some(idx) => &segments[..idx],
+        None => return FixtureFlags { trapped: false },
+    };
+
+    FixtureFlags {
+        trapped: flag_region.contains(&"trap"),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // __DATA__ spec
 // ---------------------------------------------------------------------------
 
@@ -263,7 +301,8 @@ fn verify_http_result(result: &HttpTestResult, spec: &TestSpec, fixture_name: &s
     if let Some(expected_body) = &spec.body {
         let actual_body = String::from_utf8_lossy(&result.body);
         assert_eq!(
-            actual_body, expected_body.as_str(),
+            actual_body,
+            expected_body.as_str(),
             "[{fixture_name}] body mismatch"
         );
     }
@@ -314,21 +353,18 @@ fn run_test_world(wasm: &[u8], test_id: &str) -> anyhow::Result<common::WasmRunR
             let mut store = Store::new(engine, state);
 
             let instance = linker.instantiate_async(&mut store, &component).await?;
-            let func =
-                instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, test_name)?;
+            let func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, test_name)?;
 
             match func.call_async(&mut store, ()).await {
                 Ok((Ok(()),)) => {} // passed
                 Ok((Err(()),)) => {
-                    let stderr_text =
-                        String::from_utf8_lossy(&stderr_clone.contents()).to_string();
+                    let stderr_text = String::from_utf8_lossy(&stderr_clone.contents()).to_string();
                     anyhow::bail!(
                         "[{test_id}] test '{test_name}' returned error. stderr: {stderr_text}"
                     );
                 }
                 Err(e) => {
-                    let stderr_text =
-                        String::from_utf8_lossy(&stderr_clone.contents()).to_string();
+                    let stderr_text = String::from_utf8_lossy(&stderr_clone.contents()).to_string();
                     anyhow::bail!(
                         "[{test_id}] test '{test_name}' trapped: {e}. stderr: {stderr_text}"
                     );
@@ -361,13 +397,19 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
     let opt_name = common::opt_level_name(opt_level);
     let test_id = format!("{fixture_name} ({opt_name})");
 
+    // Parse flags from filename (e.g. `trap` in `array-trap-0-bounds.wado`)
+    let flags = parse_fixture_flags(&fixture_name);
+
     // Get the __DATA__ section - required for all fixtures
     let data_section = common::extract_data_section(source).unwrap_or_else(|| {
         panic!("[{test_id}] missing __DATA__ section - all fixtures must have test expectations");
     });
 
-    // Parse the test spec from JSON
-    let spec: TestSpec = common::parse_data_section(data_section, &test_id);
+    // Parse the test spec from JSON, then apply filename flags
+    let mut spec: TestSpec = common::parse_data_section(data_section, &test_id);
+    if flags.trapped {
+        spec.trapped = true;
+    }
 
     // Handle TODO tests - they must fail
     if spec.todo {

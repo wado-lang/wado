@@ -32,20 +32,57 @@ E2E tests are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__`
 
 Each test fixture group has the same prefix in their filenames.
 
+#### Fixture Naming Convention
+
+Fixture filenames follow the pattern: `{group}-{flags}-{number}-{description}.wado`
+
+- `{group}` — test group prefix (e.g. `array-bounds-check`, `assert-fail`, `never`)
+- `{flags}` — optional flag segments (see below)
+- `{number}` — numeric identifier within the group
+- `{description}` — short description of the test case
+
+Flags are known keywords that appear as `-`-separated segments before the first purely-numeric segment. Parsing rule: after the group prefix, segments until a digit are treated as flags.
+
+| Flag   | Effect                |
+| ------ | --------------------- |
+| `trap` | Sets `trapped = true` |
+
+Examples:
+
+```
+array-bounds-check-trap-0-empty.wado     # trapped test (flag in filename)
+array-bounds-check-0-get.wado            # normal test (no flags)
+assert-fail-trap-2-simple.wado           # trapped test
+never-trap-0-binary-op.wado              # trapped test
+```
+
+When a flag is present in the filename, the corresponding `__DATA__` field can be omitted:
+
+```wado
+// File: panic-trap-0-basic.wado
+// The `trap` flag in the filename sets trapped = true automatically
+export fn run() {
+    panic("boom");
+}
+
+__DATA__
+{"stderr_contains": ["boom"]}
+```
+
 #### Data Section Schema
 
-| Field             | Type       | Description                                                |
-| ----------------- | ---------- | ---------------------------------------------------------- |
-| `world`           | `string`   | Target world (`"wasi:http/service"`, `"test"`; omit for CLI) |
-| `stdout`          | `string`   | Expected stdout (exact match)                              |
-| `stderr`          | `string`   | Expected stderr (exact match)                              |
-| `stdout_contains` | `string[]` | Strings that must appear in stdout                         |
-| `stderr_contains` | `string[]` | Strings that must appear in stderr                         |
-| `trapped`         | `bool`     | Whether the program should trap                            |
-| `compile_error`   | `string`   | Expected compile error (substring match)                   |
-| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented |
-| `http_status`     | `number`   | Expected HTTP status code (HTTP world only)                |
-| `body`            | `string`   | Expected HTTP response body (HTTP world only)              |
+| Field             | Type       | Description                                                   |
+| ----------------- | ---------- | ------------------------------------------------------------- |
+| `world`           | `string`   | Target world (`"wasi:http/service"`, `"test"`; omit for CLI)  |
+| `stdout`          | `string`   | Expected stdout (exact match)                                 |
+| `stderr`          | `string`   | Expected stderr (exact match)                                 |
+| `stdout_contains` | `string[]` | Strings that must appear in stdout                            |
+| `stderr_contains` | `string[]` | Strings that must appear in stderr                            |
+| `trapped`         | `bool`     | Whether the program should trap (prefer `trap` filename flag) |
+| `compile_error`   | `string`   | Expected compile error (substring match)                      |
+| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented    |
+| `http_status`     | `number`   | Expected HTTP status code (HTTP world only)                   |
+| `body`            | `string`   | Expected HTTP response body (HTTP world only)                 |
 
 #### Examples
 
