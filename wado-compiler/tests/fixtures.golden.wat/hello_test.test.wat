@@ -203,7 +203,7 @@
                 (block ;; label = @4
                   (local.set 6
                     (struct.new 0
-                      (i32.const 8)))
+                      (i32.const 2)))
                   (local.set 7
                     (local.get 3))
                   (call 21
@@ -373,7 +373,7 @@
                 (block ;; label = @4
                   (local.set 5
                     (struct.new 0
-                      (i32.const 12)))
+                      (i32.const 6)))
                   (local.set 6
                     (local.get 2))
                   (call 21
