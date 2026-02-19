@@ -1676,6 +1676,7 @@ fn collect_type_dependencies(
         | ResolvedType::MutRef(inner)
         | ResolvedType::Stream(inner)
         | ResolvedType::Future(inner)
+        | ResolvedType::FutureWritable(inner)
         | ResolvedType::Reactive(inner) => {
             collect_type_transitive(*inner, type_table, reachable);
         }

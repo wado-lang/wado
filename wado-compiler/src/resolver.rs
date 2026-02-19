@@ -1690,6 +1690,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             | ResolvedType::BuiltinArray(inner)
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
+            | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner) => {
                 Self::collect_cross_module_deps(*inner, type_table, out);
             }
@@ -6513,28 +6514,33 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Handle Future::<T>::new() and Stream::<T>::new()
-        // Creates a handle pair [Future<T>/Stream<T>, i32] (rx, tx)
+        // Creates a handle pair [Future<T>/Stream<T>, FutureWritable<T>/i32] (rx, tx)
         {
             let target_resolved = self.type_table.borrow().get(target_type_id).clone();
             let pair_info = match &target_resolved {
-                ResolvedType::Future(_) if static_call.method == "new" && args.is_empty() => {
-                    Some(("future_create_pair", target_type_id))
+                ResolvedType::Future(inner) if static_call.method == "new" && args.is_empty() => {
+                    Some(("future_create_pair", target_type_id, Some(*inner)))
                 }
                 ResolvedType::Stream(_) if static_call.method == "new" && args.is_empty() => {
-                    Some(("stream_create_pair", target_type_id))
+                    Some(("stream_create_pair", target_type_id, None))
                 }
                 _ => None,
             };
 
-            if let Some((builtin_name, handle_type)) = pair_info {
-                let i32_type = self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Primitive(PrimitiveType::I32));
+            if let Some((builtin_name, handle_type, future_inner)) = pair_info {
+                let tx_type = if let Some(inner) = future_inner {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::FutureWritable(inner))
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Primitive(PrimitiveType::I32))
+                };
                 let tuple_type = self
                     .type_table
                     .borrow_mut()
-                    .intern(ResolvedType::Tuple(vec![handle_type, i32_type]));
+                    .intern(ResolvedType::Tuple(vec![handle_type, tx_type]));
 
                 return TirExpr::new(
                     TirExprKind::Call {
@@ -11870,6 +11876,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 self.type_table
                     .borrow_mut()
                     .intern(ResolvedType::Future(elem))
+            }
+            "FutureWritable" => {
+                let elem = args
+                    .first()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or(TypeTable::UNKNOWN);
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::FutureWritable(elem))
             }
             _ => {
                 // Check if it's a user-defined generic struct

@@ -2191,7 +2191,9 @@ fn flat_types_from_type_id_into(
         ResolvedType::Newtype { base_type, .. } => {
             flat_types_from_type_id_into(*base_type, out, tir_modules, type_table);
         }
-        ResolvedType::Stream(_) | ResolvedType::Future(_) => out.push(cm_abi::CmValType::I32),
+        ResolvedType::Stream(_) | ResolvedType::Future(_) | ResolvedType::FutureWritable(_) => {
+            out.push(cm_abi::CmValType::I32);
+        }
         _ => {} // Never, Error, Unknown, etc.
     }
 }

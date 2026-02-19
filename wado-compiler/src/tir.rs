@@ -163,6 +163,10 @@ impl SubstitutionContext {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.intern(ResolvedType::Future(new_inner))
             }
+            ResolvedType::FutureWritable(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.intern(ResolvedType::FutureWritable(new_inner))
+            }
             ResolvedType::Reactive(inner) => {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.intern(ResolvedType::Reactive(new_inner))
@@ -261,6 +265,7 @@ pub enum ResolvedType {
     Option(TypeId),
     Stream(TypeId),
     Future(TypeId),
+    FutureWritable(TypeId),
     Ref(TypeId),
     MutRef(TypeId),
     Function {
@@ -713,6 +718,7 @@ impl TypeTable {
             | ResolvedType::MutRef(inner)
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
+            | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner) => self.contains_type_param(*inner),
             ResolvedType::Tuple(elems) => elems.iter().any(|e| self.contains_type_param(*e)),
             ResolvedType::Function {
@@ -749,6 +755,7 @@ impl TypeTable {
             ResolvedType::Option(inner)
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
+            | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner)
             | ResolvedType::BuiltinArray(inner) => self.is_generic_type(*inner),
             // For Tuple, check all elements
@@ -780,6 +787,7 @@ impl TypeTable {
             | ResolvedType::Option(_)
             | ResolvedType::Stream(_)
             | ResolvedType::Future(_)
+            | ResolvedType::FutureWritable(_)
             | ResolvedType::BuiltinArray(_) => true,
             ResolvedType::Struct {
                 is_monomorphized, ..
@@ -830,6 +838,9 @@ impl TypeTable {
             ResolvedType::Variant { name, .. } => name.clone(),
             ResolvedType::Stream(inner) => format!("Stream<{}>", self.type_name(*inner)),
             ResolvedType::Future(inner) => format!("Future<{}>", self.type_name(*inner)),
+            ResolvedType::FutureWritable(inner) => {
+                format!("FutureWritable<{}>", self.type_name(*inner))
+            }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
             ResolvedType::GenericInstance {
@@ -925,6 +936,9 @@ impl TypeTable {
             }
             ResolvedType::Stream(inner) => TypeNameInfo::Stream(self.mangle_type_name(*inner)),
             ResolvedType::Future(inner) => TypeNameInfo::Future(self.mangle_type_name(*inner)),
+            ResolvedType::FutureWritable(inner) => {
+                TypeNameInfo::FutureWritable(self.mangle_type_name(*inner))
+            }
             ResolvedType::Reactive(inner) => TypeNameInfo::Reactive(self.mangle_type_name(*inner)),
             ResolvedType::Never | ResolvedType::Unknown | ResolvedType::Error => {
                 TypeNameInfo::Unknown
