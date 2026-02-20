@@ -482,11 +482,11 @@ impl<'a> WirUnparser<'a> {
                             let lbl = lbl.to_string();
                             let kind = kind.clone();
                             match kind {
-                                LabelBlockKind::Loop => self.write(&format!("continue {lbl} ")),
-                                _ => self.write(&format!("break {lbl} ")),
+                                LabelBlockKind::Loop => self.write(&format!("continue {lbl}: ")),
+                                _ => self.write(&format!("break {lbl}: ")),
                             }
                         } else {
-                            self.write(&format!("br {depth} "));
+                            self.write(&format!("br {depth}: "));
                         }
                         self.unparse_instr_inline(val_instr);
                         self.write(";");
