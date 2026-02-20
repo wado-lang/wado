@@ -575,10 +575,10 @@ pub fn "Array<TreeMapEntry<String,i32>>::append"(self: &mut Array<TreeMapEntry<S
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
         let new_repr: builtin::array<TreeMapEntry<String,i32>> = core::builtin::array_new::<TreeMapEntry<String,i32>>(new_capacity);
         core::builtin::array_copy::<TreeMapEntry<String,i32>>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
@@ -662,10 +662,10 @@ pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
         let new_repr: builtin::array<[String, i32]> = core::builtin::array_new::<[String, i32]>(new_capacity);
         core::builtin::array_copy::<[String, i32]>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;
