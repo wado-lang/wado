@@ -1209,16 +1209,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 ```
 
-**Key differences from `return`:**
-
-| | `return` | `task return` |
-| --- | --- | --- |
-| Ends the Wasm function | Yes | No |
-| Delivers the CM result | Yes (sync) | Yes (async) |
-| Valid in `async fn` | No | Yes |
-| Valid in non-async fn | Yes | No |
-
-The expression is type-checked against the declared return type of the enclosing `export async fn`.
+The expression is type-checked against the declared return type of the enclosing `export async fn`. Regular `return` is forbidden in `async fn` bodies.
 
 ## Standard Library
 
