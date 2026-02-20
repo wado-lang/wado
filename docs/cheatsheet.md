@@ -1253,6 +1253,11 @@ f64::cbrt(x)       f64::hypot(x, y)   f64::fmod(x, y)
 
 // f32 has the same set of functions
 f32::sin(x)        f32::sqrt(x)       f32::PI
+
+// Integer min/max (branchless, uses Wasm select instruction)
+i32::min(a, b)     i32::max(a, b)
+i64::min(a, b)     i64::max(a, b)
+// Also available for i8, u8, i16, u16, u32, u64
 ```
 
 ## Generic Functions and Methods

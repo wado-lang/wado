@@ -6,6 +6,9 @@
 
 use {Eq, Ord, Iterator} from "core:prelude/traits.wado";
 use {Option} from "core:prelude/types.wado";
+
+fn i32_min(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a < b, a, b); }
+fn i32_max(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a > b, a, b); }
 /// UTF-8 encoded string type with O(1) amortized append
 pub struct String {
     repr: builtin::array<u8>,
@@ -68,14 +71,8 @@ impl String {
             return;
         }
 
-        // Calculate new capacity: double or at least min_capacity
-        let mut new_capacity = capacity * 2;
-        if new_capacity < min_capacity {
-            new_capacity = min_capacity;
-        }
-        if new_capacity < 8 {
-            new_capacity = 8;
-        }
+        // Calculate new capacity: double or at least min_capacity, minimum 8
+        let new_capacity = i32_max(i32_max(capacity * 2, min_capacity), 8);
 
         // Create new array and copy existing bytes
         let new_repr = builtin::array_new::<u8>(new_capacity);
@@ -194,7 +191,7 @@ impl Ord for String {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let len_a = self.len();
         let len_b = other.len();
-        let min_len = if len_b < len_a { len_b } else { len_a };
+        let min_len = i32_min(len_a, len_b);
 
         let a_repr = self.internal_raw_bytes();
         let b_repr = other.internal_raw_bytes();

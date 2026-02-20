@@ -667,7 +667,7 @@
         (local.get 4))
     )
     (func (;22;) (type 26) (param (ref null 2) i32)
-      (local i32 i32 (ref null 1) i32 i32 i32 (ref null 1))
+      (local i32 i32 (ref null 1) i32 i32 i32 i32 i32 i32 i32 (ref null 1))
       (local.set 2
         (array.len
           (struct.get 2 0
@@ -679,33 +679,37 @@
         (then
           (return)))
       (local.set 3
-        (i32.mul
-          (local.get 2)
-          (i32.const 2)))
-      (if ;; label = @1
-        (i32.lt_s
-          (local.get 3)
-          (local.get 1))
-        (then
-          (local.set 3
-            (local.get 1))))
-      (if ;; label = @1
-        (i32.lt_s
-          (local.get 3)
-          (i32.const 8))
-        (then
-          (local.set 3
-            (i32.const 8))))
+        (block (result i32) ;; label = @1
+          (local.set 7
+            (block (result i32) ;; label = @2
+              (local.set 9
+                (i32.mul
+                  (local.get 2)
+                  (i32.const 2)))
+              (br 0 (;@2;)
+                (select (result i32)
+                  (local.get 9)
+                  (local.get 1)
+                  (i32.gt_s
+                    (local.get 9)
+                    (local.get 1))))))
+          (br 0 (;@1;)
+            (select (result i32)
+              (local.get 7)
+              (i32.const 8)
+              (i32.gt_s
+                (local.get 7)
+                (i32.const 8))))))
       (local.set 4
         (array.new_default 1
           (local.get 3)))
       (block ;; label = @1
         (local.set 5
           (i32.const 0))
-        (local.set 7
+        (local.set 11
           (struct.get 2 1
             (local.get 0)))
-        (local.set 8
+        (local.set 12
           (struct.get 2 0
             (local.get 0)))
         (block ;; label = @2
@@ -714,13 +718,13 @@
               (i32.eqz
                 (i32.lt_s
                   (local.get 5)
-                  (local.get 7)))
+                  (local.get 11)))
               (then
                 (br 3 (;@1;))))
             (block ;; label = @4
               (local.set 6
                 (array.get_u 1
-                  (local.get 8)
+                  (local.get 12)
                   (local.get 5)))
               (array.set 1
                 (local.get 4)

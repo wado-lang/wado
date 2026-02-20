@@ -100,10 +100,10 @@ pub fn "Array<i32>^Eq::eq"(self: &Array<i32>, other: &Array<i32>) -> bool {
 }
 
 pub fn "Array<i32>^Ord::cmp"(self: &Array<i32>, other: &Array<i32>) -> Ordering {
-    let min_len: i32 = if (other.used < self.used) {
-        other.used;
-    } else {
-        self.used;
+    let min_len: i32 = __inline_i32_min_0: {
+        let a: i32 = self.used;
+        let b: i32 = other.used;
+        break __inline_i32_min_0: "select<i32>"((a < b), a, b);
     };
     __for_1: {
         let mut i: i32 = 0;

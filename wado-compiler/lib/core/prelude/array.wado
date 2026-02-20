@@ -10,6 +10,10 @@ use {
 } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { panic } from "core:internal";
+
+fn i32_min(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a < b, a, b); }
+fn i32_max(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a > b, a, b); }
+
 pub struct Array<T> {
     repr: builtin::array<T>,
     used: i32,
@@ -41,10 +45,7 @@ impl Array<T> {
         let used = self.used;
         let capacity = builtin::array_len(self.repr);
         if builtin::unlikely(used >= capacity) {
-            let mut new_capacity = capacity * 2;
-            if capacity == 0 {
-                new_capacity = 4;
-            }
+            let new_capacity = i32_max(capacity * 2, 4);
             let new_repr = builtin::array_new::<T>(new_capacity);
             builtin::array_copy::<T>(new_repr, 0, self.repr, 0, used);
             self.repr = new_repr;
@@ -99,7 +100,7 @@ impl Eq for Array<T> {
 
 impl Ord for Array<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        let min_len = if other.used < self.used { other.used } else { self.used };
+        let min_len = i32_min(self.used, other.used);
         for let mut i = 0; i < min_len; i += 1 {
             let a = builtin::array_get::<T>(self.repr, i);
             let b = builtin::array_get::<T>(other.repr, i);
@@ -160,8 +161,7 @@ impl Array<T> {
             for let mut start = 0; start < n; start += width * 2 {
                 let mid = start + width;
                 if mid < n {
-                    let mut end = start + width * 2;
-                    if end > n { end = n; }
+                    let end = i32_min(start + width * 2, n);
                     let mut i = start;
                     let mut j = mid;
                     for let mut k = start; k < end; k += 1 {
