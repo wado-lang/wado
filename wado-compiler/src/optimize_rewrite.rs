@@ -13,10 +13,6 @@
 //! 3. **Move Insertion**: Wraps fresh values in `Move` nodes to avoid unnecessary copies.
 //!    Fresh values (literals, call results, etc.) can be moved directly without copying
 //!    since they are newly created and owned by the current expression.
-//!
-//! 4. **Value Copy Type Collection**: Collects types that require value copying in each
-//!    function body. This information is used by codegen to pre-allocate scratch locals
-//!    for copy operations.
 
 use crate::name::ModuleSource;
 use crate::project::Project;
@@ -24,15 +20,12 @@ use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TypeId, TypeTable,
 };
-use indexmap::IndexSet;
 
 /// Run all post-optimization TIR rewrites in a single pass over all functions.
 ///
 /// For each function, this performs (in order):
 /// 1. Labeled block simplification (`L: { break L: expr; }` -> `expr`)
 /// 2. Move insertion (wrap fresh values in `Move` to avoid copies)
-/// 3. Value copy type collection (populate `needed_copy_types` for codegen)
-/// 4. Copy source type expansion (expand nested types for scratch locals)
 pub fn rewrite(project: &mut Project) {
     for module in project.tir_modules.values_mut() {
         let type_table = module.type_table.borrow();
@@ -48,60 +41,6 @@ pub fn rewrite(project: &mut Project) {
             if let Some(ref mut body) = func.body {
                 insert_moves_in_block(body, &type_table);
             }
-
-            // 3. Collect value copy types
-            let mut copy_types = IndexSet::new();
-            if let Some(ref body) = func.body {
-                collect_value_copy_types_in_block(body, &type_table, &mut copy_types);
-            }
-            func.needed_copy_types.extend(copy_types);
-
-            // 4. Expand copy source types (recursively expand nested types)
-            if !func.needed_copy_types.is_empty() {
-                func.copy_source_types = expand_copy_types(&func.needed_copy_types, &type_table);
-            }
-        }
-    }
-}
-
-/// Recursively expand types to include all nested types that need copy locals.
-///
-/// For example, `Option<Variant>` expands to include both the Option type
-/// and the Variant type, since copying an Option requires copying its inner value.
-fn expand_copy_types(types: &IndexSet<TypeId>, type_table: &TypeTable) -> IndexSet<TypeId> {
-    let mut expanded = IndexSet::new();
-    for &type_id in types {
-        expand_type_recursive(type_id, type_table, &mut expanded);
-    }
-    expanded
-}
-
-fn expand_type_recursive(type_id: TypeId, type_table: &TypeTable, expanded: &mut IndexSet<TypeId>) {
-    if expanded.contains(&type_id) {
-        return;
-    }
-    match type_table.get(type_id) {
-        ResolvedType::Option(inner) => {
-            expanded.insert(type_id);
-            if needs_value_copy(*inner, type_table) {
-                expand_type_recursive(*inner, type_table, expanded);
-            }
-        }
-        ResolvedType::Struct { .. } | ResolvedType::Tuple(_) | ResolvedType::Variant { .. } => {
-            expanded.insert(type_id);
-        }
-        ResolvedType::GenericInstance {
-            name, type_args, ..
-        } if name == "Array" => {
-            expanded.insert(type_id);
-            if let Some(&elem_type) = type_args.first()
-                && needs_value_copy(elem_type, type_table)
-            {
-                expand_type_recursive(elem_type, type_table, expanded);
-            }
-        }
-        _ => {
-            expanded.insert(type_id);
         }
     }
 }
@@ -695,248 +634,6 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
                 insert_moves_in_block(arm, type_table);
             }
             insert_moves_in_block(default, type_table);
-        }
-        // Leaf nodes - no nested expressions
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::StringLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit
-        | TirExprKind::Local { .. }
-        | TirExprKind::Global { .. }
-        | TirExprKind::GlobalVarGet { .. }
-        | TirExprKind::Capture { .. }
-        | TirExprKind::EnumConstruct { .. } => {}
-    }
-}
-
-/// Collect all types that need value copying in a function body.
-/// This is needed for codegen to pre-allocate scratch locals for copy operations.
-fn collect_value_copy_types_in_block(
-    block: &TirBlock,
-    type_table: &TypeTable,
-    copy_types: &mut IndexSet<TypeId>,
-) {
-    for stmt in &block.stmts {
-        collect_value_copy_types_in_stmt(stmt, type_table, copy_types);
-    }
-}
-
-/// Collect value copy types from a statement.
-fn collect_value_copy_types_in_stmt(
-    stmt: &TirStmt,
-    type_table: &TypeTable,
-    copy_types: &mut IndexSet<TypeId>,
-) {
-    match &stmt.kind {
-        TirStmtKind::Let { type_id, value, .. } => {
-            // If assigning to a value type from a non-fresh expression, we need copy
-            if needs_value_copy(*type_id, type_table) && !is_fresh_value(value) {
-                copy_types.insert(*type_id);
-            }
-            collect_value_copy_types_in_expr(value, type_table, copy_types);
-        }
-        TirStmtKind::Expr(expr) => {
-            collect_value_copy_types_in_expr(expr, type_table, copy_types);
-        }
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                collect_value_copy_types_in_expr(v, type_table, copy_types);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            collect_value_copy_types_in_expr(condition, type_table, copy_types);
-            collect_value_copy_types_in_block(then_block, type_table, copy_types);
-            if let Some(eb) = else_block {
-                collect_value_copy_types_in_block(eb, type_table, copy_types);
-            }
-        }
-        TirStmtKind::Loop { body } => {
-            collect_value_copy_types_in_block(body, type_table, copy_types);
-        }
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                collect_value_copy_types_in_expr(v, type_table, copy_types);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LetPattern { value, .. } => {
-            // The tuple value needs copying if it's not fresh
-            if needs_value_copy(value.type_id, type_table) && !is_fresh_value(value) {
-                copy_types.insert(value.type_id);
-            }
-            // Also collect element types that need copying for destructuring
-            if let ResolvedType::Tuple(elem_types) = type_table.get(value.type_id) {
-                for &elem_type in elem_types {
-                    if needs_value_copy(elem_type, type_table) {
-                        copy_types.insert(elem_type);
-                    }
-                }
-            }
-            collect_value_copy_types_in_expr(value, type_table, copy_types);
-        }
-        TirStmtKind::IfPattern {
-            scrutinee,
-            then_block,
-            else_block,
-            ..
-        } => {
-            collect_value_copy_types_in_expr(scrutinee, type_table, copy_types);
-            collect_value_copy_types_in_block(then_block, type_table, copy_types);
-            if let Some(eb) = else_block {
-                collect_value_copy_types_in_block(eb, type_table, copy_types);
-            }
-        }
-        TirStmtKind::LabeledBlock { block, .. } => {
-            collect_value_copy_types_in_block(block, type_table, copy_types);
-        }
-        TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
-        }
-    }
-}
-
-/// Collect value copy types from an expression.
-fn collect_value_copy_types_in_expr(
-    expr: &TirExpr,
-    type_table: &TypeTable,
-    copy_types: &mut IndexSet<TypeId>,
-) {
-    match &expr.kind {
-        TirExprKind::Binary { left, right, .. } => {
-            collect_value_copy_types_in_expr(left, type_table, copy_types);
-            collect_value_copy_types_in_expr(right, type_table, copy_types);
-        }
-        TirExprKind::Unary { expr: inner, .. } => {
-            collect_value_copy_types_in_expr(inner, type_table, copy_types);
-        }
-        TirExprKind::Call { args, .. }
-        | TirExprKind::StaticCall { args, .. }
-        | TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                collect_value_copy_types_in_expr(arg, type_table, copy_types);
-            }
-        }
-        TirExprKind::MethodCall { receiver, args, .. } => {
-            collect_value_copy_types_in_expr(receiver, type_table, copy_types);
-            for arg in args {
-                collect_value_copy_types_in_expr(arg, type_table, copy_types);
-            }
-        }
-        TirExprKind::IndirectCall { callee, args } => {
-            collect_value_copy_types_in_expr(callee, type_table, copy_types);
-            for arg in args {
-                collect_value_copy_types_in_expr(arg, type_table, copy_types);
-            }
-        }
-        TirExprKind::ClosureToCanonical { functor, .. } => {
-            collect_value_copy_types_in_expr(functor, type_table, copy_types);
-        }
-        TirExprKind::FieldAccess { expr: inner, .. } => {
-            // Field access on a value type requires a copy source local
-            if needs_value_copy(inner.type_id, type_table) && !is_fresh_value(inner) {
-                copy_types.insert(inner.type_id);
-            }
-            collect_value_copy_types_in_expr(inner, type_table, copy_types);
-        }
-        TirExprKind::Index { expr: inner, index } => {
-            // Index access on a value type (tuple) requires a copy source local
-            if needs_value_copy(inner.type_id, type_table) && !is_fresh_value(inner) {
-                copy_types.insert(inner.type_id);
-            }
-            collect_value_copy_types_in_expr(inner, type_table, copy_types);
-            collect_value_copy_types_in_expr(index, type_table, copy_types);
-        }
-        TirExprKind::Cast { expr: inner, .. } => {
-            collect_value_copy_types_in_expr(inner, type_table, copy_types);
-        }
-        TirExprKind::Assign { target, value } => {
-            collect_value_copy_types_in_expr(target, type_table, copy_types);
-            // If assigning a value type, we might need to copy
-            if needs_value_copy(value.type_id, type_table) && !is_fresh_value(value) {
-                copy_types.insert(value.type_id);
-            }
-            collect_value_copy_types_in_expr(value, type_table, copy_types);
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                collect_value_copy_types_in_expr(&field.value, type_table, copy_types);
-            }
-        }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
-            for elem in elements {
-                collect_value_copy_types_in_expr(elem, type_table, copy_types);
-            }
-        }
-        TirExprKind::OptionSome { value } => {
-            collect_value_copy_types_in_expr(value, type_table, copy_types);
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(payload_expr) = payload {
-                collect_value_copy_types_in_expr(payload_expr, type_table, copy_types);
-            }
-        }
-        TirExprKind::Move { expr } => {
-            collect_value_copy_types_in_expr(expr, type_table, copy_types);
-        }
-        TirExprKind::Block(block) => {
-            collect_value_copy_types_in_block(block, type_table, copy_types);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            collect_value_copy_types_in_expr(condition, type_table, copy_types);
-            collect_value_copy_types_in_block(then_branch, type_table, copy_types);
-            if let Some(eb) = else_branch {
-                collect_value_copy_types_in_block(eb, type_table, copy_types);
-            }
-        }
-        TirExprKind::Closure { body, .. } => {
-            collect_value_copy_types_in_expr(body, type_table, copy_types);
-        }
-        TirExprKind::LabeledBlock { block, .. } => {
-            collect_value_copy_types_in_block(block, type_table, copy_types);
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            collect_value_copy_types_in_expr(value, type_table, copy_types);
-        }
-        TirExprKind::Match { expr, arms } => {
-            collect_value_copy_types_in_expr(expr, type_table, copy_types);
-            for arm in arms {
-                if let Some(guard) = &arm.guard {
-                    collect_value_copy_types_in_expr(guard, type_table, copy_types);
-                }
-                collect_value_copy_types_in_expr(&arm.body, type_table, copy_types);
-            }
-        }
-        TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. } => {
-            collect_value_copy_types_in_expr(inner, type_table, copy_types);
-        }
-        TirExprKind::VariantPayload { expr: inner, .. } => {
-            collect_value_copy_types_in_expr(inner, type_table, copy_types);
-        }
-        TirExprKind::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            collect_value_copy_types_in_expr(scrutinee, type_table, copy_types);
-            for arm in arms {
-                collect_value_copy_types_in_block(arm, type_table, copy_types);
-            }
-            collect_value_copy_types_in_block(default, type_table, copy_types);
         }
         // Leaf nodes - no nested expressions
         TirExprKind::IntLiteral { .. }
