@@ -53,6 +53,22 @@ impl<'a> WirUnparser<'a> {
         }
     }
 
+    /// Get the element type of a GC array type as a display string.
+    fn array_elem_type_str(&self, type_id: &crate::wir::WirTypeId) -> String {
+        let idx = type_id.index() as usize;
+        if let Some(WirTypeDef::Array(a)) = self.types.get(idx) {
+            self.fmt_type(&a.element_type)
+        } else {
+            // Fallback: strip "array<...>" wrapper from the display name.
+            let tid = self.shorten_fq(&type_id.to_string());
+            if let Some(inner) = tid.strip_prefix("array<").and_then(|s| s.strip_suffix('>')) {
+                inner.to_string()
+            } else {
+                tid
+            }
+        }
+    }
+
     /// Look up field names for a struct type by `WirTypeId`.
     fn struct_field_names(&self, type_id: &crate::wir::WirTypeId) -> Option<Vec<String>> {
         let idx = type_id.index() as usize;
@@ -788,16 +804,16 @@ impl<'a> WirUnparser<'a> {
 
             // GC: Array
             WirInstr::ArrayNew { type_id, init, len } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.new {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("array.new<{elem}>("));
                 self.unparse_instr_inline(init);
                 self.write(", ");
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
             WirInstr::ArrayNewDefault { type_id, len } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.new_default {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("builtin::array_new<{elem}>("));
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
@@ -807,16 +823,16 @@ impl<'a> WirUnparser<'a> {
                 offset,
                 len,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.new_data {tid} {data_index}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("array.new_data<{elem}>[{data_index}]("));
                 self.unparse_instr_inline(offset);
                 self.write(", ");
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
             WirInstr::ArrayNewFixed { type_id, elements } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.new_fixed {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("array.new_fixed<{elem}>("));
                 for (i, e) in elements.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
@@ -830,8 +846,8 @@ impl<'a> WirUnparser<'a> {
                 array,
                 index,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.get {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("builtin::array_get<{elem}>("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -842,8 +858,8 @@ impl<'a> WirUnparser<'a> {
                 array,
                 index,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.get_s {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("array.get_s<{elem}>("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -854,8 +870,13 @@ impl<'a> WirUnparser<'a> {
                 array,
                 index,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.get_u {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                let fname = if elem == "u8" {
+                    "builtin::array_get_u8".to_string()
+                } else {
+                    format!("array.get_u<{elem}>")
+                };
+                self.write(&format!("{fname}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -867,8 +888,13 @@ impl<'a> WirUnparser<'a> {
                 index,
                 value,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.set {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                let fname = if elem == "u8" {
+                    "builtin::array_set_u8".to_string()
+                } else {
+                    format!("builtin::array_set<{elem}>")
+                };
+                self.write(&format!("{fname}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -876,19 +902,22 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(value);
                 self.write(")");
             }
-            WirInstr::ArrayLen(a) => self.write_unop("array.len", a),
+            WirInstr::ArrayLen(a) => {
+                self.write("builtin::array_len(");
+                self.unparse_instr_inline(a);
+                self.write(")");
+            }
             WirInstr::ArrayCopy {
                 dest_type_id,
-                src_type_id,
+                src_type_id: _,
                 dest,
                 dest_offset,
                 src,
                 src_offset,
                 len,
             } => {
-                let dtid = self.shorten_fq(&dest_type_id.to_string());
-                let stid = self.shorten_fq(&src_type_id.to_string());
-                self.write(&format!("array.copy {dtid} {stid}("));
+                let elem = self.array_elem_type_str(dest_type_id);
+                self.write(&format!("builtin::array_copy<{elem}>("));
                 self.unparse_instr_inline(dest);
                 self.write(", ");
                 self.unparse_instr_inline(dest_offset);
@@ -907,8 +936,8 @@ impl<'a> WirUnparser<'a> {
                 value,
                 len,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.fill {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("builtin::array_fill<{elem}>("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(offset);
