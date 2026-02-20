@@ -2167,25 +2167,44 @@ Note: `Option<T>` and `Result<T, E>` are declared as variants in `core:prelude`.
 **Flags** (bit flags - Component Model `flags`):
 
 ```wado
-// Bit flags - can be combined with | operator
-flags Permissions {
-    Read,
-    Write,
-    Execute,
+// Bit flags - each member is a power-of-two bitmask
+pub flags Perms {
+    Read,     // bit 0 → value 1
+    Write,    // bit 1 → value 2
+    Execute,  // bit 2 → value 4
 }
 
-// Used as:
-let perms = Permissions::Read | Permissions::Write;
+// Access members
+let r = Perms::Read;   // 1
+let w = Perms::Write;  // 2
 
-if perms.contains(Permissions::Read) {
-    // ...
+// Bitwise combination with |
+let rw = r | w;        // 3
+
+// Bitwise AND for masking
+let masked = rw & Perms::Read;   // 1 (Read bit is set)
+
+// Bitwise XOR for toggling
+let toggled = rw ^ Perms::Read;  // 2 (Read bit cleared)
+
+// Special static methods
+let none = Perms::none();  // 0 (no bits set)
+let all  = Perms::all();   // 7 (all bits set)
+
+// Cast to u32 for numeric comparison
+assert rw as u32 == 3;
+
+// Arithmetic operators (+, -, *, /, %) are NOT allowed on flags types
+// They produce a compile error; use bitwise operators (|, &, ^) instead
+```
+
+Flags are implemented as newtypes over `u32`. Member names can carry `#[wasi("...")]` attributes for WIT/Component Model name mapping:
+
+```wado
+pub flags PathFlags {
+    #[wasi("symlink-follow")]
+    SymlinkFollow,
 }
-
-// Empty flags
-let empty_perms = Permissions::none();
-
-// All flags
-let all_perms = Permissions::all();
 ```
 
 Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.

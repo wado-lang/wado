@@ -475,6 +475,9 @@ impl<'a> Unparser<'a> {
 
         self.indent_level += 1;
         for flag in &f.flags {
+            for attr in &flag.attrs {
+                self.unparse_attribute(attr);
+            }
             self.write_indent();
             self.output.push_str(&flag.name);
             self.output.push_str(",\n");
@@ -2177,7 +2180,7 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
 
 use crate::lexer::is_valid_ident;
 use crate::tir::{
-    TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFunction, TirGlobal,
+    TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal,
     TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
     TirUnaryOp, TypeTable,
 };
@@ -2248,6 +2251,12 @@ impl<'a> TirUnparser<'a> {
         // Enums
         for e in &module.enums {
             self.unparse_enum(e);
+            self.output.push('\n');
+        }
+
+        // Flags
+        for f in &module.flags {
+            self.unparse_flags_tir(f);
             self.output.push('\n');
         }
 
@@ -2343,6 +2352,29 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str(&case.name);
             // Enum cases have no payload (unlike variant cases)
             self.output.push_str(",\n");
+        }
+
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push_str("}\n");
+    }
+
+    fn unparse_flags_tir(&mut self, f: &TirFlags) {
+        self.write_indent();
+        if f.is_pub {
+            self.output.push_str("pub ");
+        }
+        self.output.push_str("flags ");
+        self.output.push_str(&f.name);
+        self.output.push_str(" {\n");
+        self.indent_level += 1;
+
+        for member in &f.members {
+            self.write_indent();
+            self.output.push_str(&member.name);
+            self.output.push_str(",  // 0x");
+            self.output.push_str(&format!("{:x}", member.bitmask));
+            self.output.push('\n');
         }
 
         self.indent_level -= 1;
