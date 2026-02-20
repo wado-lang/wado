@@ -209,27 +209,7 @@ impl<'a> WirUnparser<'a> {
         self.write_indent();
         self.write("struct ");
         self.write(&s.name.display);
-
-        if let Some(ref origin) = s.generic_origin {
-            self.write("<");
-            self.write(&origin.type_args.join(", "));
-            self.write(">");
-        }
-
         self.write(" {");
-
-        if s.fields.is_empty() {
-            self.write(" }");
-        } else {
-            self.write(" ");
-            for (i, field) in s.fields.iter().enumerate() {
-                if i > 0 {
-                    self.write(", ");
-                }
-                self.unparse_field(field);
-            }
-            self.write(" }");
-        }
 
         self.unparse_source_comment(&s.meta);
 
@@ -248,7 +228,23 @@ impl<'a> WirUnparser<'a> {
             ));
         }
 
-        self.newline();
+        if s.fields.is_empty() {
+            self.write("}");
+            self.newline();
+        } else {
+            self.newline();
+            self.indent += 1;
+            for field in &s.fields {
+                self.write_indent();
+                self.unparse_field(field);
+                self.write(",");
+                self.newline();
+            }
+            self.indent -= 1;
+            self.write_indent();
+            self.write("}");
+            self.newline();
+        }
     }
 
     fn unparse_field(&mut self, field: &WirField) {
@@ -307,7 +303,7 @@ impl<'a> WirUnparser<'a> {
             self.write(&case.discriminant.to_string());
         }
 
-        self.write(" }");
+        self.write(" };");
         self.unparse_source_comment(&e.meta);
         self.newline();
     }
@@ -327,7 +323,7 @@ impl<'a> WirUnparser<'a> {
             self.write(&format!("bit{}", bit.position));
         }
 
-        self.write(" }");
+        self.write(" };");
         self.unparse_source_comment(&f.meta);
         self.newline();
     }
@@ -342,7 +338,7 @@ impl<'a> WirUnparser<'a> {
             self.write(" (");
         }
         self.write(&self.fmt_type(&a.element_type));
-        self.write(")");
+        self.write(");");
         self.unparse_source_comment(&a.meta);
         self.newline();
     }
@@ -350,7 +346,8 @@ impl<'a> WirUnparser<'a> {
     fn unparse_func_type(&mut self, f: &WirFuncType) {
         self.write_indent();
         self.write("type ");
-        self.write(&self.shorten_fq(&f.name.display));
+        let name = self.shorten_fq(&f.name.display);
+        self.write_name(&name);
         self.write(" = fn(");
         for (i, param) in f.params.iter().enumerate() {
             if i > 0 {
@@ -374,6 +371,7 @@ impl<'a> WirUnparser<'a> {
                 self.write("]");
             }
         }
+        self.write(";");
         self.newline();
     }
 
@@ -410,7 +408,7 @@ impl<'a> WirUnparser<'a> {
                 self.write(&format!(") {ty_str}"));
             }
         }
-        self.write(&format!(" from \"{}/{}\"", import.module, import.field));
+        self.write(&format!(" from \"{}/{}\";", import.module, import.field));
         self.newline();
     }
 
@@ -438,13 +436,7 @@ impl<'a> WirUnparser<'a> {
         self.write_indent();
         self.write("fn ");
         let short_name = self.shorten_fq(&func.name.fq);
-        if needs_quoting(&short_name) {
-            self.write("\"");
-            self.write(&short_name);
-            self.write("\"");
-        } else {
-            self.write(&short_name);
-        }
+        self.write_name(&short_name);
         self.write("(");
 
         // We need the function type to get parameter types
@@ -547,6 +539,42 @@ impl<'a> WirUnparser<'a> {
             self.newline();
             return;
         }
+        // Special case: If with a Seq condition — hoist preamble as separate statements
+        // before the `if`, then render the actual condition (unwrapping bool-coercions).
+        // This cleans up enum/variant pattern matching output.
+        if let WirInstr::If {
+            condition,
+            result,
+            then_body,
+            else_body,
+        } = instr
+        {
+            let (preamble, actual_cond) = self.split_condition(condition);
+            let actual_cond = self.unwrap_bool_if(actual_cond);
+            // Try to inline scrutinee local to eliminate the preamble entirely.
+            let inlined;
+            let (effective_preamble, effective_cond) =
+                if let Some(inlined_cond) = Self::try_inline_scrutinee(preamble, actual_cond) {
+                    inlined = inlined_cond;
+                    (&[][..], &inlined as &WirInstr)
+                } else {
+                    (preamble, actual_cond)
+                };
+            if !effective_preamble.is_empty() || !std::ptr::eq(effective_cond, condition.as_ref()) {
+                for s in effective_preamble {
+                    self.unparse_instr(s);
+                }
+                let simplified = WirInstr::If {
+                    condition: Box::new(effective_cond.clone()),
+                    result: result.clone(),
+                    then_body: then_body.clone(),
+                    else_body: else_body.clone(),
+                };
+                self.unparse_instr(&simplified);
+                return;
+            }
+        }
+
         self.write_indent();
         self.unparse_instr_inline(instr);
         self.write(";");
@@ -595,83 +623,83 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I32Sub(a, b) => self.write_binop_op("-", a, b),
             WirInstr::I32Mul(a, b) => self.write_binop_op("*", a, b),
             WirInstr::I32DivS(a, b) => self.write_binop_op("/", a, b),
-            WirInstr::I32DivU(a, b) => self.write_binop("i32.div_u", a, b),
+            WirInstr::I32DivU(a, b) => self.write_binop_op("/u", a, b),
             WirInstr::I32RemS(a, b) => self.write_binop_op("%", a, b),
-            WirInstr::I32RemU(a, b) => self.write_binop("i32.rem_u", a, b),
+            WirInstr::I32RemU(a, b) => self.write_binop_op("%u", a, b),
             WirInstr::I32And(a, b) => self.write_binop_op("&", a, b),
             WirInstr::I32Or(a, b) => self.write_binop_op("|", a, b),
             WirInstr::I32Xor(a, b) => self.write_binop_op("^", a, b),
             WirInstr::I32Shl(a, b) => self.write_binop_op("<<", a, b),
             WirInstr::I32ShrS(a, b) => self.write_binop_op(">>", a, b),
-            WirInstr::I32ShrU(a, b) => self.write_binop("i32.shr_u", a, b),
+            WirInstr::I32ShrU(a, b) => self.write_binop_op(">>u", a, b),
             WirInstr::I32Eq(a, b) => self.write_binop_op("==", a, b),
             WirInstr::I32Ne(a, b) => self.write_binop_op("!=", a, b),
             WirInstr::I32LtS(a, b) => self.write_binop_op("<", a, b),
-            WirInstr::I32LtU(a, b) => self.write_binop("i32.lt_u", a, b),
+            WirInstr::I32LtU(a, b) => self.write_binop_op("<u", a, b),
             WirInstr::I32GtS(a, b) => self.write_binop_op(">", a, b),
-            WirInstr::I32GtU(a, b) => self.write_binop("i32.gt_u", a, b),
+            WirInstr::I32GtU(a, b) => self.write_binop_op(">u", a, b),
             WirInstr::I32LeS(a, b) => self.write_binop_op("<=", a, b),
-            WirInstr::I32LeU(a, b) => self.write_binop("i32.le_u", a, b),
+            WirInstr::I32LeU(a, b) => self.write_binop_op("<=u", a, b),
             WirInstr::I32GeS(a, b) => self.write_binop_op(">=", a, b),
-            WirInstr::I32GeU(a, b) => self.write_binop("i32.ge_u", a, b),
+            WirInstr::I32GeU(a, b) => self.write_binop_op(">=u", a, b),
 
             // i32 unary ops
             WirInstr::I32Eqz(a) => {
                 self.write_expr_with_parens(a);
                 self.write(" == 0");
             }
-            WirInstr::I32WrapI64(a) => self.write_unop("i32.wrap_i64", a),
-            WirInstr::I32Clz(a) => self.write_unop("i32.clz", a),
-            WirInstr::I32Ctz(a) => self.write_unop("i32.ctz", a),
-            WirInstr::I32Popcnt(a) => self.write_unop("i32.popcnt", a),
-            WirInstr::I32TruncF64S(a) => self.write_unop("i32.trunc_f64_s", a),
-            WirInstr::I32TruncF64U(a) => self.write_unop("i32.trunc_f64_u", a),
-            WirInstr::I32TruncF32S(a) => self.write_unop("i32.trunc_f32_s", a),
-            WirInstr::I32TruncF32U(a) => self.write_unop("i32.trunc_f32_u", a),
-            WirInstr::I32ReinterpretF32(a) => self.write_unop("i32.reinterpret_f32", a),
-            WirInstr::I32Extend8S(a) => self.write_unop("i32.extend8_s", a),
-            WirInstr::I32Extend16S(a) => self.write_unop("i32.extend16_s", a),
+            WirInstr::I32WrapI64(a) => self.write_unop("builtin::i32_wrap_i64", a),
+            WirInstr::I32Clz(a) => self.write_unop("builtin::i32_clz", a),
+            WirInstr::I32Ctz(a) => self.write_unop("builtin::i32_ctz", a),
+            WirInstr::I32Popcnt(a) => self.write_unop("builtin::i32_popcnt", a),
+            WirInstr::I32TruncF64S(a) => self.write_unop("builtin::i32_trunc_f64_s", a),
+            WirInstr::I32TruncF64U(a) => self.write_unop("builtin::i32_trunc_f64_u", a),
+            WirInstr::I32TruncF32S(a) => self.write_unop("builtin::i32_trunc_f32_s", a),
+            WirInstr::I32TruncF32U(a) => self.write_unop("builtin::i32_trunc_f32_u", a),
+            WirInstr::I32ReinterpretF32(a) => self.write_unop("builtin::i32_reinterpret_f32", a),
+            WirInstr::I32Extend8S(a) => self.write_unop("builtin::i32_extend8_s", a),
+            WirInstr::I32Extend16S(a) => self.write_unop("builtin::i32_extend16_s", a),
 
             // i64 binary ops
             WirInstr::I64Add(a, b) => self.write_binop_op("+", a, b),
             WirInstr::I64Sub(a, b) => self.write_binop_op("-", a, b),
             WirInstr::I64Mul(a, b) => self.write_binop_op("*", a, b),
             WirInstr::I64DivS(a, b) => self.write_binop_op("/", a, b),
-            WirInstr::I64DivU(a, b) => self.write_binop("i64.div_u", a, b),
+            WirInstr::I64DivU(a, b) => self.write_binop_op("/u", a, b),
             WirInstr::I64RemS(a, b) => self.write_binop_op("%", a, b),
-            WirInstr::I64RemU(a, b) => self.write_binop("i64.rem_u", a, b),
+            WirInstr::I64RemU(a, b) => self.write_binop_op("%u", a, b),
             WirInstr::I64And(a, b) => self.write_binop_op("&", a, b),
             WirInstr::I64Or(a, b) => self.write_binop_op("|", a, b),
             WirInstr::I64Xor(a, b) => self.write_binop_op("^", a, b),
             WirInstr::I64Shl(a, b) => self.write_binop_op("<<", a, b),
             WirInstr::I64ShrS(a, b) => self.write_binop_op(">>", a, b),
-            WirInstr::I64ShrU(a, b) => self.write_binop("i64.shr_u", a, b),
+            WirInstr::I64ShrU(a, b) => self.write_binop_op(">>u", a, b),
             WirInstr::I64Eq(a, b) => self.write_binop_op("==", a, b),
             WirInstr::I64Ne(a, b) => self.write_binop_op("!=", a, b),
             WirInstr::I64LtS(a, b) => self.write_binop_op("<", a, b),
-            WirInstr::I64LtU(a, b) => self.write_binop("i64.lt_u", a, b),
+            WirInstr::I64LtU(a, b) => self.write_binop_op("<u", a, b),
             WirInstr::I64GtS(a, b) => self.write_binop_op(">", a, b),
-            WirInstr::I64GtU(a, b) => self.write_binop("i64.gt_u", a, b),
+            WirInstr::I64GtU(a, b) => self.write_binop_op(">u", a, b),
             WirInstr::I64LeS(a, b) => self.write_binop_op("<=", a, b),
-            WirInstr::I64LeU(a, b) => self.write_binop("i64.le_u", a, b),
+            WirInstr::I64LeU(a, b) => self.write_binop_op("<=u", a, b),
             WirInstr::I64GeS(a, b) => self.write_binop_op(">=", a, b),
-            WirInstr::I64GeU(a, b) => self.write_binop("i64.ge_u", a, b),
+            WirInstr::I64GeU(a, b) => self.write_binop_op(">=u", a, b),
 
             // i64 unary ops
             WirInstr::I64Eqz(a) => {
                 self.write_expr_with_parens(a);
                 self.write(" == 0_i64");
             }
-            WirInstr::I64ExtendI32S(a) => self.write_unop("i64.extend_i32_s", a),
-            WirInstr::I64ExtendI32U(a) => self.write_unop("i64.extend_i32_u", a),
-            WirInstr::I64Clz(a) => self.write_unop("i64.clz", a),
-            WirInstr::I64Ctz(a) => self.write_unop("i64.ctz", a),
-            WirInstr::I64Popcnt(a) => self.write_unop("i64.popcnt", a),
-            WirInstr::I64TruncF64S(a) => self.write_unop("i64.trunc_f64_s", a),
-            WirInstr::I64TruncF64U(a) => self.write_unop("i64.trunc_f64_u", a),
-            WirInstr::I64TruncF32S(a) => self.write_unop("i64.trunc_f32_s", a),
-            WirInstr::I64TruncF32U(a) => self.write_unop("i64.trunc_f32_u", a),
-            WirInstr::I64ReinterpretF64(a) => self.write_unop("i64.reinterpret_f64", a),
+            WirInstr::I64ExtendI32S(a) => self.write_unop("builtin::i64_extend_i32_s", a),
+            WirInstr::I64ExtendI32U(a) => self.write_unop("builtin::i64_extend_i32_u", a),
+            WirInstr::I64Clz(a) => self.write_unop("builtin::i64_clz", a),
+            WirInstr::I64Ctz(a) => self.write_unop("builtin::i64_ctz", a),
+            WirInstr::I64Popcnt(a) => self.write_unop("builtin::i64_popcnt", a),
+            WirInstr::I64TruncF64S(a) => self.write_unop("builtin::i64_trunc_f64_s", a),
+            WirInstr::I64TruncF64U(a) => self.write_unop("builtin::i64_trunc_f64_u", a),
+            WirInstr::I64TruncF32S(a) => self.write_unop("builtin::i64_trunc_f32_s", a),
+            WirInstr::I64TruncF32U(a) => self.write_unop("builtin::i64_trunc_f32_u", a),
+            WirInstr::I64ReinterpretF64(a) => self.write_unop("builtin::i64_reinterpret_f64", a),
 
             // i128 ops
             WirInstr::I64Add128(a, b, c, d) => {
@@ -715,19 +743,19 @@ impl<'a> WirUnparser<'a> {
             WirInstr::F32Ge(a, b) => self.write_binop_op(">=", a, b),
 
             // f32 unary ops
-            WirInstr::F32Neg(a) => self.write_unop("f32.neg", a),
-            WirInstr::F32Abs(a) => self.write_unop("f32.abs", a),
-            WirInstr::F32Ceil(a) => self.write_unop("f32.ceil", a),
-            WirInstr::F32Floor(a) => self.write_unop("f32.floor", a),
-            WirInstr::F32Trunc(a) => self.write_unop("f32.trunc", a),
-            WirInstr::F32Nearest(a) => self.write_unop("f32.nearest", a),
-            WirInstr::F32Sqrt(a) => self.write_unop("f32.sqrt", a),
-            WirInstr::F32ConvertI32S(a) => self.write_unop("f32.convert_i32_s", a),
-            WirInstr::F32ConvertI32U(a) => self.write_unop("f32.convert_i32_u", a),
-            WirInstr::F32ConvertI64S(a) => self.write_unop("f32.convert_i64_s", a),
-            WirInstr::F32ConvertI64U(a) => self.write_unop("f32.convert_i64_u", a),
-            WirInstr::F32DemoteF64(a) => self.write_unop("f32.demote_f64", a),
-            WirInstr::F32ReinterpretI32(a) => self.write_unop("f32.reinterpret_i32", a),
+            WirInstr::F32Neg(a) => self.write_unop("builtin::f32_neg", a),
+            WirInstr::F32Abs(a) => self.write_unop("builtin::f32_abs", a),
+            WirInstr::F32Ceil(a) => self.write_unop("builtin::f32_ceil", a),
+            WirInstr::F32Floor(a) => self.write_unop("builtin::f32_floor", a),
+            WirInstr::F32Trunc(a) => self.write_unop("builtin::f32_trunc", a),
+            WirInstr::F32Nearest(a) => self.write_unop("builtin::f32_nearest", a),
+            WirInstr::F32Sqrt(a) => self.write_unop("builtin::f32_sqrt", a),
+            WirInstr::F32ConvertI32S(a) => self.write_unop("builtin::f32_convert_i32_s", a),
+            WirInstr::F32ConvertI32U(a) => self.write_unop("builtin::f32_convert_i32_u", a),
+            WirInstr::F32ConvertI64S(a) => self.write_unop("builtin::f32_convert_i64_s", a),
+            WirInstr::F32ConvertI64U(a) => self.write_unop("builtin::f32_convert_i64_u", a),
+            WirInstr::F32DemoteF64(a) => self.write_unop("builtin::f32_demote_f64", a),
+            WirInstr::F32ReinterpretI32(a) => self.write_unop("builtin::f32_reinterpret_i32", a),
 
             // f64 binary ops
             WirInstr::F64Add(a, b) => self.write_binop_op("+", a, b),
@@ -745,25 +773,25 @@ impl<'a> WirUnparser<'a> {
             WirInstr::F64Ge(a, b) => self.write_binop_op(">=", a, b),
 
             // f64 unary ops
-            WirInstr::F64Neg(a) => self.write_unop("f64.neg", a),
-            WirInstr::F64Abs(a) => self.write_unop("f64.abs", a),
-            WirInstr::F64Ceil(a) => self.write_unop("f64.ceil", a),
-            WirInstr::F64Floor(a) => self.write_unop("f64.floor", a),
-            WirInstr::F64Trunc(a) => self.write_unop("f64.trunc", a),
-            WirInstr::F64Nearest(a) => self.write_unop("f64.nearest", a),
-            WirInstr::F64Sqrt(a) => self.write_unop("f64.sqrt", a),
-            WirInstr::F64ConvertI32S(a) => self.write_unop("f64.convert_i32_s", a),
-            WirInstr::F64ConvertI32U(a) => self.write_unop("f64.convert_i32_u", a),
-            WirInstr::F64ConvertI64S(a) => self.write_unop("f64.convert_i64_s", a),
-            WirInstr::F64ConvertI64U(a) => self.write_unop("f64.convert_i64_u", a),
-            WirInstr::F64PromoteF32(a) => self.write_unop("f64.promote_f32", a),
-            WirInstr::F64ReinterpretI64(a) => self.write_unop("f64.reinterpret_i64", a),
+            WirInstr::F64Neg(a) => self.write_unop("builtin::f64_neg", a),
+            WirInstr::F64Abs(a) => self.write_unop("builtin::f64_abs", a),
+            WirInstr::F64Ceil(a) => self.write_unop("builtin::f64_ceil", a),
+            WirInstr::F64Floor(a) => self.write_unop("builtin::f64_floor", a),
+            WirInstr::F64Trunc(a) => self.write_unop("builtin::f64_trunc", a),
+            WirInstr::F64Nearest(a) => self.write_unop("builtin::f64_nearest", a),
+            WirInstr::F64Sqrt(a) => self.write_unop("builtin::f64_sqrt", a),
+            WirInstr::F64ConvertI32S(a) => self.write_unop("builtin::f64_convert_i32_s", a),
+            WirInstr::F64ConvertI32U(a) => self.write_unop("builtin::f64_convert_i32_u", a),
+            WirInstr::F64ConvertI64S(a) => self.write_unop("builtin::f64_convert_i64_s", a),
+            WirInstr::F64ConvertI64U(a) => self.write_unop("builtin::f64_convert_i64_u", a),
+            WirInstr::F64PromoteF32(a) => self.write_unop("builtin::f64_promote_f32", a),
+            WirInstr::F64ReinterpretI64(a) => self.write_unop("builtin::f64_reinterpret_i64", a),
 
             // GC: Struct
             WirInstr::StructNew { type_id, fields } => {
                 let tid = self.shorten_fq(&type_id.to_string());
                 let field_names = self.struct_field_names(type_id);
-                self.write(&tid);
+                self.write_name(&tid);
                 self.write(" { ");
                 for (i, f) in fields.iter().enumerate() {
                     if i > 0 {
@@ -961,7 +989,9 @@ impl<'a> WirUnparser<'a> {
             } => {
                 let null_str = if *nullable { " null" } else { "" };
                 let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("ref.cast{null_str} {tid}("));
+                self.write(&format!("ref.cast{null_str} "));
+                self.write_name(&tid);
+                self.write("(");
                 self.unparse_instr_inline(expr);
                 self.write(")");
             }
@@ -972,7 +1002,9 @@ impl<'a> WirUnparser<'a> {
             } => {
                 let null_str = if *nullable { " null" } else { "" };
                 let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("ref.test{null_str} {tid}("));
+                self.write(&format!("ref.test{null_str} "));
+                self.write_name(&tid);
+                self.write("(");
                 self.unparse_instr_inline(expr);
                 self.write(")");
             }
@@ -1055,8 +1087,9 @@ impl<'a> WirUnparser<'a> {
             }
             WirInstr::BranchHint { likely, expr } => {
                 let hint = if *likely { "likely" } else { "unlikely" };
-                self.write(&format!("branch_hint.{hint} "));
+                self.write(&format!("builtin::{hint}("));
                 self.unparse_instr_inline(expr);
+                self.write(")");
             }
             WirInstr::Br { depth } => {
                 if self.label_stack.len() > *depth as usize {
@@ -1136,7 +1169,7 @@ impl<'a> WirUnparser<'a> {
             // Calls
             WirInstr::Call { func_id, args } => {
                 let fid = self.shorten_fq(&func_id.to_string());
-                self.write(&fid);
+                self.write_name(&fid);
                 self.write("(");
                 for (i, a) in args.iter().enumerate() {
                     if i > 0 {
@@ -1153,7 +1186,9 @@ impl<'a> WirUnparser<'a> {
                 args,
             } => {
                 let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("call_indirect {tid} table={table}("));
+                self.write("call_indirect ");
+                self.write_name(&tid);
+                self.write(&format!(" table={table}("));
                 self.unparse_instr_inline(index);
                 for a in args {
                     self.write(", ");
@@ -1167,7 +1202,9 @@ impl<'a> WirUnparser<'a> {
                 args,
             } => {
                 let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("call_ref {tid}("));
+                self.write("call_ref ");
+                self.write_name(&tid);
+                self.write("(");
                 self.unparse_instr_inline(func_ref);
                 for a in args {
                     self.write(", ");
@@ -1177,36 +1214,27 @@ impl<'a> WirUnparser<'a> {
             }
             WirInstr::RefFunc { func_id } => {
                 let fid = self.shorten_fq(&func_id.to_string());
-                self.write(&format!("ref.func {fid}"));
+                self.write("ref.func ");
+                self.write_name(&fid);
             }
 
             // Memory
-            WirInstr::MemorySize => self.write("memory.size"),
-            WirInstr::MemoryGrow(a) => self.write_unop("memory.grow", a),
+            WirInstr::MemorySize => self.write("builtin::memory_size()"),
+            WirInstr::MemoryGrow(a) => self.write_unop("builtin::memory_grow", a),
             WirInstr::I32Load { offset, addr, .. } => {
-                self.write(&format!("i32.load offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(")");
+                self.write_mem_load("builtin::load_i32", *offset, addr);
             }
             WirInstr::I32Load8U { offset, addr, .. } => {
-                self.write(&format!("i32.load8_u offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(")");
+                self.write_mem_load("builtin::load_u8", *offset, addr);
             }
             WirInstr::I32Load8S { offset, addr, .. } => {
-                self.write(&format!("i32.load8_s offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(")");
+                self.write_mem_load("builtin::load_i8", *offset, addr);
             }
             WirInstr::I32Load16U { offset, addr, .. } => {
-                self.write(&format!("i32.load16_u offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(")");
+                self.write_mem_load("builtin::load_u16", *offset, addr);
             }
             WirInstr::I32Load16S { offset, addr, .. } => {
-                self.write(&format!("i32.load16_s offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(")");
+                self.write_mem_load("builtin::load_i16", *offset, addr);
             }
             WirInstr::I32Store {
                 offset,
@@ -1214,11 +1242,7 @@ impl<'a> WirUnparser<'a> {
                 value,
                 ..
             } => {
-                self.write(&format!("i32.store offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(", ");
-                self.unparse_instr_inline(value);
-                self.write(")");
+                self.write_mem_store("builtin::store_i32", *offset, addr, value);
             }
             WirInstr::I32Store8 {
                 offset,
@@ -1226,11 +1250,7 @@ impl<'a> WirUnparser<'a> {
                 value,
                 ..
             } => {
-                self.write(&format!("i32.store8 offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(", ");
-                self.unparse_instr_inline(value);
-                self.write(")");
+                self.write_mem_store("builtin::store_u8", *offset, addr, value);
             }
             WirInstr::I32Store16 {
                 offset,
@@ -1238,16 +1258,10 @@ impl<'a> WirUnparser<'a> {
                 value,
                 ..
             } => {
-                self.write(&format!("i32.store16 offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(", ");
-                self.unparse_instr_inline(value);
-                self.write(")");
+                self.write_mem_store("builtin::store_u16", *offset, addr, value);
             }
             WirInstr::I64Load { offset, addr, .. } => {
-                self.write(&format!("i64.load offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(")");
+                self.write_mem_load("builtin::load_i64", *offset, addr);
             }
             WirInstr::I64Store {
                 offset,
@@ -1255,11 +1269,7 @@ impl<'a> WirUnparser<'a> {
                 value,
                 ..
             } => {
-                self.write(&format!("i64.store offset={offset}("));
-                self.unparse_instr_inline(addr);
-                self.write(", ");
-                self.unparse_instr_inline(value);
-                self.write(")");
+                self.write_mem_store("builtin::store_i64", *offset, addr, value);
             }
 
             // Table
@@ -1283,13 +1293,17 @@ impl<'a> WirUnparser<'a> {
             // Compound
             WirInstr::ValueCopy { type_id, expr, .. } => {
                 let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("value_copy {tid}("));
+                self.write("value_copy ");
+                self.write_name(&tid);
+                self.write("(");
                 self.unparse_instr_inline(expr);
                 self.write(")");
             }
             WirInstr::MultiValueStructNew { type_id, instr } => {
                 let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("multivalue_struct_new {tid}("));
+                self.write("multivalue_struct_new ");
+                self.write_name(&tid);
+                self.write("(");
                 self.unparse_instr_inline(instr);
                 self.write(")");
             }
@@ -1318,7 +1332,8 @@ impl<'a> WirUnparser<'a> {
         match &export.desc {
             WirExportDesc::Func { func_id } => {
                 let fid = self.shorten_fq(&func_id.to_string());
-                self.write(&format!("fn {fid}"));
+                self.write("fn ");
+                self.write_name(&fid);
             }
             WirExportDesc::Global { name } => {
                 self.write(&format!("global {}", name.display));
@@ -1370,6 +1385,28 @@ impl<'a> WirUnparser<'a> {
         self.write(")");
     }
 
+    fn write_mem_load(&mut self, name: &str, offset: u64, addr: &WirInstr) {
+        self.write(name);
+        if offset != 0 {
+            self.write(&format!("[{offset}]"));
+        }
+        self.write("(");
+        self.unparse_instr_inline(addr);
+        self.write(")");
+    }
+
+    fn write_mem_store(&mut self, name: &str, offset: u64, addr: &WirInstr, value: &WirInstr) {
+        self.write(name);
+        if offset != 0 {
+            self.write(&format!("[{offset}]"));
+        }
+        self.write("(");
+        self.unparse_instr_inline(addr);
+        self.write(", ");
+        self.unparse_instr_inline(value);
+        self.write(")");
+    }
+
     /// Print the else-chain of an `if`, flattening `} else { if ... }` into `} else if ...`.
     ///
     /// The caller must have already pushed a label for the outer If onto `label_stack`.
@@ -1386,10 +1423,25 @@ impl<'a> WirUnparser<'a> {
                 } = &else_body[0]
             {
                 // Each else-if branch is a new If in Wasm depth terms.
+                // Unwrap bool-coercion and inline scrutinee locals to get a clean condition.
+                let (preamble, actual_cond) = self.split_condition(condition);
+                let actual_cond = self.unwrap_bool_if(actual_cond);
+                let inlined;
+                let effective_cond =
+                    if let Some(inlined_cond) = Self::try_inline_scrutinee(preamble, actual_cond) {
+                        inlined = inlined_cond;
+                        &inlined as &WirInstr
+                    } else {
+                        // Fall back: hoist preamble before the else-if
+                        for s in preamble {
+                            self.unparse_instr(s);
+                        }
+                        actual_cond
+                    };
                 self.push_label(LabelBlockKind::If, None);
                 self.write_indent();
                 self.write("} else if ");
-                self.unparse_instr_inline(condition);
+                self.unparse_instr_inline(effective_cond);
                 if let Some(ty) = result {
                     let ty_str = self.fmt_type(ty);
                     self.write(&format!(" -> {ty_str}"));
@@ -1446,10 +1498,10 @@ impl<'a> WirUnparser<'a> {
             WirType::Bool => "bool".to_string(),
             WirType::Char => "char".to_string(),
             WirType::Unit => "()".to_string(),
-            WirType::Enum { type_id } => self.shorten_fq(&type_id.to_string()),
-            WirType::Flags { type_id } => self.shorten_fq(&type_id.to_string()),
+            WirType::Enum { type_id } => quote_if_needed(&self.shorten_fq(&type_id.to_string())),
+            WirType::Flags { type_id } => quote_if_needed(&self.shorten_fq(&type_id.to_string())),
             WirType::Ref { type_id, nullable } => {
-                let short = self.shorten_fq(&type_id.to_string());
+                let short = quote_if_needed(&self.shorten_fq(&type_id.to_string()));
                 if *nullable {
                     format!("ref null {short}")
                 } else {
@@ -1495,6 +1547,84 @@ impl<'a> WirUnparser<'a> {
         let idx = self.label_stack.len().saturating_sub(1 + depth as usize);
         let (kind, label) = &self.label_stack[idx];
         (label.as_str(), kind)
+    }
+
+    /// Write a (possibly shortened) name, quoting it if it contains special characters.
+    fn write_name(&mut self, name: &str) {
+        self.write(&quote_if_needed(name));
+    }
+
+    /// Split a possibly-`Seq` condition into `(preamble, actual_condition)`.
+    ///
+    /// If `condition` is `Seq([...preamble, last])`, returns `(preamble, last)`.
+    /// Otherwise returns `(&[], condition)`.
+    fn split_condition<'i>(&self, condition: &'i WirInstr) -> (&'i [WirInstr], &'i WirInstr) {
+        if let WirInstr::Seq(instrs) = condition
+            && let Some((last, preamble)) = instrs.split_last()
+        {
+            return (preamble, last);
+        }
+        (&[], condition)
+    }
+
+    /// Unwrap `if cond -> bool { 1 } else { 0 }` to just `cond`.
+    ///
+    /// This pattern is emitted by enum pattern matching to coerce a comparison
+    /// result into a bool for use as an `if` condition.
+    fn unwrap_bool_if<'i>(&self, instr: &'i WirInstr) -> &'i WirInstr {
+        if let WirInstr::If {
+            condition,
+            result: Some(WirType::Bool),
+            then_body,
+            else_body: Some(else_body),
+        } = instr
+            && matches!(then_body.as_slice(), [WirInstr::I32Const(1)])
+            && matches!(else_body.as_slice(), [WirInstr::I32Const(0)])
+        {
+            return condition.as_ref();
+        }
+        instr
+    }
+
+    /// Try to inline a scrutinee local into its single-use condition.
+    ///
+    /// Recognises the enum/variant pattern-match preamble:
+    /// `[DeclareLocal(X, T), LocalSet(X, value)]` followed by `X == constant`.
+    /// Returns a new `I32Eq(value, constant)` with the local eliminated, or
+    /// `None` if the pattern does not match.
+    fn try_inline_scrutinee(preamble: &[WirInstr], cond: &WirInstr) -> Option<WirInstr> {
+        if preamble.len() != 2 {
+            return None;
+        }
+        let WirInstr::DeclareLocal {
+            name: decl_name, ..
+        } = &preamble[0]
+        else {
+            return None;
+        };
+        let WirInstr::LocalSet {
+            name: set_name,
+            value,
+        } = &preamble[1]
+        else {
+            return None;
+        };
+        if decl_name != set_name {
+            return None;
+        }
+        if let WirInstr::I32Eq(a, b) = cond {
+            if let WirInstr::LocalGet { name } = a.as_ref()
+                && name == decl_name
+            {
+                return Some(WirInstr::I32Eq(value.clone(), b.clone()));
+            }
+            if let WirInstr::LocalGet { name } = b.as_ref()
+                && name == decl_name
+            {
+                return Some(WirInstr::I32Eq(a.clone(), value.clone()));
+            }
+        }
+        None
     }
 
     fn write(&mut self, s: &str) {
@@ -1555,10 +1685,11 @@ pub fn format_type(ty: &WirType) -> String {
 fn is_op_instr(instr: &WirInstr) -> bool {
     use WirInstr::{
         F32Add, F32Div, F32Eq, F32Ge, F32Gt, F32Le, F32Lt, F32Mul, F32Ne, F32Sub, F64Add, F64Div,
-        F64Eq, F64Ge, F64Gt, F64Le, F64Lt, F64Mul, F64Ne, F64Sub, I32Add, I32And, I32DivS, I32Eq,
-        I32Eqz, I32GeS, I32GtS, I32LeS, I32LtS, I32Mul, I32Ne, I32Or, I32RemS, I32Shl, I32ShrS,
-        I32Sub, I32Xor, I64Add, I64And, I64DivS, I64Eq, I64Eqz, I64GeS, I64GtS, I64LeS, I64LtS,
-        I64Mul, I64Ne, I64Or, I64RemS, I64Shl, I64ShrS, I64Sub, I64Xor,
+        F64Eq, F64Ge, F64Gt, F64Le, F64Lt, F64Mul, F64Ne, F64Sub, I32Add, I32And, I32DivS, I32DivU,
+        I32Eq, I32Eqz, I32GeS, I32GeU, I32GtS, I32GtU, I32LeS, I32LeU, I32LtS, I32LtU, I32Mul,
+        I32Ne, I32Or, I32RemS, I32RemU, I32Shl, I32ShrS, I32ShrU, I32Sub, I32Xor, I64Add, I64And,
+        I64DivS, I64DivU, I64Eq, I64Eqz, I64GeS, I64GeU, I64GtS, I64GtU, I64LeS, I64LeU, I64LtS,
+        I64LtU, I64Mul, I64Ne, I64Or, I64RemS, I64RemU, I64Shl, I64ShrS, I64ShrU, I64Sub, I64Xor,
     };
     matches!(
         instr,
@@ -1566,35 +1697,49 @@ fn is_op_instr(instr: &WirInstr) -> bool {
             | I32Sub(..)
             | I32Mul(..)
             | I32DivS(..)
+            | I32DivU(..)
             | I32RemS(..)
+            | I32RemU(..)
             | I32And(..)
             | I32Or(..)
             | I32Xor(..)
             | I32Shl(..)
             | I32ShrS(..)
+            | I32ShrU(..)
             | I32Eq(..)
             | I32Ne(..)
             | I32LtS(..)
+            | I32LtU(..)
             | I32GtS(..)
+            | I32GtU(..)
             | I32LeS(..)
+            | I32LeU(..)
             | I32GeS(..)
+            | I32GeU(..)
             | I32Eqz(..)
             | I64Add(..)
             | I64Sub(..)
             | I64Mul(..)
             | I64DivS(..)
+            | I64DivU(..)
             | I64RemS(..)
+            | I64RemU(..)
             | I64And(..)
             | I64Or(..)
             | I64Xor(..)
             | I64Shl(..)
             | I64ShrS(..)
+            | I64ShrU(..)
             | I64Eq(..)
             | I64Ne(..)
             | I64LtS(..)
+            | I64LtU(..)
             | I64GtS(..)
+            | I64GtU(..)
             | I64LeS(..)
+            | I64LeU(..)
             | I64GeS(..)
+            | I64GeU(..)
             | I64Eqz(..)
             | F32Add(..)
             | F32Sub(..)
@@ -1665,6 +1810,15 @@ fn is_block_targeted_from(body: &[WirInstr], nesting: u32) -> bool {
 /// Returns true if `name` cannot be written as a bare word and needs double-quoting.
 fn needs_quoting(name: &str) -> bool {
     name.is_empty() || name.contains('/') || name.contains(' ')
+}
+
+/// Wrap `name` in double quotes if it needs quoting, otherwise return it as-is.
+fn quote_if_needed(name: &str) -> String {
+    if needs_quoting(name) {
+        format!("\"{name}\"")
+    } else {
+        name.to_string()
+    }
 }
 
 /// Returns true if `instr` is not suitable for inlining as the value of a
