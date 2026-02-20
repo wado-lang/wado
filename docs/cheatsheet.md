@@ -32,6 +32,15 @@ Quick reference for Wado syntax.
 0b1010          // binary
 0o755           // octal
 
+// Numeric literal coercion: when the type context is known (annotation,
+// function argument, etc.), literals coerce to the target type
+let x: i64 = 42;               // i32 literal → i64
+let y: u8 = 255;               // i32 literal → u8
+let z: u128 = 1_000_000_000;   // i32 literal → u128
+let f: f32 = 3.14;             // f64 literal → f32
+fn foo(n: i64) { ... }
+foo(100);                       // literal coerced to i64
+
 // Strings
 "hello"         // String
 `Hello, {name}` // template string
