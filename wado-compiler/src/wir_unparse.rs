@@ -468,10 +468,71 @@ impl<'a> WirUnparser<'a> {
     fn unparse_instr(&mut self, instr: &WirInstr) {
         // In statement position, expand Seq items on separate lines instead of inline.
         if let WirInstr::Seq(instrs) = instr {
+            // Special case: Seq([..., val, Br]) = break-with-value.
+            // Render as: "stmts...; break label val;" when val is a simple expression.
+            if let Some((WirInstr::Br { depth }, rest)) = instrs.split_last() {
+                if let Some((val_instr, init)) = rest.split_last() {
+                    if !is_block_expr(val_instr) {
+                        for s in init {
+                            self.unparse_instr(s);
+                        }
+                        self.write_indent();
+                        if self.label_stack.len() > *depth as usize {
+                            let (lbl, kind) = self.resolve_br(*depth);
+                            let lbl = lbl.to_string();
+                            let kind = kind.clone();
+                            match kind {
+                                LabelBlockKind::Loop => self.write(&format!("continue {lbl} ")),
+                                _ => self.write(&format!("break {lbl} ")),
+                            }
+                        } else {
+                            self.write(&format!("br {depth} "));
+                        }
+                        self.unparse_instr_inline(val_instr);
+                        self.write(";");
+                        self.newline();
+                        return;
+                    }
+                }
+            }
             for sub in instrs {
                 self.unparse_instr(sub);
             }
             return;
+        }
+        // Special case: LocalSet/GlobalSet with a Seq value — expand side effects as
+        // separate statements, then assign only the final value.
+        if let WirInstr::LocalSet { name, value } = instr {
+            if let WirInstr::Seq(instrs) = value.as_ref() {
+                if let Some((last_val, init)) = instrs.split_last() {
+                    for s in init {
+                        self.unparse_instr(s);
+                    }
+                    self.write_indent();
+                    self.write(name);
+                    self.write(" = ");
+                    self.unparse_instr_inline(last_val);
+                    self.write(";");
+                    self.newline();
+                    return;
+                }
+            }
+        }
+        if let WirInstr::GlobalSet { name, value } = instr {
+            if let WirInstr::Seq(instrs) = value.as_ref() {
+                if let Some((last_val, init)) = instrs.split_last() {
+                    for s in init {
+                        self.unparse_instr(s);
+                    }
+                    self.write_indent();
+                    self.write(&name.display);
+                    self.write(" = ");
+                    self.unparse_instr_inline(last_val);
+                    self.write(";");
+                    self.newline();
+                    return;
+                }
+            }
         }
         self.write_indent();
         self.unparse_instr_inline(instr);
@@ -1573,6 +1634,16 @@ fn is_block_targeted_from(body: &[WirInstr], nesting: u32) -> bool {
 /// Returns true if `name` cannot be written as a bare word and needs double-quoting.
 fn needs_quoting(name: &str) -> bool {
     name.is_empty() || name.contains('/') || name.contains(' ')
+}
+
+/// Returns true if `instr` is not suitable for inlining as the value of a
+/// `break label val;` expression. Multi-line constructs like `if`, `block`,
+/// `loop`, and nested `Seq` are excluded to avoid garbled single-line output.
+fn is_block_expr(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        WirInstr::If { .. } | WirInstr::Block { .. } | WirInstr::Loop { .. } | WirInstr::Seq(_)
+    )
 }
 
 fn format_abstract_heap_type(ht: &WirAbstractHeapType) -> &'static str {
