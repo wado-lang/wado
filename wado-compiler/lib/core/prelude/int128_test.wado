@@ -1,0 +1,268 @@
+// Tests for i128 and u128 types (lib/core/prelude/int128.wado)
+// Covers arithmetic methods, operators (trait-based), to_string, from_string, and edge cases.
+
+// --- Basic arithmetic methods and comparison ---
+
+test "u128 add method" {
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(50 as u64);
+    assert a.add(&b) == u128::from_u64(150 as u64);
+}
+
+test "u128 sub method" {
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(50 as u64);
+    assert a.sub(&b) == u128::from_u64(50 as u64);
+}
+
+test "u128 equality" {
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(100 as u64);
+    assert a == b;
+}
+
+test "u128 less-than comparison" {
+    let a = u128::from_u64(50 as u64);
+    let b = u128::from_u64(100 as u64);
+    assert a < b;
+}
+
+test "i128 add method" {
+    let x = i128::from_i64(100 as i64);
+    let y = i128::from_i64(-50 as i64);
+    assert x.add(&y) == i128::from_i64(50 as i64);
+}
+
+test "i128 sub method with negative result" {
+    let z = i128::from_i64(30 as i64);
+    let x = i128::from_i64(100 as i64);
+    assert z.sub(&x) == i128::from_i64(-70 as i64);
+}
+
+test "i128 neg method" {
+    let x = i128::from_i64(100 as i64);
+    assert x.neg() == i128::from_i64(-100 as i64);
+}
+
+// --- Arithmetic operators (+, -, *, /, %) ---
+
+test "u128 addition operator" {
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(50 as u64);
+    assert a + b == u128::from_u64(150 as u64);
+}
+
+test "u128 subtraction operator" {
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(50 as u64);
+    assert a - b == u128::from_u64(50 as u64);
+}
+
+test "i128 addition operator" {
+    let x = i128::from_i64(100 as i64);
+    let y = i128::from_i64(-50 as i64);
+    assert x + y == i128::from_i64(50 as i64);
+}
+
+test "i128 negation operator" {
+    let x = i128::from_i64(100 as i64);
+    assert -x == i128::from_i64(-100 as i64);
+}
+
+test "u128 multiplication" {
+    let a = u128::from_u64(100 as u64);
+    let b = u128::from_u64(200 as u64);
+    assert a * b == u128::from_u64(20000 as u64);
+}
+
+test "u128 large multiplication" {
+    let a = u128::from_u64(1000000 as u64);
+    let b = u128::from_u64(1000000 as u64);
+    assert a * b == u128::from_u64(1000000000000 as u64);
+}
+
+test "u128 division" {
+    let a = u128::from_u64(20000 as u64);
+    let b = u128::from_u64(100 as u64);
+    assert a / b == u128::from_u64(200 as u64);
+}
+
+test "u128 remainder" {
+    let a = u128::from_u64(17 as u64);
+    let b = u128::from_u64(5 as u64);
+    assert a % b == u128::from_u64(2 as u64);
+}
+
+test "i128 multiplication" {
+    let x = i128::from_i64(100 as i64);
+    let y = i128::from_i64(-20 as i64);
+    assert x * y == i128::from_i64(-2000 as i64);
+}
+
+test "i128 division" {
+    let a = i128::from_i64(-2000 as i64);
+    let b = i128::from_i64(100 as i64);
+    assert a / b == i128::from_i64(-20 as i64);
+}
+
+test "i128 remainder has same sign as dividend" {
+    let a = i128::from_i64(-17 as i64);
+    let b = i128::from_i64(5 as i64);
+    assert a % b == i128::from_i64(-2 as i64);
+}
+
+// --- Bitwise operators (&, |, ^, ~, <<, >>) ---
+
+test "u128 bitwise AND" {
+    let a = u128::from_u64(0xFF00 as u64);
+    let b = u128::from_u64(0x0FF0 as u64);
+    assert a & b == u128::from_u64(0x0F00 as u64);
+}
+
+test "u128 bitwise OR" {
+    let a = u128::from_u64(0xFF00 as u64);
+    let b = u128::from_u64(0x0FF0 as u64);
+    assert a | b == u128::from_u64(0xFFF0 as u64);
+}
+
+test "u128 bitwise XOR" {
+    let a = u128::from_u64(0xFF00 as u64);
+    let b = u128::from_u64(0x0FF0 as u64);
+    assert a ^ b == u128::from_u64(0xF0F0 as u64);
+}
+
+test "u128 bitwise NOT masked" {
+    let a = u128::from_u64(0xFF00 as u64);
+    let not_a = ~a;
+    let masked = not_a & u128::from_u64(0xFFFF as u64);
+    assert masked == u128::from_u64(0x00FF as u64);
+}
+
+test "u128 shift left" {
+    assert u128::from_u64(1 as u64) << 4 as u32 == u128::from_u64(16 as u64);
+}
+
+test "u128 shift right" {
+    assert u128::from_u64(256 as u64) >> 4 as u32 == u128::from_u64(16 as u64);
+}
+
+test "i128 bitwise AND" {
+    let x = i128::from_i64(0xFF00 as i64);
+    let y = i128::from_i64(0x0FF0 as i64);
+    assert x & y == i128::from_i64(0x0F00 as i64);
+}
+
+test "i128 shift left" {
+    assert i128::from_i64(1 as i64) << 8 as u32 == i128::from_i64(256 as i64);
+}
+
+test "i128 arithmetic shift right" {
+    let neg = i128::from_i64(-256 as i64);
+    assert neg >> 4 as u32 == i128::from_i64(-16 as i64);
+}
+
+// --- to_string ---
+
+test "u128 to_string zero" {
+    assert u128::zero().to_string() == "0";
+}
+
+test "u128 to_string small" {
+    assert u128::from_u64(12345 as u64).to_string() == "12345";
+}
+
+test "u128 to_string large" {
+    assert u128::from_u64(9999999999 as u64).to_string() == "9999999999";
+}
+
+test "i128 to_string zero" {
+    assert i128::zero().to_string() == "0";
+}
+
+test "i128 to_string positive" {
+    assert i128::from_i64(42 as i64).to_string() == "42";
+}
+
+test "i128 to_string negative" {
+    assert i128::from_i64(-12345 as i64).to_string() == "-12345";
+}
+
+test "i128 to_string large negative" {
+    assert i128::from_i64(-9876543210 as i64).to_string() == "-9876543210";
+}
+
+// --- Display (template string interpolation) ---
+
+test "u128 Display via template string" {
+    let a: u128 = 12345;
+    assert `{a}` == "12345";
+}
+
+test "i128 Display via template string" {
+    let b: i128 = 42;
+    assert `{b}` == "42";
+}
+
+test "i128 negative Display via template string" {
+    let c: i128 = -9876;
+    assert `{c}` == "-9876";
+}
+
+// --- from_string ---
+
+test "u128 from_string small" {
+    assert u128::from_string("100") == u128::from_u64(100 as u64);
+}
+
+test "u128 from_string larger than u64 max" {
+    let b = u128::from_string("18446744073709551616");
+    assert b.to_string() == "18446744073709551616";
+}
+
+test "i128 from_string positive" {
+    assert i128::from_string("100") == i128::from_i64(100 as i64);
+}
+
+test "i128 from_string negative" {
+    assert i128::from_string("-100") == i128::from_i64(-100 as i64);
+}
+
+test "u128 arithmetic with from_string" {
+    let a = u128::from_string("100");
+    assert a + u128::from_string("50") == u128::from_u64(150 as u64);
+}
+
+// --- Edge cases (max/min values, accessors) ---
+
+test "u128 max value" {
+    let max = u128::from_string("340282366920938463463374607431768211455");
+    assert max.to_string() == "340282366920938463463374607431768211455";
+    assert max.low() == 18446744073709551615 as u64;
+    assert max.high() == 18446744073709551615 as u64;
+}
+
+test "u128 max u64 value" {
+    let v = u128::from_u64(18446744073709551615 as u64);
+    assert v.to_string() == "18446744073709551615";
+}
+
+test "i128 max value" {
+    let max = i128::from_string("170141183460469231731687303715884105727");
+    assert max.to_string() == "170141183460469231731687303715884105727";
+}
+
+test "i128 min value is negative" {
+    let min = i128::from_string("-170141183460469231731687303715884105728");
+    assert min.to_string() == "-170141183460469231731687303715884105728";
+    assert min.is_negative();
+}
+
+test "i128 from max i64" {
+    let v = i128::from_i64(9223372036854775807 as i64);
+    assert v.to_string() == "9223372036854775807";
+}
+
+test "i128 from min i64" {
+    let v = i128::from_i64(-9223372036854775808 as i64);
+    assert v.to_string() == "-9223372036854775808";
+}
