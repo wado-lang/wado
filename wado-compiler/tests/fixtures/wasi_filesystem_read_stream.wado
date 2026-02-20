@@ -1,0 +1,51 @@
+// Tests: Descriptor::read_via_stream + Stdout::write_via_stream
+// This is the core of cat(1) functionality.
+//
+// This test verifies that:
+// - A file opened with open_at can produce a readable stream via read_via_stream()
+// - The stream can be piped to stdout via Stdout::write_via_stream()
+// - The file contents appear on stdout
+//
+// To run when implemented (TODO removed):
+//   cargo run --bin wado -- run --dir wado-compiler/tests/fixtures/testdata \
+//     wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado
+
+use { eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+
+    if dirs.len() == 0 {
+        eprintln("read_stream: no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Open hello.txt for reading
+    let open_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(file) = open_result {
+        // read_via_stream returns [Stream<u8>, Future<Result<(), ErrorCode>>]
+        // The stream starts at byte offset 0 (beginning of file)
+        let [read_stream, _done] = file.read_via_stream(0 as u64);
+
+        // Pipe the file's read stream directly to stdout
+        // This prints the file contents: "Hello, World!\n"
+        Stdout::write_via_stream(read_stream);
+    } else {
+        eprintln("read_stream: failed to open hello.txt");
+    }
+}
+
+__DATA__
+{
+    "TODO": true,
+    "stdout": "Hello, World!\n"
+}
