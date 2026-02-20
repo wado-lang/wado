@@ -263,18 +263,22 @@ fn String::grow(self, min_capacity) {
     let new_repr: ref null array<u8>;
     let i: i32;
     let byte: i32;
+    let __local_7: i32;
+    let __local_8: i32;
+    let __local_9: i32;
+    let __local_10: i32;
     let _licm_used: i32;
     let _licm_repr: ref null array<u8>;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     };
-    new_capacity = capacity * 2;
-    if new_capacity < min_capacity {
-        new_capacity = min_capacity;
-    };
-    if new_capacity < 8 {
-        new_capacity = 8;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = __inline_i32_max_1: block -> i32 {
+            __local_9 = capacity * 2;
+            break __inline_i32_max_1: select i32(__local_9 > min_capacity, __local_9, min_capacity);
+        };
+        break __inline_i32_max_0: select i32(__local_7 > 8, __local_7, 8);
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     __for_0: block {
@@ -282,7 +286,7 @@ fn String::grow(self, min_capacity) {
         _licm_used = self.used;
         _licm_repr = self.repr;
         block {
-            l18: loop {
+            l16: loop {
                 if (i < _licm_used) == 0 {
                     break __for_0;
                 };
@@ -291,7 +295,7 @@ fn String::grow(self, min_capacity) {
                     builtin::array_set_u8(new_repr, i, byte);
                 };
                 i = i + 1;
-                continue l18;
+                continue l16;
             };
         };
     };
@@ -334,7 +338,7 @@ fn String::append(self, other) {
         _licm_repr = self.repr;
         _licm_used = self.used;
         block {
-            l24: loop {
+            l22: loop {
                 if (i < other_len) == 0 {
                     break __for_2;
                 };
@@ -343,7 +347,7 @@ fn String::append(self, other) {
                     builtin::array_set_u8(_licm_repr, _licm_used + i, byte);
                 };
                 i = i + 1;
-                continue l24;
+                continue l22;
             };
         };
     };
@@ -384,7 +388,7 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf = self.buf;
         block {
-            l31: loop {
+            l29: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
@@ -392,7 +396,7 @@ fn Formatter::write_char_n(self, c, n) {
                     String::append_char(_licm_buf, c);
                 };
                 i = i + 1;
-                continue l31;
+                continue l29;
             };
         };
     };

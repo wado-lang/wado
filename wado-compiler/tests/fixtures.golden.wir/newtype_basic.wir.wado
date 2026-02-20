@@ -248,18 +248,22 @@ fn String::grow(self, min_capacity) {
     let new_repr: ref null array<u8>;
     let i: i32;
     let byte: i32;
+    let __local_7: i32;
+    let __local_8: i32;
+    let __local_9: i32;
+    let __local_10: i32;
     let _licm_used: i32;
     let _licm_repr: ref null array<u8>;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     };
-    new_capacity = capacity * 2;
-    if new_capacity < min_capacity {
-        new_capacity = min_capacity;
-    };
-    if new_capacity < 8 {
-        new_capacity = 8;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = __inline_i32_max_1: block -> i32 {
+            __local_9 = capacity * 2;
+            break __inline_i32_max_1: select i32(__local_9 > min_capacity, __local_9, min_capacity);
+        };
+        break __inline_i32_max_0: select i32(__local_7 > 8, __local_7, 8);
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     __for_0: block {
@@ -267,7 +271,7 @@ fn String::grow(self, min_capacity) {
         _licm_used = self.used;
         _licm_repr = self.repr;
         block {
-            l9: loop {
+            l7: loop {
                 if (i < _licm_used) == 0 {
                     break __for_0;
                 };
@@ -276,7 +280,7 @@ fn String::grow(self, min_capacity) {
                     builtin::array_set_u8(new_repr, i, byte);
                 };
                 i = i + 1;
-                continue l9;
+                continue l7;
             };
         };
     };
@@ -300,7 +304,7 @@ fn String::internal_append_from_memory(self, ptr, len) {
         _licm_repr = self.repr;
         _licm_used = self.used;
         block {
-            l14: loop {
+            l12: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
@@ -308,7 +312,7 @@ fn String::internal_append_from_memory(self, ptr, len) {
                     builtin::array_set_u8(_licm_repr, _licm_used + i, builtin::load_u8(ptr + i));
                 };
                 i = i + 1;
-                continue l14;
+                continue l12;
             };
         };
     };
@@ -339,7 +343,7 @@ fn String::append(self, other) {
         _licm_repr = self.repr;
         _licm_used = self.used;
         block {
-            l19: loop {
+            l17: loop {
                 if (i < other_len) == 0 {
                     break __for_2;
                 };
@@ -348,7 +352,7 @@ fn String::append(self, other) {
                     builtin::array_set_u8(_licm_repr, _licm_used + i, byte);
                 };
                 i = i + 1;
-                continue l19;
+                continue l17;
             };
         };
     };
@@ -389,7 +393,7 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf = self.buf;
         block {
-            l26: loop {
+            l24: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
@@ -397,7 +401,7 @@ fn Formatter::write_char_n(self, c, n) {
                     String::append_char(_licm_buf, c);
                 };
                 i = i + 1;
-                continue l26;
+                continue l24;
             };
         };
     };
@@ -454,7 +458,7 @@ fn Formatter::write_from_memory(self, ptr, len) {
     __for_1: block {
         i = 0;
         block {
-            l35: loop {
+            l33: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
@@ -462,7 +466,7 @@ fn Formatter::write_from_memory(self, ptr, len) {
                     builtin::array_set_u8(arr, i, builtin::load_u8(ptr + i));
                 };
                 i = i + 1;
-                continue l35;
+                continue l33;
             };
         };
     };

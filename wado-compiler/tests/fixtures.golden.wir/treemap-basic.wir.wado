@@ -894,18 +894,22 @@ fn String::grow(self, min_capacity) {
     let new_repr: ref null array<u8>;
     let i: i32;
     let byte: i32;
+    let __local_7: i32;
+    let __local_8: i32;
+    let __local_9: i32;
+    let __local_10: i32;
     let _licm_used: i32;
     let _licm_repr: ref null array<u8>;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     };
-    new_capacity = capacity * 2;
-    if new_capacity < min_capacity {
-        new_capacity = min_capacity;
-    };
-    if new_capacity < 8 {
-        new_capacity = 8;
+    new_capacity = __inline_i32_max_0: block -> i32 {
+        __local_7 = __inline_i32_max_1: block -> i32 {
+            __local_9 = capacity * 2;
+            break __inline_i32_max_1: select i32(__local_9 > min_capacity, __local_9, min_capacity);
+        };
+        break __inline_i32_max_0: select i32(__local_7 > 8, __local_7, 8);
     };
     new_repr = builtin::array_new<u8>(new_capacity);
     __for_0: block {
@@ -913,7 +917,7 @@ fn String::grow(self, min_capacity) {
         _licm_used = self.used;
         _licm_repr = self.repr;
         block {
-            l38: loop {
+            l36: loop {
                 if (i < _licm_used) == 0 {
                     break __for_0;
                 };
@@ -922,7 +926,7 @@ fn String::grow(self, min_capacity) {
                     builtin::array_set_u8(new_repr, i, byte);
                 };
                 i = i + 1;
-                continue l38;
+                continue l36;
             };
         };
     };
@@ -965,7 +969,7 @@ fn String::append(self, other) {
         _licm_repr = self.repr;
         _licm_used = self.used;
         block {
-            l44: loop {
+            l42: loop {
                 if (i < other_len) == 0 {
                     break __for_2;
                 };
@@ -974,7 +978,7 @@ fn String::append(self, other) {
                     builtin::array_set_u8(_licm_repr, _licm_used + i, byte);
                 };
                 i = i + 1;
-                continue l44;
+                continue l42;
             };
         };
     };
@@ -1001,7 +1005,7 @@ fn String^Eq::eq(self, other) {
     __for_5: block {
         i = 0;
         block {
-            l48: loop {
+            l46: loop {
                 if (i < len_a) == 0 {
                     break __for_5;
                 };
@@ -1011,7 +1015,7 @@ fn String^Eq::eq(self, other) {
                     };
                 };
                 i = i + 1;
-                continue l48;
+                continue l46;
             };
         };
     };
@@ -1029,17 +1033,19 @@ fn String^Ord::cmp(self, other) {
     let b_byte: i32;
     let __local_10: ref null String;
     let __local_11: ref null String;
-    let __local_12: ref null String;
-    let __local_13: ref null String;
+    let __local_12: i32;
+    let __local_13: i32;
+    let __local_14: ref null String;
+    let __local_15: ref null String;
     len_a = self.used;
     len_b = other.used;
-    min_len = select i32(len_b < len_a, len_b, len_a);
+    min_len = select i32(len_a < len_b, len_a, len_b);
     a_repr = self.repr;
     b_repr = other.repr;
     __for_6: block {
         i = 0;
         block {
-            l52: loop {
+            l50: loop {
                 if (i < min_len) == 0 {
                     break __for_6;
                 };
@@ -1054,7 +1060,7 @@ fn String^Ord::cmp(self, other) {
                     };
                 };
                 i = i + 1;
-                continue l52;
+                continue l50;
             };
         };
     };
@@ -1119,8 +1125,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     let _licm_entries: ref null Array<TreeMapEntry<String,i32>>;
     current = self.root;
     _licm_entries = value_copy Array<TreeMapEntry<String,i32>>(self.entries);
-    b64: block {
-        l65: loop {
+    b62: block {
+        l63: loop {
             if ref.is_null(current) == 0 {
                 n = ref.as_non_null(current);
                 if String^Eq::eq(key, n.key) {
@@ -1136,9 +1142,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     current = n.right;
                 };
             } else {
-                break b64;
+                break b62;
             };
-            continue l65;
+            continue l63;
         };
     };
     return -1;
@@ -1237,12 +1243,14 @@ fn Array<TreeMapEntry<String,i32>>::append(self, value) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref null array<TreeMapEntry<String,i32>>;
+    let __local_6: i32;
+    let __local_7: i32;
     used = self.used;
     capacity = builtin::array_len(self.repr);
     if builtin::unlikely(used >= capacity) {
-        new_capacity = capacity * 2;
-        if capacity == 0 {
-            new_capacity = 4;
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
         };
         new_repr = builtin::array_new<ref null "core:collections/TreeMapEntry<String,i32>">(new_capacity);
         builtin::array_copy<ref null "core:collections/TreeMapEntry<String,i32>">(new_repr, 0, self.repr, 0, used);
@@ -1267,7 +1275,7 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf = self.buf;
         block {
-            l84: loop {
+            l81: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
@@ -1275,7 +1283,7 @@ fn Formatter::write_char_n(self, c, n) {
                     String::append_char(_licm_buf, c);
                 };
                 i = i + 1;
-                continue l84;
+                continue l81;
             };
         };
     };
