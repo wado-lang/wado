@@ -185,6 +185,9 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirStmtKind::LetPattern { value, .. } => {
                 self.check_expr(value)?;
             }
+            TirStmtKind::TaskReturn { value } => {
+                self.check_expr(value)?;
+            }
         }
         Ok(())
     }

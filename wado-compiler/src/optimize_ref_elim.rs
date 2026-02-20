@@ -307,6 +307,9 @@ fn track_local_uses_in_stmt(stmt: &TirStmt, local_index: u32) -> (bool, u32) {
             .map_or((true, 0), |v| track_local_uses_in_expr(v, local_index)),
         TirStmtKind::Continue => (true, 0),
         TirStmtKind::LetPattern { value, .. } => track_local_uses_in_expr(value, local_index),
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     }
 }
 
@@ -545,6 +548,9 @@ fn replace_ref_field_access_in_stmt(
         TirStmtKind::LetPattern { value, .. } => {
             replace_ref_field_access_in_expr(value, ref_local, target_local, target_name);
         }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     }
 }
 
@@ -659,6 +665,9 @@ fn collect_ref_bindings_in_stmt(stmt: &TirStmt, bindings: &mut Vec<RefBinding>) 
         TirStmtKind::Continue => {}
         TirStmtKind::LetPattern { value, .. } => {
             collect_ref_bindings_in_expr(value, bindings);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
         }
     }
 }
@@ -864,6 +873,9 @@ fn remove_dead_ref_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &IndexSet<u
         TirStmtKind::Continue => {}
         TirStmtKind::LetPattern { value, .. } => {
             remove_dead_ref_bindings_in_expr(value, dead_locals);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
         }
     }
 }

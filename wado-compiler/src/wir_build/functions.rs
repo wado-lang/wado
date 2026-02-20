@@ -3,9 +3,7 @@
 
 use crate::name::{FreeFunctionName, FunctionId, MethodName, ModuleSource};
 use crate::tir::{TirFunction, TypeTable};
-use crate::wir::{
-    WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr, WirMeta, WirName, WirType,
-};
+use crate::wir::{WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType};
 
 use super::context::{PendingFunctionBody, WirContext};
 
@@ -536,25 +534,6 @@ fn register_globals(ctx: &mut WirContext<'_>) {
                 },
             });
         }
-    }
-
-    // HTTP handler exports need a global to save the trailers future tx handle.
-    // The future_create_pair builtin stores the tx here, and the export adapter
-    // reads it back with global_get_pending_trailers_tx after task-return.
-    if ctx.project.has_http_handler_export {
-        let fq = "global:__pending_trailers_tx".to_string();
-        let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
-        ctx.global_map.insert(fq.clone(), idx);
-        ctx.globals.push(WirGlobal {
-            name: WirName {
-                display: "__pending_trailers_tx".to_string(),
-                fq,
-            },
-            ty: WirType::I32,
-            mutable: true,
-            init: WirInstr::I32Const(0),
-            meta: WirMeta::default(),
-        });
     }
 }
 

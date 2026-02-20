@@ -15,10 +15,24 @@ pub variant Result<T, E> {
 /// Future type - readable end of an async value (WASI Component Model primitive).
 /// This is an opaque i32 handle managed by the runtime.
 ///
-/// Use `Future::<T>::new()` to create a new future pair `[Future<T>, i32]`
-/// where the second element is the writable handle (tx).
+/// Use `Future::<T>::new()` to create a new future pair `[Future<T>, FutureWritable<T>]`.
+/// The readable end (`Future<T>`) is passed to consumers; the writable end (`FutureWritable<T>`)
+/// is used by the producer to fulfill the future.
 pub resource Future<T> {
-    fn new() -> [Future<T>, i32];
+    fn new() -> [Future<T>, FutureWritable<T>];
+}
+
+/// FutureWritable type - writable end of an async value (WASI Component Model primitive).
+/// This is an opaque i32 handle managed by the runtime.
+///
+/// Obtained from `Future::<T>::new()`. Call `write(value)` to fulfill the future,
+/// or `drop()` to cancel it without fulfilling (maps to `future.drop-writable`).
+pub resource FutureWritable<T> {
+    /// Resolve the future with a value.
+    /// Currently supports writing Result<Option<Trailers>, ErrorCode>::Ok(null) (HTTP trailers).
+    fn write(&self, value: T);
+    /// Drop the writable end without resolving the future (cancels the future).
+    fn drop(&self);
 }
 
 /// Stream type - readable end of an async sequence (WASI Component Model primitive).

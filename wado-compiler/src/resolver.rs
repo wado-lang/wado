@@ -20,8 +20,8 @@ use crate::name::{self as name, LocalMethodName, MethodName, ModuleSource, mangl
 
 use crate::ast::{
     self, BinaryOp, Block, BreakStmt, ContinueStmt, Expr, ExprStmt, Function, GlobalDecl, IfExpr,
-    IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt, Type,
-    UnaryOp,
+    IfStmt, Item, LetStmt, Literal, LoopStmt, MatchArm, Module, Pattern, ReturnStmt, Stmt,
+    TaskReturnStmt, Type, UnaryOp,
 };
 use crate::compiler_host::CompilerHost;
 use crate::logger::{Bail, Logger};
@@ -408,9 +408,15 @@ struct FunctionContext {
     scopes: Vec<IndexMap<String, LocalVar>>,
     /// Next local index (Wasm locals are function-wide)
     next_local: u32,
-    /// Return type of the function
+    /// Return type of the function (unit for async fns, since they don't Wasm-return a value)
     #[allow(dead_code)] // For future return type checking
     return_type: TypeId,
+    /// Whether this is an async function (`export async fn`).
+    /// In async fns, `return expr` is forbidden; use `task return expr` instead.
+    is_async: bool,
+    /// The type that `task return` must accept (= the declared return type annotation).
+    /// `Some(type_id)` only for async functions.
+    task_return_type: Option<TypeId>,
     /// Local variable types in order (for Wasm local declarations)
     local_types: Vec<TypeId>,
     /// Local indices that have their address taken (&x or &mut x)
@@ -441,6 +447,8 @@ impl FunctionContext {
             scopes: vec![IndexMap::new()], // Start with one scope for function parameters
             next_local: 0,
             return_type,
+            is_async: false,
+            task_return_type: None,
             local_types: Vec::new(),
             address_taken_locals: IndexSet::new(),
             outer_locals: IndexMap::new(),
@@ -488,6 +496,8 @@ impl FunctionContext {
             scopes: vec![IndexMap::new()],
             next_local: 0,
             return_type,
+            is_async: false, // Closures are never async
+            task_return_type: None,
             local_types: Vec::new(),
             address_taken_locals: IndexSet::new(),
             outer_locals,
@@ -1680,6 +1690,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             | ResolvedType::BuiltinArray(inner)
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
+            | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner) => {
                 Self::collect_cross_module_deps(*inner, type_table, out);
             }
@@ -2471,12 +2482,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 .insert(func.name.clone(), type_param_list);
         }
 
-        // Resolve return type
-        let return_type = func
+        // Resolve return type annotation (used for task_return_type in async fns)
+        let declared_return_type = func
             .return_type
             .as_ref()
             .map(|t| self.resolve_type(t))
             .unwrap_or(TypeTable::UNIT);
+
+        // For async functions, the Wasm-level return type is unit (the result is delivered
+        // via `task return`, not via the Wasm function return). The declared return type is
+        // stored as `task_return_type` for validating `task return expr`.
+        let return_type = if func.is_async {
+            TypeTable::UNIT
+        } else {
+            declared_return_type
+        };
 
         // Update the function_return_types with the resolved return type
         // (This replaces the potentially incorrect type from static resolution)
@@ -2484,6 +2504,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .insert(func.name.clone(), return_type);
 
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
+        if func.is_async {
+            ctx.is_async = true;
+            ctx.task_return_type = Some(declared_return_type);
+        }
 
         // Resolve parameters
         let mut params = Vec::new();
@@ -2525,6 +2549,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             name: func.name.clone(),
             is_pub: func.is_pub,
             is_export: func.is_export,
+            is_async: func.is_async,
             type_params,
             impl_type_params: vec![], // Not a method, no impl type params
             monomorph_info: None,     // Not from monomorphization
@@ -2591,6 +2616,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             name: function_name.clone(),
             is_pub: false,    // Tests are not public
             is_export: false, // Tests are not world exports
+            is_async: false,  // Tests are never async
             type_params: vec![],
             impl_type_params: vec![],
             monomorph_info: None,
@@ -2779,6 +2805,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             name: func.name.clone(), // Will be mangled by caller
             is_pub: func.is_pub,
             is_export: false, // Methods are not world exports
+            is_async: false,  // Methods are never async
             type_params,
             impl_type_params, // Type params from impl block (e.g., T from impl Counter<T>)
             monomorph_info: None, // Not from monomorphization
@@ -2861,6 +2888,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             Stmt::Let(let_stmt) => vec![self.resolve_let(let_stmt, ctx)],
             Stmt::Expr(expr_stmt) => vec![self.resolve_expr_stmt(expr_stmt, ctx)],
             Stmt::Return(ret_stmt) => vec![self.resolve_return(ret_stmt, ctx)],
+            Stmt::TaskReturn(tr_stmt) => vec![self.resolve_task_return(tr_stmt, ctx)],
             Stmt::If(if_stmt) => self.resolve_if_stmt(if_stmt, ctx),
             // While, For, ForOf are desugared to Loop in the desugar phase
             Stmt::While(_) => unreachable!("While should be desugared before resolving"),
@@ -3211,12 +3239,38 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Resolve a return statement
     fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) -> TirStmt {
+        // In async functions, `return expr` (with a value) is forbidden; use `task return expr`
+        if ctx.is_async && ret_stmt.value.is_some() {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message:
+                    "cannot use `return expr` in `export async fn`; use `task return expr` instead"
+                        .to_string(),
+                span: ret_stmt.span,
+            });
+        }
         let return_type = ctx.return_type;
         let value = ret_stmt.value.as_ref().map(|expr| {
             // Use expected type for coercion (numeric literals, tuple to array, etc.)
             self.resolve_expr(expr, ctx, Some(return_type))
         });
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
+    }
+
+    /// Resolve a `task return` statement
+    fn resolve_task_return(
+        &mut self,
+        tr_stmt: &TaskReturnStmt,
+        ctx: &mut FunctionContext,
+    ) -> TirStmt {
+        if !ctx.is_async {
+            let _ = self.logger.error(TypeError::InvalidLiteral {
+                message: "`task return` is only valid inside `export async fn`".to_string(),
+                span: tr_stmt.span,
+            });
+        }
+        let expected = ctx.task_return_type;
+        let value = self.resolve_expr(&tr_stmt.value, ctx, expected);
+        TirStmt::new(TirStmtKind::TaskReturn { value }, tr_stmt.span)
     }
 
     /// Resolve an if statement
@@ -6086,6 +6140,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
+            // FutureWritable<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::FutureWritable(_) => (
+                "FutureWritable".to_string(),
+                ModuleSource::Core {
+                    name: "prelude/types.wado".to_string(),
+                },
+            ),
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -6249,6 +6310,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     impl_offset = 1;
                     subst_ctx = subst_ctx.with_impl_args(&[elem]);
                 }
+                // FutureWritable<T> has one type param T
+                ResolvedType::FutureWritable(inner) => {
+                    impl_offset = 1;
+                    subst_ctx = subst_ctx.with_impl_args(&[inner]);
+                }
                 _ => {}
             }
         } else {
@@ -6257,7 +6323,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     impl_offset = type_args.len() as u32;
                 }
-                ResolvedType::BuiltinArray(_) => {
+                ResolvedType::BuiltinArray(_) | ResolvedType::FutureWritable(_) => {
                     impl_offset = 1;
                 }
                 _ => {}
@@ -6308,6 +6374,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         "Array".to_string(),
                         vec![elem_name],
                         Some(vec![elem]),
+                    )
+                }
+                // FutureWritable<T>: base name is "FutureWritable", one type arg
+                ResolvedType::FutureWritable(inner) => {
+                    let inner_name = self.type_table.borrow().mangle_type_name(inner);
+                    let mangled = format!("FutureWritable<{inner_name}>");
+                    (
+                        mangled,
+                        "FutureWritable".to_string(),
+                        vec![inner_name],
+                        Some(vec![inner]),
                     )
                 }
                 _ => {
@@ -6460,28 +6537,33 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         // Handle Future::<T>::new() and Stream::<T>::new()
-        // Creates a handle pair [Future<T>/Stream<T>, i32] (rx, tx)
+        // Creates a handle pair [Future<T>/Stream<T>, FutureWritable<T>/i32] (rx, tx)
         {
             let target_resolved = self.type_table.borrow().get(target_type_id).clone();
             let pair_info = match &target_resolved {
-                ResolvedType::Future(_) if static_call.method == "new" && args.is_empty() => {
-                    Some(("future_create_pair", target_type_id))
+                ResolvedType::Future(inner) if static_call.method == "new" && args.is_empty() => {
+                    Some(("future_create_pair", target_type_id, Some(*inner)))
                 }
                 ResolvedType::Stream(_) if static_call.method == "new" && args.is_empty() => {
-                    Some(("stream_create_pair", target_type_id))
+                    Some(("stream_create_pair", target_type_id, None))
                 }
                 _ => None,
             };
 
-            if let Some((builtin_name, handle_type)) = pair_info {
-                let i32_type = self
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Primitive(PrimitiveType::I32));
+            if let Some((builtin_name, handle_type, future_inner)) = pair_info {
+                let tx_type = if let Some(inner) = future_inner {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::FutureWritable(inner))
+                } else {
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Primitive(PrimitiveType::I32))
+                };
                 let tuple_type = self
                     .type_table
                     .borrow_mut()
-                    .intern(ResolvedType::Tuple(vec![handle_type, i32_type]));
+                    .intern(ResolvedType::Tuple(vec![handle_type, tx_type]));
 
                 return TirExpr::new(
                     TirExprKind::Call {
@@ -7337,6 +7419,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 name,
                 module_source,
             } => (name.clone(), Some(module_source.clone()), None, None),
+            // FutureWritable<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::FutureWritable(inner) => (
+                "FutureWritable".to_string(),
+                Some(ModuleSource::Core {
+                    name: "prelude/types.wado".to_string(),
+                }),
+                Some(vec![*inner]),
+                None,
+            ),
             _ => return None,
         };
 
@@ -11817,6 +11908,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 self.type_table
                     .borrow_mut()
                     .intern(ResolvedType::Future(elem))
+            }
+            "FutureWritable" => {
+                let elem = args
+                    .first()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or(TypeTable::UNKNOWN);
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::FutureWritable(elem))
             }
             _ => {
                 // Check if it's a user-defined generic struct

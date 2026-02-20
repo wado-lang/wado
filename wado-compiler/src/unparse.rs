@@ -216,6 +216,10 @@ impl<'a> Unparser<'a> {
             self.output.push_str("export ");
         }
 
+        if f.is_async {
+            self.output.push_str("async ");
+        }
+
         self.output.push_str("fn ");
         self.output.push_str(&f.name);
         self.unparse_generic_params(&f.type_params);
@@ -921,6 +925,7 @@ impl<'a> Unparser<'a> {
             Stmt::Let(l) => self.unparse_let(l),
             Stmt::Expr(e) => self.unparse_expr_stmt(e),
             Stmt::Return(r) => self.unparse_return(r),
+            Stmt::TaskReturn(tr) => self.unparse_task_return(tr),
             Stmt::If(i) => self.unparse_if_stmt(i),
             Stmt::While(w) => self.unparse_while(w),
             Stmt::For(f) => self.unparse_for(f),
@@ -982,6 +987,13 @@ impl<'a> Unparser<'a> {
             self.output.push(' ');
             self.unparse_expr(value);
         }
+        self.output.push_str(";\n");
+    }
+
+    fn unparse_task_return(&mut self, tr: &crate::ast::TaskReturnStmt) {
+        self.write_indent();
+        self.output.push_str("task return ");
+        self.unparse_expr(&tr.value);
         self.output.push_str(";\n");
     }
 
@@ -1868,6 +1880,7 @@ fn get_stmt_span(stmt: &Stmt) -> Span {
         Stmt::Let(l) => l.span,
         Stmt::Expr(e) => e.span,
         Stmt::Return(r) => r.span,
+        Stmt::TaskReturn(tr) => tr.span,
         Stmt::If(i) => i.span,
         Stmt::While(w) => w.span,
         Stmt::For(f) => f.span,
@@ -2454,6 +2467,12 @@ impl<'a> TirUnparser<'a> {
                     self.output.push(' ');
                     self.unparse_expr(v);
                 }
+                self.output.push_str(";\n");
+            }
+            TirStmtKind::TaskReturn { value } => {
+                self.write_indent();
+                self.output.push_str("task return ");
+                self.unparse_expr(value);
                 self.output.push_str(";\n");
             }
             TirStmtKind::If {

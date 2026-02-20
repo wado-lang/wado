@@ -269,6 +269,7 @@ mod tests {
             name: "stream_new".to_string(),
             is_pub: false,
             is_export: false,
+            is_async: false,
             type_params: vec![],
             attrs: vec![],
             params: vec![],
@@ -301,6 +302,7 @@ mod tests {
             name: "unreachable".to_string(),
             is_pub: false,
             is_export: false,
+            is_async: false,
             type_params: vec![],
             attrs: vec![],
             params: vec![],
@@ -328,6 +330,7 @@ mod tests {
             name: "stream_write".to_string(),
             is_pub: false,
             is_export: false,
+            is_async: false,
             type_params: vec![],
             attrs: vec![],
             params: vec![

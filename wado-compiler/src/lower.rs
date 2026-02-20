@@ -422,6 +422,9 @@ fn lower_wide_int_in_stmt(stmt: &mut TirStmt, type_table: &Rc<RefCell<TypeTable>
         | TirStmtKind::Loop { .. }
         | TirStmtKind::LabeledBlock { .. }
         | TirStmtKind::LetPattern { .. } => {}
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     }
 }
 
@@ -1129,6 +1132,9 @@ impl<'a> PatternLowerer<'a> {
             }
             TirStmtKind::Continue => {
                 out.push(TirStmt::new(TirStmtKind::Continue, stmt.span));
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
             }
         }
     }
@@ -2013,6 +2019,7 @@ fn lower_global_initializers(module: &mut TirModule) {
     };
 
     let init_func = TirFunction {
+        is_async: false,
         name: "__initialize_module".to_string(),
         is_pub: true, // pub so it can be called from entry module's __initialize_modules
         is_export: false, // Internal function, not a world export
@@ -2340,6 +2347,7 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
     };
 
     let init_modules_func = TirFunction {
+        is_async: false,
         name: "__initialize_modules".to_string(),
         is_pub: false,    // Not pub - internal to entry module
         is_export: false, // Internal function, not a world export
@@ -2988,6 +2996,9 @@ impl BoxLowerer {
             }
             TirStmtKind::LetPattern { value, .. } => {
                 self.transform_expr(value, address_taken, type_table);
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
             }
         }
     }
@@ -3679,6 +3690,9 @@ impl ClosureLowerer {
             TirStmtKind::LetPattern { value, .. } => {
                 self.collect_closures_in_expr(value);
             }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         }
     }
 
@@ -3890,6 +3904,9 @@ impl ClosureLowerer {
             }
             TirStmtKind::LetPattern { value, .. } => {
                 self.analyze_closure_safety_expr(value, false);
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
             }
         }
     }
@@ -4184,6 +4201,7 @@ impl ClosureLowerer {
             );
 
             let call_method = TirFunction {
+                is_async: false,
                 name: qualified_method_name,
                 is_pub: false,
                 is_export: false, // Closure method, not a world export
@@ -4275,6 +4293,9 @@ impl ClosureLowerer {
             }
             TirStmtKind::LetPattern { value, .. } => {
                 Self::collect_locals_from_expr(value, locals);
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
             }
         }
     }
@@ -4921,6 +4942,9 @@ impl ClosureLowerer {
                 }),
             },
             TirStmtKind::Continue => TirStmtKind::Continue,
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         };
         TirStmt::new(kind, stmt.span)
     }
@@ -5108,6 +5132,9 @@ impl ClosureLowerer {
             }
             TirStmtKind::LetPattern { value, .. } => {
                 self.fn_param_in_struct_field_expr(value, fn_param_indices)
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
             }
         }
     }
@@ -5308,6 +5335,9 @@ impl ClosureLowerer {
             }
             TirStmtKind::LetPattern { value, .. } => {
                 self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
+            }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
             }
         }
     }
@@ -5798,6 +5828,7 @@ impl ClosureLowerer {
         });
 
         let specialized_func = TirFunction {
+            is_async: false,
             name: specialized_name.clone(),
             is_pub: false,    // Specialized functions are always private
             is_export: false, // Specialized functions are not world exports
@@ -5921,6 +5952,9 @@ impl ClosureLowerer {
                 is_mut: *is_mut,
                 value: self.specialize_expr(value, param_to_functor, type_table),
             },
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         };
         TirStmt::new(kind, stmt.span)
     }
@@ -6596,6 +6630,9 @@ impl ClosureLowerer {
             TirStmtKind::LetPattern { value, .. } => {
                 self.transform_expr(value, type_table);
             }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         }
     }
 
@@ -6990,6 +7027,9 @@ impl ClosureLowerer {
             TirStmtKind::LetPattern { value, .. } => {
                 self.transform_remaining_closures_expr(value);
             }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         }
     }
 
@@ -7309,6 +7349,9 @@ impl StringCollector {
             TirStmtKind::LetPattern { value, .. } => {
                 self.collect_expr(value);
             }
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         }
     }
 
@@ -7576,6 +7619,9 @@ impl<'a> ScratchLocalAnalyzer<'a> {
                 panic!("IfPattern should be lowered before scratch local analysis");
             }
             TirStmtKind::Continue => {}
+            TirStmtKind::TaskReturn { .. } => {
+                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            }
         }
     }
 
@@ -8711,6 +8757,7 @@ fn make_synthetic_method(
         name,
         is_pub: true,
         is_export: false,
+        is_async: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
         monomorph_info: None,

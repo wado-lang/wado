@@ -81,6 +81,9 @@ fn fold_constants_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) -> bool {
             .is_some_and(|v| fold_constants_in_expr(v, type_table)),
         TirStmtKind::Continue => false,
         TirStmtKind::LetPattern { value, .. } => fold_constants_in_expr(value, type_table),
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
     }
 }
 

@@ -9,12 +9,8 @@
 // mem::realloc (realloc)
 // wasi::task-return (task_return)
 
-export fn handle(request: Request) -> Result<Response, ErrorCode> {
-    return Result<Response, ErrorCode>::Err(ErrorCode::InternalError(null));
-}
-
-export fn __cm_export__handle(request: Request) {
-    let __result: Result<Response, ErrorCode> = move Result<Response, ErrorCode>::Err(ErrorCode::InternalError(null));
+export fn handle(request: Request) {
+    let __task_ret: Result<Response, ErrorCode> = move Result<Response, ErrorCode>::Err(ErrorCode::InternalError(null));
     let mut __tv: i32 = 0;
     let mut __tv: i32 = 0;
     let mut __tv: i32 = 0;
@@ -23,24 +19,14 @@ export fn __cm_export__handle(request: Request) {
     let mut __tv: i32 = 0;
     let mut __tv: i32 = 0;
     let mut __tv: i32 = 0;
-    if __variant_test(__result, case=0, name=Ok) {
+    if __variant_test(__task_ret, case=0, name=Ok) {
         __tv = 0;
-        let __ok_val: Response = __variant_payload(__result, case=0);
+        let __ok_val: Response = __variant_payload(__task_ret, case=0);
         __tv = __ok_val;
         cm_raw_call task-return(__tv, __tv, __tv, __tv, __tv, __tv, __tv, __tv);
-        let __trailers_tx: i32 = core::builtin::global_get_pending_trailers_tx();
-        if (__trailers_tx != 0) {
-            let __trailers_ptr: i32 = core::builtin::realloc(0, 0, 8, 8);
-            core::builtin::i32_store(__trailers_ptr, 0);
-            core::builtin::i32_store((__trailers_ptr + 4), 0);
-            core::builtin::future_write(__trailers_tx, __trailers_ptr);
-            core::builtin::realloc(__trailers_ptr, 8, 8, 0);
-            core::builtin::future_drop_writable(__trailers_tx);
-        }
-        return;
     } else {
         __tv = 1;
-        let __err_val: ErrorCode = __variant_payload(__result, case=1);
+        let __err_val: ErrorCode = __variant_payload(__task_ret, case=1);
         __tv = __variant_tag(__err_val);
         if __variant_test(__err_val, case=1, name=DnsError) {
             let __case_payload: DnsErrorPayload = __variant_payload(__err_val, case=1);
@@ -328,8 +314,10 @@ export fn __cm_export__handle(request: Request) {
             __tv = __flat;
         }
         cm_raw_call task-return(__tv, __tv, __tv, __tv, __tv, __tv, __tv, __tv);
-        return;
     }
-    cm_raw_call task-return(0, 0, 0, 0, 0, 0, 0, 0);
+}
+
+export fn __cm_export__handle(request: Request) {
+    handle(request);
 }
 

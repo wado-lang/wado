@@ -9,40 +9,14 @@
 // mem::realloc (realloc)
 // wasi::task-return (task_return)
 
-export fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let [trailers_future, _trailers_tx] = move core::builtin::future_create_pair();
+export fn handle(request: Request) {
+    let [trailers_future, trailers_tx] = move core::builtin::future_create_pair();
     let headers: Fields = __cm_adapter__Fields_new();
     let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = move __cm_adapter__Response_new(headers, 0, 0, trailers_future);
     let response: Response = __pattern_temp_0.0;
     let _tx_future: Future<Result<(), ErrorCode>> = __pattern_temp_0.1;
     __cm_adapter__Response_set_status_code(&response, 400);
-    return Result<Response, ErrorCode>::Ok(response);
-}
-
-fn __cm_adapter__Fields_new() -> Fields {
-    return cm_raw_call wasi:http/Fields::new();
-}
-
-fn __cm_adapter__Response_new(headers: i32, contents_flat0: i32, contents_flat1: i32, trailers: i32) -> [Response, Future<Result<(), ErrorCode>>] {
-    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
-    cm_raw_call wasi:http/Response::new(headers, contents_flat0, contents_flat1, trailers, __outptr);
-    core::builtin::realloc(__outptr, 8, 4, 0);
-    return [core::builtin::i32_load((__outptr + 0)), core::builtin::i32_load((__outptr + 4))];
-}
-
-fn __cm_adapter__Response_set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()> {
-    let __disc: i32 = cm_raw_call wasi:http/Response::set_status_code(self, status_code);
-    let mut __result_val: Result<(), ()> = move null;
-    if (__disc == 0) {
-        __result_val = move Result<(), ()>::Ok;
-    } else {
-        __result_val = move Result<(), ()>::Err;
-    }
-    return __result_val;
-}
-
-export fn __cm_export__handle(request: Request) {
-    let __result: Result<Response, ErrorCode> = move handle(request);
+    let __task_ret: Result<Response, ErrorCode> = move Result<Response, ErrorCode>::Ok(response);
     let mut __tv: i32 = 0;
     let mut __tv: i32 = 0;
     let mut __tv: i32 = 0;
@@ -51,24 +25,14 @@ export fn __cm_export__handle(request: Request) {
     let mut __tv: i32 = 0;
     let mut __tv: i32 = 0;
     let mut __tv: i32 = 0;
-    if __variant_test(__result, case=0, name=Ok) {
+    if __variant_test(__task_ret, case=0, name=Ok) {
         __tv = 0;
-        let __ok_val: Response = __variant_payload(__result, case=0);
+        let __ok_val: Response = __variant_payload(__task_ret, case=0);
         __tv = __ok_val;
         cm_raw_call task-return(__tv, __tv, __tv, __tv, __tv, __tv, __tv, __tv);
-        let __trailers_tx: i32 = core::builtin::global_get_pending_trailers_tx();
-        if (__trailers_tx != 0) {
-            let __trailers_ptr: i32 = core::builtin::realloc(0, 0, 8, 8);
-            core::builtin::i32_store(__trailers_ptr, 0);
-            core::builtin::i32_store((__trailers_ptr + 4), 0);
-            core::builtin::future_write(__trailers_tx, __trailers_ptr);
-            core::builtin::realloc(__trailers_ptr, 8, 8, 0);
-            core::builtin::future_drop_writable(__trailers_tx);
-        }
-        return;
     } else {
         __tv = 1;
-        let __err_val: ErrorCode = __variant_payload(__result, case=1);
+        let __err_val: ErrorCode = __variant_payload(__task_ret, case=1);
         __tv = __variant_tag(__err_val);
         if __variant_test(__err_val, case=1, name=DnsError) {
             let __case_payload: DnsErrorPayload = __variant_payload(__err_val, case=1);
@@ -356,8 +320,33 @@ export fn __cm_export__handle(request: Request) {
             __tv = __flat;
         }
         cm_raw_call task-return(__tv, __tv, __tv, __tv, __tv, __tv, __tv, __tv);
-        return;
     }
-    cm_raw_call task-return(0, 0, 0, 0, 0, 0, 0, 0);
+    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(move Result<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+fn __cm_adapter__Fields_new() -> Fields {
+    return cm_raw_call wasi:http/Fields::new();
+}
+
+fn __cm_adapter__Response_new(headers: i32, contents_flat0: i32, contents_flat1: i32, trailers: i32) -> [Response, Future<Result<(), ErrorCode>>] {
+    let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
+    cm_raw_call wasi:http/Response::new(headers, contents_flat0, contents_flat1, trailers, __outptr);
+    core::builtin::realloc(__outptr, 8, 4, 0);
+    return [core::builtin::i32_load((__outptr + 0)), core::builtin::i32_load((__outptr + 4))];
+}
+
+fn __cm_adapter__Response_set_status_code(self: &Response, status_code: StatusCode) -> Result<(), ()> {
+    let __disc: i32 = cm_raw_call wasi:http/Response::set_status_code(self, status_code);
+    let mut __result_val: Result<(), ()> = move null;
+    if (__disc == 0) {
+        __result_val = move Result<(), ()>::Ok;
+    } else {
+        __result_val = move Result<(), ()>::Err;
+    }
+    return __result_val;
+}
+
+export fn __cm_export__handle(request: Request) {
+    handle(request);
 }
 

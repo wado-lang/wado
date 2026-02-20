@@ -241,6 +241,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Stmt::Let(let_stmt) => self.bind_let(let_stmt)?,
             Stmt::Expr(expr_stmt) => self.bind_expr_stmt(expr_stmt)?,
             Stmt::Return(ret_stmt) => self.bind_return(ret_stmt)?,
+            Stmt::TaskReturn(stmt) => self.bind_expr(&stmt.value)?,
             Stmt::If(if_stmt) => self.bind_if_stmt(if_stmt)?,
             Stmt::While(while_stmt) => self.bind_while(while_stmt)?,
             Stmt::For(for_stmt) => self.bind_for(for_stmt)?,

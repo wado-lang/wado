@@ -373,6 +373,49 @@ To fully eliminate hardcoded CM structures, the registry would need to:
 2. Parse enum variants from `#[wasi(...)]` annotated enums in wasi/\*.wado
 3. Generate CM type definitions dynamically from parsed definitions
 
+### Async Export Functions (`export async fn`)
+
+Wado HTTP handlers use `export async fn` to opt into the Component Model async calling convention. The `async` modifier is significant — it changes the entire adapter generation strategy.
+
+#### Why `async` Is Required for HTTP Handlers
+
+Without `async`, the compiler generates a synchronous CM export adapter: it calls the user function, receives the return value, lowers it to flat CM ABI values, and returns them to the CM runtime. The function lifetime is tied to the return value.
+
+For HTTP handlers, the return type is `Result<Response, ErrorCode>`. A `Response` contains a `FutureWritable<Result<Option<Trailers>, ErrorCode>>` — a writable future handle that the caller must fulfill **after** the response headers are sent. With a sync adapter, the function would return before the trailers future is resolved, and there would be no opportunity to write to it.
+
+With `async`, the CM runtime allows the function to remain alive after delivering its result. The adapter generated for `export async fn` has two key differences:
+
+1. The Wasm-level function signature uses the async calling convention: flat params with no outptr, and the function returns nothing (result delivery is via `task.return`).
+2. The adapter only lifts the incoming parameters, then calls the user function directly — it does not handle the return value. The user's `task return` statement inside the function body drives result delivery.
+
+```wado
+// Synchronous (sync adapter wraps return):
+export fn get_version() -> String { return "1.0"; }
+
+// Async (task return drives delivery; function can continue after):
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // ...build response with trailers future...
+    task return Result::<Response, ErrorCode>::Ok(response);
+    // function continues here; fulfills trailers future
+    trailers_tx.write(Ok(null));
+}
+```
+
+#### `task return` Syntax
+
+`task return expr;` is a statement that calls the CM `task.return` instruction. It delivers the function's result to the CM runtime without ending the function.
+
+**Rationale:** Regular `return` terminates the Wasm function. If an HTTP handler used `return response`, the function would exit before it could fulfill any outstanding futures (e.g., trailers). `task return` separates result delivery from function termination, keeping the function alive so it can perform cleanup and fulfill futures.
+
+**Type checking:** The `task return` expression is type-checked against the declared return type of the surrounding `export async fn`. Regular `return` is forbidden in `async` function bodies — using it would terminate the Wasm function without notifying the CM runtime.
+
+**CM Adapter expansion:** During the CM Adapter phase, `task return expr` is expanded in-place to a sequence of TIR that:
+
+1. Lowers the Wado value to flat CM ABI values (using `synthesize_lower_to_flat`)
+2. Calls `builtin::task_return(0, flat0, flat1, ...)` — the `0` is the Ok discriminant
+
+This expansion is performed by `expand_task_returns_in_func` in `cm_adapter_gen.rs`, which walks the function body and replaces each `TirStmtKind::TaskReturn` with the expanded sequence.
+
 ### Builtin Registry
 
 The `BuiltinRegistry` module (`builtin_registry.rs`) collects function signatures from `lib/core/builtin.wado` and provides type information for code generation.
