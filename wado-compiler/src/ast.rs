@@ -1114,6 +1114,8 @@ pub struct FlagsDecl {
 #[derive(Debug, Clone)]
 pub struct FlagsVariant {
     pub name: String,
+    /// Attributes like `#[wasi("wit-kebab-name")]` for CM name override
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 

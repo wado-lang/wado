@@ -188,6 +188,10 @@ pub struct WasiRegistry {
     /// e.g., "`TerminalInput`" -> ("terminal-input", "wasi:cli/terminal-input@0.3.0-rc-2026-01-06")
     resources: IndexMap<String, (String, String)>,
 
+    /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`)
+    /// Maps Wado flags name -> (CM flags name kebab-case, member names in kebab-case)
+    flags: IndexMap<String, (String, Vec<String>)>,
+
     /// Enum types collected from WASI modules (e.g., `ErrorCode`, `IpAddressFamily`)
     /// Maps Wado enum name -> (CM enum name kebab-case, variant names in kebab-case)
     enums: IndexMap<String, (String, Vec<String>)>,
@@ -325,6 +329,25 @@ impl WasiRegistry {
                     .collect();
                 self.structs
                     .insert(struct_def.name.clone(), (cm_name, source_interface, fields));
+            }
+        }
+
+        // Collect flags types from this module
+        for item in &module.items {
+            if let Item::Flags(flags_def) = item {
+                // Use the #[wasi] fragment as the CM name (preserves acronym casing)
+                let cm_name = wasi_attr_cm_name(
+                    flags_def.attributes.as_deref().unwrap_or(&[]),
+                    &flags_def.name,
+                );
+                // Use per-member #[wasi] attr for CM name; fall back to to_kebab_case
+                let member_names: Vec<String> = flags_def
+                    .flags
+                    .iter()
+                    .map(|m| wasi_attr_cm_name(&m.attrs, &m.name))
+                    .collect();
+                self.flags
+                    .insert(flags_def.name.clone(), (cm_name, member_names));
             }
         }
 
@@ -504,6 +527,37 @@ impl WasiRegistry {
             }
         }
 
+        // Collect flags types (needed for CM type encoding)
+        for item in &module.items {
+            if let Item::Flags(flags_def) = item {
+                let cm_name = wasi_attr_cm_name(
+                    flags_def.attributes.as_deref().unwrap_or(&[]),
+                    &flags_def.name,
+                );
+                let member_names: Vec<String> = flags_def
+                    .flags
+                    .iter()
+                    .map(|m| wasi_attr_cm_name(&m.attrs, &m.name))
+                    .collect();
+                self.flags
+                    .insert(flags_def.name.clone(), (cm_name, member_names));
+            }
+        }
+
+        // Collect enum types (needed for type support checks)
+        for item in &module.items {
+            if let Item::Enum(enum_def) = item {
+                let cm_name = wasi_attr_cm_name(&enum_def.attrs, &enum_def.name);
+                let variant_names: Vec<String> = enum_def
+                    .cases
+                    .iter()
+                    .map(|c| wasi_attr_cm_name(&c.attrs, &c.name))
+                    .collect();
+                self.enums
+                    .insert(enum_def.name.clone(), (cm_name, variant_names));
+            }
+        }
+
         // Register world definitions only
         for item in &module.items {
             if let Item::World(world) = item {
@@ -582,6 +636,21 @@ impl WasiRegistry {
             .get(&full_key)
             .or_else(|| self.enums.get(name))
             .map(|(cm_name, _)| cm_name.as_str())
+    }
+
+    /// Check if a type name is a registered flags type
+    pub fn is_flags(&self, name: &str) -> bool {
+        self.flags.contains_key(name)
+    }
+
+    /// Get the CM kebab-case name for a flags type
+    pub fn get_flags_cm_name(&self, name: &str) -> Option<&str> {
+        self.flags.get(name).map(|(cm_name, _)| cm_name.as_str())
+    }
+
+    /// Get the CM member names (in kebab-case) for a flags type
+    pub fn get_flags_members(&self, name: &str) -> Option<&[String]> {
+        self.flags.get(name).map(|(_, members)| members.as_slice())
     }
 
     /// Check if a type name is a registered variant
@@ -682,11 +751,12 @@ impl WasiRegistry {
     /// This uses the registry's known enums and resources to determine if
     /// all types in the function signature are supported.
     pub fn is_function_supported(&self, func: &WasiFunctionInfo) -> bool {
-        // Build sets of known enum, variant, and resource names
+        // Build sets of known enum, variant, flags, and resource names
         let enums: IndexSet<&str> = self
             .enums
             .keys()
             .chain(self.variants.keys())
+            .chain(self.flags.keys())
             .map(String::as_str)
             .collect();
         let resources: IndexSet<&str> = self.resources.keys().map(String::as_str).collect();
@@ -1313,6 +1383,19 @@ impl CmInstanceTypeGen {
                             wasi_registry,
                             resource_exports,
                         );
+                        ComponentValType::Type(idx)
+                    } else if wasi_registry.is_flags(name) {
+                        let cache_key = format!("flags:{name}");
+                        if let Some(&idx) = self.cache.get(&cache_key) {
+                            return ComponentValType::Type(idx);
+                        }
+                        let members = wasi_registry.get_flags_members(name).unwrap().to_vec();
+                        instance_type
+                            .ty()
+                            .defined_type()
+                            .flags(members.iter().map(String::as_str));
+                        let idx = self.alloc_idx();
+                        self.cache.insert(cache_key, idx);
                         ComponentValType::Type(idx)
                     } else {
                         panic!("unsupported named type for CM instance: {name}")

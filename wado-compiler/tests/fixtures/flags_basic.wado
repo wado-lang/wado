@@ -1,0 +1,27 @@
+use { println } from "core:cli";
+
+pub flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+export fn run() with Stdout {
+    let r = Perms::Read;
+    let w = Perms::Write;
+    let x = Perms::Execute;
+    let rw = r | w;
+    let rwx = rw | x;
+    assert rw as u32 == 3;
+    assert rwx as u32 == 7;
+    assert (Perms::none() as u32) == 0;
+    assert (Perms::all() as u32) == 7;
+    let masked = rwx & Perms::Read;
+    assert masked as u32 == 1;
+    let toggled = rw ^ Perms::Read;
+    assert toggled as u32 == 2;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

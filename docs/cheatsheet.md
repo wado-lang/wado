@@ -355,6 +355,52 @@ impl Color {
 }
 ```
 
+## Flags
+
+Flags are bitmask types where each member represents a single bit. They are used for WASI permission flags and similar bitfield values.
+
+```wado
+pub flags Perms {
+    Read,     // bit 0 → value 1
+    Write,    // bit 1 → value 2
+    Execute,  // bit 2 → value 4
+}
+
+// Access individual members
+let r = Perms::Read;    // 1
+let w = Perms::Write;   // 2
+
+// Bitwise combination
+let rw = r | w;         // 3
+let rwx = rw | Perms::Execute;  // 7
+
+// Bitwise AND (masking)
+let masked = rwx & Perms::Read;   // 1
+
+// Bitwise XOR (toggle)
+let toggled = rw ^ Perms::Read;   // 2
+
+// Special static methods
+let none = Perms::none();  // 0 (no bits set)
+let all  = Perms::all();   // 7 (all bits set)
+
+// Cast to/from u32
+assert rw as u32 == 3;
+
+// Arithmetic operators (+, -, *, /, %) are NOT allowed on flags types
+// Use bitwise operators (|, &, ^) instead
+```
+
+Flags are newtypes over `u32`. Bitwise operators (`|`, `&`, `^`) work naturally.
+Attributes can annotate members for WIT name mapping:
+
+```wado
+pub flags PathFlags {
+    #[wasi("symlink-follow")]
+    SymlinkFollow,
+}
+```
+
 ## Variants
 
 Variants are sum types with payloads (unlike enums which have no payloads):
@@ -1473,7 +1519,6 @@ Wado intentionally does not support macros.
 
 ## Not Yet Implemented
 
-- `flags` (parsed but no codegen)
 - `resource` (Wasm CM resource handles)
 - Trait bounds: using bounds for method resolution on type params (e.g., calling `T.method()` where `T: Trait`)
 - Effect handlers

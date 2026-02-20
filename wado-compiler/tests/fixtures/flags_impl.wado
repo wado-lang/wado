@@ -1,0 +1,44 @@
+use { println } from "core:cli";
+
+pub flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+impl Perms {
+    fn has_read(&self) -> bool {
+        return (*self & Perms::Read) as u32 != 0;
+    }
+
+    fn has_write(&self) -> bool {
+        return (*self & Perms::Write) as u32 != 0;
+    }
+}
+
+trait HasRead {
+    fn check_read(&self) -> bool;
+}
+
+impl HasRead for Perms {
+    fn check_read(&self) -> bool {
+        return self.has_read();
+    }
+}
+
+export fn run() with Stdout {
+    let rw = Perms::Read | Perms::Write;
+    assert rw.has_read();
+    assert rw.has_write();
+    assert rw.check_read();
+
+    let w = Perms::Write;
+    assert !w.has_read();
+    assert w.has_write();
+    assert !w.check_read();
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

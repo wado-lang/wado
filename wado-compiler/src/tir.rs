@@ -1778,6 +1778,28 @@ pub struct TirEnumCase {
     pub span: Span,
 }
 
+/// A flags type declaration (bitmask type, like WIT flags)
+/// e.g., `flags PathFlags { SymlinkFollow }`
+/// Represented as a newtype over u32; each member is a bitmask value (1 << index).
+#[derive(Debug, Clone)]
+pub struct TirFlags {
+    pub name: String,
+    pub is_pub: bool,
+    /// The newtype `TypeId` (base type is u32)
+    pub type_id: TypeId,
+    pub members: Vec<TirFlagsMember>,
+    pub span: Span,
+}
+
+/// A member of a flags type
+#[derive(Debug, Clone)]
+pub struct TirFlagsMember {
+    pub name: String,
+    /// Bitmask value: `1 << index`
+    pub bitmask: u32,
+    pub span: Span,
+}
+
 /// A variant type declaration (tagged union, distinct from enum)
 /// e.g., `variant Shape { Circle(f64), Rectangle(f64, f64), Point }`
 #[derive(Debug, Clone)]
@@ -1960,6 +1982,8 @@ pub struct TirModule {
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
     pub structs: Vec<TirStruct>,
     pub enums: Vec<TirEnum>,
+    /// Flags type declarations (bitmask types, newtypes over u32)
+    pub flags: Vec<TirFlags>,
     /// Custom variant declarations (tagged unions with payloads)
     pub variants: Vec<TirVariantDecl>,
     pub newtypes: Vec<TirNewtype>,
@@ -1998,6 +2022,7 @@ impl TirModule {
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
+            flags: Vec::new(),
             variants: Vec::new(),
             newtypes: Vec::new(),
             effects: Vec::new(),
@@ -2027,6 +2052,7 @@ impl TirModule {
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
+            flags: Vec::new(),
             variants: Vec::new(),
             newtypes: Vec::new(),
             effects: Vec::new(),
@@ -2066,6 +2092,10 @@ impl TirModule {
 
     pub fn add_enum(&mut self, e: TirEnum) {
         self.enums.push(e);
+    }
+
+    pub fn add_flags(&mut self, f: TirFlags) {
+        self.flags.push(f);
     }
 
     pub fn add_newtype(&mut self, newtype: TirNewtype) {
