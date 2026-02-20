@@ -1468,12 +1468,6 @@ fn make_adapter_function(
         local_count,
         local_types,
         address_taken_locals: IndexSet::new(),
-        needed_copy_types: IndexSet::new(),
-        scratch_locals: vec![],
-        copy_source_types: IndexSet::new(),
-        indirect_call_counts: IndexMap::new(),
-        match_scrutinee_types: vec![],
-        let_pattern_types: vec![],
         is_cm_adapter: true,
     }))
 }

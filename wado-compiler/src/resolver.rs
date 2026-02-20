@@ -2681,13 +2681,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
-            needed_copy_types: IndexSet::new(),
             // Scratch local fields - computed by lower phase
-            scratch_locals: Vec::new(),
-            copy_source_types: IndexSet::new(),
-            indirect_call_counts: IndexMap::new(),
-            match_scrutinee_types: Vec::new(),
-            let_pattern_types: Vec::new(),
             is_cm_adapter: false,
         })
     }
@@ -2748,12 +2742,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
-            needed_copy_types: IndexSet::new(),
-            scratch_locals: Vec::new(),
-            copy_source_types: IndexSet::new(),
-            indirect_call_counts: IndexMap::new(),
-            match_scrutinee_types: Vec::new(),
-            let_pattern_types: Vec::new(),
             is_cm_adapter: false,
         };
 
@@ -2944,12 +2932,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_count: ctx.next_local,
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
-            needed_copy_types: IndexSet::new(),
-            scratch_locals: Vec::new(),
-            copy_source_types: IndexSet::new(),
-            indirect_call_counts: IndexMap::new(),
-            match_scrutinee_types: Vec::new(),
-            let_pattern_types: Vec::new(),
             is_cm_adapter: false,
         })
     }

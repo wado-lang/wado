@@ -129,14 +129,8 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
         }
     }
 
-    // Post-optimization rewrites: simplify labeled blocks, insert moves,
-    // collect value copy types, and expand copy source types in a single pass.
+    // Post-optimization rewrites: simplify labeled blocks and insert moves in a single pass.
     optimize_rewrite::rewrite(&mut project);
-
-    // Analyze scratch local requirements for all functions
-    // This must run AFTER inlining since the function body may change.
-    // Populates scratch_locals, indirect_call_counts, match_scrutinee_types, let_pattern_types.
-    crate::lower::analyze_scratch_locals_project(&mut project);
 
     project
 }

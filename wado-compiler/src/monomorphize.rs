@@ -2081,13 +2081,7 @@ impl Monomorphizer {
             local_count: generic.local_count,
             local_types,
             address_taken_locals: generic.address_taken_locals.clone(),
-            needed_copy_types: IndexSet::new(),
             // Scratch local fields - computed by lower phase (after monomorphization)
-            scratch_locals: Vec::new(),
-            copy_source_types: IndexSet::new(),
-            indirect_call_counts: IndexMap::new(),
-            match_scrutinee_types: Vec::new(),
-            let_pattern_types: Vec::new(),
             is_cm_adapter: false,
         })
     }
