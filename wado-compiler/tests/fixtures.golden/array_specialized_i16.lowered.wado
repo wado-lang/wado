@@ -68,10 +68,10 @@ pub fn "Array<i16>::append"(self: &mut Array<i16>, value: i16) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
     if core::builtin::unlikely((used >= capacity)) {
-        let mut new_capacity: i32 = (capacity * 2);
-        if (capacity == 0) {
-            new_capacity = 4;
-        }
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
         let new_repr: builtin::array<i16> = core::builtin::array_new::<i16>(new_capacity);
         core::builtin::array_copy::<i16>(new_repr, 0, self.repr, 0, used);
         self.repr = new_repr;

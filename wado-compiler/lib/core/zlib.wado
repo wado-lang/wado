@@ -87,10 +87,7 @@ pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     }
 
     while remaining > 0 {
-        let mut k = remaining;
-        if k > nmax {
-            k = nmax;
-        }
+        let k = i32::min(remaining, nmax);
         remaining -= k;
         for let mut i = 0; i < k; i += 1 {
             s1 += buf[pos] as u32;
@@ -358,9 +355,7 @@ fn inflate_table(
         }
         min_len += 1;
     }
-    if root < min_len {
-        root = min_len;
-    }
+    root = i32::max(root, min_len);
 
     // check for over-subscribed or incomplete set of lengths
     let mut left = 1;
@@ -1599,7 +1594,7 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
 
                 // Check match length
                 let mut match_len = 0;
-                let max_len = if input_len - pos < 258 { input_len - pos } else { 258 };
+                let max_len = i32::min(input_len - pos, 258);
                 while match_len < max_len && input[chain + match_len] == input[pos + match_len] {
                     match_len += 1;
                 }
@@ -2076,8 +2071,7 @@ fn write_dynamic_block(
             let mut rem = count;
             while rem > 0 {
                 if rem >= 11 {
-                    let mut run = rem;
-                    if run > 138 { run = 138; }
+                    let run = i32::min(rem, 138);
                     rle.append(18 as u8);
                     rle_extra.append(run - 11);
                     rem -= run;
@@ -2097,8 +2091,7 @@ fn write_dynamic_block(
             let mut rem = count - 1;
             while rem > 0 {
                 if rem >= 3 {
-                    let mut run = rem;
-                    if run > 6 { run = 6; }
+                    let run = i32::min(rem, 6);
                     rle.append(16 as u8);
                     rle_extra.append(run - 3);
                     rem -= run;
@@ -2342,7 +2335,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
                 distances.append(0);
                 let match_len = run - 1;
                 // Cap match at 258
-                let actual_match = if match_len > 258 { 258 } else { match_len };
+                let actual_match = i32::min(match_len, 258);
                 symbols.append(257 + actual_match - 3);
                 distances.append(1);
                 pos += 1 + actual_match;
@@ -2633,8 +2626,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             let mut hrem = hcount;
             while hrem > 0 {
                 if hrem >= 11 {
-                    let mut hrun = hrem;
-                    if hrun > 138 { hrun = 138; }
+                    let hrun = i32::min(hrem, 138);
                     hdr_rle.append(18 as u8);
                     hdr_rle_extra.append(hrun - 11);
                     hrem -= hrun;
@@ -2654,8 +2646,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             let mut hrem = hcount - 1;
             while hrem > 0 {
                 if hrem >= 3 {
-                    let mut hrun = hrem;
-                    if hrun > 6 { hrun = 6; }
+                    let hrun = i32::min(hrem, 6);
                     hdr_rle.append(16 as u8);
                     hdr_rle_extra.append(hrun - 3);
                     hrem -= hrun;
