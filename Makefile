@@ -56,7 +56,7 @@ test-cov-html:
 	@echo "Coverage report generated at target/llvm-cov/html/index.html"
 
 .PHONY: on-task-done
-on-task-done: clippy-fix update-golden-fixtures update-golden-wat-fixtures format test test-wado
+on-task-done: clippy-fix update-golden-fixtures update-golden-wat-fixtures update-golden-wir-fixtures format test test-wado
 	@echo "All artifacts are up-to-date and tested."
 
 .PHONY: format
@@ -81,6 +81,11 @@ update-golden-wat-fixtures:
 	@mkdir -p wado-compiler/tests/fixtures.golden.wat
 	@rm -rf wado-compiler/tests/fixtures.golden.wat/*.*
 	cargo test -p wado-compiler --test wat_golden_gen -- generate_all --ignored --exact
+
+.PHONY: update-golden-wir-fixtures
+update-golden-wir-fixtures:
+	@mkdir -p wado-compiler/tests/fixtures.golden.wir
+	cargo test -p wado-compiler --test wir_golden_gen -- generate_all --ignored --exact
 
 .PHONY: clippy
 clippy:
