@@ -451,6 +451,13 @@ impl<'a> WirUnparser<'a> {
     // === Instructions ===
 
     fn unparse_instr(&mut self, instr: &WirInstr) {
+        // In statement position, expand Seq items on separate lines instead of inline.
+        if let WirInstr::Seq(instrs) = instr {
+            for sub in instrs {
+                self.unparse_instr(sub);
+            }
+            return;
+        }
         self.write_indent();
         self.unparse_instr_inline(instr);
         self.write(";");
@@ -1231,11 +1238,11 @@ impl<'a> WirUnparser<'a> {
     /// Print the else-chain of an `if`, flattening `} else { if ... }` into `} else if ...`.
     fn unparse_else_chain(&mut self, else_body: Option<&[WirInstr]>) {
         if let Some(else_body) = else_body {
-            // Flatten single-if else into `else if`
+            // Flatten single-if else into `else if` (regardless of result type).
             if else_body.len() == 1 {
                 if let WirInstr::If {
                     condition,
-                    result: None,
+                    result,
                     then_body,
                     else_body: inner_else,
                 } = &else_body[0]
@@ -1243,6 +1250,10 @@ impl<'a> WirUnparser<'a> {
                     self.write_indent();
                     self.write("} else if ");
                     self.unparse_instr_inline(condition);
+                    if let Some(ty) = result {
+                        let ty_str = self.fmt_type(ty);
+                        self.write(&format!(" -> {ty_str}"));
+                    }
                     self.write(" {");
                     self.newline();
                     self.indent += 1;
