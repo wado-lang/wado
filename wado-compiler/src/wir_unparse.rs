@@ -486,30 +486,29 @@ impl<'a> WirUnparser<'a> {
         if let WirInstr::Seq(instrs) = instr {
             // Special case: Seq([..., val, Br]) = break-with-value.
             // Render as: "stmts...; break label val;" when val is a simple expression.
-            if let Some((WirInstr::Br { depth }, rest)) = instrs.split_last() {
-                if let Some((val_instr, init)) = rest.split_last() {
-                    if !is_block_expr(val_instr) {
-                        for s in init {
-                            self.unparse_instr(s);
-                        }
-                        self.write_indent();
-                        if self.label_stack.len() > *depth as usize {
-                            let (lbl, kind) = self.resolve_br(*depth);
-                            let lbl = lbl.to_string();
-                            let kind = kind.clone();
-                            match kind {
-                                LabelBlockKind::Loop => self.write(&format!("continue {lbl}: ")),
-                                _ => self.write(&format!("break {lbl}: ")),
-                            }
-                        } else {
-                            self.write(&format!("br {depth}: "));
-                        }
-                        self.unparse_instr_inline(val_instr);
-                        self.write(";");
-                        self.newline();
-                        return;
-                    }
+            if let Some((WirInstr::Br { depth }, rest)) = instrs.split_last()
+                && let Some((val_instr, init)) = rest.split_last()
+                && !is_block_expr(val_instr)
+            {
+                for s in init {
+                    self.unparse_instr(s);
                 }
+                self.write_indent();
+                if self.label_stack.len() > *depth as usize {
+                    let (lbl, kind) = self.resolve_br(*depth);
+                    let lbl = lbl.to_string();
+                    let kind = kind.clone();
+                    match kind {
+                        LabelBlockKind::Loop => self.write(&format!("continue {lbl}: ")),
+                        _ => self.write(&format!("break {lbl}: ")),
+                    }
+                } else {
+                    self.write(&format!("br {depth}: "));
+                }
+                self.unparse_instr_inline(val_instr);
+                self.write(";");
+                self.newline();
+                return;
             }
             for sub in instrs {
                 self.unparse_instr(sub);
@@ -518,37 +517,35 @@ impl<'a> WirUnparser<'a> {
         }
         // Special case: LocalSet/GlobalSet with a Seq value — expand side effects as
         // separate statements, then assign only the final value.
-        if let WirInstr::LocalSet { name, value } = instr {
-            if let WirInstr::Seq(instrs) = value.as_ref() {
-                if let Some((last_val, init)) = instrs.split_last() {
-                    for s in init {
-                        self.unparse_instr(s);
-                    }
-                    self.write_indent();
-                    self.write(name);
-                    self.write(" = ");
-                    self.unparse_instr_inline(last_val);
-                    self.write(";");
-                    self.newline();
-                    return;
-                }
+        if let WirInstr::LocalSet { name, value } = instr
+            && let WirInstr::Seq(instrs) = value.as_ref()
+            && let Some((last_val, init)) = instrs.split_last()
+        {
+            for s in init {
+                self.unparse_instr(s);
             }
+            self.write_indent();
+            self.write(name);
+            self.write(" = ");
+            self.unparse_instr_inline(last_val);
+            self.write(";");
+            self.newline();
+            return;
         }
-        if let WirInstr::GlobalSet { name, value } = instr {
-            if let WirInstr::Seq(instrs) = value.as_ref() {
-                if let Some((last_val, init)) = instrs.split_last() {
-                    for s in init {
-                        self.unparse_instr(s);
-                    }
-                    self.write_indent();
-                    self.write(&name.display);
-                    self.write(" = ");
-                    self.unparse_instr_inline(last_val);
-                    self.write(";");
-                    self.newline();
-                    return;
-                }
+        if let WirInstr::GlobalSet { name, value } = instr
+            && let WirInstr::Seq(instrs) = value.as_ref()
+            && let Some((last_val, init)) = instrs.split_last()
+        {
+            for s in init {
+                self.unparse_instr(s);
             }
+            self.write_indent();
+            self.write(&name.display);
+            self.write(" = ");
+            self.unparse_instr_inline(last_val);
+            self.write(";");
+            self.newline();
+            return;
         }
         self.write_indent();
         self.unparse_instr_inline(instr);
@@ -1380,34 +1377,33 @@ impl<'a> WirUnparser<'a> {
     fn unparse_else_chain(&mut self, else_body: Option<&[WirInstr]>) {
         if let Some(else_body) = else_body {
             // Flatten single-if else into `else if` (regardless of result type).
-            if else_body.len() == 1 {
-                if let WirInstr::If {
+            if else_body.len() == 1
+                && let WirInstr::If {
                     condition,
                     result,
                     then_body,
                     else_body: inner_else,
                 } = &else_body[0]
-                {
-                    // Each else-if branch is a new If in Wasm depth terms.
-                    self.push_label(LabelBlockKind::If, None);
-                    self.write_indent();
-                    self.write("} else if ");
-                    self.unparse_instr_inline(condition);
-                    if let Some(ty) = result {
-                        let ty_str = self.fmt_type(ty);
-                        self.write(&format!(" -> {ty_str}"));
-                    }
-                    self.write(" {");
-                    self.newline();
-                    self.indent += 1;
-                    for instr in then_body {
-                        self.unparse_instr(instr);
-                    }
-                    self.indent -= 1;
-                    self.unparse_else_chain(inner_else.as_deref());
-                    self.pop_label();
-                    return;
+            {
+                // Each else-if branch is a new If in Wasm depth terms.
+                self.push_label(LabelBlockKind::If, None);
+                self.write_indent();
+                self.write("} else if ");
+                self.unparse_instr_inline(condition);
+                if let Some(ty) = result {
+                    let ty_str = self.fmt_type(ty);
+                    self.write(&format!(" -> {ty_str}"));
                 }
+                self.write(" {");
+                self.newline();
+                self.indent += 1;
+                for instr in then_body {
+                    self.unparse_instr(instr);
+                }
+                self.indent -= 1;
+                self.unparse_else_chain(inner_else.as_deref());
+                self.pop_label();
+                return;
             }
             // Regular else
             self.write_indent();
@@ -1557,7 +1553,13 @@ pub fn format_type(ty: &WirType) -> String {
 
 /// Returns true if `instr` renders using infix operator syntax (needs parens as sub-expression).
 fn is_op_instr(instr: &WirInstr) -> bool {
-    use WirInstr::*;
+    use WirInstr::{
+        F32Add, F32Div, F32Eq, F32Ge, F32Gt, F32Le, F32Lt, F32Mul, F32Ne, F32Sub, F64Add, F64Div,
+        F64Eq, F64Ge, F64Gt, F64Le, F64Lt, F64Mul, F64Ne, F64Sub, I32Add, I32And, I32DivS, I32Eq,
+        I32Eqz, I32GeS, I32GtS, I32LeS, I32LtS, I32Mul, I32Ne, I32Or, I32RemS, I32Shl, I32ShrS,
+        I32Sub, I32Xor, I64Add, I64And, I64DivS, I64Eq, I64Eqz, I64GeS, I64GtS, I64LeS, I64LtS,
+        I64Mul, I64Ne, I64Or, I64RemS, I64Shl, I64ShrS, I64Sub, I64Xor,
+    };
     matches!(
         instr,
         I32Add(..)
@@ -1643,10 +1645,10 @@ fn is_block_targeted_from(body: &[WirInstr], nesting: u32) -> bool {
                 if is_block_targeted_from(then_body, nesting + 1) {
                     return true;
                 }
-                if let Some(eb) = else_body {
-                    if is_block_targeted_from(eb, nesting + 1) {
-                        return true;
-                    }
+                if let Some(eb) = else_body
+                    && is_block_targeted_from(eb, nesting + 1)
+                {
+                    return true;
                 }
             }
             WirInstr::Seq(instrs) => {
