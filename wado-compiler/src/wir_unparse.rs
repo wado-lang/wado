@@ -19,6 +19,15 @@ pub fn unparse_wir(module: &WirModule, cwd: Option<&str>) -> String {
     unparser.output
 }
 
+/// Kind of a block-like construct for branch target resolution.
+#[derive(Clone, PartialEq)]
+enum LabelBlockKind {
+    Block,
+    Loop,
+    /// `if` bodies count as block depths in Wasm but are not shown with labels.
+    If,
+}
+
 struct WirUnparser<'a> {
     output: String,
     indent: usize,
@@ -26,6 +35,10 @@ struct WirUnparser<'a> {
     entry_point_path: Option<String>,
     /// Type definitions for struct field name lookup.
     types: &'a [WirTypeDef],
+    /// Stack of (kind, label) for block-depth tracking and `br N` resolution.
+    label_stack: Vec<(LabelBlockKind, String)>,
+    /// Counter for generating unique labels.
+    label_next_id: usize,
 }
 
 impl<'a> WirUnparser<'a> {
@@ -35,6 +48,8 @@ impl<'a> WirUnparser<'a> {
             indent: 0,
             entry_point_path: entry_point_path.map(String::from),
             types,
+            label_stack: Vec::new(),
+            label_next_id: 0,
         }
     }
 
@@ -887,8 +902,10 @@ impl<'a> WirUnparser<'a> {
                 result,
                 body,
             } => {
-                if let Some(label) = label {
-                    self.write(&format!("{label}: "));
+                let targeted = is_block_targeted_from(body, 0);
+                let lbl = self.push_label(LabelBlockKind::Block, label.as_deref());
+                if targeted {
+                    self.write(&format!("{lbl}: "));
                 }
                 self.write("block");
                 if let Some(ty) = result {
@@ -904,10 +921,13 @@ impl<'a> WirUnparser<'a> {
                 self.indent -= 1;
                 self.write_indent();
                 self.write("}");
+                self.pop_label();
             }
             WirInstr::Loop { label, body } => {
-                if let Some(label) = label {
-                    self.write(&format!("{label}: "));
+                let targeted = is_block_targeted_from(body, 0);
+                let lbl = self.push_label(LabelBlockKind::Loop, label.as_deref());
+                if targeted {
+                    self.write(&format!("{lbl}: "));
                 }
                 self.write("loop {");
                 self.newline();
@@ -918,6 +938,7 @@ impl<'a> WirUnparser<'a> {
                 self.indent -= 1;
                 self.write_indent();
                 self.write("}");
+                self.pop_label();
             }
             WirInstr::If {
                 condition,
@@ -925,6 +946,10 @@ impl<'a> WirUnparser<'a> {
                 then_body,
                 else_body,
             } => {
+                // Push If onto the label stack so `br N` inside can correctly
+                // count depths, but don't show a label since `if` is not a
+                // labeled construct in pseudo-Wado.
+                self.push_label(LabelBlockKind::If, None);
                 self.write("if ");
                 self.unparse_instr_inline(condition);
                 if let Some(ty) = result {
@@ -939,6 +964,7 @@ impl<'a> WirUnparser<'a> {
                 }
                 self.indent -= 1;
                 self.unparse_else_chain(else_body.as_deref());
+                self.pop_label();
             }
             WirInstr::BranchHint { likely, expr } => {
                 let hint = if *likely { "likely" } else { "unlikely" };
@@ -946,11 +972,33 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(expr);
             }
             WirInstr::Br { depth } => {
-                self.write(&format!("br {depth}"));
+                if self.label_stack.len() > *depth as usize {
+                    let (lbl, kind) = self.resolve_br(*depth);
+                    let lbl = lbl.to_string();
+                    let kind = kind.clone();
+                    match kind {
+                        LabelBlockKind::Loop => self.write(&format!("continue {lbl}")),
+                        _ => self.write(&format!("break {lbl}")),
+                    }
+                } else {
+                    self.write(&format!("br {depth}"));
+                }
             }
             WirInstr::BrIf { depth, condition } => {
-                self.write(&format!("br_if {depth} "));
-                self.unparse_instr_inline(condition);
+                if self.label_stack.len() > *depth as usize {
+                    let (lbl, kind) = self.resolve_br(*depth);
+                    let lbl = lbl.to_string();
+                    let kind = kind.clone();
+                    let kw = match kind {
+                        LabelBlockKind::Loop => "continue_if",
+                        _ => "break_if",
+                    };
+                    self.write(&format!("{kw} {lbl} "));
+                    self.unparse_instr_inline(condition);
+                } else {
+                    self.write(&format!("br_if {depth} "));
+                    self.unparse_instr_inline(condition);
+                }
             }
             WirInstr::BrTable {
                 index,
@@ -1236,6 +1284,9 @@ impl<'a> WirUnparser<'a> {
     }
 
     /// Print the else-chain of an `if`, flattening `} else { if ... }` into `} else if ...`.
+    ///
+    /// The caller must have already pushed a label for the outer If onto `label_stack`.
+    /// Each flattened `else if` pushes/pops its own If label.
     fn unparse_else_chain(&mut self, else_body: Option<&[WirInstr]>) {
         if let Some(else_body) = else_body {
             // Flatten single-if else into `else if` (regardless of result type).
@@ -1247,6 +1298,8 @@ impl<'a> WirUnparser<'a> {
                     else_body: inner_else,
                 } = &else_body[0]
                 {
+                    // Each else-if branch is a new If in Wasm depth terms.
+                    self.push_label(LabelBlockKind::If, None);
                     self.write_indent();
                     self.write("} else if ");
                     self.unparse_instr_inline(condition);
@@ -1262,6 +1315,7 @@ impl<'a> WirUnparser<'a> {
                     }
                     self.indent -= 1;
                     self.unparse_else_chain(inner_else.as_deref());
+                    self.pop_label();
                     return;
                 }
             }
@@ -1328,6 +1382,33 @@ impl<'a> WirUnparser<'a> {
                 }
             }
         }
+    }
+
+    /// Push a block/loop/if onto the label stack, returning the assigned label.
+    fn push_label(&mut self, kind: LabelBlockKind, existing: Option<&str>) -> String {
+        let label = existing.map(String::from).unwrap_or_else(|| {
+            let prefix = match kind {
+                LabelBlockKind::Block => "b",
+                LabelBlockKind::Loop => "l",
+                LabelBlockKind::If => "_i",
+            };
+            let id = self.label_next_id;
+            self.label_next_id += 1;
+            format!("{prefix}{id}")
+        });
+        self.label_stack.push((kind, label.clone()));
+        label
+    }
+
+    fn pop_label(&mut self) {
+        self.label_stack.pop();
+    }
+
+    /// Resolve `br depth` to `(label, kind)`.
+    fn resolve_br(&self, depth: u32) -> (&str, &LabelBlockKind) {
+        let idx = self.label_stack.len().saturating_sub(1 + depth as usize);
+        let (kind, label) = &self.label_stack[idx];
+        (label.as_str(), kind)
     }
 
     fn write(&mut self, s: &str) {
@@ -1444,6 +1525,49 @@ fn is_op_instr(instr: &WirInstr) -> bool {
             | F64Le(..)
             | F64Ge(..)
     )
+}
+
+/// Returns true if any `br`/`br_if`/`br_table` in `body` targets the enclosing
+/// block at `nesting` levels above the current position.
+///
+/// Call with `nesting = 0` to check whether a block's own body targets that block.
+/// Recursing into nested blocks increments `nesting` so the check stays relative.
+fn is_block_targeted_from(body: &[WirInstr], nesting: u32) -> bool {
+    for instr in body {
+        match instr {
+            WirInstr::Br { depth } if *depth == nesting => return true,
+            WirInstr::BrIf { depth, .. } if *depth == nesting => return true,
+            WirInstr::BrTable {
+                targets, default, ..
+            } if targets.contains(&nesting) || *default == nesting => return true,
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                if is_block_targeted_from(body, nesting + 1) {
+                    return true;
+                }
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                if is_block_targeted_from(then_body, nesting + 1) {
+                    return true;
+                }
+                if let Some(eb) = else_body {
+                    if is_block_targeted_from(eb, nesting + 1) {
+                        return true;
+                    }
+                }
+            }
+            WirInstr::Seq(instrs) => {
+                if is_block_targeted_from(instrs, nesting) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Returns true if `name` cannot be written as a bare word and needs double-quoting.
