@@ -3457,12 +3457,38 @@ Entry points are integrated in World system.
 
 Each hosted world defines its entry point. Currently supported:
 
-| Hosted World        | Entry Point                                                         | CLI Command  |
-| ------------------- | ------------------------------------------------------------------- | ------------ |
-| `wasi:cli/command`  | `export fn run()`                                                   | `wado run`   |
-| `wasi:http/service` | `export fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
+| Hosted World        | Entry Point                                                               | CLI Command  |
+| ------------------- | ------------------------------------------------------------------------- | ------------ |
+| `wasi:cli/command`  | `export fn run()`                                                         | `wado run`   |
+| `wasi:http/service` | `export async fn handle(request: Request) -> Result<Response, ErrorCode>` | `wado serve` |
 
 When no explicit `contract` declaration is present, the runtime determines the expected world (e.g., `wado run` expects `wasi:cli/command`).
+
+### `task return` Statement
+
+`task return expr;` is a statement valid only inside `export async fn` bodies. It calls the Component Model `task.return` instruction, delivering the function's result to the CM runtime **without terminating the Wasm function**. Execution continues after `task return`, allowing the function to fulfill outstanding futures (e.g. trailers) or perform cleanup.
+
+#### Motivation
+
+HTTP handlers return a `Response` that contains a `Future`-based trailers channel. With a regular `return`, the Wasm function exits immediately, making it impossible to write to that channel. `task return` separates result delivery from function termination:
+
+```wado
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    task return Result::<Response, ErrorCode>::Ok(response); // deliver result; function continues
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null)); // fulfill trailers
+}
+```
+
+#### Rules
+
+- `task return` is only valid inside `export async fn` bodies.
+- Regular `return` is forbidden in `async fn` bodies — it would exit the Wasm function without notifying the CM runtime.
+- The `task return` expression is type-checked against the declared return type of the enclosing `export async fn`.
+- The `async` keyword on a function declaration has no effect on callers; Wado is fully colorless. `async` only appears in `export async fn` declarations to signal CM async calling convention at the component boundary.
 
 ### Attribute Syntax for WASI Linking
 

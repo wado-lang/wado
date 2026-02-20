@@ -1177,6 +1177,40 @@ export fn run() with Stdout {
 }
 ```
 
+`handle(request)` is the entry point for the wasi:http/service world. It must be declared `async` because HTTP handlers use the Component Model async calling convention, which allows the function to remain alive after delivering the response headers (e.g. to fulfill trailers futures).
+
+```wado
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Fields::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+
+    // task return delivers the result to the CM runtime without ending the function.
+    // The function continues executing after this point to fulfill trailers.
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+```
+
+### `task return` Statement
+
+`task return expr;` is a statement valid only inside `export async fn` bodies. It delivers the function's result to the Component Model runtime without terminating the Wasm function, allowing cleanup and future fulfillment to continue afterward.
+
+```wado
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    // ... build response ...
+
+    task return Result::<Response, ErrorCode>::Ok(response);  // deliver result
+
+    // Function is still alive here — fulfill outstanding futures
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+```
+
+The expression is type-checked against the declared return type of the enclosing `export async fn`. Regular `return` is forbidden in `async fn` bodies.
+
 ## Standard Library
 
 ```wado
