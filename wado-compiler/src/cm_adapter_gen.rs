@@ -57,8 +57,10 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
                 "String".to_string(),
                 ModuleSource::core("prelude/string.wado"),
             ),
-            // Resource types and other named types are i32 handles
-            _ => TypeTable::I32,
+            // Resource types - look up the already-resolved TypeId if available
+            _ => type_table
+                .find_resource_type_by_name(named.name.as_str())
+                .unwrap_or(TypeTable::I32),
         },
         Type::Generic(g) => match g.name.as_str() {
             "Array" if g.args.len() == 1 => {
@@ -1727,7 +1729,92 @@ fn synthesize_adapter(
 
     // ---- Handle outptr for async or complex returns ----
     if func_info.is_async {
-        flat_args.push(i32_const(ASYNC_OUTPTR));
+        // WASI P3 async calling convention:
+        // - MAX_FLAT_ASYNC_PARAMS = 4 flat params before switching to indirect.
+        // - If flat_args exceeds 4, all params are passed via a single params_ptr
+        //   (pointer to a linear-memory buffer with all lowered params).
+        // - The results_ptr (ASYNC_OUTPTR) is always added as the final param.
+        const MAX_FLAT_ASYNC_PARAMS: usize = 4;
+        if flat_args.len() > MAX_FLAT_ASYNC_PARAMS {
+            // Indirect calling: write all flat_args to a memory buffer and pass params_ptr.
+            // Compute buffer layout based on flat type sizes.
+            let flat_types: Vec<TypeId> = func_info
+                .params
+                .iter()
+                .flat_map(|(_, ty)| flatten_param_type(ty))
+                .collect();
+
+            let mut buf_offset = 0u32;
+            let mut buf_max_align = 1u32;
+            let mut buf_offsets: Vec<u32> = Vec::with_capacity(flat_types.len());
+            for &flat_ty in &flat_types {
+                let (sz, al): (u32, u32) = match flat_ty {
+                    TypeTable::I64 => (8, 8),
+                    TypeTable::F64 => (8, 8),
+                    _ => (4, 4),
+                };
+                buf_offset = (buf_offset + al - 1) & !(al - 1);
+                buf_offsets.push(buf_offset);
+                buf_offset += sz;
+                buf_max_align = buf_max_align.max(al);
+            }
+            let buf_total_size = (buf_offset + buf_max_align - 1) & !(buf_max_align - 1);
+
+            // Allocate the params buffer.
+            let params_buf_local = next_local;
+            body_stmts.push(let_stmt(
+                "__params_buf",
+                params_buf_local,
+                TypeTable::I32,
+                builtin_call(
+                    "realloc",
+                    vec![
+                        i32_const(0),
+                        i32_const(0),
+                        i32_const(buf_max_align as i32),
+                        i32_const(buf_total_size as i32),
+                    ],
+                    TypeTable::I32,
+                ),
+            ));
+            local_types.push(TypeTable::I32);
+            next_local += 1;
+
+            // Write each flat arg to the params buffer at the computed offset.
+            for (i, (flat_arg, &flat_ty)) in flat_args.iter().zip(flat_types.iter()).enumerate() {
+                let offset = buf_offsets[i];
+                let addr = if offset == 0 {
+                    local_ref(params_buf_local, "__params_buf", TypeTable::I32)
+                } else {
+                    binary(
+                        crate::tir::TirBinaryOp::Add,
+                        local_ref(params_buf_local, "__params_buf", TypeTable::I32),
+                        i32_const(offset as i32),
+                        TypeTable::I32,
+                    )
+                };
+                let store_name = match flat_ty {
+                    TypeTable::I64 => "i64_store",
+                    TypeTable::F32 => "f32_store",
+                    TypeTable::F64 => "f64_store",
+                    _ => "i32_store",
+                };
+                body_stmts.push(expr_stmt(builtin_call(
+                    store_name,
+                    vec![addr, flat_arg.clone()],
+                    TypeTable::UNIT,
+                )));
+            }
+
+            // Replace flat_args with (params_buf, ASYNC_OUTPTR).
+            flat_args = vec![
+                local_ref(params_buf_local, "__params_buf", TypeTable::I32),
+                i32_const(ASYNC_OUTPTR),
+            ];
+        } else {
+            // Direct calling: params fit within MAX_FLAT_ASYNC_PARAMS.
+            flat_args.push(i32_const(ASYNC_OUTPTR));
+        }
     } else if let Some((size, align)) = outptr_alloc {
         // Allocate outptr via realloc
         let outptr_local = next_local;

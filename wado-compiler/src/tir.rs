@@ -571,6 +571,19 @@ impl TypeTable {
         None
     }
 
+    /// Find a resource type by name (scanning all types).
+    /// Returns the first matching `ResolvedType::Resource` with the given name.
+    pub fn find_resource_type_by_name(&self, name: &str) -> Option<TypeId> {
+        for (&type_id, resolved) in &self.types {
+            if let ResolvedType::Resource { name: rname, .. } = resolved
+                && rname == name
+            {
+                return Some(type_id);
+            }
+        }
+        None
+    }
+
     /// Find an enum type by name (scanning all types).
     /// Returns the first matching `ResolvedType::Enum` with the given name.
     pub fn find_enum_type_by_name(&self, name: &str) -> Option<TypeId> {

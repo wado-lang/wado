@@ -15,6 +15,9 @@ pub struct RunOptions {
     pub input: String,
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
+    /// Preopened directories as `(host_path, guest_path)` pairs.
+    /// Populated by `--dir host_path[::guest_path]`.
+    pub preopened_dirs: Vec<(String, String)>,
 }
 
 pub fn print_usage() {
@@ -23,6 +26,8 @@ pub fn print_usage() {
     eprintln!("Compile and run a Wado CLI program (wasi:cli/command world).");
     eprintln!();
     eprintln!("Options:");
+    eprintln!("  --dir <path>     Preopen directory for WASI filesystem access.");
+    eprintln!("                   Use --dir host::guest to specify different guest path.");
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
     eprintln!("  --help           Show this help message");
@@ -44,12 +49,23 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
     let mut input: Option<String> = None;
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
+    let mut preopened_dirs: Vec<(String, String)> = Vec::new();
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
             Long("help") => {
                 print_usage();
                 process::exit(0);
+            }
+            Long("dir") => {
+                let dir_spec = require_string(&mut parser);
+                // Support "host::guest" or just "host" (guest defaults to host path).
+                let (host, guest) = if let Some((h, g)) = dir_spec.split_once("::") {
+                    (h.to_owned(), g.to_owned())
+                } else {
+                    (dir_spec.clone(), dir_spec)
+                };
+                preopened_dirs.push((host, guest));
             }
             Short('O') => {
                 let val = parser.optional_value();
@@ -94,14 +110,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
         input: require_input(input, print_usage),
         opt_level,
         log_level,
+        preopened_dirs,
     }
 }
 
-async fn run_cli_component(wasm: &[u8]) -> Result<()> {
+async fn run_cli_component(wasm: &[u8], preopened_dirs: &[(String, String)]) -> Result<()> {
     let engine = runtime::create_engine(wasmtime::OptLevel::Speed)?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&engine)?;
-    let mut store = runtime::create_store(&engine);
+    let mut store = runtime::create_store(&engine, preopened_dirs)?;
 
     let instance = linker.instantiate_async(&mut store, &component).await?;
     let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
@@ -115,7 +132,7 @@ async fn run_cli_component(wasm: &[u8]) -> Result<()> {
 pub async fn run(opts: RunOptions) {
     let wasm = compile::compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
 
-    if let Err(e) = run_cli_component(&wasm).await {
+    if let Err(e) = run_cli_component(&wasm, &opts.preopened_dirs).await {
         eprintln!("Runtime error: {e}");
         process::exit(1);
     }

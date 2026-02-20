@@ -1,7 +1,7 @@
 use anyhow::Result;
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, OptLevel, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 
 pub struct WasiState {
     ctx: WasiCtx,
@@ -9,10 +9,17 @@ pub struct WasiState {
 }
 
 impl WasiState {
-    pub fn new() -> Self {
-        let ctx = WasiCtx::builder().inherit_stdio().build();
+    /// Create a new WASI state, optionally with preopened directories.
+    /// Each entry is `(host_path, guest_path)`.
+    pub fn new(preopened_dirs: &[(String, String)]) -> Result<Self> {
+        let mut builder = WasiCtx::builder();
+        builder.inherit_stdio();
+        for (host_path, guest_path) in preopened_dirs {
+            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+        }
+        let ctx = builder.build();
         let table = ResourceTable::new();
-        Self { ctx, table }
+        Ok(Self { ctx, table })
     }
 }
 
@@ -51,9 +58,10 @@ pub fn create_engine(opt_level: OptLevel) -> Result<Engine> {
     Engine::new(&create_config(opt_level))
 }
 
-/// Create a Store with WASI state.
-pub fn create_store(engine: &Engine) -> Store<WasiState> {
-    Store::new(engine, WasiState::new())
+/// Create a Store with WASI state, optionally with preopened directories.
+/// Each entry is `(host_path, guest_path)`.
+pub fn create_store(engine: &Engine, preopened_dirs: &[(String, String)]) -> Result<Store<WasiState>> {
+    Ok(Store::new(engine, WasiState::new(preopened_dirs)?))
 }
 
 /// Create a Linker with WASI P3 bindings.
