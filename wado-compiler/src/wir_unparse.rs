@@ -405,9 +405,16 @@ impl<'a> WirUnparser<'a> {
 
     fn unparse_function(&mut self, func: &WirFunction) {
         self.write_indent();
-        self.write("fn \"");
-        self.write(&self.shorten_fq(&func.name.fq));
-        self.write("\"(");
+        self.write("fn ");
+        let short_name = self.shorten_fq(&func.name.fq);
+        if needs_quoting(&short_name) {
+            self.write("\"");
+            self.write(&short_name);
+            self.write("\"");
+        } else {
+            self.write(&short_name);
+        }
+        self.write("(");
 
         // We need the function type to get parameter types
         // For now, just output parameter names
@@ -488,32 +495,35 @@ impl<'a> WirUnparser<'a> {
             WirInstr::F64Const(v) => self.write(&v.to_string()),
 
             // i32 binary ops
-            WirInstr::I32Add(a, b) => self.write_binop("i32.add", a, b),
-            WirInstr::I32Sub(a, b) => self.write_binop("i32.sub", a, b),
-            WirInstr::I32Mul(a, b) => self.write_binop("i32.mul", a, b),
-            WirInstr::I32DivS(a, b) => self.write_binop("i32.div_s", a, b),
+            WirInstr::I32Add(a, b) => self.write_binop_op("+", a, b),
+            WirInstr::I32Sub(a, b) => self.write_binop_op("-", a, b),
+            WirInstr::I32Mul(a, b) => self.write_binop_op("*", a, b),
+            WirInstr::I32DivS(a, b) => self.write_binop_op("/", a, b),
             WirInstr::I32DivU(a, b) => self.write_binop("i32.div_u", a, b),
-            WirInstr::I32RemS(a, b) => self.write_binop("i32.rem_s", a, b),
+            WirInstr::I32RemS(a, b) => self.write_binop_op("%", a, b),
             WirInstr::I32RemU(a, b) => self.write_binop("i32.rem_u", a, b),
-            WirInstr::I32And(a, b) => self.write_binop("i32.and", a, b),
-            WirInstr::I32Or(a, b) => self.write_binop("i32.or", a, b),
-            WirInstr::I32Xor(a, b) => self.write_binop("i32.xor", a, b),
-            WirInstr::I32Shl(a, b) => self.write_binop("i32.shl", a, b),
-            WirInstr::I32ShrS(a, b) => self.write_binop("i32.shr_s", a, b),
+            WirInstr::I32And(a, b) => self.write_binop_op("&", a, b),
+            WirInstr::I32Or(a, b) => self.write_binop_op("|", a, b),
+            WirInstr::I32Xor(a, b) => self.write_binop_op("^", a, b),
+            WirInstr::I32Shl(a, b) => self.write_binop_op("<<", a, b),
+            WirInstr::I32ShrS(a, b) => self.write_binop_op(">>", a, b),
             WirInstr::I32ShrU(a, b) => self.write_binop("i32.shr_u", a, b),
-            WirInstr::I32Eq(a, b) => self.write_binop("i32.eq", a, b),
-            WirInstr::I32Ne(a, b) => self.write_binop("i32.ne", a, b),
-            WirInstr::I32LtS(a, b) => self.write_binop("i32.lt_s", a, b),
+            WirInstr::I32Eq(a, b) => self.write_binop_op("==", a, b),
+            WirInstr::I32Ne(a, b) => self.write_binop_op("!=", a, b),
+            WirInstr::I32LtS(a, b) => self.write_binop_op("<", a, b),
             WirInstr::I32LtU(a, b) => self.write_binop("i32.lt_u", a, b),
-            WirInstr::I32GtS(a, b) => self.write_binop("i32.gt_s", a, b),
+            WirInstr::I32GtS(a, b) => self.write_binop_op(">", a, b),
             WirInstr::I32GtU(a, b) => self.write_binop("i32.gt_u", a, b),
-            WirInstr::I32LeS(a, b) => self.write_binop("i32.le_s", a, b),
+            WirInstr::I32LeS(a, b) => self.write_binop_op("<=", a, b),
             WirInstr::I32LeU(a, b) => self.write_binop("i32.le_u", a, b),
-            WirInstr::I32GeS(a, b) => self.write_binop("i32.ge_s", a, b),
+            WirInstr::I32GeS(a, b) => self.write_binop_op(">=", a, b),
             WirInstr::I32GeU(a, b) => self.write_binop("i32.ge_u", a, b),
 
             // i32 unary ops
-            WirInstr::I32Eqz(a) => self.write_unop("i32.eqz", a),
+            WirInstr::I32Eqz(a) => {
+                self.write_expr_with_parens(a);
+                self.write(" == 0");
+            }
             WirInstr::I32WrapI64(a) => self.write_unop("i32.wrap_i64", a),
             WirInstr::I32Clz(a) => self.write_unop("i32.clz", a),
             WirInstr::I32Ctz(a) => self.write_unop("i32.ctz", a),
@@ -527,32 +537,35 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I32Extend16S(a) => self.write_unop("i32.extend16_s", a),
 
             // i64 binary ops
-            WirInstr::I64Add(a, b) => self.write_binop("i64.add", a, b),
-            WirInstr::I64Sub(a, b) => self.write_binop("i64.sub", a, b),
-            WirInstr::I64Mul(a, b) => self.write_binop("i64.mul", a, b),
-            WirInstr::I64DivS(a, b) => self.write_binop("i64.div_s", a, b),
+            WirInstr::I64Add(a, b) => self.write_binop_op("+", a, b),
+            WirInstr::I64Sub(a, b) => self.write_binop_op("-", a, b),
+            WirInstr::I64Mul(a, b) => self.write_binop_op("*", a, b),
+            WirInstr::I64DivS(a, b) => self.write_binop_op("/", a, b),
             WirInstr::I64DivU(a, b) => self.write_binop("i64.div_u", a, b),
-            WirInstr::I64RemS(a, b) => self.write_binop("i64.rem_s", a, b),
+            WirInstr::I64RemS(a, b) => self.write_binop_op("%", a, b),
             WirInstr::I64RemU(a, b) => self.write_binop("i64.rem_u", a, b),
-            WirInstr::I64And(a, b) => self.write_binop("i64.and", a, b),
-            WirInstr::I64Or(a, b) => self.write_binop("i64.or", a, b),
-            WirInstr::I64Xor(a, b) => self.write_binop("i64.xor", a, b),
-            WirInstr::I64Shl(a, b) => self.write_binop("i64.shl", a, b),
-            WirInstr::I64ShrS(a, b) => self.write_binop("i64.shr_s", a, b),
+            WirInstr::I64And(a, b) => self.write_binop_op("&", a, b),
+            WirInstr::I64Or(a, b) => self.write_binop_op("|", a, b),
+            WirInstr::I64Xor(a, b) => self.write_binop_op("^", a, b),
+            WirInstr::I64Shl(a, b) => self.write_binop_op("<<", a, b),
+            WirInstr::I64ShrS(a, b) => self.write_binop_op(">>", a, b),
             WirInstr::I64ShrU(a, b) => self.write_binop("i64.shr_u", a, b),
-            WirInstr::I64Eq(a, b) => self.write_binop("i64.eq", a, b),
-            WirInstr::I64Ne(a, b) => self.write_binop("i64.ne", a, b),
-            WirInstr::I64LtS(a, b) => self.write_binop("i64.lt_s", a, b),
+            WirInstr::I64Eq(a, b) => self.write_binop_op("==", a, b),
+            WirInstr::I64Ne(a, b) => self.write_binop_op("!=", a, b),
+            WirInstr::I64LtS(a, b) => self.write_binop_op("<", a, b),
             WirInstr::I64LtU(a, b) => self.write_binop("i64.lt_u", a, b),
-            WirInstr::I64GtS(a, b) => self.write_binop("i64.gt_s", a, b),
+            WirInstr::I64GtS(a, b) => self.write_binop_op(">", a, b),
             WirInstr::I64GtU(a, b) => self.write_binop("i64.gt_u", a, b),
-            WirInstr::I64LeS(a, b) => self.write_binop("i64.le_s", a, b),
+            WirInstr::I64LeS(a, b) => self.write_binop_op("<=", a, b),
             WirInstr::I64LeU(a, b) => self.write_binop("i64.le_u", a, b),
-            WirInstr::I64GeS(a, b) => self.write_binop("i64.ge_s", a, b),
+            WirInstr::I64GeS(a, b) => self.write_binop_op(">=", a, b),
             WirInstr::I64GeU(a, b) => self.write_binop("i64.ge_u", a, b),
 
             // i64 unary ops
-            WirInstr::I64Eqz(a) => self.write_unop("i64.eqz", a),
+            WirInstr::I64Eqz(a) => {
+                self.write_expr_with_parens(a);
+                self.write(" == 0_i64");
+            }
             WirInstr::I64ExtendI32S(a) => self.write_unop("i64.extend_i32_s", a),
             WirInstr::I64ExtendI32U(a) => self.write_unop("i64.extend_i32_u", a),
             WirInstr::I64Clz(a) => self.write_unop("i64.clz", a),
@@ -591,19 +604,19 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I64MulWideS(a, b) => self.write_binop("i64.mul_wide_s", a, b),
 
             // f32 binary ops
-            WirInstr::F32Add(a, b) => self.write_binop("f32.add", a, b),
-            WirInstr::F32Sub(a, b) => self.write_binop("f32.sub", a, b),
-            WirInstr::F32Mul(a, b) => self.write_binop("f32.mul", a, b),
-            WirInstr::F32Div(a, b) => self.write_binop("f32.div", a, b),
+            WirInstr::F32Add(a, b) => self.write_binop_op("+", a, b),
+            WirInstr::F32Sub(a, b) => self.write_binop_op("-", a, b),
+            WirInstr::F32Mul(a, b) => self.write_binop_op("*", a, b),
+            WirInstr::F32Div(a, b) => self.write_binop_op("/", a, b),
             WirInstr::F32Min(a, b) => self.write_binop("f32.min", a, b),
             WirInstr::F32Max(a, b) => self.write_binop("f32.max", a, b),
             WirInstr::F32Copysign(a, b) => self.write_binop("f32.copysign", a, b),
-            WirInstr::F32Eq(a, b) => self.write_binop("f32.eq", a, b),
-            WirInstr::F32Ne(a, b) => self.write_binop("f32.ne", a, b),
-            WirInstr::F32Lt(a, b) => self.write_binop("f32.lt", a, b),
-            WirInstr::F32Gt(a, b) => self.write_binop("f32.gt", a, b),
-            WirInstr::F32Le(a, b) => self.write_binop("f32.le", a, b),
-            WirInstr::F32Ge(a, b) => self.write_binop("f32.ge", a, b),
+            WirInstr::F32Eq(a, b) => self.write_binop_op("==", a, b),
+            WirInstr::F32Ne(a, b) => self.write_binop_op("!=", a, b),
+            WirInstr::F32Lt(a, b) => self.write_binop_op("<", a, b),
+            WirInstr::F32Gt(a, b) => self.write_binop_op(">", a, b),
+            WirInstr::F32Le(a, b) => self.write_binop_op("<=", a, b),
+            WirInstr::F32Ge(a, b) => self.write_binop_op(">=", a, b),
 
             // f32 unary ops
             WirInstr::F32Neg(a) => self.write_unop("f32.neg", a),
@@ -621,19 +634,19 @@ impl<'a> WirUnparser<'a> {
             WirInstr::F32ReinterpretI32(a) => self.write_unop("f32.reinterpret_i32", a),
 
             // f64 binary ops
-            WirInstr::F64Add(a, b) => self.write_binop("f64.add", a, b),
-            WirInstr::F64Sub(a, b) => self.write_binop("f64.sub", a, b),
-            WirInstr::F64Mul(a, b) => self.write_binop("f64.mul", a, b),
-            WirInstr::F64Div(a, b) => self.write_binop("f64.div", a, b),
+            WirInstr::F64Add(a, b) => self.write_binop_op("+", a, b),
+            WirInstr::F64Sub(a, b) => self.write_binop_op("-", a, b),
+            WirInstr::F64Mul(a, b) => self.write_binop_op("*", a, b),
+            WirInstr::F64Div(a, b) => self.write_binop_op("/", a, b),
             WirInstr::F64Min(a, b) => self.write_binop("f64.min", a, b),
             WirInstr::F64Max(a, b) => self.write_binop("f64.max", a, b),
             WirInstr::F64Copysign(a, b) => self.write_binop("f64.copysign", a, b),
-            WirInstr::F64Eq(a, b) => self.write_binop("f64.eq", a, b),
-            WirInstr::F64Ne(a, b) => self.write_binop("f64.ne", a, b),
-            WirInstr::F64Lt(a, b) => self.write_binop("f64.lt", a, b),
-            WirInstr::F64Gt(a, b) => self.write_binop("f64.gt", a, b),
-            WirInstr::F64Le(a, b) => self.write_binop("f64.le", a, b),
-            WirInstr::F64Ge(a, b) => self.write_binop("f64.ge", a, b),
+            WirInstr::F64Eq(a, b) => self.write_binop_op("==", a, b),
+            WirInstr::F64Ne(a, b) => self.write_binop_op("!=", a, b),
+            WirInstr::F64Lt(a, b) => self.write_binop_op("<", a, b),
+            WirInstr::F64Gt(a, b) => self.write_binop_op(">", a, b),
+            WirInstr::F64Le(a, b) => self.write_binop_op("<=", a, b),
+            WirInstr::F64Ge(a, b) => self.write_binop_op(">=", a, b),
 
             // f64 unary ops
             WirInstr::F64Neg(a) => self.write_unop("f64.neg", a),
@@ -918,18 +931,7 @@ impl<'a> WirUnparser<'a> {
                     self.unparse_instr(instr);
                 }
                 self.indent -= 1;
-                if let Some(else_body) = else_body {
-                    self.write_indent();
-                    self.write("} else {");
-                    self.newline();
-                    self.indent += 1;
-                    for instr in else_body {
-                        self.unparse_instr(instr);
-                    }
-                    self.indent -= 1;
-                }
-                self.write_indent();
-                self.write("}");
+                self.unparse_else_chain(else_body.as_deref());
             }
             WirInstr::BranchHint { likely, expr } => {
                 let hint = if *likely { "likely" } else { "unlikely" };
@@ -992,7 +994,8 @@ impl<'a> WirUnparser<'a> {
             // Calls
             WirInstr::Call { func_id, args } => {
                 let fid = self.shorten_fq(&func_id.to_string());
-                self.write(&format!("call {fid}("));
+                self.write(&fid);
+                self.write("(");
                 for (i, a) in args.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
@@ -1200,11 +1203,70 @@ impl<'a> WirUnparser<'a> {
         self.write(")");
     }
 
+    /// Write `a op b` using infix operator syntax.
+    fn write_binop_op(&mut self, op: &str, a: &WirInstr, b: &WirInstr) {
+        self.write_expr_with_parens(a);
+        self.write(&format!(" {op} "));
+        self.write_expr_with_parens(b);
+    }
+
+    /// Write `instr`, wrapping in parens if it renders as an infix operator expression.
+    fn write_expr_with_parens(&mut self, instr: &WirInstr) {
+        if is_op_instr(instr) {
+            self.write("(");
+            self.unparse_instr_inline(instr);
+            self.write(")");
+        } else {
+            self.unparse_instr_inline(instr);
+        }
+    }
+
     fn write_unop(&mut self, name: &str, a: &WirInstr) {
         self.write(name);
         self.write("(");
         self.unparse_instr_inline(a);
         self.write(")");
+    }
+
+    /// Print the else-chain of an `if`, flattening `} else { if ... }` into `} else if ...`.
+    fn unparse_else_chain(&mut self, else_body: Option<&[WirInstr]>) {
+        if let Some(else_body) = else_body {
+            // Flatten single-if else into `else if`
+            if else_body.len() == 1 {
+                if let WirInstr::If {
+                    condition,
+                    result: None,
+                    then_body,
+                    else_body: inner_else,
+                } = &else_body[0]
+                {
+                    self.write_indent();
+                    self.write("} else if ");
+                    self.unparse_instr_inline(condition);
+                    self.write(" {");
+                    self.newline();
+                    self.indent += 1;
+                    for instr in then_body {
+                        self.unparse_instr(instr);
+                    }
+                    self.indent -= 1;
+                    self.unparse_else_chain(inner_else.as_deref());
+                    return;
+                }
+            }
+            // Regular else
+            self.write_indent();
+            self.write("} else {");
+            self.newline();
+            self.indent += 1;
+            for instr in else_body {
+                self.unparse_instr(instr);
+            }
+            self.indent -= 1;
+        }
+        // Close the if/else block
+        self.write_indent();
+        self.write("}");
     }
 
     fn unparse_source_comment(&mut self, meta: &crate::wir::WirMeta) {
@@ -1309,6 +1371,73 @@ pub fn format_type(ty: &WirType) -> String {
             }
         }
     }
+}
+
+/// Returns true if `instr` renders using infix operator syntax (needs parens as sub-expression).
+fn is_op_instr(instr: &WirInstr) -> bool {
+    use WirInstr::*;
+    matches!(
+        instr,
+        I32Add(..)
+            | I32Sub(..)
+            | I32Mul(..)
+            | I32DivS(..)
+            | I32RemS(..)
+            | I32And(..)
+            | I32Or(..)
+            | I32Xor(..)
+            | I32Shl(..)
+            | I32ShrS(..)
+            | I32Eq(..)
+            | I32Ne(..)
+            | I32LtS(..)
+            | I32GtS(..)
+            | I32LeS(..)
+            | I32GeS(..)
+            | I32Eqz(..)
+            | I64Add(..)
+            | I64Sub(..)
+            | I64Mul(..)
+            | I64DivS(..)
+            | I64RemS(..)
+            | I64And(..)
+            | I64Or(..)
+            | I64Xor(..)
+            | I64Shl(..)
+            | I64ShrS(..)
+            | I64Eq(..)
+            | I64Ne(..)
+            | I64LtS(..)
+            | I64GtS(..)
+            | I64LeS(..)
+            | I64GeS(..)
+            | I64Eqz(..)
+            | F32Add(..)
+            | F32Sub(..)
+            | F32Mul(..)
+            | F32Div(..)
+            | F32Eq(..)
+            | F32Ne(..)
+            | F32Lt(..)
+            | F32Gt(..)
+            | F32Le(..)
+            | F32Ge(..)
+            | F64Add(..)
+            | F64Sub(..)
+            | F64Mul(..)
+            | F64Div(..)
+            | F64Eq(..)
+            | F64Ne(..)
+            | F64Lt(..)
+            | F64Gt(..)
+            | F64Le(..)
+            | F64Ge(..)
+    )
+}
+
+/// Returns true if `name` cannot be written as a bare word and needs double-quoting.
+fn needs_quoting(name: &str) -> bool {
+    name.is_empty() || name.contains('/') || name.contains(' ')
 }
 
 fn format_abstract_heap_type(ht: &WirAbstractHeapType) -> &'static str {
