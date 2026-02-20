@@ -19,6 +19,15 @@ pub fn unparse_wir(module: &WirModule, cwd: Option<&str>) -> String {
     unparser.output
 }
 
+/// Kind of a block-like construct for branch target resolution.
+#[derive(Clone, PartialEq)]
+enum LabelBlockKind {
+    Block,
+    Loop,
+    /// `if` bodies count as block depths in Wasm but are not shown with labels.
+    If,
+}
+
 struct WirUnparser<'a> {
     output: String,
     indent: usize,
@@ -26,6 +35,10 @@ struct WirUnparser<'a> {
     entry_point_path: Option<String>,
     /// Type definitions for struct field name lookup.
     types: &'a [WirTypeDef],
+    /// Stack of (kind, label) for block-depth tracking and `br N` resolution.
+    label_stack: Vec<(LabelBlockKind, String)>,
+    /// Counter for generating unique labels.
+    label_next_id: usize,
 }
 
 impl<'a> WirUnparser<'a> {
@@ -35,6 +48,24 @@ impl<'a> WirUnparser<'a> {
             indent: 0,
             entry_point_path: entry_point_path.map(String::from),
             types,
+            label_stack: Vec::new(),
+            label_next_id: 0,
+        }
+    }
+
+    /// Get the element type of a GC array type as a display string.
+    fn array_elem_type_str(&self, type_id: &crate::wir::WirTypeId) -> String {
+        let idx = type_id.index() as usize;
+        if let Some(WirTypeDef::Array(a)) = self.types.get(idx) {
+            self.fmt_type(&a.element_type)
+        } else {
+            // Fallback: strip "array<...>" wrapper from the display name.
+            let tid = self.shorten_fq(&type_id.to_string());
+            if let Some(inner) = tid.strip_prefix("array<").and_then(|s| s.strip_suffix('>')) {
+                inner.to_string()
+            } else {
+                tid
+            }
         }
     }
 
@@ -405,9 +436,16 @@ impl<'a> WirUnparser<'a> {
 
     fn unparse_function(&mut self, func: &WirFunction) {
         self.write_indent();
-        self.write("fn \"");
-        self.write(&self.shorten_fq(&func.name.fq));
-        self.write("\"(");
+        self.write("fn ");
+        let short_name = self.shorten_fq(&func.name.fq);
+        if needs_quoting(&short_name) {
+            self.write("\"");
+            self.write(&short_name);
+            self.write("\"");
+        } else {
+            self.write(&short_name);
+        }
+        self.write("(");
 
         // We need the function type to get parameter types
         // For now, just output parameter names
@@ -444,6 +482,71 @@ impl<'a> WirUnparser<'a> {
     // === Instructions ===
 
     fn unparse_instr(&mut self, instr: &WirInstr) {
+        // In statement position, expand Seq items on separate lines instead of inline.
+        if let WirInstr::Seq(instrs) = instr {
+            // Special case: Seq([..., val, Br]) = break-with-value.
+            // Render as: "stmts...; break label val;" when val is a simple expression.
+            if let Some((WirInstr::Br { depth }, rest)) = instrs.split_last()
+                && let Some((val_instr, init)) = rest.split_last()
+                && !is_block_expr(val_instr)
+            {
+                for s in init {
+                    self.unparse_instr(s);
+                }
+                self.write_indent();
+                if self.label_stack.len() > *depth as usize {
+                    let (lbl, kind) = self.resolve_br(*depth);
+                    let lbl = lbl.to_string();
+                    let kind = kind.clone();
+                    match kind {
+                        LabelBlockKind::Loop => self.write(&format!("continue {lbl}: ")),
+                        _ => self.write(&format!("break {lbl}: ")),
+                    }
+                } else {
+                    self.write(&format!("br {depth}: "));
+                }
+                self.unparse_instr_inline(val_instr);
+                self.write(";");
+                self.newline();
+                return;
+            }
+            for sub in instrs {
+                self.unparse_instr(sub);
+            }
+            return;
+        }
+        // Special case: LocalSet/GlobalSet with a Seq value — expand side effects as
+        // separate statements, then assign only the final value.
+        if let WirInstr::LocalSet { name, value } = instr
+            && let WirInstr::Seq(instrs) = value.as_ref()
+            && let Some((last_val, init)) = instrs.split_last()
+        {
+            for s in init {
+                self.unparse_instr(s);
+            }
+            self.write_indent();
+            self.write(name);
+            self.write(" = ");
+            self.unparse_instr_inline(last_val);
+            self.write(";");
+            self.newline();
+            return;
+        }
+        if let WirInstr::GlobalSet { name, value } = instr
+            && let WirInstr::Seq(instrs) = value.as_ref()
+            && let Some((last_val, init)) = instrs.split_last()
+        {
+            for s in init {
+                self.unparse_instr(s);
+            }
+            self.write_indent();
+            self.write(&name.display);
+            self.write(" = ");
+            self.unparse_instr_inline(last_val);
+            self.write(";");
+            self.newline();
+            return;
+        }
         self.write_indent();
         self.unparse_instr_inline(instr);
         self.write(";");
@@ -488,32 +591,35 @@ impl<'a> WirUnparser<'a> {
             WirInstr::F64Const(v) => self.write(&v.to_string()),
 
             // i32 binary ops
-            WirInstr::I32Add(a, b) => self.write_binop("i32.add", a, b),
-            WirInstr::I32Sub(a, b) => self.write_binop("i32.sub", a, b),
-            WirInstr::I32Mul(a, b) => self.write_binop("i32.mul", a, b),
-            WirInstr::I32DivS(a, b) => self.write_binop("i32.div_s", a, b),
+            WirInstr::I32Add(a, b) => self.write_binop_op("+", a, b),
+            WirInstr::I32Sub(a, b) => self.write_binop_op("-", a, b),
+            WirInstr::I32Mul(a, b) => self.write_binop_op("*", a, b),
+            WirInstr::I32DivS(a, b) => self.write_binop_op("/", a, b),
             WirInstr::I32DivU(a, b) => self.write_binop("i32.div_u", a, b),
-            WirInstr::I32RemS(a, b) => self.write_binop("i32.rem_s", a, b),
+            WirInstr::I32RemS(a, b) => self.write_binop_op("%", a, b),
             WirInstr::I32RemU(a, b) => self.write_binop("i32.rem_u", a, b),
-            WirInstr::I32And(a, b) => self.write_binop("i32.and", a, b),
-            WirInstr::I32Or(a, b) => self.write_binop("i32.or", a, b),
-            WirInstr::I32Xor(a, b) => self.write_binop("i32.xor", a, b),
-            WirInstr::I32Shl(a, b) => self.write_binop("i32.shl", a, b),
-            WirInstr::I32ShrS(a, b) => self.write_binop("i32.shr_s", a, b),
+            WirInstr::I32And(a, b) => self.write_binop_op("&", a, b),
+            WirInstr::I32Or(a, b) => self.write_binop_op("|", a, b),
+            WirInstr::I32Xor(a, b) => self.write_binop_op("^", a, b),
+            WirInstr::I32Shl(a, b) => self.write_binop_op("<<", a, b),
+            WirInstr::I32ShrS(a, b) => self.write_binop_op(">>", a, b),
             WirInstr::I32ShrU(a, b) => self.write_binop("i32.shr_u", a, b),
-            WirInstr::I32Eq(a, b) => self.write_binop("i32.eq", a, b),
-            WirInstr::I32Ne(a, b) => self.write_binop("i32.ne", a, b),
-            WirInstr::I32LtS(a, b) => self.write_binop("i32.lt_s", a, b),
+            WirInstr::I32Eq(a, b) => self.write_binop_op("==", a, b),
+            WirInstr::I32Ne(a, b) => self.write_binop_op("!=", a, b),
+            WirInstr::I32LtS(a, b) => self.write_binop_op("<", a, b),
             WirInstr::I32LtU(a, b) => self.write_binop("i32.lt_u", a, b),
-            WirInstr::I32GtS(a, b) => self.write_binop("i32.gt_s", a, b),
+            WirInstr::I32GtS(a, b) => self.write_binop_op(">", a, b),
             WirInstr::I32GtU(a, b) => self.write_binop("i32.gt_u", a, b),
-            WirInstr::I32LeS(a, b) => self.write_binop("i32.le_s", a, b),
+            WirInstr::I32LeS(a, b) => self.write_binop_op("<=", a, b),
             WirInstr::I32LeU(a, b) => self.write_binop("i32.le_u", a, b),
-            WirInstr::I32GeS(a, b) => self.write_binop("i32.ge_s", a, b),
+            WirInstr::I32GeS(a, b) => self.write_binop_op(">=", a, b),
             WirInstr::I32GeU(a, b) => self.write_binop("i32.ge_u", a, b),
 
             // i32 unary ops
-            WirInstr::I32Eqz(a) => self.write_unop("i32.eqz", a),
+            WirInstr::I32Eqz(a) => {
+                self.write_expr_with_parens(a);
+                self.write(" == 0");
+            }
             WirInstr::I32WrapI64(a) => self.write_unop("i32.wrap_i64", a),
             WirInstr::I32Clz(a) => self.write_unop("i32.clz", a),
             WirInstr::I32Ctz(a) => self.write_unop("i32.ctz", a),
@@ -527,32 +633,35 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I32Extend16S(a) => self.write_unop("i32.extend16_s", a),
 
             // i64 binary ops
-            WirInstr::I64Add(a, b) => self.write_binop("i64.add", a, b),
-            WirInstr::I64Sub(a, b) => self.write_binop("i64.sub", a, b),
-            WirInstr::I64Mul(a, b) => self.write_binop("i64.mul", a, b),
-            WirInstr::I64DivS(a, b) => self.write_binop("i64.div_s", a, b),
+            WirInstr::I64Add(a, b) => self.write_binop_op("+", a, b),
+            WirInstr::I64Sub(a, b) => self.write_binop_op("-", a, b),
+            WirInstr::I64Mul(a, b) => self.write_binop_op("*", a, b),
+            WirInstr::I64DivS(a, b) => self.write_binop_op("/", a, b),
             WirInstr::I64DivU(a, b) => self.write_binop("i64.div_u", a, b),
-            WirInstr::I64RemS(a, b) => self.write_binop("i64.rem_s", a, b),
+            WirInstr::I64RemS(a, b) => self.write_binop_op("%", a, b),
             WirInstr::I64RemU(a, b) => self.write_binop("i64.rem_u", a, b),
-            WirInstr::I64And(a, b) => self.write_binop("i64.and", a, b),
-            WirInstr::I64Or(a, b) => self.write_binop("i64.or", a, b),
-            WirInstr::I64Xor(a, b) => self.write_binop("i64.xor", a, b),
-            WirInstr::I64Shl(a, b) => self.write_binop("i64.shl", a, b),
-            WirInstr::I64ShrS(a, b) => self.write_binop("i64.shr_s", a, b),
+            WirInstr::I64And(a, b) => self.write_binop_op("&", a, b),
+            WirInstr::I64Or(a, b) => self.write_binop_op("|", a, b),
+            WirInstr::I64Xor(a, b) => self.write_binop_op("^", a, b),
+            WirInstr::I64Shl(a, b) => self.write_binop_op("<<", a, b),
+            WirInstr::I64ShrS(a, b) => self.write_binop_op(">>", a, b),
             WirInstr::I64ShrU(a, b) => self.write_binop("i64.shr_u", a, b),
-            WirInstr::I64Eq(a, b) => self.write_binop("i64.eq", a, b),
-            WirInstr::I64Ne(a, b) => self.write_binop("i64.ne", a, b),
-            WirInstr::I64LtS(a, b) => self.write_binop("i64.lt_s", a, b),
+            WirInstr::I64Eq(a, b) => self.write_binop_op("==", a, b),
+            WirInstr::I64Ne(a, b) => self.write_binop_op("!=", a, b),
+            WirInstr::I64LtS(a, b) => self.write_binop_op("<", a, b),
             WirInstr::I64LtU(a, b) => self.write_binop("i64.lt_u", a, b),
-            WirInstr::I64GtS(a, b) => self.write_binop("i64.gt_s", a, b),
+            WirInstr::I64GtS(a, b) => self.write_binop_op(">", a, b),
             WirInstr::I64GtU(a, b) => self.write_binop("i64.gt_u", a, b),
-            WirInstr::I64LeS(a, b) => self.write_binop("i64.le_s", a, b),
+            WirInstr::I64LeS(a, b) => self.write_binop_op("<=", a, b),
             WirInstr::I64LeU(a, b) => self.write_binop("i64.le_u", a, b),
-            WirInstr::I64GeS(a, b) => self.write_binop("i64.ge_s", a, b),
+            WirInstr::I64GeS(a, b) => self.write_binop_op(">=", a, b),
             WirInstr::I64GeU(a, b) => self.write_binop("i64.ge_u", a, b),
 
             // i64 unary ops
-            WirInstr::I64Eqz(a) => self.write_unop("i64.eqz", a),
+            WirInstr::I64Eqz(a) => {
+                self.write_expr_with_parens(a);
+                self.write(" == 0_i64");
+            }
             WirInstr::I64ExtendI32S(a) => self.write_unop("i64.extend_i32_s", a),
             WirInstr::I64ExtendI32U(a) => self.write_unop("i64.extend_i32_u", a),
             WirInstr::I64Clz(a) => self.write_unop("i64.clz", a),
@@ -591,19 +700,19 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I64MulWideS(a, b) => self.write_binop("i64.mul_wide_s", a, b),
 
             // f32 binary ops
-            WirInstr::F32Add(a, b) => self.write_binop("f32.add", a, b),
-            WirInstr::F32Sub(a, b) => self.write_binop("f32.sub", a, b),
-            WirInstr::F32Mul(a, b) => self.write_binop("f32.mul", a, b),
-            WirInstr::F32Div(a, b) => self.write_binop("f32.div", a, b),
+            WirInstr::F32Add(a, b) => self.write_binop_op("+", a, b),
+            WirInstr::F32Sub(a, b) => self.write_binop_op("-", a, b),
+            WirInstr::F32Mul(a, b) => self.write_binop_op("*", a, b),
+            WirInstr::F32Div(a, b) => self.write_binop_op("/", a, b),
             WirInstr::F32Min(a, b) => self.write_binop("f32.min", a, b),
             WirInstr::F32Max(a, b) => self.write_binop("f32.max", a, b),
             WirInstr::F32Copysign(a, b) => self.write_binop("f32.copysign", a, b),
-            WirInstr::F32Eq(a, b) => self.write_binop("f32.eq", a, b),
-            WirInstr::F32Ne(a, b) => self.write_binop("f32.ne", a, b),
-            WirInstr::F32Lt(a, b) => self.write_binop("f32.lt", a, b),
-            WirInstr::F32Gt(a, b) => self.write_binop("f32.gt", a, b),
-            WirInstr::F32Le(a, b) => self.write_binop("f32.le", a, b),
-            WirInstr::F32Ge(a, b) => self.write_binop("f32.ge", a, b),
+            WirInstr::F32Eq(a, b) => self.write_binop_op("==", a, b),
+            WirInstr::F32Ne(a, b) => self.write_binop_op("!=", a, b),
+            WirInstr::F32Lt(a, b) => self.write_binop_op("<", a, b),
+            WirInstr::F32Gt(a, b) => self.write_binop_op(">", a, b),
+            WirInstr::F32Le(a, b) => self.write_binop_op("<=", a, b),
+            WirInstr::F32Ge(a, b) => self.write_binop_op(">=", a, b),
 
             // f32 unary ops
             WirInstr::F32Neg(a) => self.write_unop("f32.neg", a),
@@ -621,19 +730,19 @@ impl<'a> WirUnparser<'a> {
             WirInstr::F32ReinterpretI32(a) => self.write_unop("f32.reinterpret_i32", a),
 
             // f64 binary ops
-            WirInstr::F64Add(a, b) => self.write_binop("f64.add", a, b),
-            WirInstr::F64Sub(a, b) => self.write_binop("f64.sub", a, b),
-            WirInstr::F64Mul(a, b) => self.write_binop("f64.mul", a, b),
-            WirInstr::F64Div(a, b) => self.write_binop("f64.div", a, b),
+            WirInstr::F64Add(a, b) => self.write_binop_op("+", a, b),
+            WirInstr::F64Sub(a, b) => self.write_binop_op("-", a, b),
+            WirInstr::F64Mul(a, b) => self.write_binop_op("*", a, b),
+            WirInstr::F64Div(a, b) => self.write_binop_op("/", a, b),
             WirInstr::F64Min(a, b) => self.write_binop("f64.min", a, b),
             WirInstr::F64Max(a, b) => self.write_binop("f64.max", a, b),
             WirInstr::F64Copysign(a, b) => self.write_binop("f64.copysign", a, b),
-            WirInstr::F64Eq(a, b) => self.write_binop("f64.eq", a, b),
-            WirInstr::F64Ne(a, b) => self.write_binop("f64.ne", a, b),
-            WirInstr::F64Lt(a, b) => self.write_binop("f64.lt", a, b),
-            WirInstr::F64Gt(a, b) => self.write_binop("f64.gt", a, b),
-            WirInstr::F64Le(a, b) => self.write_binop("f64.le", a, b),
-            WirInstr::F64Ge(a, b) => self.write_binop("f64.ge", a, b),
+            WirInstr::F64Eq(a, b) => self.write_binop_op("==", a, b),
+            WirInstr::F64Ne(a, b) => self.write_binop_op("!=", a, b),
+            WirInstr::F64Lt(a, b) => self.write_binop_op("<", a, b),
+            WirInstr::F64Gt(a, b) => self.write_binop_op(">", a, b),
+            WirInstr::F64Le(a, b) => self.write_binop_op("<=", a, b),
+            WirInstr::F64Ge(a, b) => self.write_binop_op(">=", a, b),
 
             // f64 unary ops
             WirInstr::F64Neg(a) => self.write_unop("f64.neg", a),
@@ -692,16 +801,16 @@ impl<'a> WirUnparser<'a> {
 
             // GC: Array
             WirInstr::ArrayNew { type_id, init, len } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.new {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("array.new<{elem}>("));
                 self.unparse_instr_inline(init);
                 self.write(", ");
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
             WirInstr::ArrayNewDefault { type_id, len } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.new_default {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("builtin::array_new<{elem}>("));
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
@@ -711,16 +820,16 @@ impl<'a> WirUnparser<'a> {
                 offset,
                 len,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.new_data {tid} {data_index}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("array.new_data<{elem}>[{data_index}]("));
                 self.unparse_instr_inline(offset);
                 self.write(", ");
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
             WirInstr::ArrayNewFixed { type_id, elements } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.new_fixed {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("array.new_fixed<{elem}>("));
                 for (i, e) in elements.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
@@ -734,8 +843,8 @@ impl<'a> WirUnparser<'a> {
                 array,
                 index,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.get {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("builtin::array_get<{elem}>("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -746,8 +855,8 @@ impl<'a> WirUnparser<'a> {
                 array,
                 index,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.get_s {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("array.get_s<{elem}>("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -758,8 +867,13 @@ impl<'a> WirUnparser<'a> {
                 array,
                 index,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.get_u {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                let fname = if elem == "u8" {
+                    "builtin::array_get_u8".to_string()
+                } else {
+                    format!("array.get_u<{elem}>")
+                };
+                self.write(&format!("{fname}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -771,8 +885,13 @@ impl<'a> WirUnparser<'a> {
                 index,
                 value,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.set {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                let fname = if elem == "u8" {
+                    "builtin::array_set_u8".to_string()
+                } else {
+                    format!("builtin::array_set<{elem}>")
+                };
+                self.write(&format!("{fname}("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(index);
@@ -780,19 +899,22 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(value);
                 self.write(")");
             }
-            WirInstr::ArrayLen(a) => self.write_unop("array.len", a),
+            WirInstr::ArrayLen(a) => {
+                self.write("builtin::array_len(");
+                self.unparse_instr_inline(a);
+                self.write(")");
+            }
             WirInstr::ArrayCopy {
                 dest_type_id,
-                src_type_id,
+                src_type_id: _,
                 dest,
                 dest_offset,
                 src,
                 src_offset,
                 len,
             } => {
-                let dtid = self.shorten_fq(&dest_type_id.to_string());
-                let stid = self.shorten_fq(&src_type_id.to_string());
-                self.write(&format!("array.copy {dtid} {stid}("));
+                let elem = self.array_elem_type_str(dest_type_id);
+                self.write(&format!("builtin::array_copy<{elem}>("));
                 self.unparse_instr_inline(dest);
                 self.write(", ");
                 self.unparse_instr_inline(dest_offset);
@@ -811,8 +933,8 @@ impl<'a> WirUnparser<'a> {
                 value,
                 len,
             } => {
-                let tid = self.shorten_fq(&type_id.to_string());
-                self.write(&format!("array.fill {tid}("));
+                let elem = self.array_elem_type_str(type_id);
+                self.write(&format!("builtin::array_fill<{elem}>("));
                 self.unparse_instr_inline(array);
                 self.write(", ");
                 self.unparse_instr_inline(offset);
@@ -867,8 +989,10 @@ impl<'a> WirUnparser<'a> {
                 result,
                 body,
             } => {
-                if let Some(label) = label {
-                    self.write(&format!("{label}: "));
+                let targeted = is_block_targeted_from(body, 0);
+                let lbl = self.push_label(LabelBlockKind::Block, label.as_deref());
+                if targeted {
+                    self.write(&format!("{lbl}: "));
                 }
                 self.write("block");
                 if let Some(ty) = result {
@@ -884,10 +1008,13 @@ impl<'a> WirUnparser<'a> {
                 self.indent -= 1;
                 self.write_indent();
                 self.write("}");
+                self.pop_label();
             }
             WirInstr::Loop { label, body } => {
-                if let Some(label) = label {
-                    self.write(&format!("{label}: "));
+                let targeted = is_block_targeted_from(body, 0);
+                let lbl = self.push_label(LabelBlockKind::Loop, label.as_deref());
+                if targeted {
+                    self.write(&format!("{lbl}: "));
                 }
                 self.write("loop {");
                 self.newline();
@@ -898,6 +1025,7 @@ impl<'a> WirUnparser<'a> {
                 self.indent -= 1;
                 self.write_indent();
                 self.write("}");
+                self.pop_label();
             }
             WirInstr::If {
                 condition,
@@ -905,6 +1033,10 @@ impl<'a> WirUnparser<'a> {
                 then_body,
                 else_body,
             } => {
+                // Push If onto the label stack so `br N` inside can correctly
+                // count depths, but don't show a label since `if` is not a
+                // labeled construct in pseudo-Wado.
+                self.push_label(LabelBlockKind::If, None);
                 self.write("if ");
                 self.unparse_instr_inline(condition);
                 if let Some(ty) = result {
@@ -918,18 +1050,8 @@ impl<'a> WirUnparser<'a> {
                     self.unparse_instr(instr);
                 }
                 self.indent -= 1;
-                if let Some(else_body) = else_body {
-                    self.write_indent();
-                    self.write("} else {");
-                    self.newline();
-                    self.indent += 1;
-                    for instr in else_body {
-                        self.unparse_instr(instr);
-                    }
-                    self.indent -= 1;
-                }
-                self.write_indent();
-                self.write("}");
+                self.unparse_else_chain(else_body.as_deref());
+                self.pop_label();
             }
             WirInstr::BranchHint { likely, expr } => {
                 let hint = if *likely { "likely" } else { "unlikely" };
@@ -937,11 +1059,33 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(expr);
             }
             WirInstr::Br { depth } => {
-                self.write(&format!("br {depth}"));
+                if self.label_stack.len() > *depth as usize {
+                    let (lbl, kind) = self.resolve_br(*depth);
+                    let lbl = lbl.to_string();
+                    let kind = kind.clone();
+                    match kind {
+                        LabelBlockKind::Loop => self.write(&format!("continue {lbl}")),
+                        _ => self.write(&format!("break {lbl}")),
+                    }
+                } else {
+                    self.write(&format!("br {depth}"));
+                }
             }
             WirInstr::BrIf { depth, condition } => {
-                self.write(&format!("br_if {depth} "));
-                self.unparse_instr_inline(condition);
+                if self.label_stack.len() > *depth as usize {
+                    let (lbl, kind) = self.resolve_br(*depth);
+                    let lbl = lbl.to_string();
+                    let kind = kind.clone();
+                    let kw = match kind {
+                        LabelBlockKind::Loop => "continue_if",
+                        _ => "break_if",
+                    };
+                    self.write(&format!("{kw} {lbl} "));
+                    self.unparse_instr_inline(condition);
+                } else {
+                    self.write(&format!("br_if {depth} "));
+                    self.unparse_instr_inline(condition);
+                }
             }
             WirInstr::BrTable {
                 index,
@@ -992,7 +1136,8 @@ impl<'a> WirUnparser<'a> {
             // Calls
             WirInstr::Call { func_id, args } => {
                 let fid = self.shorten_fq(&func_id.to_string());
-                self.write(&format!("call {fid}("));
+                self.write(&fid);
+                self.write("(");
                 for (i, a) in args.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
@@ -1200,11 +1345,79 @@ impl<'a> WirUnparser<'a> {
         self.write(")");
     }
 
+    /// Write `a op b` using infix operator syntax.
+    fn write_binop_op(&mut self, op: &str, a: &WirInstr, b: &WirInstr) {
+        self.write_expr_with_parens(a);
+        self.write(&format!(" {op} "));
+        self.write_expr_with_parens(b);
+    }
+
+    /// Write `instr`, wrapping in parens if it renders as an infix operator expression.
+    fn write_expr_with_parens(&mut self, instr: &WirInstr) {
+        if is_op_instr(instr) {
+            self.write("(");
+            self.unparse_instr_inline(instr);
+            self.write(")");
+        } else {
+            self.unparse_instr_inline(instr);
+        }
+    }
+
     fn write_unop(&mut self, name: &str, a: &WirInstr) {
         self.write(name);
         self.write("(");
         self.unparse_instr_inline(a);
         self.write(")");
+    }
+
+    /// Print the else-chain of an `if`, flattening `} else { if ... }` into `} else if ...`.
+    ///
+    /// The caller must have already pushed a label for the outer If onto `label_stack`.
+    /// Each flattened `else if` pushes/pops its own If label.
+    fn unparse_else_chain(&mut self, else_body: Option<&[WirInstr]>) {
+        if let Some(else_body) = else_body {
+            // Flatten single-if else into `else if` (regardless of result type).
+            if else_body.len() == 1
+                && let WirInstr::If {
+                    condition,
+                    result,
+                    then_body,
+                    else_body: inner_else,
+                } = &else_body[0]
+            {
+                // Each else-if branch is a new If in Wasm depth terms.
+                self.push_label(LabelBlockKind::If, None);
+                self.write_indent();
+                self.write("} else if ");
+                self.unparse_instr_inline(condition);
+                if let Some(ty) = result {
+                    let ty_str = self.fmt_type(ty);
+                    self.write(&format!(" -> {ty_str}"));
+                }
+                self.write(" {");
+                self.newline();
+                self.indent += 1;
+                for instr in then_body {
+                    self.unparse_instr(instr);
+                }
+                self.indent -= 1;
+                self.unparse_else_chain(inner_else.as_deref());
+                self.pop_label();
+                return;
+            }
+            // Regular else
+            self.write_indent();
+            self.write("} else {");
+            self.newline();
+            self.indent += 1;
+            for instr in else_body {
+                self.unparse_instr(instr);
+            }
+            self.indent -= 1;
+        }
+        // Close the if/else block
+        self.write_indent();
+        self.write("}");
     }
 
     fn unparse_source_comment(&mut self, meta: &crate::wir::WirMeta) {
@@ -1255,6 +1468,33 @@ impl<'a> WirUnparser<'a> {
                 }
             }
         }
+    }
+
+    /// Push a block/loop/if onto the label stack, returning the assigned label.
+    fn push_label(&mut self, kind: LabelBlockKind, existing: Option<&str>) -> String {
+        let label = existing.map(String::from).unwrap_or_else(|| {
+            let prefix = match kind {
+                LabelBlockKind::Block => "b",
+                LabelBlockKind::Loop => "l",
+                LabelBlockKind::If => "_i",
+            };
+            let id = self.label_next_id;
+            self.label_next_id += 1;
+            format!("{prefix}{id}")
+        });
+        self.label_stack.push((kind, label.clone()));
+        label
+    }
+
+    fn pop_label(&mut self) {
+        self.label_stack.pop();
+    }
+
+    /// Resolve `br depth` to `(label, kind)`.
+    fn resolve_br(&self, depth: u32) -> (&str, &LabelBlockKind) {
+        let idx = self.label_stack.len().saturating_sub(1 + depth as usize);
+        let (kind, label) = &self.label_stack[idx];
+        (label.as_str(), kind)
     }
 
     fn write(&mut self, s: &str) {
@@ -1309,6 +1549,132 @@ pub fn format_type(ty: &WirType) -> String {
             }
         }
     }
+}
+
+/// Returns true if `instr` renders using infix operator syntax (needs parens as sub-expression).
+fn is_op_instr(instr: &WirInstr) -> bool {
+    use WirInstr::{
+        F32Add, F32Div, F32Eq, F32Ge, F32Gt, F32Le, F32Lt, F32Mul, F32Ne, F32Sub, F64Add, F64Div,
+        F64Eq, F64Ge, F64Gt, F64Le, F64Lt, F64Mul, F64Ne, F64Sub, I32Add, I32And, I32DivS, I32Eq,
+        I32Eqz, I32GeS, I32GtS, I32LeS, I32LtS, I32Mul, I32Ne, I32Or, I32RemS, I32Shl, I32ShrS,
+        I32Sub, I32Xor, I64Add, I64And, I64DivS, I64Eq, I64Eqz, I64GeS, I64GtS, I64LeS, I64LtS,
+        I64Mul, I64Ne, I64Or, I64RemS, I64Shl, I64ShrS, I64Sub, I64Xor,
+    };
+    matches!(
+        instr,
+        I32Add(..)
+            | I32Sub(..)
+            | I32Mul(..)
+            | I32DivS(..)
+            | I32RemS(..)
+            | I32And(..)
+            | I32Or(..)
+            | I32Xor(..)
+            | I32Shl(..)
+            | I32ShrS(..)
+            | I32Eq(..)
+            | I32Ne(..)
+            | I32LtS(..)
+            | I32GtS(..)
+            | I32LeS(..)
+            | I32GeS(..)
+            | I32Eqz(..)
+            | I64Add(..)
+            | I64Sub(..)
+            | I64Mul(..)
+            | I64DivS(..)
+            | I64RemS(..)
+            | I64And(..)
+            | I64Or(..)
+            | I64Xor(..)
+            | I64Shl(..)
+            | I64ShrS(..)
+            | I64Eq(..)
+            | I64Ne(..)
+            | I64LtS(..)
+            | I64GtS(..)
+            | I64LeS(..)
+            | I64GeS(..)
+            | I64Eqz(..)
+            | F32Add(..)
+            | F32Sub(..)
+            | F32Mul(..)
+            | F32Div(..)
+            | F32Eq(..)
+            | F32Ne(..)
+            | F32Lt(..)
+            | F32Gt(..)
+            | F32Le(..)
+            | F32Ge(..)
+            | F64Add(..)
+            | F64Sub(..)
+            | F64Mul(..)
+            | F64Div(..)
+            | F64Eq(..)
+            | F64Ne(..)
+            | F64Lt(..)
+            | F64Gt(..)
+            | F64Le(..)
+            | F64Ge(..)
+    )
+}
+
+/// Returns true if any `br`/`br_if`/`br_table` in `body` targets the enclosing
+/// block at `nesting` levels above the current position.
+///
+/// Call with `nesting = 0` to check whether a block's own body targets that block.
+/// Recursing into nested blocks increments `nesting` so the check stays relative.
+fn is_block_targeted_from(body: &[WirInstr], nesting: u32) -> bool {
+    for instr in body {
+        match instr {
+            WirInstr::Br { depth } if *depth == nesting => return true,
+            WirInstr::BrIf { depth, .. } if *depth == nesting => return true,
+            WirInstr::BrTable {
+                targets, default, ..
+            } if targets.contains(&nesting) || *default == nesting => return true,
+            WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
+                if is_block_targeted_from(body, nesting + 1) {
+                    return true;
+                }
+            }
+            WirInstr::If {
+                then_body,
+                else_body,
+                ..
+            } => {
+                if is_block_targeted_from(then_body, nesting + 1) {
+                    return true;
+                }
+                if let Some(eb) = else_body
+                    && is_block_targeted_from(eb, nesting + 1)
+                {
+                    return true;
+                }
+            }
+            WirInstr::Seq(instrs) => {
+                if is_block_targeted_from(instrs, nesting) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Returns true if `name` cannot be written as a bare word and needs double-quoting.
+fn needs_quoting(name: &str) -> bool {
+    name.is_empty() || name.contains('/') || name.contains(' ')
+}
+
+/// Returns true if `instr` is not suitable for inlining as the value of a
+/// `break label val;` expression. Multi-line constructs like `if`, `block`,
+/// `loop`, and nested `Seq` are excluded to avoid garbled single-line output.
+fn is_block_expr(instr: &WirInstr) -> bool {
+    matches!(
+        instr,
+        WirInstr::If { .. } | WirInstr::Block { .. } | WirInstr::Loop { .. } | WirInstr::Seq(_)
+    )
 }
 
 fn format_abstract_heap_type(ht: &WirAbstractHeapType) -> &'static str {

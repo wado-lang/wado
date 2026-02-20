@@ -797,7 +797,7 @@ impl FunctionTranslator<'_, '_> {
                 let body_instrs = self.translate_stmts(&block.stmts);
                 self.label_stack.pop();
                 Some(WirInstr::Block {
-                    label: None,
+                    label: Some(label.clone()),
                     result: None,
                     body: body_instrs,
                 })
@@ -1336,7 +1336,7 @@ impl FunctionTranslator<'_, '_> {
                     Some(self.ctx.type_id_to_wir_type(self.type_table, expr.type_id))
                 };
                 WirInstr::Block {
-                    label: None,
+                    label: Some(label.clone()),
                     result: result_type,
                     body,
                 }
