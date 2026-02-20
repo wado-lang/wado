@@ -3681,6 +3681,53 @@ fn expand_task_returns_in_func(
     func.local_types.extend(extra_local_types);
 }
 
+/// Replace every `task return` statement in a function body with a no-op (`Continue`).
+///
+/// Used in the test world where `export async fn` bodies are not exported and will
+/// be removed by DCE. The statements must not reach `monomorphize` intact.
+fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
+    let mut func = user_func.borrow_mut();
+    let Some(mut body) = func.body.take() else {
+        return;
+    };
+    strip_task_returns_in_block(&mut body);
+    func.body = Some(body);
+}
+
+fn strip_task_returns_in_block(blk: &mut TirBlock) {
+    for stmt in &mut blk.stmts {
+        if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
+            stmt.kind = TirStmtKind::Continue;
+        } else {
+            strip_task_returns_in_stmt(stmt);
+        }
+    }
+}
+
+fn strip_task_returns_in_stmt(stmt: &mut TirStmt) {
+    match &mut stmt.kind {
+        TirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        }
+        | TirStmtKind::IfPattern {
+            then_block,
+            else_block,
+            ..
+        } => {
+            strip_task_returns_in_block(then_block);
+            if let Some(else_blk) = else_block {
+                strip_task_returns_in_block(else_blk);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            strip_task_returns_in_block(body);
+        }
+        _ => {}
+    }
+}
+
 fn expand_task_return_in_block(
     blk: &mut TirBlock,
     flat_return_types: &[cm_abi::CmValType],
@@ -4285,6 +4332,19 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
             .tir_modules
             .get_mut(&entry_source)
             .expect("entry module should exist");
+
+        // Strip `task return` from `export async fn` bodies in the test world.
+        // These functions are not exported in the test world and will be eliminated
+        // by DCE, but `task return` must not reach monomorphize intact or it panics.
+        for f in &entry_module.functions {
+            let is_async_export = {
+                let func = f.borrow();
+                func.is_async && func.is_export
+            };
+            if is_async_export {
+                strip_task_returns_in_func(f);
+            }
+        }
 
         // Collect test functions first to avoid borrow conflict.
         // Test functions have is_export=false (they're not world exports),
