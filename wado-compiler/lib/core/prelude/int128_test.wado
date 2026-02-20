@@ -416,3 +416,305 @@ test "i128 arithmetic shift right beyond i64 range" {
     let result = a >> 1;
     assert result.to_string() == "-18446744073709551616";
 }
+
+test "u128 less-than-or-equal" {
+    let a: u128 = 50;
+    let b: u128 = 100;
+    let c: u128 = 100;
+    assert a <= b;
+    assert b <= c;
+}
+
+test "u128 greater-than" {
+    let a: u128 = 100;
+    let b: u128 = 50;
+    assert a > b;
+}
+
+test "u128 greater-than-or-equal" {
+    let a: u128 = 100;
+    let b: u128 = 50;
+    let c: u128 = 100;
+    assert a >= b;
+    assert a >= c;
+}
+
+test "u128 not-equal" {
+    let a: u128 = 100;
+    let b: u128 = 50;
+    assert a != b;
+}
+
+test "i128 less-than signed" {
+    let a: i128 = -100;
+    let b: i128 = 50;
+    assert a < b;
+}
+
+test "i128 less-than-or-equal" {
+    let a: i128 = -100;
+    let b: i128 = 50;
+    let c: i128 = 50;
+    assert a <= b;
+    assert b <= c;
+}
+
+test "i128 greater-than" {
+    let a: i128 = 100;
+    let b: i128 = -50;
+    assert a > b;
+}
+
+test "i128 greater-than-or-equal" {
+    let a: i128 = 100;
+    let b: i128 = -50;
+    let c: i128 = 100;
+    assert a >= b;
+    assert a >= c;
+}
+
+test "i128 not-equal" {
+    let a: i128 = 100;
+    let b: i128 = -100;
+    assert a != b;
+}
+
+test "i128 signed comparison negative less than positive" {
+    let neg: i128 = -1;
+    let pos: i128 = 1;
+    assert neg < pos;
+    assert pos > neg;
+}
+
+test "i128 signed comparison positive greater than zero" {
+    let zero: i128 = 0;
+    let pos: i128 = 1;
+    assert zero < pos;
+    assert pos > zero;
+}
+
+test "u128 from_pair zero high" {
+    let v = u128::from_pair(12345, 0);
+    let expected: u128 = 12345;
+    assert v == expected;
+    assert v.low() == 12345;
+    assert v.high() == 0;
+}
+
+test "u128 from_pair with high set" {
+    // 2^64: high=1, low=0
+    let v = u128::from_pair(0, 1);
+    let expected: u128 = 18446744073709551616;
+    assert v == expected;
+    assert v.low() == 0;
+    assert v.high() == 1;
+}
+
+test "i128 from_pair positive" {
+    let v = i128::from_pair(42, 0);
+    let expected: i128 = 42;
+    assert v == expected;
+}
+
+test "i128 from_pair negative high" {
+    // high=-1, low=0 represents -2^64
+    let v = i128::from_pair(0, -1);
+    assert v.is_negative();
+    assert v.to_string() == "-18446744073709551616";
+}
+
+test "u128 div_rem quotient and remainder" {
+    let a: u128 = 17;
+    let b: u128 = 5;
+    let result = a.div_rem(&b);
+    let q: u128 = 3;
+    let r: u128 = 2;
+    assert result[0] == q;
+    assert result[1] == r;
+}
+
+test "u128 div_rem dividend less than divisor" {
+    let a: u128 = 3;
+    let b: u128 = 10;
+    let result = a.div_rem(&b);
+    let zero: u128 = 0;
+    assert result[0] == zero;
+    assert result[1] == a;
+}
+
+test "u128 div_rem equal values" {
+    let a: u128 = 42;
+    let result = a.div_rem(&a);
+    let one: u128 = 1;
+    let zero: u128 = 0;
+    assert result[0] == one;
+    assert result[1] == zero;
+}
+
+test "i128 div_rem negative dividend" {
+    let a: i128 = -17;
+    let b: i128 = 5;
+    let result = a.div_rem(&b);
+    let q: i128 = -3;
+    let r: i128 = -2;
+    assert result[0] == q;
+    assert result[1] == r;
+}
+
+test "i128 div_rem both negative" {
+    let a: i128 = -17;
+    let b: i128 = -5;
+    let result = a.div_rem(&b);
+    let q: i128 = 3;
+    let r: i128 = -2;
+    assert result[0] == q;
+    assert result[1] == r;
+}
+
+#[expect_trap]
+test "u128 division by zero traps" {
+    let a: u128 = 1;
+    let b: u128 = 0;
+    let _ = a / b;
+}
+
+#[expect_trap]
+test "i128 division by zero traps" {
+    let a: i128 = 1;
+    let b: i128 = 0;
+    let _ = a / b;
+}
+
+test "u128 shift by zero" {
+    let a: u128 = 12345678;
+    assert a << 0 == a;
+    assert a >> 0 == a;
+}
+
+test "u128 shift left by 128 returns zero" {
+    let a: u128 = 1;
+    let zero: u128 = 0;
+    assert a << 128 == zero;
+}
+
+test "u128 shift right by 128 returns zero" {
+    let a: u128 = 18446744073709551616; // 2^64
+    let zero: u128 = 0;
+    assert a >> 128 == zero;
+}
+
+test "i128 shift by zero" {
+    let a: i128 = 12345678;
+    assert a << 0 == a;
+    assert a >> 0 == a;
+}
+
+test "i128 shift left by 128 returns zero" {
+    let a: i128 = 1;
+    let zero: i128 = 0;
+    assert a << 128 == zero;
+}
+
+test "i128 negative shift right by 128 fills sign" {
+    // Arithmetic shift fills with sign bit; -1 >> anything = -1
+    let a: i128 = -1;
+    assert a >> 128 == a;
+}
+
+test "is_negative false for positive" {
+    let a: i128 = 42;
+    assert !a.is_negative();
+}
+
+test "is_negative false for zero" {
+    assert !i128::zero().is_negative();
+}
+
+test "abs_u128 of positive" {
+    let a: i128 = 42;
+    let expected: u128 = 42;
+    assert a.abs_u128() == expected;
+}
+
+test "abs_u128 of negative" {
+    let a: i128 = -42;
+    let expected: u128 = 42;
+    assert a.abs_u128() == expected;
+}
+
+test "abs_u128 of value beyond i64 range" {
+    // -(i64::MAX + 2) = -9223372036854775809
+    let a: i128 = -9223372036854775809;
+    assert a.abs_u128().to_string() == "9223372036854775809";
+}
+
+test "u128 one" {
+    let one = u128::one();
+    let expected: u128 = 1;
+    assert one == expected;
+}
+
+test "i128 one" {
+    let one = i128::one();
+    let expected: i128 = 1;
+    assert one == expected;
+}
+
+test "u128 mul_u64" {
+    let a: u128 = 100;
+    let expected: u128 = 5000;
+    assert a.mul_u64(50) == expected;
+}
+
+test "u128 mul_u64 crossing 64-bit boundary" {
+    // 2^32 * 2^32 = 2^64
+    let a: u128 = 4294967296;
+    let result = a.mul_u64(4294967296);
+    assert result.low() == 0;
+    assert result.high() == 1;
+}
+
+test "i128 from_u128 reinterprets bits" {
+    let u: u128 = 42;
+    let i = i128::from_u128(u);
+    let expected: i128 = 42;
+    assert i == expected;
+}
+
+test "u128 binary format crossing 64-bit boundary" {
+    // 2^64 in binary: '1' followed by 64 zeros (65 digits)
+    let a: u128 = 18446744073709551616;
+    assert `{a:b}` == "10000000000000000000000000000000000000000000000000000000000000000";
+}
+
+test "u128 hex format crossing 64-bit boundary" {
+    // 2^64 = 0x1_0000_0000_0000_0000
+    let a: u128 = 18446744073709551616;
+    assert `{a:x}` == "10000000000000000";
+}
+
+test "u128 hex format uppercase" {
+    let a: u128 = 255;
+    assert `{a:X}` == "FF";
+}
+
+test "u128 octal format" {
+    let a: u128 = 8;
+    assert `{a:o}` == "10";
+}
+
+test "u128 alternate hex format" {
+    let a: u128 = 255;
+    assert `{a:#x}` == "0xff";
+}
+
+test "i128 hex format negative" {
+    // abs(i64::MIN) = 2^63 = 0x8000_0000_0000_0000
+    let a: i128 = -9223372036854775808;
+    assert `{a:x}` == "-8000000000000000";
+}
+
+test "i128 binary format" {
+    let a: i128 = 5;
+    assert `{a:b}` == "101";
+}
