@@ -75,15 +75,15 @@ pub global MAX_WBITS: i32 = 15;
 
 
 pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
-    let base: u32 = 65521 as u32;
+    let base: u32 = 65521;
     let nmax = 5552;
-    let mut s1 = adler & 0xFFFF as u32;
-    let mut s2 = (adler >> 16 as u32) & 0xFFFF as u32;
+    let mut s1 = adler & 0xFFFF;
+    let mut s2 = (adler >> 16) & 0xFFFF;
     let mut pos = offset;
     let mut remaining = len;
 
     if remaining == 0 {
-        return s1 | (s2 << 16 as u32);
+        return s1 | (s2 << 16);
     }
 
     while remaining > 0 {
@@ -98,37 +98,37 @@ pub fn adler32(adler: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
         s2 = s2 % base;
     }
 
-    return s1 | (s2 << 16 as u32);
+    return s1 | (s2 << 16);
 }
 
 pub fn adler32_init() -> u32 {
-    return 1 as u32;
+    return 1;
 }
 
 // Combine two Adler-32 checksums
 // adler1 = adler32 of first segment, adler2 = adler32 of second segment, len2 = length of second
 pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
-    let base: u32 = 65521 as u32;
+    let base: u32 = 65521;
     let rem = (len2 % 65521) as u32;
 
-    let sum1_a = adler1 & 0xFFFF as u32;
-    let sum2_a = (adler1 >> 16 as u32) & 0xFFFF as u32;
-    let sum1_b = adler2 & 0xFFFF as u32;
-    let sum2_b = (adler2 >> 16 as u32) & 0xFFFF as u32;
+    let sum1_a = adler1 & 0xFFFF;
+    let sum2_a = (adler1 >> 16) & 0xFFFF;
+    let sum1_b = adler2 & 0xFFFF;
+    let sum2_b = (adler2 >> 16) & 0xFFFF;
 
     // sum2 = rem * sum1_a, then MOD
     let mut sum2 = (rem * sum1_a) % base;
     // sum1 = sum1_a + sum1_b + BASE - 1
-    let mut sum1 = sum1_a + sum1_b + base - 1 as u32;
+    let mut sum1 = sum1_a + sum1_b + base - 1;
     // sum2 += sum2_a + sum2_b + BASE - rem
     sum2 = sum2 + sum2_a + sum2_b + base - rem;
 
     if sum1 >= base { sum1 -= base; }
     if sum1 >= base { sum1 -= base; }
-    if sum2 >= base * 2 as u32 { sum2 -= base * 2 as u32; }
+    if sum2 >= base * 2 { sum2 -= base * 2; }
     if sum2 >= base { sum2 -= base; }
 
-    return sum1 | (sum2 << 16 as u32);
+    return sum1 | (sum2 << 16);
 }
 
 
@@ -140,14 +140,14 @@ fn ensure_crc_table() {
     if CRC_TABLE_READY {
         return;
     }
-    CRC_TABLE = Array::<u32>::filled(256, 0 as u32);
+    CRC_TABLE = Array::<u32>::filled(256, 0);
     for let mut i = 0; i < 256; i += 1 {
         let mut c = i as u32;
         for let mut j = 0; j < 8; j += 1 {
-            if (c & 1 as u32) != 0 as u32 {
-                c = 0xEDB88320 as u32 ^ (c >> 1 as u32);
+            if (c & 1) != 0 {
+                c = 0xEDB88320 as u32 ^ (c >> 1);
             } else {
-                c = c >> 1 as u32;
+                c = c >> 1;
             }
         }
         CRC_TABLE[i] = c;
@@ -160,26 +160,26 @@ pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
     let table = CRC_TABLE;
     let mut c = crc ^ 0xFFFFFFFF as u32;
     for let mut i = 0; i < len; i += 1 {
-        let index = (c ^ buf[offset + i] as u32) & 0xFF as u32;
-        c = table[index as i32] ^ (c >> 8 as u32);
+        let index = (c ^ buf[offset + i] as u32) & 0xFF;
+        c = table[index as i32] ^ (c >> 8);
     }
     return c ^ 0xFFFFFFFF as u32;
 }
 
 pub fn crc32_init() -> u32 {
-    return 0 as u32;
+    return 0;
 }
 
 // Multiply two GF(2) polynomials (for CRC-32 combine)
 fn gf2_matrix_times(mat: &Array<u32>, vec: u32) -> u32 {
-    let mut result: u32 = 0 as u32;
+    let mut result: u32 = 0;
     let mut v = vec;
     let mut i = 0;
-    while v != 0 as u32 {
-        if (v & 1 as u32) != 0 as u32 {
+    while v != 0 {
+        if (v & 1) != 0 {
             result = result ^ mat[i];
         }
-        v = v >> 1 as u32;
+        v = v >> 1;
         i += 1;
     }
     return result;
@@ -198,15 +198,15 @@ pub fn crc32_combine(crc1: u32, crc2: u32, len2: i32) -> u32 {
         return crc1;
     }
 
-    let mut even: Array<u32> = Array::<u32>::filled(32, 0 as u32);
-    let mut odd: Array<u32> = Array::<u32>::filled(32, 0 as u32);
+    let mut even: Array<u32> = Array::<u32>::filled(32, 0);
+    let mut odd: Array<u32> = Array::<u32>::filled(32, 0);
 
     // Put operator for one zero bit in odd
     odd[0] = 0xEDB88320 as u32;  // CRC-32 polynomial
-    let mut row: u32 = 1 as u32;
+    let mut row: u32 = 1;
     for let mut n = 1; n < 32; n += 1 {
         odd[n] = row;
-        row = row << 1 as u32;
+        row = row << 1;
     }
 
     // Put operator for two zero bits in even
@@ -293,47 +293,47 @@ fn inflate_table(
 ) -> [i32, i32, i32] {
     // Length codes 257..285 base
     let lbase: Array<u16> = [
-        3 as u16, 4 as u16, 5 as u16, 6 as u16, 7 as u16, 8 as u16, 9 as u16, 10 as u16,
-        11 as u16, 13 as u16, 15 as u16, 17 as u16, 19 as u16, 23 as u16, 27 as u16, 31 as u16,
-        35 as u16, 43 as u16, 51 as u16, 59 as u16, 67 as u16, 83 as u16, 99 as u16, 115 as u16,
-        131 as u16, 163 as u16, 195 as u16, 227 as u16, 258 as u16, 0 as u16, 0 as u16
+        3, 4, 5, 6, 7, 8, 9, 10,
+        11, 13, 15, 17, 19, 23, 27, 31,
+        35, 43, 51, 59, 67, 83, 99, 115,
+        131, 163, 195, 227, 258, 0, 0
     ];
     // Length codes 257..285 extra
     let lext: Array<u16> = [
-        16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16, 16 as u16,
-        17 as u16, 17 as u16, 17 as u16, 17 as u16, 18 as u16, 18 as u16, 18 as u16, 18 as u16,
-        19 as u16, 19 as u16, 19 as u16, 19 as u16, 20 as u16, 20 as u16, 20 as u16, 20 as u16,
-        21 as u16, 21 as u16, 21 as u16, 21 as u16, 16 as u16, 64 as u16, 204 as u16
+        16, 16, 16, 16, 16, 16, 16, 16,
+        17, 17, 17, 17, 18, 18, 18, 18,
+        19, 19, 19, 19, 20, 20, 20, 20,
+        21, 21, 21, 21, 16, 64, 204
     ];
     // Distance codes 0..29 base
     let dbase: Array<u16> = [
-        1 as u16, 2 as u16, 3 as u16, 4 as u16, 5 as u16, 7 as u16, 9 as u16, 13 as u16,
-        17 as u16, 25 as u16, 33 as u16, 49 as u16, 65 as u16, 97 as u16, 129 as u16, 193 as u16,
-        257 as u16, 385 as u16, 513 as u16, 769 as u16, 1025 as u16, 1537 as u16, 2049 as u16, 3073 as u16,
-        4097 as u16, 6145 as u16, 8193 as u16, 12289 as u16, 16385 as u16, 24577 as u16, 0 as u16, 0 as u16
+        1, 2, 3, 4, 5, 7, 9, 13,
+        17, 25, 33, 49, 65, 97, 129, 193,
+        257, 385, 513, 769, 1025, 1537, 2049, 3073,
+        4097, 6145, 8193, 12289, 16385, 24577, 0, 0
     ];
     // Distance codes 0..29 extra
     let dext: Array<u16> = [
-        16 as u16, 16 as u16, 16 as u16, 16 as u16, 17 as u16, 17 as u16, 18 as u16, 18 as u16,
-        19 as u16, 19 as u16, 20 as u16, 20 as u16, 21 as u16, 21 as u16, 22 as u16, 22 as u16,
-        23 as u16, 23 as u16, 24 as u16, 24 as u16, 25 as u16, 25 as u16, 26 as u16, 26 as u16,
-        27 as u16, 27 as u16, 28 as u16, 28 as u16, 29 as u16, 29 as u16, 64 as u16, 64 as u16
+        16, 16, 16, 16, 17, 17, 18, 18,
+        19, 19, 20, 20, 21, 21, 22, 22,
+        23, 23, 24, 24, 25, 25, 26, 26,
+        27, 27, 28, 28, 29, 29, 64, 64
     ];
 
-    let mut count: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0 as u16);
-    let mut offs: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0 as u16);
+    let mut count: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0);
+    let mut offs: Array<u16> = Array::<u16>::filled(MAXBITS + 1, 0);
 
     // accumulate lengths for codes
     for let mut sym = 0; sym < codes_count; sym += 1 {
         let l = lens[lens_offset + sym] as i32;
-        count[l] = count[l] + 1 as u16;
+        count[l] = count[l] + 1;
     }
 
     // bound code lengths, force root to be within code lengths
     let mut root = bits_in;
     let mut max_len = MAXBITS;
     while max_len >= 1 {
-        if count[max_len] != 0 as u16 {
+        if count[max_len] != 0 {
             break;
         }
         max_len -= 1;
@@ -350,7 +350,7 @@ fn inflate_table(
 
     let mut min_len = 1;
     while min_len < max_len {
-        if count[min_len] != 0 as u16 {
+        if count[min_len] != 0 {
             break;
         }
         min_len += 1;
@@ -371,7 +371,7 @@ fn inflate_table(
     }
 
     // generate offsets into symbol table for each length for sorting
-    offs[1] = 0 as u16;
+    offs[1] = 0;
     for let mut clen = 1; clen < MAXBITS; clen += 1 {
         offs[clen + 1] = offs[clen] + count[clen];
     }
@@ -379,10 +379,10 @@ fn inflate_table(
     // sort symbols by length, by symbol order within each length
     for let mut sym = 0; sym < codes_count; sym += 1 {
         let l = lens[lens_offset + sym];
-        if l != 0 as u16 {
+        if l != 0 {
             let off = offs[l as i32] as i32;
             work[off] = sym as u16;
-            offs[l as i32] = offs[l as i32] + 1 as u16;
+            offs[l as i32] = offs[l as i32] + 1;
         }
     }
 
@@ -406,13 +406,13 @@ fn inflate_table(
     }
 
     // initialize state for loop
-    let mut huff: u32 = 0 as u32;
+    let mut huff: u32 = 0;
     let mut sym = 0;
     let mut len = min_len;
     let mut next = table_start;
     let mut curr = root;
     let mut drop_val = 0;
-    let mut low: u32 = 0xFFFFFFFF as u32;  // trigger new sub-table when len > root
+    let mut low: u32 = 0xFFFFFFFF;  // trigger new sub-table when len > root
     let mut used = 1 << root;
     let mut mask: u32 = (used - 1) as u32;
 
@@ -426,19 +426,19 @@ fn inflate_table(
     while !done {
         // create table entry
         let here_bits = (len - drop_val) as u8;
-        let mut here_op: u8 = 0 as u8;
-        let mut here_val: u16 = 0 as u16;
+        let mut here_op: u8 = 0;
+        let mut here_val: u16 = 0;
 
         let work_sym = work[sym] as i32;
         if work_sym + 1 < match_val {
-            here_op = 0 as u8;
+            here_op = 0;
             here_val = work_sym as u16;
         } else if work_sym >= match_val {
             here_op = extra_table[work_sym - match_val] as u8;
             here_val = base_table[work_sym - match_val];
         } else {
             here_op = (32 + 64) as u8;  // end of block
-            here_val = 0 as u16;
+            here_val = 0;
         }
 
         let here = Code { op: here_op, bits: here_bits, val: here_val };
@@ -451,27 +451,27 @@ fn inflate_table(
             fill -= incr_rep;
             let idx = next + ((huff >> drop_val as u32) + fill) as i32;
             table[idx] = Code { op: here.op, bits: here.bits, val: here.val };
-            if fill == 0 as u32 {
+            if fill == 0 {
                 break;
             }
         }
 
         // backwards increment the len-bit code huff
         let mut incr = 1 as u32 << (len - 1) as u32;
-        while (huff & incr) != 0 as u32 {
-            incr = incr >> 1 as u32;
+        while (huff & incr) != 0 {
+            incr = incr >> 1;
         }
-        if incr != 0 as u32 {
-            huff = huff & (incr - 1 as u32);
+        if incr != 0 {
+            huff = huff & (incr - 1);
             huff += incr;
         } else {
-            huff = 0 as u32;
+            huff = 0;
         }
 
         // go to next symbol, update count, len
         sym += 1;
-        count[len] = count[len] - 1 as u16;
-        if count[len] == 0 as u16 {
+        count[len] = count[len] - 1;
+        if count[len] == 0 {
             if len == max_len {
                 done = true;
             } else {
@@ -516,11 +516,11 @@ fn inflate_table(
     }
 
     // fill in remaining table entry if code is incomplete
-    if huff != 0 as u32 {
+    if huff != 0 {
         table[next + huff as i32] = Code {
-            op: 64 as u8,
+            op: 64,
             bits: (len - drop_val) as u8,
-            val: 0 as u16,
+            val: 0,
         };
     }
 
@@ -548,9 +548,9 @@ global INF_BAD: i32 = 15;
 
 // Permutation of code lengths for dynamic blocks
 fn get_order() -> Array<u16> {
-    return [16 as u16, 17 as u16, 18 as u16, 0 as u16, 8 as u16, 7 as u16,
-            9 as u16, 6 as u16, 10 as u16, 5 as u16, 11 as u16, 4 as u16,
-            12 as u16, 3 as u16, 13 as u16, 2 as u16, 14 as u16, 1 as u16, 15 as u16];
+    return [16, 17, 18, 0, 8, 7,
+            9, 6, 10, 5, 11, 4,
+            12, 3, 13, 2, 14, 1, 15];
 }
 
 struct InflateState {
@@ -610,8 +610,8 @@ impl InflateState {
             wsize: 0,
             whave: 0,
             wnext: 0,
-            window: Array::<u8>::filled(1 << wbits, 0 as u8),
-            hold: 0 as u32,
+            window: Array::<u8>::filled(1 << wbits, 0),
+            hold: 0,
             bits: 0,
             length: 0,
             offset: 0,
@@ -625,10 +625,10 @@ impl InflateState {
             nlen: 0,
             ndist: 0,
             have_count: 0,
-            lens: Array::<u16>::filled(320, 0 as u16),
-            work: Array::<u16>::filled(288, 0 as u16),
-            check: 0 as u32,
-            total: 0 as u32,
+            lens: Array::<u16>::filled(320, 0),
+            work: Array::<u16>::filled(288, 0),
+            check: 0,
+            total: 0,
             sane: true,
             back: -1,
             was: 0,
@@ -640,19 +640,19 @@ impl InflateState {
         // literal/length table: 0-143=8bits, 144-255=9bits, 256-279=7bits, 280-287=8bits
         let mut sym = 0;
         while sym < 144 {
-            self.lens[sym] = 8 as u16;
+            self.lens[sym] = 8;
             sym += 1;
         }
         while sym < 256 {
-            self.lens[sym] = 9 as u16;
+            self.lens[sym] = 9;
             sym += 1;
         }
         while sym < 280 {
-            self.lens[sym] = 7 as u16;
+            self.lens[sym] = 7;
             sym += 1;
         }
         while sym < 288 {
-            self.lens[sym] = 8 as u16;
+            self.lens[sym] = 8;
             sym += 1;
         }
 
@@ -663,7 +663,7 @@ impl InflateState {
         // distance table: all 5 bits
         sym = 0;
         while sym < 32 {
-            self.lens[sym] = 5 as u16;
+            self.lens[sym] = 5;
             sym += 1;
         }
         let dist_start = result.2;
@@ -753,12 +753,12 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
                 if leave { break; }
 
-                state.last_block = (state.hold & 1 as u32) != 0 as u32;
-                state.hold = state.hold >> 1 as u32;
+                state.last_block = (state.hold & 1) != 0;
+                state.hold = state.hold >> 1;
                 state.bits -= 1;
 
-                let block_type = (state.hold & 3 as u32) as i32;
-                state.hold = state.hold >> 2 as u32;
+                let block_type = (state.hold & 3) as i32;
+                state.hold = state.hold >> 2;
                 state.bits -= 2;
 
                 if block_type == 0 {
@@ -790,13 +790,13 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             }
             if leave { break; }
 
-            let stored_len = (state.hold & 0xFFFF as u32) as i32;
-            let stored_nlen = ((state.hold >> 16 as u32) & 0xFFFF as u32) as i32;
+            let stored_len = (state.hold & 0xFFFF) as i32;
+            let stored_nlen = ((state.hold >> 16) & 0xFFFF) as i32;
             if stored_len != (stored_nlen ^ 0xFFFF) {
                 state.mode = INF_BAD;
             } else {
                 state.length = stored_len;
-                state.hold = 0 as u32;
+                state.hold = 0;
                 state.bits = 0;
                 state.mode = INF_COPY;
             }
@@ -832,14 +832,14 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             }
             if leave { break; }
 
-            state.nlen = (state.hold & 0x1F as u32) as i32 + 257;
-            state.hold = state.hold >> 5 as u32;
+            state.nlen = (state.hold & 0x1F) as i32 + 257;
+            state.hold = state.hold >> 5;
             state.bits -= 5;
-            state.ndist = (state.hold & 0x1F as u32) as i32 + 1;
-            state.hold = state.hold >> 5 as u32;
+            state.ndist = (state.hold & 0x1F) as i32 + 1;
+            state.hold = state.hold >> 5;
             state.bits -= 5;
-            state.ncode = (state.hold & 0x0F as u32) as i32 + 4;
-            state.hold = state.hold >> 4 as u32;
+            state.ncode = (state.hold & 0x0F) as i32 + 4;
+            state.hold = state.hold >> 4;
             state.bits -= 4;
 
             if state.nlen > 286 || state.ndist > 30 {
@@ -862,15 +862,15 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
                 if leave { break; }
 
-                state.lens[order[state.have_count] as i32] = (state.hold & 7 as u32) as u16;
-                state.hold = state.hold >> 3 as u32;
+                state.lens[order[state.have_count] as i32] = (state.hold & 7) as u16;
+                state.hold = state.hold >> 3;
                 state.bits -= 3;
                 state.have_count += 1;
             }
             if leave { break; }
 
             while state.have_count < 19 {
-                state.lens[order[state.have_count] as i32] = 0 as u16;
+                state.lens[order[state.have_count] as i32] = 0;
                 state.have_count += 1;
             }
 
@@ -888,7 +888,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             while state.have_count < state.nlen + state.ndist {
                 // decode using code length code
                 loop {
-                    let idx = state.lencode_off + (state.hold & ((1 as u32 << state.lenbits as u32) - 1 as u32)) as i32;
+                    let idx = state.lencode_off + (state.hold & ((1 as u32 << state.lenbits as u32) - 1)) as i32;
                     let here = &state.codes[idx];
                     if here.bits as i32 <= state.bits {
                         break;
@@ -904,7 +904,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
                 if leave { break; }
 
-                let idx = state.lencode_off + (state.hold & ((1 as u32 << state.lenbits as u32) - 1 as u32)) as i32;
+                let idx = state.lencode_off + (state.hold & ((1 as u32 << state.lenbits as u32) - 1)) as i32;
                 let here_val = state.codes[idx].val as i32;
                 let here_bits = state.codes[idx].bits as i32;
 
@@ -915,7 +915,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     state.have_count += 1;
                 } else {
                     let mut copy_len = 0;
-                    let mut copy_val: u16 = 0 as u16;
+                    let mut copy_val: u16 = 0;
                     if here_val == 16 {
                         // need here_bits + 2
                         while state.bits < here_bits + 2 {
@@ -936,8 +936,8 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                             break;
                         }
                         copy_val = state.lens[state.have_count - 1];
-                        copy_len = 3 + (state.hold & 3 as u32) as i32;
-                        state.hold = state.hold >> 2 as u32;
+                        copy_len = 3 + (state.hold & 3) as i32;
+                        state.hold = state.hold >> 2;
                         state.bits -= 2;
                     } else if here_val == 17 {
                         while state.bits < here_bits + 3 {
@@ -953,9 +953,9 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         if leave { break; }
                         state.hold = state.hold >> here_bits as u32;
                         state.bits -= here_bits;
-                        copy_val = 0 as u16;
-                        copy_len = 3 + (state.hold & 7 as u32) as i32;
-                        state.hold = state.hold >> 3 as u32;
+                        copy_val = 0;
+                        copy_len = 3 + (state.hold & 7) as i32;
+                        state.hold = state.hold >> 3;
                         state.bits -= 3;
                     } else {
                         while state.bits < here_bits + 7 {
@@ -971,9 +971,9 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                         if leave { break; }
                         state.hold = state.hold >> here_bits as u32;
                         state.bits -= here_bits;
-                        copy_val = 0 as u16;
-                        copy_len = 11 + (state.hold & 0x7F as u32) as i32;
-                        state.hold = state.hold >> 7 as u32;
+                        copy_val = 0;
+                        copy_len = 11 + (state.hold & 0x7F) as i32;
+                        state.hold = state.hold >> 7;
                         state.bits -= 7;
                     }
                     if state.have_count + copy_len > state.nlen + state.ndist {
@@ -992,7 +992,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 state.mode = INF_BAD;
             } else {
                 // check for end-of-block code
-                if state.lens[256] == 0 as u16 {
+                if state.lens[256] == 0 {
                     state.mode = INF_BAD;
                 } else {
                     // build code tables
@@ -1017,7 +1017,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
         } else if state.mode == INF_LEN {
             // decode literal/length code
             loop {
-                let idx = state.lencode_off + (state.hold & ((1 as u32 << state.lenbits as u32) - 1 as u32)) as i32;
+                let idx = state.lencode_off + (state.hold & ((1 as u32 << state.lenbits as u32) - 1)) as i32;
                 let here = &state.codes[idx];
                 if here.bits as i32 <= state.bits {
                     break;
@@ -1033,18 +1033,18 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             }
             if leave { break; }
 
-            let idx = state.lencode_off + (state.hold & ((1 as u32 << state.lenbits as u32) - 1 as u32)) as i32;
+            let idx = state.lencode_off + (state.hold & ((1 as u32 << state.lenbits as u32) - 1)) as i32;
             let mut here_op = state.codes[idx].op;
             let mut here_bits = state.codes[idx].bits;
             let mut here_val = state.codes[idx].val;
 
             // handle 2nd level length code
-            if here_op != 0 as u8 && (here_op & 0xF0 as u8) == 0 as u8 {
+            if here_op != 0 && (here_op & 0xF0) == 0 {
                 let last_bits = here_bits;
                 let last_op = here_op;
                 let last_val = here_val;
                 loop {
-                    let idx2 = state.lencode_off + last_val as i32 + ((state.hold & ((1 as u32 << (last_bits as u32 + last_op as u32)) - 1 as u32)) >> last_bits as u32) as i32;
+                    let idx2 = state.lencode_off + last_val as i32 + ((state.hold & ((1 as u32 << (last_bits as u32 + last_op as u32)) - 1)) >> last_bits as u32) as i32;
                     here_op = state.codes[idx2].op;
                     here_bits = state.codes[idx2].bits;
                     here_val = state.codes[idx2].val;
@@ -1072,14 +1072,14 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             if here_op as i32 == 0 {
                 // literal
                 state.mode = INF_LIT;
-            } else if (here_op & 32 as u8) != 0 as u8 {
+            } else if (here_op & 32) != 0 {
                 // end of block
                 state.back = -1;
                 state.mode = INF_TYPEDO;
-            } else if (here_op & 64 as u8) != 0 as u8 {
+            } else if (here_op & 64) != 0 {
                 state.mode = INF_BAD;
             } else {
-                state.extra = (here_op & 15 as u8) as i32;
+                state.extra = (here_op & 15) as i32;
                 state.mode = INF_LENEXT;
             }
         } else if state.mode == INF_LENEXT {
@@ -1095,7 +1095,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     have -= 1;
                 }
                 if leave { break; }
-                state.length += (state.hold & ((1 as u32 << state.extra as u32) - 1 as u32)) as i32;
+                state.length += (state.hold & ((1 as u32 << state.extra as u32) - 1)) as i32;
                 state.hold = state.hold >> state.extra as u32;
                 state.bits -= state.extra;
             }
@@ -1104,7 +1104,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
         } else if state.mode == INF_DIST {
             // decode distance code
             loop {
-                let idx = state.distcode_off + (state.hold & ((1 as u32 << state.distbits as u32) - 1 as u32)) as i32;
+                let idx = state.distcode_off + (state.hold & ((1 as u32 << state.distbits as u32) - 1)) as i32;
                 let here = &state.codes[idx];
                 if here.bits as i32 <= state.bits {
                     break;
@@ -1120,18 +1120,18 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             }
             if leave { break; }
 
-            let idx = state.distcode_off + (state.hold & ((1 as u32 << state.distbits as u32) - 1 as u32)) as i32;
+            let idx = state.distcode_off + (state.hold & ((1 as u32 << state.distbits as u32) - 1)) as i32;
             let mut here_op = state.codes[idx].op;
             let mut here_bits = state.codes[idx].bits;
             let mut here_val = state.codes[idx].val;
 
             // handle 2nd level distance code
-            if (here_op & 0xF0 as u8) == 0 as u8 {
+            if (here_op & 0xF0) == 0 {
                 let last_bits = here_bits;
                 let last_op = here_op;
                 let last_val = here_val;
                 loop {
-                    let idx2 = state.distcode_off + last_val as i32 + ((state.hold & ((1 as u32 << (last_bits as u32 + last_op as u32)) - 1 as u32)) >> last_bits as u32) as i32;
+                    let idx2 = state.distcode_off + last_val as i32 + ((state.hold & ((1 as u32 << (last_bits as u32 + last_op as u32)) - 1)) >> last_bits as u32) as i32;
                     here_op = state.codes[idx2].op;
                     here_bits = state.codes[idx2].bits;
                     here_val = state.codes[idx2].val;
@@ -1155,11 +1155,11 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
             state.hold = state.hold >> here_bits as u32;
             state.bits -= here_bits as i32;
 
-            if (here_op & 64 as u8) != 0 as u8 {
+            if (here_op & 64) != 0 {
                 state.mode = INF_BAD;
             } else {
                 state.offset = here_val as i32;
-                state.extra = (here_op & 15 as u8) as i32;
+                state.extra = (here_op & 15) as i32;
                 state.mode = INF_DISTEXT;
             }
         } else if state.mode == INF_DISTEXT {
@@ -1175,7 +1175,7 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                     have -= 1;
                 }
                 if leave { break; }
-                state.offset += (state.hold & ((1 as u32 << state.extra as u32) - 1 as u32)) as i32;
+                state.offset += (state.hold & ((1 as u32 << state.extra as u32) - 1)) as i32;
                 state.hold = state.hold >> state.extra as u32;
                 state.bits -= state.extra;
             }
@@ -1246,11 +1246,11 @@ fn inflate_raw_ex(input: &Array<u8>, input_offset: i32, input_length: i32) -> [A
                 }
                 if leave { break; }
                 // swap bytes for adler32 comparison
-                let check_val = ((state.hold >> 24 as u32) & 0xFF as u32)
-                    | ((state.hold >> 8 as u32) & 0xFF00 as u32)
-                    | ((state.hold & 0xFF00 as u32) << 8 as u32)
-                    | ((state.hold & 0xFF as u32) << 24 as u32);
-                state.hold = 0 as u32;
+                let check_val = ((state.hold >> 24) & 0xFF)
+                    | ((state.hold >> 8) & 0xFF00)
+                    | ((state.hold & 0xFF00) << 8)
+                    | ((state.hold & 0xFF) << 24);
+                state.hold = 0;
                 state.bits = 0;
             }
             state.mode = INF_DONE;
@@ -1299,7 +1299,7 @@ pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
     if ((cmf as i32 * 256 + flg as i32) % 31) != 0 {
         panic("invalid zlib header");
     }
-    if (cmf & 0x0F as u8) != 8 as u8 {
+    if (cmf & 0x0F) != 8 {
         panic("unsupported compression method");
     }
 
@@ -1308,9 +1308,9 @@ pub fn inflate_zlib(input: &Array<u8>) -> Array<u8> {
 
     // Verify adler32
     let computed = adler32(adler32_init(), &result, 0, result.len());
-    let stored = ((input[input.len() - 4] as u32) << 24 as u32)
-        | ((input[input.len() - 3] as u32) << 16 as u32)
-        | ((input[input.len() - 2] as u32) << 8 as u32)
+    let stored = ((input[input.len() - 4] as u32) << 24)
+        | ((input[input.len() - 3] as u32) << 16)
+        | ((input[input.len() - 2] as u32) << 8)
         | (input[input.len() - 1] as u32);
     if computed != stored {
         panic("adler32 checksum mismatch");
@@ -1335,9 +1335,9 @@ pub fn deflate_stored(input: &Array<u8>) -> Array<u8> {
 
         // Block header: BFINAL (1 bit) + BTYPE=00 (2 bits) = stored
         if is_last {
-            output.append(1 as u8);  // BFINAL=1, BTYPE=00
+            output.append(1);  // BFINAL=1, BTYPE=00
         } else {
-            output.append(0 as u8);  // BFINAL=0, BTYPE=00
+            output.append(0);  // BFINAL=0, BTYPE=00
         }
 
         // LEN and NLEN (little-endian)
@@ -1364,8 +1364,8 @@ pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
     let mut output: Array<u8> = Array::<u8>::with_capacity(input.len() + 12);
 
     // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01 (check bits)
-    output.append(0x78 as u8);
-    output.append(0x01 as u8);
+    output.append(0x78);
+    output.append(0x01);
 
     // deflate stored blocks
     let deflated = deflate_stored(input);
@@ -1375,10 +1375,10 @@ pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
 
     // adler32 trailer (big-endian)
     let checksum = adler32(adler32_init(), input, 0, input.len());
-    output.append(((checksum >> 24 as u32) & 0xFF as u32) as u8);
-    output.append(((checksum >> 16 as u32) & 0xFF as u32) as u8);
-    output.append(((checksum >> 8 as u32) & 0xFF as u32) as u8);
-    output.append((checksum & 0xFF as u32) as u8);
+    output.append(((checksum >> 24) & 0xFF) as u8);
+    output.append(((checksum >> 16) & 0xFF) as u8);
+    output.append(((checksum >> 8) & 0xFF) as u8);
+    output.append((checksum & 0xFF) as u8);
 
     return output;
 }
@@ -1386,17 +1386,17 @@ pub fn zlib_compress_stored(input: &Array<u8>) -> Array<u8> {
 
 // Bit-reverse a value of `len` bits
 fn bi_reverse(code: u32, len: i32) -> u32 {
-    let mut res: u32 = 0 as u32;
+    let mut res: u32 = 0;
     let mut c = code;
     let mut l = len;
     loop {
-        res = res | (c & 1 as u32);
-        c = c >> 1 as u32;
+        res = res | (c & 1);
+        c = c >> 1;
         l -= 1;
         if l <= 0 {
             break;
         }
-        res = res << 1 as u32;
+        res = res << 1;
     }
     return res;
 }
@@ -1410,23 +1410,23 @@ struct BitWriter {
 
 impl BitWriter {
     fn new() -> BitWriter {
-        return BitWriter { output: [], buf: 0 as u32, bits: 0 };
+        return BitWriter { output: [], buf: 0, bits: 0 };
     }
 
     fn write_bits(&mut self, value: u32, count: i32) {
         self.buf = self.buf | (value << self.bits as u32);
         self.bits += count;
         while self.bits >= 8 {
-            self.output.append((self.buf & 0xFF as u32) as u8);
-            self.buf = self.buf >> 8 as u32;
+            self.output.append((self.buf & 0xFF) as u8);
+            self.buf = self.buf >> 8;
             self.bits -= 8;
         }
     }
 
     fn flush(&mut self) {
         if self.bits > 0 {
-            self.output.append((self.buf & 0xFF as u32) as u8);
-            self.buf = 0 as u32;
+            self.output.append((self.buf & 0xFF) as u8);
+            self.buf = 0;
             self.bits = 0;
         }
     }
@@ -1441,35 +1441,35 @@ struct EncCode {
 // Build fixed Huffman literal/length encoding table (288 symbols)
 fn build_fixed_ltree() -> Array<EncCode> {
     let mut bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut tree: Array<EncCode> = Array::<EncCode>::filled(288, EncCode { code: 0 as u16, len: 0 as u8 });
+    let mut tree: Array<EncCode> = Array::<EncCode>::filled(288, EncCode { code: 0, len: 0 });
 
     let mut n = 0;
     while n <= 143 {
-        tree[n] = EncCode { code: 0 as u16, len: 8 as u8 };
+        tree[n] = EncCode { code: 0, len: 8 };
         bl_count[8] += 1;
         n += 1;
     }
     while n <= 255 {
-        tree[n] = EncCode { code: 0 as u16, len: 9 as u8 };
+        tree[n] = EncCode { code: 0, len: 9 };
         bl_count[9] += 1;
         n += 1;
     }
     while n <= 279 {
-        tree[n] = EncCode { code: 0 as u16, len: 7 as u8 };
+        tree[n] = EncCode { code: 0, len: 7 };
         bl_count[7] += 1;
         n += 1;
     }
     while n <= 287 {
-        tree[n] = EncCode { code: 0 as u16, len: 8 as u8 };
+        tree[n] = EncCode { code: 0, len: 8 };
         bl_count[8] += 1;
         n += 1;
     }
 
     // Generate canonical codes (gen_codes from trees.c)
-    let mut next_code: Array<u32> = Array::<u32>::filled(16, 0 as u32);
-    let mut code: u32 = 0 as u32;
+    let mut next_code: Array<u32> = Array::<u32>::filled(16, 0);
+    let mut code: u32 = 0;
     for let mut bits = 1; bits <= 15; bits += 1 {
-        code = (code + bl_count[bits - 1] as u32) << 1 as u32;
+        code = (code + bl_count[bits - 1] as u32) << 1;
         next_code[bits] = code;
     }
 
@@ -1477,7 +1477,7 @@ fn build_fixed_ltree() -> Array<EncCode> {
         let len = tree[i].len as i32;
         if len != 0 {
             tree[i].code = bi_reverse(next_code[len], len) as u16;
-            next_code[len] = next_code[len] + 1 as u32;
+            next_code[len] = next_code[len] + 1;
         }
     }
 
@@ -1486,9 +1486,9 @@ fn build_fixed_ltree() -> Array<EncCode> {
 
 // Build fixed distance encoding table (30 codes, all 5 bits)
 fn build_fixed_dtree() -> Array<EncCode> {
-    let mut tree: Array<EncCode> = Array::<EncCode>::filled(30, EncCode { code: 0 as u16, len: 5 as u8 });
+    let mut tree: Array<EncCode> = Array::<EncCode>::filled(30, EncCode { code: 0, len: 5 });
     for let mut i = 0; i < 30; i += 1 {
-        tree[i] = EncCode { code: bi_reverse(i as u32, 5) as u16, len: 5 as u8 };
+        tree[i] = EncCode { code: bi_reverse(i as u32, 5) as u16, len: 5 };
     }
     return tree;
 }
@@ -1496,7 +1496,7 @@ fn build_fixed_dtree() -> Array<EncCode> {
 // Direct lookup table: length_codes[length - 3] = code index (0..28)
 // Built using the zlib tr_static_init algorithm
 fn build_length_codes(extra_lbits: &Array<i32>) -> Array<u8> {
-    let mut table = Array::<u8>::filled(256, 0 as u8);
+    let mut table = Array::<u8>::filled(256, 0);
     let mut length = 0;
     for let mut code = 0; code < 28; code += 1 {
         let count = 1 << extra_lbits[code];
@@ -1505,7 +1505,7 @@ fn build_length_codes(extra_lbits: &Array<i32>) -> Array<u8> {
             length += 1;
         }
     }
-    table[255] = 28 as u8;  // length 258 -> code 28 (symbol 285)
+    table[255] = 28;  // length 258 -> code 28 (symbol 285)
     return table;
 }
 
@@ -1513,7 +1513,7 @@ fn build_length_codes(extra_lbits: &Array<i32>) -> Array<u8> {
 // First 256: direct lookup for dist-1 < 256
 // Next 256: shifted lookup for (dist-1) >> 7 when dist > 256
 fn build_dist_codes(extra_dbits: &Array<i32>) -> Array<u8> {
-    let mut table = Array::<u8>::filled(512, 0 as u8);
+    let mut table = Array::<u8>::filled(512, 0);
     let mut dist = 0;
     // First 16 codes: direct entries (covers dist 1..256)
     for let mut code = 0; code < 16; code += 1 {
@@ -1561,8 +1561,8 @@ pub fn deflate_huffman(input: &Array<u8>) -> Array<u8> {
     let input_len = input.len();
 
     // Block header: BFINAL=1, BTYPE=01 (fixed Huffman)
-    bw.write_bits(1 as u32, 1);  // BFINAL
-    bw.write_bits(1 as u32, 2);  // BTYPE = 01
+    bw.write_bits(1, 1);  // BFINAL
+    bw.write_bits(1, 2);  // BTYPE = 01
 
     if input_len == 0 {
         let eob = &ltree[256];
@@ -1715,7 +1715,7 @@ fn build_huffman_tree(
     if n_syms == 0 {
         // No symbols, set dummy codes
         for let mut i = 0; i < max_sym; i += 1 {
-            lengths[i] = 0 as u8;
+            lengths[i] = 0;
         }
         return;
     }
@@ -1724,10 +1724,10 @@ fn build_huffman_tree(
         // Only one symbol: give it length 1, add a dummy
         for let mut i = 0; i < max_sym; i += 1 {
             if freqs[i] > 0 {
-                lengths[i] = 1 as u8;
+                lengths[i] = 1;
                 bl_count[1] += 1;
             } else {
-                lengths[i] = 0 as u8;
+                lengths[i] = 0;
             }
         }
         return;
@@ -1934,7 +1934,7 @@ fn build_huffman_tree(
     // Set zero-freq symbols to length 0
     for let mut i = 0; i < max_sym; i += 1 {
         if freqs[i] == 0 {
-            lengths[i] = 0 as u8;
+            lengths[i] = 0;
         }
     }
 
@@ -1954,20 +1954,20 @@ fn gen_huffman_codes(lengths: &Array<u8>, max_sym: i32, max_bits: i32) -> Array<
         bl_count[lengths[i] as i32] += 1;
     }
 
-    let mut next_code: Array<u32> = Array::<u32>::filled(max_bits + 1, 0 as u32);
-    let mut code: u32 = 0 as u32;
+    let mut next_code: Array<u32> = Array::<u32>::filled(max_bits + 1, 0);
+    let mut code: u32 = 0;
     bl_count[0] = 0;
     for let mut bits = 1; bits <= max_bits; bits += 1 {
-        code = (code + bl_count[bits - 1] as u32) << 1 as u32;
+        code = (code + bl_count[bits - 1] as u32) << 1;
         next_code[bits] = code;
     }
 
-    let mut tree: Array<EncCode> = Array::<EncCode>::filled(max_sym, EncCode { code: 0 as u16, len: 0 as u8 });
+    let mut tree: Array<EncCode> = Array::<EncCode>::filled(max_sym, EncCode { code: 0, len: 0 });
     for let mut i = 0; i < max_sym; i += 1 {
         let len = lengths[i] as i32;
         if len != 0 {
             tree[i] = EncCode { code: bi_reverse(next_code[len], len) as u16, len: lengths[i] };
-            next_code[len] = next_code[len] + 1 as u32;
+            next_code[len] = next_code[len] + 1;
         }
     }
     return tree;
@@ -2026,11 +2026,11 @@ fn write_dynamic_block(
 
     // Build trees
     let mut lit_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut lit_lengths: Array<u8> = Array::<u8>::filled(286, 0 as u8);
+    let mut lit_lengths: Array<u8> = Array::<u8>::filled(286, 0);
     build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
 
     let mut dist_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut dist_lengths: Array<u8> = Array::<u8>::filled(30, 0 as u8);
+    let mut dist_lengths: Array<u8> = Array::<u8>::filled(30, 0);
     build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
 
     // Generate codes
@@ -2039,17 +2039,17 @@ fn write_dynamic_block(
 
     // Determine actual number of lit/dist codes needed
     let mut nlit = 286;
-    while nlit > 257 && lit_lengths[nlit - 1] == 0 as u8 {
+    while nlit > 257 && lit_lengths[nlit - 1] == 0 {
         nlit -= 1;
     }
     let mut ndist = 30;
-    while ndist > 1 && dist_lengths[ndist - 1] == 0 as u8 {
+    while ndist > 1 && dist_lengths[ndist - 1] == 0 {
         ndist -= 1;
     }
 
     // RLE encode the combined code lengths
     let total_codes = nlit + ndist;
-    let mut combined: Array<u8> = Array::<u8>::filled(total_codes, 0 as u8);
+    let mut combined: Array<u8> = Array::<u8>::filled(total_codes, 0);
     for let mut i = 0; i < nlit; i += 1 {
         combined[i] = lit_lengths[i];
     }
@@ -2067,20 +2067,20 @@ fn write_dynamic_block(
             count += 1;
         }
 
-        if val == 0 as u8 {
+        if val == 0 {
             let mut rem = count;
             while rem > 0 {
                 if rem >= 11 {
                     let run = i32::min(rem, 138);
-                    rle.append(18 as u8);
+                    rle.append(18);
                     rle_extra.append(run - 11);
                     rem -= run;
                 } else if rem >= 3 {
-                    rle.append(17 as u8);
+                    rle.append(17);
                     rle_extra.append(rem - 3);
                     rem = 0;
                 } else {
-                    rle.append(0 as u8);
+                    rle.append(0);
                     rle_extra.append(0);
                     rem -= 1;
                 }
@@ -2092,7 +2092,7 @@ fn write_dynamic_block(
             while rem > 0 {
                 if rem >= 3 {
                     let run = i32::min(rem, 6);
-                    rle.append(16 as u8);
+                    rle.append(16);
                     rle_extra.append(run - 3);
                     rem -= run;
                 } else {
@@ -2111,23 +2111,23 @@ fn write_dynamic_block(
         bl_freq[rle[j] as i32] += 1;
     }
     let mut bl_bl_count: Array<i32> = Array::<i32>::filled(MAX_BL_BITS + 1, 0);
-    let mut bl_lengths: Array<u8> = Array::<u8>::filled(19, 0 as u8);
+    let mut bl_lengths: Array<u8> = Array::<u8>::filled(19, 0);
     build_huffman_tree(&bl_freq, 19, MAX_BL_BITS, &mut bl_bl_count, &mut bl_lengths);
     let bl_tree = gen_huffman_codes(&bl_lengths, 19, MAX_BL_BITS);
 
     let bl_order: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
     let mut nbl = 19;
-    while nbl > 4 && bl_lengths[bl_order[nbl - 1]] == 0 as u8 {
+    while nbl > 4 && bl_lengths[bl_order[nbl - 1]] == 0 {
         nbl -= 1;
     }
 
     // Write block header
     if is_last {
-        bw.write_bits(1 as u32, 1);  // BFINAL=1
+        bw.write_bits(1, 1);  // BFINAL=1
     } else {
-        bw.write_bits(0 as u32, 1);  // BFINAL=0
+        bw.write_bits(0, 1);  // BFINAL=0
     }
-    bw.write_bits(2 as u32, 2);  // BTYPE=10 (dynamic)
+    bw.write_bits(2, 2);  // BTYPE=10 (dynamic)
 
     // HLIT, HDIST, HCLEN
     bw.write_bits((nlit - 257) as u32, 5);
@@ -2205,11 +2205,11 @@ fn write_fixed_block(
     dist_codes_table: &Array<u8>
 ) {
     if is_last {
-        bw.write_bits(1 as u32, 1);  // BFINAL
+        bw.write_bits(1, 1);  // BFINAL
     } else {
-        bw.write_bits(0 as u32, 1);
+        bw.write_bits(0, 1);
     }
-    bw.write_bits(1 as u32, 2);  // BTYPE=01 (fixed)
+    bw.write_bits(1, 2);  // BTYPE=01 (fixed)
 
     for let mut i = 0; i < sym_count; i += 1 {
         let sym = symbols[i];
@@ -2307,8 +2307,8 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
         // Empty input: just write empty block
         let mut bw = BitWriter::new();
         let ltree = build_fixed_ltree();
-        bw.write_bits(1 as u32, 1);  // BFINAL
-        bw.write_bits(1 as u32, 2);  // fixed
+        bw.write_bits(1, 1);  // BFINAL
+        bw.write_bits(1, 2);  // fixed
         bw.write_bits(ltree[256].code as u32, ltree[256].len as i32);
         bw.flush();
         return bw.output;
@@ -2572,10 +2572,10 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 
     // Build optimal trees to estimate dynamic cost
     let mut lit_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut lit_lengths: Array<u8> = Array::<u8>::filled(286, 0 as u8);
+    let mut lit_lengths: Array<u8> = Array::<u8>::filled(286, 0);
     build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
     let mut dist_bl_count: Array<i32> = Array::<i32>::filled(16, 0);
-    let mut dist_lengths: Array<u8> = Array::<u8>::filled(30, 0 as u8);
+    let mut dist_lengths: Array<u8> = Array::<u8>::filled(30, 0);
     build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
 
     let mut dynamic_data_bits = 0;
@@ -2599,13 +2599,13 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
 
     // Compute accurate tree header cost
     let mut nlit = 286;
-    while nlit > 257 && lit_lengths[nlit - 1] == 0 as u8 { nlit -= 1; }
+    while nlit > 257 && lit_lengths[nlit - 1] == 0 { nlit -= 1; }
     let mut ndist = 30;
-    while ndist > 1 && dist_lengths[ndist - 1] == 0 as u8 { ndist -= 1; }
+    while ndist > 1 && dist_lengths[ndist - 1] == 0 { ndist -= 1; }
 
     // RLE-encode the combined code lengths to count header bits
     let total_codes = nlit + ndist;
-    let mut hdr_combined: Array<u8> = Array::<u8>::filled(total_codes, 0 as u8);
+    let mut hdr_combined: Array<u8> = Array::<u8>::filled(total_codes, 0);
     for let mut hi = 0; hi < nlit; hi += 1 {
         hdr_combined[hi] = lit_lengths[hi];
     }
@@ -2622,20 +2622,20 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
         while hci + hcount < total_codes && hdr_combined[hci + hcount] == hval {
             hcount += 1;
         }
-        if hval == 0 as u8 {
+        if hval == 0 {
             let mut hrem = hcount;
             while hrem > 0 {
                 if hrem >= 11 {
                     let hrun = i32::min(hrem, 138);
-                    hdr_rle.append(18 as u8);
+                    hdr_rle.append(18);
                     hdr_rle_extra.append(hrun - 11);
                     hrem -= hrun;
                 } else if hrem >= 3 {
-                    hdr_rle.append(17 as u8);
+                    hdr_rle.append(17);
                     hdr_rle_extra.append(hrem - 3);
                     hrem = 0;
                 } else {
-                    hdr_rle.append(0 as u8);
+                    hdr_rle.append(0);
                     hdr_rle_extra.append(0);
                     hrem -= 1;
                 }
@@ -2647,7 +2647,7 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
             while hrem > 0 {
                 if hrem >= 3 {
                     let hrun = i32::min(hrem, 6);
-                    hdr_rle.append(16 as u8);
+                    hdr_rle.append(16);
                     hdr_rle_extra.append(hrun - 3);
                     hrem -= hrun;
                 } else {
@@ -2666,13 +2666,13 @@ pub fn deflate_with_level(input: &Array<u8>, level: i32, strategy: i32) -> Array
         hdr_bl_freq[hdr_rle[hj] as i32] += 1;
     }
     let mut hdr_bl_bl_count: Array<i32> = Array::<i32>::filled(MAX_BL_BITS + 1, 0);
-    let mut hdr_bl_lengths: Array<u8> = Array::<u8>::filled(19, 0 as u8);
+    let mut hdr_bl_lengths: Array<u8> = Array::<u8>::filled(19, 0);
     build_huffman_tree(&hdr_bl_freq, 19, MAX_BL_BITS, &mut hdr_bl_bl_count, &mut hdr_bl_lengths);
     let hdr_bl_tree = gen_huffman_codes(&hdr_bl_lengths, 19, MAX_BL_BITS);
 
     let hdr_bl_order: Array<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
     let mut hdr_nbl = 19;
-    while hdr_nbl > 4 && hdr_bl_lengths[hdr_bl_order[hdr_nbl - 1]] == 0 as u8 {
+    while hdr_nbl > 4 && hdr_bl_lengths[hdr_bl_order[hdr_nbl - 1]] == 0 {
         hdr_nbl -= 1;
     }
 
@@ -2739,10 +2739,10 @@ fn zlib_wrap(input: &Array<u8>, deflated: &Array<u8>, level: i32) -> Array<u8> {
 
     // adler32 trailer (big-endian)
     let checksum = adler32(adler32_init(), input, 0, input.len());
-    output.append(((checksum >> 24 as u32) & 0xFF as u32) as u8);
-    output.append(((checksum >> 16 as u32) & 0xFF as u32) as u8);
-    output.append(((checksum >> 8 as u32) & 0xFF as u32) as u8);
-    output.append((checksum & 0xFF as u32) as u8);
+    output.append(((checksum >> 24) & 0xFF) as u8);
+    output.append(((checksum >> 16) & 0xFF) as u8);
+    output.append(((checksum >> 8) & 0xFF) as u8);
+    output.append((checksum & 0xFF) as u8);
 
     return output;
 }
@@ -2766,13 +2766,13 @@ pub fn compress_with_strategy(input: &Array<u8>, level: i32, strategy: i32) -> A
 
 
 // Gzip header constants
-global GZIP_MAGIC1: u8 = 0x1F as u8;
-global GZIP_MAGIC2: u8 = 0x8B as u8;
-global GZIP_FTEXT: u8 = 1 as u8;
-global GZIP_FHCRC: u8 = 2 as u8;
-global GZIP_FEXTRA: u8 = 4 as u8;
-global GZIP_FNAME: u8 = 8 as u8;
-global GZIP_FCOMMENT: u8 = 16 as u8;
+global GZIP_MAGIC1: u8 = 0x1F;
+global GZIP_MAGIC2: u8 = 0x8B;
+global GZIP_FTEXT: u8 = 1;
+global GZIP_FHCRC: u8 = 2;
+global GZIP_FEXTRA: u8 = 4;
+global GZIP_FNAME: u8 = 8;
+global GZIP_FCOMMENT: u8 = 16;
 
 // Parse a single gzip member header, returning the data start position
 fn gzip_parse_header(input: &Array<u8>, start: i32) -> i32 {
@@ -2784,7 +2784,7 @@ fn gzip_parse_header(input: &Array<u8>, start: i32) -> i32 {
         panic("invalid gzip magic number");
     }
 
-    if input[start + 2] != 8 as u8 {
+    if input[start + 2] != 8 {
         panic("unsupported gzip compression method");
     }
 
@@ -2792,30 +2792,30 @@ fn gzip_parse_header(input: &Array<u8>, start: i32) -> i32 {
     let mut pos = start + 10;  // skip ID1, ID2, CM, FLG, MTIME(4), XFL, OS
 
     // Skip extra field
-    if (flags & GZIP_FEXTRA) != 0 as u8 {
+    if (flags & GZIP_FEXTRA) != 0 {
         if pos + 2 > input.len() { panic("gzip: truncated extra field"); }
         let xlen = input[pos] as i32 | ((input[pos + 1] as i32) << 8);
         pos += 2 + xlen;
     }
 
     // Skip original file name (null-terminated)
-    if (flags & GZIP_FNAME) != 0 as u8 {
-        while pos < input.len() && input[pos] != 0 as u8 {
+    if (flags & GZIP_FNAME) != 0 {
+        while pos < input.len() && input[pos] != 0 {
             pos += 1;
         }
         pos += 1;
     }
 
     // Skip comment (null-terminated)
-    if (flags & GZIP_FCOMMENT) != 0 as u8 {
-        while pos < input.len() && input[pos] != 0 as u8 {
+    if (flags & GZIP_FCOMMENT) != 0 {
+        while pos < input.len() && input[pos] != 0 {
             pos += 1;
         }
         pos += 1;
     }
 
     // Skip header CRC16
-    if (flags & GZIP_FHCRC) != 0 as u8 {
+    if (flags & GZIP_FHCRC) != 0 {
         pos += 2;
     }
 
@@ -2857,9 +2857,9 @@ pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
 
         // Verify CRC32
         let stored_crc = (input[trailer_pos] as u32)
-            | ((input[trailer_pos + 1] as u32) << 8 as u32)
-            | ((input[trailer_pos + 2] as u32) << 16 as u32)
-            | ((input[trailer_pos + 3] as u32) << 24 as u32);
+            | ((input[trailer_pos + 1] as u32) << 8)
+            | ((input[trailer_pos + 2] as u32) << 16)
+            | ((input[trailer_pos + 3] as u32) << 24);
         let computed_crc = crc32(crc32_init(), &member_output, 0, member_output.len());
         if computed_crc != stored_crc {
             panic("gzip CRC32 checksum mismatch");
@@ -2867,9 +2867,9 @@ pub fn inflate_gzip(input: &Array<u8>) -> Array<u8> {
 
         // Verify ISIZE (original size mod 2^32)
         let stored_size = (input[trailer_pos + 4] as u32)
-            | ((input[trailer_pos + 5] as u32) << 8 as u32)
-            | ((input[trailer_pos + 6] as u32) << 16 as u32)
-            | ((input[trailer_pos + 7] as u32) << 24 as u32);
+            | ((input[trailer_pos + 5] as u32) << 8)
+            | ((input[trailer_pos + 6] as u32) << 16)
+            | ((input[trailer_pos + 7] as u32) << 24);
         if stored_size != (member_output.len() as u32) {
             panic("gzip ISIZE mismatch");
         }
@@ -2902,16 +2902,16 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
     // Gzip header (10 bytes)
     output.append(GZIP_MAGIC1);      // ID1
     output.append(GZIP_MAGIC2);      // ID2
-    output.append(8 as u8);          // CM = deflate
-    output.append(0 as u8);          // FLG = no flags
-    output.append(0 as u8);          // MTIME (4 bytes, zero)
-    output.append(0 as u8);
-    output.append(0 as u8);
-    output.append(0 as u8);
+    output.append(8);                // CM = deflate
+    output.append(0);                // FLG = no flags
+    output.append(0);                // MTIME (4 bytes, zero)
+    output.append(0);
+    output.append(0);
+    output.append(0);
     // XFL: compression level hint
-    let xfl = if level <= 1 { 4 as u8 } else if level >= 9 { 2 as u8 } else { 0 as u8 };
+    let xfl: u8 = if level <= 1 { 4 } else if level >= 9 { 2 } else { 0 };
     output.append(xfl);
-    output.append(0xFF as u8);       // OS = unknown
+    output.append(0xFF);             // OS = unknown
 
     // Compressed data
     for let mut i = 0; i < deflated.len(); i += 1 {
@@ -2920,17 +2920,17 @@ pub fn gzip_compress2(input: &Array<u8>, level: i32) -> Array<u8> {
 
     // CRC32 trailer (little-endian)
     let crc = crc32(crc32_init(), input, 0, input.len());
-    output.append((crc & 0xFF as u32) as u8);
-    output.append(((crc >> 8 as u32) & 0xFF as u32) as u8);
-    output.append(((crc >> 16 as u32) & 0xFF as u32) as u8);
-    output.append(((crc >> 24 as u32) & 0xFF as u32) as u8);
+    output.append((crc & 0xFF) as u8);
+    output.append(((crc >> 8) & 0xFF) as u8);
+    output.append(((crc >> 16) & 0xFF) as u8);
+    output.append(((crc >> 24) & 0xFF) as u8);
 
     // ISIZE: original size mod 2^32 (little-endian)
     let isize_val = input.len() as u32;
-    output.append((isize_val & 0xFF as u32) as u8);
-    output.append(((isize_val >> 8 as u32) & 0xFF as u32) as u8);
-    output.append(((isize_val >> 16 as u32) & 0xFF as u32) as u8);
-    output.append(((isize_val >> 24 as u32) & 0xFF as u32) as u8);
+    output.append((isize_val & 0xFF) as u8);
+    output.append(((isize_val >> 8) & 0xFF) as u8);
+    output.append(((isize_val >> 16) & 0xFF) as u8);
+    output.append(((isize_val >> 24) & 0xFF) as u8);
 
     return output;
 }
@@ -2985,7 +2985,7 @@ impl GzipHeader {
     pub fn new() -> GzipHeader {
         return GzipHeader {
             text: false,
-            time: 0 as u32,
+            time: 0,
             xflags: 0,
             os: 0xFF,
             extra: [],
@@ -3035,7 +3035,7 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     // Gzip header
     output.append(GZIP_MAGIC1);
     output.append(GZIP_MAGIC2);
-    output.append(8 as u8);  // CM = deflate
+    output.append(8);  // CM = deflate
 
     // Flags
     let mut flags = 0;
@@ -3047,10 +3047,10 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
     output.append(flags as u8);
 
     // MTIME (4 bytes little-endian)
-    output.append((header.time & 0xFF as u32) as u8);
-    output.append(((header.time >> 8 as u32) & 0xFF as u32) as u8);
-    output.append(((header.time >> 16 as u32) & 0xFF as u32) as u8);
-    output.append(((header.time >> 24 as u32) & 0xFF as u32) as u8);
+    output.append((header.time & 0xFF) as u8);
+    output.append(((header.time >> 8) & 0xFF) as u8);
+    output.append(((header.time >> 16) & 0xFF) as u8);
+    output.append(((header.time >> 24) & 0xFF) as u8);
 
     // XFL
     let xfl = if level <= 1 { 4 } else if level >= 9 { 2 } else { 0 };
@@ -3074,7 +3074,7 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
         for let mut i = 0; i < header.name.len(); i += 1 {
             output.append(header.name.get_byte(i));
         }
-        output.append(0 as u8);
+        output.append(0);
     }
 
     // Comment (null-terminated)
@@ -3082,14 +3082,14 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
         for let mut i = 0; i < header.comment.len(); i += 1 {
             output.append(header.comment.get_byte(i));
         }
-        output.append(0 as u8);
+        output.append(0);
     }
 
     // Header CRC16
     if header.hcrc {
         let hcrc = crc32(crc32_init(), &output, 0, output.len());
-        output.append((hcrc & 0xFF as u32) as u8);
-        output.append(((hcrc >> 8 as u32) & 0xFF as u32) as u8);
+        output.append((hcrc & 0xFF) as u8);
+        output.append(((hcrc >> 8) & 0xFF) as u8);
     }
 
     // Compressed data
@@ -3099,17 +3099,17 @@ pub fn gzip_compress_with_header(input: &Array<u8>, level: i32, header: &GzipHea
 
     // CRC32 trailer
     let crc = crc32(crc32_init(), input, 0, input.len());
-    output.append((crc & 0xFF as u32) as u8);
-    output.append(((crc >> 8 as u32) & 0xFF as u32) as u8);
-    output.append(((crc >> 16 as u32) & 0xFF as u32) as u8);
-    output.append(((crc >> 24 as u32) & 0xFF as u32) as u8);
+    output.append((crc & 0xFF) as u8);
+    output.append(((crc >> 8) & 0xFF) as u8);
+    output.append(((crc >> 16) & 0xFF) as u8);
+    output.append(((crc >> 24) & 0xFF) as u8);
 
     // ISIZE
     let isize_val = input.len() as u32;
-    output.append((isize_val & 0xFF as u32) as u8);
-    output.append(((isize_val >> 8 as u32) & 0xFF as u32) as u8);
-    output.append(((isize_val >> 16 as u32) & 0xFF as u32) as u8);
-    output.append(((isize_val >> 24 as u32) & 0xFF as u32) as u8);
+    output.append((isize_val & 0xFF) as u8);
+    output.append(((isize_val >> 8) & 0xFF) as u8);
+    output.append(((isize_val >> 16) & 0xFF) as u8);
+    output.append(((isize_val >> 24) & 0xFF) as u8);
 
     return output;
 }
@@ -3132,26 +3132,26 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
     if input[0] != GZIP_MAGIC1 || input[1] != GZIP_MAGIC2 {
         panic("invalid gzip magic number");
     }
-    if input[2] != 8 as u8 {
+    if input[2] != 8 {
         panic("unsupported gzip compression method");
     }
 
     let flags = input[3];
     let mut header = GzipHeader::new();
-    header.text = (flags & GZIP_FTEXT) != 0 as u8;
+    header.text = (flags & GZIP_FTEXT) != 0;
 
     // MTIME
     header.time = (input[4] as u32)
-        | ((input[5] as u32) << 8 as u32)
-        | ((input[6] as u32) << 16 as u32)
-        | ((input[7] as u32) << 24 as u32);
+        | ((input[5] as u32) << 8)
+        | ((input[6] as u32) << 16)
+        | ((input[7] as u32) << 24);
     header.xflags = input[8] as i32;
     header.os = input[9] as i32;
 
     let mut pos = 10;
 
     // Extra field
-    if (flags & GZIP_FEXTRA) != 0 as u8 {
+    if (flags & GZIP_FEXTRA) != 0 {
         if pos + 2 > input.len() { panic("gzip: truncated extra field"); }
         let xlen = input[pos] as i32 | ((input[pos + 1] as i32) << 8);
         pos += 2;
@@ -3163,9 +3163,9 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
     }
 
     // Original file name
-    if (flags & GZIP_FNAME) != 0 as u8 {
+    if (flags & GZIP_FNAME) != 0 {
         let name_start = pos;
-        while pos < input.len() && input[pos] != 0 as u8 {
+        while pos < input.len() && input[pos] != 0 {
             pos += 1;
         }
         let name_len = pos - name_start;
@@ -3174,9 +3174,9 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
     }
 
     // Comment
-    if (flags & GZIP_FCOMMENT) != 0 as u8 {
+    if (flags & GZIP_FCOMMENT) != 0 {
         let comment_start = pos;
-        while pos < input.len() && input[pos] != 0 as u8 {
+        while pos < input.len() && input[pos] != 0 {
             pos += 1;
         }
         let comment_len = pos - comment_start;
@@ -3184,7 +3184,7 @@ pub fn inflate_get_gzip_header(input: &Array<u8>) -> GzipHeader {
         header.comment = bytes_to_string(input, comment_start, comment_len);
     }
 
-    header.hcrc = (flags & GZIP_FHCRC) != 0 as u8;
+    header.hcrc = (flags & GZIP_FHCRC) != 0;
 
     return header;
 }
@@ -3455,20 +3455,20 @@ impl DeflateStream {
         output.append(flg as u8);
 
         let dict_id = adler32(adler32_init(), &self.dict, 0, self.dict.len());
-        output.append(((dict_id >> 24 as u32) & 0xFF as u32) as u8);
-        output.append(((dict_id >> 16 as u32) & 0xFF as u32) as u8);
-        output.append(((dict_id >> 8 as u32) & 0xFF as u32) as u8);
-        output.append((dict_id & 0xFF as u32) as u8);
+        output.append(((dict_id >> 24) & 0xFF) as u8);
+        output.append(((dict_id >> 16) & 0xFF) as u8);
+        output.append(((dict_id >> 8) & 0xFF) as u8);
+        output.append((dict_id & 0xFF) as u8);
 
         for let mut i = 0; i < deflated.len(); i += 1 {
             output.append(deflated[i]);
         }
 
         let checksum = adler32(adler32_init(), &combined, 0, combined.len());
-        output.append(((checksum >> 24 as u32) & 0xFF as u32) as u8);
-        output.append(((checksum >> 16 as u32) & 0xFF as u32) as u8);
-        output.append(((checksum >> 8 as u32) & 0xFF as u32) as u8);
-        output.append((checksum & 0xFF as u32) as u8);
+        output.append(((checksum >> 24) & 0xFF) as u8);
+        output.append(((checksum >> 16) & 0xFF) as u8);
+        output.append(((checksum >> 8) & 0xFF) as u8);
+        output.append((checksum & 0xFF) as u8);
 
         return output;
     }
@@ -3612,11 +3612,11 @@ impl InflateStream {
         if ((cmf as i32 * 256 + flg as i32) % 31) != 0 {
             panic("invalid zlib header");
         }
-        if (cmf & 0x0F as u8) != 8 as u8 {
+        if (cmf & 0x0F) != 8 {
             panic("unsupported compression method");
         }
 
-        let has_fdict = (flg & 0x20 as u8) != 0 as u8;
+        let has_fdict = (flg & 0x20) != 0;
         let mut data_start = 2;
 
         if has_fdict {
@@ -3630,9 +3630,9 @@ impl InflateStream {
 
         // Verify adler32
         let computed = adler32(adler32_init(), &raw_result, 0, raw_result.len());
-        let stored = ((input[input.len() - 4] as u32) << 24 as u32)
-            | ((input[input.len() - 3] as u32) << 16 as u32)
-            | ((input[input.len() - 2] as u32) << 8 as u32)
+        let stored = ((input[input.len() - 4] as u32) << 24)
+            | ((input[input.len() - 3] as u32) << 16)
+            | ((input[input.len() - 2] as u32) << 8)
             | (input[input.len() - 1] as u32);
         if computed != stored {
             panic("adler32 checksum mismatch");
@@ -3662,8 +3662,8 @@ pub fn inflate_sync_find(input: &Array<u8>, start: i32) -> i32 {
     // This pattern appears at the start of a stored block after a sync flush
     let mut pos = start;
     while pos + 3 < input.len() {
-        if input[pos] == 0 as u8 && input[pos + 1] == 0 as u8
-            && input[pos + 2] == 0xFF as u8 && input[pos + 3] == 0xFF as u8 {
+        if input[pos] == 0 && input[pos + 1] == 0
+            && input[pos + 2] == 0xFF && input[pos + 3] == 0xFF {
             if pos >= 1 {
                 return pos - 1;
             }

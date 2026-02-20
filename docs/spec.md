@@ -1146,6 +1146,17 @@ let octal = 0o755;                 // Octal
 let hex = 0xFF_AA_BB;              // Hexadecimal
 ```
 
+**Type coercion**: When the target type is known from context (type annotation or function argument), integer literals coerce to any compatible integer type, including `i128`/`u128`:
+
+```wado
+let byte: i8 = 127;
+let long: i64 = 9_223_372_036_854_775_807;
+let unsigned: u32 = 4_294_967_295;
+let big: u128 = 1_000_000_000_000;
+fn foo(n: i64) { ... }
+foo(100);  // literal coerced to i64
+```
+
 **Type conversion** (via `as`):
 
 ```wado
@@ -1162,6 +1173,13 @@ let with_separator = 1_000_000.5;
 let scientific = 6.022e23;         // 6.022 × 10²³
 let negative_exp = 1.6e-19;        // 1.6 × 10⁻¹⁹
 let explicit_positive = 2.5e+10;
+```
+
+**Type coercion**: Floating-point literals coerce to either `f32` or `f64` when the target type is known:
+
+```wado
+let single: f32 = 3.14;
+let double: f64 = 3.14159265358979;
 ```
 
 **Type conversion** (via `as`):
