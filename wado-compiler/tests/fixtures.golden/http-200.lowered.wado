@@ -10,7 +10,7 @@
 // wasi::task-return (task_return)
 
 export fn handle(request: Request) {
-    let [trailers_future, _trailers_tx] = move core::builtin::future_create_pair();
+    let [trailers_future, trailers_tx] = move core::builtin::future_create_pair();
     let headers: Fields = __cm_adapter__Fields_new();
     let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = move __cm_adapter__Response_new(headers, 0, 0, trailers_future);
     let response: Response = __pattern_temp_0.0;
@@ -29,16 +29,6 @@ export fn handle(request: Request) {
         let __ok_val: Response = __variant_payload(__task_ret, case=0);
         __tv = __ok_val;
         cm_raw_call task-return(__tv, __tv, __tv, __tv, __tv, __tv, __tv, __tv);
-        let __trailers_tx: i32 = core::builtin::global_get_pending_trailers_tx();
-        if (__trailers_tx != 0) {
-            let __trailers_ptr: i32 = core::builtin::realloc(0, 0, 8, 8);
-            core::builtin::i32_store(__trailers_ptr, 0);
-            core::builtin::i32_store((__trailers_ptr + 4), 0);
-            core::builtin::future_write(__trailers_tx, __trailers_ptr);
-            core::builtin::realloc(__trailers_ptr, 8, 8, 0);
-            core::builtin::future_drop_writable(__trailers_tx);
-        }
-        return;
     } else {
         __tv = 1;
         let __err_val: ErrorCode = __variant_payload(__task_ret, case=1);
@@ -329,18 +319,8 @@ export fn handle(request: Request) {
             __tv = __flat;
         }
         cm_raw_call task-return(__tv, __tv, __tv, __tv, __tv, __tv, __tv, __tv);
-        let __trailers_tx: i32 = core::builtin::global_get_pending_trailers_tx();
-        if (__trailers_tx != 0) {
-            let __trailers_ptr: i32 = core::builtin::realloc(0, 0, 8, 8);
-            core::builtin::i32_store(__trailers_ptr, 0);
-            core::builtin::i32_store((__trailers_ptr + 4), 0);
-            core::builtin::future_write(__trailers_tx, __trailers_ptr);
-            core::builtin::realloc(__trailers_ptr, 8, 8, 0);
-            core::builtin::future_drop_writable(__trailers_tx);
-        }
-        return;
     }
-    cm_raw_call task-return(0, 0, 0, 0, 0, 0, 0, 0);
+    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(move Result<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 fn __cm_adapter__Fields_new() -> Fields {

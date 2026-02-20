@@ -59,10 +59,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     assert cloned_still_has;
 
     // Return 200 OK
-    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let response_headers = Fields::new();
     let [response, _tx_future] = Response::new(response_headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 __DATA__

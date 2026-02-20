@@ -23,10 +23,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // We can't inspect them directly, but creating them should not trap
 
     // Return 200 OK
-    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Fields::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 __DATA__

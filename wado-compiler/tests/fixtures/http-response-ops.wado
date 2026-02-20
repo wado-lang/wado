@@ -19,7 +19,7 @@ use {
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // 1. Create a trailers future pair
-    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
 
     // 2. Create headers
     let headers = Fields::new();
@@ -40,6 +40,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Return the response with status 404
     task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 __DATA__

@@ -4,9 +4,9 @@
 //! into a sequence of WIR instructions.
 
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+    FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType};
 use indexmap::IndexMap;
@@ -989,6 +989,12 @@ impl FunctionTranslator<'_, '_> {
                 args,
                 ..
             } => {
+                // Special case: FutureWritable::write / FutureWritable::drop
+                if let Some(instr) = self.try_translate_future_writable_method(receiver, func, args)
+                {
+                    return instr;
+                }
+
                 let mut translated_args: Vec<WirInstr> = Vec::new();
                 translated_args.push(self.translate_expr(receiver));
                 for arg in args {
@@ -2328,36 +2334,12 @@ impl FunctionTranslator<'_, '_> {
                 )));
 
                 let mut instrs = vec![declare, set_temp];
-                // For futures, store the tx handle (high 32 bits) in the pending_trailers_tx
-                // global so the export adapter can write Ok(None) trailers after task-return.
-                if is_future
-                    && self
-                        .ctx
-                        .global_map
-                        .contains_key("global:__pending_trailers_tx")
-                {
-                    instrs.push(WirInstr::GlobalSet {
-                        name: WirName {
-                            display: "__pending_trailers_tx".to_string(),
-                            fq: "global:__pending_trailers_tx".to_string(),
-                        },
-                        value: Box::new(get_high.clone()),
-                    });
-                }
                 instrs.push(WirInstr::StructNew {
                     type_id,
                     fields: vec![get_low, get_high],
                 });
                 Some(WirInstr::Seq(instrs))
             }
-
-            // === Global get pending trailers tx ===
-            "builtin::global_get_pending_trailers_tx" => Some(WirInstr::GlobalGet {
-                name: WirName {
-                    display: "__pending_trailers_tx".to_string(),
-                    fq: "global:__pending_trailers_tx".to_string(),
-                },
-            }),
 
             // Not an instruction-builtin; fall through to function call resolution
             _ => None,
@@ -2381,6 +2363,145 @@ impl FunctionTranslator<'_, '_> {
             // Fallback: just emit the instruction (shouldn't happen)
             instr
         }
+    }
+
+    // =========================================================================
+    // FutureWritable method interception
+    // =========================================================================
+
+    /// Check if a method call is on a `FutureWritable<T>` receiver.
+    /// If so, emit the appropriate WIR directly without going through `resolve_function_ref`.
+    fn try_translate_future_writable_method(
+        &mut self,
+        receiver: &TirExpr,
+        func: &FunctionRef,
+        _args: &[TirExpr],
+    ) -> Option<WirInstr> {
+        // Unwrap reference wrappers to get the base type
+        let mut recv_type = self.type_table.get(receiver.type_id).clone();
+        loop {
+            match &recv_type {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    let inner = *inner;
+                    recv_type = self.type_table.get(inner).clone();
+                }
+                _ => break,
+            }
+        }
+        if !matches!(recv_type, ResolvedType::FutureWritable(_)) {
+            return None;
+        }
+        let method_name = func.method_info()?.method_name.clone();
+        let handle = self.translate_expr(receiver);
+        match method_name.as_str() {
+            "write" => Some(self.emit_future_write_ok_none(handle)),
+            "drop" => Some(self.emit_future_writable_drop(handle)),
+            _ => None,
+        }
+    }
+
+    /// Emit `future_drop_writable(handle)`.
+    fn emit_future_writable_drop(&mut self, handle: WirInstr) -> WirInstr {
+        let Some(func_id) = self
+            .ctx
+            .func_map
+            .get("builtin/future_drop_writable")
+            .cloned()
+        else {
+            return WirInstr::Unreachable;
+        };
+        WirInstr::Call {
+            func_id,
+            args: vec![handle],
+        }
+    }
+
+    /// Emit WIR to write `Ok(None)` (8 zero bytes) into a `FutureWritable` handle,
+    /// then free the temporary buffer.
+    ///
+    /// Hardcoded encoding for `Result<Option<Trailers>, ErrorCode>::Ok(null)`:
+    ///   - 4 bytes at offset 0: Ok discriminant (0)
+    ///   - 4 bytes at offset 4: None discriminant (0)
+    ///
+    /// TODO: implement general CM lowering for arbitrary T values.
+    fn emit_future_write_ok_none(&mut self, handle: WirInstr) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(future_write_id) = self.ctx.func_map.get("builtin/future_write").cloned() else {
+            return WirInstr::Unreachable;
+        };
+
+        self.local_counter += 1;
+        let ptr_name = format!("__fw_write_ptr_{}", self.local_counter);
+
+        // DeclareLocal ptr: i32
+        let declare_ptr = WirInstr::DeclareLocal {
+            name: ptr_name.clone(),
+            ty: WirType::I32,
+        };
+        // ptr = realloc(0, 0, 8, 8) — allocate 8 bytes with 8-byte alignment.
+        // The result<option<own<trailers>>, error-code> type requires 8-byte alignment
+        // because error-code contains option<u64> fields.
+        let alloc_ptr = WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(8),
+                    WirInstr::I32Const(8),
+                ],
+            }),
+        };
+        // Store 0 at ptr+0 (Ok discriminant)
+        let store_ok = WirInstr::I32Store {
+            offset: 0,
+            align: 2,
+            addr: Box::new(WirInstr::LocalGet {
+                name: ptr_name.clone(),
+            }),
+            value: Box::new(WirInstr::I32Const(0)),
+        };
+        // Store 0 at ptr+4 (None discriminant)
+        let store_none = WirInstr::I32Store {
+            offset: 4,
+            align: 2,
+            addr: Box::new(WirInstr::LocalGet {
+                name: ptr_name.clone(),
+            }),
+            value: Box::new(WirInstr::I32Const(0)),
+        };
+        // Drop result of future_write(handle, ptr)
+        let do_write = WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: future_write_id,
+            args: vec![
+                handle,
+                WirInstr::LocalGet {
+                    name: ptr_name.clone(),
+                },
+            ],
+        }));
+        // Drop result of realloc(ptr, 8, 8, 0) — free the buffer
+        let free_mem = WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet { name: ptr_name },
+                WirInstr::I32Const(8),
+                WirInstr::I32Const(8),
+                WirInstr::I32Const(0),
+            ],
+        }));
+
+        WirInstr::Seq(vec![
+            declare_ptr,
+            alloc_ptr,
+            store_ok,
+            store_none,
+            do_write,
+            free_mem,
+        ])
     }
 
     /// Translate array index read: `arr[i]`

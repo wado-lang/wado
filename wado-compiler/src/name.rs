@@ -1083,7 +1083,7 @@ pub enum TypeNameInfo {
     Stream(String),
     /// Future<T> with inner type name
     Future(String),
-    /// FutureWritable<T> with inner type name
+    /// `FutureWritable`<T> with inner type name
     FutureWritable(String),
     /// Reactive<T> with inner type name
     Reactive(String),

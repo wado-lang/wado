@@ -6140,6 +6140,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
+            // FutureWritable<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::FutureWritable(_) => (
+                "FutureWritable".to_string(),
+                ModuleSource::Core {
+                    name: "prelude/types.wado".to_string(),
+                },
+            ),
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -6303,6 +6310,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     impl_offset = 1;
                     subst_ctx = subst_ctx.with_impl_args(&[elem]);
                 }
+                // FutureWritable<T> has one type param T
+                ResolvedType::FutureWritable(inner) => {
+                    impl_offset = 1;
+                    subst_ctx = subst_ctx.with_impl_args(&[inner]);
+                }
                 _ => {}
             }
         } else {
@@ -6311,7 +6323,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     impl_offset = type_args.len() as u32;
                 }
-                ResolvedType::BuiltinArray(_) => {
+                ResolvedType::BuiltinArray(_) | ResolvedType::FutureWritable(_) => {
                     impl_offset = 1;
                 }
                 _ => {}
@@ -6362,6 +6374,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         "Array".to_string(),
                         vec![elem_name],
                         Some(vec![elem]),
+                    )
+                }
+                // FutureWritable<T>: base name is "FutureWritable", one type arg
+                ResolvedType::FutureWritable(inner) => {
+                    let inner_name = self.type_table.borrow().mangle_type_name(inner);
+                    let mangled = format!("FutureWritable<{inner_name}>");
+                    (
+                        mangled,
+                        "FutureWritable".to_string(),
+                        vec![inner_name],
+                        Some(vec![inner]),
                     )
                 }
                 _ => {
@@ -7396,6 +7419,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 name,
                 module_source,
             } => (name.clone(), Some(module_source.clone()), None, None),
+            // FutureWritable<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::FutureWritable(inner) => (
+                "FutureWritable".to_string(),
+                Some(ModuleSource::Core {
+                    name: "prelude/types.wado".to_string(),
+                }),
+                Some(vec![*inner]),
+                None,
+            ),
             _ => return None,
         };
 

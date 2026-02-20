@@ -391,106 +391,6 @@ fn alloc_local(next_local: &mut u32, local_types: &mut Vec<TypeId>, ty: TypeId) 
     idx
 }
 
-/// Generate TIR statements to resolve the pending HTTP trailers future.
-///
-/// After `task-return`, if a trailers future tx was saved in the
-/// `__pending_trailers_tx` global, write `Ok(None)` to it and drop the
-/// writable end so the CM runtime can complete the HTTP response.
-fn resolve_pending_trailers_stmts(
-    next_local: &mut u32,
-    local_types: &mut Vec<TypeId>,
-) -> Vec<TirStmt> {
-    let mut stmts: Vec<TirStmt> = Vec::new();
-
-    // let __trailers_tx: i32 = core::builtin::global_get_pending_trailers_tx();
-    let tx_local = alloc_local(next_local, local_types, TypeTable::I32);
-    stmts.push(let_stmt(
-        "__trailers_tx",
-        tx_local,
-        TypeTable::I32,
-        builtin_call("global_get_pending_trailers_tx", vec![], TypeTable::I32),
-    ));
-
-    // if (__trailers_tx != 0) { ... }
-    let mut if_stmts: Vec<TirStmt> = Vec::new();
-
-    // let __trailers_ptr: i32 = core::builtin::realloc(0, 0, 8, 8);
-    let ptr_local = alloc_local(next_local, local_types, TypeTable::I32);
-    if_stmts.push(let_stmt(
-        "__trailers_ptr",
-        ptr_local,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![i32_const(0), i32_const(0), i32_const(8), i32_const(8)],
-            TypeTable::I32,
-        ),
-    ));
-
-    // core::builtin::i32_store(__trailers_ptr, 0); // Ok discriminant
-    if_stmts.push(expr_stmt(builtin_call(
-        "i32_store",
-        vec![
-            local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
-            i32_const(0),
-        ],
-        TypeTable::UNIT,
-    )));
-
-    // core::builtin::i32_store((__trailers_ptr + 4), 0); // None
-    if_stmts.push(expr_stmt(builtin_call(
-        "i32_store",
-        vec![
-            binary_add(
-                local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
-                i32_const(4),
-            ),
-            i32_const(0),
-        ],
-        TypeTable::UNIT,
-    )));
-
-    // core::builtin::future_write(__trailers_tx, __trailers_ptr);
-    if_stmts.push(expr_stmt(builtin_call(
-        "future_write",
-        vec![
-            local_ref(tx_local, "__trailers_tx", TypeTable::I32),
-            local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
-        ],
-        TypeTable::I32,
-    )));
-
-    // core::builtin::realloc(__trailers_ptr, 8, 8, 0);
-    if_stmts.push(expr_stmt(builtin_call(
-        "realloc",
-        vec![
-            local_ref(ptr_local, "__trailers_ptr", TypeTable::I32),
-            i32_const(8),
-            i32_const(8),
-            i32_const(0),
-        ],
-        TypeTable::I32,
-    )));
-
-    // core::builtin::future_drop_writable(__trailers_tx);
-    if_stmts.push(expr_stmt(builtin_call(
-        "future_drop_writable",
-        vec![local_ref(tx_local, "__trailers_tx", TypeTable::I32)],
-        TypeTable::UNIT,
-    )));
-
-    stmts.push(if_stmt(
-        binary_ne(
-            local_ref(tx_local, "__trailers_tx", TypeTable::I32),
-            i32_const(0),
-        ),
-        block(if_stmts),
-        None,
-    ));
-
-    stmts
-}
-
 /// Synthesize a TIR expression that loads a CM value from linear memory.
 ///
 /// For primitives, returns a single expression (no setup statements).
@@ -3760,7 +3660,6 @@ fn expand_task_returns_in_func(
     flat_return_types: &[cm_abi::CmValType],
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
-    resolve_http_trailers: bool,
 ) {
     let mut func = user_func.borrow_mut();
     let mut next_local = func.local_count;
@@ -3776,7 +3675,6 @@ fn expand_task_returns_in_func(
         &mut extra_local_types,
         tir_modules,
         type_table,
-        resolve_http_trailers,
     );
     func.body = Some(body);
     func.local_count = next_local;
@@ -3790,7 +3688,6 @@ fn expand_task_return_in_block(
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
-    resolve_http_trailers: bool,
 ) {
     let stmts = std::mem::take(&mut blk.stmts);
     let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
@@ -3806,7 +3703,6 @@ fn expand_task_return_in_block(
                     local_types,
                     tir_modules,
                     type_table,
-                    resolve_http_trailers,
                 );
                 new_stmts.extend(expanded);
             }
@@ -3818,7 +3714,6 @@ fn expand_task_return_in_block(
                 local_types,
                 tir_modules,
                 type_table,
-                resolve_http_trailers,
             );
             new_stmts.push(stmt);
         }
@@ -3833,7 +3728,6 @@ fn expand_task_return_in_stmt(
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
-    resolve_http_trailers: bool,
 ) {
     match &mut stmt.kind {
         TirStmtKind::If {
@@ -3848,7 +3742,6 @@ fn expand_task_return_in_stmt(
                 local_types,
                 tir_modules,
                 type_table,
-                resolve_http_trailers,
             );
             if let Some(blk) = else_block {
                 expand_task_return_in_block(
@@ -3858,7 +3751,6 @@ fn expand_task_return_in_stmt(
                     local_types,
                     tir_modules,
                     type_table,
-                    resolve_http_trailers,
                 );
             }
         }
@@ -3870,7 +3762,6 @@ fn expand_task_return_in_stmt(
                 local_types,
                 tir_modules,
                 type_table,
-                resolve_http_trailers,
             );
         }
         TirStmtKind::IfPattern {
@@ -3885,7 +3776,6 @@ fn expand_task_return_in_stmt(
                 local_types,
                 tir_modules,
                 type_table,
-                resolve_http_trailers,
             );
             if let Some(blk) = else_block {
                 expand_task_return_in_block(
@@ -3895,7 +3785,6 @@ fn expand_task_return_in_stmt(
                     local_types,
                     tir_modules,
                     type_table,
-                    resolve_http_trailers,
                 );
             }
         }
@@ -3917,7 +3806,6 @@ fn generate_inline_task_return(
     local_types: &mut Vec<TypeId>,
     tir_modules: &IndexMap<ModuleSource, crate::tir::TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
-    resolve_http_trailers: bool,
 ) -> Vec<TirStmt> {
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;
@@ -4010,10 +3898,8 @@ fn generate_inline_task_return(
             task_return_args.clone(),
             TypeTable::UNIT,
         )));
-        if resolve_http_trailers {
-            ok_stmts.extend(resolve_pending_trailers_stmts(next_local, local_types));
-        }
-        ok_stmts.push(return_stmt(None));
+        // No return here: task.return is a cooperative yield, not a function exit.
+        // Execution continues after task.return so user code after `task return` runs.
 
         // === Err case ===
         let mut err_stmts: Vec<TirStmt> = Vec::new();
@@ -4089,10 +3975,7 @@ fn generate_inline_task_return(
             task_return_args,
             TypeTable::UNIT,
         )));
-        if resolve_http_trailers {
-            err_stmts.extend(resolve_pending_trailers_stmts(next_local, local_types));
-        }
-        err_stmts.push(return_stmt(None));
+        // No return here: see comment in ok_stmts above.
 
         // Combine Ok/Err branches
         stmts.push(if_stmt(
@@ -4104,15 +3987,6 @@ fn generate_inline_task_return(
             block(ok_stmts),
             Some(block(err_stmts)),
         ));
-
-        // Fallthrough (unreachable; emit safe task-return)
-        let fallthrough_args: Vec<TirExpr> =
-            flat_return_types.iter().map(|&vt| cm_zero(vt)).collect();
-        stmts.push(expr_stmt(cm_raw_call(
-            "task-return",
-            fallthrough_args,
-            TypeTable::UNIT,
-        )));
     } else {
         drop(tt);
         // Non-Result (or empty flat types): just emit task-return(0)
@@ -4282,13 +4156,11 @@ pub fn generate_adapters(mut project: Project) -> Result<Project, String> {
                                 &tt,
                             );
                             drop(tt);
-                            let resolve_http_trailers = world_info.has_http_handler_export();
                             expand_task_returns_in_func(
                                 &user_func_rc,
                                 &flat_types,
                                 &project.tir_modules,
                                 &entry_type_table,
-                                resolve_http_trailers,
                             );
                         }
                         synthesize_async_export_adapter(
