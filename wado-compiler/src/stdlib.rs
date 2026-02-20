@@ -20,78 +20,30 @@
 //! use {Preopens, Descriptor} from "wasi:filesystem";
 //! ```
 
-/// Embedded source for core:prelude
 pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
-
-/// Embedded source for core:cli
 pub const CORE_CLI: &str = include_str!("../lib/core/cli.wado");
-
-/// Embedded source for core:stream
 pub const CORE_STREAM: &str = include_str!("../lib/core/stream.wado");
-
-/// Embedded source for core:internal
 pub const CORE_INTERNAL: &str = include_str!("../lib/core/internal.wado");
-
-/// Embedded source for core:prelude/string (String type, separated from prelude)
-/// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_STRING: &str = include_str!("../lib/core/prelude/string.wado");
-
-/// Embedded source for core:builtin (compiler intrinsic declarations)
 pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
-
-/// Embedded source for core:clocks
 pub const CORE_CLOCKS: &str = include_str!("../lib/core/clocks.wado");
-
-/// Embedded source for core:prelude/traits (trait definitions)
-/// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_TRAITS: &str = include_str!("../lib/core/prelude/traits.wado");
-
-/// Embedded source for core:prelude/int128 (128-bit integer types)
-/// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_INT128: &str = include_str!("../lib/core/prelude/int128.wado");
-
-/// Embedded source for core:prelude/types (Option, Result, Stream, Future)
-/// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wado");
-
-/// Embedded source for core:prelude/primitives (methods for primitive types)
-/// Located in prelude/ subdirectory and imported by prelude.wado
 pub const CORE_PRELUDE_PRIMITIVES: &str = include_str!("../lib/core/prelude/primitives.wado");
-
-/// Embedded source for core:prelude/format (Alignment, Formatter)
-/// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_FORMAT: &str = include_str!("../lib/core/prelude/format.wado");
-
-/// Embedded source for core:prelude/array (Array type and iterators)
-/// Located in prelude/ subdirectory and re-exported by prelude.wado
 pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
-
-/// Embedded source for core:collections (`TreeMap`)
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
-
-/// Embedded source for core:zlib (compression/decompression)
 pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
-
-/// Embedded source for wasi:cli
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
-
-/// Embedded source for wasi:filesystem
 pub const WASI_FILESYSTEM: &str = include_str!("../lib/wasi/filesystem.wado");
-
-/// Embedded source for wasi:clocks
 pub const WASI_CLOCKS: &str = include_str!("../lib/wasi/clocks.wado");
-
-/// Embedded source for wasi:random
 pub const WASI_RANDOM: &str = include_str!("../lib/wasi/random.wado");
-
-/// Embedded source for wasi:sockets
 pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
-
-/// Embedded source for wasi:http
 pub const WASI_HTTP: &str = include_str!("../lib/wasi/http.wado");
 
 /// Get embedded module source by import path.
-//
+///
 /// # Arguments
 /// * `import_path` - Import path string, e.g., `"core:cli"` or `"wasi:filesystem"`
 ///
