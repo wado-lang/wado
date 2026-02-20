@@ -3125,12 +3125,12 @@ impl Parser {
 
         let mut flags = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-            // Skip doc comments (lines starting with ///)
-            // The lexer should handle these, but flags only have simple names
+            let flag_attrs = self.parse_attributes()?;
             let flag_span = self.peek().span;
             let flag_name = self.consume_ident()?;
             flags.push(FlagsVariant {
                 name: flag_name,
+                attrs: flag_attrs,
                 span: flag_span,
             });
             // Comma is optional for the last item

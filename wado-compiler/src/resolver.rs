@@ -29,10 +29,10 @@ use crate::project::Project;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::tir::{
     FunctionRef, MonomorphInfo, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp,
-    TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TirTest, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeId,
-    TypeTable,
+    TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember,
+    TirFunction, TirGlobal, TirLiteralPattern, TirMatchArm, TirModule, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TirTest, TirUnaryOp, TirVariantCase,
+    TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -94,6 +94,20 @@ struct EnumCaseData {
 struct EnumInfo {
     module_source: ModuleSource,
     cases: Vec<EnumCaseData>,
+}
+
+/// Flags member data: name and bitmask value
+#[derive(Clone)]
+struct FlagsMemberData {
+    name: String,
+    bitmask: u32,
+}
+
+/// Flags type info: newtype `TypeId` and members
+#[derive(Clone)]
+struct FlagsInfo {
+    type_id: TypeId,
+    members: Vec<FlagsMemberData>,
 }
 
 /// Resource info: module source and method names
@@ -687,6 +701,8 @@ pub struct Resolver<'a, H: CompilerHost> {
     variant_cases: IndexMap<String, VariantInfo>,
     /// Enum case info (enum name -> (`module_source`, cases)) - flat map for current module
     enum_cases: IndexMap<String, EnumInfo>,
+    /// Flags type info (flags name -> (`module_source`, `type_id`, members)) - flat map for current module
+    flags_cases: IndexMap<String, FlagsInfo>,
     /// Resource info (resource name -> module source and methods) - flat map for current module
     resource_types: IndexMap<String, ResourceInfo>,
     /// Per-module nested maps for cross-module type resolution
@@ -694,6 +710,7 @@ pub struct Resolver<'a, H: CompilerHost> {
     all_struct_fields: IndexMap<ModuleSource, IndexMap<String, StructFieldInfo>>,
     all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>>,
     all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>>,
+    all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>>,
     all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>>,
     /// Function return types (name -> return type)
     function_return_types: IndexMap<String, TypeId>,
@@ -743,11 +760,12 @@ pub struct Resolver<'a, H: CompilerHost> {
 }
 
 /// Cached per-module type maps for cross-module type resolution.
-/// These are the five flat maps that `build_module_map` produces.
+/// These are the flat maps that `build_module_map` produces.
 struct ModuleTypeMaps {
     struct_fields: IndexMap<String, StructFieldInfo>,
     variant_cases: IndexMap<String, VariantInfo>,
     enum_cases: IndexMap<String, EnumInfo>,
+    flags_cases: IndexMap<String, FlagsInfo>,
     newtypes: IndexMap<String, TypeId>,
     resource_types: IndexMap<String, ResourceInfo>,
 }
@@ -828,11 +846,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             struct_fields: IndexMap::new(),
             variant_cases: IndexMap::new(),
             enum_cases: IndexMap::new(),
+            flags_cases: IndexMap::new(),
             resource_types: IndexMap::new(),
             all_newtypes: IndexMap::new(),
             all_struct_fields: IndexMap::new(),
             all_variant_cases: IndexMap::new(),
             all_enum_cases: IndexMap::new(),
+            all_flags_cases: IndexMap::new(),
             all_resource_types: IndexMap::new(),
             function_return_types: IndexMap::new(),
             imported_functions: IndexSet::new(),
@@ -1116,6 +1136,27 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     };
                     tir_module.add_enum(tir_enum);
                 }
+                Item::Flags(flags_decl) => {
+                    if let Some(flags_info) = self.flags_cases.get(&flags_decl.name) {
+                        let tir_flags = TirFlags {
+                            name: flags_decl.name.clone(),
+                            is_pub: flags_decl.is_pub,
+                            type_id: flags_info.type_id,
+                            members: flags_decl
+                                .flags
+                                .iter()
+                                .enumerate()
+                                .map(|(i, m)| TirFlagsMember {
+                                    name: m.name.clone(),
+                                    bitmask: 1u32 << i,
+                                    span: m.span,
+                                })
+                                .collect(),
+                            span: flags_decl.span,
+                        };
+                        tir_module.add_flags(tir_flags);
+                    }
+                }
                 // Other items will be added as needed
                 _ => {}
             }
@@ -1153,6 +1194,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let mut all_variant_cases: IndexMap<ModuleSource, IndexMap<String, VariantInfo>> =
             IndexMap::new();
         let mut all_enum_cases: IndexMap<ModuleSource, IndexMap<String, EnumInfo>> =
+            IndexMap::new();
+        let mut all_flags_cases: IndexMap<ModuleSource, IndexMap<String, FlagsInfo>> =
             IndexMap::new();
         let mut all_resource_types: IndexMap<ModuleSource, IndexMap<String, ResourceInfo>> =
             IndexMap::new();
@@ -1399,6 +1442,41 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 },
                             );
                     }
+                    Item::Flags(flags_decl) => {
+                        // Create a newtype over u32 for the flags type
+                        let flags_type = type_table.borrow_mut().make_newtype(
+                            flags_decl.name.clone(),
+                            module_source.clone(),
+                            TypeTable::U32,
+                        );
+                        // Add to newtypes so it can be used as a type name in signatures
+                        all_newtypes
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(flags_decl.name.clone(), flags_type);
+                        // Also update flat_newtypes for subsequent items in this module
+                        flat_newtypes.insert(flags_decl.name.clone(), flags_type);
+                        // Store member info with bitmask values (1 << index)
+                        let members: Vec<FlagsMemberData> = flags_decl
+                            .flags
+                            .iter()
+                            .enumerate()
+                            .map(|(i, m)| FlagsMemberData {
+                                name: m.name.clone(),
+                                bitmask: 1u32 << i,
+                            })
+                            .collect();
+                        all_flags_cases
+                            .entry(module_source.clone())
+                            .or_default()
+                            .insert(
+                                flags_decl.name.clone(),
+                                FlagsInfo {
+                                    type_id: flags_type,
+                                    members,
+                                },
+                            );
+                    }
                     _ => {}
                 }
             }
@@ -1439,6 +1517,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             );
             let enum_cases = Self::build_module_map(
                 &all_enum_cases,
+                module_source,
+                &imported_type_sources,
+                &import_original_names,
+            );
+            let flags_cases = Self::build_module_map(
+                &all_flags_cases,
                 module_source,
                 &imported_type_sources,
                 &import_original_names,
@@ -1508,11 +1592,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 struct_fields,
                 variant_cases,
                 enum_cases,
+                flags_cases,
                 resource_types,
                 all_newtypes: all_newtypes.clone(),
                 all_struct_fields: all_struct_fields.clone(),
                 all_variant_cases: all_variant_cases.clone(),
                 all_enum_cases: all_enum_cases.clone(),
+                all_flags_cases: all_flags_cases.clone(),
                 all_resource_types: all_resource_types.clone(),
                 function_return_types,
                 imported_functions,
@@ -1640,6 +1726,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             ),
             enum_cases: Self::build_module_map(
                 &self.all_enum_cases,
+                module_source,
+                &imported_sources,
+                &import_names,
+            ),
+            flags_cases: Self::build_module_map(
+                &self.all_flags_cases,
                 module_source,
                 &imported_sources,
                 &import_names,
@@ -2207,6 +2299,33 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         EnumInfo {
                             module_source: self.current_module_source.clone(),
                             cases,
+                        },
+                    );
+                }
+                Item::Flags(flags_decl) => {
+                    // Create a newtype over u32 for the flags type
+                    let flags_type = self.type_table.borrow_mut().make_newtype(
+                        flags_decl.name.clone(),
+                        self.current_module_source.clone(),
+                        TypeTable::U32,
+                    );
+                    // Add to newtypes so it can be used as a type name
+                    self.newtypes.insert(flags_decl.name.clone(), flags_type);
+                    // Store member info with bitmask values (1 << index)
+                    let members: Vec<FlagsMemberData> = flags_decl
+                        .flags
+                        .iter()
+                        .enumerate()
+                        .map(|(i, m)| FlagsMemberData {
+                            name: m.name.clone(),
+                            bitmask: 1u32 << i,
+                        })
+                        .collect();
+                    self.flags_cases.insert(
+                        flags_decl.name.clone(),
+                        FlagsInfo {
+                            type_id: flags_type,
+                            members,
                         },
                     );
                 }
@@ -4021,6 +4140,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     ident.span,
                 );
             }
+
+            // Check for flags member: PathFlags::SymlinkFollow
+            // Flags members are bitmask integers (1 << index) represented as IntLiteral
+            if let Some(flags_info) = self.flags_cases.get(prefix)
+                && let Some(member) = flags_info.members.iter().find(|m| m.name == suffix)
+            {
+                return TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: u64::from(member.bitmask),
+                        repr: member.bitmask.to_string(),
+                    },
+                    flags_info.type_id,
+                    ident.span,
+                );
+            }
         }
 
         // Check for global variables in current module
@@ -4473,6 +4607,38 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         binary.span,
                     );
                 }
+            }
+        }
+
+        // Check for arithmetic on flags types: only bitwise ops are allowed
+        {
+            let is_flags_arith = matches!(
+                binary.op,
+                BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
+            ) && {
+                let type_table = self.type_table.borrow();
+                let flags_name = match type_table.get(left.type_id) {
+                    ResolvedType::Newtype { name, .. } => Some(name.clone()),
+                    _ => None,
+                };
+                flags_name.is_some_and(|n| self.flags_cases.contains_key(&n))
+            };
+            if is_flags_arith {
+                let op_char = match binary.op {
+                    BinaryOp::Add => "+",
+                    BinaryOp::Sub => "-",
+                    BinaryOp::Mul => "*",
+                    BinaryOp::Div => "/",
+                    BinaryOp::Mod => "%",
+                    _ => unreachable!(),
+                };
+                let _ = self.logger.error(TypeError::InvalidPattern {
+                    message: format!(
+                        "arithmetic operator `{op_char}` is not allowed on flags types; use bitwise operators (`|`, `&`, `^`) instead"
+                    ),
+                    span: binary.span,
+                });
+                return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
             }
         }
 
@@ -5120,6 +5286,25 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             ctx,
                         );
                     }
+                    // Check if this is a flags type method call: Perms::none(), Perms::all()
+                    else if let Some(flags_info) = self.flags_cases.get(prefix).cloned()
+                        && matches!(suffix, "none" | "all")
+                    {
+                        let member_count = flags_info.members.len();
+                        let value: u64 = match suffix {
+                            "none" => 0,
+                            "all" => u64::from((1u32 << member_count) - 1),
+                            _ => unreachable!(),
+                        };
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value,
+                                repr: value.to_string(),
+                            },
+                            flags_info.type_id,
+                            call.span,
+                        );
+                    }
                     // Check if this is a variant case construction (Color::Red)
                     else if let Some(variant_info) = self.variant_cases.get(prefix) {
                         // Find the case by name
@@ -5384,6 +5569,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     &callee_imported,
                     &callee_original_names,
                 );
+                let callee_flags_cases = Self::build_module_map(
+                    &self.all_flags_cases,
+                    callee_module,
+                    &callee_imported,
+                    &callee_original_names,
+                );
                 let callee_resource_types = Self::build_module_map(
                     &self.all_resource_types,
                     callee_module,
@@ -5398,6 +5589,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 let old_variant_cases =
                     std::mem::replace(&mut self.variant_cases, callee_variant_cases);
                 let old_enum_cases = std::mem::replace(&mut self.enum_cases, callee_enum_cases);
+                let old_flags_cases = std::mem::replace(&mut self.flags_cases, callee_flags_cases);
                 let old_resource_types =
                     std::mem::replace(&mut self.resource_types, callee_resource_types);
 
@@ -5408,6 +5600,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 self.struct_fields = old_struct_fields;
                 self.variant_cases = old_variant_cases;
                 self.enum_cases = old_enum_cases;
+                self.flags_cases = old_flags_cases;
                 self.resource_types = old_resource_types;
                 self.current_type_params = old_type_params;
 
@@ -6536,6 +6729,73 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
+        // Handle flags type static methods: none() and all()
+        {
+            let flags_name = match self.type_table.borrow().get(target_type_id).clone() {
+                ResolvedType::Newtype { ref name, .. } => Some(name.clone()),
+                _ => None,
+            };
+            if let Some(ref name) = flags_name
+                && let Some(flags_info) = self.flags_cases.get(name).cloned()
+            {
+                match static_call.method.as_str() {
+                    "none" => {
+                        if !args.is_empty() {
+                            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                                expected: 0,
+                                found: args.len(),
+                                span: static_call.span,
+                            });
+                            return TirExpr::new(
+                                TirExprKind::Unit,
+                                TypeTable::ERROR,
+                                static_call.span,
+                            );
+                        }
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: 0,
+                                repr: "0".to_string(),
+                            },
+                            flags_info.type_id,
+                            static_call.span,
+                        );
+                    }
+                    "all" => {
+                        if !args.is_empty() {
+                            let _ = self.logger.error(TypeError::ArgumentCountMismatch {
+                                expected: 0,
+                                found: args.len(),
+                                span: static_call.span,
+                            });
+                            return TirExpr::new(
+                                TirExprKind::Unit,
+                                TypeTable::ERROR,
+                                static_call.span,
+                            );
+                        }
+                        let member_count = flags_info.members.len();
+                        let all_bits = if member_count == 0 {
+                            0u32
+                        } else if member_count >= 32 {
+                            u32::MAX
+                        } else {
+                            (1u32 << member_count) - 1
+                        };
+                        return TirExpr::new(
+                            TirExprKind::IntLiteral {
+                                value: u64::from(all_bits),
+                                repr: all_bits.to_string(),
+                            },
+                            flags_info.type_id,
+                            static_call.span,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // Handle Future::<T>::new() and Stream::<T>::new()
         // Creates a handle pair [Future<T>/Stream<T>, FutureWritable<T>/i32] (rx, tx)
         {
@@ -7526,6 +7786,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                         &mut cached.variant_cases,
                                     );
                                     std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+                                    std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
                                     std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
                                     std::mem::swap(
                                         &mut self.resource_types,
@@ -7553,6 +7814,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                         &mut cached.variant_cases,
                                     );
                                     std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+                                    std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
                                     std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
                                     std::mem::swap(
                                         &mut self.resource_types,
@@ -9585,6 +9847,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
         std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
         std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+        std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
         std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
         std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
 
@@ -9600,6 +9863,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         std::mem::swap(&mut self.struct_fields, &mut cached.struct_fields);
         std::mem::swap(&mut self.variant_cases, &mut cached.variant_cases);
         std::mem::swap(&mut self.enum_cases, &mut cached.enum_cases);
+        std::mem::swap(&mut self.flags_cases, &mut cached.flags_cases);
         std::mem::swap(&mut self.newtypes, &mut cached.newtypes);
         std::mem::swap(&mut self.resource_types, &mut cached.resource_types);
         self.module_type_maps_cache

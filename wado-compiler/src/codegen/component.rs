@@ -271,11 +271,15 @@ fn wado_type_to_cm_val_type(
     _error_code_idx: Option<u32>,
     result_param_type_idx: Option<u32>,
     enum_type_indices: &IndexMap<String, u32>,
+    flags_type_indices: &IndexMap<String, u32>,
 ) -> ComponentValType {
     match ty {
         Type::Named(named) => {
             if let Some(&enum_idx) = enum_type_indices.get(&named.name) {
                 return ComponentValType::Type(enum_idx);
+            }
+            if let Some(&flags_idx) = flags_type_indices.get(&named.name) {
+                return ComponentValType::Type(flags_idx);
             }
             match named.name.as_str() {
                 "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
@@ -884,6 +888,19 @@ fn generate_wasi_imports(
                 }
             }
 
+            // Collect flags types needed by functions
+            let mut needed_flags: Vec<String> = Vec::new();
+            for func in &supported_functions {
+                for (_, ty) in &func.params {
+                    if let Type::Named(named) = ty
+                        && project.wasi_registry.is_flags(&named.name)
+                        && !needed_flags.contains(&named.name)
+                    {
+                        needed_flags.push(named.name.clone());
+                    }
+                }
+            }
+
             let mut enum_type_indices: IndexMap<String, u32> = IndexMap::new();
             let mut enum_export_indices: IndexMap<String, u32> = IndexMap::new();
             let interface_path = &interface_info.path;
@@ -910,6 +927,28 @@ fn generate_wasi_imports(
                             wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(type_idx)),
                         );
                         enum_export_indices.insert(enum_name.clone(), local_type_idx);
+                        local_type_idx += 1;
+                    }
+                }
+            }
+
+            // Emit flags types in the instance type
+            let mut flags_export_indices: IndexMap<String, u32> = IndexMap::new();
+            for flags_name in &needed_flags {
+                if let Some(members) = project.wasi_registry.get_flags_members(flags_name) {
+                    instance_type
+                        .ty()
+                        .defined_type()
+                        .flags(members.iter().map(String::as_str));
+                    let type_idx = local_type_idx;
+                    local_type_idx += 1;
+
+                    if let Some(cm_name) = project.wasi_registry.get_flags_cm_name(flags_name) {
+                        instance_type.export(
+                            cm_name,
+                            wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(type_idx)),
+                        );
+                        flags_export_indices.insert(flags_name.clone(), local_type_idx);
                         local_type_idx += 1;
                     }
                 }
@@ -1090,6 +1129,7 @@ fn generate_wasi_imports(
                             error_code_idx,
                             result_param_type_idx,
                             &enum_export_indices,
+                            &flags_export_indices,
                         );
                         (to_kebab_case(name), val_type)
                     })

@@ -1628,7 +1628,7 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 - **Variant pattern matching**: Single-payload and tuple-payload cases work (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`). Struct payloads not yet supported. See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
 - **`core:prelude`**: Partial (parser doesn't support generic resources)
 - **Function types**: Parser supports `Fn(T) -> U` syntax, basic closure codegen works, but full function type support is incomplete.
-- **`flags` declarations**: Parser supports `flags` syntax, but no codegen yet.
+- **`flags` declarations**: Fully implemented as newtypes over `u32`. Members resolve to bitmask literals (`1 << index`); `none()`/`all()` are special static methods; bitwise operators (`|`, `&`, `^`) work via newtype inheritance; arithmetic operators are rejected at compile time. WASI flags types are emitted as CM `flags` in instance types.
 - **Inner attributes (`#![...]`)**: Parser supports inner attributes like `#![no_prelude]`, used in semantic analysis.
 
 ### Known Limitations
