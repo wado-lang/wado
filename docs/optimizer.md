@@ -47,7 +47,7 @@ The optimizer runs after lowering and before Wasm plan/codegen:
    2. Reference Elimination
    3. SROA (Scalar Replacement of Aggregates)
    4. Copy Propagation
-   5. Constant Propagation (global constants → literals)
+   5. Constant Propagation
    6. Constant Folding
    7. Constant Global Promotion
    8. Constant Branch Pruning
@@ -468,31 +468,6 @@ Implementation: Detect `return func(...)` pattern in TIR, emit `return_call` ins
 | Count bits           | Loop with shifts  | Use `popcnt`                                                      |
 | Find first bit       | Loop with shifts  | Use `clz` / `ctz`                                                 |
 | Loop unrolling       | Replicate code 4x | Don't — increases code size, Wasm runtimes already optimize loops |
-
-## Implementation Roadmap
-
-### Phase 1: Pattern Recognition and Wasm-Native Features
-
-- Expose remaining bit intrinsics (`i32_ctz`, `i64_ctz`, `i32_popcnt`, `i64_popcnt`)
-- Tail call optimization (`return_call`)
-- Bit manipulation pattern recognition (log2, popcount, ctz loops)
-
-### Phase 2: Loop Optimizations
-
-- Strength reduction (expensive loop ops to cheaper equivalents)
-- Bounds check elimination (value range propagation)
-
-### Phase 3: Scalar Optimizations
-
-- SCCP (Sparse Conditional Constant Propagation — more powerful than current const prop)
-- Common subexpression elimination / GVN
-- Peephole optimization / instruction combining
-- Dead store elimination
-
-### Phase 4: Allocation Optimizations
-
-- Return scalarization via multi-value returns (eliminate struct allocation at function boundaries)
-- Function specialization for known constants
 
 ## Testing Strategy
 

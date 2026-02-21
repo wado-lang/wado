@@ -196,7 +196,7 @@ Container::transform::<i32, i64> → Container::transform$1
 
 ### Optimizer
 
-See [optimizer.md](./optimizer.md) for detailed optimization documentation (passes, levels, pipeline, and roadmap).
+See [optimizer.md](./optimizer.md).
 
 ### Standard Library
 
