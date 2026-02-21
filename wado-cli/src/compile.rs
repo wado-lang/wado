@@ -196,11 +196,6 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
     }
 }
 
-/// Compile a Wado source file and return the Wasm binary
-pub async fn compile(filename: &str) -> Vec<u8> {
-    compile_with_opts(filename, OptLevel::default(), LogLevel::default()).await
-}
-
 /// Compile a Wado source file with optimization options
 pub async fn compile_with_opts(
     filename: &str,
