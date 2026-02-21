@@ -3,17 +3,18 @@
 #
 # Compares .wasm binary sizes across different languages
 #
-# Some tools require manual installation:
+# Run `mise install` to install managed tools.
+# Remaining manual steps:
 # - Rust wasm target: rustup target add wasm32-wasip1
-# - TinyGo: https://tinygo.org/getting-started/install/
 # - Moonbit: curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-# - C (macOS): brew install llvm lld wasi-libc wasi-runtimes
-# - C (Linux): apt install wasi-libc libclang-rt-18-dev-wasm32
 
 [tools]
 node = "latest"
 zig = "latest"
-wasmtime = "41"  # matches project's Cargo.toml
+go = "latest"
+wasmtime = "41"                        # matches project's Cargo.toml
+"github:tinygo-org/tinygo" = "latest"  # TinyGo (needs go)
+"github:WebAssembly/wasi-sdk" = "latest" # clang + wasm-ld + wasi-sysroot
 
 [env]
 OUT_DIR = "out"
@@ -26,20 +27,31 @@ run = """
 set -e
 mkdir -p "$OUT_DIR"
 
-# Auto-detect C-to-Wasm toolchain (macOS Homebrew or Linux apt)
+# Find wasi-capable clang
+# Priority: wasi-sdk (mise or manual) > system clang + wasi-sysroot > Homebrew
 WASM_CLANG=""
-if [ "$(uname)" = "Darwin" ]; then
+
+# 1. wasi-sdk: clang with co-located wasi-sysroot
+if command -v clang >/dev/null 2>&1; then
+    SDK_DIR="$(cd "$(dirname "$(command -v clang)")/.." 2>/dev/null && pwd)"
+    if [ -d "$SDK_DIR/share/wasi-sysroot" ]; then
+        WASM_CLANG="clang --target=wasm32-wasi --sysroot=$SDK_DIR/share/wasi-sysroot"
+    fi
+fi
+
+# 2. System clang + apt wasi-sysroot (Linux)
+if [ -z "$WASM_CLANG" ] && command -v clang >/dev/null 2>&1 && command -v wasm-ld >/dev/null 2>&1 && [ -d "/usr/share/wasi-sysroot" ]; then
+    WASM_CLANG="clang --target=wasm32-wasi --sysroot=/usr/share/wasi-sysroot"
+fi
+
+# 3. Homebrew (macOS)
+if [ -z "$WASM_CLANG" ] && [ "$(uname)" = "Darwin" ]; then
     LLVM_PATH="/opt/homebrew/opt/llvm"
     LLD_PATH="/opt/homebrew/opt/lld"
     WASI_SYSROOT="/opt/homebrew/opt/wasi-libc/share/wasi-sysroot"
     WASI_RUNTIMES="/opt/homebrew/opt/wasi-runtimes/share/wasi-runtimes"
     if [ -x "$LLVM_PATH/bin/clang" ] && [ -x "$LLD_PATH/bin/wasm-ld" ] && [ -d "$WASI_SYSROOT" ] && [ -d "$WASI_RUNTIMES" ]; then
         WASM_CLANG="PATH=$LLD_PATH/bin:$PATH $LLVM_PATH/bin/clang --target=wasm32-wasi --sysroot=$WASI_SYSROOT -resource-dir $WASI_RUNTIMES"
-    fi
-else
-    WASI_SYSROOT="/usr/share/wasi-sysroot"
-    if command -v clang >/dev/null 2>&1 && command -v wasm-ld >/dev/null 2>&1 && [ -d "$WASI_SYSROOT" ]; then
-        WASM_CLANG="clang --target=wasm32-wasi --sysroot=$WASI_SYSROOT"
     fi
 fi
 
@@ -48,7 +60,7 @@ if [ -n "$WASM_CLANG" ]; then
     eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/hello_world_c.wasm" hello_world/hello_world.c
     eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/pi_approx_c.wasm" pi_approx/pi_approx.c
 else
-    echo "SKIP: C (macOS: brew install llvm lld wasi-libc wasi-runtimes / Linux: apt install wasi-libc libclang-rt-dev-wasm32)"
+    echo "SKIP: C (run 'mise install' for wasi-sdk)"
 fi
 """
 
@@ -94,7 +106,7 @@ if command -v tinygo >/dev/null 2>&1; then
     tinygo build -o "$OUT_DIR/hello_world_tinygo.wasm" -target=wasip1 -opt=z -no-debug hello_world/hello_world.go
     tinygo build -o "$OUT_DIR/pi_approx_tinygo.wasm" -target=wasip1 -opt=z -no-debug pi_approx/pi_approx.go
 else
-    echo "SKIP: TinyGo (not installed)"
+    echo "SKIP: TinyGo (run 'mise install' to install)"
 fi
 """
 
@@ -125,7 +137,7 @@ if command -v moon >/dev/null 2>&1; then
     cp hello_world/_build/wasm/release/build/main.wasm "$OUT_DIR/hello_world_moonbit.wasm"
     cp pi_approx/_build/wasm/release/build/main.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
 else
-    echo "SKIP: Moonbit (not installed)"
+    echo "SKIP: Moonbit (curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash)"
 fi
 """
 
@@ -210,20 +222,10 @@ rm -rf assemblyscript/node_modules
 description = "Show dependency installation instructions"
 run = """
 #!/usr/bin/env bash
-echo "Managed by mise (run 'mise install' in this directory):"
-echo "  node, zig, wasmtime"
+echo "Managed by mise (run 'mise install'):"
+echo "  node, zig, go, wasmtime, tinygo, wasi-sdk"
 echo ""
 echo "Manual installation required:"
 echo "  rustup target add wasm32-wasip1                                # Rust wasm target"
 echo "  curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit"
-echo ""
-if [ "$(uname)" = "Darwin" ]; then
-    echo "macOS (Homebrew):"
-    echo "  brew install tinygo                                        # TinyGo"
-    echo "  brew install llvm lld wasi-libc wasi-runtimes              # C"
-else
-    echo "Linux (apt):"
-    echo "  apt install tinygo                                         # TinyGo"
-    echo "  apt install wasi-libc libclang-rt-18-dev-wasm32            # C"
-fi
 """
