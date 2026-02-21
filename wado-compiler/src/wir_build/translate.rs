@@ -418,6 +418,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Build a `ValueCopy` instruction for the given type.
     /// Uses the WIR type ID to identify the struct, and builds a shallow copy descriptor.
+    /// Only `Option<T>` values can be null; plain struct/variant types are always non-null.
     fn build_value_copy(&self, type_id: TypeId, expr: WirInstr) -> WirInstr {
         use crate::wir::{WirCopyField, WirCopyType};
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, type_id);
@@ -425,12 +426,16 @@ impl FunctionTranslator<'_, '_> {
             type_id: wir_tid, ..
         } = wir_type
         {
+            // Only Option<T> values can be null at the source level
+            let nullable = matches!(self.type_table.get(type_id), ResolvedType::Option(_));
+
             // Variants use pass-through copy (immutable structs in the rec group)
             if self.ctx.is_variant_type(&wir_tid) {
                 return WirInstr::ValueCopy {
                     type_id: wir_tid,
                     source_type: WirCopyType::Variant { cases: Vec::new() },
                     expr: Box::new(expr),
+                    nullable,
                 };
             }
             // Look up the WIR struct type to get field count
@@ -448,6 +453,7 @@ impl FunctionTranslator<'_, '_> {
                     fields: copy_fields,
                 },
                 expr: Box::new(expr),
+                nullable,
             }
         } else {
             expr
