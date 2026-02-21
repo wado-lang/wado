@@ -8,11 +8,11 @@ HTTP handlers are required to use this convention because `Response::new` takes 
 
 The `wasi:http` package defines three worlds:
 
-| World                    | Role                                                         | Status      |
-| ------------------------ | ------------------------------------------------------------ | ----------- |
-| `wasi:http/service`      | Inbound HTTP handler — exports `handle`                      | Implemented |
-| `wasi:http/client`       | Outbound HTTP client — imports `Client::send`                | Defined; not yet callable from Wado |
-| `wasi:http/middleware`   | Handler chain — exports `handle`, imports `Handler::handle`  | Defined; not yet supported as target world |
+| World                  | Role                                                        | Status                                     |
+| ---------------------- | ----------------------------------------------------------- | ------------------------------------------ |
+| `wasi:http/service`    | Inbound HTTP handler — exports `handle`                     | Implemented                                |
+| `wasi:http/client`     | Outbound HTTP client — imports `Client::send`               | Defined; not yet callable from Wado        |
+| `wasi:http/middleware` | Handler chain — exports `handle`, imports `Handler::handle` | Defined; not yet supported as target world |
 
 ## Decision
 
@@ -50,6 +50,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 **Why `task return` only at the CM boundary:** Wado's internal async model is colorless — async suspension and resumption happen transparently at the WASI call level. There is no user-visible async/await inside Wado. `task return` is a CM-specific mechanism and has no meaning inside Wado-to-Wado function calls.
 
 Rules:
+
 - `task return expr` is only valid in `export async fn` bodies.
 - `return` is forbidden in `async fn` bodies.
 - The expression is type-checked against the declared return type of the enclosing `export async fn`.
@@ -120,106 +121,106 @@ All types are imported from `"wasi:http"`.
 
 ### Resources
 
-| Type             | Description                                              |
-| ---------------- | -------------------------------------------------------- |
+| Type             | Description                                                            |
+| ---------------- | ---------------------------------------------------------------------- |
 | `Request`        | Incoming HTTP request (method, path, scheme, authority, headers, body) |
-| `Response`       | HTTP response (status code, headers, body, trailers)     |
-| `Fields`         | HTTP header or trailer fields (mutable key-value map)    |
-| `RequestOptions` | Request configuration (connect timeout, byte timeouts)   |
+| `Response`       | HTTP response (status code, headers, body, trailers)                   |
+| `Fields`         | HTTP header or trailer fields (mutable key-value map)                  |
+| `RequestOptions` | Request configuration (connect timeout, byte timeouts)                 |
 
 ### Type Aliases
 
-| Type         | Base               | Description                            |
-| ------------ | ------------------ | -------------------------------------- |
-| `FieldName`  | `String`           | Header/trailer field name              |
-| `FieldValue` | `Array<u8>`        | Header/trailer field value (raw bytes) |
-| `Headers`    | `Fields`           | Request or response headers            |
-| `Trailers`   | `Fields`           | HTTP trailers                          |
-| `StatusCode` | `u16`              | HTTP status code                       |
+| Type         | Base        | Description                            |
+| ------------ | ----------- | -------------------------------------- |
+| `FieldName`  | `String`    | Header/trailer field name              |
+| `FieldValue` | `Array<u8>` | Header/trailer field value (raw bytes) |
+| `Headers`    | `Fields`    | Request or response headers            |
+| `Trailers`   | `Fields`    | HTTP trailers                          |
+| `StatusCode` | `u16`       | HTTP status code                       |
 
 ### Variants
 
-| Type          | Description                                                                   |
-| ------------- | ----------------------------------------------------------------------------- |
-| `Method`      | HTTP methods: `Get`, `Head`, `Post`, `Put`, `Delete`, `Connect`, `Options`, `Trace`, `Patch`, `Other(String)` |
-| `Scheme`      | URI scheme: `Http`, `Https`, `Other(String)`                                  |
-| `ErrorCode`   | HTTP error (42 cases: `DnsTimeout`, `ConnectionRefused`, `InternalError(Option<String>)`, etc.) |
-| `HeaderError` | Header mutation errors: `Immutable`, `InvalidSyntax`                          |
-| `RequestOptionsError` | Timeout configuration errors                                          |
+| Type                  | Description                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `Method`              | HTTP methods: `Get`, `Head`, `Post`, `Put`, `Delete`, `Connect`, `Options`, `Trace`, `Patch`, `Other(String)` |
+| `Scheme`              | URI scheme: `Http`, `Https`, `Other(String)`                                                                  |
+| `ErrorCode`           | HTTP error (42 cases: `DnsTimeout`, `ConnectionRefused`, `InternalError(Option<String>)`, etc.)               |
+| `HeaderError`         | Header mutation errors: `Immutable`, `InvalidSyntax`                                                          |
+| `RequestOptionsError` | Timeout configuration errors                                                                                  |
 
 ### `Fields` Methods
 
-| Method                  | Signature                                        | Description                              |
-| ----------------------- | ------------------------------------------------ | ---------------------------------------- |
-| `Fields::new()`         | `-> Fields`                                      | Create empty mutable fields              |
-| `Fields::from_list(e)`  | `-> Result<Fields, HeaderError>`                 | Create from `[[FieldName, FieldValue]]`  |
-| `fields.get(name)`      | `-> Array<FieldValue>`                           | Get all values for a name                |
-| `fields.has(name)`      | `-> bool`                                        | Check if name exists                     |
-| `fields.set(name, vals)`| `-> Result<(), HeaderError>`                     | Replace all values for a name            |
-| `fields.append(name, v)`| `-> Result<(), HeaderError>`                     | Append a value to a name                 |
-| `fields.delete(name)`   | `-> Result<(), HeaderError>`                     | Remove all values for a name             |
-| `fields.get_and_delete(name)` | `-> Result<Array<FieldValue>, HeaderError>` | Get and remove                         |
-| `fields.copy_all()`     | `-> Array<[FieldName, FieldValue]>`              | Return all entries as a flat list        |
-| `fields.clone()`        | `-> Fields`                                      | Deep copy                                |
+| Method                        | Signature                                   | Description                             |
+| ----------------------------- | ------------------------------------------- | --------------------------------------- |
+| `Fields::new()`               | `-> Fields`                                 | Create empty mutable fields             |
+| `Fields::from_list(e)`        | `-> Result<Fields, HeaderError>`            | Create from `[[FieldName, FieldValue]]` |
+| `fields.get(name)`            | `-> Array<FieldValue>`                      | Get all values for a name               |
+| `fields.has(name)`            | `-> bool`                                   | Check if name exists                    |
+| `fields.set(name, vals)`      | `-> Result<(), HeaderError>`                | Replace all values for a name           |
+| `fields.append(name, v)`      | `-> Result<(), HeaderError>`                | Append a value to a name                |
+| `fields.delete(name)`         | `-> Result<(), HeaderError>`                | Remove all values for a name            |
+| `fields.get_and_delete(name)` | `-> Result<Array<FieldValue>, HeaderError>` | Get and remove                          |
+| `fields.copy_all()`           | `-> Array<[FieldName, FieldValue]>`         | Return all entries as a flat list       |
+| `fields.clone()`              | `-> Fields`                                 | Deep copy                               |
 
 ### `Request` Methods
 
-| Method                         | Signature                         | Description                          |
-| ------------------------------ | --------------------------------- | ------------------------------------ |
-| `Request::new(headers, body, trailers, options)` | `-> [Request, Future<Result<(), ErrorCode>>]` | Create outbound request |
-| `request.get_method()`         | `-> Method`                       | Get HTTP method                      |
-| `request.set_method(method)`   | `-> Result<(), ()>`               | Set HTTP method                      |
-| `request.get_path_with_query()`| `-> Option<String>`               | Get path + query string              |
-| `request.set_path_with_query(p)` | `-> Result<(), ()>`             | Set path + query string              |
-| `request.get_scheme()`         | `-> Option<Scheme>`               | Get URI scheme                       |
-| `request.set_scheme(scheme)`   | `-> Result<(), ()>`               | Set URI scheme                       |
-| `request.get_authority()`      | `-> Option<String>`               | Get authority (`host:port`)          |
-| `request.set_authority(a)`     | `-> Result<(), ()>`               | Set authority                        |
-| `request.get_headers()`        | `-> Headers`                      | Get request headers                  |
-| `request.get_options()`        | `-> Option<RequestOptions>`       | Get request options                  |
-| `Request::consume_body(req, res)` | `-> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]` | Move body out of request |
+| Method                                           | Signature                                                      | Description                 |
+| ------------------------------------------------ | -------------------------------------------------------------- | --------------------------- |
+| `Request::new(headers, body, trailers, options)` | `-> [Request, Future<Result<(), ErrorCode>>]`                  | Create outbound request     |
+| `request.get_method()`                           | `-> Method`                                                    | Get HTTP method             |
+| `request.set_method(method)`                     | `-> Result<(), ()>`                                            | Set HTTP method             |
+| `request.get_path_with_query()`                  | `-> Option<String>`                                            | Get path + query string     |
+| `request.set_path_with_query(p)`                 | `-> Result<(), ()>`                                            | Set path + query string     |
+| `request.get_scheme()`                           | `-> Option<Scheme>`                                            | Get URI scheme              |
+| `request.set_scheme(scheme)`                     | `-> Result<(), ()>`                                            | Set URI scheme              |
+| `request.get_authority()`                        | `-> Option<String>`                                            | Get authority (`host:port`) |
+| `request.set_authority(a)`                       | `-> Result<(), ()>`                                            | Set authority               |
+| `request.get_headers()`                          | `-> Headers`                                                   | Get request headers         |
+| `request.get_options()`                          | `-> Option<RequestOptions>`                                    | Get request options         |
+| `Request::consume_body(req, res)`                | `-> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]` | Move body out of request    |
 
 ### `Response` Methods
 
-| Method                         | Signature                         | Description                          |
-| ------------------------------ | --------------------------------- | ------------------------------------ |
-| `Response::new(headers, body, trailers)` | `-> [Response, Future<Result<(), ErrorCode>>]` | Create response |
-| `response.get_status_code()`   | `-> StatusCode`                   | Get HTTP status code                 |
-| `response.set_status_code(c)`  | `-> Result<(), ()>`               | Set HTTP status code                 |
-| `response.get_headers()`       | `-> Headers`                      | Get response headers                 |
-| `Response::consume_body(res, done)` | `-> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]` | Move body out of response |
+| Method                                   | Signature                                                      | Description               |
+| ---------------------------------------- | -------------------------------------------------------------- | ------------------------- |
+| `Response::new(headers, body, trailers)` | `-> [Response, Future<Result<(), ErrorCode>>]`                 | Create response           |
+| `response.get_status_code()`             | `-> StatusCode`                                                | Get HTTP status code      |
+| `response.set_status_code(c)`            | `-> Result<(), ()>`                                            | Set HTTP status code      |
+| `response.get_headers()`                 | `-> Headers`                                                   | Get response headers      |
+| `Response::consume_body(res, done)`      | `-> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]` | Move body out of response |
 
 ### `Client` Functions
 
-| Function        | Signature                                     | Description        |
-| --------------- | --------------------------------------------- | ------------------ |
+| Function                | Signature                              | Description                |
+| ----------------------- | -------------------------------------- | -------------------------- |
 | `Client::send(request)` | `async -> Result<Response, ErrorCode>` | Send outbound HTTP request |
 
 ### `FutureWritable<T>`
 
 The writable end of a `Future<T>`, obtained from `Future::<T>::new()` which returns `[Future<T>, FutureWritable<T>]`.
 
-| Method           | Description                               |
-| ---------------- | ----------------------------------------- |
-| `tx.write(value: T)` | Resolve the future with a value       |
+| Method               | Description                     |
+| -------------------- | ------------------------------- |
+| `tx.write(value: T)` | Resolve the future with a value |
 
 ## E2E Test Fixtures
 
 HTTP test fixtures are in `wado-compiler/tests/fixtures/http-*.wado`. Each has a `__DATA__` section with `"wasi:http/service": {...}`.
 
-| Fixture                        | Description                                        |
-| ------------------------------ | -------------------------------------------------- |
-| `http-200.wado`                | 200 OK with empty body and no trailers             |
-| `http-400.wado`                | 400 Bad Request via `set_status_code`              |
-| `http-500.wado`                | 500 Internal Server Error via `set_status_code`    |
-| `http-error-code.wado`         | `Err(ErrorCode::InternalError(null))`              |
-| `http-error-code-payload.wado` | `Err(ErrorCode::InternalError(Some("...")))`       |
-| `http-fields.wado`             | `Fields`: `new`, `has`, `append`, `delete`, `clone`|
-| `http-future-new.wado`         | `Future::<T>::new()` returns `[rx, tx]` pair       |
-| `http-request-method.wado`     | `request.get_method()` returns injected method     |
-| `http-request-path.wado`       | `request.get_path_with_query()` returns injected path |
+| Fixture                        | Description                                              |
+| ------------------------------ | -------------------------------------------------------- |
+| `http-200.wado`                | 200 OK with empty body and no trailers                   |
+| `http-400.wado`                | 400 Bad Request via `set_status_code`                    |
+| `http-500.wado`                | 500 Internal Server Error via `set_status_code`          |
+| `http-error-code.wado`         | `Err(ErrorCode::InternalError(null))`                    |
+| `http-error-code-payload.wado` | `Err(ErrorCode::InternalError(Some("...")))`             |
+| `http-fields.wado`             | `Fields`: `new`, `has`, `append`, `delete`, `clone`      |
+| `http-future-new.wado`         | `Future::<T>::new()` returns `[rx, tx]` pair             |
+| `http-request-method.wado`     | `request.get_method()` returns injected method           |
+| `http-request-path.wado`       | `request.get_path_with_query()` returns injected path    |
 | `http-response-headers.wado`   | Response headers visible to caller via `headers_contain` |
-| `http-response-ops.wado`       | `Response::new`, `get_status_code`, `set_status_code` |
+| `http-response-ops.wado`       | `Response::new`, `get_status_code`, `set_status_code`    |
 
 ## Not Yet Implemented
 
