@@ -15,6 +15,8 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
+    let inf: f32 = (1.0 / 0.0);
+    let neg_inf: f32 = (-1.0 / 0.0);
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_1: {
@@ -22,7 +24,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_f32_Display__fmt_2: {
-            let self: Box<f32> = move Box<f32> { value: Infinity };
+            let self: Box<f32> = move Box<f32> { value: inf };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_f32"(self.value, f);
         };
@@ -35,7 +37,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_f32_Display__fmt_5: {
-            let self: Box<f32> = move Box<f32> { value: -Infinity };
+            let self: Box<f32> = move Box<f32> { value: neg_inf };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_f32"(self.value, f);
         };

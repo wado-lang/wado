@@ -1,0 +1,12 @@
+// Test that integer division by zero is NOT folded away — it must remain
+// a runtime trap, not a compile error.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // This division by zero must trap at runtime, not be optimized away.
+    let x = 1 / 0;
+    println(`{x}`);
+}
+
+__DATA__
+{"trapped": true}

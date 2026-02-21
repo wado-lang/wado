@@ -1,4 +1,4 @@
-// Test enhanced constant folding: comparison, bitwise, bool, float operations
+// Test constant folding: integer comparison, bitwise, boolean, float comparison
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -28,24 +28,16 @@ export fn run() with Stdout {
     let not_t = !false;
     println(`bool: {and_t} {and_f} {or_t} {or_f} {not_t}`);
 
-    // Float arithmetic folding
-    let fadd = 1.5 + 2.5;
-    let fsub = 10.0 - 3.5;
-    let fmul = 3.0 * 2.0;
-    let fdiv = 10.0 / 4.0;
-    println(`float: {fadd} {fsub} {fmul} {fdiv}`);
-
-    // Float comparison folding
+    // Float comparison folding (comparisons produce bool, safe to fold)
     let flt = 1.0 < 2.0;
     let fge = 5.0 >= 5.0;
     println(`fcmp: {flt} {fge}`);
 
     // Combined: const propagation + const folding
-    // (global X=10, Y=20 from opt_const_prop can chain into folding)
     let a = 10 + 20;
     let b = a * 2;
     println(`combined: {b}`);
 }
 
 __DATA__
-{"stdout": "cmp: true true true true\nbitwise: 15 255 240\nshift: 16 16\nbool: true false true false true\nfloat: 4.0 6.5 6.0 2.5\nfcmp: true true\ncombined: 60\n"}
+{"stdout": "cmp: true true true true\nbitwise: 15 255 240\nshift: 16 16\nbool: true false true false true\nfcmp: true true\ncombined: 60\n"}
