@@ -2075,7 +2075,7 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         changed = true;
     }
 
-    // Simplify `{ expr; }` → `expr` (single-expression block)
+    // Simplify `{ expr; }` → `expr` (single-expression unlabeled block)
     if let TirExprKind::Block(block) = &expr.kind
         && block.stmts.len() == 1
         && let TirStmtKind::Expr(_) = &block.stmts[0].kind
@@ -2091,9 +2091,8 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         changed = true;
     }
 
-    // Simplify `{ }` → `()` (empty block)
-    if let TirExprKind::Block(block) = &expr.kind
-        && block.stmts.is_empty()
+    // Simplify `[label:] { }` → `()` (empty block, with or without label)
+    if matches!(&expr.kind, TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } if b.stmts.is_empty())
     {
         expr.kind = TirExprKind::Unit;
         changed = true;
@@ -2116,6 +2115,9 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
         ) || matches!(
             &s.kind,
             TirStmtKind::LabeledBlock { block, .. } if block.stmts.is_empty()
+        ) || matches!(
+            &s.kind,
+            TirStmtKind::Expr(e) if matches!(e.kind, TirExprKind::Unit)
         )
     };
     if !block.stmts.iter().any(dominated) {
@@ -2146,6 +2148,12 @@ fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
         // Empty labeled block → drop
         if let TirStmtKind::LabeledBlock { block: inner, .. } = &stmt.kind
             && inner.stmts.is_empty()
+        {
+            continue;
+        }
+        // Unit expression → drop (side-effect free)
+        if let TirStmtKind::Expr(e) = &stmt.kind
+            && matches!(e.kind, TirExprKind::Unit)
         {
             continue;
         }
