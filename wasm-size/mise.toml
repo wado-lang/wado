@@ -34,8 +34,8 @@ WASI_SYSROOT="$WASI_LIBC_PATH/share/wasi-sysroot"
 if [ -x "$LLVM_PATH/bin/clang" ] && [ -x "$LLD_PATH/bin/wasm-ld" ] && [ -d "$WASI_SYSROOT" ] && [ -d "$WASI_RUNTIMES_PATH/share/wasi-runtimes" ]; then
     echo "Building C..."
     WASM_CLANG="PATH=$LLD_PATH/bin:$PATH $LLVM_PATH/bin/clang --target=wasm32-wasi --sysroot=$WASI_SYSROOT -resource-dir $WASI_RUNTIMES_PATH/share/wasi-runtimes"
-    eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/hello_world_c.wasm" c/hello_world.c
-    eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/pi_approx_c.wasm" c/pi_approx.c
+    eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/hello_world_c.wasm" hello_world/hello_world.c
+    eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/pi_approx_c.wasm" pi_approx/pi_approx.c
 else
     echo "SKIP: C (brew install llvm lld wasi-libc wasi-runtimes)"
 fi
@@ -50,10 +50,10 @@ mkdir -p "$OUT_DIR"
 
 if rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
     echo "Building Rust..."
-    (cd rust/hello_world && cargo build --release --target wasm32-wasip1)
-    (cd rust/pi_approx && cargo build --release --target wasm32-wasip1)
-    cp rust/hello_world/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
-    cp rust/pi_approx/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
+    (cd hello_world/rust && cargo build --release --target wasm32-wasip1)
+    (cd pi_approx/rust && cargo build --release --target wasm32-wasip1)
+    cp hello_world/rust/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
+    cp pi_approx/rust/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
 else
     echo "SKIP: Rust (rustup target add wasm32-wasip1)"
 fi
@@ -67,8 +67,8 @@ set -e
 mkdir -p "$OUT_DIR"
 
 echo "Building Zig..."
-zig build-exe -O ReleaseSmall -target wasm32-wasi zig/hello_world.zig -femit-bin="$OUT_DIR/hello_world_zig.wasm"
-zig build-exe -O ReleaseSmall -target wasm32-wasi zig/pi_approx.zig -femit-bin="$OUT_DIR/pi_approx_zig.wasm"
+zig build-exe -O ReleaseSmall -target wasm32-wasi hello_world/hello_world.zig -femit-bin="$OUT_DIR/hello_world_zig.wasm"
+zig build-exe -O ReleaseSmall -target wasm32-wasi pi_approx/pi_approx.zig -femit-bin="$OUT_DIR/pi_approx_zig.wasm"
 """
 
 [tasks.build-tinygo]
@@ -80,8 +80,8 @@ mkdir -p "$OUT_DIR"
 
 if command -v tinygo >/dev/null 2>&1; then
     echo "Building TinyGo..."
-    tinygo build -o "$OUT_DIR/hello_world_tinygo.wasm" -target=wasip1 -opt=z -no-debug tinygo/hello_world.go
-    tinygo build -o "$OUT_DIR/pi_approx_tinygo.wasm" -target=wasip1 -opt=z -no-debug tinygo/pi_approx.go
+    tinygo build -o "$OUT_DIR/hello_world_tinygo.wasm" -target=wasip1 -opt=z -no-debug hello_world/hello_world.go
+    tinygo build -o "$OUT_DIR/pi_approx_tinygo.wasm" -target=wasip1 -opt=z -no-debug pi_approx/pi_approx.go
 else
     echo "SKIP: TinyGo (not installed)"
 fi
@@ -96,8 +96,8 @@ mkdir -p "$OUT_DIR"
 
 echo "Building AssemblyScript..."
 (cd assemblyscript && npm install)
-(cd assemblyscript && npx asc hello_world.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/hello_world_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
-(cd assemblyscript && npx asc pi_approx.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/pi_approx_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
+(cd assemblyscript && npx asc ../hello_world/hello_world.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/hello_world_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
+(cd assemblyscript && npx asc ../pi_approx/pi_approx.ts --config ./node_modules/@assemblyscript/wasi-shim/asconfig.json -o "../$OUT_DIR/pi_approx_assemblyscript.wasm" --optimize --optimizeLevel 3 --shrinkLevel 2)
 """
 
 [tasks.build-moonbit]
@@ -109,10 +109,10 @@ mkdir -p "$OUT_DIR"
 
 if command -v moon >/dev/null 2>&1; then
     echo "Building Moonbit..."
-    (cd moonbit/hello_world && moon build --target wasm --release --strip)
-    (cd moonbit/pi_approx && moon build --target wasm --release --strip)
-    cp moonbit/hello_world/_build/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
-    cp moonbit/pi_approx/_build/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
+    (cd hello_world/moonbit && moon build --target wasm --release --strip)
+    (cd pi_approx/moonbit && moon build --target wasm --release --strip)
+    cp hello_world/moonbit/_build/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
+    cp pi_approx/moonbit/_build/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
 else
     echo "SKIP: Moonbit (not installed)"
 fi
@@ -126,9 +126,9 @@ set -e
 mkdir -p "$OUT_DIR"
 
 echo "Building Wado..."
-if [ -f wado/hello_world.wado ]; then
-    cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/hello_world_wado.wasm" wado/hello_world.wado
-    cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/pi_approx_wado.wasm" wado/pi_approx.wado
+if [ -f hello_world/hello_world.wado ]; then
+    cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/hello_world_wado.wasm" hello_world/hello_world.wado
+    cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/pi_approx_wado.wasm" pi_approx/pi_approx.wado
 else
     echo "SKIP: Wado (source files not found)"
 fi
@@ -190,8 +190,8 @@ description = "Clean build artifacts"
 run = """
 #!/usr/bin/env bash
 rm -rf "$OUT_DIR"
-rm -rf rust/hello_world/target rust/pi_approx/target
-rm -rf moonbit/hello_world/_build moonbit/pi_approx/_build
+rm -rf hello_world/rust/target pi_approx/rust/target
+rm -rf hello_world/moonbit/_build pi_approx/moonbit/_build
 rm -rf assemblyscript/node_modules
 """
 
