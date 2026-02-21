@@ -318,12 +318,14 @@ fn try_fold_binary(
     // Float binary: arithmetic and comparison on two FloatLiterals.
     // Arithmetic results that are NaN are skipped (NaN bit patterns are
     // nondeterministic). This follows cranelift's `.non_nan()` approach.
+    // f32 operations use f32 precision to avoid double-rounding issues.
     if let (
         TirExprKind::FloatLiteral { value: lv, .. },
         TirExprKind::FloatLiteral { value: rv, .. },
     ) = (&left.kind, &right.kind)
     {
-        return try_fold_float_binary(*lv, op, *rv);
+        let is_f32 = is_f32_type(left.type_id, type_table);
+        return try_fold_float_binary(*lv, op, *rv, is_f32);
     }
 
     // Integer binary: arithmetic, comparison, and bitwise on two IntLiterals
@@ -412,16 +414,45 @@ fn try_fold_int_binary(
 /// nondeterministic across architectures. This follows cranelift's
 /// `.non_nan()` approach (see `cranelift/codegen/src/isle_prelude.rs`).
 ///
+/// For f32 types, arithmetic is performed in f32 precision (matching
+/// cranelift's separate `f32_add`/`f64_add` functions) to avoid
+/// double-rounding issues.
+///
 /// Comparisons: produce Bool results, always deterministic (including
 /// NaN behavior: NaN != NaN is true, all other NaN comparisons are false).
-fn try_fold_float_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
+fn try_fold_float_binary(
+    lval: f64,
+    op: TirBinaryOp,
+    rval: f64,
+    is_f32: bool,
+) -> Option<FoldedExpr> {
     match op {
         // Arithmetic → Float result (skip if NaN)
-        TirBinaryOp::Add => non_nan_float(lval + rval),
-        TirBinaryOp::Sub => non_nan_float(lval - rval),
-        TirBinaryOp::Mul => non_nan_float(lval * rval),
-        TirBinaryOp::Div => non_nan_float(lval / rval),
-        // Comparison → Bool result
+        TirBinaryOp::Add | TirBinaryOp::Sub | TirBinaryOp::Mul | TirBinaryOp::Div => {
+            if is_f32 {
+                let l = lval as f32;
+                let r = rval as f32;
+                let result = match op {
+                    TirBinaryOp::Add => l + r,
+                    TirBinaryOp::Sub => l - r,
+                    TirBinaryOp::Mul => l * r,
+                    TirBinaryOp::Div => l / r,
+                    _ => unreachable!(),
+                };
+                non_nan_float(f64::from(result))
+            } else {
+                let result = match op {
+                    TirBinaryOp::Add => lval + rval,
+                    TirBinaryOp::Sub => lval - rval,
+                    TirBinaryOp::Mul => lval * rval,
+                    TirBinaryOp::Div => lval / rval,
+                    _ => unreachable!(),
+                };
+                non_nan_float(result)
+            }
+        }
+        // Comparison → Bool result (no precision issue; f64 comparison is fine
+        // since f32 values round-trip exactly through f64)
         TirBinaryOp::Eq => Some(FoldedExpr::Bool(lval == rval)),
         TirBinaryOp::NotEq => Some(FoldedExpr::Bool(lval != rval)),
         TirBinaryOp::Lt => Some(FoldedExpr::Bool(lval < rval)),
@@ -594,6 +625,15 @@ fn format_float(value: f64) -> String {
     } else {
         format!("{s}.0")
     }
+}
+
+/// Check if a `TypeId` is f32 (following newtypes).
+fn is_f32_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    let base = type_table.get_ultimate_base_type(type_id);
+    matches!(
+        type_table.get(base),
+        ResolvedType::Primitive(PrimitiveType::F32)
+    )
 }
 
 /// Get the integer `PrimitiveType` for a `TypeId`, following newtypes.
@@ -944,57 +984,68 @@ mod tests {
     }
 
     #[test]
-    fn test_float_arithmetic() {
-        // Add
-        let r = try_fold_float_binary(1.5, TirBinaryOp::Add, 2.5);
+    fn test_float_arithmetic_f64() {
+        let r = try_fold_float_binary(1.5, TirBinaryOp::Add, 2.5, false);
         assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 4.0));
-        // Sub
-        let r = try_fold_float_binary(10.0, TirBinaryOp::Sub, 3.5);
+        let r = try_fold_float_binary(10.0, TirBinaryOp::Sub, 3.5, false);
         assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 6.5));
-        // Mul
-        let r = try_fold_float_binary(3.0, TirBinaryOp::Mul, 2.0);
+        let r = try_fold_float_binary(3.0, TirBinaryOp::Mul, 2.0, false);
         assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 6.0));
-        // Div
-        let r = try_fold_float_binary(10.0, TirBinaryOp::Div, 4.0);
+        let r = try_fold_float_binary(10.0, TirBinaryOp::Div, 4.0, false);
         assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 2.5));
         // Div by zero → Infinity (not a trap for floats)
-        let r = try_fold_float_binary(1.0, TirBinaryOp::Div, 0.0);
+        let r = try_fold_float_binary(1.0, TirBinaryOp::Div, 0.0, false);
         assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == f64::INFINITY));
+    }
+
+    #[test]
+    fn test_float_arithmetic_f32() {
+        // f32 operations use f32 precision
+        let r = try_fold_float_binary(1.5, TirBinaryOp::Add, 2.5, true);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 4.0));
+        let r = try_fold_float_binary(1.0, TirBinaryOp::Div, 3.0, true);
+        // f32 precision: 1.0f32 / 3.0f32
+        let expected = f64::from(1.0f32 / 3.0f32);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == expected));
     }
 
     #[test]
     fn test_float_nan_skipped() {
         // NaN results must NOT be folded (nondeterministic bit patterns)
-        assert!(try_fold_float_binary(0.0, TirBinaryOp::Div, 0.0).is_none());
-        assert!(try_fold_float_binary(f64::INFINITY, TirBinaryOp::Sub, f64::INFINITY).is_none());
-        assert!(try_fold_float_binary(0.0, TirBinaryOp::Mul, f64::INFINITY).is_none());
+        assert!(try_fold_float_binary(0.0, TirBinaryOp::Div, 0.0, false).is_none());
+        assert!(
+            try_fold_float_binary(f64::INFINITY, TirBinaryOp::Sub, f64::INFINITY, false).is_none()
+        );
+        assert!(try_fold_float_binary(0.0, TirBinaryOp::Mul, f64::INFINITY, false).is_none());
+        // f32 NaN also skipped
+        assert!(try_fold_float_binary(0.0, TirBinaryOp::Div, 0.0, true).is_none());
     }
 
     #[test]
     fn test_float_comparison() {
         assert!(matches!(
-            try_fold_float_binary(1.0, TirBinaryOp::Lt, 2.0),
+            try_fold_float_binary(1.0, TirBinaryOp::Lt, 2.0, false),
             Some(FoldedExpr::Bool(true))
         ));
         assert!(matches!(
-            try_fold_float_binary(2.0, TirBinaryOp::Lt, 1.0),
+            try_fold_float_binary(2.0, TirBinaryOp::Lt, 1.0, false),
             Some(FoldedExpr::Bool(false))
         ));
         assert!(matches!(
-            try_fold_float_binary(1.0, TirBinaryOp::Eq, 1.0),
+            try_fold_float_binary(1.0, TirBinaryOp::Eq, 1.0, false),
             Some(FoldedExpr::Bool(true))
         ));
         // NaN comparisons — deterministic in IEEE 754
         assert!(matches!(
-            try_fold_float_binary(f64::NAN, TirBinaryOp::Eq, f64::NAN),
+            try_fold_float_binary(f64::NAN, TirBinaryOp::Eq, f64::NAN, false),
             Some(FoldedExpr::Bool(false))
         ));
         assert!(matches!(
-            try_fold_float_binary(f64::NAN, TirBinaryOp::NotEq, f64::NAN),
+            try_fold_float_binary(f64::NAN, TirBinaryOp::NotEq, f64::NAN, false),
             Some(FoldedExpr::Bool(true))
         ));
         assert!(matches!(
-            try_fold_float_binary(f64::NAN, TirBinaryOp::Lt, 1.0),
+            try_fold_float_binary(f64::NAN, TirBinaryOp::Lt, 1.0, false),
             Some(FoldedExpr::Bool(false))
         ));
     }
