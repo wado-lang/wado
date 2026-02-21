@@ -1532,6 +1532,9 @@ let line = #line;           // i32
 // Get current function name
 let func = #function;       // "run" or "Point::distance"
 
+// Get the __DATA__ section content (compile error if absent)
+let data = #data;           // String
+
 // Example: debug logging
 fn log_debug(message: String) with Stdout {
     println(`[{#file}:{#line}] {message}`);

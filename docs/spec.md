@@ -1424,17 +1424,32 @@ let len = arr.len(); // Get length
 
 Compile-time location literals provide source location information at compile time. They use the `#` prefix to clearly signal compile-time evaluation.
 
-| Literal     | Type     | Value                           |
-| ----------- | -------- | ------------------------------- |
-| `#file`     | `String` | Current source file path        |
-| `#line`     | `i32`    | Current line number (1-indexed) |
-| `#function` | `String` | Fully specialized function name |
+| Literal     | Type     | Value                                              |
+| ----------- | -------- | -------------------------------------------------- |
+| `#file`     | `String` | Current source file path                           |
+| `#line`     | `i32`    | Current line number (1-indexed)                    |
+| `#function` | `String` | Fully specialized function name                    |
+| `#data`     | `String` | `__DATA__` section content (compile error if none) |
 
 ```wado
 fn example() {
     println(`Error at {#file}:{#line}`);
     println(`In function: {#function}`);
 }
+```
+
+**`#data`:**
+
+Returns the raw text content of the `__DATA__` section as a `String`. This is useful for programs that need to access embedded metadata at runtime (e.g., configuration, test fixtures, embedded documents). Using `#data` in a file that has no `__DATA__` section is a compile error.
+
+```wado
+export fn run() with Stdout {
+    let config = #data;  // contains the __DATA__ section text
+    println(config);
+}
+
+__DATA__
+{"key": "value"}
 ```
 
 **`#function` Format:**

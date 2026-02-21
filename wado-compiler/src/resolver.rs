@@ -3996,6 +3996,25 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     string_type,
                 )
             }
+            Literal::LocationData => {
+                // #data - returns the __DATA__ section content as a String
+                let data = self
+                    .loaded_modules
+                    .get(&self.current_module_source)
+                    .and_then(|m| m.data_section())
+                    .map(str::to_owned);
+                let string_type = self.get_string_struct_type();
+                if let Some(content) = data {
+                    (TirExprKind::StringLiteral(content), string_type)
+                } else {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message: "`#data` requires a `__DATA__` section in the source file"
+                            .to_owned(),
+                        span: lit.span,
+                    });
+                    (TirExprKind::StringLiteral(String::new()), string_type)
+                }
+            }
         };
         TirExpr::new(kind, type_id, lit.span)
     }

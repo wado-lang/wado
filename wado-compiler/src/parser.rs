@@ -2400,10 +2400,11 @@ impl Parser {
                             "file" => Literal::LocationFile,
                             "line" => Literal::LocationLine,
                             "function" => Literal::LocationFunction,
+                            "data" => Literal::LocationData,
                             _ => {
                                 return Err(ParseError {
                                     message: format!(
-                                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, or `#function`"
+                                        "unknown compile-time literal `#{name}`, expected `#file`, `#line`, `#function`, or `#data`"
                                     ),
                                     span: start_span.merge(&end_span),
                                 });
