@@ -141,7 +141,12 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // Sync functions with complex return types also need an outptr
             else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
-                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty) {
+                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
+                    || crate::component_model::wasi_named_type_return_needs_outptr(
+                        &resolved_ret_ty,
+                        wasi_registry,
+                    )
+                {
                     param_vts.push(wasm_encoder::ValType::I32);
                 }
             }
@@ -154,7 +159,12 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 vec![WirType::I32]
             } else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
-                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty) {
+                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
+                    || crate::component_model::wasi_named_type_return_needs_outptr(
+                        &resolved_ret_ty,
+                        wasi_registry,
+                    )
+                {
                     // Complex return via outptr — function returns nothing
                     Vec::new()
                 } else {

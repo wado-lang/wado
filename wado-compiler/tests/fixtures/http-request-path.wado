@@ -1,5 +1,6 @@
-// HTTP 200 response test
-// This test verifies the HTTP server returns 200 OK with empty body.
+// HTTP request path reading test
+// Verifies that request.get_path_with_query() returns the correct path
+// when the handler is invoked with a specific URI path.
 
 use {
     Request,
@@ -10,13 +11,19 @@ use {
 } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let path = request.get_path_with_query();
+    if let Some(p) = path {
+        assert p == "/hello";
+    } else {
+        panic("expected path but got null");
+    }
+
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Fields::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
-
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 __DATA__
-{"wasi:http/service": {"status": 200}}
+{"wasi:http/service": {"request": {"path": "/hello"}, "status": 200}}

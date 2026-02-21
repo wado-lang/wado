@@ -52,10 +52,24 @@ fn run_golden_test(
         let source = std::fs::read_to_string(&source_path)
             .unwrap_or_else(|e| panic!("Failed to read source file {:?}: {}", source_path, e));
 
-        // Extract target world from __DATA__ section
+        // Extract target world from __DATA__ section.
+        // Supports both old format {"world": "wasi:http/service", ...}
+        // and new format {"wasi:http/service": {...}} where the world is a top-level key.
         let target_world = common::extract_data_section(&source).and_then(|data| {
             let json: serde_json::Value = serde_json::from_str(data.trim()).ok()?;
-            json.get("world")?.as_str().map(String::from)
+            // Old format: explicit "world" key
+            if let Some(world) = json.get("world").and_then(|v| v.as_str()) {
+                return Some(world.to_string());
+            }
+            // New format: world name is a top-level key (e.g. "wasi:http/service" or "test")
+            if let Some(obj) = json.as_object() {
+                for key in obj.keys() {
+                    if key.contains(':') || key == "test" {
+                        return Some(key.clone());
+                    }
+                }
+            }
+            None
         });
 
         // Create compiler host

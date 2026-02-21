@@ -14,7 +14,7 @@
 mod common;
 
 use bytes::Bytes;
-use http_body_util::{BodyExt, Empty};
+use http_body_util::{BodyExt, Full};
 use serde::Deserialize;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -31,11 +31,87 @@ use wado_compiler::{CompilerOptions, OptLevel};
 // __DATA__ spec
 // ---------------------------------------------------------------------------
 
+fn http_method_default() -> String {
+    "GET".to_string()
+}
+
+fn http_path_default() -> String {
+    "/".to_string()
+}
+
+/// HTTP request input for `"wasi:http/service"` tests
+#[derive(Debug, Deserialize)]
+struct HttpRequestSpec {
+    /// HTTP method (default: `"GET"`)
+    #[serde(default = "http_method_default")]
+    method: String,
+
+    /// Request path + query string, e.g. `"/hello?name=Alice"` (default: `"/"`)
+    #[serde(default = "http_path_default")]
+    path: String,
+
+    /// Request headers as `[[name, value], ...]`
+    #[serde(default)]
+    headers: Vec<[String; 2]>,
+
+    /// Request body as UTF-8 string (default: empty)
+    #[serde(default)]
+    body: Option<String>,
+}
+
+impl Default for HttpRequestSpec {
+    fn default() -> Self {
+        Self {
+            method: http_method_default(),
+            path: http_path_default(),
+            headers: Vec::new(),
+            body: None,
+        }
+    }
+}
+
+/// Expected HTTP response and injected request for `"wasi:http/service"` tests.
+///
+/// Example:
+/// ```json
+/// {
+///   "wasi:http/service": {
+///     "request": { "method": "POST", "path": "/api", "body": "hello" },
+///     "status": 200,
+///     "body": "world",
+///     "headers_contain": [["content-type", "text/plain"]]
+///   }
+/// }
+/// ```
+#[derive(Debug, Deserialize, Default)]
+struct HttpServiceSpec {
+    /// Injected HTTP request (defaults to `GET /`)
+    #[serde(default)]
+    request: HttpRequestSpec,
+
+    /// Expected HTTP status code
+    #[serde(default)]
+    status: Option<u16>,
+
+    /// Expected response body (exact UTF-8 match)
+    #[serde(default)]
+    body: Option<String>,
+
+    /// Strings that must appear in the response body
+    #[serde(default)]
+    body_contains: Vec<String>,
+
+    /// Response headers that must be present with the given value: `[[name, value], ...]`
+    #[serde(default)]
+    headers_contain: Vec<[String; 2]>,
+}
+
 /// Expected test results from __DATA__ section (JSON format)
 #[derive(Debug, Deserialize, Default)]
 struct TestSpec {
     /// Target world. Omit or `null` for `wasi:cli/command` (default).
-    /// Use `"wasi:http/service"` for HTTP tests, `"test"` for test-block tests.
+    /// Use `"test"` for test-block tests.
+    /// For HTTP tests, use the `"wasi:http/service"` key instead.
     #[serde(default)]
     world: Option<String>,
 
@@ -71,19 +147,16 @@ struct TestSpec {
     #[serde(rename = "TODO")]
     todo: bool,
 
-    /// Expected HTTP status code — HTTP world
-    #[serde(default)]
-    http_status: Option<u16>,
-
-    /// Expected HTTP response body (UTF-8) — HTTP world
-    #[serde(default)]
-    body: Option<String>,
-
     /// Preopened directories for WASI filesystem tests.
     /// Each entry is `[host_path, guest_path]`.
     /// Paths are relative to the workspace root (cargo test working directory).
     #[serde(default)]
     preopened_dirs: Vec<[String; 2]>,
+
+    /// HTTP world spec: request injection + response expectations.
+    /// Presence of this key implies `world = "wasi:http/service"`.
+    #[serde(rename = "wasi:http/service")]
+    http_service: Option<HttpServiceSpec>,
 }
 
 // ---------------------------------------------------------------------------
@@ -183,15 +256,19 @@ fn http_runtime() -> &'static tokio::runtime::Runtime {
 /// Result of an HTTP request to the Wasm component
 struct HttpTestResult {
     status: u16,
+    headers: http::HeaderMap,
     body: Vec<u8>,
 }
 
 /// Run an HTTP request against a compiled Wasm component
-fn run_http_request(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult> {
-    http_runtime().block_on(run_http_request_async(wasm))
+fn run_http_request(wasm: Vec<u8>, req_spec: &HttpRequestSpec) -> anyhow::Result<HttpTestResult> {
+    http_runtime().block_on(run_http_request_async(wasm, req_spec))
 }
 
-async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult> {
+async fn run_http_request_async(
+    wasm: Vec<u8>,
+    req_spec: &HttpRequestSpec,
+) -> anyhow::Result<HttpTestResult> {
     let engine = common::http_engine();
     let component = Component::new(engine, &wasm)
         .map_err(|e| anyhow::anyhow!("failed to create component: {e:?}"))?;
@@ -209,11 +286,19 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
 
     let service = Service::instantiate_async(&mut store, &component, &linker).await?;
 
-    // Create a simple GET request
-    let http_req = http::Request::builder()
-        .uri("http://localhost/")
-        .method(http::Method::GET)
-        .body(Empty::<Bytes>::new())?;
+    // Build request from spec
+    let method = req_spec
+        .method
+        .parse::<http::Method>()
+        .unwrap_or(http::Method::GET);
+    let uri = format!("http://localhost{}", req_spec.path);
+    let body_bytes = req_spec.body.as_deref().unwrap_or("").as_bytes().to_vec();
+
+    let mut builder = http::Request::builder().uri(uri).method(method);
+    for [name, value] in &req_spec.headers {
+        builder = builder.header(name.as_str(), value.as_str());
+    }
+    let http_req = builder.body(Full::new(Bytes::from(body_bytes)))?;
 
     let (req, io) = Request::from_http(http_req);
 
@@ -246,11 +331,17 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
                 .await
                 .map_err(|_| anyhow::anyhow!("response channel closed unexpectedly"))?;
             let status = res.status().as_u16();
+            let headers = res.headers().clone();
             let body = res.into_body().collect().await?.to_bytes().to_vec();
-            Ok(HttpTestResult { status, body })
+            Ok(HttpTestResult {
+                status,
+                headers,
+                body,
+            })
         }
         Err(Some(error_code)) => Ok(HttpTestResult {
             status: 500,
+            headers: http::HeaderMap::new(),
             body: format!("{error_code:?}").into_bytes(),
         }),
         Err(None) => Err(anyhow::anyhow!("Handler returned error without error code")),
@@ -258,8 +349,8 @@ async fn run_http_request_async(wasm: Vec<u8>) -> anyhow::Result<HttpTestResult>
 }
 
 /// Verify an HTTP test result matches the spec
-fn verify_http_result(result: &HttpTestResult, spec: &TestSpec, fixture_name: &str) {
-    if let Some(expected_status) = spec.http_status {
+fn verify_http_result(result: &HttpTestResult, spec: &HttpServiceSpec, fixture_name: &str) {
+    if let Some(expected_status) = spec.status {
         assert_eq!(
             result.status, expected_status,
             "[{fixture_name}] HTTP status mismatch: expected {expected_status}, got {}",
@@ -273,6 +364,29 @@ fn verify_http_result(result: &HttpTestResult, spec: &TestSpec, fixture_name: &s
             actual_body,
             expected_body.as_str(),
             "[{fixture_name}] body mismatch"
+        );
+    }
+
+    for expected in &spec.body_contains {
+        let actual_body = String::from_utf8_lossy(&result.body);
+        assert!(
+            actual_body.contains(expected.as_str()),
+            "[{fixture_name}] body should contain '{expected}', but got:\n{actual_body}"
+        );
+    }
+
+    for [name, value] in &spec.headers_contain {
+        let header_name = http::header::HeaderName::from_bytes(name.as_bytes())
+            .unwrap_or_else(|_| panic!("[{fixture_name}] invalid header name in spec: {name}"));
+        let expected_val = value.as_str();
+        let actual_val = result
+            .headers
+            .get(&header_name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("(missing)");
+        assert_eq!(
+            actual_val, expected_val,
+            "[{fixture_name}] response header '{name}': expected '{expected_val}', got '{actual_val}'"
         );
     }
 }
@@ -437,10 +551,17 @@ fn run_normal_test(
     spec: &TestSpec,
     test_id: &str,
 ) {
+    // Determine target world: http_service key implies wasi:http/service
+    let target_world = spec
+        .http_service
+        .as_ref()
+        .map(|_| "wasi:http/service".to_string())
+        .or_else(|| spec.world.clone());
+
     // Use CompilerOptions to pass the target world through
     let options = CompilerOptions {
         opt_level,
-        target_world: spec.world.clone(),
+        target_world,
         skip_validation: false,
     };
 
@@ -473,36 +594,38 @@ fn run_normal_test(
     });
 
     // Dispatch to the appropriate runner based on world
-    match spec.world.as_deref() {
-        Some("wasi:http/service") => {
-            let result = run_http_request(compile_result.wasm).unwrap_or_else(|e| {
+    if let Some(http_spec) = &spec.http_service {
+        let result =
+            run_http_request(compile_result.wasm, &http_spec.request).unwrap_or_else(|e| {
                 panic!("[{test_id}] HTTP error: {e:?}");
             });
-            verify_http_result(&result, spec, test_id);
-        }
-        Some("test") => {
-            let result = run_test_world(&compile_result.wasm, test_id).unwrap_or_else(|e| {
-                panic!("[{test_id}] test world error: {e:?}");
-            });
-            verify_result(&result, spec, test_id);
-        }
-        _ => {
-            // Default: wasi:cli/command
-            let result = if spec.preopened_dirs.is_empty() {
-                common::run_wasm(compile_result.wasm).unwrap_or_else(|e| {
-                    panic!("[{test_id}] runtime error: {e}");
-                })
-            } else {
-                let dirs: Vec<(String, String)> = spec
-                    .preopened_dirs
-                    .iter()
-                    .map(|[h, g]| (h.clone(), g.clone()))
-                    .collect();
-                common::run_wasm_with_dirs(compile_result.wasm, &dirs).unwrap_or_else(|e| {
-                    panic!("[{test_id}] runtime error: {e}");
-                })
-            };
-            verify_result(&result, spec, test_id);
+        verify_http_result(&result, http_spec, test_id);
+    } else {
+        match spec.world.as_deref() {
+            Some("test") => {
+                let result = run_test_world(&compile_result.wasm, test_id).unwrap_or_else(|e| {
+                    panic!("[{test_id}] test world error: {e:?}");
+                });
+                verify_result(&result, spec, test_id);
+            }
+            _ => {
+                // Default: wasi:cli/command
+                let result = if spec.preopened_dirs.is_empty() {
+                    common::run_wasm(compile_result.wasm).unwrap_or_else(|e| {
+                        panic!("[{test_id}] runtime error: {e}");
+                    })
+                } else {
+                    let dirs: Vec<(String, String)> = spec
+                        .preopened_dirs
+                        .iter()
+                        .map(|[h, g]| (h.clone(), g.clone()))
+                        .collect();
+                    common::run_wasm_with_dirs(compile_result.wasm, &dirs).unwrap_or_else(|e| {
+                        panic!("[{test_id}] runtime error: {e}");
+                    })
+                };
+                verify_result(&result, spec, test_id);
+            }
         }
     }
 }

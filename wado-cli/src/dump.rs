@@ -754,7 +754,11 @@ async fn run_single(opts: &DumpOptions, input: &str) {
     }
 }
 
-/// Extract the `"world"` field from the `__DATA__` JSON section of a source file.
+/// Extract the target world from the `__DATA__` JSON section of a source file.
+///
+/// Supports two formats:
+/// - Old: `{"world": "wasi:http/service", ...}`
+/// - New: `{"wasi:http/service": {...}}` (world as top-level key containing `:` or `"test"`)
 fn extract_world_from_data_section(source: &str) -> Option<String> {
     let marker = "\n__DATA__\n";
     let data = if let Some(pos) = source.find(marker) {
@@ -765,5 +769,17 @@ fn extract_world_from_data_section(source: &str) -> Option<String> {
         return None;
     };
     let json: serde_json::Value = serde_json::from_str(data.trim()).ok()?;
-    json.get("world")?.as_str().map(String::from)
+    // Old format: explicit "world" key
+    if let Some(world) = json.get("world").and_then(|v| v.as_str()) {
+        return Some(world.to_string());
+    }
+    // New format: world name is a top-level key (contains ':' or is "test")
+    if let Some(obj) = json.as_object() {
+        for key in obj.keys() {
+            if key.contains(':') || key == "test" {
+                return Some(key.clone());
+            }
+        }
+    }
+    None
 }
