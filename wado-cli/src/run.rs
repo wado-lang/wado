@@ -28,9 +28,13 @@ pub fn print_usage() {
     eprintln!("Options:");
     eprintln!("  --dir <path>     Preopen directory for WASI filesystem access.");
     eprintln!("                   Use --dir host::guest to specify different guest path.");
+    eprintln!("                   Overrides the default of preopening the current directory.");
+    eprintln!("  --no-dir         Do not preopen any directories (disables the default).");
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
     eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
     eprintln!("  --help           Show this help message");
+    eprintln!();
+    eprintln!("By default, the current directory is preopened as '.' for WASI filesystem access.");
 }
 
 /// Parse log level from string
@@ -50,6 +54,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
+    let mut explicit_dirs = false;
+    let mut no_dir = false;
 
     while let Some(arg) = next_arg(&mut parser) {
         match arg {
@@ -66,6 +72,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
                     (dir_spec.clone(), dir_spec)
                 };
                 preopened_dirs.push((host, guest));
+                explicit_dirs = true;
+            }
+            Long("no-dir") => {
+                no_dir = true;
             }
             Short('O') => {
                 let val = parser.optional_value();
@@ -104,6 +114,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
             }
             _ => unexpected_arg(arg, print_usage),
         }
+    }
+
+    // Default: preopen the current directory unless --dir or --no-dir was given.
+    if !explicit_dirs && !no_dir {
+        preopened_dirs.push((".".to_owned(), ".".to_owned()));
     }
 
     RunOptions {
