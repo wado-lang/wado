@@ -1,21 +1,33 @@
 //! Optimization pass for Wado TIR
 //!
 //! This module coordinates various optimization passes:
-//! - Dead Code Elimination (DCE) via `optimize_dce` module
-//! - Function inlining via `optimize_inline` module
-//! - Reference elimination via `optimize_ref_elim` module
-//! - Scalar Replacement of Aggregates (SROA) via `optimize_sroa` module
-//! - Copy propagation via `optimize_copy_prop` module
-//! - Constant folding via `optimize_const_fold` module
-//! - Loop-Invariant Code Motion (LICM) via `optimize_licm` module
-//! - Post-optimization rewrites (select lowering, move insertion) via `optimize_rewrite` module
+//! - Dead Code Elimination (DCE) via `dce` module
+//! - Function inlining via `inline` module
+//! - Reference elimination via `ref_elim` module
+//! - Scalar Replacement of Aggregates (SROA) via `sroa` module
+//! - Copy propagation via `copy_prop` module
+//! - Constant folding via `const_fold` module
+//! - Loop-Invariant Code Motion (LICM) via `licm` module
+//! - Post-optimization rewrites (select lowering, move insertion) via `rewrite` module
 
-use crate::optimize_const_fold::fold_constants;
-use crate::optimize_copy_prop::propagate_copies;
-use crate::optimize_dce::{
-    analyze_project, remove_unreachable_functions, remove_unreachable_types,
-};
-use crate::optimize_inline::inline_functions;
+mod const_fold;
+mod copy_prop;
+pub mod dce;
+mod inline;
+mod licm;
+mod ref_elim;
+mod rewrite;
+mod sroa;
+
+use const_fold::fold_constants;
+use copy_prop::propagate_copies;
+use dce::{analyze_project, remove_unreachable_functions, remove_unreachable_types};
+use inline::inline_functions;
+use licm::apply_licm;
+use ref_elim::eliminate_unnecessary_refs;
+use sroa::scalar_replace_aggregates;
+
+use crate::project::Project;
 
 /// Configuration for optimization passes
 struct OptConfig {
@@ -24,11 +36,6 @@ struct OptConfig {
     /// Maximum statement count for inlining
     inline_threshold: usize,
 }
-use crate::optimize_licm::apply_licm;
-use crate::optimize_ref_elim::eliminate_unnecessary_refs;
-use crate::optimize_rewrite;
-use crate::optimize_sroa::scalar_replace_aggregates;
-use crate::project::Project;
 
 /// Optimization level for the compiler.
 ///
@@ -130,7 +137,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
     }
 
     // Post-optimization rewrites: simplify labeled blocks and insert moves in a single pass.
-    optimize_rewrite::rewrite(&mut project);
+    rewrite::rewrite(&mut project);
 
     project
 }
