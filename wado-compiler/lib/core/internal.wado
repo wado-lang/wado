@@ -134,40 +134,19 @@ pub fn cm_lower_array_u8(arr: Array<u8>) -> i64 {
 /// Escapes: " → \", \ → \\, \n → \n, \t → \t, \r → \r
 /// Does NOT write the surrounding quotes — caller is responsible for those.
 pub fn write_escaped_string(s: String, f: &mut Formatter) {
-    let bytes = s.internal_raw_bytes();
-    let len = s.len();
-    let mut start = 0;
-    let mut i = 0;
-    while i < len {
-        let c = (builtin::array_get_u8(bytes, i) as u8) as char;
-        if c == '"' || c == '\\' || c == '\n' || c == '\t' || c == '\r' {
-            if i > start {
-                let chunk_len = i - start;
-                let sub = builtin::array_new::<u8>(chunk_len);
-                builtin::array_copy::<u8>(sub, 0, bytes, start, chunk_len);
-                f.write_str(String::internal_from_utf8_raw(sub, chunk_len));
-            }
-            if c == '"' {
-                f.write_str("\\\"");
-            } else if c == '\\' {
-                f.write_str("\\\\");
-            } else if c == '\n' {
-                f.write_str("\\n");
-            } else if c == '\t' {
-                f.write_str("\\t");
-            } else {
-                f.write_str("\\r");
-            }
-            start = i + 1;
+    for let c of s.chars() {
+        if c == '"' {
+            f.write_str("\\\"");
+        } else if c == '\\' {
+            f.write_str("\\\\");
+        } else if c == '\n' {
+            f.write_str("\\n");
+        } else if c == '\t' {
+            f.write_str("\\t");
+        } else if c == '\r' {
+            f.write_str("\\r");
+        } else {
+            f.write_char(c);
         }
-        i += 1;
-    }
-    if start == 0 {
-        f.write_str(s);
-    } else if start < len {
-        let chunk_len = len - start;
-        let sub = builtin::array_new::<u8>(chunk_len);
-        builtin::array_copy::<u8>(sub, 0, bytes, start, chunk_len);
-        f.write_str(String::internal_from_utf8_raw(sub, chunk_len));
     }
 }
