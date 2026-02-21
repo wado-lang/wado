@@ -205,13 +205,6 @@ fn sanitize_kebab_export_name(function_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{GenericType, NamedType};
-    use crate::token::Span;
-
-    fn make_span() -> Span {
-        Span::new(0, 0, 0, 0)
-    }
-
     #[test]
     fn test_sanitize_kebab_export_name() {
         // Simple case
