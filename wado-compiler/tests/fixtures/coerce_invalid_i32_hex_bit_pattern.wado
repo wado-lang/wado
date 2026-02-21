@@ -1,0 +1,8 @@
+// 0xFFFF_FFFF = 4294967295, which is out of range for i32 (-2147483648..=2147483647)
+// Bit-pattern reinterpretation requires explicit cast: 0xFFFF_FFFF as i32
+export fn run() {
+    let i: i32 = 0xFFFF_FFFF;
+}
+
+__DATA__
+{"compile_error": "literal out of range for `i32`: 0xFFFF_FFFF"}

@@ -1157,22 +1157,21 @@ fn foo(n: i64) { ... }
 foo(100);  // literal coerced to i64
 ```
 
-**Compile-time range checking**: The compiler rejects literal coercions whose value falls outside the target type's range. The rules differ by literal base:
+**Compile-time range checking**: The compiler rejects literal coercions whose value falls outside the target type's range. All literal bases (decimal, hex `0x`, octal `0o`, binary `0b`) use strict numeric range: the value must lie within `[MIN, MAX]` for signed types or `[0, MAX]` for unsigned types.
 
-- **Decimal literals** use strict numeric range: the value must lie within `[MIN, MAX]` for signed types or `[0, MAX]` for unsigned types.
-- **Non-decimal literals** (hex `0x`, octal `0o`, binary `0b`) use bit-width range for **signed** types: any value that fits in the corresponding unsigned bit width is accepted and reinterpreted as a bit pattern. Unsigned types always use the strict unsigned range regardless of base.
+To reinterpret a bit pattern as a signed integer, use an explicit `as` cast.
 
 ```wado
-// Decimal: strict numeric range
 let a: i8 = 127;                  // OK: max i8
 let b: i8 = 128;                  // compile error: literal out of range for `i8`: 128
 let c: i8 = -128;                 // OK: min i8
 let d: u32 = -1;                  // compile error: literal out of range for `u32`: -1
 
-// Non-decimal: bit-width range for signed types
-let e: i8 = 0xFF;                 // OK: bit pattern of -1 (255 fits in 8-bit)
-let f: i64 = 0xfa8fd5a0081c0289;  // OK: fits in 64-bit
-let g: u32 = 0x1_0000_0000;       // compile error: 33-bit value does not fit in u32
+let e: i8 = 0xFF;                 // compile error: literal out of range for `i8`: 0xFF
+let f: i8 = 0xFF as i8;           // OK: explicit bit-pattern reinterpretation (value: -1)
+let g: i32 = 0xFFFF_FFFF;         // compile error: literal out of range for `i32`: 0xFFFF_FFFF
+let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation (value: -1)
+let i: u32 = 0x1_0000_0000;       // compile error: 33-bit value does not fit in u32
 ```
 
 **Type conversion** (via `as`):

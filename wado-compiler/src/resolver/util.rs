@@ -2,21 +2,12 @@
 
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
-/// Returns `true` if the literal repr is hex, octal, or binary (non-decimal).
-/// Non-decimal literals use bit-pattern semantics for signed integer types.
-pub(super) fn is_non_decimal_literal(repr: &str) -> bool {
-    let s = repr.trim_start_matches('-');
-    let lower = s.to_ascii_lowercase();
-    lower.starts_with("0x") || lower.starts_with("0b") || lower.starts_with("0o")
-}
-
 /// Check if a positive integer literal value fits in the target integer type.
 /// Returns `Some(error_message)` if out of range, `None` if OK.
 /// Only checks primitive integer types (not i128/u128, which are handled separately).
 ///
-/// Decimal literals use strict numeric range.
-/// Hex/octal/binary literals use bit-width range for signed types
-/// (e.g. `0xFF` is valid for `i8`, interpreted as the bit pattern -1).
+/// All literal formats (decimal, hex, octal, binary) use strict numeric range.
+/// To reinterpret a bit pattern, use an explicit cast: `0xFF as i8`.
 pub(super) fn check_int_range_positive(
     value: u64,
     target_type: TypeId,
@@ -24,39 +15,12 @@ pub(super) fn check_int_range_positive(
     repr: &str,
 ) -> Option<String> {
     let base_id = type_table.get_ultimate_base_type(target_type);
-    let non_decimal = is_non_decimal_literal(repr);
     let in_range = match type_table.get(base_id) {
         ResolvedType::Primitive(prim) => match prim {
-            // Signed types: non-decimal uses bit-width (bit-pattern), decimal uses MAX_SIGNED
-            PrimitiveType::I8 => {
-                if non_decimal {
-                    u8::try_from(value).is_ok()
-                } else {
-                    i8::try_from(value).is_ok()
-                }
-            }
-            PrimitiveType::I16 => {
-                if non_decimal {
-                    u16::try_from(value).is_ok()
-                } else {
-                    i16::try_from(value).is_ok()
-                }
-            }
-            PrimitiveType::I32 => {
-                if non_decimal {
-                    u32::try_from(value).is_ok()
-                } else {
-                    i32::try_from(value).is_ok()
-                }
-            }
-            PrimitiveType::I64 => {
-                if non_decimal {
-                    true
-                } else {
-                    i64::try_from(value).is_ok()
-                }
-            }
-            // Unsigned types: always check bit width (same for both)
+            PrimitiveType::I8 => i8::try_from(value).is_ok(),
+            PrimitiveType::I16 => i16::try_from(value).is_ok(),
+            PrimitiveType::I32 => i32::try_from(value).is_ok(),
+            PrimitiveType::I64 => i64::try_from(value).is_ok(),
             PrimitiveType::U8 => u8::try_from(value).is_ok(),
             PrimitiveType::U16 => u16::try_from(value).is_ok(),
             PrimitiveType::U32 => u32::try_from(value).is_ok(),
