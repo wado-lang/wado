@@ -65,8 +65,6 @@ Eliminates function call overhead by replacing small pure function calls with th
 
 Eligibility: pure (no effects), non-recursive, no reference parameters/returns, no generics, not from core library, expression count below threshold.
 
-Functions with early returns are supported: the inlined body is wrapped in a labeled block, and `return expr` is rewritten to `break label: expr`, preserving control flow semantics.
-
 ### Reference Elimination
 
 **Module:** `optimize/ref_elim.rs`
