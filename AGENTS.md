@@ -380,6 +380,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Wasm IR (WIR) Layer](./docs/wep-2026-02-14-wir-layer.md)
 - [TIR-Level CM Adapter Synthesis](./docs/wep-2026-02-15-cm-adapter-synthesis.md)
 - [WASI HTTP Integration](./docs/wep-2026-02-21-wasi-http.md)
+- [Inspect (Debug Output)](./docs/wep-2026-02-21-inspect-debug-output.md)
 
 ### Structure
 
