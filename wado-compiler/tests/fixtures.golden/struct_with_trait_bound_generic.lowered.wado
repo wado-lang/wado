@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 struct Container {
     wrapped: Wrapper<i32>,
@@ -32,10 +36,6 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data: i32) {
-    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
 export fn __cm_export__run() {

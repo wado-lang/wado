@@ -264,6 +264,127 @@ fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
     }
 }
 
+/// Like `wado_type_to_cm_primitive` but also resolves resource types using the
+/// `own_resource_indices` map (resource Wado name → `own<resource>` type index).
+fn type_to_cm_primitive_with_resources(
+    ty: &Type,
+    own_resource_indices: &IndexMap<String, u32>,
+) -> ComponentValType {
+    if let Type::Named(named) = ty
+        && let Some(&own_idx) = own_resource_indices.get(&named.name)
+    {
+        return ComponentValType::Type(own_idx);
+    }
+    wado_type_to_cm_primitive(ty)
+}
+
+/// Build CM `ComponentValType` entries for tuple elements, handling `Stream<T>` and
+/// `Future<T>` elements by emitting the necessary local types into `instance_type`.
+///
+/// Returns the `ComponentValType` list ready to pass to `instance_type.defined_type().tuple(...)`.
+#[allow(clippy::too_many_arguments)]
+fn build_cm_tuple_types(
+    elems: &[Type],
+    instance_type: &mut InstanceType,
+    local_type_idx: &mut u32,
+    error_code_idx: Option<u32>,
+    has_local_error_code: bool,
+    enum_export_indices: &IndexMap<String, u32>,
+    own_resource_type_indices: &IndexMap<String, u32>,
+    ctx: &mut ComponentModelContext,
+) -> Vec<ComponentValType> {
+    let mut tuple_types = Vec::new();
+    for t in elems {
+        match t {
+            Type::Generic(g) if g.name == "Stream" => {
+                // Emit stream<u8> local type (only u8 streams are supported in WASI P3)
+                instance_type
+                    .ty()
+                    .defined_type()
+                    .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+                tuple_types.push(ComponentValType::Type(*local_type_idx));
+                *local_type_idx += 1;
+            }
+            Type::Generic(g) if g.name == "Future" => {
+                // Emit future<result<_, error-code>> local type.
+                // Determine the error-code type index.
+                let inner_cm = if let Some(inner_g) = g.args.first()
+                    && let Type::Generic(inner) = inner_g
+                    && inner.name == "Result"
+                {
+                    let err_idx = if let Some(idx) = error_code_idx {
+                        idx
+                    } else if has_local_error_code && enum_export_indices.contains_key("ErrorCode")
+                    {
+                        enum_export_indices["ErrorCode"]
+                    } else {
+                        // Alias the outer error-code type.
+                        let outer_ec = ctx.type_idx("error-code");
+                        instance_type.alias(Alias::Outer {
+                            kind: ComponentOuterAliasKind::Type,
+                            count: 1,
+                            index: outer_ec,
+                        });
+                        let idx = *local_type_idx;
+                        *local_type_idx += 1;
+                        idx
+                    };
+                    instance_type
+                        .ty()
+                        .defined_type()
+                        .result(None, Some(ComponentValType::Type(err_idx)));
+                    let result_idx = *local_type_idx;
+                    *local_type_idx += 1;
+                    Some(ComponentValType::Type(result_idx))
+                } else {
+                    None
+                };
+                instance_type.ty().defined_type().future(inner_cm);
+                tuple_types.push(ComponentValType::Type(*local_type_idx));
+                *local_type_idx += 1;
+            }
+            _ => {
+                tuple_types.push(type_to_cm_primitive_with_resources(
+                    t,
+                    own_resource_type_indices,
+                ));
+            }
+        }
+    }
+    tuple_types
+}
+
+/// Collect resource type names referenced anywhere in a type tree.
+///
+/// Used to build the `needed_resources` list for `generate_wasi_imports`.
+fn collect_resources_in_type(
+    ty: &Type,
+    wasi_registry: &crate::component_model::WasiRegistry,
+    out: &mut Vec<String>,
+) {
+    match ty {
+        Type::Named(named) if wasi_registry.is_resource(&named.name) => {
+            if !out.contains(&named.name) {
+                out.push(named.name.clone());
+            }
+        }
+        Type::Generic(g) => {
+            for arg in &g.args {
+                collect_resources_in_type(arg, wasi_registry, out);
+            }
+        }
+        Type::Tuple(elems) => {
+            for elem in elems {
+                collect_resources_in_type(elem, wasi_registry, out);
+            }
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            collect_resources_in_type(inner, wasi_registry, out);
+        }
+        _ => {}
+    }
+}
+
 fn wado_type_to_cm_val_type(
     _project: &Project,
     ty: &Type,
@@ -272,6 +393,7 @@ fn wado_type_to_cm_val_type(
     result_param_type_idx: Option<u32>,
     enum_type_indices: &IndexMap<String, u32>,
     flags_type_indices: &IndexMap<String, u32>,
+    borrow_resource_type_indices: &IndexMap<String, u32>,
 ) -> ComponentValType {
     match ty {
         Type::Named(named) => {
@@ -295,6 +417,15 @@ fn wado_type_to_cm_val_type(
                 "String" => ComponentValType::Primitive(PrimitiveValType::String),
                 _ => panic!("unsupported Wado param type for CM: {}", named.name),
             }
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            // borrow<resource> - WASI resource methods take self as &Resource
+            if let Type::Named(named) = inner.as_ref()
+                && let Some(&borrow_idx) = borrow_resource_type_indices.get(&named.name)
+            {
+                return ComponentValType::Type(borrow_idx);
+            }
+            panic!("unsupported reference param type for CM: {ty:?}")
         }
         Type::Generic(generic) => match generic.name.as_str() {
             "Stream" => ComponentValType::Type(stream_type_idx.expect("stream type not defined")),
@@ -810,12 +941,39 @@ fn generate_wasi_imports(
                 if !project.wasi_registry.is_function_supported(func) {
                     return false;
                 }
-                let effect_name = &func.effect_name;
-                project.has_effect(effect_name)
+                // Use per-function check (same as wir_build) to avoid including
+                // unused functions that reference unsupported types (e.g. Stream<u8>
+                // in tuples when read_via_stream is not called).
+                let func_key = format!("{}::{}", func.effect_name, func.method_name);
+                project.used_wasi_functions.contains(&func_key)
             })
             .collect();
 
         if supported_functions.is_empty() {
+            continue;
+        }
+
+        // Collect resource types referenced in any function signature.
+        let mut needed_resources: Vec<String> = Vec::new();
+        for func in &supported_functions {
+            if let Some(ret_ty) = &func.return_type {
+                collect_resources_in_type(ret_ty, project.wasi_registry, &mut needed_resources);
+            }
+            for (_, ty) in &func.params {
+                collect_resources_in_type(ty, project.wasi_registry, &mut needed_resources);
+            }
+        }
+
+        // Interfaces that reference resources DEFINED BY OTHER interfaces must be deferred
+        // until those resource-defining interfaces are imported (via import_resource_using_interfaces,
+        // Phase 3). Interfaces that define their own resources (source path == self) are handled here.
+        let uses_external_resources = needed_resources.iter().any(|resource_name| {
+            project
+                .wasi_registry
+                .get_resource_source_interface(resource_name)
+                .is_some_and(|src| src != interface_info.path.as_str())
+        });
+        if uses_external_resources {
             continue;
         }
 
@@ -826,23 +984,9 @@ fn generate_wasi_imports(
             let mut instance_type = InstanceType::new();
             let mut local_type_idx = 0u32;
 
-            // Collect resource types needed by static methods
-            let mut needed_resources: Vec<String> = Vec::new();
-            for func in &supported_functions {
-                if func.wasi_func_name.starts_with("[static]")
-                    && let Some(Type::Generic(g)) = &func.return_type
-                    && g.name == "Result"
-                    && !g.args.is_empty()
-                    && let Type::Named(named) = &g.args[0]
-                    && project.wasi_registry.is_resource(&named.name)
-                    && !needed_resources.contains(&named.name)
-                {
-                    needed_resources.push(named.name.clone());
-                }
-            }
-
             let mut resource_type_indices: IndexMap<String, u32> = IndexMap::new();
             let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::new();
+            let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::new();
             for resource_name in &needed_resources {
                 if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
                     instance_type.export(
@@ -856,8 +1000,18 @@ fn generate_wasi_imports(
                     instance_type.ty().defined_type().own(resource_idx);
                     own_resource_type_indices.insert(resource_name.clone(), local_type_idx);
                     local_type_idx += 1;
+
+                    instance_type.ty().defined_type().borrow(resource_idx);
+                    borrow_resource_type_indices.insert(resource_name.clone(), local_type_idx);
+                    local_type_idx += 1;
                 }
             }
+
+            // Determine if this interface defines its own ErrorCode (e.g. wasi:filesystem/types,
+            // wasi:sockets/types) vs. using the shared wasi:cli/types error-code via outer alias.
+            let has_local_error_code = project
+                .wasi_registry
+                .has_enum_in_interface(&interface_info.path, "ErrorCode");
 
             // Collect enum types needed by functions
             let mut needed_enums: Vec<String> = Vec::new();
@@ -879,7 +1033,9 @@ fn generate_wasi_imports(
                             && project.wasi_registry.is_enum(&named.name)
                             && !needed_enums.contains(&named.name)
                         {
-                            if named.name == "ErrorCode" && interface_info.package != "sockets" {
+                            // Skip ErrorCode for interfaces that don't define their own —
+                            // those use the shared wasi:cli/types error-code via outer alias.
+                            if named.name == "ErrorCode" && !has_local_error_code {
                                 continue;
                             }
                             needed_enums.push(named.name.clone());
@@ -983,8 +1139,8 @@ fn generate_wasi_imports(
                 };
 
                 let error_code_idx = if needs_error_code {
-                    let uses_local_error_code = interface_info.package == "sockets"
-                        && enum_export_indices.contains_key("ErrorCode");
+                    let uses_local_error_code =
+                        has_local_error_code && enum_export_indices.contains_key("ErrorCode");
 
                     if uses_local_error_code {
                         Some(enum_export_indices["ErrorCode"])
@@ -1049,22 +1205,40 @@ fn generate_wasi_imports(
                             Type::Generic(elem_g)
                                 if elem_g.name == "Tuple" && !elem_g.args.is_empty() =>
                             {
-                                let tuple_types: Vec<ComponentValType> =
-                                    elem_g.args.iter().map(wado_type_to_cm_primitive).collect();
+                                let tuple_types: Vec<ComponentValType> = elem_g
+                                    .args
+                                    .iter()
+                                    .map(|t| {
+                                        type_to_cm_primitive_with_resources(
+                                            t,
+                                            &own_resource_type_indices,
+                                        )
+                                    })
+                                    .collect();
                                 instance_type.ty().defined_type().tuple(tuple_types);
                                 let tuple_idx = local_type_idx;
                                 local_type_idx += 1;
                                 ComponentValType::Type(tuple_idx)
                             }
                             Type::Tuple(elems) if !elems.is_empty() => {
-                                let tuple_types: Vec<ComponentValType> =
-                                    elems.iter().map(wado_type_to_cm_primitive).collect();
+                                let tuple_types: Vec<ComponentValType> = elems
+                                    .iter()
+                                    .map(|t| {
+                                        type_to_cm_primitive_with_resources(
+                                            t,
+                                            &own_resource_type_indices,
+                                        )
+                                    })
+                                    .collect();
                                 instance_type.ty().defined_type().tuple(tuple_types);
                                 let tuple_idx = local_type_idx;
                                 local_type_idx += 1;
                                 ComponentValType::Type(tuple_idx)
                             }
-                            _ => wado_type_to_cm_primitive(element_type),
+                            _ => type_to_cm_primitive_with_resources(
+                                element_type,
+                                &own_resource_type_indices,
+                            ),
                         };
                         instance_type.ty().defined_type().list(element_val_type);
                         let idx = local_type_idx;
@@ -1080,7 +1254,10 @@ fn generate_wasi_imports(
                 let option_type_idx = if let Some(Type::Generic(g)) = &func.return_type {
                     if g.name == "Option" && !g.args.is_empty() {
                         let element_type = &g.args[0];
-                        let element_val_type = wado_type_to_cm_primitive(element_type);
+                        let element_val_type = type_to_cm_primitive_with_resources(
+                            element_type,
+                            &own_resource_type_indices,
+                        );
                         instance_type.ty().defined_type().option(element_val_type);
                         let idx = local_type_idx;
                         local_type_idx += 1;
@@ -1096,8 +1273,16 @@ fn generate_wasi_imports(
                     if elems.is_empty() {
                         None
                     } else {
-                        let tuple_types: Vec<ComponentValType> =
-                            elems.iter().map(wado_type_to_cm_primitive).collect();
+                        let tuple_types = build_cm_tuple_types(
+                            elems,
+                            &mut instance_type,
+                            &mut local_type_idx,
+                            error_code_idx,
+                            has_local_error_code,
+                            &enum_export_indices,
+                            &own_resource_type_indices,
+                            ctx,
+                        );
                         instance_type.ty().defined_type().tuple(tuple_types);
                         let idx = local_type_idx;
                         local_type_idx += 1;
@@ -1105,8 +1290,16 @@ fn generate_wasi_imports(
                     }
                 } else if let Some(Type::Generic(g)) = &func.return_type {
                     if g.name == "Tuple" && !g.args.is_empty() {
-                        let tuple_types: Vec<ComponentValType> =
-                            g.args.iter().map(wado_type_to_cm_primitive).collect();
+                        let tuple_types = build_cm_tuple_types(
+                            &g.args,
+                            &mut instance_type,
+                            &mut local_type_idx,
+                            error_code_idx,
+                            has_local_error_code,
+                            &enum_export_indices,
+                            &own_resource_type_indices,
+                            ctx,
+                        );
                         instance_type.ty().defined_type().tuple(tuple_types);
                         let idx = local_type_idx;
                         local_type_idx += 1;
@@ -1130,6 +1323,7 @@ fn generate_wasi_imports(
                             result_param_type_idx,
                             &enum_export_indices,
                             &flags_export_indices,
+                            &borrow_resource_type_indices,
                         );
                         (to_kebab_case(name), val_type)
                     })
@@ -1178,6 +1372,23 @@ fn generate_wasi_imports(
             &interface_info.path,
             wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
         );
+
+        // Expose any resources defined in this interface at the outer component scope.
+        // This allows other interfaces (e.g., wasi:filesystem/preopens which uses
+        // wasi:filesystem/types::descriptor) to alias them via `alias outer`.
+        for resource_name in &needed_resources {
+            if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
+                let resource_type_name = format!("resource:{cm_name}");
+                if !ctx.has_type(&resource_type_name) {
+                    ctx.register_type(&resource_type_name);
+                    builder.alias_export(
+                        ctx.instance_idx(&interface_info.interface),
+                        cm_name,
+                        ComponentExportKind::Type,
+                    );
+                }
+            }
+        }
 
         for func in &supported_functions {
             let local_name = project
@@ -1526,6 +1737,19 @@ fn import_interface_with_resource(
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
+    // When this interface defines its own resource (not aliased from a source interface),
+    // expose the resource at the outer component scope so that other interfaces (like
+    // wasi:filesystem/preopens) can alias it using `alias outer`.
+    if !has_outer_resource {
+        let resource_type_name = format!("resource:{resource_cm_name}");
+        ctx.register_type(&resource_type_name);
+        builder.alias_export(
+            ctx.instance_idx(&interface_info.interface),
+            resource_cm_name,
+            ComponentExportKind::Type,
+        );
+    }
+
     ctx.register_comp_func(&local_name);
     builder.alias_export(
         ctx.instance_idx(&interface_info.interface),
@@ -1616,6 +1840,289 @@ fn import_interfaces_with_resources(
     // Phase 2: Import function interfaces that use those resources
     for interface_info in &interfaces_with_resources {
         import_interface_with_resource(builder, ctx, interface_info, project);
+    }
+
+    // Phase 3: Import interfaces that reference resources from other interfaces
+    // (e.g. wasi:filesystem/preopens whose get-directories returns a list of descriptors
+    // from wasi:filesystem/types). These must be imported AFTER Phase 1 so that the
+    // resource outer-aliases are available in ctx.
+    import_resource_using_interfaces(builder, ctx, project);
+}
+
+/// Import interfaces that reference resources from other interfaces but don't define resources
+/// themselves (e.g., wasi:filesystem/preopens which uses `descriptor` from wasi:filesystem/types).
+///
+/// Must run after Phase 1 of `import_interfaces_with_resources` so that `resource:*` types
+/// have been registered in `ctx`.
+fn import_resource_using_interfaces(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &Project,
+) {
+    for interface_info in project.wasi_registry.interfaces() {
+        if interface_info.interface == "run" {
+            continue;
+        }
+        if interface_info.resource_type.is_some() {
+            continue;
+        }
+        if interface_info.package == "http" {
+            continue;
+        }
+
+        let supported_functions: Vec<_> = interface_info
+            .functions
+            .iter()
+            .filter(|func| {
+                if !project.wasi_registry.is_function_supported(func) {
+                    return false;
+                }
+                let func_key = format!("{}::{}", func.effect_name, func.method_name);
+                project.used_wasi_functions.contains(&func_key)
+            })
+            .collect();
+
+        if supported_functions.is_empty() {
+            continue;
+        }
+
+        // Collect resources used in function signatures
+        let mut needed_resources: Vec<String> = Vec::new();
+        for func in &supported_functions {
+            if let Some(ret_ty) = &func.return_type {
+                collect_resources_in_type(ret_ty, project.wasi_registry, &mut needed_resources);
+            }
+            for (_, ty) in &func.params {
+                collect_resources_in_type(ty, project.wasi_registry, &mut needed_resources);
+            }
+        }
+
+        // Only handle interfaces that reference resources from other interfaces.
+        // Interfaces with no resources are already handled in generate_wasi_imports.
+        if needed_resources.is_empty() {
+            continue;
+        }
+
+        // Skip if already imported (e.g., previously handled by generate_wasi_imports on a prior build)
+        let first_func_local_name = supported_functions
+            .first()
+            .map(|f| f.local_alias_name())
+            .unwrap_or_default();
+        if ctx.has_comp_func(&first_func_local_name) {
+            continue;
+        }
+
+        // Ensure all needed resources are imported before building the instance type.
+        // A resource may appear only in a return type (e.g., preopens::get-directories
+        // returns a list of descriptors) without any of its own methods being called.
+        // In that case Phase 1/2 would not have imported the resource-defining interface,
+        // so we do it here at component scope before entering the instance-type builder.
+        // We use package-qualified names (e.g., "filesystem-types") to avoid collisions
+        // with other interfaces that share the same short interface name (e.g., "cli/types").
+        for resource_name in &needed_resources {
+            if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
+                let outer_resource_type_name = format!("resource:{cm_name}");
+                if ctx.has_type(&outer_resource_type_name) {
+                    continue; // already imported
+                }
+                let Some(source_path) = project
+                    .wasi_registry
+                    .get_resource_source_interface(resource_name)
+                else {
+                    continue;
+                };
+                let Some(wasi_import) = crate::ast::WasiImport::parse(source_path) else {
+                    continue;
+                };
+                // Use package-qualified names to avoid collision with same-named interfaces
+                // from different packages (e.g., wasi:cli/types vs wasi:filesystem/types).
+                let src_instance_name =
+                    format!("{}-{}", wasi_import.package, wasi_import.interface);
+                let src_instance_type_name = format!("{src_instance_name}-instance-type");
+                if !ctx.has_type(&src_instance_type_name) {
+                    // Import the resource-defining interface minimally (just the resource export)
+                    let src_instance_type_idx = ctx.register_type(&src_instance_type_name);
+                    {
+                        let (_, enc) = builder.ty(Some(&src_instance_type_name));
+                        let mut src_it = InstanceType::new();
+                        src_it.export(
+                            cm_name,
+                            wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+                        );
+                        enc.instance(&src_it);
+                    }
+                    ctx.register_instance(&src_instance_name);
+                    builder.import(
+                        source_path,
+                        wasm_encoder::ComponentTypeRef::Instance(src_instance_type_idx),
+                    );
+                }
+                // Alias the resource type into the outer component scope
+                ctx.register_type(&outer_resource_type_name);
+                builder.alias_export(
+                    ctx.instance_idx(&src_instance_name),
+                    cm_name,
+                    ComponentExportKind::Type,
+                );
+            }
+        }
+
+        // Build a map: resource_wado_name -> local_type_idx_in_instance_type
+        // First alias outer resources, then build own<>/borrow<> types.
+        let instance_type_name = format!("{}-instance-type", interface_info.interface);
+        let instance_type_idx = ctx.register_type(&instance_type_name);
+        {
+            let (_, enc) = builder.ty(Some(&instance_type_name));
+            let mut instance_type = InstanceType::new();
+            let mut local_type_idx = 0u32;
+
+            // Maps: resource_name -> (alias_local_idx, own_local_idx, borrow_local_idx)
+            let mut resource_alias_indices: IndexMap<String, u32> = IndexMap::new();
+            let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::new();
+            let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::new();
+
+            for resource_name in &needed_resources {
+                if let Some(cm_name) = project.wasi_registry.get_resource_cm_name(resource_name) {
+                    let outer_resource_type_name = format!("resource:{cm_name}");
+                    if ctx.has_type(&outer_resource_type_name) {
+                        let outer_idx = ctx.type_idx(&outer_resource_type_name);
+                        {
+                            // Alias the resource from the outer component scope
+                            instance_type.alias(Alias::Outer {
+                                kind: ComponentOuterAliasKind::Type,
+                                count: 1,
+                                index: outer_idx,
+                            });
+                            resource_alias_indices.insert(resource_name.clone(), local_type_idx);
+                            local_type_idx += 1;
+
+                            let resource_local_idx = resource_alias_indices[resource_name];
+                            instance_type.ty().defined_type().own(resource_local_idx);
+                            own_resource_type_indices.insert(resource_name.clone(), local_type_idx);
+                            local_type_idx += 1;
+
+                            instance_type.ty().defined_type().borrow(resource_local_idx);
+                            borrow_resource_type_indices
+                                .insert(resource_name.clone(), local_type_idx);
+                            local_type_idx += 1;
+                        }
+                    } else {
+                        // Resource not yet imported — skip this interface
+                        continue;
+                    }
+                }
+            }
+
+            // Build function types using the aliased resource indices
+            let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
+
+            for func in &supported_functions {
+                // Build return type
+                let array_type_idx = if let Some(Type::Generic(g)) = &func.return_type {
+                    if g.name == "Array" && !g.args.is_empty() {
+                        let element_type = &g.args[0];
+                        let element_val_type = match element_type {
+                            Type::Generic(elem_g)
+                                if elem_g.name == "Tuple" && !elem_g.args.is_empty() =>
+                            {
+                                let tuple_types: Vec<ComponentValType> = elem_g
+                                    .args
+                                    .iter()
+                                    .map(|t| {
+                                        type_to_cm_primitive_with_resources(
+                                            t,
+                                            &own_resource_type_indices,
+                                        )
+                                    })
+                                    .collect();
+                                instance_type.ty().defined_type().tuple(tuple_types);
+                                let tuple_idx = local_type_idx;
+                                local_type_idx += 1;
+                                ComponentValType::Type(tuple_idx)
+                            }
+                            Type::Tuple(elems) if !elems.is_empty() => {
+                                let tuple_types: Vec<ComponentValType> = elems
+                                    .iter()
+                                    .map(|t| {
+                                        type_to_cm_primitive_with_resources(
+                                            t,
+                                            &own_resource_type_indices,
+                                        )
+                                    })
+                                    .collect();
+                                instance_type.ty().defined_type().tuple(tuple_types);
+                                let tuple_idx = local_type_idx;
+                                local_type_idx += 1;
+                                ComponentValType::Type(tuple_idx)
+                            }
+                            _ => type_to_cm_primitive_with_resources(
+                                element_type,
+                                &own_resource_type_indices,
+                            ),
+                        };
+                        instance_type.ty().defined_type().list(element_val_type);
+                        let idx = local_type_idx;
+                        local_type_idx += 1;
+                        Some(idx)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let result_type = func.return_type.as_ref().map(|ty| {
+                    let resolved_ty = project.wasi_registry.resolve_type(ty);
+                    wado_type_to_cm_result_type(&resolved_ty, None, array_type_idx, None, None)
+                });
+
+                let mut func_encoder = instance_type.ty().function();
+                if func.is_async {
+                    func_encoder
+                        .async_(true)
+                        .params::<[(&str, ComponentValType); 0], _>([])
+                        .result(result_type);
+                } else {
+                    func_encoder
+                        .params::<[(&str, ComponentValType); 0], _>([])
+                        .result(result_type);
+                }
+                let func_type_idx = local_type_idx;
+                local_type_idx += 1;
+
+                deferred_func_exports.push((func.wasi_func_name.clone(), func_type_idx));
+            }
+
+            for (func_name, func_type_idx) in &deferred_func_exports {
+                instance_type.export(
+                    func_name,
+                    wasm_encoder::ComponentTypeRef::Func(*func_type_idx),
+                );
+            }
+
+            enc.instance(&instance_type);
+        }
+
+        ctx.register_instance(&interface_info.interface);
+        builder.import(
+            &interface_info.path,
+            wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
+        );
+
+        for func in &supported_functions {
+            let local_name = project
+                .wasi_registry
+                .get_local_name(&interface_info.path, &func.wasi_func_name)
+                .cloned()
+                .unwrap_or_else(|| format!("{}-{}", interface_info.interface, func.wasi_func_name));
+
+            ctx.register_comp_func(&local_name);
+            builder.alias_export(
+                ctx.instance_idx(&interface_info.interface),
+                &func.wasi_func_name,
+                ComponentExportKind::Func,
+            );
+        }
     }
 }
 

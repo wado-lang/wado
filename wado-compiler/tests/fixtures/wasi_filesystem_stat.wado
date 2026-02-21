@@ -1,0 +1,97 @@
+// Tests: Descriptor::stat and Descriptor::stat_at - file metadata
+//
+// This test verifies that:
+// - stat() returns file metadata for an open file descriptor
+// - stat_at() returns file metadata for a path relative to a directory descriptor
+// - DescriptorStat fields (type, size) are accessible
+// - Regular files report DescriptorType::RegularFile
+//
+// To run when implemented (TODO removed):
+//   cargo run --bin wado -- run --dir wado-compiler/tests/fixtures/testdata \
+//     wado-compiler/tests/fixtures/wasi_filesystem_stat.wado
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use {
+    Preopens,
+    Descriptor,
+    DescriptorType,
+    Filesize,
+    PathFlags,
+    OpenFlags,
+    DescriptorFlags,
+} from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+
+    if dirs.len() == 0 {
+        eprintln("stat: no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Test stat_at: get metadata for hello.txt via the directory descriptor
+    let stat_result = dir.stat_at(PathFlags::none(), "hello.txt");
+
+    if let Ok(stat) = stat_result {
+        // hello.txt should be a regular file
+        if stat.type == DescriptorType::RegularFile {
+            println("stat_at: type is RegularFile (correct)");
+        } else {
+            eprintln("stat_at: unexpected file type");
+        }
+
+        // hello.txt contains "Hello, World!\n" = 14 bytes
+        if stat.size == 14 as Filesize {
+            println("stat_at: size is correct (14 bytes)");
+        } else {
+            eprintln(`stat_at: unexpected size: {stat.size}`);
+        }
+
+        println("stat_at: test passed");
+    } else {
+        eprintln("stat_at: failed to stat hello.txt");
+        return;
+    }
+
+    // Test stat: open the file, then stat the descriptor
+    let open_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(file) = open_result {
+        let fstat_result = file.stat();
+
+        if let Ok(fstat) = fstat_result {
+            if fstat.type == DescriptorType::RegularFile {
+                println("stat: type is RegularFile (correct)");
+            } else {
+                eprintln("stat: unexpected file type");
+            }
+
+            println("stat: test passed");
+        } else {
+            eprintln("stat: failed to stat file descriptor");
+        }
+    } else {
+        eprintln("stat: failed to open hello.txt");
+    }
+
+    println("all stat tests passed");
+}
+
+__DATA__
+{
+    "TODO": true,
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "stat_at: type is RegularFile (correct)",
+        "stat_at: size is correct (14 bytes)",
+        "stat: type is RegularFile (correct)",
+        "all stat tests passed"
+    ]
+}

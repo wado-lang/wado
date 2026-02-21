@@ -258,10 +258,9 @@ impl WasiRegistry {
         let wasi_sockets = parse_module(stdlib::WASI_SOCKETS);
         registry.register_module(&wasi_sockets, &mut world_registry);
 
-        // Note: wasi:filesystem uses resource types (Descriptor) which aren't
-        // fully supported in CM codegen yet. Register for worlds only.
+        // Parse and register wasi:filesystem
         let wasi_filesystem = parse_module(stdlib::WASI_FILESYSTEM);
-        registry.register_world_definitions(&wasi_filesystem, &mut world_registry);
+        registry.register_module(&wasi_filesystem, &mut world_registry);
 
         // Parse and register wasi:http
         // HTTP resource methods (Fields, Request, Response) are registered in the
@@ -497,75 +496,6 @@ impl WasiRegistry {
         }
     }
 
-    /// Register only world definitions from a WASI module (no effects)
-    ///
-    /// Use this for modules with resource types that aren't fully supported
-    /// for Component Model lowering yet. This registers the world definitions
-    /// so they can be used for targeting (e.g., --world wasi:http/service), but skips
-    /// effect/function registration.
-    fn register_world_definitions(
-        &mut self,
-        module: &crate::ast::Module,
-        world_registry: &mut crate::world_registry::WorldRegistry,
-    ) {
-        use crate::ast::Item;
-
-        // Collect resource types (needed for type checking)
-        for item in &module.items {
-            if let Item::Resource(resource) = item {
-                let cm_name = wasi_attr_cm_name(&resource.attrs, &resource.name);
-                let source_interface = resource
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == "wasi")
-                    .and_then(|a| a.args.first())
-                    .and_then(|s| s.split('#').next())
-                    .unwrap_or("")
-                    .to_string();
-                self.resources
-                    .insert(resource.name.clone(), (cm_name, source_interface));
-            }
-        }
-
-        // Collect flags types (needed for CM type encoding)
-        for item in &module.items {
-            if let Item::Flags(flags_def) = item {
-                let cm_name = wasi_attr_cm_name(
-                    flags_def.attributes.as_deref().unwrap_or(&[]),
-                    &flags_def.name,
-                );
-                let member_names: Vec<String> = flags_def
-                    .flags
-                    .iter()
-                    .map(|m| wasi_attr_cm_name(&m.attrs, &m.name))
-                    .collect();
-                self.flags
-                    .insert(flags_def.name.clone(), (cm_name, member_names));
-            }
-        }
-
-        // Collect enum types (needed for type support checks)
-        for item in &module.items {
-            if let Item::Enum(enum_def) = item {
-                let cm_name = wasi_attr_cm_name(&enum_def.attrs, &enum_def.name);
-                let variant_names: Vec<String> = enum_def
-                    .cases
-                    .iter()
-                    .map(|c| wasi_attr_cm_name(&c.attrs, &c.name))
-                    .collect();
-                self.enums
-                    .insert(enum_def.name.clone(), (cm_name, variant_names));
-            }
-        }
-
-        // Register world definitions only
-        for item in &module.items {
-            if let Item::World(world) = item {
-                world_registry.register(world);
-            }
-        }
-    }
-
     /// Get a newtype by name
     pub fn get_newtype(&self, name: &str) -> Option<&Type> {
         self.newtypes.get(name)
@@ -636,6 +566,12 @@ impl WasiRegistry {
             .get(&full_key)
             .or_else(|| self.enums.get(name))
             .map(|(cm_name, _)| cm_name.as_str())
+    }
+
+    /// Check if an interface defines its own enum type (exact interface path match, no fallback)
+    pub fn has_enum_in_interface(&self, interface_path: &str, name: &str) -> bool {
+        let full_key = format!("{interface_path}#{name}");
+        self.enums.contains_key(&full_key)
     }
 
     /// Check if a type name is a registered flags type
@@ -1707,6 +1643,14 @@ fn is_param_type_supported_with_types(
                 generic.name.as_str(),
                 "Stream" | "Result" | "Future" | "Option" | "Array"
             )
+        }
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            // borrow<resource> - passed as i32 handle at CM boundary
+            if let Type::Named(named) = inner.as_ref() {
+                resources.contains(named.name.as_str())
+            } else {
+                false
+            }
         }
         _ => false,
     }

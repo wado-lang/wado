@@ -213,7 +213,18 @@ async fn collect_test_jobs(
 /// Run a single test in its own Store
 async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResult {
     // Create fresh Store and Linker for this test
-    let mut store = runtime::create_store(&module.engine);
+    let mut store = match runtime::create_store(&module.engine, &[], &[]) {
+        Ok(s) => s,
+        Err(e) => {
+            return TestResult {
+                file_path: module.path.clone(),
+                test_name: job.test_name.clone(),
+                display_name: job.display_name.clone(),
+                passed: false,
+                error: Some(format!("failed to set up store: {e}")),
+            };
+        }
+    };
     let linker = match runtime::create_linker(&module.engine) {
         Ok(l) => l,
         Err(e) => {

@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use wasmtime::component::{Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use wado_compiler::{Bail, CompileError, CompilerHost, Diagnostic, OptLevel, SourceError};
 
@@ -438,6 +438,65 @@ pub fn run_wasm(wasm: Vec<u8>) -> anyhow::Result<WasmRunResult> {
         let stderr_clone = stderr_pipe.clone();
 
         let state = CliWasiState::new_with_pipes(stdout_pipe, stderr_pipe);
+        let mut store = Store::new(engine, state);
+
+        let instance = linker.instantiate_async(&mut store, &component).await?;
+        let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
+
+        let (trapped, trap_msg) = match run_func.call_async(&mut store, ()).await {
+            Ok((result,)) => (result.is_err(), String::new()),
+            Err(e) => (true, format!("{e:#}")),
+        };
+
+        let stdout = String::from_utf8(stdout_clone.contents().to_vec())?;
+        let mut stderr = String::from_utf8(stderr_clone.contents().to_vec())?;
+        if !trap_msg.is_empty() {
+            if !stderr.is_empty() {
+                stderr.push('\n');
+            }
+            stderr.push_str(&trap_msg);
+        }
+
+        Ok(WasmRunResult {
+            stdout,
+            stderr,
+            trapped,
+        })
+    })
+}
+
+/// Run a compiled Wasm component with preopened directories and capture its output.
+/// `dirs` is a list of `(host_path, guest_path)` pairs.
+pub fn run_wasm_with_dirs(
+    wasm: Vec<u8>,
+    dirs: &[(String, String)],
+) -> anyhow::Result<WasmRunResult> {
+    use wasmtime::component::Component;
+    use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
+
+    let rt = runtime();
+    let engine = cli_engine();
+
+    rt.block_on(async {
+        let component = Component::new(engine, &wasm)?;
+        let linker = cli_linker(engine)?;
+
+        let stdout_pipe = MemoryOutputPipe::new(65536);
+        let stdout_clone = stdout_pipe.clone();
+        let stderr_pipe = MemoryOutputPipe::new(65536);
+        let stderr_clone = stderr_pipe.clone();
+
+        let mut builder = WasiCtxBuilder::new();
+        builder.stdout(stdout_pipe).stderr(stderr_pipe);
+        builder.allow_blocking_current_thread(true);
+        for (host_path, guest_path) in dirs {
+            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+        }
+        let ctx = builder.build();
+        let state = CliWasiState {
+            ctx,
+            table: ResourceTable::new(),
+        };
         let mut store = Store::new(engine, state);
 
         let instance = linker.instantiate_async(&mut store, &component).await?;

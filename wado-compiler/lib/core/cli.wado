@@ -13,11 +13,12 @@
 // This ordering must be followed in each output function.
 
 use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
+use { wait_for_subtask } from "core:internal";
 
 // Re-export commonly used effects for convenience
 pub use {Stdout, Stderr, Environment, Exit} from "wasi:cli";
 // Write string to stream tx handle
-// Called AFTER write_via_stream has started the consumer
+// Called AFTER the consumer (write_via_stream) has been started.
 // add_newline: if true, appends '\n' after the message
 pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
     let len = message.len();
@@ -35,18 +36,18 @@ pub fn write_to_stream(tx: i32, message: String, add_newline: bool) {
     builtin::stream_drop_writable(tx);
 }
 /// Print a line to stdout (adds newline)
-/// Uses WASI P3 async stream with correct ordering: consumer starts before producer writes
+/// Uses WASI P3 async stream with correct ordering:
+/// 1. Start consumer (write_via_stream) with rx first
+/// 2. Write data to tx + close tx
+/// 3. Wait for consumer to complete
 pub fn println(message: String) with Stdout {
-    // 1. Create stream
     let handles = builtin::stream_new();
     let rx = handles as i32;
     let tx = (handles >> 32) as i32;
 
-    // 2. Start consumer FIRST (critical for WASI P3 async streams)
-    Stdout::write_via_stream(rx);
-
-    // 3-4. Write data and close stream
+    let subtask = builtin::call_indirect_stdout_write_via_stream(rx);
     write_to_stream(tx, message, true);
+    wait_for_subtask(subtask);
 }
 
 /// Print a line to stderr (adds newline)
@@ -55,8 +56,9 @@ pub fn eprintln(message: String) with Stderr {
     let rx = handles as i32;
     let tx = (handles >> 32) as i32;
 
-    Stderr::write_via_stream(rx);
+    let subtask = builtin::call_indirect_stderr_write_via_stream(rx);
     write_to_stream(tx, message, true);
+    wait_for_subtask(subtask);
 }
 
 /// Print to stdout without newline
@@ -65,8 +67,9 @@ pub fn print(message: String) with Stdout {
     let rx = handles as i32;
     let tx = (handles >> 32) as i32;
 
-    Stdout::write_via_stream(rx);
+    let subtask = builtin::call_indirect_stdout_write_via_stream(rx);
     write_to_stream(tx, message, false);
+    wait_for_subtask(subtask);
 }
 
 /// Print to stderr without newline
@@ -75,8 +78,9 @@ pub fn eprint(message: String) with Stderr {
     let rx = handles as i32;
     let tx = (handles >> 32) as i32;
 
-    Stderr::write_via_stream(rx);
+    let subtask = builtin::call_indirect_stderr_write_via_stream(rx);
     write_to_stream(tx, message, false);
+    wait_for_subtask(subtask);
 }
 /// Get environment variable by name
 /// TODO: Implement when for-in loops are supported
