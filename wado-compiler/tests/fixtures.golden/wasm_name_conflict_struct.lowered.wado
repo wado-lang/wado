@@ -14,7 +14,6 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
-    let a: Pair = move Pair { x: 42 };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(19), used: 0 };
         __r.String::append(move "a: ");
@@ -23,13 +22,12 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: a.x };
+            let self: Box<i32> = move Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let b: Pair = move Pair { a: 10, b: 20 };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(19), used: 0 };
         __r.String::append(move "b: ");
@@ -38,7 +36,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_8: {
-            let self: Box<i32> = move Box<i32> { value: (b.a + b.b) };
+            let self: Box<i32> = move Box<i32> { value: 30 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

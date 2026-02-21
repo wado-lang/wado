@@ -54,10 +54,8 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let empty: String = move String { repr: "array_new<u8>"(0), used: 0 };
-    if (empty.used == 0) {
-        core::cli::println(move "empty is empty");
-    }
+    let __sroa_empty_repr: builtin::array<u8> = "array_new<u8>"(0);
+    core::cli::println(move "empty is empty");
     let nonempty: String = move "test";
     if !(nonempty.used == 0) {
         core::cli::println(move "nonempty is not empty");

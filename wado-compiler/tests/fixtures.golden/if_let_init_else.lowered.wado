@@ -14,24 +14,20 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
-    if false {
-        core::cli::println(move "big");
-    } else {
-        core::cli::println(__tmpl: {
-            let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
-            __r.String::append(move "small: ");
-            let mut __f: Formatter = __inline_Formatter__new_1: {
-                let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-            };
-            __inline_i32_Display__fmt_2: {
-                let self: Box<i32> = move Box<i32> { value: 3 };
-                let f: &mut Formatter = &mut __f;
-                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-            };
-            break __tmpl: __r;
-        });
-    }
+    core::cli::println(__tmpl: {
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
+        __r.String::append(move "small: ");
+        let mut __f: Formatter = __inline_Formatter__new_1: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_i32_Display__fmt_2: {
+            let self: Box<i32> = move Box<i32> { value: 3 };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+        };
+        break __tmpl: __r;
+    });
 }
 
 export fn __cm_export__run() {

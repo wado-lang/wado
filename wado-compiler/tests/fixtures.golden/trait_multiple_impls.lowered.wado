@@ -21,21 +21,29 @@ struct Dog {
     name: String,
 }
 
-export fn run() with Stdout {
-    let __sroa_cat_name: String = move "Whiskers";
-    let __sroa_dog_name: String = move "Buddy";
-    core::cli::println(__tmpl: {
+fn "Cat^Describe::describe"(self: &Cat) -> String {
+    return __tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(28), used: 0 };
         __r.String::append(move "A cat named ");
-        __r.String::append(__sroa_cat_name);
+        __r.String::append(self.name);
         break __tmpl: __r;
-    });
-    core::cli::println(__tmpl: {
+    };
+}
+
+fn "Dog^Describe::describe"(self: &Dog) -> String {
+    return __tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(28), used: 0 };
         __r.String::append(move "A dog named ");
-        __r.String::append(__sroa_dog_name);
+        __r.String::append(self.name);
         break __tmpl: __r;
-    });
+    };
+}
+
+export fn run() with Stdout {
+    let cat: Cat = move Cat { name: "Whiskers" };
+    let dog: Dog = move Dog { name: "Buddy" };
+    core::cli::println(move cat."Cat^Describe::describe"());
+    core::cli::println(move dog."Dog^Describe::describe"());
 }
 
 export fn __cm_export__run() {

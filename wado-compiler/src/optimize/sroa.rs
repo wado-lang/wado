@@ -588,7 +588,16 @@ fn rewrite_block(
                             // Sort fields by field_index to match the candidate's field order
                             let mut sorted_fields: Vec<_> = fields.into_iter().collect();
                             sorted_fields.sort_by_key(|f| f.field_index);
-                            for field in sorted_fields {
+                            for mut field in sorted_fields {
+                                // Rewrite references to other SROA'd locals
+                                // within the field value expression.
+                                rewrite_expr(
+                                    &mut field.value,
+                                    safe_set,
+                                    field_map,
+                                    info_map,
+                                    candidate_mut,
+                                );
                                 let key = (local_idx, field.field_index);
                                 let new_local = field_map[&key];
                                 let (new_name, field_type) = &info_map[&key];
@@ -606,7 +615,14 @@ fn rewrite_block(
                             }
                         }
                         TirExprKind::TupleLiteral { elements, .. } => {
-                            for (i, elem) in elements.into_iter().enumerate() {
+                            for (i, mut elem) in elements.into_iter().enumerate() {
+                                rewrite_expr(
+                                    &mut elem,
+                                    safe_set,
+                                    field_map,
+                                    info_map,
+                                    candidate_mut,
+                                );
                                 let key = (local_idx, i as u32);
                                 let new_local = field_map[&key];
                                 let (new_name, field_type) = &info_map[&key];

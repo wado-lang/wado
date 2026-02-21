@@ -14,7 +14,6 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
-    let x: i32 = 42;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
         __r.String::append(move "wrap(42) = ");
@@ -23,16 +22,12 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: x };
+            let self: Box<i32> = move Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let y: i32 = __inline_apply_twice_i32__4: {
-        let first: i32 = 10;
-        break __inline_apply_twice_i32__4: first;
-    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
         __r.String::append(move "apply_twice(10) = ");
@@ -41,16 +36,12 @@ export fn run() with Stdout {
             break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_9: {
-            let self: Box<i32> = move Box<i32> { value: y };
+            let self: Box<i32> = move Box<i32> { value: 10 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let pair: [i32, i32] = __inline_wrap_and_double_i32__10: {
-        let wrapped: i32 = 5;
-        break __inline_wrap_and_double_i32__10: [wrapped, wrapped];
-    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(57), used: 0 };
         __r.String::append(move "wrap_and_double(5) = [");
@@ -59,7 +50,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_15: {
-            let self: Box<i32> = move Box<i32> { value: pair.0 };
+            let self: Box<i32> = move Box<i32> { value: 5 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -69,23 +60,13 @@ export fn run() with Stdout {
             break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_17: {
-            let self: Box<i32> = move Box<i32> { value: pair.1 };
+            let self: Box<i32> = move Box<i32> { value: 5 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r.String::append(move "]");
         break __tmpl: __r;
     });
-    let quad: i32 = __inline_quad_wrap_i32__18: {
-        let first: i32 = __inline_apply_twice_i32__19: {
-            let first: i32 = 7;
-            break __inline_apply_twice_i32__19: first;
-        };
-        break __inline_quad_wrap_i32__18: __inline_apply_twice_i32__22: {
-            let first: i32 = first;
-            break __inline_apply_twice_i32__22: first;
-        };
-    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(31), used: 0 };
         __r.String::append(move "quad_wrap(7) = ");
@@ -94,7 +75,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_25: {
-            let self: Box<i32> = move Box<i32> { value: quad };
+            let self: Box<i32> = move Box<i32> { value: 7 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -112,14 +93,7 @@ export fn run() with Stdout {
     });
     let s2: String = __inline_quad_wrap_String__28: {
         let value: String = move "world";
-        let first: String = __inline_apply_twice_String__29: {
-            let first: String = value;
-            break __inline_apply_twice_String__29: first;
-        };
-        break __inline_quad_wrap_String__28: __inline_apply_twice_String__32: {
-            let first: String = first;
-            break __inline_apply_twice_String__32: first;
-        };
+        break __inline_quad_wrap_String__28: value;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(35), used: 0 };

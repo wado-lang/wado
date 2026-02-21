@@ -22,8 +22,8 @@ struct Container {
 }
 
 export fn run() with Stdout {
-    let mut c: Container = move Container { item: Value { n: 10 } };
-    let v: Value = *&c.item;
+    let mut __sroa_c_item: Value = move Value { n: 10 };
+    let v: Value = *&__sroa_c_item;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
         __r.String::append(move "Initial: ");
@@ -39,8 +39,7 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     __inline_Value__double_5: {
-        let self: &mut Value = &mut c.item;
-        self.n = (self.n * 2);
+        __sroa_c_item.n = (__sroa_c_item.n * 2);
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
@@ -50,7 +49,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_9: {
-            let self: Box<i32> = move Box<i32> { value: c.item.n };
+            let self: Box<i32> = move Box<i32> { value: __sroa_c_item.n };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -58,7 +57,7 @@ export fn run() with Stdout {
     });
     __inline_Container_IndexAssign__index_assign_10: {
         let value: Value = move Value { n: 100 };
-        c.item = value;
+        __sroa_c_item = value;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
@@ -68,7 +67,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_14: {
-            let self: Box<i32> = move Box<i32> { value: c.item.n };
+            let self: Box<i32> = move Box<i32> { value: __sroa_c_item.n };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

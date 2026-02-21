@@ -27,8 +27,7 @@ struct "Box<Array<i32>>" {
 
 export fn run() with Stdout {
     let arr: Array<i32> = move [1, 2, 3];
-    let boxed_arr: Box<Array<i32>> = move Box<Array<i32>> { value: arr };
-    let inner: Array<i32> = boxed_arr.value;
+    let inner: Array<i32> = arr;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
         __r.String::append(move "inner len: ");
@@ -57,9 +56,6 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let inner_box: Box<i32> = move Box<i32> { value: 42 };
-    let outer_box: Box<Box<i32>> = move Box<Box<i32>> { value: inner_box };
-    let unwrapped: Box<i32> = outer_box.value;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
         __r.String::append(move "unwrapped value: ");
@@ -68,7 +64,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_14: {
-            let self: Box<i32> = move Box<i32> { value: unwrapped.value };
+            let self: Box<i32> = move Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

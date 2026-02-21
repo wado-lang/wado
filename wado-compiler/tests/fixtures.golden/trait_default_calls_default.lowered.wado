@@ -27,19 +27,20 @@ pub fn "Item^Describable::short_desc"(self: &Item) -> String {
     };
 }
 
+pub fn "Item^Describable::full_desc"(self: &Item) -> String {
+    return __tmpl: {
+        let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
+        __r.String::append(move "Description: ");
+        __r.String::append(move self."Item^Describable::short_desc"());
+        break __tmpl: __r;
+    };
+}
+
 export fn run() with Stdout {
     let item: Item = move Item { name: "Widget" };
     core::cli::println(item.name);
     core::cli::println(move item."Item^Describable::short_desc"());
-    core::cli::println(__inline_Item_Describable__full_desc_0: {
-        let self: &Item = &item;
-        break __inline_Item_Describable__full_desc_0: __tmpl: {
-            let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
-            __r.String::append(move "Description: ");
-            __r.String::append(move self."Item^Describable::short_desc"());
-            break __tmpl: __r;
-        };
-    });
+    core::cli::println(move item."Item^Describable::full_desc"());
 }
 
 export fn __cm_export__run() {
