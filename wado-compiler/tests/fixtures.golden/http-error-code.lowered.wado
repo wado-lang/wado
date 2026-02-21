@@ -11,309 +11,309 @@
 
 export fn handle(request: Request) {
     let __task_ret: Result<Response, ErrorCode> = move Result<Response, ErrorCode>::Err(ErrorCode::InternalError(null));
-    let mut __tv: i32 = 0;
-    let mut __tv: i32 = 0;
-    let mut __tv: i32 = 0;
-    let mut __tv: i64 = 0;
-    let mut __tv: i32 = 0;
-    let mut __tv: i32 = 0;
-    let mut __tv: i32 = 0;
-    let mut __tv: i32 = 0;
+    let mut __tv_0: i32 = 0;
+    let mut __tv_1: i32 = 0;
+    let mut __tv_2: i32 = 0;
+    let mut __tv_3: i64 = 0;
+    let mut __tv_4: i32 = 0;
+    let mut __tv_5: i32 = 0;
+    let mut __tv_6: i32 = 0;
+    let mut __tv_7: i32 = 0;
     if __variant_test(__task_ret, case=0, name=Ok) {
-        __tv = 0;
+        __tv_0 = 0;
         let __ok_val: Response = __variant_payload(__task_ret, case=0);
-        __tv = __ok_val;
-        cm_raw_call task-return(__tv, __tv, __tv, __tv, __tv, __tv, __tv, __tv);
+        __tv_1 = __ok_val;
+        cm_raw_call task-return(__tv_0, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     } else {
-        __tv = 1;
+        __tv_0 = 1;
         let __err_val: ErrorCode = __variant_payload(__task_ret, case=1);
-        __tv = __variant_tag(__err_val);
+        __tv_1 = __variant_tag(__err_val);
         if __variant_test(__err_val, case=1, name=DnsError) {
             let __case_payload: DnsErrorPayload = __variant_payload(__err_val, case=1);
             let __opt_val: Option<String> = __case_payload.rcode;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
             if (__opt_disc != 0) {
                 let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__opt_val));
                 let __ptr: i32 = __packed as i32;
                 let __len: i32 = (__packed >> 32) as i32;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
             }
             let __opt_val: Option<u16> = __case_payload.info_code;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__opt_val).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
-            __tv = __flat;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
+            __tv_5 = __flat;
+            __tv_6 = __flat;
         }
         if __variant_test(__err_val, case=14, name=TlsAlertReceived) {
             let __case_payload: TlsAlertReceivedPayload = __variant_payload(__err_val, case=14);
             let __opt_val: Option<u8> = __case_payload.alert_id;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__opt_val).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
             let __opt_val: Option<String> = __case_payload.alert_message;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
             if (__opt_disc != 0) {
                 let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__opt_val));
                 let __ptr: i32 = __packed as i32;
                 let __len: i32 = (__packed >> 32) as i32;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
-            __tv = __flat;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
+            __tv_5 = __flat;
+            __tv_6 = __flat;
         }
         if __variant_test(__err_val, case=17, name=HttpRequestBodySize) {
             let __case_payload: Option<u64> = __variant_payload(__err_val, case=17);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i64 = 0;
+            let mut __opt_inner_0: i64 = 0;
             if (__opt_disc != 0) {
                 let __flat: i64 = __unwrap_option(__case_payload).value as i64;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat;
         }
         if __variant_test(__err_val, case=21, name=HttpRequestHeaderSectionSize) {
             let __case_payload: Option<u32> = __variant_payload(__err_val, case=21);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__case_payload).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
         }
         if __variant_test(__err_val, case=22, name=HttpRequestHeaderSize) {
             let __case_payload: Option<FieldSizePayload> = __variant_payload(__err_val, case=22);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
+            let mut __opt_inner_2: i32 = 0;
+            let mut __opt_inner_3: i32 = 0;
+            let mut __opt_inner_4: i32 = 0;
             if (__opt_disc != 0) {
                 let __struct_val: FieldSizePayload = __unwrap_option(__case_payload);
                 let __opt_val: Option<String> = __struct_val.field_name;
                 let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-                let mut __opt_inner: i32 = 0;
-                let mut __opt_inner: i32 = 0;
+                let mut __opt_inner_0: i32 = 0;
+                let mut __opt_inner_1: i32 = 0;
                 if (__opt_disc != 0) {
                     let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__opt_val));
                     let __ptr: i32 = __packed as i32;
                     let __len: i32 = (__packed >> 32) as i32;
-                    __opt_inner = __flat;
-                    __opt_inner = __flat;
+                    __opt_inner_0 = __flat;
+                    __opt_inner_1 = __flat;
                 }
                 let __opt_val: Option<u32> = __struct_val.field_size;
                 let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-                let mut __opt_inner: i32 = 0;
+                let mut __opt_inner_0: i32 = 0;
                 if (__opt_disc != 0) {
                     let __flat: i32 = __unwrap_option(__opt_val).value as i32;
-                    __opt_inner = __flat;
+                    __opt_inner_0 = __flat;
                 }
-                __opt_inner = __flat;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
+                __opt_inner_2 = __flat;
+                __opt_inner_3 = __flat;
+                __opt_inner_4 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
-            __tv = __flat;
-            __tv = __flat;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
+            __tv_5 = __flat;
+            __tv_6 = __flat;
+            __tv_7 = __flat;
         }
         if __variant_test(__err_val, case=23, name=HttpRequestTrailerSectionSize) {
             let __case_payload: Option<u32> = __variant_payload(__err_val, case=23);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__case_payload).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
         }
         if __variant_test(__err_val, case=24, name=HttpRequestTrailerSize) {
             let __case_payload: FieldSizePayload = __variant_payload(__err_val, case=24);
             let __opt_val: Option<String> = __case_payload.field_name;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
             if (__opt_disc != 0) {
                 let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__opt_val));
                 let __ptr: i32 = __packed as i32;
                 let __len: i32 = (__packed >> 32) as i32;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
             }
             let __opt_val: Option<u32> = __case_payload.field_size;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__opt_val).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
-            __tv = __flat;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
+            __tv_5 = __flat;
+            __tv_6 = __flat;
         }
         if __variant_test(__err_val, case=26, name=HttpResponseHeaderSectionSize) {
             let __case_payload: Option<u32> = __variant_payload(__err_val, case=26);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__case_payload).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
         }
         if __variant_test(__err_val, case=27, name=HttpResponseHeaderSize) {
             let __case_payload: FieldSizePayload = __variant_payload(__err_val, case=27);
             let __opt_val: Option<String> = __case_payload.field_name;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
             if (__opt_disc != 0) {
                 let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__opt_val));
                 let __ptr: i32 = __packed as i32;
                 let __len: i32 = (__packed >> 32) as i32;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
             }
             let __opt_val: Option<u32> = __case_payload.field_size;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__opt_val).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
-            __tv = __flat;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
+            __tv_5 = __flat;
+            __tv_6 = __flat;
         }
         if __variant_test(__err_val, case=28, name=HttpResponseBodySize) {
             let __case_payload: Option<u64> = __variant_payload(__err_val, case=28);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i64 = 0;
+            let mut __opt_inner_0: i64 = 0;
             if (__opt_disc != 0) {
                 let __flat: i64 = __unwrap_option(__case_payload).value as i64;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat;
         }
         if __variant_test(__err_val, case=29, name=HttpResponseTrailerSectionSize) {
             let __case_payload: Option<u32> = __variant_payload(__err_val, case=29);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__case_payload).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
         }
         if __variant_test(__err_val, case=30, name=HttpResponseTrailerSize) {
             let __case_payload: FieldSizePayload = __variant_payload(__err_val, case=30);
             let __opt_val: Option<String> = __case_payload.field_name;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
             if (__opt_disc != 0) {
                 let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__opt_val));
                 let __ptr: i32 = __packed as i32;
                 let __len: i32 = (__packed >> 32) as i32;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
             }
             let __opt_val: Option<u32> = __case_payload.field_size;
             let __opt_disc: i32 = __is_not_null(__opt_val) as i32;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
             if (__opt_disc != 0) {
                 let __flat: i32 = __unwrap_option(__opt_val).value as i32;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
-            __tv = __flat;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
+            __tv_5 = __flat;
+            __tv_6 = __flat;
         }
         if __variant_test(__err_val, case=31, name=HttpResponseTransferCoding) {
             let __case_payload: Option<String> = __variant_payload(__err_val, case=31);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
             if (__opt_disc != 0) {
                 let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__case_payload));
                 let __ptr: i32 = __packed as i32;
                 let __len: i32 = (__packed >> 32) as i32;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
         }
         if __variant_test(__err_val, case=32, name=HttpResponseContentCoding) {
             let __case_payload: Option<String> = __variant_payload(__err_val, case=32);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
             if (__opt_disc != 0) {
                 let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__case_payload));
                 let __ptr: i32 = __packed as i32;
                 let __len: i32 = (__packed >> 32) as i32;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
         }
         if __variant_test(__err_val, case=38, name=InternalError) {
             let __case_payload: Option<String> = __variant_payload(__err_val, case=38);
             let __opt_disc: i32 = __is_not_null(__case_payload) as i32;
-            let mut __opt_inner: i32 = 0;
-            let mut __opt_inner: i32 = 0;
+            let mut __opt_inner_0: i32 = 0;
+            let mut __opt_inner_1: i32 = 0;
             if (__opt_disc != 0) {
                 let __packed: i64 = core::internal::cm_lower_string(__unwrap_option(__case_payload));
                 let __ptr: i32 = __packed as i32;
                 let __len: i32 = (__packed >> 32) as i32;
-                __opt_inner = __flat;
-                __opt_inner = __flat;
+                __opt_inner_0 = __flat;
+                __opt_inner_1 = __flat;
             }
-            __tv = __flat;
-            __tv = __flat as i64;
-            __tv = __flat;
+            __tv_2 = __flat;
+            __tv_3 = __flat as i64;
+            __tv_4 = __flat;
         }
-        cm_raw_call task-return(__tv, __tv, __tv, __tv, __tv, __tv, __tv, __tv);
+        cm_raw_call task-return(__tv_0, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
 }
 
