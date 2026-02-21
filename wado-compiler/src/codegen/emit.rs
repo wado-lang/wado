@@ -1085,8 +1085,13 @@ impl<'a> WirEmitter<'a> {
 
             // GC: Struct
             WirInstr::StructNew { type_id, fields } => {
-                for field in fields {
+                for (i, field) in fields.iter().enumerate() {
                     self.emit_instr(f, field);
+                    // Non-nullable ref fields require ref.as_non_null to cast from
+                    // nullable locals to non-nullable field types
+                    if self.is_field_nonnull_ref(type_id.index(), i) {
+                        f.instruction(&Instruction::RefAsNonNull);
+                    }
                 }
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 f.instruction(&Instruction::StructNew(wasm_idx));
@@ -1131,6 +1136,11 @@ impl<'a> WirEmitter<'a> {
             } => {
                 self.emit_instr(f, expr);
                 self.emit_instr(f, value);
+                // Non-nullable ref fields require ref.as_non_null to cast from
+                // nullable locals to non-nullable field types
+                if self.is_named_field_nonnull_ref(type_id.index(), field_name) {
+                    f.instruction(&Instruction::RefAsNonNull);
+                }
                 let wasm_idx = self.resolve_type_index(type_id.index());
                 let field_idx = self.resolve_field_index(type_id.index(), field_name);
                 f.instruction(&Instruction::StructSet {
@@ -1785,6 +1795,11 @@ impl<'a> WirEmitter<'a> {
                         });
                         // Push the new array on stack (for struct.new)
                         f.instruction(&Instruction::LocalGet(dst_local));
+                        // Non-nullable ref fields need ref.as_non_null since
+                        // the local is nullable
+                        if self.is_field_nonnull_ref(type_id.index(), field.index as usize) {
+                            f.instruction(&Instruction::RefAsNonNull);
+                        }
                     } else {
                         f.instruction(&Instruction::LocalGet(temp_idx));
                         match self.is_field_packed_by_index(type_id.index(), field.index) {
@@ -1953,6 +1968,33 @@ impl<'a> WirEmitter<'a> {
             };
         }
         None
+    }
+
+    /// Check if the i-th field of a struct type is a non-nullable reference.
+    fn is_field_nonnull_ref(&self, wir_type_idx: u32, field_index: usize) -> bool {
+        let idx = wir_type_idx as usize;
+        if idx < self.wir.types.len()
+            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
+            && let Some(field) = st.fields.get(field_index)
+        {
+            return field.ty.is_nonnull_ref();
+        }
+        false
+    }
+
+    /// Check if a named field of a struct type is a non-nullable reference.
+    fn is_named_field_nonnull_ref(&self, wir_type_idx: u32, field_name: &str) -> bool {
+        let idx = wir_type_idx as usize;
+        if idx < self.wir.types.len()
+            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
+        {
+            for field in &st.fields {
+                if field.name == field_name {
+                    return field.ty.is_nonnull_ref();
+                }
+            }
+        }
+        false
     }
 
     fn is_field_packed(&self, wir_type_idx: u32, field_name: &str) -> Option<bool> {

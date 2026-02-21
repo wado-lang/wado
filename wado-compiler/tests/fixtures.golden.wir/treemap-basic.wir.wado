@@ -13,7 +13,7 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
 array array<u8> (mut u8);
 
 struct String {
-    mut repr: ref null array<u8>,
+    mut repr: ref array<u8>,
     mut used: i32,
 }
 
@@ -25,26 +25,26 @@ struct Formatter {
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut buf: ref null String,
+    mut buf: ref String,
 }
 
 array array<TreeMapEntry<String,i32>> (mut ref null "core:collections/TreeMapEntry<String,i32>");
 
 struct TreeMap<String,i32> {  // from core:collections  // TreeMap<T> with T=String, i32
     mut root: ref null "core:collections/TreeMapNode<String>",
-    mut entries: ref null Array<TreeMapEntry<String,i32>>,
+    mut entries: ref Array<TreeMapEntry<String,i32>>,
     mut size: i32,
     mut deleted_count: i32,
 }
 
 struct TreeMapEntry<String,i32> {  // from core:collections  // TreeMapEntry<T> with T=String, i32
-    mut key: ref null String,
+    mut key: ref String,
     mut value: i32,
     mut deleted: bool,
 }
 
 struct TreeMapNode<String> {  // from core:collections  // TreeMapNode<T> with T=String
-    mut key: ref null String,
+    mut key: ref String,
     mut index: i32,
     mut level: i32,
     mut left: ref null "core:collections/TreeMapNode<String>",
@@ -52,7 +52,7 @@ struct TreeMapNode<String> {  // from core:collections  // TreeMapNode<T> with T
 }
 
 struct Array<TreeMapEntry<String,i32>> {  // Array<T> with T=TreeMapEntry<String,i32>
-    mut repr: ref null array<TreeMapEntry<String,i32>>,
+    mut repr: ref array<TreeMapEntry<String,i32>>,
     mut used: i32,
 }
 

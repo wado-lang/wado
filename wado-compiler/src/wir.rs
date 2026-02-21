@@ -441,6 +441,66 @@ pub enum WirType {
     },
 }
 
+impl WirType {
+    /// Returns a non-nullable version of this type.
+    /// Only affects `Ref` and `AbstractRef` variants; other types are returned unchanged.
+    pub fn as_nonnull(self) -> Self {
+        match self {
+            Self::Ref {
+                type_id,
+                nullable: true,
+            } => Self::Ref {
+                type_id,
+                nullable: false,
+            },
+            Self::AbstractRef {
+                heap_type,
+                nullable: true,
+            } => Self::AbstractRef {
+                heap_type,
+                nullable: false,
+            },
+            other => other,
+        }
+    }
+
+    /// Returns true if this type is a non-nullable reference.
+    pub fn is_nonnull_ref(&self) -> bool {
+        matches!(
+            self,
+            Self::Ref {
+                nullable: false,
+                ..
+            } | Self::AbstractRef {
+                nullable: false,
+                ..
+            }
+        )
+    }
+
+    /// Returns a nullable version of this type.
+    /// Only affects `Ref` and `AbstractRef` variants; other types are returned unchanged.
+    pub fn as_nullable(self) -> Self {
+        match self {
+            Self::Ref {
+                type_id,
+                nullable: false,
+            } => Self::Ref {
+                type_id,
+                nullable: true,
+            },
+            Self::AbstractRef {
+                heap_type,
+                nullable: false,
+            } => Self::AbstractRef {
+                heap_type,
+                nullable: true,
+            },
+            other => other,
+        }
+    }
+}
+
 /// Abstract heap types for Wasm GC.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WirAbstractHeapType {

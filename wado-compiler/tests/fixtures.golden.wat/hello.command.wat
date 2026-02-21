@@ -65,7 +65,7 @@
     (rec
       (type (;0;) (sub (struct (field (mut i32)))))
       (type (;1;) (array (mut i8)))
-      (type (;2;) (sub (struct (field (mut (ref null 1))) (field (mut i32)))))
+      (type (;2;) (sub (struct (field (mut (ref 1))) (field (mut i32)))))
     )
     (type (;3;) (func (param i32 i32 i32 i32) (result i32)))
     (type (;4;) (func (param i32)))
@@ -97,9 +97,10 @@
     (func (;10;) (type 13)
       (call 13
         (struct.new 2
-          (array.new_data 1 0
-            (i32.const 0)
-            (i32.const 13))
+          (ref.as_non_null
+            (array.new_data 1 0
+              (i32.const 0)
+              (i32.const 13)))
           (i32.const 13)))
     )
     (func (;11;) (type 14)
