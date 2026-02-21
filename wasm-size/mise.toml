@@ -50,10 +50,10 @@ mkdir -p "$OUT_DIR"
 
 if rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
     echo "Building Rust..."
-    (cd hello_world/rust && cargo build --release --target wasm32-wasip1)
-    (cd pi_approx/rust && cargo build --release --target wasm32-wasip1)
-    cp hello_world/rust/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
-    cp pi_approx/rust/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
+    (cd hello_world && cargo build --release --target wasm32-wasip1)
+    (cd pi_approx && cargo build --release --target wasm32-wasip1)
+    cp hello_world/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
+    cp pi_approx/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
 else
     echo "SKIP: Rust (rustup target add wasm32-wasip1)"
 fi
@@ -109,10 +109,10 @@ mkdir -p "$OUT_DIR"
 
 if command -v moon >/dev/null 2>&1; then
     echo "Building Moonbit..."
-    (cd hello_world/moonbit && moon build --target wasm --release --strip)
-    (cd pi_approx/moonbit && moon build --target wasm --release --strip)
-    cp hello_world/moonbit/_build/wasm/release/build/src/src.wasm "$OUT_DIR/hello_world_moonbit.wasm"
-    cp pi_approx/moonbit/_build/wasm/release/build/src/src.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
+    (cd hello_world && moon build --target wasm --release --strip)
+    (cd pi_approx && moon build --target wasm --release --strip)
+    cp hello_world/_build/wasm/release/build/main.wasm "$OUT_DIR/hello_world_moonbit.wasm"
+    cp pi_approx/_build/wasm/release/build/main.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
 else
     echo "SKIP: Moonbit (not installed)"
 fi
@@ -190,8 +190,8 @@ description = "Clean build artifacts"
 run = """
 #!/usr/bin/env bash
 rm -rf "$OUT_DIR"
-rm -rf hello_world/rust/target pi_approx/rust/target
-rm -rf hello_world/moonbit/_build pi_approx/moonbit/_build
+rm -rf hello_world/target pi_approx/target
+rm -rf hello_world/_build pi_approx/_build
 rm -rf assemblyscript/node_modules
 """
 
