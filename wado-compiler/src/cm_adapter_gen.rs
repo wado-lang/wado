@@ -473,7 +473,13 @@ fn synthesize_lift_inner(
                     vec![binary_add(addr, i32_const(4))],
                     TypeTable::I32,
                 );
-                internal_call("memory_to_gc_string", vec![ptr, len], TypeTable::I32)
+                let string_type_id = ctx.map_or(TypeTable::I32, |c| {
+                    c.type_table.borrow_mut().make_struct(
+                        "String".to_string(),
+                        ModuleSource::core("prelude/string.wado"),
+                    )
+                });
+                internal_call("memory_to_gc_string", vec![ptr, len], string_type_id)
             }
             _ => {
                 // Check if this is a WASI variant/enum that needs GC struct construction
@@ -550,6 +556,7 @@ fn try_lift_wasi_variant_or_enum(
             next_local,
             stmts,
             local_types,
+            Some(ctx),
         ));
     }
 
@@ -572,8 +579,15 @@ fn try_lift_wasi_variant_or_enum(
     None
 }
 
-/// Lift a WASI variant type (e.g., `HeaderError`) from an i32 discriminant.
+/// Lift a WASI variant type (e.g., `Method`) from linear memory.
+///
+/// CM variant layout:
+/// - discriminant: 1 byte (u8) at offset 0 (for variants with ≤ 256 cases)
+/// - payload: at `align_to(1, max_payload_align)` (only for payload cases)
+///
 /// Generates an if/else chain: disc==0 → Case0, disc==1 → Case1, ...
+/// Payload cases lift the payload from the appropriate memory offset.
+#[allow(clippy::cast_possible_wrap)]
 fn synthesize_lift_wasi_variant(
     _name: &str,
     variant_type: TypeId,
@@ -582,14 +596,15 @@ fn synthesize_lift_wasi_variant(
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
     local_types: &mut Vec<TypeId>,
+    ctx: Option<&LiftContext<'_>>,
 ) -> TirExpr {
-    // Load discriminant
+    // Load discriminant: 1 byte (u8) for variants with ≤ 256 cases
     let disc_local = alloc_local(next_local, local_types, TypeTable::I32);
     stmts.push(let_stmt(
         "__vdisc",
         disc_local,
         TypeTable::I32,
-        builtin_call("i32_load", vec![addr], TypeTable::I32),
+        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
     ));
 
     // Result local (typed as the variant type)
@@ -601,41 +616,67 @@ fn synthesize_lift_wasi_variant(
         null_expr(variant_type),
     ));
 
+    // Compute max payload alignment for payload offset calculation
+    let max_payload_align = cases
+        .iter()
+        .filter_map(|(_, p)| p.as_ref())
+        .map(cm_abi::cm_align)
+        .max()
+        .unwrap_or(1);
+    let payload_offset = cm_abi::align_to(1, max_payload_align); // after 1-byte disc
+
     // Build if/else chain for each case (last case is the else branch)
-    // Note: currently only handles no-payload cases
     let case_count = cases.len();
     let mut current_else: Option<TirBlock> = None;
 
-    for (i, (cm_case_name, _payload)) in cases.iter().enumerate().rev() {
+    for (i, (cm_case_name, payload_type)) in cases.iter().enumerate().rev() {
         // Convert kebab-case CM name to PascalCase Wado name
         let case_name = kebab_to_pascal(cm_case_name);
+
+        // Lift payload if present
+        let mut case_stmts: Vec<TirStmt> = Vec::new();
+        let payload_box = if let Some(payload_ty) = payload_type {
+            let payload_addr = binary_add(addr.clone(), i32_const(payload_offset as i32));
+            let lifted = synthesize_lift_inner(
+                payload_ty,
+                payload_addr,
+                next_local,
+                &mut case_stmts,
+                local_types,
+                ctx,
+            );
+            Some(Box::new(lifted))
+        } else {
+            None
+        };
+
         let construct = TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type,
                 case_index: i as u32,
                 case_name,
-                payload: None,
+                payload: payload_box,
             },
             variant_type,
             synth_span(),
         );
-        let assign_stmt = expr_stmt(assign(
+        case_stmts.push(expr_stmt(assign(
             local_ref(result_local, "__vresult", variant_type),
             construct,
-        ));
+        )));
 
         if i == case_count - 1 {
             // Last case: becomes the else branch
-            current_else = Some(block(vec![assign_stmt]));
+            current_else = Some(block(case_stmts));
         } else {
-            // Build if statement: if disc == i { assign } else { current_else }
+            // Build if statement: if disc == i { ... } else { current_else }
             let cond = binary(
                 crate::tir::TirBinaryOp::Eq,
                 local_ref(disc_local, "__vdisc", TypeTable::I32),
                 i32_const(i as i32),
                 TypeTable::BOOL,
             );
-            let if_stmt_node = if_stmt(cond, block(vec![assign_stmt]), current_else);
+            let if_stmt_node = if_stmt(cond, block(case_stmts), current_else);
             current_else = Some(block(vec![if_stmt_node]));
         }
     }
@@ -912,6 +953,16 @@ fn synthesize_lift_option_inner(
     let layout = cm_abi::layout_option(inner_ty);
     let payload_offset = layout.offsets[1];
 
+    // Resolve the concrete Option<T> TypeId so the local and null/some exprs
+    // use the correct GC reference type rather than an i32 placeholder.
+    let option_type_id = if let Some(c) = ctx {
+        let mut tt = c.type_table.borrow_mut();
+        let inner_type_id = wasi_type_to_type_id(inner_ty, &mut tt);
+        tt.make_option(inner_type_id)
+    } else {
+        TypeTable::I32 // placeholder when no context
+    };
+
     let disc_local = alloc_local(next_local, local_types, TypeTable::I32);
     stmts.push(let_stmt(
         "__disc",
@@ -920,12 +971,12 @@ fn synthesize_lift_option_inner(
         builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
     ));
 
-    let result_local = alloc_local(next_local, local_types, TypeTable::I32);
+    let result_local = alloc_local(next_local, local_types, option_type_id);
     stmts.push(let_mut_stmt(
         "__option_result",
         result_local,
-        TypeTable::I32,
-        null_expr(TypeTable::I32),
+        option_type_id,
+        null_expr(option_type_id),
     ));
 
     // if __disc != 0 { __option_result = Some(lift(inner, addr + offset)); }
@@ -941,8 +992,8 @@ fn synthesize_lift_option_inner(
     );
     then_stmts.extend(synthesize_free_element(inner_ty, payload_addr));
     then_stmts.push(expr_stmt(assign(
-        local_ref(result_local, "__option_result", TypeTable::I32),
-        option_some(lifted, TypeTable::I32),
+        local_ref(result_local, "__option_result", option_type_id),
+        option_some(lifted, option_type_id),
     )));
 
     stmts.push(if_stmt(
@@ -956,7 +1007,7 @@ fn synthesize_lift_option_inner(
         None,
     ));
 
-    local_ref(result_local, "__option_result", TypeTable::I32)
+    local_ref(result_local, "__option_result", option_type_id)
 }
 
 /// Lift a `result<T, E>` from linear memory at `addr`.
@@ -1510,15 +1561,18 @@ fn make_adapter_function(
 
 /// Map a WASI return type to the flat return `TypeId` for the adapter.
 /// Sync functions with outptr return void from the raw call itself.
-fn wasi_return_type_id(func_info: &WasiFunctionInfo) -> TypeId {
+fn wasi_return_type_id(
+    func_info: &WasiFunctionInfo,
+    wasi_registry: &crate::component_model::WasiRegistry,
+) -> TypeId {
     if func_info.is_async {
         // Async: raw call returns subtask handle (i32)
         TypeTable::I32
     } else {
-        let needs_outptr = func_info
-            .return_type
-            .as_ref()
-            .is_some_and(|rt| crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS);
+        let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
+            crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
+                || crate::component_model::wasi_named_type_return_needs_outptr(rt, wasi_registry)
+        });
         if needs_outptr {
             // Outptr: raw call returns void; result is read from outptr
             TypeTable::UNIT
@@ -1561,16 +1615,24 @@ fn synthesize_adapter(
     let name = adapter_func_name(&func_info.effect_name, &func_info.method_name);
     let local_name = func_info.local_alias_name();
 
-    // Derive outptr needs from return type using Canonical ABI layout
-    let needs_outptr = func_info
-        .return_type
-        .as_ref()
-        .is_some_and(|rt| crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS);
+    // Derive outptr needs from return type using Canonical ABI layout.
+    // Also check WASI variants with payload cases (e.g., Method with Other(String)):
+    // cm_flat_types treats unknown named types as i32, missing their true flat count.
+    let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
+        crate::cm_abi::cm_flat_types(rt).len() > MAX_FLAT_RESULTS
+            || crate::component_model::wasi_named_type_return_needs_outptr(rt, wasi_registry)
+    });
     let outptr_alloc = if needs_outptr {
-        func_info
-            .return_type
-            .as_ref()
-            .map(|rt| (crate::cm_abi::cm_size(rt), crate::cm_abi::cm_align(rt)))
+        func_info.return_type.as_ref().map(|rt| {
+            // WASI variants need their registry-computed size/align, not the generic cm_size
+            if let crate::ast::Type::Named(named) = rt
+                && let Some(sa) =
+                    crate::component_model::wasi_variant_cm_size_align(&named.name, wasi_registry)
+            {
+                return sa;
+            }
+            (crate::cm_abi::cm_size(rt), crate::cm_abi::cm_align(rt))
+        })
     } else {
         None
     };
@@ -1875,7 +1937,7 @@ fn synthesize_adapter(
     }
 
     // ---- Build CmRawCall ----
-    let raw_call_return_type = wasi_return_type_id(func_info);
+    let raw_call_return_type = wasi_return_type_id(func_info, wasi_registry);
     let raw_call_expr = cm_raw_call(&local_name, flat_args, raw_call_return_type);
 
     // ---- Handle result ----

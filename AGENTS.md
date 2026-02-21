@@ -32,18 +32,38 @@ Each test fixture group has the same prefix in their filenames.
 
 #### Data Section Schema
 
-| Field             | Type       | Description                                                  |
-| ----------------- | ---------- | ------------------------------------------------------------ |
-| `world`           | `string`   | Target world (`"wasi:http/service"`, `"test"`; omit for CLI) |
-| `stdout`          | `string`   | Expected stdout (exact match)                                |
-| `stderr`          | `string`   | Expected stderr (exact match)                                |
-| `stdout_contains` | `string[]` | Strings that must appear in stdout                           |
-| `stderr_contains` | `string[]` | Strings that must appear in stderr                           |
-| `trapped`         | `bool`     | Whether the program should trap                              |
-| `compile_error`   | `string`   | Expected compile error (substring match)                     |
-| `TODO`            | `bool`     | Mark as TODO test - must fail until feature is implemented   |
-| `http_status`     | `number`   | Expected HTTP status code (HTTP world only)                  |
-| `body`            | `string`   | Expected HTTP response body (HTTP world only)                |
+The target world is indicated by the top-level key in the JSON object:
+
+- No world key → `wasi:cli/command` (default)
+- `"test": {}` → test world (runs test block exports)
+- `"wasi:http/service": {...}` → HTTP service world
+
+| Field                 | Type                 | Description                                                |
+| --------------------- | -------------------- | ---------------------------------------------------------- |
+| `"test"`              | `{}`                 | Run as test world (`wasi:test`), executing test exports    |
+| `"wasi:http/service"` | `object`             | Run as HTTP service (see HTTP sub-fields below)            |
+| `stdout`              | `string`             | Expected stdout (exact match)                              |
+| `stderr`              | `string`             | Expected stderr (exact match)                              |
+| `stdout_contains`     | `string[]`           | Strings that must appear in stdout                         |
+| `stderr_contains`     | `string[]`           | Strings that must appear in stderr                         |
+| `trapped`             | `bool`               | Whether the program should trap                            |
+| `compile_error`       | `string`             | Expected compile error (substring match)                   |
+| `TODO`                | `bool`               | Mark as TODO test - must fail until feature is implemented |
+| `preopened_dirs`      | `[string, string][]` | Preopened directories `[host_path, guest_path]`            |
+
+HTTP sub-fields (inside `"wasi:http/service": {...}`):
+
+| Field             | Type                 | Description                                   |
+| ----------------- | -------------------- | --------------------------------------------- |
+| `request`         | `object`             | Injected HTTP request (defaults to `GET /`)   |
+| `request.method`  | `string`             | HTTP method (default: `"GET"`)                |
+| `request.path`    | `string`             | Request path (default: `"/"`)                 |
+| `request.headers` | `[string, string][]` | Request headers                               |
+| `request.body`    | `string`             | Request body as UTF-8                         |
+| `status`          | `number`             | Expected HTTP status code                     |
+| `body`            | `string`             | Expected response body (exact UTF-8 match)    |
+| `body_contains`   | `string[]`           | Strings that must appear in the response body |
+| `headers_contain` | `[string, string][]` | Response headers that must be present         |
 
 #### Examples
 
@@ -92,22 +112,23 @@ test "addition" {
 }
 
 __DATA__
-{"world": "test"}
+{"test": {}}
 ```
 
 ```wado
 // HTTP world - compiled as wasi:http/service
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
-export fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let headers = Fields::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
-    return Result::<Response, ErrorCode>::Ok(response);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 __DATA__
-{"world": "wasi:http/service", "http_status": 200}
+{"wasi:http/service": {"status": 200}}
 ```
 
 ### Adding New Test Fixtures
@@ -351,6 +372,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [Package Manifest (`wado.toml`)](./docs/wep-2026-02-14-package-manifest.md)
 - [Wasm IR (WIR) Layer](./docs/wep-2026-02-14-wir-layer.md)
 - [TIR-Level CM Adapter Synthesis](./docs/wep-2026-02-15-cm-adapter-synthesis.md)
+- [WASI HTTP Integration](./docs/wep-2026-02-21-wasi-http.md)
 
 ### Structure
 

@@ -1507,8 +1507,18 @@ fn import_http_types_for_service(
         let resource_methods: Vec<WasiFunctionInfo> = all_funcs
             .iter()
             .filter(|f| {
-                (f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]"))
-                    || (f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]"))
+                let is_fields_method =
+                    f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]");
+                let is_response_method =
+                    f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
+                // Only include Request methods that are actually used to avoid
+                // referencing unsupported resource types (e.g. RequestOptions).
+                let is_used_request_method = f.effect_name == "Request"
+                    && f.wasi_func_name.starts_with("[method]")
+                    && project
+                        .used_wasi_functions
+                        .contains(&format!("{}::{}", f.effect_name, f.method_name));
+                is_fields_method || is_response_method || is_used_request_method
             })
             .cloned()
             .collect();
@@ -1607,7 +1617,7 @@ fn import_http_types_for_service(
     );
     ctx.alias_comp_func("http-fields-constructor", "wasi:http/Fields::new");
 
-    // Alias Fields and Response resource methods
+    // Alias Fields, Response, and used Request resource methods
     {
         let resource_funcs: Vec<(String, String)> = project
             .wasi_registry
@@ -1617,9 +1627,16 @@ fn import_http_types_for_service(
                 i.functions
                     .iter()
                     .filter(|f| {
-                        (f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]"))
-                            || (f.effect_name == "Response"
-                                && f.wasi_func_name.starts_with("[method]"))
+                        let is_fields_method =
+                            f.effect_name == "Fields" && f.wasi_func_name.starts_with("[method]");
+                        let is_response_method =
+                            f.effect_name == "Response" && f.wasi_func_name.starts_with("[method]");
+                        let is_used_request_method = f.effect_name == "Request"
+                            && f.wasi_func_name.starts_with("[method]")
+                            && project
+                                .used_wasi_functions
+                                .contains(&format!("{}::{}", f.effect_name, f.method_name));
+                        is_fields_method || is_response_method || is_used_request_method
                     })
                     .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
                     .collect()
@@ -2151,8 +2168,8 @@ fn lower_wasi_functions(
                 options.push(CanonicalOption::Async);
             }
 
-            let needs_memory = func.needs_memory();
-            let needs_realloc = func.needs_realloc();
+            let needs_memory = func.needs_memory_with_registry(project.wasi_registry);
+            let needs_realloc = needs_memory;
 
             if needs_memory {
                 options.push(CanonicalOption::Memory(ctx.memory_idx()));

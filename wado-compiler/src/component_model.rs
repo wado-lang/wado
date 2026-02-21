@@ -100,6 +100,38 @@ impl WasiFunctionInfo {
         self.needs_memory()
     }
 
+    /// Like `needs_memory`, but also checks WASI variant return types.
+    ///
+    /// WASI variant types (e.g., `Method` with `Other(String)`) have string
+    /// payloads that require memory for `canon lower`.
+    pub fn needs_memory_with_registry(&self, registry: &WasiRegistry) -> bool {
+        if self.needs_memory() {
+            return true;
+        }
+        // Check if return type is a WASI variant whose payload contains a string
+        if let Some(rt) = &self.return_type
+            && Self::named_type_payload_requires_memory(rt, registry)
+        {
+            return true;
+        }
+        // Check if any param is a WASI variant whose payload contains a string
+        self.params
+            .iter()
+            .any(|(_, ty)| Self::named_type_payload_requires_memory(ty, registry))
+    }
+
+    /// Check if a named type is a WASI variant/struct whose payload requires memory.
+    fn named_type_payload_requires_memory(ty: &Type, registry: &WasiRegistry) -> bool {
+        if let Type::Named(named) = ty
+            && let Some(cases) = registry.get_variant_cases(&named.name)
+        {
+            return cases
+                .iter()
+                .any(|(_, payload)| payload.as_ref().is_some_and(Self::type_requires_memory));
+        }
+        false
+    }
+
     /// Check if a parameter type requires Memory + Realloc in canon lower.
     fn type_requires_memory(ty: &Type) -> bool {
         match ty {
@@ -1832,6 +1864,49 @@ pub fn return_type_requires_outptr(ty: &Type) -> bool {
         Type::Tuple(elems) => !elems.is_empty(),
         _ => false,
     }
+}
+
+/// Check if a named WASI type is a variant with payload cases, requiring outptr return.
+///
+/// Types like `Method` (which has `Other(String)`) flatten to more than
+/// `MAX_FLAT_RESULTS` core values, so they must be returned via an outptr.
+/// Generic `cm_flat_types` doesn't know about WASI variant cases; this
+/// registry-aware check fills that gap.
+pub fn wasi_named_type_return_needs_outptr(ty: &Type, registry: &WasiRegistry) -> bool {
+    if let Type::Named(named) = ty
+        && let Some(cases) = registry.get_variant_cases(&named.name)
+    {
+        return cases.iter().any(|(_, payload)| payload.is_some());
+    }
+    false
+}
+
+/// Compute the CM canonical-ABI size and alignment for a WASI variant type.
+///
+/// Returns `None` if the type is not a known WASI variant with payload cases.
+///
+/// Layout (Canonical ABI):
+/// - discriminant: 1 byte (u8) for variants with ≤ 256 cases
+/// - payload: at `align_to(1, max_payload_align)`
+/// - total: `align_to(payload_offset + max_payload_size, max_payload_align)`
+pub fn wasi_variant_cm_size_align(name: &str, registry: &WasiRegistry) -> Option<(u32, u32)> {
+    let cases = registry.get_variant_cases(name)?;
+    if !cases.iter().any(|(_, p)| p.is_some()) {
+        return None; // no payload cases — not outptr
+    }
+    let mut max_payload_size = 0u32;
+    let mut max_payload_align = 1u32;
+    for (_, payload) in cases {
+        if let Some(ty) = payload {
+            max_payload_size = max_payload_size.max(crate::cm_abi::cm_size(ty));
+            max_payload_align = max_payload_align.max(crate::cm_abi::cm_align(ty));
+        }
+    }
+    let disc_size = 1u32; // u8 for n ≤ 256 cases
+    let payload_offset = crate::cm_abi::align_to(disc_size, max_payload_align);
+    let overall_align = max_payload_align; // max(disc_align=1, payload_align)
+    let size = crate::cm_abi::align_to(payload_offset + max_payload_size, overall_align);
+    Some((size, overall_align))
 }
 
 /// Primitive type for CM tuple return handling
