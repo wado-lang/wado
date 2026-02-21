@@ -112,13 +112,8 @@
     (func (;10;) (type 14)
       (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3) (ref null 3) (ref null 3))
       (block ;; label = @1
-        (local.set 1
-          (i32.eq
-            (i32.const 2)
-            (i32.const 2)))
         (if ;; label = @2
-          (i32.eqz
-            (local.get 1))
+          (i32.const 0)
           (then
             (call 18
               (block (result (ref null 2)) ;; label = @3
@@ -287,8 +282,7 @@
       (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
-          (i32.eqz
-            (i32.const 1))
+          (i32.const 0)
           (then
             (call 18
               (block (result (ref null 2)) ;; label = @3

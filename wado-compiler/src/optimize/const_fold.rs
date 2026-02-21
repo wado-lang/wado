@@ -1,18 +1,48 @@
 //! Constant folding optimization for Wado TIR
 //!
-//! This module folds compile-time-known integer arithmetic expressions into
-//! literal values. For example, `2 + 3` becomes `5`.
+//! This module folds compile-time-known expressions into literal values.
+//! For example, `2 + 3` becomes `5`, `10 > 5` becomes `true`.
 //!
-//! Currently supported:
-//! - Integer binary operations: Add, Sub, Mul, Div, Mod
+//! Supported operations:
+//! - Integer arithmetic: Add, Sub, Mul, Div, Mod
+//! - Integer comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
+//! - Integer bitwise: `BitAnd`, `BitOr`, `BitXor`, Shl, Shr
+//! - Integer unary: Neg, `BitNot`
 //! - Integer types: i8, i16, i32, i64, u8, u16, u32, u64
-//! - Unary negation on integer literals
+//! - Integer cast: truncation/extension between integer types
+//! - Float arithmetic: Add, Sub, Mul, Div
+//! - Float comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
+//! - Float unary: Neg
+//! - Float types: f32, f64
+//! - Boolean logical: And, Or
+//! - Boolean equality: Eq, `NotEq`
+//! - Boolean unary: Not
 
 use crate::project::Project;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeTable,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
+
+/// Result of a constant fold operation.
+enum FoldedExpr {
+    Int { value: u64, prim: PrimitiveType },
+    Float { value: f64, repr: String },
+    Bool(bool),
+}
+
+impl FoldedExpr {
+    fn into_expr_kind(self) -> TirExprKind {
+        match self {
+            Self::Int { value, prim } => TirExprKind::IntLiteral {
+                repr: format_int_value(value, prim),
+                value,
+            },
+            Self::Float { value, repr } => TirExprKind::FloatLiteral { value, repr },
+            Self::Bool(b) => TirExprKind::BoolLiteral(b),
+        }
+    }
+}
 
 /// Apply constant folding to all functions in the project.
 pub fn fold_constants(project: &mut Project) -> bool {
@@ -219,43 +249,304 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
     }
 
     // Now try to fold this expression
-    if let Some((value, prim)) = try_fold_expr(expr, type_table) {
-        expr.kind = TirExprKind::IntLiteral {
-            value,
-            repr: format_int_value(value, prim),
-        };
+    if let Some(folded) = try_fold_expr(expr, type_table) {
+        expr.kind = folded.into_expr_kind();
         changed = true;
     }
 
     changed
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Top-level fold dispatch
+// ──────────────────────────────────────────────────────────────────────────────
+
 /// Try to fold a single expression node into a constant.
-/// Returns the folded value and its primitive type, or `None` if not foldable.
-fn try_fold_expr(expr: &TirExpr, type_table: &TypeTable) -> Option<(u64, PrimitiveType)> {
-    let prim = get_int_primitive(expr.type_id, type_table)?;
+fn try_fold_expr(expr: &TirExpr, type_table: &TypeTable) -> Option<FoldedExpr> {
     match &expr.kind {
         TirExprKind::Binary { left, op, right } => {
-            try_fold_int_binary(left, *op, right, prim).map(|v| (v, prim))
+            try_fold_binary(expr.type_id, left, *op, right, type_table)
         }
-        TirExprKind::Unary {
-            op: TirUnaryOp::Neg,
-            expr: inner,
-        } => {
-            let TirExprKind::IntLiteral { value, .. } = &inner.kind else {
-                return None;
-            };
-            eval_int_neg(*value, prim).map(|v| (v, prim))
+        TirExprKind::Unary { op, expr: inner } => {
+            try_fold_unary(expr.type_id, *op, inner, type_table)
         }
         TirExprKind::Cast { expr: inner, .. } => {
+            let prim = get_int_primitive(expr.type_id, type_table)?;
             let TirExprKind::IntLiteral { value, .. } = &inner.kind else {
                 return None;
             };
-            Some((truncate_int(*value, prim), prim))
+            Some(FoldedExpr::Int {
+                value: truncate_int(*value, prim),
+                prim,
+            })
         }
         _ => None,
     }
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Binary operation folding
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn try_fold_binary(
+    result_type: TypeId,
+    left: &TirExpr,
+    op: TirBinaryOp,
+    right: &TirExpr,
+    type_table: &TypeTable,
+) -> Option<FoldedExpr> {
+    // Bool logical: And, Or on two BoolLiterals
+    if let (TirExprKind::BoolLiteral(lb), TirExprKind::BoolLiteral(rb)) = (&left.kind, &right.kind)
+    {
+        return match op {
+            TirBinaryOp::And => Some(FoldedExpr::Bool(*lb && *rb)),
+            TirBinaryOp::Or => Some(FoldedExpr::Bool(*lb || *rb)),
+            TirBinaryOp::Eq => Some(FoldedExpr::Bool(*lb == *rb)),
+            TirBinaryOp::NotEq => Some(FoldedExpr::Bool(*lb != *rb)),
+            _ => None,
+        };
+    }
+
+    // Float binary: arithmetic and comparison on two FloatLiterals
+    if let (
+        TirExprKind::FloatLiteral { value: lv, .. },
+        TirExprKind::FloatLiteral { value: rv, .. },
+    ) = (&left.kind, &right.kind)
+    {
+        return try_fold_float_binary(*lv, op, *rv);
+    }
+
+    // Integer binary: arithmetic, comparison, and bitwise on two IntLiterals
+    if let (TirExprKind::IntLiteral { value: lv, .. }, TirExprKind::IntLiteral { value: rv, .. }) =
+        (&left.kind, &right.kind)
+    {
+        // Determine the operand's integer type from the left operand
+        let operand_prim = get_int_primitive(left.type_id, type_table)?;
+        return try_fold_int_binary(result_type, *lv, op, *rv, operand_prim, type_table);
+    }
+
+    None
+}
+
+/// Fold integer binary operations.
+fn try_fold_int_binary(
+    result_type: TypeId,
+    lval: u64,
+    op: TirBinaryOp,
+    rval: u64,
+    prim: PrimitiveType,
+    type_table: &TypeTable,
+) -> Option<FoldedExpr> {
+    match op {
+        // Arithmetic → Int result
+        TirBinaryOp::Add => Some(FoldedExpr::Int {
+            value: eval_int_add(lval, rval, prim)?,
+            prim,
+        }),
+        TirBinaryOp::Sub => Some(FoldedExpr::Int {
+            value: eval_int_sub(lval, rval, prim)?,
+            prim,
+        }),
+        TirBinaryOp::Mul => Some(FoldedExpr::Int {
+            value: eval_int_mul(lval, rval, prim)?,
+            prim,
+        }),
+        TirBinaryOp::Div => Some(FoldedExpr::Int {
+            value: eval_int_div(lval, rval, prim)?,
+            prim,
+        }),
+        TirBinaryOp::Mod => Some(FoldedExpr::Int {
+            value: eval_int_mod(lval, rval, prim)?,
+            prim,
+        }),
+
+        // Comparison → Bool result
+        TirBinaryOp::Eq
+        | TirBinaryOp::NotEq
+        | TirBinaryOp::Lt
+        | TirBinaryOp::LtEq
+        | TirBinaryOp::Gt
+        | TirBinaryOp::GtEq => Some(FoldedExpr::Bool(eval_int_cmp(lval, op, rval, prim))),
+
+        // Bitwise → Int result
+        TirBinaryOp::BitAnd => Some(FoldedExpr::Int {
+            value: truncate_int(lval & rval, prim),
+            prim,
+        }),
+        TirBinaryOp::BitOr => Some(FoldedExpr::Int {
+            value: truncate_int(lval | rval, prim),
+            prim,
+        }),
+        TirBinaryOp::BitXor => Some(FoldedExpr::Int {
+            value: truncate_int(lval ^ rval, prim),
+            prim,
+        }),
+        TirBinaryOp::Shl => eval_int_shl(lval, rval, prim).map(|value| FoldedExpr::Int {
+            value,
+            prim: get_int_primitive(result_type, type_table).unwrap_or(prim),
+        }),
+        TirBinaryOp::Shr => eval_int_shr(lval, rval, prim).map(|value| FoldedExpr::Int {
+            value,
+            prim: get_int_primitive(result_type, type_table).unwrap_or(prim),
+        }),
+
+        // And/Or on integers don't apply
+        TirBinaryOp::And | TirBinaryOp::Or => None,
+    }
+}
+
+/// Fold float binary operations.
+fn try_fold_float_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
+    match op {
+        // Arithmetic → Float result
+        TirBinaryOp::Add => Some(FoldedExpr::Float {
+            repr: format_float(lval + rval),
+            value: lval + rval,
+        }),
+        TirBinaryOp::Sub => Some(FoldedExpr::Float {
+            repr: format_float(lval - rval),
+            value: lval - rval,
+        }),
+        TirBinaryOp::Mul => Some(FoldedExpr::Float {
+            repr: format_float(lval * rval),
+            value: lval * rval,
+        }),
+        TirBinaryOp::Div => Some(FoldedExpr::Float {
+            repr: format_float(lval / rval),
+            value: lval / rval,
+        }),
+        // Comparison → Bool result (IEEE 754 semantics: NaN comparisons behave correctly)
+        TirBinaryOp::Eq => Some(FoldedExpr::Bool(lval == rval)),
+        TirBinaryOp::NotEq => Some(FoldedExpr::Bool(lval != rval)),
+        TirBinaryOp::Lt => Some(FoldedExpr::Bool(lval < rval)),
+        TirBinaryOp::LtEq => Some(FoldedExpr::Bool(lval <= rval)),
+        TirBinaryOp::Gt => Some(FoldedExpr::Bool(lval > rval)),
+        TirBinaryOp::GtEq => Some(FoldedExpr::Bool(lval >= rval)),
+        _ => None,
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Unary operation folding
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn try_fold_unary(
+    result_type: TypeId,
+    op: TirUnaryOp,
+    inner: &TirExpr,
+    type_table: &TypeTable,
+) -> Option<FoldedExpr> {
+    match op {
+        TirUnaryOp::Neg => match &inner.kind {
+            TirExprKind::IntLiteral { value, .. } => {
+                let prim = get_int_primitive(result_type, type_table)?;
+                eval_int_neg(*value, prim).map(|value| FoldedExpr::Int { value, prim })
+            }
+            TirExprKind::FloatLiteral { value, .. } => {
+                let negated = -value;
+                Some(FoldedExpr::Float {
+                    repr: format_float(negated),
+                    value: negated,
+                })
+            }
+            _ => None,
+        },
+        TirUnaryOp::Not => {
+            let TirExprKind::BoolLiteral(b) = &inner.kind else {
+                return None;
+            };
+            Some(FoldedExpr::Bool(!b))
+        }
+        TirUnaryOp::BitNot => {
+            let TirExprKind::IntLiteral { value, .. } = &inner.kind else {
+                return None;
+            };
+            let prim = get_int_primitive(result_type, type_table)?;
+            Some(FoldedExpr::Int {
+                value: truncate_int(!value, prim),
+                prim,
+            })
+        }
+        TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref => None,
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Integer comparison
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[allow(clippy::cast_sign_loss)]
+fn eval_int_cmp(lval: u64, op: TirBinaryOp, rval: u64, prim: PrimitiveType) -> bool {
+    let is_signed = matches!(
+        prim,
+        PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64
+    );
+    if is_signed {
+        let l = lval as i64;
+        let r = rval as i64;
+        match op {
+            TirBinaryOp::Eq => l == r,
+            TirBinaryOp::NotEq => l != r,
+            TirBinaryOp::Lt => l < r,
+            TirBinaryOp::LtEq => l <= r,
+            TirBinaryOp::Gt => l > r,
+            TirBinaryOp::GtEq => l >= r,
+            _ => unreachable!(),
+        }
+    } else {
+        match op {
+            TirBinaryOp::Eq => lval == rval,
+            TirBinaryOp::NotEq => lval != rval,
+            TirBinaryOp::Lt => lval < rval,
+            TirBinaryOp::LtEq => lval <= rval,
+            TirBinaryOp::Gt => lval > rval,
+            TirBinaryOp::GtEq => lval >= rval,
+            _ => unreachable!(),
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Integer shift operations
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn eval_int_shl(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
+    let bits = int_bit_width(prim);
+    // In Wasm, shift amount is masked to the type width
+    let shift = (rval as u32) & (bits - 1);
+    Some(truncate_int(lval.wrapping_shl(shift), prim))
+}
+
+#[allow(clippy::cast_sign_loss)]
+fn eval_int_shr(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
+    let bits = int_bit_width(prim);
+    let shift = (rval as u32) & (bits - 1);
+    let is_signed = matches!(
+        prim,
+        PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64
+    );
+    if is_signed {
+        // Arithmetic shift right (sign-extending)
+        let result = (lval as i64).wrapping_shr(shift);
+        Some(truncate_int(result as u64, prim))
+    } else {
+        Some(truncate_int(lval.wrapping_shr(shift), prim))
+    }
+}
+
+fn int_bit_width(prim: PrimitiveType) -> u32 {
+    match prim {
+        PrimitiveType::I8 | PrimitiveType::U8 => 8,
+        PrimitiveType::I16 | PrimitiveType::U16 => 16,
+        PrimitiveType::I32 | PrimitiveType::U32 => 32,
+        PrimitiveType::I64 | PrimitiveType::U64 => 64,
+        _ => 32, // fallback
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────────────────
 
 /// Format an integer value as a string appropriate for its type.
 /// Signed types display as signed (e.g., -128), unsigned as unsigned.
@@ -268,34 +559,29 @@ fn format_int_value(value: u64, prim: PrimitiveType) -> String {
     }
 }
 
-/// Try to fold an integer binary operation with two literal operands.
-/// Returns the folded value if both operands are integer literals.
-fn try_fold_int_binary(
-    left: &TirExpr,
-    op: TirBinaryOp,
-    right: &TirExpr,
-    prim: PrimitiveType,
-) -> Option<u64> {
-    let TirExprKind::IntLiteral { value: lval, .. } = &left.kind else {
-        return None;
-    };
-    let TirExprKind::IntLiteral { value: rval, .. } = &right.kind else {
-        return None;
-    };
-
-    match op {
-        TirBinaryOp::Add => eval_int_add(*lval, *rval, prim),
-        TirBinaryOp::Sub => eval_int_sub(*lval, *rval, prim),
-        TirBinaryOp::Mul => eval_int_mul(*lval, *rval, prim),
-        TirBinaryOp::Div => eval_int_div(*lval, *rval, prim),
-        TirBinaryOp::Mod => eval_int_mod(*lval, *rval, prim),
-        _ => None,
+/// Format a float value, ensuring it always has a decimal point.
+fn format_float(value: f64) -> String {
+    if value.is_nan() {
+        return "NaN".to_string();
+    }
+    if value.is_infinite() {
+        return if value.is_sign_positive() {
+            "Infinity".to_string()
+        } else {
+            "-Infinity".to_string()
+        };
+    }
+    let s = value.to_string();
+    if s.contains('.') || s.contains('e') || s.contains('E') {
+        s
+    } else {
+        format!("{s}.0")
     }
 }
 
 /// Get the integer `PrimitiveType` for a `TypeId`, following newtypes.
 /// Returns `None` for non-integer types and i128/u128 (not yet supported).
-fn get_int_primitive(type_id: crate::tir::TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
+fn get_int_primitive(type_id: TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
     let base = type_table.get_ultimate_base_type(type_id);
     match type_table.get(base) {
         ResolvedType::Primitive(
@@ -332,6 +618,10 @@ fn truncate_int(value: u64, prim: PrimitiveType) -> u64 {
         _ => value,
     }
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Integer arithmetic evaluators
+// ──────────────────────────────────────────────────────────────────────────────
 
 fn eval_int_add(lval: u64, rval: u64, prim: PrimitiveType) -> Option<u64> {
     Some(truncate_int(lval.wrapping_add(rval), prim))
@@ -442,9 +732,15 @@ fn eval_int_neg(value: u64, prim: PrimitiveType) -> Option<u64> {
     }
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Tests
+// ──────────────────────────────────────────────────────────────────────────────
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Integer truncation tests
 
     #[test]
     fn test_truncate_int_unsigned() {
@@ -457,31 +753,26 @@ mod tests {
 
     #[test]
     fn test_truncate_int_signed() {
-        // i8: 128 (0x80) sign-extends to -128
         assert_eq!(truncate_int(128, PrimitiveType::I8) as i64, -128);
-        // i8: 127 stays 127
         assert_eq!(truncate_int(127, PrimitiveType::I8), 127);
-        // i16: 0x8000 sign-extends to -32768
         assert_eq!(truncate_int(0x8000, PrimitiveType::I16) as i64, -32768);
-        // i32: 0x8000_0000 sign-extends to -2147483648
         assert_eq!(
             truncate_int(0x8000_0000, PrimitiveType::I32) as i64,
             -2_147_483_648
         );
     }
 
+    // Integer arithmetic tests
+
     #[test]
     fn test_add_wrapping() {
-        // u8: 255 + 1 = 0
         assert_eq!(eval_int_add(255, 1, PrimitiveType::U8), Some(0));
-        // i32: normal addition
         assert_eq!(eval_int_add(21, 21, PrimitiveType::I32), Some(42));
     }
 
     #[test]
     fn test_sub() {
         assert_eq!(eval_int_sub(10, 3, PrimitiveType::I32), Some(7));
-        // u8: 0 - 1 wraps to 255
         assert_eq!(eval_int_sub(0, 1, PrimitiveType::U8), Some(255));
     }
 
@@ -495,7 +786,6 @@ mod tests {
     fn test_div() {
         assert_eq!(eval_int_div(42, 6, PrimitiveType::I32), Some(7));
         assert_eq!(eval_int_div(42, 0, PrimitiveType::I32), None);
-        // Signed division: -7 / 2 = -3 (truncates toward zero)
         let neg7 = (-7_i32) as u64;
         let result = eval_int_div(neg7, 2, PrimitiveType::I32);
         assert_eq!(result.map(|v| v as i32), Some(-3));
@@ -517,11 +807,9 @@ mod tests {
     fn test_mod() {
         assert_eq!(eval_int_mod(10, 3, PrimitiveType::I32), Some(1));
         assert_eq!(eval_int_mod(10, 0, PrimitiveType::I32), None);
-        // i32::MIN % -1 traps in Wasm — must not fold
         let i32_min = i32::MIN as u64;
         let neg1 = (-1_i32) as u64;
         assert_eq!(eval_int_mod(i32_min, neg1, PrimitiveType::I32), None);
-        // i64::MIN % -1 traps in Wasm — must not fold
         let i64_min = i64::MIN as u64;
         let neg1_i64 = (-1_i64) as u64;
         assert_eq!(eval_int_mod(i64_min, neg1_i64, PrimitiveType::I64), None);
@@ -533,20 +821,156 @@ mod tests {
             eval_int_neg(42, PrimitiveType::I32).map(|v| v as i32),
             Some(-42)
         );
-        // Unsigned negation returns None
         assert_eq!(eval_int_neg(42, PrimitiveType::U32), None);
     }
 
     #[test]
     fn test_cast_mask() {
-        // i32 value cast to i64 preserves value
         assert_eq!(truncate_int(1_000_000, PrimitiveType::I64), 1_000_000);
-        // i64 large value cast to i32 truncates + sign-extends
         assert_eq!(truncate_int(0x1_0000_0001, PrimitiveType::I32), 1);
-        // u8 cast truncates
         assert_eq!(truncate_int(300, PrimitiveType::U8), 44);
-        // Signed cast: -128 as i8
         let neg128 = (-128_i64) as u64;
         assert_eq!(truncate_int(neg128, PrimitiveType::I8) as i64, -128);
+    }
+
+    // Integer comparison tests
+
+    #[test]
+    fn test_int_cmp_unsigned() {
+        assert!(eval_int_cmp(10, TirBinaryOp::Eq, 10, PrimitiveType::U32));
+        assert!(!eval_int_cmp(10, TirBinaryOp::Eq, 20, PrimitiveType::U32));
+        assert!(eval_int_cmp(10, TirBinaryOp::NotEq, 20, PrimitiveType::U32));
+        assert!(eval_int_cmp(5, TirBinaryOp::Lt, 10, PrimitiveType::U32));
+        assert!(!eval_int_cmp(10, TirBinaryOp::Lt, 5, PrimitiveType::U32));
+        assert!(eval_int_cmp(5, TirBinaryOp::LtEq, 5, PrimitiveType::U32));
+        assert!(eval_int_cmp(10, TirBinaryOp::Gt, 5, PrimitiveType::U32));
+        assert!(eval_int_cmp(10, TirBinaryOp::GtEq, 10, PrimitiveType::U32));
+    }
+
+    #[test]
+    fn test_int_cmp_signed() {
+        let neg5 = (-5_i32) as u64;
+        let neg10 = (-10_i32) as u64;
+        // -5 > -10 (signed)
+        assert!(eval_int_cmp(
+            neg5,
+            TirBinaryOp::Gt,
+            neg10,
+            PrimitiveType::I32
+        ));
+        // -10 < -5 (signed)
+        assert!(eval_int_cmp(
+            neg10,
+            TirBinaryOp::Lt,
+            neg5,
+            PrimitiveType::I32
+        ));
+        // -5 < 5 (signed)
+        assert!(eval_int_cmp(neg5, TirBinaryOp::Lt, 5, PrimitiveType::I32));
+    }
+
+    // Integer bitwise tests
+
+    #[test]
+    fn test_bitwise_and() {
+        assert_eq!(truncate_int(0xFF & 0x0F, PrimitiveType::U8), 0x0F);
+    }
+
+    #[test]
+    fn test_bitwise_or() {
+        assert_eq!(truncate_int(0xF0 | 0x0F, PrimitiveType::U8), 0xFF);
+    }
+
+    #[test]
+    fn test_bitwise_xor() {
+        assert_eq!(truncate_int(0xFF ^ 0x0F, PrimitiveType::U8), 0xF0);
+    }
+
+    #[test]
+    fn test_bitwise_not() {
+        // ~0 for u8 = 0xFF = 255
+        assert_eq!(truncate_int(!0u64, PrimitiveType::U8), 0xFF);
+        // ~0 for i32 = -1 (sign-extended)
+        assert_eq!(truncate_int(!0u64, PrimitiveType::I32) as i64, -1);
+    }
+
+    #[test]
+    fn test_shift_left() {
+        assert_eq!(eval_int_shl(1, 4, PrimitiveType::U32), Some(16));
+        // Shift wraps: shift by 32 on u32 = shift by 0
+        assert_eq!(eval_int_shl(1, 32, PrimitiveType::U32), Some(1));
+    }
+
+    #[test]
+    fn test_shift_right_unsigned() {
+        assert_eq!(eval_int_shr(16, 4, PrimitiveType::U32), Some(1));
+        assert_eq!(eval_int_shr(0xFF, 4, PrimitiveType::U8), Some(0x0F));
+    }
+
+    #[test]
+    fn test_shift_right_signed() {
+        // Arithmetic shift: -128 >> 1 = -64
+        let neg128 = (-128_i32) as u64;
+        let result = eval_int_shr(neg128, 1, PrimitiveType::I32);
+        assert_eq!(result.map(|v| v as i32), Some(-64));
+    }
+
+    // Float tests
+
+    #[test]
+    fn test_float_format() {
+        assert_eq!(format_float(3.14), "3.14");
+        assert_eq!(format_float(0.0), "0.0");
+        assert_eq!(format_float(f64::INFINITY), "Infinity");
+        assert_eq!(format_float(f64::NEG_INFINITY), "-Infinity");
+        assert_eq!(format_float(f64::NAN), "NaN");
+    }
+
+    #[test]
+    fn test_float_arithmetic() {
+        // Add
+        let r = try_fold_float_binary(1.5, TirBinaryOp::Add, 2.5);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 4.0));
+        // Sub
+        let r = try_fold_float_binary(10.0, TirBinaryOp::Sub, 3.5);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 6.5));
+        // Mul
+        let r = try_fold_float_binary(3.0, TirBinaryOp::Mul, 2.0);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 6.0));
+        // Div
+        let r = try_fold_float_binary(10.0, TirBinaryOp::Div, 4.0);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 2.5));
+        // Div by zero → Infinity (not a trap for floats)
+        let r = try_fold_float_binary(1.0, TirBinaryOp::Div, 0.0);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == f64::INFINITY));
+    }
+
+    #[test]
+    fn test_float_comparison() {
+        assert!(matches!(
+            try_fold_float_binary(1.0, TirBinaryOp::Lt, 2.0),
+            Some(FoldedExpr::Bool(true))
+        ));
+        assert!(matches!(
+            try_fold_float_binary(2.0, TirBinaryOp::Lt, 1.0),
+            Some(FoldedExpr::Bool(false))
+        ));
+        assert!(matches!(
+            try_fold_float_binary(1.0, TirBinaryOp::Eq, 1.0),
+            Some(FoldedExpr::Bool(true))
+        ));
+        // NaN comparisons
+        assert!(matches!(
+            try_fold_float_binary(f64::NAN, TirBinaryOp::Eq, f64::NAN),
+            Some(FoldedExpr::Bool(false))
+        ));
+        assert!(matches!(
+            try_fold_float_binary(f64::NAN, TirBinaryOp::NotEq, f64::NAN),
+            Some(FoldedExpr::Bool(true))
+        ));
+        assert!(matches!(
+            try_fold_float_binary(f64::NAN, TirBinaryOp::Lt, 1.0),
+            Some(FoldedExpr::Bool(false))
+        ));
     }
 }
