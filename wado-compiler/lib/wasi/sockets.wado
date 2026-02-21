@@ -99,20 +99,26 @@ pub variant IpAddress {
 #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#ipv4-socket-address")]
 pub struct Ipv4SocketAddress {
     /// sin_port
+    #[wasi("port")]
     port: u16,
     /// sin_addr
+    #[wasi("address")]
     address: Ipv4Address,
 }
 
 #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#ipv6-socket-address")]
 pub struct Ipv6SocketAddress {
     /// sin6_port
+    #[wasi("port")]
     port: u16,
     /// sin6_flowinfo
+    #[wasi("flow-info")]
     flow_info: u32,
     /// sin6_addr
+    #[wasi("address")]
     address: Ipv6Address,
     /// sin6_scope_id
+    #[wasi("scope-id")]
     scope_id: u32,
 }
 
@@ -194,6 +200,7 @@ pub resource TcpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[static]tcp-socket.create")]
+    #[wasi_params("address-family")]
     fn create(address_family: IpAddressFamily) -> Result<TcpSocket, ErrorCode>;
     /// Bind the socket to the provided IP address and port.
     /// 
@@ -227,6 +234,7 @@ pub resource TcpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.bind")]
+    #[wasi_params("self", "local-address")]
     fn bind(self: &TcpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>;
     /// Connect to a remote endpoint.
     /// 
@@ -258,6 +266,7 @@ pub resource TcpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
     /// - <https://man.freebsd.org/cgi/man.cgi?connect>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.connect")]
+    #[wasi_params("self", "remote-address")]
     async fn connect(self: &TcpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>;
     /// Start listening and return a stream of new inbound connections.
     /// 
@@ -324,6 +333,7 @@ pub resource TcpSocket {
     /// - <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.listen")]
+    #[wasi_params("self")]
     fn listen(self: &TcpSocket) -> Result<Stream<TcpSocket>, ErrorCode>;
     /// Transmit data to peer.
     /// 
@@ -346,6 +356,7 @@ pub resource TcpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.send")]
+    #[wasi_params("self", "data")]
     async fn send(self: &TcpSocket, data: Stream<u8>) -> Result<(), ErrorCode>;
     /// Read data from peer.
     /// 
@@ -379,6 +390,7 @@ pub resource TcpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.receive")]
+    #[wasi_params("self")]
     fn receive(self: &TcpSocket) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
     /// Get the bound local address.
     /// 
@@ -397,6 +409,7 @@ pub resource TcpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
     /// - <https://man.freebsd.org/cgi/man.cgi?getsockname>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-local-address")]
+    #[wasi_params("self")]
     fn get_local_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>;
     /// Get the remote address.
     /// 
@@ -409,11 +422,13 @@ pub resource TcpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-remote-address")]
+    #[wasi_params("self")]
     fn get_remote_address(self: &TcpSocket) -> Result<IpSocketAddress, ErrorCode>;
     /// Whether the socket is in the `listening` state.
     /// 
     /// Equivalent to the SO_ACCEPTCONN socket option.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-is-listening")]
+    #[wasi_params("self")]
     fn get_is_listening(self: &TcpSocket) -> bool;
     /// Whether this is a IPv4 or IPv6 socket.
     /// 
@@ -421,6 +436,7 @@ pub resource TcpSocket {
     /// 
     /// Equivalent to the SO_DOMAIN socket option.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-address-family")]
+    #[wasi_params("self")]
     fn get_address_family(self: &TcpSocket) -> IpAddressFamily;
     /// Hints the desired listen queue size. Implementations are free to ignore this.
     /// 
@@ -432,6 +448,7 @@ pub resource TcpSocket {
     /// - `invalid-argument`:     (set) The provided value was 0.
     /// - `invalid-state`:        (set) The socket is in the `connecting` or `connected` state.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.set-listen-backlog-size")]
+    #[wasi_params("self", "value")]
     fn set_listen_backlog_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>;
     /// Enables or disables keepalive.
     /// 
@@ -443,8 +460,10 @@ pub resource TcpSocket {
     /// 
     /// Equivalent to the SO_KEEPALIVE socket option.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-keep-alive-enabled")]
+    #[wasi_params("self")]
     fn get_keep_alive_enabled(self: &TcpSocket) -> Result<bool, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.set-keep-alive-enabled")]
+    #[wasi_params("self", "value")]
     fn set_keep_alive_enabled(self: &TcpSocket, value: bool) -> Result<(), ErrorCode>;
     /// Amount of time the connection has to be idle before TCP starts sending keepalive packets.
     /// 
@@ -457,8 +476,10 @@ pub resource TcpSocket {
     /// # Typical errors
     /// - `invalid-argument`:     (set) The provided value was 0.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-keep-alive-idle-time")]
+    #[wasi_params("self")]
     fn get_keep_alive_idle_time(self: &TcpSocket) -> Result<Duration, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.set-keep-alive-idle-time")]
+    #[wasi_params("self", "value")]
     fn set_keep_alive_idle_time(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>;
     /// The time between keepalive packets.
     /// 
@@ -471,8 +492,10 @@ pub resource TcpSocket {
     /// # Typical errors
     /// - `invalid-argument`:     (set) The provided value was 0.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-keep-alive-interval")]
+    #[wasi_params("self")]
     fn get_keep_alive_interval(self: &TcpSocket) -> Result<Duration, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.set-keep-alive-interval")]
+    #[wasi_params("self", "value")]
     fn set_keep_alive_interval(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>;
     /// The maximum amount of keepalive packets TCP should send before aborting the connection.
     /// 
@@ -485,8 +508,10 @@ pub resource TcpSocket {
     /// # Typical errors
     /// - `invalid-argument`:     (set) The provided value was 0.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-keep-alive-count")]
+    #[wasi_params("self")]
     fn get_keep_alive_count(self: &TcpSocket) -> Result<u32, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.set-keep-alive-count")]
+    #[wasi_params("self", "value")]
     fn set_keep_alive_count(self: &TcpSocket, value: u32) -> Result<(), ErrorCode>;
     /// Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
     /// 
@@ -495,8 +520,10 @@ pub resource TcpSocket {
     /// # Typical errors
     /// - `invalid-argument`:     (set) The TTL value must be 1 or higher.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-hop-limit")]
+    #[wasi_params("self")]
     fn get_hop_limit(self: &TcpSocket) -> Result<u8, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.set-hop-limit")]
+    #[wasi_params("self", "value")]
     fn set_hop_limit(self: &TcpSocket, value: u8) -> Result<(), ErrorCode>;
     /// The kernel buffer space reserved for sends/receives on this socket.
     /// 
@@ -509,12 +536,16 @@ pub resource TcpSocket {
     /// # Typical errors
     /// - `invalid-argument`:     (set) The provided value was 0.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-receive-buffer-size")]
+    #[wasi_params("self")]
     fn get_receive_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.set-receive-buffer-size")]
+    #[wasi_params("self", "value")]
     fn set_receive_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.get-send-buffer-size")]
+    #[wasi_params("self")]
     fn get_send_buffer_size(self: &TcpSocket) -> Result<u64, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]tcp-socket.set-send-buffer-size")]
+    #[wasi_params("self", "value")]
     fn set_send_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>;
 }
 
@@ -536,6 +567,7 @@ pub resource UdpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[static]udp-socket.create")]
+    #[wasi_params("address-family")]
     fn create(address_family: IpAddressFamily) -> Result<UdpSocket, ErrorCode>;
     /// Bind the socket to the provided IP address and port.
     /// 
@@ -556,6 +588,7 @@ pub resource UdpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.bind")]
+    #[wasi_params("self", "local-address")]
     fn bind(self: &UdpSocket, local_address: IpSocketAddress) -> Result<(), ErrorCode>;
     /// Associate this socket with a specific peer address.
     /// 
@@ -594,6 +627,7 @@ pub resource UdpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
     /// - <https://man.freebsd.org/cgi/man.cgi?connect>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.connect")]
+    #[wasi_params("self", "remote-address")]
     fn connect(self: &UdpSocket, remote_address: IpSocketAddress) -> Result<(), ErrorCode>;
     /// Dissociate this socket from its peer address.
     /// 
@@ -611,6 +645,7 @@ pub resource UdpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
     /// - <https://man.freebsd.org/cgi/man.cgi?connect>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.disconnect")]
+    #[wasi_params("self")]
     fn disconnect(self: &UdpSocket) -> Result<(), ErrorCode>;
     /// Send a message on the socket to a particular peer.
     /// 
@@ -644,6 +679,7 @@ pub resource UdpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.send")]
+    #[wasi_params("self", "data", "remote-address")]
     async fn send(self: &UdpSocket, data: Array<u8>, remote_address: Option<IpSocketAddress>) -> Result<(), ErrorCode>;
     /// Receive a message on the socket.
     /// 
@@ -669,6 +705,7 @@ pub resource UdpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_wsarecvmsg>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.receive")]
+    #[wasi_params("self")]
     async fn receive(self: &UdpSocket) -> Result<[Array<u8>, IpSocketAddress], ErrorCode>;
     /// Get the current bound address.
     /// 
@@ -687,6 +724,7 @@ pub resource UdpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
     /// - <https://man.freebsd.org/cgi/man.cgi?getsockname>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.get-local-address")]
+    #[wasi_params("self")]
     fn get_local_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>;
     /// Get the address the socket is currently "connected" to.
     /// 
@@ -699,6 +737,7 @@ pub resource UdpSocket {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.get-remote-address")]
+    #[wasi_params("self")]
     fn get_remote_address(self: &UdpSocket) -> Result<IpSocketAddress, ErrorCode>;
     /// Whether this is a IPv4 or IPv6 socket.
     /// 
@@ -706,6 +745,7 @@ pub resource UdpSocket {
     /// 
     /// Equivalent to the SO_DOMAIN socket option.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.get-address-family")]
+    #[wasi_params("self")]
     fn get_address_family(self: &UdpSocket) -> IpAddressFamily;
     /// Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
     /// 
@@ -714,8 +754,10 @@ pub resource UdpSocket {
     /// # Typical errors
     /// - `invalid-argument`:     (set) The TTL value must be 1 or higher.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.get-unicast-hop-limit")]
+    #[wasi_params("self")]
     fn get_unicast_hop_limit(self: &UdpSocket) -> Result<u8, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.set-unicast-hop-limit")]
+    #[wasi_params("self", "value")]
     fn set_unicast_hop_limit(self: &UdpSocket, value: u8) -> Result<(), ErrorCode>;
     /// The kernel buffer space reserved for sends/receives on this socket.
     /// 
@@ -728,12 +770,16 @@ pub resource UdpSocket {
     /// # Typical errors
     /// - `invalid-argument`:     (set) The provided value was 0.
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.get-receive-buffer-size")]
+    #[wasi_params("self")]
     fn get_receive_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.set-receive-buffer-size")]
+    #[wasi_params("self", "value")]
     fn set_receive_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.get-send-buffer-size")]
+    #[wasi_params("self")]
     fn get_send_buffer_size(self: &UdpSocket) -> Result<u64, ErrorCode>;
     #[wasi("wasi:sockets/types@0.3.0-rc-2026-01-06#[method]udp-socket.set-send-buffer-size")]
+    #[wasi_params("self", "value")]
     fn set_send_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>;
 }
 
@@ -762,6 +808,7 @@ pub effect IpNameLookup {
     /// - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
     /// - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
     #[wasi("wasi:sockets/ip-name-lookup@0.3.0-rc-2026-01-06#resolve-addresses")]
+    #[wasi_params("name")]
     async fn resolve_addresses(name: String) -> Result<Array<IpAddress>, ErrorCode>;
 }
 

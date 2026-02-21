@@ -47,8 +47,10 @@ pub enum DescriptorType {
 #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#descriptor-flags")]
 pub flags DescriptorFlags {
     /// Read mode: Data can be read.
+    #[wasi("read")]
     Read,
     /// Write mode: Data can be written to.
+    #[wasi("write")]
     Write,
     /// Request that writes be performed according to synchronized I/O file
     /// integrity completion. The data stored in the file and the file's
@@ -57,6 +59,7 @@ pub flags DescriptorFlags {
     /// The precise semantics of this operation have not yet been defined for
     /// WASI. At this time, it should be interpreted as a request, and not a
     /// requirement.
+    #[wasi("file-integrity-sync")]
     FileIntegritySync,
     /// Request that writes be performed according to synchronized I/O data
     /// integrity completion. Only the data stored in the file is
@@ -65,6 +68,7 @@ pub flags DescriptorFlags {
     /// The precise semantics of this operation have not yet been defined for
     /// WASI. At this time, it should be interpreted as a request, and not a
     /// requirement.
+    #[wasi("data-integrity-sync")]
     DataIntegritySync,
     /// Requests that reads be performed at the same level of integrity
     /// requested for writes. This is similar to `O_RSYNC` in POSIX.
@@ -72,6 +76,7 @@ pub flags DescriptorFlags {
     /// The precise semantics of this operation have not yet been defined for
     /// WASI. At this time, it should be interpreted as a request, and not a
     /// requirement.
+    #[wasi("requested-write-sync")]
     RequestedWriteSync,
     /// Mutating directories mode: Directory contents may be mutated.
     /// 
@@ -82,6 +87,7 @@ pub flags DescriptorFlags {
     /// they would otherwise succeed.
     /// 
     /// This may only be set on directories.
+    #[wasi("mutate-directory")]
     MutateDirectory,
 }
 
@@ -90,6 +96,7 @@ pub flags DescriptorFlags {
 pub flags PathFlags {
     /// As long as the resolved path corresponds to a symbolic link, it is
     /// expanded.
+    #[wasi("symlink-follow")]
     SymlinkFollow,
 }
 
@@ -97,12 +104,16 @@ pub flags PathFlags {
 #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#open-flags")]
 pub flags OpenFlags {
     /// Create file if it does not exist, similar to `O_CREAT` in POSIX.
+    #[wasi("create")]
     Create,
     /// Fail if not a directory, similar to `O_DIRECTORY` in POSIX.
+    #[wasi("directory")]
     Directory,
     /// Fail if file already exists, similar to `O_EXCL` in POSIX.
+    #[wasi("exclusive")]
     Exclusive,
     /// Truncate file to size 0, similar to `O_TRUNC` in POSIX.
+    #[wasi("truncate")]
     Truncate,
 }
 
@@ -115,26 +126,32 @@ pub type LinkCount = u64;
 #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#descriptor-stat")]
 pub struct DescriptorStat {
     /// File type.
+    #[wasi("type")]
     type: DescriptorType,
     /// Number of hard links to the file.
+    #[wasi("link-count")]
     link_count: LinkCount,
     /// For regular files, the file size in bytes. For symbolic links, the
     /// length in bytes of the pathname contained in the symbolic link.
+    #[wasi("size")]
     size: Filesize,
     /// Last data access timestamp.
     /// 
     /// If the `option` is none, the platform doesn't maintain an access
     /// timestamp for this file.
+    #[wasi("data-access-timestamp")]
     data_access_timestamp: Option<Instant>,
     /// Last data modification timestamp.
     /// 
     /// If the `option` is none, the platform doesn't maintain a
     /// modification timestamp for this file.
+    #[wasi("data-modification-timestamp")]
     data_modification_timestamp: Option<Instant>,
     /// Last file status-change timestamp.
     /// 
     /// If the `option` is none, the platform doesn't maintain a
     /// status-change timestamp for this file.
+    #[wasi("status-change-timestamp")]
     status_change_timestamp: Option<Instant>,
 }
 
@@ -157,8 +174,10 @@ pub variant NewTimestamp {
 #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#directory-entry")]
 pub struct DirectoryEntry {
     /// The type of the file referred to by this directory entry.
+    #[wasi("type")]
     type: DescriptorType,
     /// The name of the object.
+    #[wasi("name")]
     name: String,
 }
 
@@ -312,8 +331,10 @@ pub enum Advice {
 #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#metadata-hash-value")]
 pub struct MetadataHashValue {
     /// 64 bits of a 128-bit hash value.
+    #[wasi("lower")]
     lower: u64,
     /// Another 64 bits of a 128-bit hash value.
+    #[wasi("upper")]
     upper: u64,
 }
 
@@ -340,6 +361,7 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `pread` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.read-via-stream")]
+    #[wasi_params("self", "offset")]
     fn read_via_stream(self: &Descriptor, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>];
     /// Return a stream for writing to a file, if available.
     /// 
@@ -354,6 +376,7 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `pwrite` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.write-via-stream")]
+    #[wasi_params("self", "data", "offset")]
     async fn write_via_stream(self: &Descriptor, data: Stream<u8>, offset: Filesize) -> Result<(), ErrorCode>;
     /// Return a stream for appending to a file, if available.
     /// 
@@ -364,11 +387,13 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `write` with `O_APPEND` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.append-via-stream")]
+    #[wasi_params("self", "data")]
     async fn append_via_stream(self: &Descriptor, data: Stream<u8>) -> Result<(), ErrorCode>;
     /// Provide file advisory information on a descriptor.
     /// 
     /// This is similar to `posix_fadvise` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.advise")]
+    #[wasi_params("self", "offset", "length", "advice")]
     async fn advise(self: &Descriptor, offset: Filesize, length: Filesize, advice: Advice) -> Result<(), ErrorCode>;
     /// Synchronize the data of a file to disk.
     /// 
@@ -377,6 +402,7 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `fdatasync` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.sync-data")]
+    #[wasi_params("self")]
     async fn sync_data(self: &Descriptor) -> Result<(), ErrorCode>;
     /// Get flags associated with a descriptor.
     /// 
@@ -385,6 +411,7 @@ pub resource Descriptor {
     /// Note: This returns the value that was the `fs_flags` value returned
     /// from `fdstat_get` in earlier versions of WASI.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.get-flags")]
+    #[wasi_params("self")]
     async fn get_flags(self: &Descriptor) -> Result<DescriptorFlags, ErrorCode>;
     /// Get the dynamic type of a descriptor.
     /// 
@@ -397,12 +424,14 @@ pub resource Descriptor {
     /// Note: This returns the value that was the `fs_filetype` value returned
     /// from `fdstat_get` in earlier versions of WASI.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.get-type")]
+    #[wasi_params("self")]
     async fn get_type(self: &Descriptor) -> Result<DescriptorType, ErrorCode>;
     /// Adjust the size of an open file. If this increases the file's size, the
     /// extra bytes are filled with zeros.
     /// 
     /// Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.set-size")]
+    #[wasi_params("self", "size")]
     async fn set_size(self: &Descriptor, size: Filesize) -> Result<(), ErrorCode>;
     /// Adjust the timestamps of an open file or directory.
     /// 
@@ -410,6 +439,7 @@ pub resource Descriptor {
     /// 
     /// Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.set-times")]
+    #[wasi_params("self", "data-access-timestamp", "data-modification-timestamp")]
     async fn set_times(self: &Descriptor, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>;
     /// Read directory entries from a directory.
     /// 
@@ -424,6 +454,7 @@ pub resource Descriptor {
     /// This function returns a future, which will resolve to an error code if
     /// reading full contents of the directory fails.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.read-directory")]
+    #[wasi_params("self")]
     async fn read_directory(self: &Descriptor) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>];
     /// Synchronize the data and metadata of a file to disk.
     /// 
@@ -432,11 +463,13 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `fsync` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.sync")]
+    #[wasi_params("self")]
     async fn sync(self: &Descriptor) -> Result<(), ErrorCode>;
     /// Create a directory.
     /// 
     /// Note: This is similar to `mkdirat` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.create-directory-at")]
+    #[wasi_params("self", "path")]
     async fn create_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
     /// Return the attributes of an open file or directory.
     /// 
@@ -448,6 +481,7 @@ pub resource Descriptor {
     /// 
     /// Note: This was called `fd_filestat_get` in earlier versions of WASI.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.stat")]
+    #[wasi_params("self")]
     async fn stat(self: &Descriptor) -> Result<DescriptorStat, ErrorCode>;
     /// Return the attributes of a file or directory.
     /// 
@@ -457,6 +491,7 @@ pub resource Descriptor {
     /// 
     /// Note: This was called `path_filestat_get` in earlier versions of WASI.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.stat-at")]
+    #[wasi_params("self", "path-flags", "path")]
     async fn stat_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<DescriptorStat, ErrorCode>;
     /// Adjust the timestamps of a file or directory.
     /// 
@@ -465,6 +500,7 @@ pub resource Descriptor {
     /// Note: This was called `path_filestat_set_times` in earlier versions of
     /// WASI.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.set-times-at")]
+    #[wasi_params("self", "path-flags", "path", "data-access-timestamp", "data-modification-timestamp")]
     async fn set_times_at(self: &Descriptor, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> Result<(), ErrorCode>;
     /// Create a hard link.
     /// 
@@ -474,6 +510,7 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `linkat` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.link-at")]
+    #[wasi_params("self", "old-path-flags", "old-path", "new-descriptor", "new-path")]
     async fn link_at(self: &Descriptor, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>;
     /// Open a file or directory.
     /// 
@@ -488,6 +525,7 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `openat` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.open-at")]
+    #[wasi_params("self", "path-flags", "path", "open-flags", "flags")]
     async fn open_at(self: &Descriptor, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, ErrorCode>;
     /// Read the contents of a symbolic link.
     /// 
@@ -496,6 +534,7 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `readlinkat` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.readlink-at")]
+    #[wasi_params("self", "path")]
     async fn readlink_at(self: &Descriptor, path: String) -> Result<String, ErrorCode>;
     /// Remove a directory.
     /// 
@@ -503,11 +542,13 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.remove-directory-at")]
+    #[wasi_params("self", "path")]
     async fn remove_directory_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
     /// Rename a filesystem object.
     /// 
     /// Note: This is similar to `renameat` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.rename-at")]
+    #[wasi_params("self", "old-path", "new-descriptor", "new-path")]
     async fn rename_at(self: &Descriptor, old_path: String, new_descriptor: &Descriptor, new_path: String) -> Result<(), ErrorCode>;
     /// Create a symbolic link (also known as a "symlink").
     /// 
@@ -516,12 +557,14 @@ pub resource Descriptor {
     /// 
     /// Note: This is similar to `symlinkat` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.symlink-at")]
+    #[wasi_params("self", "old-path", "new-path")]
     async fn symlink_at(self: &Descriptor, old_path: String, new_path: String) -> Result<(), ErrorCode>;
     /// Unlink a filesystem object that is not a directory.
     /// 
     /// Return `error-code::is-directory` if the path refers to a directory.
     /// Note: This is similar to `unlinkat(fd, path, 0)` in POSIX.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.unlink-file-at")]
+    #[wasi_params("self", "path")]
     async fn unlink_file_at(self: &Descriptor, path: String) -> Result<(), ErrorCode>;
     /// Test whether two descriptors refer to the same filesystem object.
     /// 
@@ -530,6 +573,7 @@ pub resource Descriptor {
     /// wasi-filesystem does not expose device and inode numbers, so this function
     /// may be used instead.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.is-same-object")]
+    #[wasi_params("self", "other")]
     async fn is_same_object(self: &Descriptor, other: &Descriptor) -> bool;
     /// Return a hash of the metadata associated with a filesystem object referred
     /// to by a descriptor.
@@ -551,12 +595,14 @@ pub resource Descriptor {
     /// 
     /// However, none of these is required.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.metadata-hash")]
+    #[wasi_params("self")]
     async fn metadata_hash(self: &Descriptor) -> Result<MetadataHashValue, ErrorCode>;
     /// Return a hash of the metadata associated with a filesystem object referred
     /// to by a directory descriptor and a relative path.
     /// 
     /// This performs the same hash computation as `metadata-hash`.
     #[wasi("wasi:filesystem/types@0.3.0-rc-2026-01-06#[method]descriptor.metadata-hash-at")]
+    #[wasi_params("self", "path-flags", "path")]
     async fn metadata_hash_at(self: &Descriptor, path_flags: PathFlags, path: String) -> Result<MetadataHashValue, ErrorCode>;
 }
 

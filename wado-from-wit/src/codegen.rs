@@ -125,6 +125,7 @@ impl WadoCodeGenerator {
 
         for flag in &f.flags {
             self.write_doc_comment(flag.doc_comment.as_ref());
+            self.writeln(&format!("#[wasi(\"{}\")]", flag.wasi_attr));
             self.writeln(&format!("{},", flag.name));
         }
 
@@ -142,6 +143,7 @@ impl WadoCodeGenerator {
 
         for field in &s.fields {
             self.write_doc_comment(field.doc_comment.as_ref());
+            self.writeln(&format!("#[wasi(\"{}\")]", field.wasi_attr));
             self.writeln(&format!(
                 "{}: {},",
                 field.name,
@@ -212,6 +214,16 @@ impl WadoCodeGenerator {
     fn write_function(&mut self, func: &WadoFunction) {
         self.write_doc_comment(func.doc_comment.as_ref());
         self.writeln(&format!("#[wasi(\"{}\")]", func.wasi_attr));
+
+        // Emit #[wasi_params] with original WIT kebab-case parameter names
+        if !func.params.is_empty() {
+            let wit_names: Vec<String> = func
+                .params
+                .iter()
+                .map(|p| format!("\"{}\"", p.wit_name))
+                .collect();
+            self.writeln(&format!("#[wasi_params({})]", wit_names.join(", ")));
+        }
 
         let params = Self::format_params(&func.params);
 

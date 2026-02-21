@@ -123,7 +123,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
             // a results_ptr (i32). This matches what `canon lower async` produces.
             const MAX_FLAT_ASYNC_PARAMS: usize = 4;
             let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
-            for (_, ty) in &func.params {
+            for (_, _, ty) in &func.params {
                 let resolved_ty = wasi_registry.resolve_type(ty);
                 crate::component_model::flatten_wasi_param_type(&resolved_ty, &mut param_vts);
             }

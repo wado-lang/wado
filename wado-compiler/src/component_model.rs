@@ -8,16 +8,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use indexmap::{IndexMap, IndexSet};
 
-use heck::ToKebabCase;
 use wasm_encoder::ValType;
 
 use crate::ast::{GenericType, Type, WasiImport};
 use crate::tir::{TypeId, TypeTable};
-
-/// Convert a name to kebab-case
-fn to_kebab_case(name: &str) -> String {
-    name.to_kebab_case()
-}
 
 /// Extract the CM name from a `#[wasi("...")]` attribute.
 ///
@@ -26,7 +20,7 @@ fn to_kebab_case(name: &str) -> String {
 /// - Case-level: `#[wasi("cm-name")]` → uses the whole arg directly
 ///
 /// Preserves acronym casing from the WIT source (e.g., `DNS-timeout`, `TLS-protocol-error`).
-/// Falls back to `to_kebab_case(wado_name)` when no `#[wasi]` attribute is present.
+/// Panics if no `#[wasi]` attribute is present — all WASI names must be metadata-driven.
 fn wasi_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
     attrs
         .iter()
@@ -40,7 +34,16 @@ fn wasi_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String
                 s.clone()
             }
         })
-        .unwrap_or_else(|| to_kebab_case(wado_name))
+        .unwrap_or_else(|| panic!("missing #[wasi] attribute for WASI name: {wado_name}"))
+}
+
+/// Extract CM parameter names from a `#[wasi_params("param-a", "param-b")]` attribute.
+fn extract_wasi_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .find(|a| a.name == "wasi_params")
+        .map(|a| a.args.clone())
+        .unwrap_or_default()
 }
 
 /// Information about a WASI function from an effect method
@@ -58,8 +61,8 @@ pub struct WasiFunctionInfo {
     pub package: String,
     /// Whether this is an async function
     pub is_async: bool,
-    /// Parameter types
-    pub params: Vec<(String, Type)>,
+    /// Parameter names and types: (`wado_name`, `cm_name`, type)
+    pub params: Vec<(String, String, Type)>,
     /// Return type
     pub return_type: Option<Type>,
 }
@@ -84,7 +87,7 @@ impl WasiFunctionInfo {
         if self
             .params
             .iter()
-            .any(|(_, ty)| Self::type_requires_memory(ty))
+            .any(|(_, _, ty)| Self::type_requires_memory(ty))
         {
             return true;
         }
@@ -117,7 +120,7 @@ impl WasiFunctionInfo {
         // Check if any param is a WASI variant whose payload contains a string
         self.params
             .iter()
-            .any(|(_, ty)| Self::named_type_payload_requires_memory(ty, registry))
+            .any(|(_, _, ty)| Self::named_type_payload_requires_memory(ty, registry))
     }
 
     /// Check if a named type is a WASI variant/struct whose payload requires memory.
@@ -356,7 +359,7 @@ impl WasiRegistry {
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
-                    .map(|f| (to_kebab_case(&f.name), f.ty.clone()))
+                    .map(|f| (wasi_attr_cm_name(&f.attrs, &f.name), f.ty.clone()))
                     .collect();
                 self.structs
                     .insert(struct_def.name.clone(), (cm_name, source_interface, fields));
@@ -371,7 +374,7 @@ impl WasiRegistry {
                     flags_def.attributes.as_deref().unwrap_or(&[]),
                     &flags_def.name,
                 );
-                // Use per-member #[wasi] attr for CM name; fall back to to_kebab_case
+                // Use per-member #[wasi] attr for CM name
                 let member_names: Vec<String> = flags_def
                     .flags
                     .iter()
@@ -388,7 +391,7 @@ impl WasiRegistry {
             if let Item::Enum(enum_def) = item {
                 // Use the #[wasi] fragment as the CM name (preserves acronym casing)
                 let cm_name = wasi_attr_cm_name(&enum_def.attrs, &enum_def.name);
-                // Use per-case #[wasi] attr for CM name; fall back to to_kebab_case
+                // Use per-case #[wasi] attr for CM name
                 let variant_names: Vec<String> = enum_def
                     .cases
                     .iter()
@@ -470,10 +473,24 @@ impl WasiRegistry {
             if let Item::Effect(effect) = item {
                 for method in &effect.methods {
                     if let Some(wasi) = method.attrs.first().and_then(|a| a.wasi_import.as_ref()) {
-                        let params: Vec<(String, Type)> = method
+                        // Extract CM param names from #[wasi_params] attribute
+                        let cm_param_names = extract_wasi_params_attr(&method.attrs);
+                        let params: Vec<(String, String, Type)> = method
                             .params
                             .iter()
-                            .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.newtypes)))
+                            .enumerate()
+                            .map(|(i, p)| {
+                                let cm_name = cm_param_names
+                                    .get(i)
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "missing #[wasi_params] for param '{}' in {}.{}",
+                                            p.name, effect.name, method.name
+                                        )
+                                    })
+                                    .clone();
+                                (p.name.clone(), cm_name, resolve_type(&p.ty, &self.newtypes))
+                            })
                             .collect();
 
                         // Keep original return type for newtype semantics
@@ -498,10 +515,24 @@ impl WasiRegistry {
             if let Item::Resource(resource) = item {
                 for method in &resource.methods {
                     if let Some(wasi) = method.attrs.first().and_then(|a| a.wasi_import.as_ref()) {
-                        let params: Vec<(String, Type)> = method
+                        // Extract CM param names from #[wasi_params] attribute
+                        let cm_param_names = extract_wasi_params_attr(&method.attrs);
+                        let params: Vec<(String, String, Type)> = method
                             .params
                             .iter()
-                            .map(|p| (p.name.clone(), resolve_type(&p.ty, &self.newtypes)))
+                            .enumerate()
+                            .map(|(i, p)| {
+                                let cm_name = cm_param_names
+                                    .get(i)
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "missing #[wasi_params] for param '{}' in {}.{}",
+                                            p.name, resource.name, method.name
+                                        )
+                                    })
+                                    .clone();
+                                (p.name.clone(), cm_name, resolve_type(&p.ty, &self.newtypes))
+                            })
                             .collect();
 
                         // Keep original return type for newtype semantics
@@ -730,7 +761,7 @@ impl WasiRegistry {
         let resources: IndexSet<&str> = self.resources.keys().map(String::as_str).collect();
 
         // Check all parameter types
-        for (_name, ty) in &func.params {
+        for (_, _, ty) in &func.params {
             if !is_param_type_supported_with_types(ty, &enums, &resources) {
                 return false;
             }
@@ -762,7 +793,7 @@ impl WasiRegistry {
         method_name: &str,
         wasi: &WasiImport,
         is_async: bool,
-        params: Vec<(String, Type)>,
+        params: Vec<(String, String, Type)>,
         return_type: Option<Type>,
     ) {
         let interface_path = wasi.interface_path();
@@ -775,9 +806,9 @@ impl WasiRegistry {
 
         // Resolve newtypes in params upfront
         // This ensures codegen doesn't need any type resolution logic
-        let resolved_params: Vec<(String, Type)> = params
+        let resolved_params: Vec<(String, String, Type)> = params
             .into_iter()
-            .map(|(name, ty)| (name, self.resolve_type(&ty)))
+            .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
             .collect();
         let func_info = WasiFunctionInfo {
             effect_name: effect_name.to_string(),
@@ -1816,7 +1847,7 @@ pub fn is_return_type_supported(ty: &Type) -> bool {
 /// (without enum/resource knowledge - use `WasiRegistry::is_function_supported` instead)
 pub fn is_wasi_function_supported(func: &WasiFunctionInfo) -> bool {
     // Check all parameter types (Result not allowed in params)
-    for (_, ty) in &func.params {
+    for (_, _, ty) in &func.params {
         if !is_param_type_supported(ty) {
             return false;
         }
@@ -1981,7 +2012,11 @@ mod tests {
             "write_via_stream",
             &wasi,
             true,
-            vec![("data".to_string(), make_stream_u8_type())],
+            vec![(
+                "data".to_string(),
+                "data".to_string(),
+                make_stream_u8_type(),
+            )],
             Some(make_result_type()),
         );
 
@@ -2005,7 +2040,11 @@ mod tests {
             "write_via_stream",
             &stdout_wasi,
             true,
-            vec![("data".to_string(), make_stream_u8_type())],
+            vec![(
+                "data".to_string(),
+                "data".to_string(),
+                make_stream_u8_type(),
+            )],
             Some(make_result_type()),
         );
 
@@ -2017,7 +2056,11 @@ mod tests {
             "write_via_stream",
             &stderr_wasi,
             true,
-            vec![("data".to_string(), make_stream_u8_type())],
+            vec![(
+                "data".to_string(),
+                "data".to_string(),
+                make_stream_u8_type(),
+            )],
             Some(make_result_type()),
         );
 
@@ -2047,7 +2090,11 @@ mod tests {
             "write_via_stream",
             &wasi,
             true,
-            vec![("data".to_string(), make_stream_u8_type())],
+            vec![(
+                "data".to_string(),
+                "data".to_string(),
+                make_stream_u8_type(),
+            )],
             Some(make_result_type()),
         );
 

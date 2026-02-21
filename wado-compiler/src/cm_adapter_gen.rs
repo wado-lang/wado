@@ -1654,7 +1654,7 @@ fn synthesize_adapter(
     //
     // Track (start_param_idx, param_count) per WASI param for Pass 2 indexing.
     let mut param_mapping: Vec<(usize, usize)> = Vec::new();
-    for (param_name, param_type) in &func_info.params {
+    for (param_name, _, param_type) in &func_info.params {
         let flat_tys = flatten_param_type(param_type);
         if flat_tys.is_empty() {
             continue; // unit param, skip
@@ -1714,7 +1714,7 @@ fn synthesize_adapter(
     // ---- Pass 2: Generate parameter lowering code ----
     // Intermediate locals (packed i64, etc.) are allocated after all params.
     let mut mapping_idx = 0usize;
-    for (param_name, param_type) in &func_info.params {
+    for (param_name, _, param_type) in &func_info.params {
         let flat_tys = flatten_param_type(param_type);
         if flat_tys.is_empty() {
             continue; // unit param, skip
@@ -1837,7 +1837,7 @@ fn synthesize_adapter(
             let flat_types: Vec<TypeId> = func_info
                 .params
                 .iter()
-                .flat_map(|(_, ty)| flatten_param_type(ty))
+                .flat_map(|(_, _, ty)| flatten_param_type(ty))
                 .collect();
 
             let mut buf_offset = 0u32;
@@ -4984,7 +4984,7 @@ fn rewrite_calls_in_expr(
             // here into individual i32 args.
             let flat_call_args = if let Some(func_info) = &wasi_func_info {
                 let mut flat = Vec::new();
-                for (i, (_param_name, param_type)) in func_info.params.iter().enumerate() {
+                for (i, (_param_name, _, param_type)) in func_info.params.iter().enumerate() {
                     let flat_tys = flatten_param_type(param_type);
                     if flat_tys.is_empty() || i >= taken_args.len() {
                         continue;

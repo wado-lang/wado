@@ -45,6 +45,7 @@ pub effect Insecure {
     /// implementations are encouraged to return evenly distributed values with
     /// a long period.
     #[wasi("wasi:random/insecure@0.3.0-rc-2026-01-06#get-insecure-random-bytes")]
+    #[wasi_params("len")]
     fn get_insecure_random_bytes(len: u64) -> Array<u8>;
     /// Return an insecure pseudo-random `u64` value.
     /// 
@@ -73,6 +74,7 @@ pub effect Random {
     /// must omit this function, rather than implementing it with deterministic
     /// data.
     #[wasi("wasi:random/random@0.3.0-rc-2026-01-06#get-random-bytes")]
+    #[wasi_params("len")]
     fn get_random_bytes(len: u64) -> Array<u8>;
     /// Return a cryptographically-secure random or pseudo-random `u64` value.
     /// 

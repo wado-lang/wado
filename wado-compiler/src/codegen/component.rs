@@ -16,7 +16,6 @@ use crate::ast::Type;
 use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
 use crate::project::Project;
-use heck::ToKebabCase;
 use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -236,10 +235,6 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
     }
 
     component_bytes
-}
-
-fn to_kebab_case(name: &str) -> String {
-    name.to_kebab_case()
 }
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
@@ -959,7 +954,7 @@ fn generate_wasi_imports(
             if let Some(ret_ty) = &func.return_type {
                 collect_resources_in_type(ret_ty, project.wasi_registry, &mut needed_resources);
             }
-            for (_, ty) in &func.params {
+            for (_, _, ty) in &func.params {
                 collect_resources_in_type(ty, project.wasi_registry, &mut needed_resources);
             }
         }
@@ -1016,7 +1011,7 @@ fn generate_wasi_imports(
             // Collect enum types needed by functions
             let mut needed_enums: Vec<String> = Vec::new();
             for func in &supported_functions {
-                for (_, ty) in &func.params {
+                for (_, _, ty) in &func.params {
                     if let Type::Named(named) = ty
                         && project.wasi_registry.is_enum(&named.name)
                         && !needed_enums.contains(&named.name)
@@ -1047,7 +1042,7 @@ fn generate_wasi_imports(
             // Collect flags types needed by functions
             let mut needed_flags: Vec<String> = Vec::new();
             for func in &supported_functions {
-                for (_, ty) in &func.params {
+                for (_, _, ty) in &func.params {
                     if let Type::Named(named) = ty
                         && project.wasi_registry.is_flags(&named.name)
                         && !needed_flags.contains(&named.name)
@@ -1116,7 +1111,7 @@ fn generate_wasi_imports(
                 let needs_stream_u8 = func
                     .params
                     .iter()
-                    .any(|(_, ty)| matches!(ty, Type::Generic(g) if g.name == "Stream"));
+                    .any(|(_, _, ty)| matches!(ty, Type::Generic(g) if g.name == "Stream"));
                 let needs_error_code = func
                     .return_type
                     .as_ref()
@@ -1124,7 +1119,7 @@ fn generate_wasi_imports(
                 let needs_result_param = func
                     .params
                     .iter()
-                    .any(|(_, ty)| matches!(ty, Type::Generic(g) if g.name == "Result"));
+                    .any(|(_, _, ty)| matches!(ty, Type::Generic(g) if g.name == "Result"));
 
                 let stream_type_idx = if needs_stream_u8 {
                     instance_type
@@ -1314,7 +1309,7 @@ fn generate_wasi_imports(
                 let kebab_params: Vec<(String, ComponentValType)> = func
                     .params
                     .iter()
-                    .map(|(name, ty)| {
+                    .map(|(_, cm_name, ty)| {
                         let val_type = wado_type_to_cm_val_type(
                             project,
                             ty,
@@ -1325,7 +1320,7 @@ fn generate_wasi_imports(
                             &flags_export_indices,
                             &borrow_resource_type_indices,
                         );
-                        (to_kebab_case(name), val_type)
+                        (cm_name.clone(), val_type)
                     })
                     .collect();
                 let params: Vec<(&str, ComponentValType)> = kebab_params
@@ -1469,14 +1464,14 @@ fn import_http_types_for_service(
             let cm_params: Vec<(String, ComponentValType)> = func
                 .params
                 .iter()
-                .map(|(name, ty)| {
+                .map(|(_, cm_name, ty)| {
                     let cm_type = type_gen.ast_type_to_cm(
                         ty,
                         &mut instance_type,
                         project.wasi_registry,
                         &resource_exports,
                     );
-                    (to_kebab_case(name), cm_type)
+                    (cm_name.clone(), cm_type)
                 })
                 .collect();
 
@@ -1532,14 +1527,14 @@ fn import_http_types_for_service(
             let cm_params: Vec<(String, ComponentValType)> = func
                 .params
                 .iter()
-                .map(|(name, ty)| {
+                .map(|(_, cm_name, ty)| {
                     let cm_type = type_gen.ast_type_to_cm(
                         ty,
                         &mut instance_type,
                         project.wasi_registry,
                         &resource_exports,
                     );
-                    (to_kebab_case(name), cm_type)
+                    (cm_name.clone(), cm_type)
                 })
                 .collect();
 
@@ -1909,7 +1904,7 @@ fn import_resource_using_interfaces(
             if let Some(ret_ty) = &func.return_type {
                 collect_resources_in_type(ret_ty, project.wasi_registry, &mut needed_resources);
             }
-            for (_, ty) in &func.params {
+            for (_, _, ty) in &func.params {
                 collect_resources_in_type(ty, project.wasi_registry, &mut needed_resources);
             }
         }

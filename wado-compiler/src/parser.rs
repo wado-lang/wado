@@ -3047,6 +3047,7 @@ impl Parser {
         let mut fields = Vec::new();
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            let attrs = self.parse_attributes()?;
             let start_span = self.peek().span;
             // Allow keywords as field names (unambiguous in context)
             let name = self.consume_field_name()?;
@@ -3056,6 +3057,7 @@ impl Parser {
             fields.push(StructField {
                 name,
                 ty,
+                attrs,
                 span: start_span,
             });
 
