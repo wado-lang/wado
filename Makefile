@@ -168,6 +168,10 @@ update-bundled:
 	wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled_fts.wasm > wado-compiler/lib/builtins/wado-bundled-fts.wat
 	wasm-tools print target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > wado-compiler/lib/builtins/wado-bundled-libm.wat
 
+.PHONY: benchmark-all
+benchmark-all:
+	mise run -C benchmark all
+
 .PHONY: benchmark-count-prime
 benchmark-count-prime:
 	mise run -C benchmark count-prime

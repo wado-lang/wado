@@ -561,3 +561,20 @@ test "uncompress2 with limit" {
     let decompressed = uncompress2(&compressed, 200);
     assert bytes_equal(&data, &decompressed);
 }
+
+test "round-trip large data (>32KB window boundary)" {
+    // Regression: inflate_zlib failed for data exceeding the 32KB LZ77 window
+    let data = make_pattern_data(34054);
+    let compressed = zlib_compress(&data);
+    let decompressed = inflate_zlib(&compressed);
+    assert decompressed.len() == 34054, "decompressed size mismatch";
+    assert bytes_equal(&data, &decompressed);
+}
+
+test "round-trip 100KB data" {
+    let data = make_pattern_data(100000);
+    let compressed = zlib_compress(&data);
+    let decompressed = inflate_zlib(&compressed);
+    assert decompressed.len() == 100000, "decompressed size mismatch";
+    assert bytes_equal(&data, &decompressed);
+}

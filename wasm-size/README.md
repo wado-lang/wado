@@ -81,13 +81,14 @@ Run `mise install` to install:
 
 - **Node.js** - for AssemblyScript
 - **Zig** - wasm32-wasi target
+- **Go** - needed by TinyGo
 - **wasmtime** - for validation (v41+ required for Wado's WASI P3)
+- **TinyGo** - wasip1 target (`github:tinygo-org/tinygo`)
+- **wasi-sdk** - clang + wasm-ld + wasi-sysroot for C (`github:WebAssembly/wasi-sdk`)
 
 ### Manual installation
 
 ```sh
 rustup target add wasm32-wasip1                                # Rust wasm target
-brew install tinygo                                            # TinyGo (macOS)
 curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash  # Moonbit
-brew install llvm lld wasi-libc wasi-runtimes                  # C (macOS)
 ```
