@@ -3,10 +3,10 @@
 //! These tests compile Wado programs from fixtures/*.wado and run them,
 //! verifying the output matches expected values defined in each file's __DATA__ section.
 //!
-//! Test fixtures support different target worlds via the `"world"` field:
-//! - (default) `wasi:cli/command` — runs as CLI program, checks stdout/stderr
-//! - `"wasi:http/service"` — runs as HTTP service, checks `http_status`/`body`
-//! - `"test"` — runs test block exports, checks all tests pass
+//! Test fixtures specify the target world via the top-level key in __DATA__:
+//! - (default) no world key — runs as `wasi:cli/command`, checks stdout/stderr
+//! - `"test": {}` — runs as test world, executes test block exports
+//! - `"wasi:http/service": {...}` — runs as HTTP service with request/response spec
 //!
 //! Helper modules that are imported by tests go in subdirectories
 //! (e.g., fixtures/sub/) and are not run as tests themselves.
@@ -106,14 +106,17 @@ struct HttpServiceSpec {
     headers_contain: Vec<[String; 2]>,
 }
 
+/// Test world spec for `"test": {}` — no sub-fields, presence signals the test world.
+#[derive(Debug, Deserialize, Default)]
+struct TestWorldSpec {}
+
 /// Expected test results from __DATA__ section (JSON format)
 #[derive(Debug, Deserialize, Default)]
 struct TestSpec {
-    /// Target world. Omit or `null` for `wasi:cli/command` (default).
-    /// Use `"test"` for test-block tests.
-    /// For HTTP tests, use the `"wasi:http/service"` key instead.
+    /// Test world: presence of this key (e.g. `"test": {}`) runs test block exports.
+    #[serde(rename = "test")]
     #[serde(default)]
-    world: Option<String>,
+    test_world: Option<TestWorldSpec>,
 
     /// Expected stdout (exact match) — CLI / test worlds
     #[serde(default)]
@@ -551,12 +554,14 @@ fn run_normal_test(
     spec: &TestSpec,
     test_id: &str,
 ) {
-    // Determine target world: http_service key implies wasi:http/service
-    let target_world = spec
-        .http_service
-        .as_ref()
-        .map(|_| "wasi:http/service".to_string())
-        .or_else(|| spec.world.clone());
+    // Determine target world from the world key present in the spec
+    let target_world = if spec.http_service.is_some() {
+        Some("wasi:http/service".to_string())
+    } else if spec.test_world.is_some() {
+        Some("test".to_string())
+    } else {
+        None
+    };
 
     // Use CompilerOptions to pass the target world through
     let options = CompilerOptions {
@@ -600,33 +605,28 @@ fn run_normal_test(
                 panic!("[{test_id}] HTTP error: {e:?}");
             });
         verify_http_result(&result, http_spec, test_id);
+    } else if spec.test_world.is_some() {
+        let result = run_test_world(&compile_result.wasm, test_id).unwrap_or_else(|e| {
+            panic!("[{test_id}] test world error: {e:?}");
+        });
+        verify_result(&result, spec, test_id);
     } else {
-        match spec.world.as_deref() {
-            Some("test") => {
-                let result = run_test_world(&compile_result.wasm, test_id).unwrap_or_else(|e| {
-                    panic!("[{test_id}] test world error: {e:?}");
-                });
-                verify_result(&result, spec, test_id);
-            }
-            _ => {
-                // Default: wasi:cli/command
-                let result = if spec.preopened_dirs.is_empty() {
-                    common::run_wasm(compile_result.wasm).unwrap_or_else(|e| {
-                        panic!("[{test_id}] runtime error: {e}");
-                    })
-                } else {
-                    let dirs: Vec<(String, String)> = spec
-                        .preopened_dirs
-                        .iter()
-                        .map(|[h, g]| (h.clone(), g.clone()))
-                        .collect();
-                    common::run_wasm_with_dirs(compile_result.wasm, &dirs).unwrap_or_else(|e| {
-                        panic!("[{test_id}] runtime error: {e}");
-                    })
-                };
-                verify_result(&result, spec, test_id);
-            }
-        }
+        // Default: wasi:cli/command
+        let result = if spec.preopened_dirs.is_empty() {
+            common::run_wasm(compile_result.wasm).unwrap_or_else(|e| {
+                panic!("[{test_id}] runtime error: {e}");
+            })
+        } else {
+            let dirs: Vec<(String, String)> = spec
+                .preopened_dirs
+                .iter()
+                .map(|[h, g]| (h.clone(), g.clone()))
+                .collect();
+            common::run_wasm_with_dirs(compile_result.wasm, &dirs).unwrap_or_else(|e| {
+                panic!("[{test_id}] runtime error: {e}");
+            })
+        };
+        verify_result(&result, spec, test_id);
     }
 }
 
