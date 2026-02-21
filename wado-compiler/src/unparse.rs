@@ -1323,6 +1323,7 @@ impl<'a> Unparser<'a> {
             Literal::LocationFile => self.output.push_str("#file"),
             Literal::LocationLine => self.output.push_str("#line"),
             Literal::LocationFunction => self.output.push_str("#function"),
+            Literal::DataSection => self.output.push_str("#data"),
         }
     }
 
@@ -2175,6 +2176,7 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
         Literal::LocationFile => output.push_str("#file"),
         Literal::LocationLine => output.push_str("#line"),
         Literal::LocationFunction => output.push_str("#function"),
+        Literal::DataSection => output.push_str("#data"),
     }
 }
 
