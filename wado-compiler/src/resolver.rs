@@ -8,6 +8,8 @@
 //! All type resolution happens in this phase. The output TIR has fully
 //! resolved types on every expression, making code generation mechanical.
 
+mod util;
+
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -5828,14 +5830,27 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ));
             }
             return Some(match Self::parse_int_literal(&num_lit.repr) {
-                Ok(value) => TirExpr::new(
-                    TirExprKind::IntLiteral {
+                Ok(value) => {
+                    if let Some(err_msg) = util::check_int_range_positive(
                         value,
-                        repr: num_lit.repr.clone(),
-                    },
-                    target_type,
-                    lit.span,
-                ),
+                        target_type,
+                        &self.type_table.borrow(),
+                        &num_lit.repr,
+                    ) {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message: err_msg,
+                            span: lit.span,
+                        });
+                    }
+                    TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value,
+                            repr: num_lit.repr.clone(),
+                        },
+                        target_type,
+                        lit.span,
+                    )
+                }
                 Err(message) => {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message,
@@ -5879,6 +5894,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             return Some(match Self::parse_int_literal(&num_lit.repr) {
                 Ok(value) => {
+                    if let Some(err_msg) = util::check_int_range_negative(
+                        value,
+                        target_type,
+                        &self.type_table.borrow(),
+                        &num_lit.repr,
+                    ) {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message: err_msg,
+                            span: unary.span,
+                        });
+                    }
                     let neg_value = (value as i64).wrapping_neg().cast_unsigned();
                     TirExpr::new(
                         TirExprKind::IntLiteral {
