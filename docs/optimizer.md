@@ -45,9 +45,13 @@ The optimizer runs after lowering and before Wasm plan/codegen:
 1. Fixed-point iteration loop (skipped for `-O0`):
    1. Function Inlining
    2. Reference Elimination
-   3. Copy Propagation
-   4. Constant Folding
-   5. Loop-Invariant Code Motion (LICM)
+   3. SROA (Scalar Replacement of Aggregates)
+   4. Copy Propagation
+   5. Constant Propagation (global constants → literals)
+   6. Constant Folding
+   7. Constant Global Promotion
+   8. Branch Pruning (dead branch elimination)
+   9. Loop-Invariant Code Motion (LICM)
 2. DCE Analysis and removal of unreachable functions/types (all levels)
 3. Post-optimization rewrites (select lowering, move insertion, all levels)
 4. Value copy type collection for codegen (all levels)
@@ -58,7 +62,7 @@ Note: Steps 3-4 are codegen prerequisites that currently live in the optimizer. 
 
 ### Function Inlining
 
-**Module:** `optimize_inline.rs`
+**Module:** `optimize/inline.rs`
 
 Eliminates function call overhead by replacing small pure function calls with their body. Uses expression-count-based threshold for accurate size estimation.
 
@@ -66,49 +70,73 @@ Eligibility: pure (no effects), non-recursive, no early returns, no reference pa
 
 ### Reference Elimination
 
-**Module:** `optimize_ref_elim.rs`
+**Module:** `optimize/ref_elim.rs`
 
 Eliminates unnecessary reference bindings introduced during inlining. When `let self: &T = &local_var` is followed by field accesses only, replaces them with direct field access on the original variable.
 
+### Scalar Replacement of Aggregates (SROA)
+
+**Module:** `optimize/sroa.rs`
+
+Eliminates struct and tuple allocations when the aggregate is only used for field access. After inlining exposes patterns like `let s = Struct { a, b }; ... s.a ... s.b`, SROA decomposes the struct into individual scalar locals, removing the GC `struct.new` overhead. Handles struct literals, tuple literals, and chained field accesses. Does not apply when the aggregate escapes (passed to calls, returned, address-taken).
+
 ### Copy Propagation
 
-**Module:** `optimize_copy_prop.rs`
+**Module:** `optimize/copy_prop.rs`
 
 Eliminates trivial copy bindings (`let x = y`, `let x = 42`, `let x = true`) by propagating the source value to all uses, then removing the dead binding. Checks safety conditions: target not reassigned, not address-taken, not captured by closures.
 
+### Constant Propagation
+
+**Module:** `optimize/const_prop.rs`
+
+Propagates compile-time-known immutable global variable values into their use sites. When a global is not mutable and has a scalar constant initializer (integer, float, boolean), all `GlobalVarGet` references are replaced with the literal value. This enables further constant folding.
+
 ### Constant Folding
 
-**Module:** `optimize_const_fold.rs`
+**Module:** `optimize/const_fold.rs`
 
 Evaluates compile-time-known integer arithmetic at compile time. Supports binary operations (add, sub, mul, div, mod), unary negation, and cast operations on i8–i64 and u8–u64. Guards against division by zero and `MIN / -1` traps.
 
+### Constant Global Promotion
+
+**Module:** `optimize/const_global_promotion.rs`
+
+After constant propagation and folding reduce runtime initializations to scalar constants, this pass promotes those globals back to immutable compile-time constants. Scans `__initialize_module` functions for `GlobalVarSet` with constant values targeting promotable globals (user-declared immutable but forced Wasm-mutable by lowering), updates the initializer, marks immutable, and removes the dead `GlobalVarSet` statements. Enables cascading optimization: promoted constants feed back into constant propagation in subsequent iterations.
+
+### Branch Pruning
+
+**Module:** `optimize/dce.rs`
+
+Eliminates dead branches when the condition is a compile-time boolean constant. Statement-level: `if true { A } else { B }` inlines A; `if false { A } else { B }` inlines B. Expression-level: replaces the `if` expression with the taken branch as a `Block`. Composes with constant propagation and folding to eliminate branches gated by global constants.
+
 ### Loop-Invariant Code Motion (LICM)
 
-**Module:** `optimize_licm.rs`
+**Module:** `optimize/licm.rs`
 
 Hoists loop-invariant field accesses out of loops. When a field access targets a variable that does not change within the loop body, it is moved before the loop entry.
 
 ### Dead Code Elimination (DCE)
 
-**Module:** `optimize_dce.rs`
+**Module:** `optimize/dce.rs`
 
 Removes unreachable functions from the compiled output via call graph reachability analysis from the entry point. Also eliminates unreachable types, unused string literals, and unused WASI effect/function imports.
 
 ### Feature Analysis and Conditional Feature Inclusion
 
-**Module:** `optimize_dce.rs`
+**Module:** `optimize/dce.rs`
 
 Includes only WASI functions, effects, and builtins that are actually used by reachable code. Tracks effect usage (Stdout, Stderr, etc.), WASI function usage, canonical builtins (stream operations, float-to-string, etc.), and box primitive requirements.
 
 ### Select Lowering (Branchless Conditional)
 
-**Module:** `optimize_rewrite.rs`
+**Module:** `optimize/rewrite.rs`
 
 Converts simple `if cond { a } else { b }` expressions where both branches are pure (locals or literals) into `builtin::select(cond, a, b)`, which emits the Wasm `select` instruction. This eliminates branch misprediction penalty.
 
 ### Move Insertion
 
-**Module:** `optimize_rewrite.rs`
+**Module:** `optimize/rewrite.rs`
 
 Wraps fresh values (literals, call results) in `Move` nodes to avoid unnecessary value copies. Fresh values are owned by the current expression and can be moved directly.
 
@@ -135,12 +163,6 @@ Can provide 10-30% speedup for array-intensive code.
 Identify identical subexpressions and replace with a single computation. Hash expressions to find duplicates, replace with a temporary variable.
 
 Could be extended to Global Value Numbering (GVN), which is more powerful: it detects semantically equivalent computations even when syntactically different (e.g., `a + b` and `b + a`). GVN is one of LLVM's most impactful optimization passes.
-
-### Constant Propagation
-
-Replace variable uses with their constant values when known. This enables further constant folding and dead branch elimination.
-
-A more powerful variant is Sparse Conditional Constant Propagation (SCCP), which handles branches to simultaneously propagate constants and eliminate dead code.
 
 ### Copy Propagation (Cross-Block)
 
@@ -173,56 +195,9 @@ Remove assignments to variables that are never subsequently read. Requires liven
 
 Apply algebraic laws to simplify expressions. Often implemented as part of peephole optimization.
 
-### Branch Elimination / Dead Branch Removal
+### Escape Analysis for SROA
 
-Remove branches that always take the same path. Requires constant propagation to determine branch conditions.
-
-### Escape Analysis and Scalar Replacement of Aggregates (SROA)
-
-Identify heap allocations (structs, tuples) that do not escape the current function scope. Non-escaping allocations can be decomposed into individual scalar locals, eliminating GC `struct.new` overhead.
-
-This is particularly impactful for WasmGC-targeting compilers. Binaryen already implements this as "heap2local" — moving WasmGC struct allocations to locals when they don't escape. Wado could perform this analysis at the TIR level before codegen for even better results, since TIR has richer type information.
-
-Example — local struct:
-
-```wado
-fn distance(ax: i32, ay: i32, bx: i32, by: i32) -> i32 {
-    let p = Point { x: ax - bx, y: ay - by };  // does not escape
-    return p.x * p.x + p.y * p.y;
-}
-// After SROA:
-fn distance(ax: i32, ay: i32, bx: i32, by: i32) -> i32 {
-    let p_x = ax - bx;
-    let p_y = ay - by;
-    return p_x * p_x + p_y * p_y;
-}
-```
-
-Example — inlined tuple return:
-
-```wado
-fn get_pair() -> [i32, i32] { return [10, 20]; }
-fn caller() {
-    let [x, y] = get_pair();
-    println(`{x + y}`);
-}
-// After inlining + SROA:
-fn caller() {
-    let x = 10;  // struct.new eliminated
-    let y = 20;
-    println(`{x + y}`);
-}
-```
-
-SROA naturally composes with inlining: once a tuple-returning function is inlined, the tuple construction and destructuring are in the same function, and SROA decomposes the intermediate allocation into scalar locals.
-
-A struct/tuple does NOT escape if:
-
-- It is only used for field reads
-- It is not passed to a function call
-- It is not returned from the function
-- Its reference is not taken (`&`)
-- It is not stored into another struct/array
+Basic SROA is implemented (see above), but it currently requires the aggregate to be constructed and consumed within a simple pattern. Full escape analysis would extend this to handle more complex cases where aggregates flow through multiple paths but still don't escape the function.
 
 ### Return Scalarization via Multi-Value Returns
 
@@ -484,14 +459,14 @@ Implementation: Detect `return func(...)` pattern in TIR, emit `return_call` ins
 
 ### Phase 3: Scalar Optimizations
 
-- Constant propagation / SCCP
+- SCCP (Sparse Conditional Constant Propagation — more powerful than current const prop)
 - Common subexpression elimination / GVN
 - Peephole optimization / instruction combining
 - Dead store elimination
 
 ### Phase 4: Allocation Optimizations
 
-- Escape analysis + SROA (decompose non-escaping structs/tuples into scalar locals)
+- Escape analysis (extend SROA to handle more complex non-escaping patterns)
 - Return scalarization via multi-value returns (eliminate struct allocation at function boundaries)
 - Function specialization for known constants
 
