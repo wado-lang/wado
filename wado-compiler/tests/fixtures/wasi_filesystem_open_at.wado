@@ -1,0 +1,67 @@
+// Tests: Descriptor::open_at - opening a file in a preopened directory
+//
+// This test verifies that:
+// - Preopens::get_directories() returns at least one preopened directory
+// - Descriptor::open_at() can open an existing file for reading
+// - Descriptor::open_at() returns an error for a nonexistent file
+//
+// To run when implemented (TODO removed):
+//   cargo run --bin wado -- run --dir wado-compiler/tests/fixtures/testdata \
+//     wado-compiler/tests/fixtures/wasi_filesystem_open_at.wado
+
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+
+    if dirs.len() == 0 {
+        eprintln("open_at: no preopened directories available");
+        return;
+    }
+
+    let dir = dirs[0].0;
+    let preopen_path = dirs[0].1;
+    println(`open_at: preopened dir = "{preopen_path}"`);
+
+    // Test: open an existing file for reading
+    let open_result = dir.open_at(
+        PathFlags::none(),
+        "hello.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(_file) = open_result {
+        println("open_at: file opened successfully");
+    } else {
+        eprintln("open_at: failed to open existing file");
+        return;
+    }
+
+    // Test: open a nonexistent file returns an error
+    let missing_result = dir.open_at(
+        PathFlags::none(),
+        "does_not_exist.txt",
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Err(_err) = missing_result {
+        println("open_at: nonexistent file returns error (correct)");
+    } else {
+        eprintln("open_at: nonexistent file should have returned an error");
+    }
+
+    println("all open_at tests passed");
+}
+
+__DATA__
+{
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout_contains": [
+        "open_at: file opened successfully",
+        "open_at: nonexistent file returns error (correct)",
+        "all open_at tests passed"
+    ]
+}

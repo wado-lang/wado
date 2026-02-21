@@ -12,13 +12,14 @@ Wado has no macros and no preprocessor, so we need a distinct syntax that clearl
 
 ## Decision
 
-Introduce three compile-time location literals with `#` prefix:
+Introduce compile-time literals with `#` prefix:
 
-| Literal     | Type     | Value                           |
-| ----------- | -------- | ------------------------------- |
-| `#file`     | `String` | Current source file path        |
-| `#line`     | `i32`    | Current line number (1-indexed) |
-| `#function` | `String` | Fully specialized function name |
+| Literal     | Type     | Value                                              |
+| ----------- | -------- | -------------------------------------------------- |
+| `#file`     | `String` | Current source file path                           |
+| `#line`     | `i32`    | Current line number (1-indexed)                    |
+| `#function` | `String` | Fully specialized function name                    |
+| `#data`     | `String` | `__DATA__` section content (compile error if none) |
 
 ### Syntax
 
@@ -40,6 +41,20 @@ Returns the fully specialized name without signature:
 | Generic method | `Array<String>::len`         |
 | Closure        | `parent_function::{closure}` |
 
+### `#data`
+
+Returns the raw text content of the file's `__DATA__` section as a `String`. Using `#data` in a source file that has no `__DATA__` section is a compile error. This allows programs to embed and access static data inline without a separate data file.
+
+```wado
+export fn run() with Stdout {
+    let config = #data;
+    println(config);
+}
+
+__DATA__
+{"key": "value"}
+```
+
 ### Not Included
 
 - `#column` - No compelling use case for user code
@@ -56,7 +71,8 @@ If line directives become necessary (e.g., for code generators), use inner attri
 
 ## Consequences
 
-- Simple, explicit syntax for source location
+- Simple, explicit syntax for source location and embedded data
 - `#` prefix is consistent with existing attributes (`#[...]`, `#![...]`)
 - No conflict with potential future directives
-- Useful for debugging, logging, and assertion messages
+- Useful for debugging, logging, assertion messages, and inline data embedding
+- `#data` reuses the already-existing `__DATA__` section mechanism with no additional syntax overhead

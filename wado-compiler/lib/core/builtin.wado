@@ -53,9 +53,11 @@ fn task_return(result: i32);
 #[canonical("wasi", "waitable-set-new")]
 fn waitable_set_new() -> i32;
 
-/// Join a subtask to a waitable set
+/// Join a waitable (task/stream/future handle) to a waitable set.
+/// waitable: the handle to join (task, stream, or future)
+/// set: the waitable set to join into (0 = remove from current set)
 #[canonical("wasi", "waitable-join")]
-fn waitable_join(set: i32, subtask: i32);
+fn waitable_join(waitable: i32, set: i32);
 
 /// Wait on a waitable set, returns event ordinal when any task completes.
 /// Writes 8 bytes (POINTER_PAIR) to outptr:

@@ -1146,6 +1146,34 @@ let octal = 0o755;                 // Octal
 let hex = 0xFF_AA_BB;              // Hexadecimal
 ```
 
+**Type coercion**: When the target type is known from context (type annotation or function argument), integer literals coerce to any compatible integer type, including `i128`/`u128`:
+
+```wado
+let byte: i8 = 127;
+let long: i64 = 9_223_372_036_854_775_807;
+let unsigned: u32 = 4_294_967_295;
+let big: u128 = 1_000_000_000_000;
+fn foo(n: i64) { ... }
+foo(100);  // literal coerced to i64
+```
+
+**Compile-time range checking**: The compiler rejects literal coercions whose value falls outside the target type's range. All literal bases (decimal, hex `0x`, octal `0o`, binary `0b`) use strict numeric range: the value must lie within `[MIN, MAX]` for signed types or `[0, MAX]` for unsigned types.
+
+To reinterpret a bit pattern as a signed integer, use an explicit `as` cast.
+
+```wado
+let a: i8 = 127;                  // OK: max i8
+let b: i8 = 128;                  // compile error: literal out of range for `i8`: 128
+let c: i8 = -128;                 // OK: min i8
+let d: u32 = -1;                  // compile error: literal out of range for `u32`: -1
+
+let e: i8 = 0xFF;                 // compile error: literal out of range for `i8`: 0xFF
+let f: i8 = 0xFF as i8;           // OK: explicit bit-pattern reinterpretation (value: -1)
+let g: i32 = 0xFFFF_FFFF;         // compile error: literal out of range for `i32`: 0xFFFF_FFFF
+let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation (value: -1)
+let i: u32 = 0x1_0000_0000;       // compile error: 33-bit value does not fit in u32
+```
+
 **Type conversion** (via `as`):
 
 ```wado
@@ -1162,6 +1190,13 @@ let with_separator = 1_000_000.5;
 let scientific = 6.022e23;         // 6.022 × 10²³
 let negative_exp = 1.6e-19;        // 1.6 × 10⁻¹⁹
 let explicit_positive = 2.5e+10;
+```
+
+**Type coercion**: Floating-point literals coerce to either `f32` or `f64` when the target type is known:
+
+```wado
+let single: f32 = 3.14;
+let double: f64 = 3.14159265358979;
 ```
 
 **Type conversion** (via `as`):
@@ -1389,17 +1424,32 @@ let len = arr.len(); // Get length
 
 Compile-time location literals provide source location information at compile time. They use the `#` prefix to clearly signal compile-time evaluation.
 
-| Literal     | Type     | Value                           |
-| ----------- | -------- | ------------------------------- |
-| `#file`     | `String` | Current source file path        |
-| `#line`     | `i32`    | Current line number (1-indexed) |
-| `#function` | `String` | Fully specialized function name |
+| Literal     | Type     | Value                                              |
+| ----------- | -------- | -------------------------------------------------- |
+| `#file`     | `String` | Current source file path                           |
+| `#line`     | `i32`    | Current line number (1-indexed)                    |
+| `#function` | `String` | Fully specialized function name                    |
+| `#data`     | `String` | `__DATA__` section content (compile error if none) |
 
 ```wado
 fn example() {
     println(`Error at {#file}:{#line}`);
     println(`In function: {#function}`);
 }
+```
+
+**`#data`:**
+
+Returns the raw text content of the `__DATA__` section as a `String`. This is useful for programs that need to access embedded metadata at runtime (e.g., configuration, test fixtures, embedded documents). Using `#data` in a file that has no `__DATA__` section is a compile error.
+
+```wado
+export fn run() with Stdout {
+    let config = #data;  // contains the __DATA__ section text
+    println(config);
+}
+
+__DATA__
+{"key": "value"}
 ```
 
 **`#function` Format:**

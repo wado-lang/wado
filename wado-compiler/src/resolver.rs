@@ -8,6 +8,8 @@
 //! All type resolution happens in this phase. The output TIR has fully
 //! resolved types on every expression, making code generation mechanical.
 
+mod util;
+
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -4059,6 +4061,25 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     string_type,
                 )
             }
+            Literal::DataSection => {
+                // #data - returns the __DATA__ section content as a String
+                let data = self
+                    .loaded_modules
+                    .get(&self.current_module_source)
+                    .and_then(|m| m.data_section())
+                    .map(str::to_owned);
+                let string_type = self.get_string_struct_type();
+                if let Some(content) = data {
+                    (TirExprKind::StringLiteral(content), string_type)
+                } else {
+                    let _ = self.logger.error(TypeError::InvalidLiteral {
+                        message: "`#data` requires a `__DATA__` section in the source file"
+                            .to_owned(),
+                        span: lit.span,
+                    });
+                    (TirExprKind::StringLiteral(String::new()), string_type)
+                }
+            }
         };
         TirExpr::new(kind, type_id, lit.span)
     }
@@ -5709,8 +5730,26 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         // Cache the newtype for future lookups
                         self.newtypes.insert(named.name.clone(), newtype_id);
                         newtype_id
+                    } else if self.wasi_registry.is_resource(&named.name) {
+                        // WASI resource type - create a proper Resource TypeId so that
+                        // method calls on the returned handle resolve correctly.
+                        // Look up the actual module source from all_resource_types.
+                        let module_source = self
+                            .all_resource_types
+                            .iter()
+                            .find_map(|(ms, map)| {
+                                if map.contains_key(&named.name) {
+                                    Some(ms.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_else(|| ModuleSource::wasi("filesystem"));
+                        self.type_table
+                            .borrow_mut()
+                            .make_resource(named.name.clone(), module_source)
                     } else {
-                        // Resource types are represented as i32 handles
+                        // Unknown type - represent as i32 handle
                         TypeTable::I32
                     }
                 }
@@ -5893,14 +5932,27 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ));
             }
             return Some(match Self::parse_int_literal(&num_lit.repr) {
-                Ok(value) => TirExpr::new(
-                    TirExprKind::IntLiteral {
+                Ok(value) => {
+                    if let Some(err_msg) = util::check_int_range_positive(
                         value,
-                        repr: num_lit.repr.clone(),
-                    },
-                    target_type,
-                    lit.span,
-                ),
+                        target_type,
+                        &self.type_table.borrow(),
+                        &num_lit.repr,
+                    ) {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message: err_msg,
+                            span: lit.span,
+                        });
+                    }
+                    TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value,
+                            repr: num_lit.repr.clone(),
+                        },
+                        target_type,
+                        lit.span,
+                    )
+                }
                 Err(message) => {
                     let _ = self.logger.error(TypeError::InvalidLiteral {
                         message,
@@ -5944,6 +5996,17 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             return Some(match Self::parse_int_literal(&num_lit.repr) {
                 Ok(value) => {
+                    if let Some(err_msg) = util::check_int_range_negative(
+                        value,
+                        target_type,
+                        &self.type_table.borrow(),
+                        &num_lit.repr,
+                    ) {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message: err_msg,
+                            span: unary.span,
+                        });
+                    }
                     let neg_value = (value as i64).wrapping_neg().cast_unsigned();
                     TirExpr::new(
                         TirExprKind::IntLiteral {

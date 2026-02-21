@@ -117,7 +117,11 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 continue;
             }
 
-            // Build param types using CM ABI type flattening
+            // Build param types using CM ABI type flattening.
+            // WASI P3 async functions with > MAX_FLAT_ASYNC_PARAMS (4) flat params use
+            // indirect calling: all params are passed via a single params_ptr (i32) plus
+            // a results_ptr (i32). This matches what `canon lower async` produces.
+            const MAX_FLAT_ASYNC_PARAMS: usize = 4;
             let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
             for (_, ty) in &func.params {
                 let resolved_ty = wasi_registry.resolve_type(ty);
@@ -126,12 +130,23 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
 
             // Async functions have an additional outptr parameter
             if func.is_async {
-                param_vts.push(wasm_encoder::ValType::I32);
+                if param_vts.len() > MAX_FLAT_ASYNC_PARAMS {
+                    // Indirect convention: collapse all params to a single params_ptr + outptr.
+                    param_vts = vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32];
+                } else {
+                    // Direct convention: params passed directly + outptr.
+                    param_vts.push(wasm_encoder::ValType::I32);
+                }
             }
             // Sync functions with complex return types also need an outptr
             else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
-                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty) {
+                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
+                    || crate::component_model::wasi_named_type_return_needs_outptr(
+                        &resolved_ret_ty,
+                        wasi_registry,
+                    )
+                {
                     param_vts.push(wasm_encoder::ValType::I32);
                 }
             }
@@ -144,7 +159,12 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
                 vec![WirType::I32]
             } else if let Some(ret_ty) = &func.return_type {
                 let resolved_ret_ty = wasi_registry.resolve_type(ret_ty);
-                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty) {
+                if crate::component_model::return_type_requires_outptr(&resolved_ret_ty)
+                    || crate::component_model::wasi_named_type_return_needs_outptr(
+                        &resolved_ret_ty,
+                        wasi_registry,
+                    )
+                {
                     // Complex return via outptr — function returns nothing
                     Vec::new()
                 } else {

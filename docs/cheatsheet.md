@@ -23,14 +23,23 @@ Quick reference for Wado syntax.
 
 ```wado
 // Numbers
-42              // i32 (default)
+42              // integer literal (defaults to i32 without type context)
 42 as i64       // i64 via cast
-3.14            // f64 (default)
+3.14            // float literal (defaults to f64 without type context)
 3.14 as f32     // f32 via cast
 1_000_000       // underscores for readability
 0xFF            // hex
 0b1010          // binary
 0o755           // octal
+
+// Numeric literal coercion: integer/float literals have no fixed type until
+// the type context is known (annotation, function argument, etc.)
+let x: i64 = 42;               // integer literal → i64
+let y: u8 = 255;               // integer literal → u8
+let z: u128 = 1_000_000_000;   // integer literal → u128
+let f: f32 = 3.14;             // float literal → f32
+fn foo(n: i64) { ... }
+foo(100);                       // integer literal coerced to i64
 
 // Strings
 "hello"         // String
@@ -1522,6 +1531,9 @@ let line = #line;           // i32
 
 // Get current function name
 let func = #function;       // "run" or "Point::distance"
+
+// Get the __DATA__ section content (compile error if absent)
+let data = #data;           // String
 
 // Example: debug logging
 fn log_debug(message: String) with Stdout {
