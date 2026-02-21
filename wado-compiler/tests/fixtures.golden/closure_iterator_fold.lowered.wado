@@ -105,20 +105,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     return Option::Some(Box<i32> { value: item });
 }
 
-fn __Closure_2::__call(self: &__Closure_2, acc: i32, x: i32) -> i32 {
-    if (x > acc) {
-        return x;
-    }
-    return acc;
-}
-
-fn __Closure_3::__call(self: &__Closure_3, acc: i32, x: i32) -> i32 {
-    if (x > 2) {
-        return (acc + 1);
-    }
-    return acc;
-}
-
 fn "ArrayIter<i32>::fold<i32>$__Closure_0"(self: &mut ArrayIter<i32>, init: i32, f: &__Closure_0) -> i32 {
     let mut acc: i32 = init;
     loop {
@@ -159,7 +145,13 @@ fn "ArrayIter<i32>::fold<i32>$__Closure_2"(self: &mut ArrayIter<i32>, init: i32,
         let __pattern_temp_0: Option<i32> = self."ArrayIter<i32>^Iterator::next"();
         if __is_not_null(__pattern_temp_0) {
             let item: i32 = __unwrap_option(__pattern_temp_0).value;
-            acc = f.__Closure_2::__call(acc, item);
+            acc = __inline___Closure_2____call_0: {
+                let acc: i32 = acc;
+                if (item > acc) {
+                    break __inline___Closure_2____call_0: item;
+                }
+                break __inline___Closure_2____call_0: acc;
+            };
         } else {
             break;
         }
@@ -173,7 +165,13 @@ fn "ArrayIter<i32>::fold<i32>$__Closure_3"(self: &mut ArrayIter<i32>, init: i32,
         let __pattern_temp_0: Option<i32> = self."ArrayIter<i32>^Iterator::next"();
         if __is_not_null(__pattern_temp_0) {
             let item: i32 = __unwrap_option(__pattern_temp_0).value;
-            acc = f.__Closure_3::__call(acc, item);
+            acc = __inline___Closure_3____call_0: {
+                let acc: i32 = acc;
+                if (item > 2) {
+                    break __inline___Closure_3____call_0: (acc + 1);
+                }
+                break __inline___Closure_3____call_0: acc;
+            };
         } else {
             break;
         }

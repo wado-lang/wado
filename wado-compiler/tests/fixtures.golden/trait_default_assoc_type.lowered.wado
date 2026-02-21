@@ -17,18 +17,15 @@ struct IntBox {
     value: i32,
 }
 
-pub fn "IntBox^Container::has_items"(self: &IntBox) -> bool {
-    let __pattern_temp_0: Option<i32> = Option::Some(Box<i32> { value: self.value });
-    if __is_not_null(__pattern_temp_0) {
-        __unwrap_option(__pattern_temp_0).value;
-        return true;
-    }
-    return false;
-}
-
 export fn run() with Stdout {
-    let b: IntBox = move IntBox { value: 42 };
-    if b."IntBox^Container::has_items"() {
+    if __inline_IntBox_Container__has_items_0: {
+        let __pattern_temp_0: Option<i32> = Option::Some(Box<i32> { value: 42 });
+        if __is_not_null(__pattern_temp_0) {
+            __unwrap_option(__pattern_temp_0).value;
+            break __inline_IntBox_Container__has_items_0: true;
+        }
+        break __inline_IntBox_Container__has_items_0: false;
+    } {
         core::cli::println(move "has items");
     }
 }

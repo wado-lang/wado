@@ -198,12 +198,6 @@ fn is_inline_eligible(
         return false;
     }
 
-    // Only inline functions with a single return at the end
-    // Functions with early returns (inside if/while) are too complex to inline
-    if has_early_return(body) {
-        return false;
-    }
-
     // Small enough (based on expression count)
     count_block_exprs(body) < inline_threshold
 }
@@ -214,100 +208,7 @@ fn has_complex_nested_generic(type_id: TypeId, type_table: &TypeTable) -> bool {
     type_table.has_nested_generics(type_id)
 }
 
-/// Check if a block has early returns (returns inside if/while blocks)
-fn has_early_return(block: &TirBlock) -> bool {
-    for (i, stmt) in block.stmts.iter().enumerate() {
-        let is_last = i == block.stmts.len() - 1;
-        match &stmt.kind {
-            TirStmtKind::Return { .. } => {
-                // Return is only OK if it's the last statement
-                if !is_last {
-                    return true;
-                }
-            }
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                // Check if there are returns inside if blocks
-                if block_has_return(then_block) {
-                    return true;
-                }
-                if let Some(else_blk) = else_block
-                    && block_has_return(else_blk)
-                {
-                    return true;
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                if block_has_return(body) {
-                    return true;
-                }
-            }
-            TirStmtKind::IfPattern {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if block_has_return(then_block) {
-                    return true;
-                }
-                if let Some(else_blk) = else_block
-                    && block_has_return(else_blk)
-                {
-                    return true;
-                }
-            }
-            _ => {}
-        }
-    }
-    false
-}
 
-/// Check if a block contains any return statement
-fn block_has_return(block: &TirBlock) -> bool {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            TirStmtKind::Return { .. } => return true,
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if block_has_return(then_block) {
-                    return true;
-                }
-                if let Some(else_blk) = else_block
-                    && block_has_return(else_blk)
-                {
-                    return true;
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                if block_has_return(body) {
-                    return true;
-                }
-            }
-            TirStmtKind::IfPattern {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if block_has_return(then_block) {
-                    return true;
-                }
-                if let Some(else_blk) = else_block
-                    && block_has_return(else_blk)
-                {
-                    return true;
-                }
-            }
-            _ => {}
-        }
-    }
-    false
-}
 
 /// Check if any expression in the function body has a type with complex nested generics.
 /// This catches cases where the function accesses fields or creates values with deeply nested

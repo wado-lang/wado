@@ -18,8 +18,10 @@ struct "Box<i32>" {
 }
 
 fn __test_0_if_let_some_on_index_value_returning_option() {
-    let b: Box<i32> = move Box<i32> { value: 42 };
-    let __pattern_temp_0: Option<i32> = b."Box<i32>^IndexValue::index_value"(0);
+    let __pattern_temp_0: Option<i32> = __inline_Box_i32__IndexValue__index_value_0: {
+        break __inline_Box_i32__IndexValue__index_value_0: Option::Some(Box<i32> { value: 42 });
+        break __inline_Box_i32__IndexValue__index_value_0: null;
+    };
     if __is_not_null(__pattern_temp_0) {
         let val: i32 = __unwrap_option(__pattern_temp_0).value;
         __assert_0: {
@@ -32,22 +34,22 @@ fn __test_0_if_let_some_on_index_value_returning_option() {
                     __r.String::append(move " at ");
                     __r.String::append(move "wado-compiler/tests/fixtures/index-value-option-pattern.wado");
                     __r.String::append(move ":");
-                    let mut __f: Formatter = __inline_Formatter__new_1: {
+                    let mut __f: Formatter = __inline_Formatter__new_2: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_i32_Display__fmt_2: {
+                    __inline_i32_Display__fmt_3: {
                         let self: Box<i32> = move Box<i32> { value: 22 };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                     };
                     __r.String::append(move "\ncondition: val == 42\n");
                     __r.String::append(move "val: ");
-                    __f = __inline_Formatter__new_3: {
+                    __f = __inline_Formatter__new_4: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_i32_Display__fmt_4: {
+                    __inline_i32_Display__fmt_5: {
                         let self: Box<i32> = move Box<i32> { value: val };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -63,12 +65,5 @@ fn __test_0_if_let_some_on_index_value_returning_option() {
 export fn __cm_export____test_0_if_let_some_on_index_value_returning_option() {
     __test_0_if_let_some_on_index_value_returning_option();
     cm_raw_call task-return(0);
-}
-
-fn "Box<i32>^IndexValue::index_value"(self: &Box<i32>, index: i32) -> Option<i32> {
-    if (index == 0) {
-        return Option::Some(Box<i32> { value: self.value });
-    }
-    return null;
 }
 

@@ -1,0 +1,32 @@
+// Test that functions with early returns can be inlined.
+// Early returns should be transformed into labeled block + break.
+
+use { println, Stdout } from "core:cli";
+
+fn classify(x: i32) -> String {
+    if x < 0 {
+        return "negative";
+    }
+    if x == 0 {
+        return "zero";
+    }
+    return "positive";
+}
+
+fn abs(x: i32) -> i32 {
+    if x < 0 {
+        return -x;
+    }
+    return x;
+}
+
+export fn run() with Stdout {
+    println(classify(-5));
+    println(classify(0));
+    println(classify(7));
+    println(`{abs(-3)}`);
+    println(`{abs(4)}`);
+}
+
+__DATA__
+{"stdout": "negative\nzero\npositive\n3\n4\n"}
