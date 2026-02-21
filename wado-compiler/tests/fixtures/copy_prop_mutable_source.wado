@@ -1,0 +1,33 @@
+// Regression: copy propagation must not alias `let b = a` when `a` is reassigned later
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // u8
+    let mut a_u8: u8 = 9;
+    let b_u8 = a_u8;
+    a_u8 = 1;
+    println(`u8: a={a_u8} b={b_u8}`);
+
+    // i32
+    let mut a_i32: i32 = 9;
+    let b_i32 = a_i32;
+    a_i32 = 1;
+    println(`i32: a={a_i32} b={b_i32}`);
+
+    // u16
+    let mut a_u16: u16 = 9;
+    let b_u16 = a_u16;
+    a_u16 = 1;
+    println(`u16: a={a_u16} b={b_u16}`);
+
+    // u32
+    let mut a_u32: u32 = 9;
+    let b_u32 = a_u32;
+    a_u32 = 1;
+    println(`u32: a={a_u32} b={b_u32}`);
+
+    println("done");
+}
+
+__DATA__
+{"stdout": "u8: a=1 b=9\ni32: a=1 b=9\nu16: a=1 b=9\nu32: a=1 b=9\ndone\n"}

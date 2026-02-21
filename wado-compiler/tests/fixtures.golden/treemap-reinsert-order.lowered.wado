@@ -762,8 +762,9 @@ fn "TreeMap<String,i32>::find_index"(self: &TreeMap<String,i32>, key: String) ->
     let mut current: Option<&mut TreeMapNode<String>> = self.root;
     let _licm_entries: Array<TreeMapEntry<String,i32>> = self.entries;
     loop {
-        if __is_not_null(current) {
-            let n: &mut TreeMapNode<String> = __unwrap_option(current);
+        let __pattern_temp_0: Option<&mut TreeMapNode<String>> = current;
+        if __is_not_null(__pattern_temp_0) {
+            let n: &mut TreeMapNode<String> = __unwrap_option(__pattern_temp_0);
             if key."String^Eq::eq"(&n.key) {
                 let entry: &TreeMapEntry<String,i32> = &_licm_entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(n.index);
                 if entry.deleted {

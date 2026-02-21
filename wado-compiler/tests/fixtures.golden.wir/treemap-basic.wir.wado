@@ -1119,14 +1119,15 @@ fn TreeMap<String,i32>::find_index(self, key) {
     let current: ref null "core:collections/TreeMapNode<String>";
     let n: ref null "core:collections/TreeMapNode<String>";
     let entry: ref null "core:collections/TreeMapEntry<String,i32>";
-    let __local_5: ref null "core:collections/TreeMapNode<String>";
+    let __pattern_temp_0: ref null "core:collections/TreeMapNode<String>";
     let _licm_entries: ref null Array<TreeMapEntry<String,i32>>;
     current = self.root;
     _licm_entries = value_copy Array<TreeMapEntry<String,i32>>(self.entries);
     b62: block {
         l63: loop {
-            if ref.is_null(current) == 0 {
-                n = ref.as_non_null(current);
+            __pattern_temp_0 = current;
+            if ref.is_null(__pattern_temp_0) == 0 {
+                n = ref.as_non_null(__pattern_temp_0);
                 if String^Eq::eq(key, n.key) {
                     entry = Array<TreeMapEntry<String,i32>>^IndexValue::index_value(_licm_entries, n.index);
                     if entry.deleted {

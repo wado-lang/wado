@@ -1,11 +1,13 @@
 # Mise configuration for Wado benchmarks
 # https://mise.jdx.dev/
 #
-# Prerequisites (system-installed):
-# - cc (C compiler)
-# - node (Node.js)
-# - python3
-# - ruby
+# Run `mise install` to install managed tools.
+# C compiler (cc) is expected from the system.
+
+[tools]
+node = "latest"
+python = "latest"
+ruby = "latest"
 
 [tasks.count-prime]
 description = "Run count_prime benchmark (integer arithmetic)"
@@ -14,25 +16,25 @@ run = """
 set -e
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o count_prime.wasm count_prime.wado
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o count_prime/count_prime.wasm count_prime/count_prime.wado
 
 echo "=== Compiling C benchmark ==="
-cc -O3 -o count_prime_c count_prime.c
+cc -O3 -o count_prime/count_prime_c count_prime/count_prime.c
 
 echo "=== C ==="
-./count_prime_c
+./count_prime/count_prime_c
 
 echo "=== JavaScript ==="
-node count_prime.js
+node count_prime/count_prime.js
 
 echo "=== Python ==="
-python3 count_prime.py
+python3 count_prime/count_prime.py
 
 echo "=== Ruby ==="
-ruby count_prime.rb
+ruby count_prime/count_prime.rb
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 count_prime.wado
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 count_prime/count_prime.wado
 """
 
 [tasks.mandelbrot]
@@ -42,25 +44,25 @@ run = """
 set -e
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o mandelbrot.wasm mandelbrot.wado
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o mandelbrot/mandelbrot.wasm mandelbrot/mandelbrot.wado
 
 echo "=== Compiling C benchmark ==="
-cc -O3 -ffp-contract=off -o mandelbrot_c mandelbrot.c
+cc -O3 -ffp-contract=off -o mandelbrot/mandelbrot_c mandelbrot/mandelbrot.c
 
 echo "=== C ==="
-./mandelbrot_c
+./mandelbrot/mandelbrot_c
 
 echo "=== JavaScript ==="
-node mandelbrot.js
+node mandelbrot/mandelbrot.js
 
 echo "=== Python ==="
-python3 mandelbrot.py
+python3 mandelbrot/mandelbrot.py
 
 echo "=== Ruby ==="
-ruby mandelbrot.rb
+ruby mandelbrot/mandelbrot.rb
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 mandelbrot.wado
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 mandelbrot/mandelbrot.wado
 """
 
 [tasks.sieve]
@@ -70,25 +72,25 @@ run = """
 set -e
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o sieve.wasm sieve.wado
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o sieve/sieve.wasm sieve/sieve.wado
 
 echo "=== Compiling C benchmark ==="
-cc -O3 -o sieve_c sieve.c
+cc -O3 -o sieve/sieve_c sieve/sieve.c
 
 echo "=== C ==="
-./sieve_c
+./sieve/sieve_c
 
 echo "=== JavaScript ==="
-node sieve.js
+node sieve/sieve.js
 
 echo "=== Python ==="
-python3 sieve.py
+python3 sieve/sieve.py
 
 echo "=== Ruby ==="
-ruby sieve.rb
+ruby sieve/sieve.rb
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sieve.wado
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sieve/sieve.wado
 """
 
 [tasks.zlib]
@@ -98,18 +100,23 @@ run = """
 set -e
 
 echo "=== Compiling zlib-rs benchmark ==="
-cargo build --release --manifest-path zlib_rs/Cargo.toml --quiet
+cargo build --release --manifest-path zlib/Cargo.toml --quiet
 
 echo "=== zlib-rs (native Rust) ==="
-./zlib_rs/target/release/zlib_rs_bench
+./zlib/target/release/zlib_rs_bench
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib_bench.wado
+cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib/zlib_bench.wado
 """
+
+[tasks.all]
+description = "Run all benchmarks"
+depends = ["count-prime", "mandelbrot", "sieve", "zlib"]
 
 [tasks.clean]
 description = "Clean benchmark artifacts"
 run = """
-rm -f *.wasm count_prime_c mandelbrot_c sieve_c
-rm -rf zlib_rs/target
+rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm
+rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
+rm -rf zlib/target
 """

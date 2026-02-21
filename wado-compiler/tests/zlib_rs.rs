@@ -1352,3 +1352,64 @@ fn compression_size_all_levels_pseudorandom() {
         );
     }
 }
+
+#[test]
+fn zlib_rs_large_sequential_inflated_by_wado() {
+    // Regression test: Wado inflate_zlib works for data > 32KB
+    let input: Vec<u8> = (0..34054).map(|i| (i % 256) as u8).collect();
+    let compressed = zlib_rs_compress(&input, 6);
+    // Build Wado source that takes compressed bytes and inflates them, outputting size and checksum
+    let source = format!(
+        r#"use {{ println, Stdout }} from "core:cli";
+use {{ inflate_zlib }} from "core:zlib";
+
+export fn run() with Stdout {{
+    let data: Array<u8> = [{array_literal}];
+    let decompressed = inflate_zlib(&data);
+    println(`{{decompressed.len()}}`);
+    // Verify first and last bytes
+    println(`{{decompressed[0] as i32}}`);
+    println(`{{decompressed[255] as i32}}`);
+    println(`{{decompressed[256] as i32}}`);
+    println(`{{decompressed[34053] as i32}}`);
+}}"#,
+        array_literal = bytes_to_wado_array(&compressed)
+    );
+    let stdout = compile_and_run(&source);
+    let lines: Vec<&str> = stdout.trim().lines().collect();
+    assert_eq!(lines[0], "34054", "decompressed size mismatch");
+    assert_eq!(lines[1], "0", "byte[0] mismatch");
+    assert_eq!(lines[2], "255", "byte[255] mismatch");
+    assert_eq!(lines[3], "0", "byte[256] mismatch");
+    assert_eq!(lines[4], "5", "byte[34053] mismatch"); // 34053 % 256 = 5
+}
+
+#[test]
+fn wado_compress_large_sequential_decompressed_by_zlib_rs() {
+    // Regression test: zlib_compress produces valid output for data > 32KB
+    // (the LZ77 sliding window size boundary)
+    let source = r#"use { print, println, Stdout } from "core:cli";
+use { zlib_compress } from "core:zlib";
+
+export fn run() with Stdout {
+    let size = 34054;
+    let mut data: Array<u8> = Array::<u8>::with_capacity(size);
+    for let mut i = 0; i < size; i += 1 {
+        data.append((i % 256) as u8);
+    }
+    let compressed = zlib_compress(&data);
+    for let mut i = 0; i < compressed.len(); i += 1 {
+        if i > 0 { print(" "); }
+        print(`{compressed[i] as i32}`);
+    }
+    println("");
+}"#;
+    let expected: Vec<u8> = (0..34054).map(|i| (i % 256) as u8).collect();
+    let stdout = compile_and_run(source);
+    let wado_compressed = parse_bytes(&stdout);
+    let decompressed = zlib_rs_decompress(&wado_compressed, expected.len() * 2);
+    assert_eq!(
+        decompressed, expected,
+        "zlib-rs failed to decompress Wado large sequential data"
+    );
+}
