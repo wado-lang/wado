@@ -55,8 +55,12 @@
   (core func $stream.drop-writable (;1;) (canon stream.drop-writable $stream-u8))
   (core func $stream.new (;2;) (canon stream.new $stream-u8))
   (core func $stream.write (;3;) (canon stream.write $stream-u8 (memory $memory) (realloc $realloc)))
-  (core func $task.return (;4;) (canon task.return (result $result-unit) (memory $memory)))
-  (core func $wasi:cli/Stdout::write_via_stream (;5;) (canon lower (func $write-via-stream) async (memory $memory) (realloc $realloc)))
+  (core func $subtask.drop (;4;) (canon subtask.drop))
+  (core func $task.return (;5;) (canon task.return (result $result-unit) (memory $memory)))
+  (core func $waitable.join (;6;) (canon waitable.join))
+  (core func $waitable-set.new (;7;) (canon waitable-set.new))
+  (core func $waitable-set.wait (;8;) (canon waitable-set.wait (memory $memory)))
+  (core func $wasi:cli/Stdout::write_via_stream (;9;) (canon lower (func $write-via-stream) async (memory $memory) (realloc $realloc)))
   (core module $main-mod (;1;)
     (rec
       (type (;0;) (sub (struct (field (mut i32)))))
@@ -68,40 +72,42 @@
     (type (;5;) (func (result i64)))
     (type (;6;) (func (param i32 i32 i32) (result i32)))
     (type (;7;) (func (param i32)))
-    (type (;8;) (func (param i32 i32) (result i32)))
-    (type (;9;) (func))
-    (type (;10;) (func (param i32)))
-    (type (;11;) (func))
-    (type (;12;) (func (param i32 (ref null 2) i32)))
-    (type (;13;) (func (param (ref null 2))))
+    (type (;8;) (func (param i32)))
+    (type (;9;) (func (param i32 i32)))
+    (type (;10;) (func (result i32)))
+    (type (;11;) (func (param i32 i32) (result i32)))
+    (type (;12;) (func (param i32 i32) (result i32)))
+    (type (;13;) (func))
+    (type (;14;) (func))
+    (type (;15;) (func (param i32 (ref null 2) i32)))
+    (type (;16;) (func (param (ref null 2))))
+    (type (;17;) (func (param i32)))
     (import "mem" "realloc" (func (;0;) (type 3)))
     (import "wasi" "stream-drop-writable" (func (;1;) (type 4)))
     (import "wasi" "stream-new" (func (;2;) (type 5)))
     (import "wasi" "stream-write" (func (;3;) (type 6)))
-    (import "wasi" "task-return" (func (;4;) (type 7)))
-    (import "wasi" "wasi:cli/Stdout::write_via_stream" (func (;5;) (type 8)))
+    (import "wasi" "subtask-drop" (func (;4;) (type 7)))
+    (import "wasi" "task-return" (func (;5;) (type 8)))
+    (import "wasi" "waitable-join" (func (;6;) (type 9)))
+    (import "wasi" "waitable-set-new" (func (;7;) (type 10)))
+    (import "wasi" "waitable-set-wait" (func (;8;) (type 11)))
+    (import "wasi" "wasi:cli/Stdout::write_via_stream" (func (;9;) (type 12)))
     (import "mem" "memory" (memory (;0;) 1))
-    (export "run" (func 8))
-    (func (;6;) (type 9)
-      (call 10
+    (export "run" (func 11))
+    (func (;10;) (type 13)
+      (call 13
         (struct.new 2
           (array.new_data 1 0
             (i32.const 0)
             (i32.const 13))
           (i32.const 13)))
     )
-    (func (;7;) (type 10) (param i32)
-      (drop
-        (call 5
-          (local.get 0)
-          (i32.const 2048)))
-    )
-    (func (;8;) (type 11)
-      (call 6)
-      (call 4
+    (func (;11;) (type 14)
+      (call 10)
+      (call 5
         (i32.const 0))
     )
-    (func (;9;) (type 12) (param i32 (ref null 2) i32)
+    (func (;12;) (type 15) (param i32 (ref null 2) i32)
       (local i32 (ref null 1) i32 i32 i32 i32 (ref null 2) (ref null 2))
       (local.set 3
         (struct.get 2 1
@@ -167,8 +173,8 @@
       (call 1
         (local.get 0))
     )
-    (func (;10;) (type 13) (param (ref null 2))
-      (local i64 i32 i32)
+    (func (;13;) (type 16) (param (ref null 2))
+      (local i64 i32 i32 i32)
       (local.set 1
         (call 2))
       (local.set 2
@@ -179,12 +185,51 @@
           (i64.shr_s
             (local.get 1)
             (i64.const 32))))
-      (call 7
-        (local.get 2))
-      (call 9
+      (local.set 4
+        (call 9
+          (local.get 2)
+          (i32.const 2048)))
+      (call 12
         (local.get 3)
         (local.get 0)
         (i32.const 1))
+      (call 14
+        (local.get 4))
+    )
+    (func (;14;) (type 17) (param i32)
+      (local i32 i32 i32)
+      (local.set 1
+        (i32.shr_s
+          (local.get 0)
+          (i32.const 4)))
+      (if ;; label = @1
+        (i32.ne
+          (local.get 1)
+          (i32.const 0))
+        (then
+          (local.set 2
+            (call 7))
+          (call 6
+            (local.get 1)
+            (local.get 2))
+          (local.set 3
+            (call 0
+              (i32.const 0)
+              (i32.const 0)
+              (i32.const 4)
+              (i32.const 8)))
+          (drop
+            (call 8
+              (local.get 2)
+              (local.get 3)))
+          (drop
+            (call 0
+              (local.get 3)
+              (i32.const 8)
+              (i32.const 4)
+              (i32.const 0)))
+          (call 4
+            (local.get 1))))
     )
     (data (;0;) "Hello, world!")
   )
@@ -192,7 +237,11 @@
     (export "stream-drop-writable" (func $stream.drop-writable))
     (export "stream-new" (func $stream.new))
     (export "stream-write" (func $stream.write))
+    (export "subtask-drop" (func $subtask.drop))
     (export "task-return" (func $task.return))
+    (export "waitable-join" (func $waitable.join))
+    (export "waitable-set-new" (func $waitable-set.new))
+    (export "waitable-set-wait" (func $waitable-set.wait))
     (export "wasi:cli/Stdout::write_via_stream" (func $wasi:cli/Stdout::write_via_stream))
   )
   (core instance $mem-instance (;2;)
@@ -204,7 +253,7 @@
       (with "mem" (instance $mem-instance))
     )
   )
-  (alias core export $main "run" (core func $run-core (;6;)))
+  (alias core export $main "run" (core func $run-core (;10;)))
   (type $run-func-type (;5;) (func async (result $result-unit)))
   (func $run (;1;) (type $run-func-type) (canon lift (core func $run-core) async (memory $memory)))
   (export $"#func2 run" (@name "run") (;2;) "run" (func $run))

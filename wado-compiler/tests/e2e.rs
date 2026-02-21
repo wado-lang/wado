@@ -78,6 +78,12 @@ struct TestSpec {
     /// Expected HTTP response body (UTF-8) — HTTP world
     #[serde(default)]
     body: Option<String>,
+
+    /// Preopened directories for WASI filesystem tests.
+    /// Each entry is `[host_path, guest_path]`.
+    /// Paths are relative to the workspace root (cargo test working directory).
+    #[serde(default)]
+    preopened_dirs: Vec<[String; 2]>,
 }
 
 // ---------------------------------------------------------------------------
@@ -89,15 +95,16 @@ fn verify_result(result: &common::WasmRunResult, spec: &TestSpec, fixture_name: 
     // Check trapped status
     assert_eq!(
         result.trapped, spec.trapped,
-        "[{fixture_name}] trapped mismatch: expected {}, got {}",
-        spec.trapped, result.trapped
+        "[{fixture_name}] trapped mismatch: expected {}, got {}\n  stderr: {:?}\n  stdout: {:?}",
+        spec.trapped, result.trapped, result.stderr, result.stdout
     );
 
     // Check stdout exact match if specified
     if let Some(expected_stdout) = &spec.stdout {
         assert_eq!(
             &result.stdout, expected_stdout,
-            "[{fixture_name}] stdout mismatch"
+            "[{fixture_name}] stdout mismatch\n  stderr was: {:?}",
+            result.stderr
         );
     }
 
@@ -481,9 +488,20 @@ fn run_normal_test(
         }
         _ => {
             // Default: wasi:cli/command
-            let result = common::run_wasm(compile_result.wasm).unwrap_or_else(|e| {
-                panic!("[{test_id}] runtime error: {e}");
-            });
+            let result = if spec.preopened_dirs.is_empty() {
+                common::run_wasm(compile_result.wasm).unwrap_or_else(|e| {
+                    panic!("[{test_id}] runtime error: {e}");
+                })
+            } else {
+                let dirs: Vec<(String, String)> = spec
+                    .preopened_dirs
+                    .iter()
+                    .map(|[h, g]| (h.clone(), g.clone()))
+                    .collect();
+                common::run_wasm_with_dirs(compile_result.wasm, &dirs).unwrap_or_else(|e| {
+                    panic!("[{test_id}] runtime error: {e}");
+                })
+            };
             verify_result(&result, spec, test_id);
         }
     }

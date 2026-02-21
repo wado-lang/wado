@@ -53,13 +53,18 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
             "f64" => TypeTable::F64,
             "bool" => TypeTable::BOOL,
             "char" => TypeTable::CHAR,
+            // Unit type written as a named type "()"
+            "()" => TypeTable::UNIT,
             "String" => type_table.make_struct(
                 "String".to_string(),
                 ModuleSource::core("prelude/string.wado"),
             ),
-            // Resource types - look up the already-resolved TypeId if available
+            // Resource/enum/variant types - look up the already-resolved TypeId if available.
+            // We try resource, enum, then variant to find the most specific match.
             _ => type_table
                 .find_resource_type_by_name(named.name.as_str())
+                .or_else(|| type_table.find_enum_type_by_name(named.name.as_str()))
+                .or_else(|| type_table.find_variant_type_by_name(named.name.as_str()))
                 .unwrap_or(TypeTable::I32),
         },
         Type::Generic(g) => match g.name.as_str() {
@@ -71,8 +76,20 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
                 let inner_type = wasi_type_to_type_id(&g.args[0], type_table);
                 type_table.make_option(inner_type)
             }
+            "Result" if g.args.len() == 2 => {
+                let ok_type = wasi_type_to_type_id(&g.args[0], type_table);
+                let err_type = wasi_type_to_type_id(&g.args[1], type_table);
+                type_table.make_generic_instance(
+                    "Result".to_string(),
+                    ModuleSource::core("prelude/types.wado"),
+                    vec![ok_type, err_type],
+                )
+            }
+            // Stream/Future/Own/Borrow are handle types represented as i32
+            "Stream" | "Future" | "Own" | "Borrow" => TypeTable::I32,
             _ => TypeTable::UNIT,
         },
+        Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
                 .iter()
@@ -966,12 +983,29 @@ fn synthesize_lift_result_inner(
         builtin_call("i32_load", vec![addr.clone()], TypeTable::I32),
     ));
 
-    let result_local = alloc_local(next_local, local_types, TypeTable::I32);
+    // Determine the proper variant TypeId for Result<ok_ty, err_ty> so that the
+    // mutable local is typed as a GC reference (not i32). Using TypeTable::I32 as a
+    // placeholder would cause a wasm validation error: the local would be declared as
+    // i32 but initialized with `ref.null none` (a reference type).
+    let result_type_id = if let Some(ctx) = ctx {
+        let mut tt = ctx.type_table.borrow_mut();
+        let ok_type_id = wasi_type_to_type_id(ok_ty, &mut tt);
+        let err_type_id = wasi_type_to_type_id(err_ty, &mut tt);
+        tt.make_generic_instance(
+            "Result".to_string(),
+            ModuleSource::core("prelude/types.wado"),
+            vec![ok_type_id, err_type_id],
+        )
+    } else {
+        TypeTable::I32 // placeholder when no context
+    };
+
+    let result_local = alloc_local(next_local, local_types, result_type_id);
     stmts.push(let_mut_stmt(
         "__result_val",
         result_local,
-        TypeTable::I32,
-        null_expr(TypeTable::I32),
+        result_type_id,
+        null_expr(result_type_id),
     ));
 
     let payload_addr = binary_add(addr, i32_const(payload_offset as i32));
@@ -993,15 +1027,15 @@ fn synthesize_lift_result_inner(
         Some(Box::new(lifted))
     };
     ok_stmts.push(expr_stmt(assign(
-        local_ref(result_local, "__result_val", TypeTable::I32),
+        local_ref(result_local, "__result_val", result_type_id),
         TirExpr::new(
             TirExprKind::VariantConstruct {
-                variant_type: TypeTable::I32,
+                variant_type: result_type_id,
                 case_index: 0,
                 case_name: "Ok".to_string(),
                 payload: ok_payload,
             },
-            TypeTable::I32,
+            result_type_id,
             synth_span(),
         ),
     )));
@@ -1023,15 +1057,15 @@ fn synthesize_lift_result_inner(
         Some(Box::new(lifted))
     };
     err_stmts.push(expr_stmt(assign(
-        local_ref(result_local, "__result_val", TypeTable::I32),
+        local_ref(result_local, "__result_val", result_type_id),
         TirExpr::new(
             TirExprKind::VariantConstruct {
-                variant_type: TypeTable::I32,
+                variant_type: result_type_id,
                 case_index: 1,
                 case_name: "Err".to_string(),
                 payload: err_payload,
             },
-            TypeTable::I32,
+            result_type_id,
             synth_span(),
         ),
     )));
@@ -1047,7 +1081,7 @@ fn synthesize_lift_result_inner(
         Some(block(err_stmts)),
     ));
 
-    local_ref(result_local, "__result_val", TypeTable::I32)
+    local_ref(result_local, "__result_val", result_type_id)
 }
 
 /// Lift a tuple from linear memory at `addr`.
@@ -1849,9 +1883,45 @@ fn synthesize_adapter(
     let adapter_return_type;
 
     if func_info.is_async {
-        // Async: discard subtask handle, return void
-        body_stmts.push(expr_stmt(raw_call_expr));
-        adapter_return_type = TypeTable::UNIT;
+        // WASI P3 async calling convention: the lowered function returns a subtask
+        // handle (i32). 0 = completed synchronously; non-zero = async task in-flight.
+        // In both cases, the result is written to ASYNC_OUTPTR in linear memory.
+        // Save the subtask handle and wait for completion before reading the result.
+        let subtask_local = next_local;
+        local_types.push(TypeTable::I32);
+        next_local += 1;
+        body_stmts.push(let_stmt(
+            "__subtask",
+            subtask_local,
+            TypeTable::I32,
+            raw_call_expr,
+        ));
+        body_stmts.push(expr_stmt(internal_call(
+            "wait_for_subtask",
+            vec![local_ref(subtask_local, "__subtask", TypeTable::I32)],
+            TypeTable::UNIT,
+        )));
+
+        if let Some(return_type) = &func_info.return_type {
+            // Async with result: lift from the fixed ASYNC_OUTPTR location in memory.
+            let resolved = wasi_registry.resolve_type(return_type);
+            let lift_ctx = LiftContext {
+                wasi_registry,
+                type_table,
+            };
+            let lifted = synthesize_lift_with_context(
+                &resolved,
+                i32_const(ASYNC_OUTPTR),
+                &mut next_local,
+                &mut body_stmts,
+                &mut local_types,
+                &lift_ctx,
+            );
+            body_stmts.push(return_stmt(Some(lifted)));
+            adapter_return_type = TypeTable::I32; // placeholder, fixed up at call site
+        } else {
+            adapter_return_type = TypeTable::UNIT;
+        }
     } else if let Some((alloc_size, alloc_align)) = outptr_alloc {
         body_stmts.push(expr_stmt(raw_call_expr));
         let outptr_local = next_local - 1;

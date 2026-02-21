@@ -50,8 +50,6 @@ type "functype/wasi/wasi:cli/Stdout::write_via_stream" = fn(i32, i32) -> i32;
 
 type "functype/run" = fn();
 
-type "functype/__cm_adapter__Stdout_write_via_stream" = fn(i32);
-
 type "functype/__cm_export__run" = fn();
 
 type "functype/core:cli/write_to_stream" = fn(i32, ref null String, bool);
@@ -306,10 +304,6 @@ fn run() with Stdout {
     "core:cli/println"(String { repr: array.new_data<u8>[12](0, 2), used: 2 });
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data) {
-    drop("wasi/wasi:cli/Stdout::write_via_stream"(data, 2048));
-}
-
 fn __cm_export__run() {
     run();
     "wasi/task-return"(0);
@@ -359,11 +353,13 @@ fn "core:cli/println"(message) with Stdout {  // from core:cli
     let handles: i64;
     let rx: i32;
     let tx: i32;
+    let subtask: i32;
     handles = "wasi/stream-new"();
     rx = builtin::i32_wrap_i64(handles);
     tx = builtin::i32_wrap_i64(handles >> 32_i64);
-    __cm_adapter__Stdout_write_via_stream(rx);
+    subtask = "wasi/wasi:cli/Stdout::write_via_stream"(rx, 2048);
     "core:cli/write_to_stream"(tx, message, 1);
+    "core:internal/wait_for_subtask"(subtask);
 }
 
 fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
@@ -409,16 +405,18 @@ fn "core:internal/write_string_to_stream"(tx, message, add_newline) {  // from c
     "wasi/stream-drop-writable"(tx);
 }
 
-fn "core:internal/wait_for_subtask"(subtask) {  // from core:internal
+fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
+    let handle: i32;
     let ws: i32;
     let ptr: i32;
-    if (subtask & 1) == 0 {
+    handle = packed >> 4;
+    if handle != 0 {
         ws = "wasi/waitable-set-new"();
-        "wasi/waitable-join"(ws, subtask);
+        "wasi/waitable-join"(handle, ws);
         ptr = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(ws, ptr));
         drop("mem/realloc"(ptr, 8, 4, 0));
-        "wasi/subtask-drop"(subtask);
+        "wasi/subtask-drop"(handle);
     };
 }
 

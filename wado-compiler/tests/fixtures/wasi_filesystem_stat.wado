@@ -15,6 +15,7 @@ use {
     Preopens,
     Descriptor,
     DescriptorType,
+    Filesize,
     PathFlags,
     OpenFlags,
     DescriptorFlags,
@@ -42,7 +43,7 @@ export fn run() with Stdout, Stderr, Preopens {
         }
 
         // hello.txt contains "Hello, World!\n" = 14 bytes
-        if stat.size == 14 as u64 {
+        if stat.size == 14 as Filesize {
             println("stat_at: size is correct (14 bytes)");
         } else {
             eprintln(`stat_at: unexpected size: {stat.size}`);
@@ -86,6 +87,7 @@ export fn run() with Stdout, Stderr, Preopens {
 __DATA__
 {
     "TODO": true,
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout_contains": [
         "stat_at: type is RegularFile (correct)",
         "stat_at: size is correct (14 bytes)",

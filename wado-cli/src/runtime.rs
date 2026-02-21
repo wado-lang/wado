@@ -60,7 +60,10 @@ pub fn create_engine(opt_level: OptLevel) -> Result<Engine> {
 
 /// Create a Store with WASI state, optionally with preopened directories.
 /// Each entry is `(host_path, guest_path)`.
-pub fn create_store(engine: &Engine, preopened_dirs: &[(String, String)]) -> Result<Store<WasiState>> {
+pub fn create_store(
+    engine: &Engine,
+    preopened_dirs: &[(String, String)],
+) -> Result<Store<WasiState>> {
     Ok(Store::new(engine, WasiState::new(preopened_dirs)?))
 }
 

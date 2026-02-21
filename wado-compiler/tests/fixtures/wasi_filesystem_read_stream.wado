@@ -11,7 +11,7 @@
 //     wado-compiler/tests/fixtures/wasi_filesystem_read_stream.wado
 
 use { eprintln, Stdout, Stderr } from "core:cli";
-use { Preopens, Descriptor, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
 export fn run() with Stdout, Stderr, Preopens {
     let dirs = Preopens::get_directories();
@@ -34,7 +34,7 @@ export fn run() with Stdout, Stderr, Preopens {
     if let Ok(file) = open_result {
         // read_via_stream returns [Stream<u8>, Future<Result<(), ErrorCode>>]
         // The stream starts at byte offset 0 (beginning of file)
-        let [read_stream, _done] = file.read_via_stream(0 as u64);
+        let [read_stream, _done] = file.read_via_stream(0 as Filesize);
 
         // Pipe the file's read stream directly to stdout
         // This prints the file contents: "Hello, World!\n"
@@ -46,6 +46,6 @@ export fn run() with Stdout, Stderr, Preopens {
 
 __DATA__
 {
-    "TODO": true,
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
     "stdout": "Hello, World!\n"
 }

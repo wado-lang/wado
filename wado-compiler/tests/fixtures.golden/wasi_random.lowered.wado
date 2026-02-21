@@ -7,7 +7,11 @@
 // wasi::stream-drop-writable (stream_drop_writable)
 // wasi::stream-new (stream_new)
 // wasi::stream-write (stream_write)
+// wasi::subtask-drop (subtask_drop)
 // wasi::task-return (task_return)
+// wasi::waitable-join (waitable_join)
+// wasi::waitable-set-new (waitable_set_new)
+// wasi::waitable-set-wait (waitable_set_wait)
 
 export fn run() with Stdout, Random, Insecure, InsecureSeed {
     let r1: u64 = __cm_adapter__Random_get_random_u64();
@@ -41,10 +45,6 @@ export fn run() with Stdout, Random, Insecure, InsecureSeed {
         core::cli::println(move "test: insecure seed produced zeros (unlikely but valid)");
     }
     core::cli::println(move "all random tests passed");
-}
-
-fn __cm_adapter__Stdout_write_via_stream(data: i32) {
-    cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
 }
 
 fn __cm_adapter__Random_get_random_u64() -> u64 {

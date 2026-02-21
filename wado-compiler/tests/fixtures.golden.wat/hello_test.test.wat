@@ -479,20 +479,22 @@
         (local.get 0))
     )
     (func (;16;) (type 20) (param i32)
-      (local i32 i32)
+      (local i32 i32 i32)
+      (local.set 1
+        (i32.shr_s
+          (local.get 0)
+          (i32.const 4)))
       (if ;; label = @1
-        (i32.eq
-          (i32.and
-            (local.get 0)
-            (i32.const 1))
+        (i32.ne
+          (local.get 1)
           (i32.const 0))
         (then
-          (local.set 1
+          (local.set 2
             (call 7))
           (call 6
             (local.get 1)
-            (local.get 0))
-          (local.set 2
+            (local.get 2))
+          (local.set 3
             (call 0
               (i32.const 0)
               (i32.const 0)
@@ -500,16 +502,16 @@
               (i32.const 8)))
           (drop
             (call 8
-              (local.get 1)
-              (local.get 2)))
+              (local.get 2)
+              (local.get 3)))
           (drop
             (call 0
-              (local.get 2)
+              (local.get 3)
               (i32.const 8)
               (i32.const 4)
               (i32.const 0)))
           (call 4
-            (local.get 0))))
+            (local.get 1))))
     )
     (func (;17;) (type 21) (param (ref null 2))
       (local i64 i32 i32 i32)

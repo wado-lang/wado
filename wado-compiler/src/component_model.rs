@@ -568,6 +568,12 @@ impl WasiRegistry {
             .map(|(cm_name, _)| cm_name.as_str())
     }
 
+    /// Check if an interface defines its own enum type (exact interface path match, no fallback)
+    pub fn has_enum_in_interface(&self, interface_path: &str, name: &str) -> bool {
+        let full_key = format!("{interface_path}#{name}");
+        self.enums.contains_key(&full_key)
+    }
+
     /// Check if a type name is a registered flags type
     pub fn is_flags(&self, name: &str) -> bool {
         self.flags.contains_key(name)
