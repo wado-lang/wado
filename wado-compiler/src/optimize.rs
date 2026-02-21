@@ -24,7 +24,10 @@ mod sroa;
 use const_fold::fold_constants;
 use const_prop::propagate_constants;
 use copy_prop::propagate_copies;
-use dce::{analyze_project, remove_unreachable_functions, remove_unreachable_types};
+use dce::{
+    analyze_project, prune_constant_branches, remove_unreachable_functions,
+    remove_unreachable_types,
+};
 use inline::inline_functions;
 use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
@@ -154,6 +157,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
 /// - Copy propagation
 /// - Constant propagation (global constants → literals)
 /// - Constant folding
+/// - Constant branch pruning (dead branch elimination)
 /// - Loop-invariant code motion (LICM)
 ///
 /// The `config` parameter controls the number of iterations and inline threshold.
@@ -167,6 +171,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         changed |= propagate_copies(project);
         changed |= propagate_constants(project);
         changed |= fold_constants(project);
+        changed |= prune_constant_branches(project);
         changed |= apply_licm(project);
         if !changed {
             break;

@@ -14,13 +14,11 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
-    let x: i32 = if false {
-        1;
-    } else {
-        if false {
-            2;
-        } else {
-            core::builtin::select::<i32>(true, 3, 4);
+    let x: i32 = {
+        {
+            {
+                3;
+            };
         };
     };
     core::cli::println(__tmpl: {
@@ -36,10 +34,8 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let y: i32 = if true {
+    let y: i32 = {
         100;
-    } else {
-        core::builtin::select::<i32>(false, 200, 300);
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };

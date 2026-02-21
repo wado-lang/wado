@@ -1,7 +1,12 @@
 //! Dead Code Elimination (DCE) for Wado TIR
 //!
-//! This module provides function-level dead code elimination through reachability analysis.
-//! It starts from the entry point and traces all reachable functions via the call graph.
+//! This module provides dead code elimination at two levels:
+//!
+//! 1. **Function-level DCE**: Reachability analysis starting from the entry point,
+//!    removing functions that are never called.
+//!
+//! 2. **Constant branch pruning**: When an `if` condition is a compile-time boolean
+//!    literal, the dead branch is eliminated and the taken branch is inlined in place.
 
 use indexmap::IndexSet;
 
@@ -11,8 +16,8 @@ use crate::name::{
 };
 use crate::project::Project;
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule, TirStmtKind,
-    TypeId, TypeTable,
+    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirImport, TirModule, TirStmt,
+    TirStmtKind, TypeId, TypeTable,
 };
 use indexmap::IndexMap;
 
@@ -1837,6 +1842,280 @@ pub fn remove_unreachable_types(project: &mut Project) {
         let mut type_table = module.type_table.borrow_mut();
         type_table.retain(|type_id, _| reachable_types.contains(&type_id));
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Constant branch pruning
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Eliminate dead branches where the `if` condition is a compile-time boolean literal.
+///
+/// **Statement-level (`TirStmtKind::If`):**
+/// - `if true  { A } [else { B }]` → inline A's statements
+/// - `if false { A }`              → remove entirely
+/// - `if false { A } else { B }`   → inline B's statements
+///
+/// **Expression-level (`TirExprKind::If`):**
+/// - `if true  { A } [else { B }]` → `Block(A)`
+/// - `if false { A }`              → `Unit`
+/// - `if false { A } else { B }`   → `Block(B)`
+pub fn prune_constant_branches(project: &mut Project) -> bool {
+    let mut changed = false;
+    for module in project.tir_modules.values_mut() {
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            changed |= prune_branches_in_function(&mut func);
+        }
+    }
+    changed
+}
+
+fn prune_branches_in_function(func: &mut TirFunction) -> bool {
+    let Some(body) = &mut func.body else {
+        return false;
+    };
+    prune_branches_in_block(body)
+}
+
+fn prune_branches_in_block(block: &mut TirBlock) -> bool {
+    let mut changed = false;
+    for stmt in &mut block.stmts {
+        changed |= prune_branches_in_stmt(stmt);
+    }
+    // Inline taken branches of constant `if` statements.
+    changed |= inline_constant_if_stmts(block);
+    changed
+}
+
+fn prune_branches_in_stmt(stmt: &mut TirStmt) -> bool {
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, .. } => prune_branches_in_expr(value),
+        TirStmtKind::Expr(expr) => prune_branches_in_expr(expr),
+        TirStmtKind::Return { value } => value.as_mut().is_some_and(prune_branches_in_expr),
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            let mut changed = prune_branches_in_expr(condition);
+            changed |= prune_branches_in_block(then_block);
+            if let Some(eb) = else_block {
+                changed |= prune_branches_in_block(eb);
+            }
+            changed
+        }
+        TirStmtKind::Loop { body } => prune_branches_in_block(body),
+        TirStmtKind::LabeledBlock { block, .. } => prune_branches_in_block(block),
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            let mut changed = prune_branches_in_expr(scrutinee);
+            changed |= prune_branches_in_block(then_block);
+            if let Some(eb) = else_block {
+                changed |= prune_branches_in_block(eb);
+            }
+            changed
+        }
+        TirStmtKind::Break { value, .. } => value.as_mut().is_some_and(prune_branches_in_expr),
+        TirStmtKind::Continue => false,
+        TirStmtKind::LetPattern { value, .. } => prune_branches_in_expr(value),
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+        }
+    }
+}
+
+fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
+    let mut changed = false;
+
+    // Recurse into sub-expressions first (bottom-up)
+    match &mut expr.kind {
+        TirExprKind::Binary { left, right, .. } => {
+            changed |= prune_branches_in_expr(left);
+            changed |= prune_branches_in_expr(right);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Move { expr: inner }
+        | TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
+            changed |= prune_branches_in_expr(inner);
+        }
+        TirExprKind::Assign { target, value } => {
+            changed |= prune_branches_in_expr(target);
+            changed |= prune_branches_in_expr(value);
+        }
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
+            changed |= prune_branches_in_expr(inner);
+            changed |= prune_branches_in_expr(index);
+        }
+        TirExprKind::Call { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                changed |= prune_branches_in_expr(arg);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            changed |= prune_branches_in_expr(receiver);
+            for arg in args {
+                changed |= prune_branches_in_expr(arg);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            changed |= prune_branches_in_expr(callee);
+            for arg in args {
+                changed |= prune_branches_in_expr(arg);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            changed |= prune_branches_in_expr(functor);
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            changed |= prune_branches_in_block(block);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            changed |= prune_branches_in_expr(condition);
+            changed |= prune_branches_in_block(then_branch);
+            if let Some(eb) = else_branch {
+                changed |= prune_branches_in_block(eb);
+            }
+        }
+        TirExprKind::Match { expr: inner, arms } => {
+            changed |= prune_branches_in_expr(inner);
+            for arm in arms {
+                if let Some(guard) = &mut arm.guard {
+                    changed |= prune_branches_in_expr(guard);
+                }
+                changed |= prune_branches_in_expr(&mut arm.body);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                changed |= prune_branches_in_expr(&mut field.value);
+            }
+        }
+        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+            for elem in elements {
+                changed |= prune_branches_in_expr(elem);
+            }
+        }
+        TirExprKind::OptionSome { value } => {
+            changed |= prune_branches_in_expr(value);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                changed |= prune_branches_in_expr(p);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            changed |= prune_branches_in_expr(body);
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            changed |= prune_branches_in_expr(value);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            changed |= prune_branches_in_expr(scrutinee);
+            for arm in arms {
+                changed |= prune_branches_in_block(arm);
+            }
+            changed |= prune_branches_in_block(default);
+        }
+        // Leaf nodes
+        TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+
+    // Prune expression-level `if` with constant boolean condition.
+    if let TirExprKind::If { condition, .. } = &expr.kind
+        && let TirExprKind::BoolLiteral(value) = condition.kind
+    {
+        let TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+        else {
+            unreachable!();
+        };
+        if value {
+            expr.kind = TirExprKind::Block(then_branch);
+        } else if let Some(else_blk) = else_branch {
+            expr.kind = TirExprKind::Block(else_blk);
+        }
+        // false without else: type is Unit, TirExprKind::Unit is already set
+        changed = true;
+    }
+
+    changed
+}
+
+/// Replace statement-level `if` nodes whose condition is a constant boolean
+/// by inlining the taken branch's statements (or removing entirely).
+fn inline_constant_if_stmts(block: &mut TirBlock) -> bool {
+    let any_constant = block.stmts.iter().any(|s| {
+        matches!(
+            &s.kind,
+            TirStmtKind::If { condition, .. }
+                if matches!(condition.kind, TirExprKind::BoolLiteral(_))
+        )
+    });
+    if !any_constant {
+        return false;
+    }
+
+    let old_stmts = std::mem::take(&mut block.stmts);
+    for stmt in old_stmts {
+        if let TirStmtKind::If { ref condition, .. } = stmt.kind
+            && let TirExprKind::BoolLiteral(value) = condition.kind
+        {
+            let TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } = stmt.kind
+            else {
+                unreachable!();
+            };
+            if value {
+                block.stmts.extend(then_block.stmts);
+            } else if let Some(else_blk) = else_block {
+                block.stmts.extend(else_blk.stmts);
+            }
+            // false without else: drop entirely
+            continue;
+        }
+        block.stmts.push(stmt);
+    }
+    true
 }
 
 #[cfg(test)]
