@@ -1,0 +1,34 @@
+// Test constant global promotion (CGP):
+// Globals with non-constant initializers that fold to constants
+// should be promoted back to immutable compile-time constants.
+use { println, Stdout } from "core:cli";
+
+// Chain of dependent globals: each depends on the previous
+global BASE: i32 = 10;
+global STEP: i32 = BASE + 5;       // should promote to 15
+global DOUBLED: i32 = STEP * 2;    // should promote to 30
+global COMBINED: i32 = BASE + DOUBLED; // should promote to 40
+
+// Arithmetic that folds to a constant
+global PRODUCT: i32 = 7 * 6;       // should promote to 42
+
+// Mixed types
+global LONG: i64 = 1000 as i64 + 234 as i64; // should promote to 1234
+
+// User-declared mutable globals should NOT be promoted
+global mut COUNTER: i32 = 0;
+
+export fn run() with Stdout {
+    println(`BASE={BASE}`);
+    println(`STEP={STEP}`);
+    println(`DOUBLED={DOUBLED}`);
+    println(`COMBINED={COMBINED}`);
+    println(`PRODUCT={PRODUCT}`);
+    println(`LONG={LONG}`);
+    // Verify mutable global works normally
+    COUNTER = COUNTER + 1;
+    println(`COUNTER={COUNTER}`);
+}
+
+__DATA__
+{"stdout": "BASE=10\nSTEP=15\nDOUBLED=30\nCOMBINED=40\nPRODUCT=42\nLONG=1234\nCOUNTER=1\n"}

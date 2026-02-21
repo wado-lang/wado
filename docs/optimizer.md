@@ -45,12 +45,13 @@ The optimizer runs after lowering and before Wasm plan/codegen:
 1. Fixed-point iteration loop (skipped for `-O0`):
    1. Function Inlining
    2. Reference Elimination
-   3. Scalar Replacement of Aggregates (SROA)
+   3. SROA (Scalar Replacement of Aggregates)
    4. Copy Propagation
    5. Constant Propagation
    6. Constant Folding
-   7. Constant Branch Pruning
-   8. Loop-Invariant Code Motion (LICM)
+   7. Constant Global Promotion
+   8. Constant Branch Pruning
+   9. Loop-Invariant Code Motion (LICM)
 2. DCE Analysis and removal of unreachable functions/types (all levels)
 3. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
 
@@ -121,6 +122,12 @@ Eliminates branches with compile-time-known boolean conditions. When `if true { 
 - `{ expr; }` → `expr` (single-expression block)
 - `label: { break label: val; }` → `val` (trivial labeled block from inlining)
 - Empty blocks → `()` (unit)
+
+### Constant Global Promotion
+
+**Module:** `optimize/const_global_promotion.rs`
+
+After constant propagation and folding reduce runtime initializations to scalar constants, this pass promotes those globals back to immutable compile-time constants. Scans `__initialize_module` functions for `GlobalVarSet` with constant values targeting promotable globals (user-declared immutable but forced Wasm-mutable by lowering), updates the initializer, marks immutable, and removes the dead `GlobalVarSet` statements. Enables cascading optimization: promoted constants feed back into constant propagation in subsequent iterations.
 
 ### Loop-Invariant Code Motion (LICM)
 

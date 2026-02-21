@@ -1640,6 +1640,10 @@ pub struct TirGlobal {
     pub ty: TypeId,
     pub initializer: TirExpr,
     pub mutable: bool,
+    /// Whether the user declared this global as `global mut`.
+    /// Preserved across lowering so the optimizer can promote lazy-init globals
+    /// back to immutable when their initializers fold to constants.
+    pub wado_mutable: bool,
     pub is_pub: bool,
     /// Module where this global is defined
     pub module_source: ModuleSource,

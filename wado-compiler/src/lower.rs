@@ -2265,6 +2265,7 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         ty: TypeTable::BOOL,
         initializer: TirExpr::new(TirExprKind::BoolLiteral(false), TypeTable::BOOL, span),
         mutable: true,
+        wado_mutable: true,
         is_pub: false,
         module_source: entry_source.clone(),
         span,

@@ -12,6 +12,7 @@
 //! - Post-optimization rewrites (select lowering, move insertion) via `rewrite` module
 
 mod const_fold;
+mod const_global_promotion;
 mod const_prop;
 mod copy_prop;
 pub mod dce;
@@ -22,6 +23,7 @@ mod rewrite;
 mod sroa;
 
 use const_fold::fold_constants;
+use const_global_promotion::promote_constant_globals;
 use const_prop::propagate_constants;
 use copy_prop::propagate_copies;
 use dce::{
@@ -171,6 +173,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         changed |= propagate_copies(project);
         changed |= propagate_constants(project);
         changed |= fold_constants(project);
+        changed |= promote_constant_globals(project);
         changed |= prune_constant_branches(project);
         changed |= apply_licm(project);
         if !changed {

@@ -2538,6 +2538,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             ty,
             initializer,
             mutable: global_decl.mutable,
+            wado_mutable: global_decl.mutable,
             is_pub: global_decl.is_pub,
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
