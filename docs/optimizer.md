@@ -462,31 +462,6 @@ Implementation: Detect `return func(...)` pattern in TIR, emit `return_call` ins
 | Find first bit       | Loop with shifts  | Use `clz` / `ctz`                                                 |
 | Loop unrolling       | Replicate code 4x | Don't — increases code size, Wasm runtimes already optimize loops |
 
-## Implementation Roadmap
-
-### Phase 1: Pattern Recognition and Wasm-Native Features
-
-- Expose remaining bit intrinsics (`i32_ctz`, `i64_ctz`, `i32_popcnt`, `i64_popcnt`)
-- Tail call optimization (`return_call`)
-- Bit manipulation pattern recognition (log2, popcount, ctz loops)
-
-### Phase 2: Loop Optimizations
-
-- Strength reduction (expensive loop ops to cheaper equivalents)
-- Bounds check elimination (value range propagation)
-
-### Phase 3: Scalar Optimizations
-
-- SCCP (simultaneous constant propagation and dead branch elimination)
-- Common subexpression elimination / GVN
-- Peephole optimization / instruction combining
-- Dead store elimination
-
-### Phase 4: Allocation Optimizations
-
-- Return scalarization via multi-value returns (eliminate struct allocation at function boundaries)
-- Function specialization for known constants
-
 ## Testing Strategy
 
 1. Golden Fixtures: `tests/fixtures.golden/*.lowered.wado` captures optimized TIR output. Regenerate with `make update-golden-fixtures`.
