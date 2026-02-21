@@ -1882,8 +1882,8 @@ fn prune_branches_in_block(block: &mut TirBlock) -> bool {
     for stmt in &mut block.stmts {
         changed |= prune_branches_in_stmt(stmt);
     }
-    // Inline taken branches of constant `if` statements.
-    changed |= inline_constant_if_stmts(block);
+    // Eliminate dead statements: constant `if`, empty labeled blocks.
+    changed |= eliminate_dead_stmts(block);
     changed
 }
 
@@ -2078,22 +2078,29 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
     changed
 }
 
-/// Replace statement-level `if` nodes whose condition is a constant boolean
-/// by inlining the taken branch's statements (or removing entirely).
-fn inline_constant_if_stmts(block: &mut TirBlock) -> bool {
-    let any_constant = block.stmts.iter().any(|s| {
+/// Eliminate dead statements from a block:
+/// - `if true { A } [else { B }]` → inline A's statements
+/// - `if false { A }` → remove
+/// - `if false { A } else { B }` → inline B's statements
+/// - `label: { }` (empty labeled block) → remove
+fn eliminate_dead_stmts(block: &mut TirBlock) -> bool {
+    let dominated = |s: &TirStmt| {
         matches!(
             &s.kind,
             TirStmtKind::If { condition, .. }
                 if matches!(condition.kind, TirExprKind::BoolLiteral(_))
+        ) || matches!(
+            &s.kind,
+            TirStmtKind::LabeledBlock { block, .. } if block.stmts.is_empty()
         )
-    });
-    if !any_constant {
+    };
+    if !block.stmts.iter().any(dominated) {
         return false;
     }
 
     let old_stmts = std::mem::take(&mut block.stmts);
     for stmt in old_stmts {
+        // Constant `if` → inline taken branch or drop
         if let TirStmtKind::If { ref condition, .. } = stmt.kind
             && let TirExprKind::BoolLiteral(value) = condition.kind
         {
@@ -2110,7 +2117,12 @@ fn inline_constant_if_stmts(block: &mut TirBlock) -> bool {
             } else if let Some(else_blk) = else_block {
                 block.stmts.extend(else_blk.stmts);
             }
-            // false without else: drop entirely
+            continue;
+        }
+        // Empty labeled block → drop
+        if let TirStmtKind::LabeledBlock { block: inner, .. } = &stmt.kind
+            && inner.stmts.is_empty()
+        {
             continue;
         }
         block.stmts.push(stmt);
