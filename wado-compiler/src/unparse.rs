@@ -338,6 +338,11 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_struct_field(&mut self, field: &StructField) {
+        for attr in &field.attrs {
+            self.write_indent();
+            self.unparse_attribute(attr);
+            self.output.push('\n');
+        }
         self.write_indent();
         self.output.push_str(&field.name);
         self.output.push_str(": ");

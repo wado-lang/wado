@@ -30,7 +30,9 @@ pub type Mark = u64;
 /// [Unix Time]: https://en.wikipedia.org/wiki/Unix_time
 #[wasi("wasi:clocks/system-clock@0.3.0-rc-2026-01-06#instant")]
 pub struct Instant {
+    #[wasi("seconds")]
     seconds: i64,
+    #[wasi("nanoseconds")]
     nanoseconds: u32,
 }
 
@@ -62,9 +64,11 @@ pub effect MonotonicClock {
     fn get_resolution() -> Duration;
     /// Wait until the specified mark has occurred.
     #[wasi("wasi:clocks/monotonic-clock@0.3.0-rc-2026-01-06#wait-until")]
+    #[wasi_params("when")]
     async fn wait_until(when: Mark);
     /// Wait for the specified duration to elapse.
     #[wasi("wasi:clocks/monotonic-clock@0.3.0-rc-2026-01-06#wait-for")]
+    #[wasi_params("how-long")]
     async fn wait_for(how_long: Duration);
 }
 
@@ -121,6 +125,7 @@ pub effect Timezone {
     /// and UTC, or determining the current timezone fails, this returns
     /// nothing.
     #[wasi("wasi:clocks/timezone@0.3.0-rc-2026-01-06#utc-offset")]
+    #[wasi_params("when")]
     fn utc_offset(when: Instant) -> Option<i64>;
     /// Returns a string that is suitable to assist humans in debugging whether
     /// any timezone is available, and if so, which. This may be the same string

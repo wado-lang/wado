@@ -67,6 +67,8 @@ pub struct WadoFlags {
 pub struct WadoFlagMember {
     pub name: String,
     pub doc_comment: Option<String>,
+    /// Original WIT kebab-case name for the `#[wasi("...")]` attribute
+    pub wasi_attr: String,
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +84,8 @@ pub struct WadoField {
     pub name: String,
     pub ty: WadoType,
     pub doc_comment: Option<String>,
+    /// Original WIT kebab-case name for the `#[wasi("...")]` attribute
+    pub wasi_attr: String,
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +143,8 @@ pub struct WadoFunction {
 pub struct WadoParam {
     pub name: String,
     pub ty: WadoType,
+    /// Original WIT kebab-case name for the `#[wasi_params]` attribute
+    pub wit_name: String,
 }
 
 #[derive(Debug, Clone)]

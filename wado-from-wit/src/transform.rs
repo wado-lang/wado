@@ -262,6 +262,7 @@ impl<'a> Transformer<'a> {
                 Ok(WadoParam {
                     name: to_snake_case(name),
                     ty: self.transform_type(*ty)?,
+                    wit_name: name.clone(),
                 })
             })
             .collect()
@@ -396,6 +397,7 @@ impl<'a> Transformer<'a> {
                     .map(|flag| WadoFlagMember {
                         name: to_upper_camel_case(&flag.name),
                         doc_comment: flag.docs.contents.clone(),
+                        wasi_attr: flag.name.clone(),
                     })
                     .collect();
 
@@ -415,6 +417,7 @@ impl<'a> Transformer<'a> {
                             name: to_snake_case(&field.name),
                             ty: self.transform_type(field.ty)?,
                             doc_comment: field.docs.contents.clone(),
+                            wasi_attr: field.name.clone(),
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;

@@ -1071,6 +1071,8 @@ pub struct StructDecl {
 pub struct StructField {
     pub name: String,
     pub ty: Type,
+    /// Attributes like `#[wasi("...")]` for CM name override
+    pub attrs: Vec<Attribute>,
     pub span: Span,
 }
 
