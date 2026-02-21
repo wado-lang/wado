@@ -198,12 +198,6 @@ fn is_inline_eligible(
         return false;
     }
 
-    // Only inline functions with a single return at the end
-    // Functions with early returns (inside if/while) are too complex to inline
-    if has_early_return(body) {
-        return false;
-    }
-
     // Small enough (based on expression count)
     count_block_exprs(body) < inline_threshold
 }
@@ -212,101 +206,6 @@ fn is_inline_eligible(
 /// Uses the `TypeTable`'s type metadata to check for nested generic types.
 fn has_complex_nested_generic(type_id: TypeId, type_table: &TypeTable) -> bool {
     type_table.has_nested_generics(type_id)
-}
-
-/// Check if a block has early returns (returns inside if/while blocks)
-fn has_early_return(block: &TirBlock) -> bool {
-    for (i, stmt) in block.stmts.iter().enumerate() {
-        let is_last = i == block.stmts.len() - 1;
-        match &stmt.kind {
-            TirStmtKind::Return { .. } => {
-                // Return is only OK if it's the last statement
-                if !is_last {
-                    return true;
-                }
-            }
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                // Check if there are returns inside if blocks
-                if block_has_return(then_block) {
-                    return true;
-                }
-                if let Some(else_blk) = else_block
-                    && block_has_return(else_blk)
-                {
-                    return true;
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                if block_has_return(body) {
-                    return true;
-                }
-            }
-            TirStmtKind::IfPattern {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if block_has_return(then_block) {
-                    return true;
-                }
-                if let Some(else_blk) = else_block
-                    && block_has_return(else_blk)
-                {
-                    return true;
-                }
-            }
-            _ => {}
-        }
-    }
-    false
-}
-
-/// Check if a block contains any return statement
-fn block_has_return(block: &TirBlock) -> bool {
-    for stmt in &block.stmts {
-        match &stmt.kind {
-            TirStmtKind::Return { .. } => return true,
-            TirStmtKind::If {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if block_has_return(then_block) {
-                    return true;
-                }
-                if let Some(else_blk) = else_block
-                    && block_has_return(else_blk)
-                {
-                    return true;
-                }
-            }
-            TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-                if block_has_return(body) {
-                    return true;
-                }
-            }
-            TirStmtKind::IfPattern {
-                then_block,
-                else_block,
-                ..
-            } => {
-                if block_has_return(then_block) {
-                    return true;
-                }
-                if let Some(else_blk) = else_block
-                    && block_has_return(else_blk)
-                {
-                    return true;
-                }
-            }
-            _ => {}
-        }
-    }
-    false
 }
 
 /// Check if any expression in the function body has a type with complex nested generics.
@@ -1741,7 +1640,14 @@ fn try_inline_static_call_expr(
     Some((inlined_expr, inlined_key))
 }
 
-/// Remap locals and convert returns to break statements with the given label
+/// Remap locals and convert returns to break statements with the given label.
+///
+/// Scope blocks (`LabeledBlock` stmts) whose labels are not targeted by any
+/// `break` in their body are flattened into the parent. This is safe because
+/// inlining remaps all locals to unique indices, making variable scoping
+/// irrelevant. Without flattening, intermediate void scope blocks between the
+/// inline label and a `break` targeting it produce invalid Wasm: the void
+/// block's fallthrough leaves nothing on the stack for the outer typed block.
 fn remap_and_convert_returns(
     block: &TirBlock,
     param_to_local: &IndexMap<u32, u32>,
@@ -1767,6 +1673,22 @@ fn remap_and_convert_returns(
                     stmt.span,
                 ));
             }
+            TirStmtKind::LabeledBlock {
+                label: inner_label,
+                block: inner_block,
+            } if !block_has_break_to(inner_label, inner_block) => {
+                // Flatten: scope block has no breaks targeting its own label,
+                // so just inline its stmts into the parent
+                let inner = remap_and_convert_returns(
+                    inner_block,
+                    param_to_local,
+                    local_offset,
+                    param_count,
+                    label,
+                    source_module,
+                );
+                stmts.extend(inner);
+            }
             _ => {
                 stmts.push(remap_stmt_with_label(
                     stmt,
@@ -1781,6 +1703,75 @@ fn remap_and_convert_returns(
     }
 
     stmts
+}
+
+/// Check if any `break` statement in the block targets the given label.
+fn block_has_break_to(label: &str, block: &TirBlock) -> bool {
+    block.stmts.iter().any(|s| stmt_has_break_to(label, s))
+}
+
+fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
+    match &stmt.kind {
+        TirStmtKind::Break { label: Some(l), .. } => l == label,
+        TirStmtKind::Let { value, .. } => expr_has_break_to(label, value),
+        TirStmtKind::Expr(expr) => expr_has_break_to(label, expr),
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            expr_has_break_to(label, condition)
+                || block_has_break_to(label, then_block)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| block_has_break_to(label, b))
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            block_has_break_to(label, body)
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            expr_has_break_to(label, scrutinee)
+                || block_has_break_to(label, then_block)
+                || else_block
+                    .as_ref()
+                    .is_some_and(|b| block_has_break_to(label, b))
+        }
+        TirStmtKind::Return { value } => {
+            value.as_ref().is_some_and(|v| expr_has_break_to(label, v))
+        }
+        TirStmtKind::LetPattern { value, .. } => expr_has_break_to(label, value),
+        TirStmtKind::TaskReturn { value } => expr_has_break_to(label, value),
+        _ => false,
+    }
+}
+
+fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            block_has_break_to(label, block)
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expr_has_break_to(label, condition)
+                || block_has_break_to(label, then_branch)
+                || else_branch
+                    .as_ref()
+                    .is_some_and(|b| block_has_break_to(label, b))
+        }
+        TirExprKind::Match { expr, arms } => {
+            expr_has_break_to(label, expr)
+                || arms.iter().any(|arm| expr_has_break_to(label, &arm.body))
+        }
+        _ => false,
+    }
 }
 
 /// Remap local indices in a statement, converting nested returns to breaks
@@ -2006,7 +1997,10 @@ fn remap_pattern(
     }
 }
 
-/// Remap local indices in a block with label for return conversion
+/// Remap local indices in a block with label for return conversion.
+///
+/// Like `remap_and_convert_returns`, this flattens scope blocks whose labels
+/// are not targeted by any break.
 fn remap_block_with_label(
     block: &TirBlock,
     param_to_local: &IndexMap<u32, u32>,
@@ -2015,23 +2009,36 @@ fn remap_block_with_label(
     label: &str,
     source_module: &[String],
 ) -> TirBlock {
-    TirBlock::new(
-        block
-            .stmts
-            .iter()
-            .map(|s| {
-                remap_stmt_with_label(
-                    s,
+    let mut stmts = Vec::new();
+    for stmt in &block.stmts {
+        match &stmt.kind {
+            TirStmtKind::LabeledBlock {
+                label: inner_label,
+                block: inner_block,
+            } if !block_has_break_to(inner_label, inner_block) => {
+                let inner = remap_and_convert_returns(
+                    inner_block,
                     param_to_local,
                     local_offset,
                     param_count,
                     label,
                     source_module,
-                )
-            })
-            .collect(),
-        block.span,
-    )
+                );
+                stmts.extend(inner);
+            }
+            _ => {
+                stmts.push(remap_stmt_with_label(
+                    stmt,
+                    param_to_local,
+                    local_offset,
+                    param_count,
+                    label,
+                    source_module,
+                ));
+            }
+        }
+    }
+    TirBlock::new(stmts, block.span)
 }
 
 /// Remap a local index

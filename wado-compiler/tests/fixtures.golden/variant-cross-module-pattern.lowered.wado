@@ -13,26 +13,22 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
-fn compare(a: i32, b: i32) -> Ordering {
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
 export fn run() with Stdout {
-    let ord: Ordering = compare(1, 2);
+    let ord: Ordering = __inline_compare_0: {
+        break __inline_compare_0: Ordering::Less;
+        break __inline_compare_0: Ordering::Equal;
+    };
     if (ord == Ordering::Less) {
         core::cli::println(move "1 < 2");
     }
-    let ord2: Ordering = compare(3, 3);
+    let ord2: Ordering = Ordering::Equal;
     if (ord2 == Ordering::Equal) {
         core::cli::println(move "3 == 3");
     }
-    let ord3: Ordering = compare(5, 1);
+    let ord3: Ordering = __inline_compare_2: {
+        break __inline_compare_2: Ordering::Greater;
+        break __inline_compare_2: Ordering::Equal;
+    };
     if (ord3 == Ordering::Greater) {
         core::cli::println(move "5 > 1");
     }

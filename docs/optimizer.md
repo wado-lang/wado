@@ -63,7 +63,7 @@ The optimizer runs after lowering and before Wasm plan/codegen:
 
 Eliminates function call overhead by replacing small pure function calls with their body. Uses expression-count-based threshold for accurate size estimation.
 
-Eligibility: pure (no effects), non-recursive, no early returns, no reference parameters/returns, no generics, not from core library, expression count below threshold.
+Eligibility: pure (no effects), non-recursive, no reference parameters/returns, no generics, not from core library, expression count below threshold.
 
 ### Reference Elimination
 
