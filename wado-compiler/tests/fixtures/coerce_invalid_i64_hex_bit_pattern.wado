@@ -1,0 +1,8 @@
+// 0xFFFF_FFFF_FFFF_FFFF = 18446744073709551615 (u64 max), out of range for i64
+// Bit-pattern reinterpretation requires explicit cast: 0xFFFF_FFFF_FFFF_FFFF as i64
+export fn run() {
+    let i: i64 = 0xFFFF_FFFF_FFFF_FFFF;
+}
+
+__DATA__
+{"compile_error": "literal out of range for `i64`: 0xFFFF_FFFF_FFFF_FFFF"}
