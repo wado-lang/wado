@@ -34,10 +34,7 @@ pub enum ProviderError {
     /// A local I/O operation failed.
     IoError { path: String, message: String },
     /// The fetched manifest is invalid.
-    InvalidManifest {
-        source: String,
-        message: String,
-    },
+    InvalidManifest { source: String, message: String },
 }
 
 impl fmt::Display for ProviderError {
@@ -289,14 +286,14 @@ impl DependencyProvider for InMemoryDependencyProvider {
         &self,
         path: &str,
     ) -> impl Future<Output = Result<Manifest, ProviderError>> + Send {
-        let result = self
-            .path_manifests
-            .get(path)
-            .cloned()
-            .ok_or_else(|| ProviderError::NotFound {
-                source: path.to_string(),
-                message: "path not found".to_string(),
-            });
+        let result =
+            self.path_manifests
+                .get(path)
+                .cloned()
+                .ok_or_else(|| ProviderError::NotFound {
+                    source: path.to_string(),
+                    message: "path not found".to_string(),
+                });
         std::future::ready(result)
     }
 }
@@ -414,11 +411,7 @@ lib = "src/lib.wado"
     #[tokio::test]
     async fn git_resolve_ref() {
         let mut provider = InMemoryDependencyProvider::new();
-        provider.add_git_ref(
-            "https://github.com/user/lib.git",
-            "main",
-            "abc123def456789",
-        );
+        provider.add_git_ref("https://github.com/user/lib.git", "main", "abc123def456789");
 
         let sha = provider
             .resolve_git_ref("https://github.com/user/lib.git", "main")
