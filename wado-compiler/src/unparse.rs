@@ -2229,9 +2229,7 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(&import.namespace);
                 self.output.push_str("::");
                 self.output.push_str(&import.canonical_name);
-                self.output.push_str(" (");
-                self.output.push_str(&import.func_name);
-                self.output.push_str(")\n");
+                self.output.push('\n');
             }
             self.output.push('\n');
         }
