@@ -196,72 +196,7 @@ Container::transform::<i32, i64> → Container::transform$1
 
 ### Optimizer
 
-The `optimize.rs` module coordinates multiple optimization passes on TIR. The optimizer follows the ownership transfer pattern: `optimize(project: Project, opt_level: OptLevel) -> Project`.
-
-**Optimization Passes:**
-
-| Module                   | File                              | Description                                            |
-| ------------------------ | --------------------------------- | ------------------------------------------------------ |
-| Constant Folding         | `optimize/const_fold.rs`          | Fold compile-time-known integer arithmetic             |
-| Constant Propagation     | `optimize/const_prop.rs`          | Propagate immutable global constants to use sites      |
-| Const Global Promotion   | `optimize/const_global_promotion.rs` | Promote lazy-init globals back to immutable constants |
-| DCE                      | `optimize/dce.rs`                 | Dead code elimination via reachability analysis        |
-| Function Inlining        | `optimize/inline.rs`              | Inline small, pure functions                           |
-| Reference Elimination    | `optimize/ref_elim.rs`            | Eliminate unnecessary `&local` bindings after inline   |
-| Copy Propagation         | `optimize/copy_prop.rs`           | Propagate trivial copies like `let x = y`              |
-| LICM                     | `optimize/licm.rs`                | Hoist loop-invariant field accesses                    |
-| SROA                     | `optimize/sroa.rs`                | Scalar replacement of aggregates (elim struct allocs)  |
-| Post-opt Rewrite         | `optimize/rewrite.rs`             | Select lowering, move insertion, copy type collection  |
-
-**Optimization Order:**
-
-For `-O2` and `-Os`:
-
-1. **Inlining** → inline small functions
-2. **Reference Elimination** → clean up `&local` bindings from inlining
-3. **SROA** → scalar replacement of aggregates
-4. **Copy Propagation** → eliminate trivial copies
-5. **Constant Propagation** → replace immutable global reads with literal values
-6. **Constant Folding** → evaluate compile-time-known arithmetic
-7. **Constant Global Promotion** → promote lazy-init globals with folded constant values back to immutable
-8. **Branch Pruning** → remove dead branches based on constant conditions
-9. **LICM** → hoist loop-invariant code
-10. Steps 1–9 repeat until no changes (fixed-point iteration)
-11. **DCE** → remove unreachable functions and types
-12. **Post-opt Rewrite** → select lowering, move insertion (all optimization levels)
-
-**Usage Analysis Fields (populated in Project):**
-
-| Field                 | Type                   | Description                                             |
-| --------------------- | ---------------------- | ------------------------------------------------------- |
-| `reachable_functions` | `IndexSet<FunctionId>` | Functions reachable from entry point (DCE)              |
-| `used_wasi_functions` | `IndexSet<String>`     | WASI functions called (e.g. `Stdout::write_via_stream`) |
-| `strip_names`         | `bool`                 | Whether to strip debug name sections (`-Os`)            |
-
-**CLI Control:**
-
-| Flag  | Effect                                                      |
-| ----- | ----------------------------------------------------------- |
-| `-O0` | DCE only, no optimization passes                            |
-| `-O1` | All passes with fast iteration + DCE                        |
-| `-O2` | Full optimizations (inline, ref-elim, copy-prop, LICM, DCE) |
-| `-O3` | Aggressive optimizations (100 iterations, higher inline)    |
-| `-Os` | Full optimizations + strips debug name sections             |
-
-### Wasm-Level DCE
-
-In addition to TIR-level DCE (dead code elimination at the intermediate representation level), the compiler performs Wasm-level DCE on the bundled module using [walrus](https://crates.io/crates/walrus).
-
-The bundled module (`wado-bundled`) contains:
-
-- Float-to-string conversion (for template string formatting)
-- libm mathematical functions (sin, cos, exp, log, etc.)
-
-Without Wasm DCE, the entire bundled module (~53KB) is included even when only a small subset is used. With Wasm DCE enabled, only the actually-used functions are kept, reducing binary size significantly (e.g., ~12KB for a simple program using only float formatting).
-
-**Wasm DCE is enabled for `-O1` and above, disabled for `-O0`.**
-
-Benchmarking shows that Wasm DCE slightly improves test execution speed (smaller binaries = faster JIT compilation), so it is enabled by default for all optimization levels except `-O0`.
+See [optimizer.md](./optimizer.md) for detailed optimization documentation (passes, levels, pipeline, and roadmap).
 
 ### Standard Library
 
