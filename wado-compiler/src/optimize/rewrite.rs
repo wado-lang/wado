@@ -247,30 +247,6 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
         changed = true;
     }
 
-    // Simplify: `{ expr; }` → `expr` (single-expression block)
-    if let TirExprKind::Block(block) = &expr.kind
-        && block.stmts.len() == 1
-        && let TirStmtKind::Expr(_) = &block.stmts[0].kind
-    {
-        let TirExprKind::Block(block) = std::mem::replace(&mut expr.kind, TirExprKind::Unit) else {
-            unreachable!();
-        };
-        let mut stmts = block.stmts;
-        let TirStmtKind::Expr(inner) = stmts.remove(0).kind else {
-            unreachable!();
-        };
-        *expr = inner;
-        changed = true;
-    }
-
-    // Simplify: `{ }` → `()` (empty block)
-    if let TirExprKind::Block(block) = &expr.kind
-        && block.stmts.is_empty()
-    {
-        expr.kind = TirExprKind::Unit;
-        changed = true;
-    }
-
     changed
 }
 
