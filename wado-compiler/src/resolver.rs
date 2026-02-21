@@ -13,6 +13,7 @@ mod util;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use indexmap::{IndexMap, IndexSet};
 
@@ -685,6 +686,13 @@ enum VarRef {
     },
 }
 
+/// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
+/// Built once from all loaded modules to avoid O(all items) scans per method call.
+type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
+
+/// Pre-built index: trait name → (`ModuleSource`, item index) for trait declarations.
+type TraitDeclIndex = IndexMap<String, (ModuleSource, usize)>;
+
 /// The resolver converts AST to TIR with resolved types
 pub struct Resolver<'a, H: CompilerHost> {
     /// Type table (shared across all modules via Rc<RefCell>)
@@ -759,6 +767,11 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Built lazily on first access per module. Avoids rebuilding `build_module_map`
     /// on every imported method call or field access.
     module_type_maps_cache: IndexMap<ModuleSource, ModuleTypeMaps>,
+    /// Pre-built index: type name → (`module_source`, `item_idx`) for trait impl blocks in `loaded_modules`.
+    /// Shared across all module Resolvers; avoids O(all items) scans in `find_trait_method_for_type`.
+    trait_impl_index: Arc<TraitImplIndex>,
+    /// Pre-built index: trait name → (`module_source`, `item_idx`) for trait declarations in `loaded_modules`.
+    trait_decl_index: Arc<TraitDeclIndex>,
 }
 
 /// Cached per-module type maps for cross-module type resolution.
@@ -840,6 +853,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
+        let (trait_impl_index, trait_decl_index) = Self::build_trait_indices(loaded_modules);
         Self {
             type_table,
             symbols,
@@ -874,6 +888,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             imported_globals: IndexMap::new(),
             associated_constants: IndexMap::new(),
             module_type_maps_cache: IndexMap::new(),
+            trait_impl_index,
+            trait_decl_index,
         }
     }
 
@@ -1492,6 +1508,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let builtin_registry = BuiltinRegistry::build_from_stdlib(&type_table);
 
+        // Build trait lookup indices once for all modules.
+        // This allows find_trait_method_for_type and find_indexing_trait_impl to do O(1)
+        // lookups by type name instead of scanning all items in all modules per method call.
+        let (trait_impl_index, trait_decl_index) = Self::build_trait_indices(modules);
+
         // Second pass: resolve each module with per-module function_return_types and imports
         for module_source in &sorted_sources {
             let module = modules.get(module_source).expect("module should exist");
@@ -1620,6 +1641,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 imported_globals: IndexMap::new(),
                 associated_constants: IndexMap::new(),
                 module_type_maps_cache: IndexMap::new(),
+                trait_impl_index: Arc::clone(&trait_impl_index),
+                trait_decl_index: Arc::clone(&trait_decl_index),
             };
 
             // Errors are emitted to the logger; if resolve_module returns Bail,
@@ -2939,6 +2962,46 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Get the type name from a Type node
+    /// Static version of `get_type_name` for use before the Resolver is fully initialized.
+    fn get_type_name_static(ty: &Type) -> String {
+        match ty {
+            Type::Named(named) => named.name.clone(),
+            Type::Generic(generic) => generic.name.clone(),
+            Type::Reference(inner) | Type::MutReference(inner) => Self::get_type_name_static(inner),
+            _ => "Unknown".to_string(),
+        }
+    }
+
+    /// Build trait impl and trait declaration indices from all loaded modules.
+    /// Called once in `resolve_all_modules` before per-module resolution begins.
+    /// The indices enable O(1) trait lookup by type/trait name instead of scanning all modules.
+    fn build_trait_indices(
+        modules: &IndexMap<ModuleSource, Module>,
+    ) -> (Arc<TraitImplIndex>, Arc<TraitDeclIndex>) {
+        let mut impl_index: TraitImplIndex = IndexMap::new();
+        let mut decl_index: TraitDeclIndex = IndexMap::new();
+        for (module_source, module) in modules {
+            for (item_idx, item) in module.items.iter().enumerate() {
+                match item {
+                    Item::Impl(impl_block) if impl_block.trait_type.is_some() => {
+                        let type_name = Self::get_type_name_static(&impl_block.ty);
+                        impl_index
+                            .entry(type_name)
+                            .or_default()
+                            .push((module_source.clone(), item_idx));
+                    }
+                    Item::Trait(trait_decl) => {
+                        decl_index
+                            .entry(trait_decl.name.clone())
+                            .or_insert((module_source.clone(), item_idx));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        (Arc::new(impl_index), Arc::new(decl_index))
+    }
+
     fn get_type_name(&self, ty: &Type) -> String {
         match ty {
             Type::Named(named) => named.name.clone(),
@@ -8500,77 +8563,16 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        struct_module: &ModuleSource,
+        _struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<(String, MethodInfo, ModuleSource)> {
         let mut found_traits: Vec<(String, MethodInfo, ModuleSource)> = Vec::new();
 
-        // Collect impl blocks to check (avoiding borrow issues)
-        // Include associated type bindings for resolving Self::* types
-        // Also track which module source each impl comes from
-        let mut impl_blocks_to_check: Vec<(
-            Type,
-            Type,
-            Vec<Function>,
-            Vec<crate::ast::AssociatedTypeBinding>,
-            ModuleSource,
-        )> = Vec::new();
-
-        // Check specific module if provided
-        if !struct_module.is_entry_point()
-            && let Some(module) = self.loaded_modules.get(struct_module)
-        {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && let Some(trait_type) = &impl_block.trait_type
-                {
-                    impl_blocks_to_check.push((
-                        impl_block.ty.clone(),
-                        trait_type.clone(),
-                        impl_block.methods.clone(),
-                        impl_block.associated_types.clone(),
-                        struct_module.clone(),
-                    ));
-                }
-            }
-        }
-
-        // Also check all loaded modules
-        for (module_src, module) in self.loaded_modules {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
-                    && let Some(trait_type) = &impl_block.trait_type
-                {
-                    impl_blocks_to_check.push((
-                        impl_block.ty.clone(),
-                        trait_type.clone(),
-                        impl_block.methods.clone(),
-                        impl_block.associated_types.clone(),
-                        module_src.clone(),
-                    ));
-                }
-            }
-        }
-
-        // Check current module items
-        for item in &self.current_module_items {
-            if let Item::Impl(impl_block) = item
-                && let Some(trait_type) = &impl_block.trait_type
-            {
-                impl_blocks_to_check.push((
-                    impl_block.ty.clone(),
-                    trait_type.clone(),
-                    impl_block.methods.clone(),
-                    impl_block.associated_types.clone(),
-                    self.current_module_source.clone(),
-                ));
-            }
-        }
-
-        // For newtypes, also check base type for trait implementations
+        // Build names_to_check first (struct name + newtype chain), then use the
+        // pre-built index to fetch only the matching impl blocks instead of scanning
+        // all items in all modules.
         let names_to_check: Vec<String> = {
             let mut names = vec![struct_name.to_string()];
-            // If struct_name is a newtype, also check base type names
             if let Some(&newtype_id) = self.newtypes.get(struct_name) {
                 let mut current = newtype_id;
                 while let ResolvedType::Newtype { base_type, .. } =
@@ -8583,6 +8585,55 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             names
         };
+
+        // Collect impl blocks to check (avoiding borrow issues with &mut self).
+        // Use the pre-built index to look up only impl blocks for the matching type names —
+        // O(1) per name instead of scanning every item in every loaded module.
+        let mut impl_blocks_to_check: Vec<(
+            Type,
+            Type,
+            Vec<Function>,
+            Vec<crate::ast::AssociatedTypeBinding>,
+            ModuleSource,
+        )> = Vec::new();
+
+        for name in &names_to_check {
+            if let Some(entries) = self.trait_impl_index.get(name.as_str()) {
+                for (module_src, item_idx) in entries {
+                    let module = &self.loaded_modules[module_src];
+                    if let Item::Impl(impl_block) = &module.items[*item_idx]
+                        && let Some(trait_type) = &impl_block.trait_type
+                    {
+                        impl_blocks_to_check.push((
+                            impl_block.ty.clone(),
+                            trait_type.clone(),
+                            impl_block.methods.clone(),
+                            impl_block.associated_types.clone(),
+                            module_src.clone(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Also check current module items (not covered by the index, which only indexes
+        // loaded_modules captured before per-module resolution began).
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                let impl_struct_name = Self::get_type_name_static(&impl_block.ty);
+                if names_to_check.contains(&impl_struct_name) {
+                    impl_blocks_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.methods.clone(),
+                        impl_block.associated_types.clone(),
+                        self.current_module_source.clone(),
+                    ));
+                }
+            }
+        }
 
         // Now process the collected impl blocks with mutable access
         for (impl_ty, trait_type, methods, associated_types, impl_module_source) in
@@ -8696,15 +8747,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Find a trait declaration by name across all modules.
     /// Returns the trait's methods (cloned) if found.
     fn find_trait_decl_methods(&self, trait_name: &str) -> Option<Vec<ast::Function>> {
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Trait(trait_decl) = item
-                    && trait_decl.name == trait_name
-                {
-                    return Some(trait_decl.methods.clone());
-                }
+        // Fast O(1) lookup via pre-built index instead of scanning all modules.
+        if let Some((module_src, item_idx)) = self.trait_decl_index.get(trait_name) {
+            let module = &self.loaded_modules[module_src];
+            if let Item::Trait(trait_decl) = &module.items[*item_idx] {
+                return Some(trait_decl.methods.clone());
             }
         }
+        // Check current module items (not covered by the index).
         for item in &self.current_module_items {
             if let Item::Trait(trait_decl) = item
                 && trait_decl.name == trait_name
@@ -8827,7 +8877,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 Vec::new()
             };
 
-        // Collect impl blocks to check
+        // Collect impl blocks to check — use pre-built index for O(1) lookup by type name.
         let mut impl_blocks_to_check: Vec<(
             Type,
             Type,
@@ -8835,10 +8885,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             Vec<crate::ast::AssociatedTypeBinding>,
         )> = Vec::new();
 
-        // Check all loaded modules
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
+        if let Some(entries) = self.trait_impl_index.get(struct_name) {
+            for (module_src, item_idx) in entries {
+                let module = &self.loaded_modules[module_src];
+                if let Item::Impl(impl_block) = &module.items[*item_idx]
                     && let Some(trait_type) = &impl_block.trait_type
                 {
                     impl_blocks_to_check.push((
@@ -8851,10 +8901,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        // Check current module items
+        // Also check current module items (not covered by the index).
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && let Some(trait_type) = &impl_block.trait_type
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
             {
                 impl_blocks_to_check.push((
                     impl_block.ty.clone(),
@@ -8981,17 +9032,15 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         trait_name: &str,
         type_args: Option<&[TypeId]>,
     ) -> bool {
-        // Check all loaded modules
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
+        // Use pre-built index for O(1) lookup by type name.
+        if let Some(entries) = self.trait_impl_index.get(type_name) {
+            for (module_src, item_idx) in entries {
+                let module = &self.loaded_modules[module_src];
+                if let Item::Impl(impl_block) = &module.items[*item_idx]
                     && let Some(trait_type) = &impl_block.trait_type
                 {
-                    let impl_type_name = self.get_type_name(&impl_block.ty);
                     let impl_trait_name = self.get_type_name(trait_type);
-
-                    if impl_type_name == type_name
-                        && impl_trait_name == trait_name
+                    if impl_trait_name == trait_name
                         && self.check_impl_block_bounds(impl_block, type_args)
                     {
                         return true;
@@ -9000,16 +9049,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        // Check current module items
+        // Also check current module items (not covered by the index).
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && let Some(trait_type) = &impl_block.trait_type
+                && Self::get_type_name_static(&impl_block.ty) == type_name
             {
-                let impl_type_name = self.get_type_name(&impl_block.ty);
                 let impl_trait_name = self.get_type_name(trait_type);
-
-                if impl_type_name == type_name
-                    && impl_trait_name == trait_name
+                if impl_trait_name == trait_name
                     && self.check_impl_block_bounds(impl_block, type_args)
                 {
                     return true;
@@ -9282,13 +9329,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 Vec::new()
             };
 
-        // Collect impl blocks to check
+        // Collect impl blocks to check — use pre-built index for O(1) lookup by type name.
         let mut impl_blocks_to_check: Vec<(Type, Type, Vec<Function>)> = Vec::new();
 
-        // Check all loaded modules
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
+        if let Some(entries) = self.trait_impl_index.get(struct_name) {
+            for (module_src, item_idx) in entries {
+                let module = &self.loaded_modules[module_src];
+                if let Item::Impl(impl_block) = &module.items[*item_idx]
                     && let Some(trait_type) = &impl_block.trait_type
                 {
                     impl_blocks_to_check.push((
@@ -9300,10 +9347,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        // Check current module items
+        // Also check current module items (not covered by the index).
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && let Some(trait_type) = &impl_block.trait_type
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
             {
                 impl_blocks_to_check.push((
                     impl_block.ty.clone(),
@@ -9364,7 +9412,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             } else {
                 Vec::new()
             };
-        // Collect impl blocks to check
+        // Collect impl blocks to check — use pre-built index for O(1) lookup by type name.
         let mut impl_blocks_to_check: Vec<(
             Type,
             Type,
@@ -9372,10 +9420,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             Vec<crate::ast::AssociatedTypeBinding>,
         )> = Vec::new();
 
-        // Check all loaded modules
-        for module in self.loaded_modules.values() {
-            for item in &module.items {
-                if let Item::Impl(impl_block) = item
+        if let Some(entries) = self.trait_impl_index.get(struct_name) {
+            for (module_src, item_idx) in entries {
+                let module = &self.loaded_modules[module_src];
+                if let Item::Impl(impl_block) = &module.items[*item_idx]
                     && let Some(trait_type) = &impl_block.trait_type
                 {
                     impl_blocks_to_check.push((
@@ -9388,10 +9436,11 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        // Check current module items
+        // Also check current module items (not covered by the index).
         for item in &self.current_module_items {
             if let Item::Impl(impl_block) = item
                 && let Some(trait_type) = &impl_block.trait_type
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
             {
                 impl_blocks_to_check.push((
                     impl_block.ty.clone(),
