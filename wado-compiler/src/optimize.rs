@@ -6,11 +6,13 @@
 //! - Reference elimination via `ref_elim` module
 //! - Scalar Replacement of Aggregates (SROA) via `sroa` module
 //! - Copy propagation via `copy_prop` module
+//! - Constant propagation via `const_prop` module
 //! - Constant folding via `const_fold` module
 //! - Loop-Invariant Code Motion (LICM) via `licm` module
 //! - Post-optimization rewrites (select lowering, move insertion) via `rewrite` module
 
 mod const_fold;
+mod const_prop;
 mod copy_prop;
 pub mod dce;
 mod inline;
@@ -20,6 +22,7 @@ mod rewrite;
 mod sroa;
 
 use const_fold::fold_constants;
+use const_prop::propagate_constants;
 use copy_prop::propagate_copies;
 use dce::{analyze_project, remove_unreachable_functions, remove_unreachable_types};
 use inline::inline_functions;
@@ -149,6 +152,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
 /// - Reference elimination
 /// - Scalar Replacement of Aggregates (SROA)
 /// - Copy propagation
+/// - Constant propagation (global constants → literals)
 /// - Constant folding
 /// - Loop-invariant code motion (LICM)
 ///
@@ -161,6 +165,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         changed |= eliminate_unnecessary_refs(project);
         changed |= scalar_replace_aggregates(project);
         changed |= propagate_copies(project);
+        changed |= propagate_constants(project);
         changed |= fold_constants(project);
         changed |= apply_licm(project);
         if !changed {
