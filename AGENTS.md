@@ -153,6 +153,12 @@ make update-stdlib-wasi
 
 It requires a git submodule `vendor/wasmtime` to be initialized.
 
+## The Package Manifest
+
+`wado-manifest/` handles `wado.toml` parsing, validation, and `wado.lock` lock file management. It also defines the `DependencyProvider` trait that abstracts I/O for dependency resolution (registry queries, git operations, path lookups), with an `InMemoryDependencyProvider` for testing.
+
+This crate must compile for `wasm32-unknown-unknown` (same constraint as `wado-compiler`).
+
 ## The CLI
 
 The CLI is implemented in `wado-cli/` with sub-command style CLI:
