@@ -2091,6 +2091,32 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         changed = true;
     }
 
+    // Simplify `label: { break label: val; }` → `val`
+    // This pattern arises from inlining `return expr;` → `break label: expr;`
+    if let TirExprKind::LabeledBlock { label, block, .. } = &expr.kind
+        && block.stmts.len() == 1
+        && let TirStmtKind::Break {
+            label: Some(brk_label),
+            ..
+        } = &block.stmts[0].kind
+        && brk_label == label
+    {
+        let TirExprKind::LabeledBlock { block, .. } =
+            std::mem::replace(&mut expr.kind, TirExprKind::Unit)
+        else {
+            unreachable!();
+        };
+        let mut stmts = block.stmts;
+        let TirStmtKind::Break { value, .. } = stmts.remove(0).kind else {
+            unreachable!();
+        };
+        if let Some(inner) = value {
+            *expr = inner;
+        }
+        // else: break without value → Unit is already set
+        changed = true;
+    }
+
     // Simplify `[label:] { }` → `()` (empty block, with or without label)
     if matches!(&expr.kind, TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } if b.stmts.is_empty())
     {

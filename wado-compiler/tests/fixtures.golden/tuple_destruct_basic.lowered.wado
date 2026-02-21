@@ -14,9 +14,7 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
-    let __pattern_temp_0: [i32, String] = move [42, "hello"];
-    let a: i32 = __pattern_temp_0.0;
-    let b: String = __pattern_temp_0.1;
+    let __sroa___pattern_temp_0_1: String = move "hello";
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_2: {
@@ -24,12 +22,12 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: a };
+            let self: Box<i32> = move Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         __r.String::append(move ", ");
-        __r.String::append(b);
+        __r.String::append(__sroa___pattern_temp_0_1);
         break __tmpl: __r;
     });
 }

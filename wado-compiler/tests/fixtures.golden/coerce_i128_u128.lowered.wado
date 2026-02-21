@@ -19,7 +19,8 @@ struct BigInts {
 }
 
 export fn run() with Stdout {
-    let b: BigInts = move BigInts { a: u128 { low: 42, high: 0 }, b: i128 { low: 18446744073709551516, high: -1 } };
+    let __sroa_b_a: u128 = move u128 { low: 42, high: 0 };
+    let __sroa_b_b: i128 = move i128 { low: 18446744073709551516, high: -1 };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(18), used: 0 };
         __r.String::append(move "a=");
@@ -28,7 +29,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_u128_Display__fmt_5: {
-            let self: &u128 = &b.a;
+            let self: &u128 = &__sroa_b_a;
             __inline_Formatter__write_str_6: {
                 let s: String = move self.u128::to_string();
                 __f.buf.String::append(s);
@@ -44,7 +45,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i128_Display__fmt_9: {
-            let self: &i128 = &b.b;
+            let self: &i128 = &__sroa_b_b;
             __inline_Formatter__write_str_10: {
                 let s: String = move self.i128::to_string();
                 __f.buf.String::append(s);

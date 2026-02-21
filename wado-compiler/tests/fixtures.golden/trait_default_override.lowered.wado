@@ -32,16 +32,20 @@ fn "Article^Summary::summary"(self: &Article) -> String {
     };
 }
 
+pub fn "Tweet^Summary::summary"(self: &Tweet) -> String {
+    return __tmpl: {
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
+        __r.String::append(move "Title: ");
+        __r.String::append(self.text);
+        break __tmpl: __r;
+    };
+}
+
 export fn run() with Stdout {
     let a: Article = move Article { headline: "Breaking News", content: "Something happened" };
     core::cli::println(move a."Article^Summary::summary"());
-    let __sroa_t_text: String = move "Hello world";
-    core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
-        __r.String::append(move "Title: ");
-        __r.String::append(__sroa_t_text);
-        break __tmpl: __r;
-    });
+    let t: Tweet = move Tweet { text: "Hello world" };
+    core::cli::println(move t."Tweet^Summary::summary"());
 }
 
 export fn __cm_export__run() {

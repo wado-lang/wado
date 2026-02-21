@@ -32,11 +32,6 @@ struct "Pair<i32,i64>" {
 }
 
 export fn run() with Stdout {
-    let p: Pair<i32,i64> = move Pair<i32,i64> { first: 10, second: 20 };
-    let boxed: Box<i32> = __inline_Box_i32___new_2: {
-        let value: i32 = p.first;
-        break __inline_Box_i32___new_2: Box<i32> { value: value };
-    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
         __r.String::append(move "boxed first: ");
@@ -45,15 +40,12 @@ export fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_5: {
-            let self: Box<i32> = move Box<i32> { value: boxed.value };
+            let self: Box<i32> = move Box<i32> { value: 10 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let pair: Pair<i32,i32> = move Pair<i32,i32> { first: 100, second: 200 };
-    let boxed_pair: Box<Pair<i32,i32>> = move Box<Pair<i32,i32>> { value: pair };
-    let inner_pair: Pair<i32,i32> = boxed_pair.value;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
         __r.String::append(move "inner first: ");
@@ -62,7 +54,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_12: {
-            let self: Box<i32> = move Box<i32> { value: inner_pair.first };
+            let self: Box<i32> = move Box<i32> { value: 100 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -76,7 +68,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_16: {
-            let self: Box<i32> = move Box<i32> { value: inner_pair.second };
+            let self: Box<i32> = move Box<i32> { value: 200 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
