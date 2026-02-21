@@ -18,6 +18,7 @@ Currently, `builtin::inspect` is referenced in the WEPs and format resolution ta
 ### Name: `inspect`
 
 The feature is called **inspect** throughout:
+
 - `builtin::inspect(expr, &mut f)` — the compiler marker in the resolver
 - `{expr:?}` — template string syntax (inspect specifier)
 - `{expr:#?}` — alternate (pretty-print) inspect (future extension)
@@ -26,33 +27,33 @@ The feature is called **inspect** throughout:
 
 Inspect output follows Wado literal syntax where possible:
 
-| Type | Output | Example |
-|------|--------|---------|
-| `i32`, `i64`, etc. | Decimal number | `42` |
-| `u8`, `u16`, etc. | Decimal number | `255` |
-| `f32`, `f64` | Float number | `3.14` |
-| `bool` | `true` / `false` | `true` |
-| `char` | Quoted character | `'A'` |
-| `String` | Escaped, quoted string | `"hello\"world"` |
-| `()` (unit) | `()` | `()` |
-| Struct | `Name { field: value, ... }` | `Point { x: 10, y: 20 }` |
-| Struct (generic) | `Name { field: value }` (no type args) | `Box { value: 42 }` |
-| Struct (`#[hidden]` field) | Field omitted | `Foo { visible: 1 }` |
-| Tuple | `[elem, ...]` | `[1, "a", true]` |
-| `Array<T>` | `[elem, ...]` | `[1, 2, 3]` |
-| `Option::Some(v)` | `Some(inspect(v))` | `Some(42)` |
-| `Option::None` / `null` | `null` | `null` |
-| Enum | `TypeName::CaseName` | `Color::Red` |
-| Variant (no payload) | `TypeName::CaseName` | `Shape::Point` |
-| Variant (with payload) | `TypeName::CaseName(inspect(payload))` | `Shape::Circle(5.0)` |
-| Flags | `TypeName::MemberName \| ...` | `Perms::Read \| Perms::Write` |
-| Flags (none) | `TypeName::none()` | `Perms::none()` |
-| Newtype | `value as TypeName` | `1.5 as Meters` |
-| Resource (opaque handle) | `TypeName#0xHH` | `Fields#0x01` |
-| `&T` | `&inspect(inner)` | `&42` |
-| `&mut T` | `&mut inspect(inner)` | `&mut Point { x: 1, y: 2 }` |
-| Closure (default) | Signature only | `\|x: i32\| -> i32` |
-| Closure (`#` alternate) | TIR unparsed source | `\|x: i32\| x + 1` |
+| Type                       | Output                                 | Example                       |
+| -------------------------- | -------------------------------------- | ----------------------------- |
+| `i32`, `i64`, etc.         | Decimal number                         | `42`                          |
+| `u8`, `u16`, etc.          | Decimal number                         | `255`                         |
+| `f32`, `f64`               | Float number                           | `3.14`                        |
+| `bool`                     | `true` / `false`                       | `true`                        |
+| `char`                     | Quoted character                       | `'A'`                         |
+| `String`                   | Escaped, quoted string                 | `"hello\"world"`              |
+| `()` (unit)                | `()`                                   | `()`                          |
+| Struct                     | `Name { field: value, ... }`           | `Point { x: 10, y: 20 }`      |
+| Struct (generic)           | `Name { field: value }` (no type args) | `Box { value: 42 }`           |
+| Struct (`#[hidden]` field) | Field omitted                          | `Foo { visible: 1 }`          |
+| Tuple                      | `[elem, ...]`                          | `[1, "a", true]`              |
+| `Array<T>`                 | `[elem, ...]`                          | `[1, 2, 3]`                   |
+| `Option::Some(v)`          | `Some(inspect(v))`                     | `Some(42)`                    |
+| `Option::None` / `null`    | `null`                                 | `null`                        |
+| Enum                       | `TypeName::CaseName`                   | `Color::Red`                  |
+| Variant (no payload)       | `TypeName::CaseName`                   | `Shape::Point`                |
+| Variant (with payload)     | `TypeName::CaseName(inspect(payload))` | `Shape::Circle(5.0)`          |
+| Flags                      | `TypeName::MemberName \| ...`          | `Perms::Read \| Perms::Write` |
+| Flags (none)               | `TypeName::none()`                     | `Perms::none()`               |
+| Newtype                    | `value as TypeName`                    | `1.5 as Meters`               |
+| Resource (opaque handle)   | `TypeName#0xHH`                        | `Fields#0x01`                 |
+| `&T`                       | `&inspect(inner)`                      | `&42`                         |
+| `&mut T`                   | `&mut inspect(inner)`                  | `&mut Point { x: 1, y: 2 }`   |
+| Closure (default)          | Signature only                         | `\|x: i32\| -> i32`           |
+| Closure (`#` alternate)    | TIR unparsed source                    | `\|x: i32\| x + 1`            |
 
 #### Detailed Format Rules
 
@@ -60,11 +61,11 @@ Inspect output follows Wado literal syntax where possible:
 
 **Enum/Variant/Flags type name**: Always include the type name prefix (`Color::Red`, not just `Red`). This is unambiguous and matches construction syntax.
 
-**Newtype**: Inspect the inner value using the base type's inspect, then append ` as TypeName`. This mirrors Wado's cast syntax: `1.5 as Meters`.
+**Newtype**: Inspect the inner value using the base type's inspect, then append `as TypeName`. This mirrors Wado's cast syntax: `1.5 as Meters`.
 
 **Resource**: Resources are opaque handles. Display as `TypeName#0xHH` where `HH` is the handle value (i32) in lowercase hex. This makes it clear the value is an opaque handle, not a constructible value.
 
-**Flags**: Decompose the bitmask into individual set members joined by ` | `. If no bits are set, output `TypeName::none()`. This matches the construction syntax.
+**Flags**: Decompose the bitmask into individual set members joined by `|`. If no bits are set, output `TypeName::none()`. This matches the construction syntax.
 
 **References**: Prefix with `&` or `&mut`, then inspect the referent. Since Wado uses GC-managed references, dereferencing is always safe.
 
@@ -231,12 +232,12 @@ Both paths produce compile-time constants — no runtime overhead.
 
 ### Interaction with Existing WEPs
 
-| WEP | Interaction |
-|-----|-------------|
-| Type Stringification | Implements the `builtin::inspect` specified there |
-| Format Traits | `:?` resolves to `builtin::inspect`, not a trait |
+| WEP                        | Interaction                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| Type Stringification       | Implements the `builtin::inspect` specified there              |
+| Format Traits              | `:?` resolves to `builtin::inspect`, not a trait               |
 | Template Format Specifiers | `{expr:?}` triggers inspect; `{expr:#?}` is the alternate flag |
-| CM Adapter Synthesis | `synthesize_inspect` runs before CM adapters |
+| CM Adapter Synthesis       | `synthesize_inspect` runs before CM adapters                   |
 
 ## Consequences
 
