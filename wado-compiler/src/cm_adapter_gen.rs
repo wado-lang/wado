@@ -2576,13 +2576,15 @@ fn lower_to_flat_inner(
             let inner_flat_types = flat_types_from_type_id(inner_type_id, tir_modules, type_table);
             if !inner_flat_types.is_empty() {
                 // Allocate locals for inner flat values (initialized to zero)
-                let inner_locals: Vec<(u32, cm_abi::CmValType)> = inner_flat_types
+                let inner_locals: Vec<(u32, cm_abi::CmValType, String)> = inner_flat_types
                     .iter()
-                    .map(|&vt| {
+                    .enumerate()
+                    .map(|(i, &vt)| {
                         let tid = cm_val_type_to_type_id(vt);
                         let l = alloc_local(next_local, local_types, tid);
-                        stmts.push(let_mut_stmt("__opt_inner", l, tid, cm_zero(vt)));
-                        (l, vt)
+                        let name = format!("__opt_inner_{i}");
+                        stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
+                        (l, vt, name)
                     })
                     .collect();
 
@@ -2601,7 +2603,7 @@ fn lower_to_flat_inner(
                 );
                 for (i, flat_val) in inner_lowered.iter().enumerate() {
                     if i < inner_locals.len() {
-                        let (target_local, target_vt) = inner_locals[i];
+                        let (target_local, target_vt, ref target_name) = inner_locals[i];
                         let target_type = cm_val_type_to_type_id(target_vt);
                         let source_type = cm_val_type_to_type_id(flat_val.cm_type);
                         let mut val = local_ref(flat_val.index, "__flat", source_type);
@@ -2609,7 +2611,7 @@ fn lower_to_flat_inner(
                             val = cast(val, target_type);
                         }
                         then_stmts.push(expr_stmt(assign(
-                            local_ref(target_local, "__opt_inner", target_type),
+                            local_ref(target_local, target_name, target_type),
                             val,
                         )));
                     }
@@ -2626,7 +2628,7 @@ fn lower_to_flat_inner(
                     None,
                 ));
 
-                for (l, vt) in inner_locals {
+                for (l, vt, _) in inner_locals {
                     result.push(FlatLocal {
                         index: l,
                         cm_type: vt,
@@ -3147,13 +3149,15 @@ fn synthesize_result_export_adapter(
 
     // Allocate mutable flat value locals (initialized to zero)
     // These hold the flattened task-return args
-    let flat_locals: Vec<u32> = flat_return_types
+    let flat_locals: Vec<(u32, String)> = flat_return_types
         .iter()
-        .map(|&vt| {
+        .enumerate()
+        .map(|(i, &vt)| {
             let type_id = cm_val_type_to_type_id(vt);
             let local = alloc_local(&mut next_local, &mut local_types, type_id);
-            body_stmts.push(let_mut_stmt("__tv", local, type_id, cm_zero(vt)));
-            local
+            let name = format!("__tv_{i}");
+            body_stmts.push(let_mut_stmt(&name, local, type_id, cm_zero(vt)));
+            (local, name)
         })
         .collect();
 
@@ -3163,8 +3167,8 @@ fn synthesize_result_export_adapter(
     // Set flat[0] = 0 (Ok discriminant)
     ok_stmts.push(expr_stmt(assign(
         local_ref(
-            flat_locals[0],
-            "__tv",
+            flat_locals[0].0,
+            &flat_locals[0].1,
             cm_val_type_to_type_id(flat_return_types[0]),
         ),
         i32_const(0),
@@ -3209,7 +3213,7 @@ fn synthesize_result_export_adapter(
                     val = cast(val, target_type);
                 }
                 ok_stmts.push(expr_stmt(assign(
-                    local_ref(flat_locals[1 + i], "__tv", target_type),
+                    local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                     val,
                 )));
             }
@@ -3220,7 +3224,7 @@ fn synthesize_result_export_adapter(
     let task_return_args: Vec<TirExpr> = flat_locals
         .iter()
         .zip(flat_return_types.iter())
-        .map(|(&local, &vt)| local_ref(local, "__tv", cm_val_type_to_type_id(vt)))
+        .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
         .collect();
     ok_stmts.push(expr_stmt(cm_raw_call(
         "task-return",
@@ -3236,8 +3240,8 @@ fn synthesize_result_export_adapter(
     // Set flat[0] = 1 (Err discriminant)
     err_stmts.push(expr_stmt(assign(
         local_ref(
-            flat_locals[0],
-            "__tv",
+            flat_locals[0].0,
+            &flat_locals[0].1,
             cm_val_type_to_type_id(flat_return_types[0]),
         ),
         i32_const(1),
@@ -3278,8 +3282,8 @@ fn synthesize_result_export_adapter(
             if flat_locals.len() > 1 {
                 err_stmts.push(expr_stmt(assign(
                     local_ref(
-                        flat_locals[1],
-                        "__tv",
+                        flat_locals[1].0,
+                        &flat_locals[1].1,
                         cm_val_type_to_type_id(flat_return_types[1]),
                     ),
                     local_ref(err_local, "__err_val", err_type_id),
@@ -3306,7 +3310,7 @@ fn synthesize_result_export_adapter(
                     val = cast(val, target_type);
                 }
                 err_stmts.push(expr_stmt(assign(
-                    local_ref(flat_locals[1 + i], "__tv", target_type),
+                    local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                     val,
                 )));
             }
@@ -3319,7 +3323,7 @@ fn synthesize_result_export_adapter(
     let task_return_args: Vec<TirExpr> = flat_locals
         .iter()
         .zip(flat_return_types.iter())
-        .map(|(&local, &vt)| local_ref(local, "__tv", cm_val_type_to_type_id(vt)))
+        .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
         .collect();
     err_stmts.push(expr_stmt(cm_raw_call(
         "task-return",
@@ -3377,7 +3381,7 @@ fn synthesize_variant_lower_to_flat(
     value_local: u32,
     value_type_id: TypeId,
     variant_decl: &crate::tir::TirVariantDecl,
-    flat_locals: &[u32], // flat locals for [disc, p2, p3, ...]
+    flat_locals: &[(u32, String)], // flat locals for [disc, p2, p3, ...]
     flat_types: &[cm_abi::CmValType],
     next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
@@ -3389,8 +3393,8 @@ fn synthesize_variant_lower_to_flat(
     if !flat_locals.is_empty() {
         stmts.push(expr_stmt(assign(
             local_ref(
-                flat_locals[0],
-                "__tv",
+                flat_locals[0].0,
+                &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_types[0]),
             ),
             variant_tag(local_ref(value_local, "__err_val", value_type_id)),
@@ -3441,7 +3445,7 @@ fn synthesize_variant_lower_to_flat(
                     val = cast(val, target_type);
                 }
                 case_stmts.push(expr_stmt(assign(
-                    local_ref(flat_locals[1 + i], "__tv", target_type),
+                    local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                     val,
                 )));
             }
@@ -4090,28 +4094,30 @@ fn generate_inline_task_return(
         stmts.push(let_stmt("__task_ret", result_local, value_type_id, value));
 
         // Allocate mutable flat value locals (initialized to zero)
-        let flat_locals: Vec<u32> = flat_return_types
+        let flat_locals: Vec<(u32, String)> = flat_return_types
             .iter()
-            .map(|&vt| {
+            .enumerate()
+            .map(|(i, &vt)| {
                 let type_id = cm_val_type_to_type_id(vt);
                 let local = alloc_local(next_local, local_types, type_id);
-                stmts.push(let_mut_stmt("__tv", local, type_id, cm_zero(vt)));
-                local
+                let name = format!("__tv_{i}");
+                stmts.push(let_mut_stmt(&name, local, type_id, cm_zero(vt)));
+                (local, name)
             })
             .collect();
 
         let task_return_args: Vec<TirExpr> = flat_locals
             .iter()
             .zip(flat_return_types.iter())
-            .map(|(&local, &vt)| local_ref(local, "__tv", cm_val_type_to_type_id(vt)))
+            .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
             .collect();
 
         // === Ok case ===
         let mut ok_stmts: Vec<TirStmt> = Vec::new();
         ok_stmts.push(expr_stmt(assign(
             local_ref(
-                flat_locals[0],
-                "__tv",
+                flat_locals[0].0,
+                &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_return_types[0]),
             ),
             i32_const(0),
@@ -4147,7 +4153,7 @@ fn generate_inline_task_return(
                         val = cast(val, target_type);
                     }
                     ok_stmts.push(expr_stmt(assign(
-                        local_ref(flat_locals[1 + i], "__tv", target_type),
+                        local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                         val,
                     )));
                 }
@@ -4165,8 +4171,8 @@ fn generate_inline_task_return(
         let mut err_stmts: Vec<TirStmt> = Vec::new();
         err_stmts.push(expr_stmt(assign(
             local_ref(
-                flat_locals[0],
-                "__tv",
+                flat_locals[0].0,
+                &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_return_types[0]),
             ),
             i32_const(1),
@@ -4197,8 +4203,8 @@ fn generate_inline_task_return(
             } else if flat_locals.len() > 1 {
                 err_stmts.push(expr_stmt(assign(
                     local_ref(
-                        flat_locals[1],
-                        "__tv",
+                        flat_locals[1].0,
+                        &flat_locals[1].1,
                         cm_val_type_to_type_id(flat_return_types[1]),
                     ),
                     local_ref(err_local, "__err_val", err_type_id),
@@ -4223,7 +4229,7 @@ fn generate_inline_task_return(
                         val = cast(val, target_type);
                     }
                     err_stmts.push(expr_stmt(assign(
-                        local_ref(flat_locals[1 + i], "__tv", target_type),
+                        local_ref(flat_locals[1 + i].0, &flat_locals[1 + i].1, target_type),
                         val,
                     )));
                 }
