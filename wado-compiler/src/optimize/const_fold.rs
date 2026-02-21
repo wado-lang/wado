@@ -10,16 +10,21 @@
 //! - Integer unary: Neg, `BitNot`
 //! - Integer types: i8, i16, i32, i64, u8, u16, u32, u64
 //! - Integer cast: truncation/extension between integer types
+//! - Float arithmetic: Add, Sub, Mul, Div (skipped when result is NaN)
 //! - Float comparison: Eq, `NotEq`, Lt, `LtEq`, Gt, `GtEq`
+//! - Float unary: Neg (via sign-bit flip, safe for all values including NaN)
+//! - Float types: f32, f64
 //! - Boolean logical: And, Or
 //! - Boolean equality: Eq, `NotEq`
 //! - Boolean unary: Not
 //!
-//! Float arithmetic (Add, Sub, Mul, Div) and negation are intentionally NOT
-//! folded to avoid architecture-dependent results. Wasm mandates IEEE 754
-//! semantics, but host FPU behavior may differ in edge cases (NaN bit
-//! patterns, rounding). Integer division/modulo by zero and signed
-//! MIN / -1 are also not folded — they must remain runtime traps.
+//! Float arithmetic uses native Rust IEEE 754 ops (same as Wasm), following
+//! cranelift's approach: fold the result, but skip if it is NaN since NaN
+//! bit patterns are nondeterministic across architectures.
+//! Float negation is a pure bit flip (XOR sign bit), always deterministic.
+//!
+//! Integer division/modulo by zero and signed MIN / -1 are not folded —
+//! they must remain runtime traps.
 
 use crate::project::Project;
 use crate::tir::{
@@ -30,6 +35,7 @@ use crate::tir::{
 /// Result of a constant fold operation.
 enum FoldedExpr {
     Int { value: u64, prim: PrimitiveType },
+    Float { value: f64, repr: String },
     Bool(bool),
 }
 
@@ -40,6 +46,7 @@ impl FoldedExpr {
                 repr: format_int_value(value, prim),
                 value,
             },
+            Self::Float { value, repr } => TirExprKind::FloatLiteral { value, repr },
             Self::Bool(b) => TirExprKind::BoolLiteral(b),
         }
     }
@@ -308,14 +315,15 @@ fn try_fold_binary(
         };
     }
 
-    // Float comparison on two FloatLiterals → Bool result.
-    // Float arithmetic is NOT folded to avoid architecture-dependent results.
+    // Float binary: arithmetic and comparison on two FloatLiterals.
+    // Arithmetic results that are NaN are skipped (NaN bit patterns are
+    // nondeterministic). This follows cranelift's `.non_nan()` approach.
     if let (
         TirExprKind::FloatLiteral { value: lv, .. },
         TirExprKind::FloatLiteral { value: rv, .. },
     ) = (&left.kind, &right.kind)
     {
-        return try_fold_float_comparison(*lv, op, *rv);
+        return try_fold_float_binary(*lv, op, *rv);
     }
 
     // Integer binary: arithmetic, comparison, and bitwise on two IntLiterals
@@ -397,17 +405,23 @@ fn try_fold_int_binary(
     }
 }
 
-/// Fold float comparison operations.
+/// Fold float binary operations.
 ///
-/// Float comparisons produce Bool results which are architecture-independent.
-/// IEEE 754 comparison semantics are deterministic (including NaN behavior:
-/// NaN != NaN is true, all other NaN comparisons are false).
+/// Arithmetic: uses native Rust IEEE 754 ops (matching Wasm semantics).
+/// Returns `None` if the result is NaN, since NaN bit patterns are
+/// nondeterministic across architectures. This follows cranelift's
+/// `.non_nan()` approach (see `cranelift/codegen/src/isle_prelude.rs`).
 ///
-/// Float arithmetic (Add, Sub, Mul, Div) is intentionally NOT folded here
-/// because host FPU results may differ from Wasm in edge cases (NaN bit
-/// patterns, rounding).
-fn try_fold_float_comparison(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
+/// Comparisons: produce Bool results, always deterministic (including
+/// NaN behavior: NaN != NaN is true, all other NaN comparisons are false).
+fn try_fold_float_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
     match op {
+        // Arithmetic → Float result (skip if NaN)
+        TirBinaryOp::Add => non_nan_float(lval + rval),
+        TirBinaryOp::Sub => non_nan_float(lval - rval),
+        TirBinaryOp::Mul => non_nan_float(lval * rval),
+        TirBinaryOp::Div => non_nan_float(lval / rval),
+        // Comparison → Bool result
         TirBinaryOp::Eq => Some(FoldedExpr::Bool(lval == rval)),
         TirBinaryOp::NotEq => Some(FoldedExpr::Bool(lval != rval)),
         TirBinaryOp::Lt => Some(FoldedExpr::Bool(lval < rval)),
@@ -416,6 +430,17 @@ fn try_fold_float_comparison(lval: f64, op: TirBinaryOp, rval: f64) -> Option<Fo
         TirBinaryOp::GtEq => Some(FoldedExpr::Bool(lval >= rval)),
         _ => None,
     }
+}
+
+/// Return a `FoldedExpr::Float` for the value, or `None` if it is NaN.
+fn non_nan_float(value: f64) -> Option<FoldedExpr> {
+    if value.is_nan() {
+        return None;
+    }
+    Some(FoldedExpr::Float {
+        repr: format_float(value),
+        value,
+    })
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -429,11 +454,20 @@ fn try_fold_unary(
     type_table: &TypeTable,
 ) -> Option<FoldedExpr> {
     match op {
-        // Float negation is NOT folded to avoid architecture-dependent NaN handling.
         TirUnaryOp::Neg => match &inner.kind {
             TirExprKind::IntLiteral { value, .. } => {
                 let prim = get_int_primitive(result_type, type_table)?;
                 eval_int_neg(*value, prim).map(|value| FoldedExpr::Int { value, prim })
+            }
+            // Float negation: flip sign bit (XOR with SIGN_MASK).
+            // This is a pure bit operation, deterministic for all values
+            // including NaN and Infinity. Follows cranelift's Neg impl.
+            TirExprKind::FloatLiteral { value, .. } => {
+                let negated = f64::from_bits(value.to_bits() ^ (1u64 << 63));
+                Some(FoldedExpr::Float {
+                    repr: format_float(negated),
+                    value: negated,
+                })
             }
             _ => None,
         },
@@ -542,6 +576,23 @@ fn format_int_value(value: u64, prim: PrimitiveType) -> String {
             (value as i64).to_string()
         }
         _ => value.to_string(),
+    }
+}
+
+/// Format a float value, ensuring it always has a decimal point.
+fn format_float(value: f64) -> String {
+    if value.is_infinite() {
+        return if value.is_sign_positive() {
+            "Infinity".to_string()
+        } else {
+            "-Infinity".to_string()
+        };
+    }
+    let s = value.to_string();
+    if s.contains('.') || s.contains('e') || s.contains('E') {
+        s
+    } else {
+        format!("{s}.0")
     }
 }
 
@@ -884,39 +935,66 @@ mod tests {
     // Float tests
 
     #[test]
-    fn test_float_arithmetic_not_folded() {
-        // Float arithmetic must NOT be folded (architecture-dependent)
-        assert!(try_fold_float_comparison(1.5, TirBinaryOp::Add, 2.5).is_none());
-        assert!(try_fold_float_comparison(10.0, TirBinaryOp::Sub, 3.5).is_none());
-        assert!(try_fold_float_comparison(3.0, TirBinaryOp::Mul, 2.0).is_none());
-        assert!(try_fold_float_comparison(10.0, TirBinaryOp::Div, 4.0).is_none());
+    fn test_float_format() {
+        assert_eq!(format_float(3.14), "3.14");
+        assert_eq!(format_float(0.0), "0.0");
+        assert_eq!(format_float(4.0), "4.0");
+        assert_eq!(format_float(f64::INFINITY), "Infinity");
+        assert_eq!(format_float(f64::NEG_INFINITY), "-Infinity");
+    }
+
+    #[test]
+    fn test_float_arithmetic() {
+        // Add
+        let r = try_fold_float_binary(1.5, TirBinaryOp::Add, 2.5);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 4.0));
+        // Sub
+        let r = try_fold_float_binary(10.0, TirBinaryOp::Sub, 3.5);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 6.5));
+        // Mul
+        let r = try_fold_float_binary(3.0, TirBinaryOp::Mul, 2.0);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 6.0));
+        // Div
+        let r = try_fold_float_binary(10.0, TirBinaryOp::Div, 4.0);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == 2.5));
+        // Div by zero → Infinity (not a trap for floats)
+        let r = try_fold_float_binary(1.0, TirBinaryOp::Div, 0.0);
+        assert!(matches!(r, Some(FoldedExpr::Float { value, .. }) if value == f64::INFINITY));
+    }
+
+    #[test]
+    fn test_float_nan_skipped() {
+        // NaN results must NOT be folded (nondeterministic bit patterns)
+        assert!(try_fold_float_binary(0.0, TirBinaryOp::Div, 0.0).is_none());
+        assert!(try_fold_float_binary(f64::INFINITY, TirBinaryOp::Sub, f64::INFINITY).is_none());
+        assert!(try_fold_float_binary(0.0, TirBinaryOp::Mul, f64::INFINITY).is_none());
     }
 
     #[test]
     fn test_float_comparison() {
         assert!(matches!(
-            try_fold_float_comparison(1.0, TirBinaryOp::Lt, 2.0),
+            try_fold_float_binary(1.0, TirBinaryOp::Lt, 2.0),
             Some(FoldedExpr::Bool(true))
         ));
         assert!(matches!(
-            try_fold_float_comparison(2.0, TirBinaryOp::Lt, 1.0),
+            try_fold_float_binary(2.0, TirBinaryOp::Lt, 1.0),
             Some(FoldedExpr::Bool(false))
         ));
         assert!(matches!(
-            try_fold_float_comparison(1.0, TirBinaryOp::Eq, 1.0),
+            try_fold_float_binary(1.0, TirBinaryOp::Eq, 1.0),
             Some(FoldedExpr::Bool(true))
         ));
         // NaN comparisons — deterministic in IEEE 754
         assert!(matches!(
-            try_fold_float_comparison(f64::NAN, TirBinaryOp::Eq, f64::NAN),
+            try_fold_float_binary(f64::NAN, TirBinaryOp::Eq, f64::NAN),
             Some(FoldedExpr::Bool(false))
         ));
         assert!(matches!(
-            try_fold_float_comparison(f64::NAN, TirBinaryOp::NotEq, f64::NAN),
+            try_fold_float_binary(f64::NAN, TirBinaryOp::NotEq, f64::NAN),
             Some(FoldedExpr::Bool(true))
         ));
         assert!(matches!(
-            try_fold_float_comparison(f64::NAN, TirBinaryOp::Lt, 1.0),
+            try_fold_float_binary(f64::NAN, TirBinaryOp::Lt, 1.0),
             Some(FoldedExpr::Bool(false))
         ));
     }
