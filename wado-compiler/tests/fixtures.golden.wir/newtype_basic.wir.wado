@@ -13,7 +13,7 @@ struct Box<i32> {  // Box<T> with T=i32
 array array<u8> (mut u8);
 
 struct String {
-    mut repr: ref null array<u8>,
+    mut repr: ref array<u8>,
     mut used: i32,
 }
 
@@ -25,7 +25,7 @@ struct Formatter {
     mut zero_pad: bool,
     mut width: i32,
     mut precision: i32,
-    mut buf: ref null String,
+    mut buf: ref String,
 }
 
 enum Alignment { Left = 0, Center = 1, Right = 2 };
@@ -124,11 +124,11 @@ fn run() with Stdout {
     let __local_29: ref null "core:internal/Box<f64>";
     let __local_30: ref null Formatter;
     "core:cli/println"(__tmpl: block -> ref null String {
-        __local_4 = String { repr: builtin::array_new<u8>(31), used: 0 };
-        String::append(__local_4, String { repr: array.new_data<u8>[0](0, 15), used: 15 });
+        __local_4 = String { repr: ref.as_non_null(builtin::array_new<u8>(31)), used: 0 };
+        String::append(__local_4, String { repr: ref.as_non_null(array.new_data<u8>[0](0, 15)), used: 15 });
         __local_5 = value_copy Formatter(__inline_Formatter__new_1: block -> ref null Formatter {
             __local_16 = __local_4;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: __local_16 };
+            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_16) };
         });
         block {
             __local_17 = "core:internal/Box<f64>" { value: 1500 };
@@ -139,11 +139,11 @@ fn run() with Stdout {
     });
     raw = 1000;
     "core:cli/println"(__tmpl: block -> ref null String {
-        __local_7 = String { repr: builtin::array_new<u8>(21), used: 0 };
-        String::append(__local_7, String { repr: array.new_data<u8>[1](0, 5), used: 5 });
+        __local_7 = String { repr: ref.as_non_null(builtin::array_new<u8>(21)), used: 0 };
+        String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 5)), used: 5 });
         __local_8 = value_copy Formatter(__inline_Formatter__new_4: block -> ref null Formatter {
             __local_20 = __local_7;
-            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: __local_20 };
+            break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_20) };
         });
         block {
             __local_21 = "core:internal/Box<f64>" { value: raw };
@@ -154,11 +154,11 @@ fn run() with Stdout {
     });
     from_raw = 100;
     "core:cli/println"(__tmpl: block -> ref null String {
-        __local_10 = String { repr: builtin::array_new<u8>(26), used: 0 };
-        String::append(__local_10, String { repr: array.new_data<u8>[2](0, 10), used: 10 });
+        __local_10 = String { repr: ref.as_non_null(builtin::array_new<u8>(26)), used: 0 };
+        String::append(__local_10, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 10)), used: 10 });
         __local_11 = value_copy Formatter(__inline_Formatter__new_7: block -> ref null Formatter {
             __local_24 = __local_10;
-            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: __local_24 };
+            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_24) };
         });
         block {
             __local_25 = "core:internal/Box<f64>" { value: from_raw };
@@ -169,11 +169,11 @@ fn run() with Stdout {
     });
     km_from_m = 1000 / 1000;
     "core:cli/println"(__tmpl: block -> ref null String {
-        __local_13 = String { repr: builtin::array_new<u8>(27), used: 0 };
-        String::append(__local_13, String { repr: array.new_data<u8>[3](0, 11), used: 11 });
+        __local_13 = String { repr: ref.as_non_null(builtin::array_new<u8>(27)), used: 0 };
+        String::append(__local_13, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 11)), used: 11 });
         __local_14 = value_copy Formatter(__inline_Formatter__new_10: block -> ref null Formatter {
             __local_28 = __local_13;
-            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: __local_28 };
+            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_28) };
         });
         block {
             __local_29 = "core:internal/Box<f64>" { value: km_from_m };
@@ -308,7 +308,7 @@ fn String::grow(self, min_capacity) {
             };
         };
     };
-    self.repr = new_repr;
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn String::internal_append_from_memory(self, ptr, len) {
@@ -494,7 +494,7 @@ fn Formatter::write_from_memory(self, ptr, len) {
             };
         };
     };
-    s = String { repr: arr, used: len };
+    s = String { repr: ref.as_non_null(arr), used: len };
     Formatter::pad(self, s);
 }
 

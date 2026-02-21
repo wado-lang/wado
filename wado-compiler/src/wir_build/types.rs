@@ -239,10 +239,19 @@ fn register_struct(
     let fields: Vec<WirField> = tir_struct
         .fields
         .iter()
-        .map(|f| WirField {
-            name: f.name.clone(),
-            ty: ctx.type_id_to_wir_type(type_table, f.type_id),
-            mutable: true, // All fields mutable at Wasm GC level
+        .map(|f| {
+            let ty = ctx.type_id_to_wir_type(type_table, f.type_id);
+            // Struct fields use non-nullable refs (except Option<T> which is already nullable)
+            let ty = if matches!(type_table.get(f.type_id), ResolvedType::Option(_)) {
+                ty
+            } else {
+                ty.as_nonnull()
+            };
+            WirField {
+                name: f.name.clone(),
+                ty,
+                mutable: true, // All fields mutable at Wasm GC level
+            }
         })
         .collect();
 
@@ -524,10 +533,19 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 let fields: Vec<WirField> = elements
                     .iter()
                     .enumerate()
-                    .map(|(i, &elem_type_id)| WirField {
-                        name: format!("{i}"),
-                        ty: ctx.type_id_to_wir_type(type_table, elem_type_id),
-                        mutable: true,
+                    .map(|(i, &elem_type_id)| {
+                        let ty = ctx.type_id_to_wir_type(type_table, elem_type_id);
+                        let ty = if matches!(type_table.get(elem_type_id), ResolvedType::Option(_))
+                        {
+                            ty
+                        } else {
+                            ty.as_nonnull()
+                        };
+                        WirField {
+                            name: format!("{i}"),
+                            ty,
+                            mutable: true,
+                        }
                     })
                     .collect();
 
@@ -981,7 +999,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
                         name: "repr".to_string(),
                         ty: crate::wir::WirType::Ref {
                             type_id: raw_type,
-                            nullable: true,
+                            nullable: false,
                         },
                         mutable: true,
                     },
@@ -1058,9 +1076,17 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         continue;
                     }
                     if field_idx < tir_struct.fields.len() {
-                        let wir_type = ctx
-                            .type_id_to_wir_type(type_table, tir_struct.fields[field_idx].type_id);
+                        let field_type_id = tir_struct.fields[field_idx].type_id;
+                        let wir_type = ctx.type_id_to_wir_type(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
+                            // Make non-Option struct fields non-nullable (same as register_struct)
+                            let wir_type =
+                                if matches!(type_table.get(field_type_id), ResolvedType::Option(_))
+                                {
+                                    wir_type
+                                } else {
+                                    wir_type.as_nonnull()
+                                };
                             resolved = Some(wir_type);
                             break;
                         }
@@ -1083,9 +1109,18 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                             if let Some(wir_tid) = ctx.tuple_type_map.get(elements)
                                 && wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX)
                             {
-                                let wir_type =
-                                    ctx.type_id_to_wir_type(type_table, elements[field_idx]);
+                                let elem_type_id = elements[field_idx];
+                                let wir_type = ctx.type_id_to_wir_type(type_table, elem_type_id);
                                 if !is_abstract_ref(&wir_type) {
+                                    // Make non-Option tuple fields non-nullable
+                                    let wir_type = if matches!(
+                                        type_table.get(elem_type_id),
+                                        ResolvedType::Option(_)
+                                    ) {
+                                        wir_type
+                                    } else {
+                                        wir_type.as_nonnull()
+                                    };
                                     resolved = Some(wir_type);
                                     break;
                                 }

@@ -441,6 +441,66 @@ pub enum WirType {
     },
 }
 
+impl WirType {
+    /// Returns a non-nullable version of this type.
+    /// Only affects `Ref` and `AbstractRef` variants; other types are returned unchanged.
+    pub fn as_nonnull(self) -> Self {
+        match self {
+            Self::Ref {
+                type_id,
+                nullable: true,
+            } => Self::Ref {
+                type_id,
+                nullable: false,
+            },
+            Self::AbstractRef {
+                heap_type,
+                nullable: true,
+            } => Self::AbstractRef {
+                heap_type,
+                nullable: false,
+            },
+            other => other,
+        }
+    }
+
+    /// Returns true if this type is a non-nullable reference.
+    pub fn is_nonnull_ref(&self) -> bool {
+        matches!(
+            self,
+            Self::Ref {
+                nullable: false,
+                ..
+            } | Self::AbstractRef {
+                nullable: false,
+                ..
+            }
+        )
+    }
+
+    /// Returns a nullable version of this type.
+    /// Only affects `Ref` and `AbstractRef` variants; other types are returned unchanged.
+    pub fn as_nullable(self) -> Self {
+        match self {
+            Self::Ref {
+                type_id,
+                nullable: false,
+            } => Self::Ref {
+                type_id,
+                nullable: true,
+            },
+            Self::AbstractRef {
+                heap_type,
+                nullable: false,
+            } => Self::AbstractRef {
+                heap_type,
+                nullable: true,
+            },
+            other => other,
+        }
+    }
+}
+
 /// Abstract heap types for Wasm GC.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WirAbstractHeapType {
@@ -912,10 +972,12 @@ pub enum WirInstr {
     // === High-level compound instructions (lowered to sequences during emission) ===
     /// Deep copy of a value type (struct, array, variant, option, tuple).
     /// Lowered to field-by-field copy, array loop, etc. during emission.
+    /// When `nullable` is true, codegen emits a null guard (`ref.is_null` + if/else).
     ValueCopy {
         type_id: WirTypeId,
         source_type: WirCopyType,
         expr: Box<WirInstr>,
+        nullable: bool,
     },
 
     /// Multi-value instruction with direct local binding (tuple elision).

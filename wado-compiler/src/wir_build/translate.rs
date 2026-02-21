@@ -8,7 +8,7 @@ use crate::tir::{
     TirFunction, TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
-use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType};
+use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 use indexmap::IndexMap;
 
 use super::context::WirContext;
@@ -290,6 +290,72 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Build a `StructNew` instruction, wrapping each field value with `RefAsNonNull`
+    /// where the struct definition declares a non-nullable reference field.
+    fn struct_new(&self, type_id: WirTypeId, fields: Vec<WirInstr>) -> WirInstr {
+        let fields = self.cast_nonnull_fields(&type_id, fields);
+        WirInstr::StructNew { type_id, fields }
+    }
+
+    /// Build a `StructSet` instruction, wrapping the value with `RefAsNonNull`
+    /// if the target field is a non-nullable reference.
+    fn struct_set(
+        &self,
+        type_id: WirTypeId,
+        field_name: String,
+        expr: WirInstr,
+        value: WirInstr,
+    ) -> WirInstr {
+        let value = if self.is_field_nonnull_ref(&type_id, &field_name) {
+            WirInstr::RefAsNonNull(Box::new(value))
+        } else {
+            value
+        };
+        WirInstr::StructSet {
+            type_id,
+            field_name,
+            expr: Box::new(expr),
+            value: Box::new(value),
+        }
+    }
+
+    /// Wrap each field value with `RefAsNonNull` where the struct definition
+    /// declares a non-nullable reference field.
+    fn cast_nonnull_fields(&self, type_id: &WirTypeId, fields: Vec<WirInstr>) -> Vec<WirInstr> {
+        let idx = type_id.index() as usize;
+        if idx < self.ctx.types.len()
+            && let WirTypeDef::Struct(st) = &self.ctx.types[idx]
+        {
+            fields
+                .into_iter()
+                .enumerate()
+                .map(|(i, instr)| {
+                    if st.fields.get(i).is_some_and(|f| f.ty.is_nonnull_ref()) {
+                        WirInstr::RefAsNonNull(Box::new(instr))
+                    } else {
+                        instr
+                    }
+                })
+                .collect()
+        } else {
+            fields
+        }
+    }
+
+    /// Check if a named field of a struct type is a non-nullable reference.
+    fn is_field_nonnull_ref(&self, type_id: &WirTypeId, field_name: &str) -> bool {
+        let idx = type_id.index() as usize;
+        if idx < self.ctx.types.len()
+            && let WirTypeDef::Struct(st) = &self.ctx.types[idx]
+        {
+            st.fields
+                .iter()
+                .any(|f| f.name == field_name && f.ty.is_nonnull_ref())
+        } else {
+            false
+        }
+    }
+
     /// Check if a type requires value copy (struct, array, tuple, variant, option).
     fn needs_value_copy(&self, type_id: TypeId) -> bool {
         match self.type_table.get(type_id) {
@@ -352,6 +418,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Build a `ValueCopy` instruction for the given type.
     /// Uses the WIR type ID to identify the struct, and builds a shallow copy descriptor.
+    /// Only `Option<T>` values can be null; plain struct/variant types are always non-null.
     fn build_value_copy(&self, type_id: TypeId, expr: WirInstr) -> WirInstr {
         use crate::wir::{WirCopyField, WirCopyType};
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, type_id);
@@ -359,12 +426,16 @@ impl FunctionTranslator<'_, '_> {
             type_id: wir_tid, ..
         } = wir_type
         {
+            // Only Option<T> values can be null at the source level
+            let nullable = matches!(self.type_table.get(type_id), ResolvedType::Option(_));
+
             // Variants use pass-through copy (immutable structs in the rec group)
             if self.ctx.is_variant_type(&wir_tid) {
                 return WirInstr::ValueCopy {
                     type_id: wir_tid,
                     source_type: WirCopyType::Variant { cases: Vec::new() },
                     expr: Box::new(expr),
+                    nullable,
                 };
             }
             // Look up the WIR struct type to get field count
@@ -382,6 +453,7 @@ impl FunctionTranslator<'_, '_> {
                     fields: copy_fields,
                 },
                 expr: Box::new(expr),
+                nullable,
             }
         } else {
             expr
@@ -1042,10 +1114,7 @@ impl FunctionTranslator<'_, '_> {
                         .iter()
                         .map(|f| self.translate_expr(&f.value))
                         .collect();
-                    WirInstr::StructNew {
-                        type_id,
-                        fields: field_instrs,
-                    }
+                    self.struct_new(type_id, field_instrs)
                 } else {
                     WirInstr::Unreachable
                 }
@@ -1106,12 +1175,7 @@ impl FunctionTranslator<'_, '_> {
                             .ctx
                             .type_id_to_wir_type(self.type_table, receiver.type_id);
                         if let WirType::Ref { type_id, .. } = wir_type {
-                            WirInstr::StructSet {
-                                type_id,
-                                field_name: field_name.clone(),
-                                expr: Box::new(recv),
-                                value: Box::new(val),
-                            }
+                            self.struct_set(type_id, field_name.clone(), recv, val)
                         } else {
                             WirInstr::Unreachable
                         }
@@ -1214,10 +1278,7 @@ impl FunctionTranslator<'_, '_> {
                 if let WirType::Ref { type_id, .. } = wir_type {
                     let field_instrs: Vec<WirInstr> =
                         elements.iter().map(|e| self.translate_expr(e)).collect();
-                    WirInstr::StructNew {
-                        type_id,
-                        fields: field_instrs,
-                    }
+                    self.struct_new(type_id, field_instrs)
                 } else {
                     WirInstr::Unreachable
                 }
@@ -1400,24 +1461,24 @@ impl FunctionTranslator<'_, '_> {
 
         if byte_len == 0 {
             // Empty string: array.new_default + struct.new
-            WirInstr::StructNew {
-                type_id: string_type_id,
-                fields: vec![
+            self.struct_new(
+                string_type_id,
+                vec![
                     WirInstr::ArrayNewDefault {
                         type_id: array_type_id,
                         len: Box::new(WirInstr::I32Const(0)),
                     },
                     WirInstr::I32Const(0),
                 ],
-            }
+            )
         } else {
             // Non-empty string: look up data segment
             let data_index = self.ctx.string_literal_map.get(s).copied().unwrap_or(0);
             let len_i32 = i32::try_from(byte_len).unwrap_or(0);
 
-            WirInstr::StructNew {
-                type_id: string_type_id,
-                fields: vec![
+            self.struct_new(
+                string_type_id,
+                vec![
                     WirInstr::ArrayNewData {
                         type_id: array_type_id,
                         data_index,
@@ -1426,7 +1487,7 @@ impl FunctionTranslator<'_, '_> {
                     },
                     WirInstr::I32Const(len_i32),
                 ],
-            }
+            )
         }
     }
 
@@ -2334,10 +2395,7 @@ impl FunctionTranslator<'_, '_> {
                 )));
 
                 let mut instrs = vec![declare, set_temp];
-                instrs.push(WirInstr::StructNew {
-                    type_id,
-                    fields: vec![get_low, get_high],
-                });
+                instrs.push(self.struct_new(type_id, vec![get_low, get_high]));
                 Some(WirInstr::Seq(instrs))
             }
 
@@ -2688,16 +2746,16 @@ impl FunctionTranslator<'_, '_> {
                     elements.iter().map(|e| self.translate_expr(e)).collect();
                 let len = i32::try_from(elements.len()).unwrap_or(0);
 
-                WirInstr::StructNew {
-                    type_id: struct_type,
-                    fields: vec![
+                self.struct_new(
+                    struct_type,
+                    vec![
                         WirInstr::ArrayNewFixed {
                             type_id: raw_type,
                             elements: elem_instrs,
                         },
                         WirInstr::I32Const(len),
                     ],
-                }
+                )
             } else {
                 WirInstr::Unreachable
             }
@@ -3478,10 +3536,7 @@ impl FunctionTranslator<'_, '_> {
             if let Some(payload_expr) = payload {
                 fields.push(self.translate_expr(payload_expr));
             }
-            WirInstr::StructNew {
-                type_id: case_type_id,
-                fields,
-            }
+            self.struct_new(case_type_id, fields)
         } else {
             // Fallback: try the base variant type
             let wir_type = self.ctx.type_id_to_wir_type(self.type_table, result_type);
@@ -3490,7 +3545,7 @@ impl FunctionTranslator<'_, '_> {
                 if let Some(payload_expr) = payload {
                     fields.push(self.translate_expr(payload_expr));
                 }
-                WirInstr::StructNew { type_id, fields }
+                self.struct_new(type_id, fields)
             } else {
                 WirInstr::Unreachable
             }
@@ -3800,14 +3855,14 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // Build: CanonicalClosure { env: functor_as_structref, func: ref.func $wrapper }
-        WirInstr::StructNew {
-            type_id: struct_type_id,
-            fields: vec![
+        self.struct_new(
+            struct_type_id,
+            vec![
                 functor_instr,
                 WirInstr::RefFunc {
                     func_id: wrapper_func_id,
                 },
             ],
-        }
+        )
     }
 }

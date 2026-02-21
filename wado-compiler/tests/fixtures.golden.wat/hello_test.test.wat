@@ -46,8 +46,8 @@
     (rec
       (type (;0;) (sub (struct (field (mut i32)))))
       (type (;1;) (array (mut i8)))
-      (type (;2;) (sub (struct (field (mut (ref null 1))) (field (mut i32)))))
-      (type (;3;) (sub (struct (field (mut i32)) (field (mut i32)) (field (mut i8)) (field (mut i8)) (field (mut i8)) (field (mut i32)) (field (mut i32)) (field (mut (ref null 2))))))
+      (type (;2;) (sub (struct (field (mut (ref 1))) (field (mut i32)))))
+      (type (;3;) (sub (struct (field (mut i32)) (field (mut i32)) (field (mut i8)) (field (mut i8)) (field (mut i8)) (field (mut i32)) (field (mut i32)) (field (mut (ref 2))))))
     )
     (type (;4;) (func (param i32 i32 i32 i32) (result i32)))
     (type (;5;) (func (param i32)))

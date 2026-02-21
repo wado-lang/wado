@@ -1645,8 +1645,9 @@ impl<'a> WirEmitter<'a> {
                 type_id,
                 source_type,
                 expr,
+                nullable,
             } => {
-                self.emit_value_copy(f, type_id, source_type, expr);
+                self.emit_value_copy(f, type_id, source_type, expr, *nullable);
             }
 
             // Everything else - emit unreachable for unimplemented instructions
@@ -1714,6 +1715,7 @@ impl<'a> WirEmitter<'a> {
         type_id: &WirTypeId,
         source_type: &WirCopyType,
         expr: &WirInstr,
+        nullable: bool,
     ) {
         match source_type {
             WirCopyType::Struct { fields } => {
@@ -1727,19 +1729,20 @@ impl<'a> WirEmitter<'a> {
                 let temp_idx = self.resolve_local(&temp_name);
                 // Store source to temp
                 f.instruction(&Instruction::LocalSet(temp_idx));
-                // Null guard: if source is null, skip copy and produce null.
-                // This handles Option<T> where the value may be null (None).
-                // Use if-else with typed result: (ref null $type).
                 let heap = HeapType::Concrete(wasm_type_idx);
-                let val_type = ValType::Ref(RefType {
-                    nullable: true,
-                    heap_type: heap,
-                });
-                f.instruction(&Instruction::LocalGet(temp_idx));
-                f.instruction(&Instruction::RefIsNull);
-                f.instruction(&Instruction::If(BlockType::Result(val_type)));
-                f.instruction(&Instruction::RefNull(heap));
-                f.instruction(&Instruction::Else);
+                // Null guard: if source may be null, wrap in if/else.
+                // When nullable=false, the source is guaranteed non-null — skip the guard.
+                if nullable {
+                    let val_type = ValType::Ref(RefType {
+                        nullable: true,
+                        heap_type: heap,
+                    });
+                    f.instruction(&Instruction::LocalGet(temp_idx));
+                    f.instruction(&Instruction::RefIsNull);
+                    f.instruction(&Instruction::If(BlockType::Result(val_type)));
+                    f.instruction(&Instruction::RefNull(heap));
+                    f.instruction(&Instruction::Else);
+                }
                 // For each field: load from temp, get field (handle packed fields)
                 for field in fields {
                     // Check if this field needs array deep copy
@@ -1785,6 +1788,11 @@ impl<'a> WirEmitter<'a> {
                         });
                         // Push the new array on stack (for struct.new)
                         f.instruction(&Instruction::LocalGet(dst_local));
+                        // Non-nullable ref fields need ref.as_non_null since
+                        // the local is nullable
+                        if self.is_field_nonnull_ref(type_id.index(), field.index as usize) {
+                            f.instruction(&Instruction::RefAsNonNull);
+                        }
                     } else {
                         f.instruction(&Instruction::LocalGet(temp_idx));
                         match self.is_field_packed_by_index(type_id.index(), field.index) {
@@ -1811,7 +1819,9 @@ impl<'a> WirEmitter<'a> {
                 }
                 // Create new struct with all field values
                 f.instruction(&Instruction::StructNew(wasm_type_idx));
-                f.instruction(&Instruction::End); // end of if-else null guard
+                if nullable {
+                    f.instruction(&Instruction::End); // end of if-else null guard
+                }
             }
             WirCopyType::Array { element_copy: _ } => {
                 // Array copy: pass through for now (shallow ref copy)
@@ -1953,6 +1963,18 @@ impl<'a> WirEmitter<'a> {
             };
         }
         None
+    }
+
+    /// Check if the i-th field of a struct type is a non-nullable reference.
+    fn is_field_nonnull_ref(&self, wir_type_idx: u32, field_index: usize) -> bool {
+        let idx = wir_type_idx as usize;
+        if idx < self.wir.types.len()
+            && let WirTypeDef::Struct(ref st) = self.wir.types[idx]
+            && let Some(field) = st.fields.get(field_index)
+        {
+            return field.ty.is_nonnull_ref();
+        }
+        false
     }
 
     fn is_field_packed(&self, wir_type_idx: u32, field_name: &str) -> Option<bool> {
