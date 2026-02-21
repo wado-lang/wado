@@ -1,0 +1,274 @@
+# WEP: Inspect (Debug Output)
+
+## Context
+
+Wado's type stringification system (WEP: Type Stringification) specifies that `builtin::inspect()` converts any value to its debug string representation. Template strings use it for `{expr:?}` (always inspect) and as the fallback for `{expr}` when no `Display` trait is implemented.
+
+Currently, `builtin::inspect` is referenced in the WEPs and format resolution table but has no implementation. This WEP defines the output format, the user-facing name, and the compiler implementation strategy.
+
+### Design Goals
+
+1. **Wado-syntax output**: Inspect output should look like Wado source code — familiar, copy-pasteable
+2. **No new TIR node**: Reuse existing TIR infrastructure; the compiler synthesizes inspect bodies from type metadata
+3. **Works for all types**: Every type is inspectable without requiring trait implementations
+4. **Formatter integration**: Writes to `&mut Formatter` like all format traits, supporting width/alignment/alternate flag
+
+## Decision
+
+### Name: `inspect`
+
+The feature is called **inspect** throughout:
+
+- `builtin::inspect(expr, &mut f)` — the compiler marker in the resolver
+- `{expr:?}` — template string syntax (inspect specifier)
+- `{expr:#?}` — alternate (pretty-print) inspect (future extension)
+
+### Output Format by Type
+
+Inspect output follows Wado literal syntax where possible:
+
+| Type                       | Output                                 | Example                       |
+| -------------------------- | -------------------------------------- | ----------------------------- |
+| `i32`, `i64`, etc.         | Decimal number                         | `42`                          |
+| `u8`, `u16`, etc.          | Decimal number                         | `255`                         |
+| `f32`, `f64`               | Float number                           | `3.14`                        |
+| `bool`                     | `true` / `false`                       | `true`                        |
+| `char`                     | Quoted character                       | `'A'`                         |
+| `String`                   | Escaped, quoted string                 | `"hello\"world"`              |
+| `()` (unit)                | `()`                                   | `()`                          |
+| Struct                     | `Name { field: value, ... }`           | `Point { x: 10, y: 20 }`      |
+| Struct (generic)           | `Name { field: value }` (no type args) | `Box { value: 42 }`           |
+| Struct (`#[hidden]` field) | Field omitted                          | `Foo { visible: 1 }`          |
+| Tuple                      | `[elem, ...]`                          | `[1, "a", true]`              |
+| `Array<T>`                 | `[elem, ...]`                          | `[1, 2, 3]`                   |
+| `Option::Some(v)`          | `Some(inspect(v))`                     | `Some(42)`                    |
+| `Option::None` / `null`    | `null`                                 | `null`                        |
+| Enum                       | `TypeName::CaseName`                   | `Color::Red`                  |
+| Variant (no payload)       | `TypeName::CaseName`                   | `Shape::Point`                |
+| Variant (with payload)     | `TypeName::CaseName(inspect(payload))` | `Shape::Circle(5.0)`          |
+| Flags                      | `TypeName::MemberName \| ...`          | `Perms::Read \| Perms::Write` |
+| Flags (none)               | `TypeName::none()`                     | `Perms::none()`               |
+| Newtype                    | `value as TypeName`                    | `1.5 as Meters`               |
+| Resource (opaque handle)   | `TypeName#0xHH`                        | `Fields#0x01`                 |
+| `&T`                       | `&inspect(inner)`                      | `&42`                         |
+| `&mut T`                   | `&mut inspect(inner)`                  | `&mut Point { x: 1, y: 2 }`   |
+| Closure (default)          | Signature only                         | `\|x: i32\| -> i32`           |
+| Closure (`#` alternate)    | TIR unparsed source                    | `\|x: i32\| x + 1`            |
+
+#### Detailed Format Rules
+
+**Struct fields**: Iterate fields in declaration order. Skip fields annotated with `#[hidden]`. Recursively inspect each field value.
+
+**Enum/Variant/Flags type name**: Always include the type name prefix (`Color::Red`, not just `Red`). This is unambiguous and matches construction syntax.
+
+**Newtype**: Inspect the inner value using the base type's inspect, then append `as TypeName`. This mirrors Wado's cast syntax: `1.5 as Meters`.
+
+**Resource**: Resources are opaque handles. Display as `TypeName#0xHH` where `HH` is the handle value (i32) in lowercase hex. This makes it clear the value is an opaque handle, not a constructible value.
+
+**Flags**: Decompose the bitmask into individual set members joined by `|`. If no bits are set, output `TypeName::none()`. This matches the construction syntax.
+
+**References**: Prefix with `&` or `&mut`, then inspect the referent. Since Wado uses GC-managed references, dereferencing is always safe.
+
+**Closures**: By default, show only the parameter types and return type (the signature). With the `#` alternate flag (`{closure:#?}`), show the TIR-unparsed source code of the closure body. The signature-only default avoids potentially large output for complex closures.
+
+**Option special handling**: `Option::Some(v)` renders as `Some(v)` (short form), `Option::None` renders as `null` (matching Wado's null literal).
+
+### Implementation Strategy
+
+#### No New TIR Node
+
+Inspect is implemented without adding a new TIR expression kind. Instead:
+
+1. **Resolver phase**: When the resolver encounters `{expr:?}` or falls back to inspect for `{expr}`, it emits a `StaticCall` to `builtin::inspect(expr, &mut f)`. This acts as a **marker** — the function doesn't exist as real code.
+
+2. **Synthesize phase** (`synthesize_inspect`): A new pass runs after TIR resolution and before CM adapter synthesis. It scans the TIR for `builtin::inspect` calls and replaces each one with synthesized TIR that writes the formatted output to the Formatter. The synthesized code uses the same TIR nodes as hand-written Wado code (method calls, match expressions, struct field access, etc.).
+
+3. **Normal pipeline**: The synthesized TIR flows through the rest of the pipeline (CM adapter → monomorphize → lower → optimize → codegen) like any other code.
+
+#### Pipeline Position
+
+```
+parse → desugar → modules → symbols → tir (resolve)
+                                          ↓
+                                     effect_check
+                                          ↓
+                                     synthesize_inspect  ← NEW
+                                          ↓
+                                     cm_adapter_gen
+                                          ↓
+                          monomorphize → lower → optimize → wasm_plan → codegen
+```
+
+The phase runs **after effect checking** and **before CM adapter synthesis** because:
+
+- It needs resolved type information (available after TIR)
+- It generates closures and match expressions that must go through lowering
+- It must run before CM adapters because adapter-generated code should not contain inspect markers
+- Closures generated by inspect synthesis need to go through the normal closure lowering pipeline
+
+#### Synthesis Algorithm
+
+For a `builtin::inspect(expr, &mut f)` call where `expr` has type `T`:
+
+```
+fn synthesize_inspect_for_type(T, expr, f_ref) -> Vec<TirStmt>:
+    match T:
+        Primitive(i32/i64/u8/..) →
+            // Reuse Display::fmt — primitives inspect the same as display
+            expr.fmt(f_ref)
+
+        Primitive(bool) →
+            expr.fmt(f_ref)  // "true" / "false"
+
+        Primitive(char) →
+            // Wrap in single quotes: 'A'
+            f.write_char('\'')
+            expr.fmt(f_ref)
+            f.write_char('\'')
+
+        String →
+            // Wrap in escaped quotes: "hello\"world"
+            f.write_char('"')
+            // write escaped string content
+            f.write_char('"')
+
+        Struct { name, fields } →
+            f.write_str("Name { ")
+            for each (i, field) in fields (skip #[hidden]):
+                if i > 0: f.write_str(", ")
+                f.write_str("field_name: ")
+                synthesize_inspect_for_type(field.type, expr.field, f_ref)
+            f.write_str(" }")
+
+        Tuple(element_types) →
+            f.write_char('[')
+            for each (i, elem_type) in element_types:
+                if i > 0: f.write_str(", ")
+                synthesize_inspect_for_type(elem_type, expr.i, f_ref)
+            f.write_char(']')
+
+        Array(elem_type) →
+            // Generate a loop that iterates and inspects each element
+            f.write_char('[')
+            for-of loop with index tracking, comma separation
+            f.write_char(']')
+
+        Option(inner_type) →
+            match expr:
+                Some(v) → f.write_str("Some("); inspect(v, f); f.write_char(')')
+                None → f.write_str("null")
+
+        Enum { name, cases } →
+            match expr:
+                case_i → f.write_str("EnumName::CaseName")
+
+        Variant { name, cases } →
+            match expr:
+                CaseName(payload) → f.write_str("Name::CaseName("); inspect(payload, f); f.write_char(')')
+                CaseName → f.write_str("Name::CaseName")
+
+        Flags { name, members } →
+            // Test each bit, collect set member names joined by " | "
+            if expr == 0: f.write_str("Name::none()")
+            else: join with " | ": "Name::Member1 | Name::Member2"
+
+        Newtype { name, base_type } →
+            synthesize_inspect_for_type(base_type, expr as base_type, f_ref)
+            f.write_str(" as Name")
+
+        Resource { name } →
+            f.write_str("Name#0x")
+            // format handle as hex (the handle is i32)
+            (expr as i32).fmt_hex(f_ref)
+
+        Ref(inner) →
+            f.write_char('&')
+            synthesize_inspect_for_type(inner, *expr, f_ref)
+
+        MutRef(inner) →
+            f.write_str("&mut ")
+            synthesize_inspect_for_type(inner, *expr, f_ref)
+
+        Closure { params, return_type } →
+            // Default: signature only
+            f.write_str("|param1: Type1, param2: Type2| -> ReturnType")
+            // Alternate (#): TIR unparsed source (compile-time string constant)
+            if f.alternate():
+                f.write_str(tir_unparse(closure_body))
+```
+
+#### Resolver Changes
+
+In `resolve_template_string`, when `trait_name` would be `"Display"` but the type has no Display impl (the current fallback path), or when the format spec is `?`:
+
+```rust
+// In resolve_template_string, after determining trait_name:
+if is_inspect_specifier || (trait_name == "Display" && !has_display_impl) {
+    // Emit: builtin::inspect(resolved_expr, &mut __f)
+    let inspect_call = TirExpr::new(
+        TirExprKind::StaticCall {
+            func: FunctionRef::Builtin("inspect".to_string()),
+            args: vec![resolved, fmt_mut_ref],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    stmts.push(TirStmt::new(TirStmtKind::Expr(inspect_call), span));
+}
+```
+
+The `FunctionRef::Builtin("inspect")` variant acts as the marker. The `synthesize_inspect` pass recognizes this and replaces the entire `StaticCall` with the synthesized TIR.
+
+#### Closure Source Text
+
+For the closure alternate format (`{closure:#?}`), the synthesized code emits the TIR-unparsed representation as a compile-time string constant. During synthesis:
+
+1. The closure's TIR body is available (it's a `TirExprKind::Closure`)
+2. Run the TIR unparser on it to produce source text
+3. Embed the result as a `TirExprKind::StringLiteral` in the synthesized code
+4. The default (non-alternate) path generates the signature string from the closure's parameter types and return type, also as a string literal
+
+Both paths produce compile-time constants — no runtime overhead.
+
+### Interaction with Existing WEPs
+
+| WEP                        | Interaction                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| Type Stringification       | Implements the `builtin::inspect` specified there              |
+| Format Traits              | `:?` resolves to `builtin::inspect`, not a trait               |
+| Template Format Specifiers | `{expr:?}` triggers inspect; `{expr:#?}` is the alternate flag |
+| CM Adapter Synthesis       | `synthesize_inspect` runs before CM adapters                   |
+
+## Consequences
+
+### Positive
+
+1. **No TIR node proliferation**: Reuses existing `StaticCall` for the marker, no new expression kinds
+2. **Full pipeline participation**: Synthesized inspect code goes through monomorphization, lowering, optimization — dead code elimination removes unused inspect paths
+3. **Wado-native output**: Output mirrors Wado syntax, making it intuitive to read
+4. **Type-complete**: Every type in the type system has a defined inspect representation
+5. **Closure introspection**: Closures can show their source via `#` flag, leveraging TIR unparse
+
+### Negative
+
+1. **Code size**: Inspect synthesis generates code for every type that appears in `{:?}` — complex struct hierarchies produce substantial TIR
+   - **Mitigation**: The optimizer and tree-shaking eliminate unused paths
+2. **Synthesis complexity**: The `synthesize_inspect` pass must handle every `ResolvedType` variant
+   - **Mitigation**: The synthesis is mechanical and type-driven, similar to CM adapter synthesis
+3. **String escaping**: Inspect of strings requires escape logic (quotes, backslashes, newlines)
+   - **Mitigation**: Implement as a stdlib helper `internal::write_escaped_string(&String, &mut Formatter)`
+
+### Future Extensions
+
+1. **Pretty-print (`{:#?}`)**: Indented multi-line output with depth tracking via `Formatter` state
+2. **Depth limit**: Prevent infinite recursion on deeply nested or recursive types
+3. **Custom inspect**: Allow types to override inspect behavior via a trait (opt-in, not required)
+
+## References
+
+- [WEP: Type Stringification](./wep-2026-01-16-type-stringification.md)
+- [WEP: Format Traits](./wep-2026-02-01-format-traits.md)
+- [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)
+- [WEP: TIR-Level CM Adapter Synthesis](./wep-2026-02-15-cm-adapter-synthesis.md)
+- [Elixir Inspect Protocol](https://hexdocs.pm/elixir/Inspect.html)
+- [Rust Debug trait](https://doc.rust-lang.org/std/fmt/trait.Debug.html)
