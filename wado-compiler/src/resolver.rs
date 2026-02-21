@@ -686,11 +686,11 @@ enum VarRef {
     },
 }
 
-/// Pre-built index: type name → list of (ModuleSource, item index) for trait impl blocks.
+/// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
 /// Built once from all loaded modules to avoid O(all items) scans per method call.
 type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
 
-/// Pre-built index: trait name → (ModuleSource, item index) for trait declarations.
+/// Pre-built index: trait name → (`ModuleSource`, item index) for trait declarations.
 type TraitDeclIndex = IndexMap<String, (ModuleSource, usize)>;
 
 /// The resolver converts AST to TIR with resolved types
@@ -767,10 +767,10 @@ pub struct Resolver<'a, H: CompilerHost> {
     /// Built lazily on first access per module. Avoids rebuilding `build_module_map`
     /// on every imported method call or field access.
     module_type_maps_cache: IndexMap<ModuleSource, ModuleTypeMaps>,
-    /// Pre-built index: type name → (module_source, item_idx) for trait impl blocks in loaded_modules.
-    /// Shared across all module Resolvers; avoids O(all items) scans in find_trait_method_for_type.
+    /// Pre-built index: type name → (`module_source`, `item_idx`) for trait impl blocks in `loaded_modules`.
+    /// Shared across all module Resolvers; avoids O(all items) scans in `find_trait_method_for_type`.
     trait_impl_index: Arc<TraitImplIndex>,
-    /// Pre-built index: trait name → (module_source, item_idx) for trait declarations in loaded_modules.
+    /// Pre-built index: trait name → (`module_source`, `item_idx`) for trait declarations in `loaded_modules`.
     trait_decl_index: Arc<TraitDeclIndex>,
 }
 
@@ -2962,14 +2962,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     }
 
     /// Get the type name from a Type node
-    /// Static version of get_type_name for use before the Resolver is fully initialized.
+    /// Static version of `get_type_name` for use before the Resolver is fully initialized.
     fn get_type_name_static(ty: &Type) -> String {
         match ty {
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                Self::get_type_name_static(inner)
-            }
+            Type::Reference(inner) | Type::MutReference(inner) => Self::get_type_name_static(inner),
             _ => "Unknown".to_string(),
         }
     }
