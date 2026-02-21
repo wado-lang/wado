@@ -3996,7 +3996,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     string_type,
                 )
             }
-            Literal::LocationData => {
+            Literal::DataSection => {
                 // #data - returns the __DATA__ section content as a String
                 let data = self
                     .loaded_modules

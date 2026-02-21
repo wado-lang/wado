@@ -741,7 +741,7 @@ pub enum Literal {
     /// Compile-time location literal: `#function`
     LocationFunction,
     /// Compile-time data section literal: `#data`
-    LocationData,
+    DataSection,
 }
 
 /// String literal with original representation to preserve multiline strings

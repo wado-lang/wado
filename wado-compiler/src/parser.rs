@@ -2400,7 +2400,7 @@ impl Parser {
                             "file" => Literal::LocationFile,
                             "line" => Literal::LocationLine,
                             "function" => Literal::LocationFunction,
-                            "data" => Literal::LocationData,
+                            "data" => Literal::DataSection,
                             _ => {
                                 return Err(ParseError {
                                     message: format!(
