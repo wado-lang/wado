@@ -208,8 +208,6 @@ fn has_complex_nested_generic(type_id: TypeId, type_table: &TypeTable) -> bool {
     type_table.has_nested_generics(type_id)
 }
 
-
-
 /// Check if any expression in the function body has a type with complex nested generics.
 /// This catches cases where the function accesses fields or creates values with deeply nested
 /// generic types that could cause type normalization issues during codegen.
