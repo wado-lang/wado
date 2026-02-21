@@ -115,7 +115,7 @@ pub fn analyze_project(project: &mut Project) {
     let has_http_handler_export_early = project
         .world_registry
         .get(&project.target_world)
-        .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
+        .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
     if has_http_handler_export_early {
         let func = core_internal("cm_lower_string");
         reachable.extend(compute_reachable(&call_graph, &func));
@@ -217,11 +217,11 @@ pub fn analyze_project(project: &mut Project) {
         || project
             .world_registry
             .get(&project.target_world)
-            .is_some_and(super::world_registry::WorldInfo::has_async_export);
+            .is_some_and(crate::world_registry::WorldInfo::has_async_export);
     let has_http_handler_export = project
         .world_registry
         .get(&project.target_world)
-        .is_some_and(super::world_registry::WorldInfo::has_http_handler_export);
+        .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
     if has_async_export {
         // TaskReturn is always needed for async exports.
         // For Result-returning exports (e.g., HTTP handler), cm_adapter_gen computes
