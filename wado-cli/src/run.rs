@@ -4,9 +4,7 @@ use anyhow::Result;
 use lexopt::Arg::{Long, Short, Value};
 use wasmtime::component::Component;
 
-use crate::args::{
-    next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
-};
+use crate::args::{next_arg, require_input, require_string, unexpected_arg};
 use crate::compile::{self, OptLevel};
 use crate::runtime;
 use wado_compiler::LogLevel;
@@ -18,6 +16,8 @@ pub struct RunOptions {
     /// Preopened directories as `(host_path, guest_path)` pairs.
     /// Populated by `--dir host_path[::guest_path]`.
     pub preopened_dirs: Vec<(String, String)>,
+    /// Arguments passed to the guest program via `wasi:cli/environment.get-arguments`.
+    pub program_args: Vec<String>,
 }
 
 pub fn print_usage() {
@@ -54,6 +54,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
+    let mut program_args: Vec<String> = Vec::new();
     let mut explicit_dirs = false;
     let mut no_dir = false;
 
@@ -109,8 +110,13 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
                 }
             }
             Value(val) => {
-                reject_multiple_inputs(&input);
-                input = Some(val.to_string_lossy().into_owned());
+                let s = val.to_string_lossy().into_owned();
+                if input.is_none() {
+                    input = Some(s);
+                } else {
+                    // Arguments after the source file are passed to the program.
+                    program_args.push(s);
+                }
             }
             _ => unexpected_arg(arg, print_usage),
         }
@@ -126,14 +132,19 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
         opt_level,
         log_level,
         preopened_dirs,
+        program_args,
     }
 }
 
-async fn run_cli_component(wasm: &[u8], preopened_dirs: &[(String, String)]) -> Result<()> {
+async fn run_cli_component(
+    wasm: &[u8],
+    preopened_dirs: &[(String, String)],
+    program_args: &[String],
+) -> Result<()> {
     let engine = runtime::create_engine(wasmtime::OptLevel::Speed)?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&engine)?;
-    let mut store = runtime::create_store(&engine, preopened_dirs)?;
+    let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
 
     let instance = linker.instantiate_async(&mut store, &component).await?;
     let run_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, "run")?;
@@ -147,7 +158,7 @@ async fn run_cli_component(wasm: &[u8], preopened_dirs: &[(String, String)]) -> 
 pub async fn run(opts: RunOptions) {
     let wasm = compile::compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
 
-    if let Err(e) = run_cli_component(&wasm, &opts.preopened_dirs).await {
+    if let Err(e) = run_cli_component(&wasm, &opts.preopened_dirs, &opts.program_args).await {
         eprintln!("Runtime error: {e}");
         process::exit(1);
     }

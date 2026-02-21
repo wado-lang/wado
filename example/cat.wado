@@ -1,84 +1,51 @@
+#!/usr/bin/env wado
 // A simple cat(1) implementation in Wado
 //
-// Usage: wado run --dir . example/cat.wado <file>...
+// Usage: wado run example/cat.wado <file>...
 //
-// This demonstrates WASI P3 filesystem operations:
-// - Getting preopened directories
-// - Opening files
-// - Reading file streams and writing to stdout
+// By default, wado run preopens the current directory as '.'.
+// Files are opened relative to that preopened directory.
 //
-// Current Status: The wasi:filesystem module is fully generated with all
-// Descriptor methods (open_at, read_via_stream, stat, etc.), but resource
-// type codegen is not yet implemented. This file documents the intended API.
+// Example:
+//   wado run example/cat.wado README.md
+//   wado run example/cat.wado example/cat.wado example/hello.wado
 
-use {eprintln, args, Stdout, Stderr, Environment} from "core:cli";
+use { args, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
-// These imports work but Descriptor resource codegen is not yet implemented:
-// use {
-//     Preopens,
-//     Descriptor,
-//     PathFlags,
-//     OpenFlags,
-//     DescriptorFlags,
-//     ErrorCode,
-// } from "wasi:filesystem";
-
-export fn run() with Stdout, Stderr, Environment {
+export fn run() with Stdout, Stderr, Environment, Preopens {
     let arguments = args();
 
-    if arguments.len() <= 1 {
+    if arguments.len() == 0 {
         eprintln("cat: usage: cat <file>...");
-        eprintln("cat: note: filesystem resource codegen not yet implemented");
         return;
     }
 
-    // When resource codegen is implemented, the following will work:
-    //
-    // // Get preopened directories
-    // let preopens = Preopens::get_directories();
-    // if preopens.len() == 0 {
-    //     eprintln("cat: no preopened directories available");
-    //     return;
-    // }
-    //
-    // // Use first preopened directory as base
-    // let root_entry = preopens[0];
-    // let root_dir = root_entry.0;
-    //
-    // // Process each file argument
-    // for let mut i = 1; i < arguments.len(); i = i + 1 {
-    //     let path = arguments[i];
-    //     cat_file(&root_dir, path);
-    // }
+    // Use the first preopened directory as the root for relative paths.
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("cat: no preopened directories available (try without --no-dir)");
+        return;
+    }
+    let root = dirs[0].0;
 
-    // Temporary: Show what files were requested
-    eprintln("cat: file reading not yet implemented (resource codegen needed)");
-    for let mut i = 1; i < arguments.len(); i = i + 1 {
-        eprintln(`cat: would read: {arguments[i]}`);
+    for let mut i = 0; i < arguments.len(); i = i + 1 {
+        cat_file(&root, arguments[i]);
     }
 }
 
-// When resource codegen is implemented:
-//
-// fn cat_file(dir: &Descriptor, path: String) with Stdout, Stderr {
-//     // Open the file for reading
-//     let open_result = dir.method_descriptor_open_at(
-//         PathFlags::none(),
-//         path,
-//         OpenFlags::none(),
-//         DescriptorFlags::Read
-//     );
-//
-//     if let Ok(file) = open_result {
-//         // Get read stream from file (offset 0 = start of file)
-//         let stream_result = file.method_descriptor_read_via_stream(0 as u64);
-//
-//         // stream_result is [Stream<u8>, Future<Result<(), ErrorCode>>]
-//         let read_stream = stream_result.0;
-//
-//         // Write the file contents to stdout
-//         Stdout::write_via_stream(read_stream);
-//     } else {
-//         eprintln(`cat: {path}: cannot open file`);
-//     }
-// }
+fn cat_file(dir: &Descriptor, path: String) with Stdout, Stderr {
+    let open_result = dir.open_at(
+        PathFlags::none(),
+        path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    );
+
+    if let Ok(file) = open_result {
+        let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+        Stdout::write_via_stream(read_stream);
+    } else {
+        eprintln(`cat: {path}: cannot open file`);
+    }
+}
