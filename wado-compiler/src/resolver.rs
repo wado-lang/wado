@@ -10868,6 +10868,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     // Parse format spec (if any) to determine trait + Formatter fields
                     let parsed = format.as_ref().map(|f| self.parse_format_spec(&f.spec));
 
+                    // Check if this is an inspect format specifier (:?)
+                    let is_inspect = parsed.as_ref().is_some_and(|pf| pf.type_char == Some('?'));
+
                     // Determine which trait's fmt to call
                     let (trait_name, _trait_type_char) = match &parsed {
                         Some(pf) => match pf.type_char {
@@ -10877,6 +10880,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             Some('X') => ("UpperHex", Some('X')),
                             Some('e') => ("LowerExp", Some('e')),
                             Some('E') => ("UpperExp", Some('E')),
+                            Some('?') => ("Display", None), // placeholder, not used
                             _ => ("Display", None),
                         },
                         None => ("Display", None),
@@ -10966,7 +10970,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         span,
                     );
 
-                    if let Some(func_name) = float_fixed_func {
+                    if is_inspect {
+                        // Emit builtin::inspect marker — replaced by synthesize_inspect phase
+                        let inspect_call = TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("builtin"),
+                                    name: "builtin::inspect".to_string(),
+                                    monomorph_info: None,
+                                    method_info: None,
+                                },
+                                args: vec![resolved, fmt_mut_ref],
+                            },
+                            TypeTable::UNIT,
+                            span,
+                        );
+                        stmts.push(TirStmt::new(TirStmtKind::Expr(inspect_call), span));
+                    } else if let Some(func_name) = float_fixed_func {
                         // Direct call: fmt_f64_fixed(value, precision, &mut __f)
                         let precision_value = parsed.as_ref().unwrap().precision.unwrap();
                         let precision_expr = TirExpr::new(

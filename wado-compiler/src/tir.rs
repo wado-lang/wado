@@ -1100,9 +1100,8 @@ impl FunctionRef {
 
         // Check if the generic name is a known builtin
         match generic_name.as_str() {
-            "array_get" | "array_set" | "array_new" | "array_len" | "select" => {
-                Some(format!("builtin::{generic_name}"))
-            }
+            "array_get" | "array_set" | "array_new" | "array_len" | "array_copy" | "array_fill"
+            | "select" => Some(format!("builtin::{generic_name}")),
             _ => None,
         }
     }
