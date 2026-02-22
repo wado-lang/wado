@@ -1,0 +1,36 @@
+// Test shifting i64/u64 values by i32 shift amounts
+// Regression: compiler must extend i32 shift amount to i64 for i64.shl/shr
+
+export fn run() {
+    // u64 << i32
+    let x: u64 = 1;
+    let shift = 11;
+    let result = x << shift;
+    assert result == 2048;
+
+    // u64 >> i32
+    let y: u64 = 2048;
+    let result2 = y >> shift;
+    assert result2 == 1;
+
+    // i64 << i32
+    let z: i64 = 1 as i64;
+    let result3 = z << shift;
+    assert result3 == 2048 as i64;
+
+    // i64 >> i32
+    let w: i64 = 2048 as i64;
+    let result4 = w >> shift;
+    assert result4 == 1 as i64;
+
+    // variable shift amount
+    let mut n = 0;
+    n = n + 5;
+    let v: u64 = 1;
+    let shifted = v << n;
+    assert shifted == 32;
+
+}
+
+__DATA__
+{}
