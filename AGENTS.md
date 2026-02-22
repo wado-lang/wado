@@ -200,10 +200,6 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 ```
 
-### Profiling
-
-`wado run --profile <mode>` enables runtime profiling via wasmtime. Modes: `guest` (cross-platform, Firefox Profiler JSON), `jitdump` (Linux perf), `perfmap` (Linux perf). See `benchmark/README.md` for full documentation and examples.
-
 ### Dump Command
 
 Use `wado dump` to inspect compiler internal state for debugging:
