@@ -272,8 +272,13 @@ async fn run_cli_component(
 pub async fn run(opts: RunOptions) {
     let wasm = compile::compile_with_opts(&opts.input, opts.opt_level, opts.log_level).await;
 
-    if let Err(e) =
-        run_cli_component(&wasm, &opts.profile, &opts.preopened_dirs, &opts.program_args).await
+    if let Err(e) = run_cli_component(
+        &wasm,
+        &opts.profile,
+        &opts.preopened_dirs,
+        &opts.program_args,
+    )
+    .await
     {
         eprintln!("Runtime error: {e}");
         process::exit(1);

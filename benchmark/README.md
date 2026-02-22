@@ -120,6 +120,7 @@ View the output at https://profiler.firefox.com/ by uploading the JSON file.
 **How it works**: The engine is configured with epoch interruption. A background thread bumps the epoch at the specified interval. On each epoch tick, a callback calls `GuestProfiler::sample()` which captures the current Wasm call stack. After execution, the profile is serialized to the Firefox "processed profile format".
 
 **Limitations**:
+
 - Only measures time in WebAssembly guest code (not host or kernel)
 - Sampling granularity is limited to function entry points and loop headers (epoch check points)
 - Function names may show as `<wasm function N>` without DWARF debug info
@@ -140,6 +141,7 @@ perf report --input perf.jit.data
 ```
 
 **Advantages over guest profiling**:
+
 - Measures time in guest code, host runtime, and kernel
 - Hardware performance counter support
 - Higher precision timing from CPU counters
@@ -166,11 +168,11 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 
 ### Comparison
 
-| Mode      | Platform    | Precision | Scope                | Output               | Viewer                        |
-| --------- | ----------- | --------- | -------------------- | -------------------- | ----------------------------- |
-| `guest`   | All         | Moderate  | Wasm guest only      | Firefox Profiler JSON | https://profiler.firefox.com/ |
-| `jitdump` | Linux       | High      | Guest + host + kernel | perf jitdump         | `perf report`                 |
-| `perfmap` | Linux       | High      | Guest + host + kernel | `/tmp/perf-<pid>.map` | `perf report` / samply        |
+| Mode      | Platform | Precision | Scope                 | Output                | Viewer                        |
+| --------- | -------- | --------- | --------------------- | --------------------- | ----------------------------- |
+| `guest`   | All      | Moderate  | Wasm guest only       | Firefox Profiler JSON | https://profiler.firefox.com/ |
+| `jitdump` | Linux    | High      | Guest + host + kernel | perf jitdump          | `perf report`                 |
+| `perfmap` | Linux    | High      | Guest + host + kernel | `/tmp/perf-<pid>.map` | `perf report` / samply        |
 
 ### Tips
 
