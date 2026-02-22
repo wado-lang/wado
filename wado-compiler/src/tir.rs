@@ -661,7 +661,7 @@ impl TypeTable {
     pub fn make_array(&mut self, element: TypeId) -> TypeId {
         self.make_generic_instance(
             "Array".to_string(),
-            ModuleSource::core("prelude/array.wado"),
+            ModuleSource::array(),
             vec![element],
         )
     }

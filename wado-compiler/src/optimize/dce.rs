@@ -700,7 +700,7 @@ fn analyze_expr(
                         // (e.g., i32^Ord::cmp, char::is_ascii_space)
                         let prim_name = prim.as_str().to_string();
                         let method_id = FunctionId::Method(MethodName::new(
-                            ModuleSource::core("prelude/primitives.wado"),
+                            ModuleSource::primitives(),
                             prim_name,
                             trait_name.clone(),
                             method_name.clone(),
@@ -1026,7 +1026,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
             let prim_name = prim.as_str();
             // Method format: module_source/StructName::method_name
             let method_id = FunctionId::Method(MethodName::new(
-                ModuleSource::core("prelude/primitives.wado"),
+                ModuleSource::primitives(),
                 prim_name.to_string(),
                 None,
                 "to_string".to_string(),

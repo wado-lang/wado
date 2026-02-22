@@ -4276,7 +4276,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             return TirExpr::new(
                 TirExprKind::Global {
-                    module_source: ModuleSource::core("internal"),
+                    module_source: ModuleSource::internal(),
                     name: ident.name.clone(),
                 },
                 TypeTable::UNKNOWN,
@@ -4389,7 +4389,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4451,7 +4451,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     let ordering_type_id =
                         self.type_table.borrow_mut().intern(ResolvedType::Enum {
                             name: "Ordering".to_string(),
-                            module_source: ModuleSource::core("prelude"),
+                            module_source: ModuleSource::prelude(),
                         });
 
                     let mangled_method_name =
@@ -4461,7 +4461,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4590,7 +4590,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4654,7 +4654,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4842,7 +4842,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4892,7 +4892,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -5335,7 +5335,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     // Builtin functions: resolve through core:builtin module
                     if prefix == "builtin" {
                         (
-                            Some(ModuleSource::core("builtin")),
+                            Some(ModuleSource::builtin()),
                             suffix.to_string(),
                             true,
                         )
@@ -5455,7 +5455,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 // These are defined in core:internal and re-exported by core:prelude
                 else if matches!(ident.name.as_str(), "panic" | "unreachable") {
                     (
-                        Some(ModuleSource::core("internal")),
+                        Some(ModuleSource::internal()),
                         ident.name.clone(),
                         true,
                     )
@@ -5823,7 +5823,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source: ModuleSource::core("prelude/int128.wado"),
+                    module_source: ModuleSource::int128(),
                     name: mangled_func_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
@@ -6141,7 +6141,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         return Some(TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("prelude/int128.wado"),
+                                    module_source: ModuleSource::int128(),
                                     name: mangled_func_name,
                                     monomorph_info: None,
                                     method_info: Some(method_info),
@@ -6938,7 +6938,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 return TirExpr::new(
                     TirExprKind::Call {
                         func: FunctionRef::External {
-                            module_source: ModuleSource::core("builtin"),
+                            module_source: ModuleSource::builtin(),
                             name: builtin_name.to_string(),
                             monomorph_info: None,
                             method_info: None,
@@ -10784,7 +10784,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Prepare Formatter type and its &mut type
         let formatter_type = self.type_table.borrow_mut().make_struct(
             "Formatter".to_string(),
-            ModuleSource::core("prelude/format.wado"),
+            ModuleSource::format(),
         );
         let mut_ref_formatter = self.type_table.borrow_mut().make_mut_ref(formatter_type);
 
@@ -10985,7 +10985,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         let inspect_call = TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("builtin"),
+                                    module_source: ModuleSource::builtin(),
                                     name: "builtin::inspect".to_string(),
                                     monomorph_info: None,
                                     method_info: None,
@@ -11010,7 +11010,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         let fmt_call = TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("prelude/primitives.wado"),
+                                    module_source: ModuleSource::primitives(),
                                     name: func_name.to_string(),
                                     monomorph_info: None,
                                     method_info: None,
@@ -11086,7 +11086,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             let inspect_call = TirExpr::new(
                                 TirExprKind::StaticCall {
                                     func: FunctionRef::External {
-                                        module_source: ModuleSource::core("builtin"),
+                                        module_source: ModuleSource::builtin(),
                                         name: "builtin::inspect".to_string(),
                                         monomorph_info: None,
                                         method_info: None,
@@ -11260,7 +11260,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return TirExpr::new(
                 TirExprKind::StaticCall {
                     func: FunctionRef::External {
-                        module_source: ModuleSource::core("prelude/format.wado"),
+                        module_source: ModuleSource::format(),
                         name: "Formatter::new".to_string(),
                         monomorph_info: None,
                         method_info: Some(LocalMethodName::new(
@@ -11280,7 +11280,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let pf = parsed.as_ref().unwrap();
         let alignment_type = self.type_table.borrow_mut().make_enum(
             "Alignment".to_string(),
-            ModuleSource::core("prelude/format.wado"),
+            ModuleSource::format(),
         );
         let fill_char = pf.fill.unwrap_or(if pf.zero_pad { '0' } else { ' ' });
         let align_index: u32 = match pf.align {
@@ -11531,7 +11531,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         return TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("prelude/int128.wado"),
+                                    module_source: ModuleSource::int128(),
                                     name: mangled_func_name,
                                     monomorph_info: None,
                                     method_info: Some(method_info),
@@ -11626,7 +11626,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 return TirExpr::new(
                     TirExprKind::StaticCall {
                         func: FunctionRef::External {
-                            module_source: ModuleSource::core("prelude/int128.wado"),
+                            module_source: ModuleSource::int128(),
                             name: mangled_func_name,
                             monomorph_info: None,
                             method_info: Some(method_info),
@@ -12274,7 +12274,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Resolve a generic type
     fn resolve_generic_type(&mut self, name: &str, args: &[Type], span: Span) -> TypeId {
         // Prelude module path for looking up Option/Result
-        let prelude_source = ModuleSource::core("prelude");
+        let prelude_source = ModuleSource::prelude();
 
         match name {
             "Option" => {

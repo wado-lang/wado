@@ -144,10 +144,70 @@ impl ModuleSource {
         Self::Remote { url: url.into() }
     }
 
-    /// Create the module source for the String type (`core:prelude/string.wado`).
+    /// `core:prelude` — the prelude module.
+    #[must_use]
+    pub fn prelude() -> Self {
+        Self::core("prelude")
+    }
+
+    /// `core:prelude/string.wado` — the String type.
     #[must_use]
     pub fn string() -> Self {
         Self::core("prelude/string.wado")
+    }
+
+    /// `core:prelude/array.wado` — the Array type.
+    #[must_use]
+    pub fn array() -> Self {
+        Self::core("prelude/array.wado")
+    }
+
+    /// `core:prelude/format.wado` — format trait helpers.
+    #[must_use]
+    pub fn format() -> Self {
+        Self::core("prelude/format.wado")
+    }
+
+    /// `core:prelude/int128.wado` — 128-bit integer types.
+    #[must_use]
+    pub fn int128() -> Self {
+        Self::core("prelude/int128.wado")
+    }
+
+    /// `core:prelude/primitives.wado` — primitive type methods.
+    #[must_use]
+    pub fn primitives() -> Self {
+        Self::core("prelude/primitives.wado")
+    }
+
+    /// `core:prelude/types.wado` — core type definitions.
+    #[must_use]
+    pub fn types() -> Self {
+        Self::core("prelude/types.wado")
+    }
+
+    /// `core:prelude/traits.wado` — builtin trait definitions.
+    #[must_use]
+    pub fn traits() -> Self {
+        Self::core("prelude/traits.wado")
+    }
+
+    /// `core:internal` — compiler internal functions.
+    #[must_use]
+    pub fn internal() -> Self {
+        Self::core("internal")
+    }
+
+    /// `core:builtin` — builtin wasm instruction mappings.
+    #[must_use]
+    pub fn builtin() -> Self {
+        Self::core("builtin")
+    }
+
+    /// `core:cli` — CLI output functions.
+    #[must_use]
+    pub fn cli() -> Self {
+        Self::core("cli")
     }
 
     /// Create an entry point module source with a filename.
@@ -291,7 +351,7 @@ impl ModuleSource {
     /// for disambiguating same-named types from different modules.
     ///
     /// Examples:
-    /// - `ModuleSource::core("prelude").qualify_name("Option")` → `"core:prelude//Option"`
+    /// - `ModuleSource::prelude().qualify_name("Option")` → `"core:prelude//Option"`
     /// - `ModuleSource::local("./geometry.wado").qualify_name("Point")` → `"./geometry.wado//Point"`
     /// - `ModuleSource::entry_point_with_filename("main.wado").qualify_name("Foo")` → `"main.wado//Foo"`
     #[must_use]
@@ -1285,7 +1345,7 @@ mod tests {
     fn test_build_core_internal_name() {
         let name = build_core_internal_name("log_stdout");
         assert_eq!(name.to_string(), "core/internal/log_stdout");
-        assert_eq!(name.module_source, ModuleSource::core("internal"));
+        assert_eq!(name.module_source, ModuleSource::internal());
         assert_eq!(name.name, "log_stdout");
     }
 
@@ -1471,7 +1531,7 @@ mod tests {
 
     #[test]
     fn test_module_source_to_path() {
-        let source = ModuleSource::core("prelude");
+        let source = ModuleSource::prelude();
         assert_eq!(source.to_path(), vec!["core", "prelude"]);
 
         let source = ModuleSource::wasi("cli");
@@ -1486,7 +1546,8 @@ mod tests {
 
     #[test]
     fn test_module_source_display() {
-        assert_eq!(ModuleSource::core("prelude").to_string(), "core:prelude");
+        assert_eq!(ModuleSource::prelude().to_string(), "core:prelude");
+        assert_eq!(ModuleSource::cli().to_string(), "core:cli");
         assert_eq!(ModuleSource::wasi("cli").to_string(), "wasi:cli");
         assert_eq!(
             ModuleSource::local("./geometry.wado").to_string(),
@@ -1500,16 +1561,16 @@ mod tests {
 
     #[test]
     fn test_module_source_helpers() {
-        let core = ModuleSource::core("internal");
+        let core = ModuleSource::internal();
         assert!(core.is_core());
         assert!(core.is_core_internal());
         assert!(!core.is_wasi());
         assert!(!core.is_local());
 
-        let builtin = ModuleSource::core("builtin");
+        let builtin = ModuleSource::builtin();
         assert!(builtin.is_core_builtin());
 
-        let prelude = ModuleSource::core("prelude");
+        let prelude = ModuleSource::prelude();
         assert!(prelude.is_core_prelude());
 
         let wasi = ModuleSource::wasi("cli");
@@ -1524,7 +1585,7 @@ mod tests {
     #[test]
     fn test_module_source_qualify_name() {
         assert_eq!(
-            ModuleSource::core("prelude").qualify_name("Option"),
+            ModuleSource::prelude().qualify_name("Option"),
             "core:prelude//Option"
         );
         assert_eq!(

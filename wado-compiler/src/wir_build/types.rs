@@ -452,7 +452,7 @@ fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::w
     if ctx.lookup_struct_by_name(&box_name).is_some() {
         return;
     }
-    let module_source = ModuleSource::core("prelude");
+    let module_source = ModuleSource::prelude();
     let struct_name = StructName::new(module_source.clone(), box_name.clone());
     let fq = format!("{module_source}//{box_name}");
     let type_id = ctx.register_type(
@@ -980,7 +980,7 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
             continue;
         };
 
-        let module_source = ModuleSource::core("prelude");
+        let module_source = ModuleSource::prelude();
         let struct_name = StructName::new(module_source.clone(), mangled.clone());
         if ctx.struct_type_map.contains_key(&struct_name) {
             continue;

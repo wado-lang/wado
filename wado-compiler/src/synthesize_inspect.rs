@@ -48,7 +48,7 @@ pub fn synthesize_inspect(mut project: Project) -> Project {
 
             let formatter_struct = tt.borrow_mut().make_struct(
                 "Formatter".to_string(),
-                ModuleSource::core("prelude/format.wado"),
+                ModuleSource::format(),
             );
             let fmt_type = tt.borrow_mut().make_mut_ref(formatter_struct);
 
@@ -761,7 +761,7 @@ fn ws(text: &str, fmt: TirExpr, tt: &Rc<RefCell<TypeTable>>, span: Span) -> TirS
         TirExprKind::MethodCall {
             receiver: Box::new(fmt),
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/format.wado"),
+                module_source: ModuleSource::format(),
                 name: "Formatter::write_str".to_string(),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
@@ -789,7 +789,7 @@ fn wc(c: char, fmt: TirExpr, span: Span) -> TirStmt {
         TirExprKind::MethodCall {
             receiver: Box::new(fmt),
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/format.wado"),
+                module_source: ModuleSource::format(),
                 name: "Formatter::write_char".to_string(),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
@@ -881,7 +881,7 @@ fn lower_hex_fmt(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/primitives.wado"),
+                module_source: ModuleSource::primitives(),
                 name: mangled,
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
@@ -901,14 +901,14 @@ fn lower_hex_fmt(
 
 fn display_impl_module(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> ModuleSource {
     match tt.borrow().get(type_id).clone() {
-        ResolvedType::Primitive(_) => ModuleSource::core("prelude/primitives.wado"),
+        ResolvedType::Primitive(_) => ModuleSource::primitives(),
         ResolvedType::Struct { name, .. } if name == "String" => {
-            ModuleSource::core("prelude/format.wado")
+            ModuleSource::format()
         }
         ResolvedType::Struct { module_source, .. } | ResolvedType::Enum { module_source, .. } => {
             module_source
         }
-        _ => ModuleSource::core("prelude/primitives.wado"),
+        _ => ModuleSource::primitives(),
     }
 }
 
@@ -925,7 +925,7 @@ fn synth_string(
     let call = TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef::External {
-                module_source: ModuleSource::core("internal"),
+                module_source: ModuleSource::internal(),
                 name: "write_escaped_string".to_string(),
                 monomorph_info: None,
                 method_info: None,
@@ -1243,7 +1243,7 @@ fn synth_array(
         TirExprKind::MethodCall {
             receiver: Box::new(val.clone()),
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/array.wado"),
+                module_source: ModuleSource::array(),
                 name: "Array::len".to_string(),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new("Array".into(), None, "len".into())),
