@@ -228,7 +228,17 @@ Apply algebraic laws to simplify expressions. Often implemented as part of peeph
 
 When a function returns a struct or tuple that is immediately destructured at every call site, the return can be scalarized using Wasm multi-value returns. This eliminates the GC struct allocation at the function boundary without requiring inlining.
 
-The compiler already implements this for builtins (e.g., `i64_add128` returns two `i64` values on the Wasm stack via the `skip_tuple_wrap` mechanism). Extending this to user-defined functions is a natural next step.
+The compiler already implements this for builtins (e.g., `i64_add128` returns two `i64` values on the Wasm stack via `MultiValueStructNew`/`MultiValueLocalBind` in WIR). Extending this to user-defined functions is a natural next step.
+
+#### Current State: Builtin Multi-Value Pipeline
+
+The existing pipeline for builtins:
+
+1. `lower.rs`: `is_multivalue_builtin_pattern()` detects builtin multi-value calls and **preserves** `LetPattern` (instead of lowering to `Let + FieldAccess`)
+2. `wir_build/translate.rs`: Wraps the Wasm multi-value instruction in `MultiValueStructNew`
+3. `translate_let_pattern()`: Detects `MultiValueStructNew` → replaces with `MultiValueLocalBind` (tuple elision, no struct allocation)
+
+#### Goal: Extend to User-Defined Functions
 
 Example:
 
@@ -270,19 +280,87 @@ Optimized codegen with multi-value return:
 (local.set $lo)
 ```
 
-Implementation strategy:
+#### Implementation Phase: Hybrid TIR Analysis + WIR Generation
 
-1. **Whole-program analysis**: Identify functions where ALL call sites immediately destructure the return value (let-pattern with bindings/wildcards only)
-2. **Signature rewrite**: Change function return type from `(result (ref $tuple))` to `(result T0 T1 ...)`
-3. **Call site rewrite**: Replace `struct.get` field extractions with direct `local.set` from stack
-4. **Fallback**: If any call site stores the tuple as a whole value, the function keeps the struct return (or a multi-value variant is cloned)
+Two approaches were considered:
 
-Constraints:
+**Option A: Pure WIR optimization pass** — Add an optimization phase after WIR build that rewrites signatures and call sites. WIR already has `MultiValueStructNew`/`MultiValueLocalBind` infrastructure and Wasm-level types. However, WIR currently has no optimization framework, and introducing one is a significant architectural change.
 
-- Requires whole-program analysis (all call sites must be known)
-- Component Model export boundaries always need single-value returns, so this is internal only
-- Nested tuples (e.g., `[i32, [String, bool]]`) require recursive flattening
-- Best limited to small tuples (2-4 fields) to avoid Wasm stack depth issues
+**Option B (preferred): Hybrid TIR analysis + WIR generation** — The TIR optimizer identifies candidate functions via whole-program analysis and marks them. WIR build then uses these marks to generate multi-value signatures and call sites.
+
+Rationale for Option B:
+
+1. **Whole-program analysis is natural at TIR level** — The TIR optimizer already performs cross-function analysis (inlining, DCE). Adding call-site analysis fits this model.
+2. **Leverages existing fixed-point iteration** — SROA decomposes struct locals, copy propagation cleans up, then multi-value candidate detection runs in the same loop. Interplay between passes is valuable.
+3. **No new WIR optimization framework needed** — The "decision" happens at TIR, the "execution" happens during WIR build (which already handles the builtin case).
+4. **Clean separation of concerns** — "What to optimize" is a TIR-level question. "How to emit multi-value Wasm" is a WIR-level question.
+
+Note: A WIR optimization framework may be useful in the future for other purposes (stack scheduling, register allocation, peephole). Option B does not preclude adding one later.
+
+#### Implementation Strategy
+
+1. **TIR analysis pass** (new pass in `optimize/`): Scan all internal functions that return a struct or tuple. For each, check that ALL call sites either:
+   - Immediately destructure via `LetPattern` (tuple or struct destructuring)
+   - Only access fields without escaping the value (SROA will have decomposed these)
+     Mark qualifying functions with a metadata flag (e.g., `multivalue_return: true`).
+
+2. **Callee rewrite at WIR build**: When generating a marked function, emit multiple Wasm result types instead of a single struct ref. Replace `struct.new` at return sites with bare stack values.
+
+3. **Call site rewrite at WIR build**: For calls to marked functions, emit `MultiValueLocalBind` instead of `Call` + `StructGet` sequences. The existing `translate_let_pattern()` mechanism can be extended.
+
+4. **Fallback**: If any call site uses the return value as a whole (passes it to another function, stores it, etc.), the function is NOT marked. No cloning — keep it simple.
+
+#### Applicable Syntax Patterns
+
+**Pattern 1: Direct destructuring (primary target)**
+
+```wado
+let [lo, hi] = minmax(x, y);
+```
+
+Directly maps to `MultiValueLocalBind`. Simplest case.
+
+**Pattern 2: Struct destructuring**
+
+```wado
+struct Point { x: i32, y: i32 }
+fn origin() -> Point { return Point { x: 0, y: 0 }; }
+let { x, y } = origin();
+```
+
+Same as tuple but field order follows struct definition order.
+
+**Pattern 3: Field access only (SROA-assisted)**
+
+```wado
+let result = minmax(x, y);
+use(result.0);
+use(result.1);
+```
+
+After SROA decomposes `result` into `__sroa_result_0` and `__sroa_result_1`, the pattern becomes equivalent to destructuring. The multi-value analysis can recognize SROA-decomposed call results.
+
+**Pattern 4: Partial use with wildcard**
+
+```wado
+let [lo, _] = minmax(x, y);
+```
+
+The unused return value is emitted as `drop` in Wasm. Already supported by `MultiValueLocalBind`.
+
+**Not applicable:**
+
+- Mixed call sites (some destructure, some use whole value) — would require function cloning
+- CM export boundaries — always need single-value returns per Component Model ABI
+- Deeply nested tuples (`[i32, [String, bool]]`) — recursive flattening adds complexity, defer to future work
+- Functions with reference-type return fields — `struct.get` on GC refs has different semantics than stack values
+- Best limited to small returns (2-4 fields) to avoid Wasm stack depth issues
+
+#### Interaction with Existing Passes
+
+- **SROA**: Decomposes local struct variables. Multi-value return scalarization complements SROA by eliminating the struct at the function boundary. SROA handles the "local" case, multi-value handles the "cross-function" case.
+- **Function inlining**: Inlining eliminates the function boundary entirely, making multi-value optimization unnecessary. Multi-value is most valuable for functions too large to inline.
+- **Copy propagation**: After multi-value rewrite, trivial copies (`let x = __multivalue_0`) are cleaned up by copy propagation.
 
 ### Function Specialization
 
