@@ -7532,10 +7532,8 @@ fn generate_enum_trait_impls(module: &mut TirModule) {
         // Generate Ord::cmp
         let cmp_key = MethodName::format_local(enum_name, Some("Ord"), "cmp");
         if !existing_trait_methods.contains(&cmp_key) {
-            let ordering_type = type_table.make_enum(
-                "Ordering".to_string(),
-                ModuleSource::traits(),
-            );
+            let ordering_type =
+                type_table.make_enum("Ordering".to_string(), ModuleSource::traits());
             let func = generate_enum_ord_fn(
                 enum_name,
                 enum_type,

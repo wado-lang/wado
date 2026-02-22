@@ -1479,10 +1479,8 @@ impl FunctionTranslator<'_, '_> {
         let u8_array_type = self.ctx.array_type_by_name.get("u8").cloned();
 
         // Look up String struct type
-        let string_struct_name = crate::name::StructName::new(
-            crate::name::ModuleSource::string(),
-            "String".to_string(),
-        );
+        let string_struct_name =
+            crate::name::StructName::new(crate::name::ModuleSource::string(), "String".to_string());
         let string_type = self.ctx.struct_type_map.get(&string_struct_name).cloned();
 
         let (Some(array_type_id), Some(string_type_id)) = (u8_array_type, string_type) else {

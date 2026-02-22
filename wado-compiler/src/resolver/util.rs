@@ -146,11 +146,9 @@ pub(super) fn parse_int_literal(repr: &str) -> Result<u64, String> {
     if clean.starts_with("0x") || clean.starts_with("0X") {
         u64::from_str_radix(&clean[2..], 16).map_err(|_| format!("invalid hex literal: {repr}"))
     } else if clean.starts_with("0b") || clean.starts_with("0B") {
-        u64::from_str_radix(&clean[2..], 2)
-            .map_err(|_| format!("invalid binary literal: {repr}"))
+        u64::from_str_radix(&clean[2..], 2).map_err(|_| format!("invalid binary literal: {repr}"))
     } else if clean.starts_with("0o") || clean.starts_with("0O") {
-        u64::from_str_radix(&clean[2..], 8)
-            .map_err(|_| format!("invalid octal literal: {repr}"))
+        u64::from_str_radix(&clean[2..], 8).map_err(|_| format!("invalid octal literal: {repr}"))
     } else if clean.to_lowercase().contains('e') {
         // Scientific notation: parse as f64 first, then convert to u64
         let value: f64 = clean
@@ -221,14 +219,11 @@ pub(super) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
     let clean: String = repr.chars().filter(|&c| c != '_').collect();
 
     if clean.starts_with("0x") || clean.starts_with("0X") {
-        u128::from_str_radix(&clean[2..], 16)
-            .map_err(|_| format!("invalid hex literal: {repr}"))
+        u128::from_str_radix(&clean[2..], 16).map_err(|_| format!("invalid hex literal: {repr}"))
     } else if clean.starts_with("0b") || clean.starts_with("0B") {
-        u128::from_str_radix(&clean[2..], 2)
-            .map_err(|_| format!("invalid binary literal: {repr}"))
+        u128::from_str_radix(&clean[2..], 2).map_err(|_| format!("invalid binary literal: {repr}"))
     } else if clean.starts_with("0o") || clean.starts_with("0O") {
-        u128::from_str_radix(&clean[2..], 8)
-            .map_err(|_| format!("invalid octal literal: {repr}"))
+        u128::from_str_radix(&clean[2..], 8).map_err(|_| format!("invalid octal literal: {repr}"))
     } else {
         clean
             .parse()

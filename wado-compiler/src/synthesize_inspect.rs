@@ -46,10 +46,9 @@ pub fn synthesize_inspect(mut project: Project) -> Project {
             let functions: Vec<Rc<RefCell<_>>> = module.functions.clone();
             let all_modules: Vec<&TirModule> = project.tir_modules.values().collect();
 
-            let formatter_struct = tt.borrow_mut().make_struct(
-                "Formatter".to_string(),
-                ModuleSource::format(),
-            );
+            let formatter_struct = tt
+                .borrow_mut()
+                .make_struct("Formatter".to_string(), ModuleSource::format());
             let fmt_type = tt.borrow_mut().make_mut_ref(formatter_struct);
 
             let mut reg = InspectRegistry::new();
@@ -748,10 +747,8 @@ fn synth_body(
 
 /// Resolve string `TypeId`.
 fn str_type(tt: &Rc<RefCell<TypeTable>>) -> TypeId {
-    tt.borrow_mut().make_struct(
-        "String".to_string(),
-        ModuleSource::string(),
-    )
+    tt.borrow_mut()
+        .make_struct("String".to_string(), ModuleSource::string())
 }
 
 /// Build a `f.write_str("text")` statement.
@@ -902,9 +899,7 @@ fn lower_hex_fmt(
 fn display_impl_module(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> ModuleSource {
     match tt.borrow().get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::primitives(),
-        ResolvedType::Struct { name, .. } if name == "String" => {
-            ModuleSource::format()
-        }
+        ResolvedType::Struct { name, .. } if name == "String" => ModuleSource::format(),
         ResolvedType::Struct { module_source, .. } | ResolvedType::Enum { module_source, .. } => {
             module_source
         }

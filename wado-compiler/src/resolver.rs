@@ -5169,11 +5169,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                     // Builtin functions: resolve through core:builtin module
                     if prefix == "builtin" {
-                        (
-                            Some(ModuleSource::builtin()),
-                            suffix.to_string(),
-                            true,
-                        )
+                        (Some(ModuleSource::builtin()), suffix.to_string(), true)
                     }
                     // Check if this is a static method call (Type::method)
                     // Static methods are registered with mangled names "Type::method"
@@ -5289,11 +5285,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 // Check for prelude functions (panic, unreachable)
                 // These are defined in core:internal and re-exported by core:prelude
                 else if matches!(ident.name.as_str(), "panic" | "unreachable") {
-                    (
-                        Some(ModuleSource::internal()),
-                        ident.name.clone(),
-                        true,
-                    )
+                    (Some(ModuleSource::internal()), ident.name.clone(), true)
                 }
                 // Check if this is an imported function (per-module imports)
                 else if self.imported_functions.contains(&ident.name) {
@@ -5615,10 +5607,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Get the String struct type (from core:prelude/string.wado)
     fn get_string_struct_type(&mut self) -> TypeId {
-        self.type_table.borrow_mut().make_struct(
-            "String".to_string(),
-            ModuleSource::string(),
-        )
+        self.type_table
+            .borrow_mut()
+            .make_struct("String".to_string(), ModuleSource::string())
     }
 
     /// Build a `from_pair` call for i128/u128 large literal construction
@@ -10600,10 +10591,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         )];
 
         // Prepare Formatter type and its &mut type
-        let formatter_type = self.type_table.borrow_mut().make_struct(
-            "Formatter".to_string(),
-            ModuleSource::format(),
-        );
+        let formatter_type = self
+            .type_table
+            .borrow_mut()
+            .make_struct("Formatter".to_string(), ModuleSource::format());
         let mut_ref_formatter = self.type_table.borrow_mut().make_mut_ref(formatter_type);
 
         // Track whether we've created the __f local yet
@@ -11096,10 +11087,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Construct Formatter struct literal with custom fields
         let pf = parsed.as_ref().unwrap();
-        let alignment_type = self.type_table.borrow_mut().make_enum(
-            "Alignment".to_string(),
-            ModuleSource::format(),
-        );
+        let alignment_type = self
+            .type_table
+            .borrow_mut()
+            .make_enum("Alignment".to_string(), ModuleSource::format());
         let fill_char = pf.fill.unwrap_or(if pf.zero_pad { '0' } else { ' ' });
         let align_index: u32 = match pf.align {
             Some('<') => 0, // Left
