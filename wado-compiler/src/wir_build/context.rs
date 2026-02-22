@@ -370,7 +370,7 @@ impl<'a> WirContext<'a> {
                 // Special case: String struct
                 let lookup_name = if name == "String" {
                     StructName::new(
-                        ModuleSource::core("prelude/string.wado"),
+                        ModuleSource::string(),
                         "String".to_string(),
                     )
                 } else {

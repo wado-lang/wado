@@ -623,7 +623,7 @@ fn synth_body(
         } => {
             let n = name.clone();
             let ms = ms.clone();
-            if n == "String" && ms == ModuleSource::core("prelude/string.wado") {
+            if n == "String" && ms == ModuleSource::string() {
                 synth_string(val, fmt, tt, span)
             } else {
                 synth_struct(reg, &n, val, fmt, tt, mods, fmt_type, module_source, span)
@@ -750,7 +750,7 @@ fn synth_body(
 fn str_type(tt: &Rc<RefCell<TypeTable>>) -> TypeId {
     tt.borrow_mut().make_struct(
         "String".to_string(),
-        ModuleSource::core("prelude/string.wado"),
+        ModuleSource::string(),
     )
 }
 

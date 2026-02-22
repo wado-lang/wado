@@ -1480,7 +1480,7 @@ impl FunctionTranslator<'_, '_> {
 
         // Look up String struct type
         let string_struct_name = crate::name::StructName::new(
-            crate::name::ModuleSource::core("prelude/string.wado"),
+            crate::name::ModuleSource::string(),
             "String".to_string(),
         );
         let string_type = self.ctx.struct_type_map.get(&string_struct_name).cloned();

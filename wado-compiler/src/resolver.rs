@@ -39,11 +39,6 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Helper to get the `ModuleSource` for String type (core:prelude/string.wado)
-fn string_module_source() -> ModuleSource {
-    ModuleSource::core("prelude/string.wado")
-}
-
 /// Parsed format specification from a template string interpolation.
 /// Syntax: `[[fill]align][sign][#][0][width][.precision]type`
 #[allow(dead_code)]
@@ -4710,7 +4705,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        let op = convert_binary_op(binary.op);
+        let op = util::convert_binary_op(binary.op);
 
         // Type check: both operands of a binary operation must have the same type.
         // This applies to primitives, newtypes, and all non-overloaded binary ops.
@@ -4771,7 +4766,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         let expr = self.resolve_expr(&unary.expr, ctx, None);
-        let op = convert_unary_op(unary.op);
+        let op = util::convert_unary_op(unary.op);
 
         // Track address-taken locals for &x and &mut x
         if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
@@ -5787,7 +5782,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     fn get_string_struct_type(&mut self) -> TypeId {
         self.type_table.borrow_mut().make_struct(
             "String".to_string(),
-            ModuleSource::core("prelude/string.wado"),
+            ModuleSource::string(),
         )
     }
 
@@ -10753,7 +10748,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let with_capacity_call = TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source: string_module_source(),
+                    module_source: ModuleSource::string(),
                     name: "String::with_capacity".to_string(),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
@@ -10816,7 +10811,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(buf_ref),
                             func: FunctionRef::External {
-                                module_source: string_module_source(),
+                                module_source: ModuleSource::string(),
                                 name: "String::append".to_string(),
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -10854,7 +10849,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(buf_ref),
                                 func: FunctionRef::External {
-                                    module_source: string_module_source(),
+                                    module_source: ModuleSource::string(),
                                     name: "String::append".to_string(),
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
@@ -12395,42 +12390,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Get the type table (after resolution)
     pub fn into_type_table(self) -> Rc<RefCell<TypeTable>> {
         self.type_table
-    }
-}
-
-/// Convert AST `BinaryOp` to TIR `BinaryOp`
-fn convert_binary_op(op: BinaryOp) -> TirBinaryOp {
-    match op {
-        BinaryOp::Add => TirBinaryOp::Add,
-        BinaryOp::Sub => TirBinaryOp::Sub,
-        BinaryOp::Mul => TirBinaryOp::Mul,
-        BinaryOp::Div => TirBinaryOp::Div,
-        BinaryOp::Mod => TirBinaryOp::Mod,
-        BinaryOp::Eq => TirBinaryOp::Eq,
-        BinaryOp::NotEq => TirBinaryOp::NotEq,
-        BinaryOp::Lt => TirBinaryOp::Lt,
-        BinaryOp::LtEq => TirBinaryOp::LtEq,
-        BinaryOp::Gt => TirBinaryOp::Gt,
-        BinaryOp::GtEq => TirBinaryOp::GtEq,
-        BinaryOp::And => TirBinaryOp::And,
-        BinaryOp::Or => TirBinaryOp::Or,
-        BinaryOp::BitAnd => TirBinaryOp::BitAnd,
-        BinaryOp::BitOr => TirBinaryOp::BitOr,
-        BinaryOp::BitXor => TirBinaryOp::BitXor,
-        BinaryOp::Shl => TirBinaryOp::Shl,
-        BinaryOp::Shr => TirBinaryOp::Shr,
-    }
-}
-
-/// Convert AST `UnaryOp` to TIR `UnaryOp`
-fn convert_unary_op(op: UnaryOp) -> TirUnaryOp {
-    match op {
-        UnaryOp::Neg => TirUnaryOp::Neg,
-        UnaryOp::Not => TirUnaryOp::Not,
-        UnaryOp::BitNot => TirUnaryOp::BitNot,
-        UnaryOp::Ref => TirUnaryOp::Ref,
-        UnaryOp::MutRef => TirUnaryOp::MutRef,
-        UnaryOp::Deref => TirUnaryOp::Deref,
     }
 }
 

@@ -57,7 +57,7 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
             "()" => TypeTable::UNIT,
             "String" => type_table.make_struct(
                 "String".to_string(),
-                ModuleSource::core("prelude/string.wado"),
+                ModuleSource::string(),
             ),
             // Resource/enum/variant types - look up the already-resolved TypeId if available.
             // We try resource, enum, then variant to find the most specific match.
@@ -476,7 +476,7 @@ fn synthesize_lift_inner(
                 let string_type_id = ctx.map_or(TypeTable::I32, |c| {
                     c.type_table.borrow_mut().make_struct(
                         "String".to_string(),
-                        ModuleSource::core("prelude/string.wado"),
+                        ModuleSource::string(),
                     )
                 });
                 internal_call("memory_to_gc_string", vec![ptr, len], string_type_id)

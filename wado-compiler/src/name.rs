@@ -144,6 +144,12 @@ impl ModuleSource {
         Self::Remote { url: url.into() }
     }
 
+    /// Create the module source for the String type (`core:prelude/string.wado`).
+    #[must_use]
+    pub fn string() -> Self {
+        Self::core("prelude/string.wado")
+    }
+
     /// Create an entry point module source with a filename.
     #[must_use]
     pub fn entry_point_with_filename(filename: impl Into<String>) -> Self {
