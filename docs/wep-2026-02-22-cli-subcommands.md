@@ -54,15 +54,15 @@ wado add shared --path ../shared
 wado add bench --dev --git https://gitlab.com/user/bench.git --version "^0.1.0"
 ```
 
-| Flag | Description |
-| --- | --- |
-| `--package <ns:name>` | Registry package identity |
-| `--version <spec>` | Version specifier (e.g., `"^1.0.0"`) |
-| `--registry <name>` | Registry alias (default: `default`) |
-| `--git <url>` | Git repository URL |
-| `--ref <ref>` | Exact git ref (tag, branch, or SHA) |
-| `--path <path>` | Local path |
-| `--dev` | Add to `[dev-dependencies]` instead |
+| Flag                  | Description                          |
+| --------------------- | ------------------------------------ |
+| `--package <ns:name>` | Registry package identity            |
+| `--version <spec>`    | Version specifier (e.g., `"^1.0.0"`) |
+| `--registry <name>`   | Registry alias (default: `default`)  |
+| `--git <url>`         | Git repository URL                   |
+| `--ref <ref>`         | Exact git ref (tag, branch, or SHA)  |
+| `--path <path>`       | Local path                           |
+| `--dev`               | Add to `[dev-dependencies]` instead  |
 
 The `<name>` argument becomes the dependency key (the import name in Wado source). `--version` is required for registry and git-with-semver dependencies. `--version` and `--ref` are mutually exclusive for git dependencies.
 
@@ -140,11 +140,11 @@ This may introduce breaking API changes. The compiler will catch incompatibiliti
 
 #### Summary
 
-| Mode | `wado.lock` | `wado.toml` | Use case |
-| --- | --- | --- | --- |
-| `wado update` | updated (within specs) | unchanged | Library: keep specs loose |
-| `wado update --pin` | updated (within specs) | version bumped, operator kept | App: track tested versions |
-| `wado update --breaking` | updated (any version) | version bumped, operator kept | Major upgrade |
+| Mode                     | `wado.lock`            | `wado.toml`                   | Use case                   |
+| ------------------------ | ---------------------- | ----------------------------- | -------------------------- |
+| `wado update`            | updated (within specs) | unchanged                     | Library: keep specs loose  |
+| `wado update --pin`      | updated (within specs) | version bumped, operator kept | App: track tested versions |
+| `wado update --breaking` | updated (any version)  | version bumped, operator kept | Major upgrade              |
 
 ### `wado fetch`
 
@@ -192,10 +192,10 @@ Dependencies are stored in a structured directory tree under `~/wado/`, mirrorin
 
 #### Path Convention
 
-| Source   | Path pattern                                        | Example                                          |
-| -------- | --------------------------------------------------- | ------------------------------------------------ |
-| Registry | `{registry-host}/{namespace}/{name}/{version}/`     | `wa.dev/docs/regex/0.1.2/`                       |
-| Git      | `{git-host}/{owner}/{repo}/{version}-{short-ref}/`  | `github.com/user/router/1.0.2-abc1234d/`         |
+| Source   | Path pattern                                       | Example                                  |
+| -------- | -------------------------------------------------- | ---------------------------------------- |
+| Registry | `{registry-host}/{namespace}/{name}/{version}/`    | `wa.dev/docs/regex/0.1.2/`               |
+| Git      | `{git-host}/{owner}/{repo}/{version}-{short-ref}/` | `github.com/user/router/1.0.2-abc1234d/` |
 
 Git dependencies include a short commit prefix (8 hex chars) in the directory name to distinguish different commits that resolve to the same version tag. Registry dependencies use the exact resolved version.
 
