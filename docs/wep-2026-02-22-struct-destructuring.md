@@ -295,43 +295,21 @@ TirStructPatternField {
 }
 ```
 
-### Lowering: Preserve `LetPattern` in TIR
+### Lowering: Expand in Lower Phase
 
-**Design principle**: Struct destructuring patterns are **not** lowered to `Let + FieldAccess` sequences. Instead, `LetPattern` with `TirPattern::Struct` is preserved through the TIR optimization pipeline and lowered at the WIR level.
-
-This is the same approach that should apply to tuple destructuring. The key insight is that SROA (Scalar Replacement of Aggregates) benefits from seeing the destructuring pattern directly:
+Struct destructuring patterns are lowered to `Let + FieldAccess` sequences in the lower phase (Phase 1.5), consistent with how tuple destructuring is handled. After lowering, no `TirPattern::Struct` survives into later phases.
 
 ```wado
 // Source
 let { x, y } = point;
 
-// TIR: preserved as LetPattern
-LetPattern {
-    pattern: Struct { fields: [x, y] },
-    value: point,
-}
-
-// NOT lowered to:
-//   let __tmp = point;
-//   let x = __tmp.x;   ← SROA must re-discover this pattern
-//   let y = __tmp.y;
+// After lowering:
+let __pattern_temp_0 = point;
+let x = __pattern_temp_0.x;
+let y = __pattern_temp_0.y;
 ```
 
-When the optimizer sees `LetPattern` + `StructLiteral` in sequence, SROA can directly eliminate the allocation:
-
-```wado
-// Before SROA
-let p = Point { x: a + 1, y: b + 2 };
-let { x, y } = p;
-
-// After SROA: aggregate eliminated, fields forwarded directly
-let x = a + 1;
-let y = b + 2;
-```
-
-The pattern is then translated at the WIR level to field access instructions (struct.get), or further optimized to Wasm multi-value returns when applicable.
-
-**Current status**: Tuple `LetPattern` is currently lowered to `Let + FieldAccess` in `lower.rs` Phase 1.5 (except for multi-value builtins). This is a known limitation; ideally both tuple and struct `LetPattern` should be preserved through TIR and lowered at WIR translation.
+The existing SROA optimization pass can then eliminate intermediate allocations when the struct literal is directly destructured.
 
 ### Exhaustiveness
 

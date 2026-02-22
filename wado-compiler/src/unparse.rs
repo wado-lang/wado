@@ -1170,7 +1170,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str("mut ");
         }
 
-        self.output.push_str(&f.binding);
+        self.unparse_let_pattern(&f.binding);
         self.output.push_str(" of ");
         self.unparse_expr(&f.iterable);
         self.output.push_str(" {\n");
@@ -1641,6 +1641,35 @@ impl<'a> Unparser<'a> {
                     self.output.push(')');
                 }
             }
+            Pattern::Struct {
+                type_name,
+                fields,
+                has_rest,
+                ..
+            } => {
+                if let Some(name) = type_name {
+                    self.output.push_str(name);
+                    self.output.push(' ');
+                }
+                self.output.push_str("{ ");
+                for (i, field) in fields.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(&field.field_name);
+                    if !matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name) {
+                        self.output.push_str(": ");
+                        self.unparse_pattern(&field.pattern);
+                    }
+                }
+                if *has_rest {
+                    if !fields.is_empty() {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str("..");
+                }
+                self.output.push_str(" }");
+            }
         }
     }
 
@@ -1676,6 +1705,35 @@ impl<'a> Unparser<'a> {
                     }
                     self.output.push(')');
                 }
+            }
+            Pattern::Struct {
+                type_name,
+                fields,
+                has_rest,
+                ..
+            } => {
+                if let Some(name) = type_name {
+                    self.output.push_str(name);
+                    self.output.push(' ');
+                }
+                self.output.push_str("{ ");
+                for (i, field) in fields.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(&field.field_name);
+                    if !matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name) {
+                        self.output.push_str(": ");
+                        self.unparse_let_pattern(&field.pattern);
+                    }
+                }
+                if *has_rest {
+                    if !fields.is_empty() {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str("..");
+                }
+                self.output.push_str(" }");
             }
         }
     }
@@ -2294,7 +2352,7 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             if f.is_mut {
                 output.push_str("mut ");
             }
-            output.push_str(&f.binding);
+            unparse_pattern_into(&f.binding, output);
             output.push_str(" of ");
             unparse_expr_into(&f.iterable, output, false);
             output.push(' ');
@@ -2371,6 +2429,35 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
                 }
                 output.push(')');
             }
+        }
+        Pattern::Struct {
+            type_name,
+            fields,
+            has_rest,
+            ..
+        } => {
+            if let Some(name) = type_name {
+                output.push_str(name);
+                output.push(' ');
+            }
+            output.push_str("{ ");
+            for (i, field) in fields.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                output.push_str(&field.field_name);
+                if !matches!(&field.pattern, Pattern::Ident(n) if n == &field.field_name) {
+                    output.push_str(": ");
+                    unparse_pattern_into(&field.pattern, output);
+                }
+            }
+            if *has_rest {
+                if !fields.is_empty() {
+                    output.push_str(", ");
+                }
+                output.push_str("..");
+            }
+            output.push_str(" }");
         }
     }
 }
@@ -3013,6 +3100,21 @@ impl<'a> TirUnparser<'a> {
             TirPattern::Enum { case_name, .. } => {
                 self.output.push_str(case_name);
             }
+            TirPattern::Struct { fields, .. } => {
+                self.output.push_str("{ ");
+                for (i, field) in fields.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(&field.field_name);
+                    if !matches!(&field.pattern, TirPattern::Binding { name, .. } if name == &field.field_name)
+                    {
+                        self.output.push_str(": ");
+                        self.unparse_tir_pattern(&field.pattern);
+                    }
+                }
+                self.output.push_str(" }");
+            }
         }
     }
 
@@ -3533,6 +3635,21 @@ impl<'a> TirUnparser<'a> {
             }
             TirPattern::Enum { case_name, .. } => {
                 self.output.push_str(case_name);
+            }
+            TirPattern::Struct { fields, .. } => {
+                self.output.push_str("{ ");
+                for (i, field) in fields.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(&field.field_name);
+                    if !matches!(&field.pattern, TirPattern::Binding { name, .. } if name == &field.field_name)
+                    {
+                        self.output.push_str(": ");
+                        self.unparse_pattern(&field.pattern);
+                    }
+                }
+                self.output.push_str(" }");
             }
         }
     }
