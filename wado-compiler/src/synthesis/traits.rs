@@ -1,7 +1,7 @@
-//! Enum trait synthesis phase.
+//! Trait synthesis phase.
 //!
-//! Generates auto-derived trait implementations (Eq, Ord) for enum types.
-//! For each enum declaration, generates synthetic TIR functions:
+//! Generates auto-derived trait implementations for types that support them.
+//! Currently handles enum types with auto-derived `Eq` and `Ord`:
 //! - `EnumName^Eq::eq(&self, &Self) -> bool` - discriminant equality
 //! - `EnumName^Ord::cmp(&self, &Self) -> Ordering` - discriminant ordering
 //!
@@ -21,14 +21,16 @@ use crate::tir::{
 
 use super::common::make_synthetic_method;
 
-/// Run enum trait synthesis on the entire project.
+/// Run trait synthesis on the entire project.
 ///
 /// For each module, generates Eq and Ord implementations for all enum types
 /// that don't already have user-provided implementations.
-pub fn synthesize_enum_traits(project: &mut Project) {
+pub fn synthesize_traits(project: Project) -> Project {
+    let mut project = project;
     for module in project.tir_modules.values_mut() {
         generate_enum_trait_impls(module);
     }
+    project
 }
 
 /// Generate auto-derived trait implementations (Eq, Ord) for enum types in a module.
@@ -81,10 +83,8 @@ fn generate_enum_trait_impls(module: &mut TirModule) {
         // Generate Ord::cmp
         let cmp_key = MethodName::format_local(enum_name, Some("Ord"), "cmp");
         if !existing_trait_methods.contains(&cmp_key) {
-            let ordering_type = type_table.make_enum(
-                "Ordering".to_string(),
-                ModuleSource::core("prelude/traits.wado"),
-            );
+            let ordering_type =
+                type_table.make_enum("Ordering".to_string(), ModuleSource::traits());
             let func =
                 generate_enum_ord_fn(enum_name, enum_type, ref_enum_type, ordering_type, *span);
             generated_functions.push(Rc::new(RefCell::new(func)));

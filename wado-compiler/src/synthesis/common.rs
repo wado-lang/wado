@@ -7,7 +7,7 @@
 
 use indexmap::IndexSet;
 
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
     FunctionRef, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam,
     TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -27,7 +27,7 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef::External {
-                module_source: crate::name::ModuleSource::core("builtin"),
+                module_source: ModuleSource::builtin(),
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,
@@ -45,7 +45,7 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
     TirExpr::new(
         TirExprKind::Call {
             func: FunctionRef::External {
-                module_source: crate::name::ModuleSource::core("internal"),
+                module_source: ModuleSource::internal(),
                 name: name.to_string(),
                 monomorph_info: None,
                 method_info: None,

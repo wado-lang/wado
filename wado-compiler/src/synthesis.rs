@@ -9,20 +9,19 @@
 
 pub mod cm_adapter;
 pub mod common;
-pub mod enum_traits;
 pub mod inspect;
+pub mod traits;
 
 use crate::project::Project;
 
 /// Run all synthesis phases on the project.
 ///
 /// Execution order:
-/// 1. Enum traits — generates `Eq`/`Ord` for enums
+/// 1. Traits — generates `Eq`/`Ord` for enums
 /// 2. Inspect — synthesizes debug output functions
 /// 3. CM adapters — generates Component Model boundary adapters
 pub fn synthesize(project: Project) -> Result<Project, String> {
-    let mut project = project;
-    enum_traits::synthesize_enum_traits(&mut project);
+    let project = traits::synthesize_traits(project);
     let project = inspect::synthesize_inspect(project);
     let project = cm_adapter::generate_adapters(project)?;
     Ok(project)
