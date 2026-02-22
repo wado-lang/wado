@@ -168,6 +168,7 @@ cargo run --bin wado -- compile -o file.wasm file.wado    # generates Wasm
 cargo run --bin wado -- compile -o file.wat file.wado     # generates WAT
 cargo run --bin wado -- compile --wat-to-stdout file.wado # outputs WAT to stdout
 cargo run --bin wado -- run file.wado                     # run CLI program using wasmtime
+cargo run --bin wado -- run --profile guest file.wado     # run with profiling
 cargo run --bin wado -- serve file.wado                   # serve HTTP service using wasmtime
 ```
 
@@ -201,31 +202,7 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 ### Profiling
 
-Use `--profile` with `wado run` to profile Wado programs:
-
-```sh
-# Cross-platform guest profiling (outputs Firefox Profiler JSON)
-wado run --profile guest prog.wado                     # writes profile.json
-wado run --profile guest,output.json prog.wado          # custom output path
-wado run --profile guest,output.json,5 prog.wado        # 5ms sampling interval
-
-# View the profile at https://profiler.firefox.com/
-
-# Linux perf profiling (jitdump - detailed)
-perf record -k mono wado run --profile jitdump prog.wado
-perf inject --jit --input perf.data --output perf.jit.data
-perf report --input perf.jit.data
-
-# Linux perf profiling (perfmap - simpler)
-perf record -k mono wado run --profile perfmap prog.wado
-perf report --input perf.data
-```
-
-| Mode      | Platform        | Output                 | Viewer                          |
-| --------- | --------------- | ---------------------- | ------------------------------- |
-| `guest`   | All             | Firefox Profiler JSON  | https://profiler.firefox.com/   |
-| `jitdump` | Linux           | perf jitdump           | `perf report`                   |
-| `perfmap` | Linux           | `/tmp/perf-<pid>.map`  | `perf report`                   |
+`wado run --profile <mode>` enables runtime profiling via wasmtime. Modes: `guest` (cross-platform, Firefox Profiler JSON), `jitdump` (Linux perf), `perfmap` (Linux perf). See `benchmark/README.md` for full documentation and examples.
 
 ### Dump Command
 
