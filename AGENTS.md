@@ -168,7 +168,7 @@ cargo run --bin wado -- compile -o file.wasm file.wado    # generates Wasm
 cargo run --bin wado -- compile -o file.wat file.wado     # generates WAT
 cargo run --bin wado -- compile --wat-to-stdout file.wado # outputs WAT to stdout
 cargo run --bin wado -- run file.wado                     # run CLI program using wasmtime
-cargo run --bin wado -- run --profile guest file.wado     # run with profiling
+cargo run --bin wado -- run --profile MODE file.wado      # run with profiling
 cargo run --bin wado -- serve file.wado                   # serve HTTP service using wasmtime
 ```
 
