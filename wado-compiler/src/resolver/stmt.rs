@@ -251,11 +251,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
                 let type_table = self.type_table.borrow();
-                matches!(
-                    (type_table.get(value.type_id), type_table.get(type_id)),
-                    (ResolvedType::Option(inner), ResolvedType::Option(_))
-                        if *inner == TypeTable::UNKNOWN
-                )
+                type_table
+                    .as_option(value.type_id)
+                    .is_some_and(|inner| inner == TypeTable::UNKNOWN)
+                    && type_table.as_option(type_id).is_some()
             };
             if !is_null_to_option {
                 let _ = self.logger.error(TypeError::TypeMismatch {
@@ -658,14 +657,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 // Each variant case has exactly one payload type.
                 // Determine the payload type for the variant case.
                 let payload_type: TypeId = match &resolved_type {
-                    // Option<T>: Some has inner type T, None has unit type
-                    ResolvedType::Option(inner) => {
-                        if variant_name == "Some" {
-                            *inner
-                        } else {
-                            TypeTable::UNIT
-                        }
-                    }
                     // Non-generic variant
                     ResolvedType::Variant { name, .. } => {
                         self.get_variant_case_payload_type(name, variant_name, &[], *span)

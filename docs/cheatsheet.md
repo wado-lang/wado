@@ -303,6 +303,31 @@ let p: Point = { x, y };
 // Field access
 let sum = p.x + p.y;
 let v = b.value;
+
+// Destructuring (unnamed — type inferred from RHS)
+let { x, y } = p;
+
+// Destructuring (named — explicit type)
+let Point { x, y } = p;
+
+// Renaming fields
+let { x: horizontal, y: vertical } = p;
+
+// Ignore remaining fields with ..
+struct Person { name: String, age: i32, email: String }
+let { name, .. } = person;
+
+// Mutable destructuring
+let mut { x, y } = p;
+
+// Nested destructuring
+struct Line { start: Point, end: Point }
+let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
+
+// In for-of
+for let { x, y } of points {
+    println(`{x}, {y}`);
+}
 ```
 
 ## Enums
@@ -1588,6 +1613,7 @@ Wado intentionally does not support macros.
 - postfix `?` operator (error propagation)
 - JSX
 - Generic function/method type inference
+- Struct destructuring in patterns (`let { x, y } = point;`, designed in WEP)
 - Generic variant pattern matching (custom `Maybe<T>`)
 - `Result<T, E>` pattern matching
 

@@ -22,9 +22,9 @@ pub struct "ArrayIter<i32>" {
 export fn run() with Stdout {
     let arr: Array<i32> = move [];
     let mut iter: ArrayIter<i32> = move ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
-    let __pattern_temp_0: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
-    if __is_not_null(__pattern_temp_0) {
-        let a: i32 = __unwrap_option(__pattern_temp_0).value;
+    let __pattern_temp_0: Option<i32> = move iter."ArrayIter<i32>^Iterator::next"();
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let a: i32 = __variant_payload(__pattern_temp_0, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(28), used: 0 };
             __r.String::append(move "unexpected: ");
@@ -42,9 +42,9 @@ export fn run() with Stdout {
     } else {
         core::cli::println(move "empty");
     }
-    let __pattern_temp_1: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
-    if __is_not_null(__pattern_temp_1) {
-        let b: i32 = __unwrap_option(__pattern_temp_1).value;
+    let __pattern_temp_1: Option<i32> = move iter."ArrayIter<i32>^Iterator::next"();
+    if __variant_test(__pattern_temp_1, case=0, name=Some) {
+        let b: i32 = __variant_payload(__pattern_temp_1, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(28), used: 0 };
             __r.String::append(move "unexpected: ");
@@ -75,6 +75,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<i32> { value: item });
+    return Option::Some(item);
 }
 

@@ -53,6 +53,7 @@ pub enum ProfileMode {
 }
 
 /// Create a wasmtime Config with all required Wasm features enabled.
+#[must_use]
 pub fn create_config(opt_level: OptLevel, profile: &ProfileMode) -> Config {
     let mut config = Config::new();
     config.async_support(true);

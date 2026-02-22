@@ -18,9 +18,9 @@ struct Config {
 }
 
 export fn run() with Stdout {
-    let __sroa_c_width: Option<i32> = Option::Some(Box<i32> { value: 42 });
-    if __is_not_null(__sroa_c_width) {
-        let w: i32 = __unwrap_option(__sroa_c_width).value;
+    let __sroa_c_width: Option<i32> = Option::Some(42);
+    if __variant_test(__sroa_c_width, case=0, name=Some) {
+        let w: i32 = __variant_payload(__sroa_c_width, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
             __r.String::append(move "width: ");
@@ -36,9 +36,9 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __sroa_d_width: Option<i32> = null;
-    if __is_not_null(__sroa_d_width) {
-        let w: i32 = __unwrap_option(__sroa_d_width).value;
+    let __sroa_d_width: Option<i32> = move null;
+    if __variant_test(__sroa_d_width, case=0, name=Some) {
+        let w: i32 = __variant_payload(__sroa_d_width, case=0);
         core::cli::println(move "should not print");
     } else {
         core::cli::println(move "no width");

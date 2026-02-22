@@ -23,8 +23,8 @@ export fn run() with Stdout {
     dict."MiniDict<String,String>::set"(move "type", move "language");
     dict."MiniDict<String,String>::set"(move "target", move "WebAssembly");
     let __pattern_temp_0: Option<String> = move dict."MiniDict<String,String>::get"(move "name");
-    if __is_not_null(__pattern_temp_0) {
-        let name_val: String = __unwrap_option(__pattern_temp_0);
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let name_val: String = __variant_payload(__pattern_temp_0, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(22), used: 0 };
             __r.String::append(move "name: ");
@@ -33,8 +33,8 @@ export fn run() with Stdout {
         });
     }
     let __pattern_temp_1: Option<String> = move dict."MiniDict<String,String>::get"(move "type");
-    if __is_not_null(__pattern_temp_1) {
-        let type_val: String = __unwrap_option(__pattern_temp_1);
+    if __variant_test(__pattern_temp_1, case=0, name=Some) {
+        let type_val: String = __variant_payload(__pattern_temp_1, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(22), used: 0 };
             __r.String::append(move "type: ");
@@ -44,8 +44,8 @@ export fn run() with Stdout {
     }
     dict."MiniDict<String,String>::set"(move "name", move "Wado Language");
     let __pattern_temp_2: Option<String> = move dict."MiniDict<String,String>::get"(move "name");
-    if __is_not_null(__pattern_temp_2) {
-        let updated_val: String = __unwrap_option(__pattern_temp_2);
+    if __variant_test(__pattern_temp_2, case=0, name=Some) {
+        let updated_val: String = __variant_payload(__pattern_temp_2, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
             __r.String::append(move "updated name: ");
@@ -107,7 +107,7 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     let __pattern_temp_3: Option<String> = move dict."MiniDict<String,String>::get"(move "missing");
-    if !__is_not_null(__pattern_temp_3) {
+    if __variant_test(__pattern_temp_3, case=1, name=None) {
         core::cli::println(move "missing key returned None");
     }
 }

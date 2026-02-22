@@ -28,9 +28,9 @@ export fn run() with Stdout {
     __for_of_0: {
         let mut __iter_0: ArrayIter<f32> = move ArrayIter<f32> { repr: arr.repr, used: arr.used, index: 0 };
         loop {
-            let __pattern_temp_0: Option<f32> = __iter_0."ArrayIter<f32>^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let x: f32 = __unwrap_option(__pattern_temp_0).value;
+            let __pattern_temp_0: Option<f32> = move __iter_0."ArrayIter<f32>^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let x: f32 = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_2: {
@@ -62,7 +62,7 @@ fn "ArrayIter<f32>^Iterator::next"(self: &mut ArrayIter<f32>) -> Option<f32> {
     }
     let item: f32 = core::builtin::array_get::<f32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<f32> { value: item });
+    return Option::Some(item);
 }
 
 pub fn "Array<f32>::append"(self: &mut Array<f32>, value: f32) {

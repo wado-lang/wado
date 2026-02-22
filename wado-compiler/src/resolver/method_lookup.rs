@@ -1450,7 +1450,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 },
             ),
             ResolvedType::BuiltinArray(elem) => ("Array".to_string(), Some(vec![*elem])),
-            ResolvedType::Option(_) => ("Option".to_string(), None),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 // For references, check if the inner type implements the trait
                 return self.type_implements_trait(*inner, trait_name);
@@ -1724,7 +1723,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     format!("{}<{}>", name, args.join(", "))
                 }
             }
-            ResolvedType::Option(inner) => format!("Option<{}>", self.type_id_to_string(inner)),
             ResolvedType::BuiltinArray(elem) => {
                 format!("builtin::array<{}>", self.type_id_to_string(elem))
             }

@@ -345,7 +345,6 @@ fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
         ResolvedType::Tuple(elements) => !elements.is_empty(),
-        ResolvedType::Option(inner) => needs_value_copy(*inner, type_table),
         // References, primitives, etc. don't need copying
         _ => false,
     }

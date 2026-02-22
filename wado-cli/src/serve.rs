@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::TokioIo;
-use lexopt::Arg::{Long, Short, Value};
+use lexopt::Arg::Value;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -19,9 +20,7 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::p3::bindings::Service;
 use wasmtime_wasi_http::p3::{Request as WasiRequest, WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
-use crate::args::{
-    next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
-};
+use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
 use crate::runtime;
 use wado_compiler::LogLevel;
@@ -33,90 +32,95 @@ pub struct ServeOptions {
     pub addr: String,
 }
 
-pub fn print_usage() {
-    eprintln!("Usage: wado serve [options] <file.wado>");
-    eprintln!();
-    eprintln!("Compile and serve a Wado HTTP service using wasmtime.");
-    eprintln!();
-    eprintln!("Options:");
-    eprintln!("  --addr <addr>    Address to listen on (default: 0.0.0.0:8080)");
-    eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
-    eprintln!("  --log-level <l>  Log level: debug, info, warn, error, off (default: info)");
-    eprintln!("  --help           Show this help message");
+#[derive(Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
+enum Opt {
+    Addr,
+    OptLevel,
+    LogLevel,
+    Help,
 }
 
-/// Parse log level from string
-fn parse_log_level(s: &str) -> Option<LogLevel> {
-    match s.to_lowercase().as_str() {
-        "debug" => Some(LogLevel::Debug),
-        "info" => Some(LogLevel::Info),
-        "warn" | "warning" => Some(LogLevel::Warn),
-        "error" => Some(LogLevel::Error),
-        "off" | "none" => Some(LogLevel::Off),
-        _ => None,
+impl Opt {
+    const ALL: &[Self] = &[Self::Addr, Self::OptLevel, Self::LogLevel, Self::Help];
+
+    const fn spec(self) -> args::OptSpec {
+        match self {
+            Self::Addr => args::OptSpec {
+                long: Some("addr"),
+                short: None,
+                value: Some("<addr>"),
+                desc: "Address to listen on (default: 0.0.0.0:8080)",
+            },
+            Self::OptLevel => args::OPT_LEVEL_SPEC,
+            Self::LogLevel => args::LOG_LEVEL_SPEC,
+            Self::Help => args::HELP_SPEC,
+        }
     }
 }
 
-pub fn parse_args(mut parser: lexopt::Parser) -> ServeOptions {
+fn format_usage() -> String {
+    let mut buf = String::new();
+    writeln!(buf, "Usage: wado serve [options] <file.wado>").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Compile and serve a Wado HTTP service using wasmtime.").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Options:").unwrap();
+    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    buf
+}
+
+pub fn print_usage() {
+    eprint!("{}", format_usage());
+}
+
+pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
+    let usage = format_usage();
     let mut input: Option<String> = None;
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
     let mut addr = "0.0.0.0:8080".to_string();
 
-    while let Some(arg) = next_arg(&mut parser) {
-        match arg {
-            Long("help") => {
-                print_usage();
-                process::exit(0);
-            }
-            Long("addr") => {
-                addr = require_string(&mut parser);
-            }
-            Short('O') => {
-                let val = parser.optional_value();
-                let level_str = val
-                    .as_ref()
-                    .map(|v| v.to_string_lossy())
-                    .unwrap_or_default();
-                opt_level = match level_str.as_ref() {
-                    "" | "0" | "g" => OptLevel::O0,
-                    "1" => OptLevel::O1,
-                    "2" => OptLevel::O2,
-                    "3" => OptLevel::O3,
-                    "s" => OptLevel::Os,
-                    _ => {
-                        eprintln!(
-                            "Error: unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-                        );
-                        process::exit(1);
-                    }
-                };
-            }
-            Long("log-level") => {
-                let level_str = require_string(&mut parser);
-                if let Some(level) = parse_log_level(&level_str) {
-                    log_level = level;
-                } else {
-                    eprintln!(
-                        "Error: unknown log level '{level_str}'. Use debug, info, warn, error, or off"
-                    );
-                    process::exit(1);
+    while let Some(arg) = args::next_arg(&mut parser)? {
+        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+            match opt {
+                Opt::Addr => addr = args::require_string(&mut parser)?,
+                Opt::OptLevel => {
+                    let val = parser.optional_value();
+                    let level_str = val
+                        .as_ref()
+                        .map(|v| v.to_string_lossy())
+                        .unwrap_or_default();
+                    opt_level = match level_str.as_ref() {
+                        "" | "0" | "g" => OptLevel::O0,
+                        "1" => OptLevel::O1,
+                        "2" => OptLevel::O2,
+                        "3" => OptLevel::O3,
+                        "s" => OptLevel::Os,
+                        _ => {
+                            return Err(CliExit::error(format!(
+                                "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
+                            )));
+                        }
+                    };
                 }
+                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
+                Opt::Help => return Err(CliExit::help(usage)),
             }
-            Value(val) => {
-                reject_multiple_inputs(&input);
-                input = Some(val.to_string_lossy().into_owned());
-            }
-            _ => unexpected_arg(arg, print_usage),
+        } else if let Value(val) = arg {
+            args::reject_multiple_inputs(&input)?;
+            input = Some(val.to_string_lossy().into_owned());
+        } else {
+            return Err(args::unexpected_arg(arg, &usage));
         }
     }
 
-    ServeOptions {
-        input: require_input(input, print_usage),
+    Ok(ServeOptions {
+        input: args::require_input(input, &usage)?,
         opt_level,
         log_level,
         addr,
-    }
+    })
 }
 
 struct HttpWasiCtx;

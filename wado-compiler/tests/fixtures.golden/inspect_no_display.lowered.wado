@@ -73,7 +73,7 @@ export fn run() with Stdout {
         "__inspect$Mode"(3, &mut __f);
         break __tmpl: __r;
     });
-    let opt: Option<i32> = Option::Some(Box<i32> { value: 42 });
+    let opt: Option<i32> = Option::Some(42);
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_9: {
@@ -83,7 +83,7 @@ export fn run() with Stdout {
         "__inspect$Option<i32>"(opt, &mut __f);
         break __tmpl: __r;
     });
-    let none: Option<i32> = null;
+    let none: Option<i32> = move null;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_11: {
@@ -252,13 +252,13 @@ fn "__inspect$Mode"(__val: Mode, __fmt: &mut Formatter) {
 }
 
 fn "__inspect$Option<i32>"(__val: Option<i32>, __fmt: &mut Formatter) {
-    if __is_not_null(__val) {
+    if __variant_test(__val, case=0, name=Some) {
         __inline_Formatter__write_str_0: {
             let s: String = move "Some(";
             __fmt.buf.String::append(s);
         };
         __inline___inspect_i32_1: {
-            let __val: i32 = __unwrap_option(__val).value;
+            let __val: i32 = __variant_payload(__val, case=0);
             __inline_i32_Display__fmt_2: {
                 "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
             };
@@ -275,12 +275,12 @@ fn "__inspect$Option<i32>"(__val: Option<i32>, __fmt: &mut Formatter) {
 }
 
 fn "__inspect$Option<Point>"(__val: Option<Point>, __fmt: &mut Formatter) {
-    if __is_not_null(__val) {
+    if __variant_test(__val, case=0, name=Some) {
         __inline_Formatter__write_str_0: {
             let s: String = move "Some(";
             __fmt.buf.String::append(s);
         };
-        "__inspect$Point"(__unwrap_option(__val), __fmt);
+        "__inspect$Point"(__variant_payload(__val, case=0), __fmt);
         __inline_Formatter__write_char_1: {
             __fmt.buf.String::append_char(')');
         };

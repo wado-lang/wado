@@ -341,10 +341,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Null literal → Option<T>
         if let Expr::Literal(lit) = expr
             && matches!(&lit.value, Literal::Null)
-            && matches!(
-                self.type_table.borrow().get(target_type),
-                ResolvedType::Option(_)
-            )
+            && self.type_table.borrow().as_option(target_type).is_some()
         {
             return Some(TirExpr::new(TirExprKind::Null, target_type, lit.span));
         }

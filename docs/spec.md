@@ -534,15 +534,16 @@ match command {
 
 **Pattern Syntax:**
 
-| Pattern  | Example                | Description            |
-| -------- | ---------------------- | ---------------------- |
-| Wildcard | `_`                    | Matches anything       |
-| Variable | `x`                    | Binds matched value    |
-| Literal  | `0`, `"hello"`, `true` | Matches exact value    |
-| Variant  | `Some(x)`, `None`      | Matches variant case   |
-| Tuple    | `[a, b, c]`            | Destructures tuple     |
-| Or       | `Red \| Blue`          | Matches either pattern |
-| Guard    | `Some(x) && x > 0`     | Pattern with condition |
+| Pattern  | Example                      | Description            |
+| -------- | ---------------------------- | ---------------------- |
+| Wildcard | `_`                          | Matches anything       |
+| Variable | `x`                          | Binds matched value    |
+| Literal  | `0`, `"hello"`, `true`       | Matches exact value    |
+| Variant  | `Some(x)`, `None`            | Matches variant case   |
+| Tuple    | `[a, b, c]`                  | Destructures tuple     |
+| Struct   | `{ x, y }`, `Point { x, y }` | Destructures struct    |
+| Or       | `Red \| Blue`                | Matches either pattern |
+| Guard    | `Some(x) && x > 0`           | Pattern with condition |
 
 **Exhaustiveness:**
 

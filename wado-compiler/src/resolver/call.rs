@@ -559,9 +559,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
                 "Option" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type(&generic.args[0]);
-                    self.type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Option(inner_type))
+                    self.type_table.borrow_mut().make_option(inner_type)
                 }
                 _ => TypeTable::UNIT,
             },

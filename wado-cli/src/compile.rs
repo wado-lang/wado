@@ -1,13 +1,12 @@
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 use std::process;
 
-use lexopt::Arg::{Long, Short, Value};
+use lexopt::Arg::Value;
 use wado_compiler::LogLevel;
 
-use crate::args::{
-    next_arg, reject_multiple_inputs, require_input, require_string, unexpected_arg,
-};
+use crate::args::{self, CliExit};
 use crate::compiler_host::FilesystemCompilerHost;
 
 /// Optimization level
@@ -30,7 +29,7 @@ pub enum OptLevel {
     Os,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
     Wasm,
     Wat,
@@ -67,38 +66,87 @@ pub struct CompileOptions {
     pub skip_validation: bool,
 }
 
-pub fn print_usage() {
-    eprintln!("Usage: wado compile [options] <file.wado>");
-    eprintln!();
-    eprintln!("Compile a Wado source file to WebAssembly.");
-    eprintln!();
-    eprintln!("Options:");
-    eprintln!("  -o <file>         Output file path (default: <input>.wasm)");
-    eprintln!("  --format <fmt>    Output format: wasm, wat (default: guessed from -o extension)");
-    eprintln!(
-        "  --wat-to-stdout   Output WAT to stdout (shorthand for --format wat -o /dev/stdout)"
-    );
-    eprintln!("  --world <name>    Target world (default: wasi:cli/command)");
-    eprintln!("                    Use 'test' to export test functions only");
-    eprintln!("  -O<n>             Optimization level: -O0, -O1, -O2, -O3, -Os");
-    eprintln!("  --log-level <l>   Log level: debug, info, warn, error, off (default: info)");
-    eprintln!("  --no-validate     Skip Wasm validation (output raw bytes even if invalid)");
-    eprintln!("  --help            Show this help message");
+#[derive(Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
+enum Opt {
+    Output,
+    Format,
+    WatToStdout,
+    World,
+    OptLevel,
+    LogLevel,
+    NoValidate,
+    Help,
 }
 
-/// Parse log level from string
-fn parse_log_level(s: &str) -> Option<LogLevel> {
-    match s.to_lowercase().as_str() {
-        "debug" => Some(LogLevel::Debug),
-        "info" => Some(LogLevel::Info),
-        "warn" | "warning" => Some(LogLevel::Warn),
-        "error" => Some(LogLevel::Error),
-        "off" | "none" => Some(LogLevel::Off),
-        _ => None,
+impl Opt {
+    const ALL: &[Self] = &[
+        Self::Output,
+        Self::Format,
+        Self::WatToStdout,
+        Self::World,
+        Self::OptLevel,
+        Self::LogLevel,
+        Self::NoValidate,
+        Self::Help,
+    ];
+
+    const fn spec(self) -> args::OptSpec {
+        match self {
+            Self::Output => args::OptSpec {
+                long: None,
+                short: Some('o'),
+                value: Some("<file>"),
+                desc: "Output file path (default: <input>.wasm)",
+            },
+            Self::Format => args::OptSpec {
+                long: Some("format"),
+                short: None,
+                value: Some("<fmt>"),
+                desc: "Output format: wasm, wat (default: guessed from -o extension)",
+            },
+            Self::WatToStdout => args::OptSpec {
+                long: Some("wat-to-stdout"),
+                short: None,
+                value: None,
+                desc: "Output WAT to stdout (shorthand for --format wat -o /dev/stdout)",
+            },
+            Self::World => args::OptSpec {
+                long: Some("world"),
+                short: None,
+                value: Some("<name>"),
+                desc: "Target world (default: wasi:cli/command)\nUse 'test' to export test functions only",
+            },
+            Self::OptLevel => args::OPT_LEVEL_SPEC,
+            Self::LogLevel => args::LOG_LEVEL_SPEC,
+            Self::NoValidate => args::OptSpec {
+                long: Some("no-validate"),
+                short: None,
+                value: None,
+                desc: "Skip Wasm validation (output raw bytes even if invalid)",
+            },
+            Self::Help => args::HELP_SPEC,
+        }
     }
 }
 
-pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
+fn format_usage() -> String {
+    let mut buf = String::new();
+    writeln!(buf, "Usage: wado compile [options] <file.wado>").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Compile a Wado source file to WebAssembly.").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Options:").unwrap();
+    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    buf
+}
+
+pub fn print_usage() {
+    eprint!("{}", format_usage());
+}
+
+pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit> {
+    let usage = format_usage();
     let mut output: Option<String> = None;
     let mut format: Option<OutputFormat> = None;
     let mut input: Option<String> = None;
@@ -107,74 +155,51 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
     let mut log_level = LogLevel::default();
     let mut target_world: Option<String> = None;
     let mut skip_validation = false;
-    while let Some(arg) = next_arg(&mut parser) {
-        match arg {
-            Long("help") => {
-                print_usage();
-                process::exit(0);
-            }
-            Long("wat-to-stdout") => {
-                wat_to_stdout = true;
-            }
-            Long("no-validate") => {
-                skip_validation = true;
-            }
-            Long("world") => {
-                target_world = Some(require_string(&mut parser));
-            }
-            Short('o') => {
-                output = Some(require_string(&mut parser));
-            }
-            Short('O') => {
-                let val = parser.optional_value();
-                let level_str = val
-                    .as_ref()
-                    .map(|v| v.to_string_lossy())
-                    .unwrap_or_default();
-                opt_level = match level_str.as_ref() {
-                    "" | "0" | "g" => OptLevel::O0,
-                    "1" => OptLevel::O1,
-                    "2" => OptLevel::O2,
-                    "3" => OptLevel::O3,
-                    "s" => OptLevel::Os,
-                    _ => {
-                        eprintln!(
-                            "Error: unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-                        );
-                        process::exit(1);
-                    }
-                };
-            }
-            Long("format") => {
-                let fmt_str = require_string(&mut parser);
-                if let Some(f) = OutputFormat::from_str(&fmt_str) {
-                    format = Some(f);
-                } else {
-                    eprintln!("Error: unknown format '{fmt_str}'. Use 'wasm' or 'wat'");
-                    process::exit(1);
+    while let Some(arg) = args::next_arg(&mut parser)? {
+        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+            match opt {
+                Opt::Output => output = Some(args::require_string(&mut parser)?),
+                Opt::Format => {
+                    let fmt_str = args::require_string(&mut parser)?;
+                    format = Some(OutputFormat::from_str(&fmt_str).ok_or_else(|| {
+                        CliExit::error(format!("unknown format '{fmt_str}'. Use 'wasm' or 'wat'"))
+                    })?);
                 }
-            }
-            Long("log-level") => {
-                let level_str = require_string(&mut parser);
-                if let Some(level) = parse_log_level(&level_str) {
-                    log_level = level;
-                } else {
-                    eprintln!(
-                        "Error: unknown log level '{level_str}'. Use debug, info, warn, error, or off"
-                    );
-                    process::exit(1);
+                Opt::WatToStdout => wat_to_stdout = true,
+                Opt::World => target_world = Some(args::require_string(&mut parser)?),
+                Opt::OptLevel => {
+                    let val = parser.optional_value();
+                    let level_str = val
+                        .as_ref()
+                        .map(|v| v.to_string_lossy())
+                        .unwrap_or_default();
+                    opt_level = match level_str.as_ref() {
+                        "" | "0" | "g" => OptLevel::O0,
+                        "1" => OptLevel::O1,
+                        "2" => OptLevel::O2,
+                        "3" => OptLevel::O3,
+                        "s" => OptLevel::Os,
+                        _ => {
+                            return Err(CliExit::error(format!(
+                                "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
+                            )));
+                        }
+                    };
                 }
+                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
+                Opt::NoValidate => skip_validation = true,
+                Opt::Help => return Err(CliExit::help(usage)),
             }
-            Value(val) => {
-                reject_multiple_inputs(&input);
-                input = Some(val.to_string_lossy().into_owned());
-            }
-            _ => unexpected_arg(arg, print_usage),
+        } else if let Value(val) = arg {
+            args::reject_multiple_inputs(&input)?;
+            input = Some(val.to_string_lossy().into_owned());
+        } else {
+            return Err(args::unexpected_arg(arg, &usage));
         }
     }
 
-    CompileOptions {
-        input: require_input(input, print_usage),
+    Ok(CompileOptions {
+        input: args::require_input(input, &usage)?,
         output,
         format,
         opt_level,
@@ -182,7 +207,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> CompileOptions {
         log_level,
         target_world,
         skip_validation,
-    }
+    })
 }
 
 /// Convert CLI `OptLevel` to compiler `OptLevel`

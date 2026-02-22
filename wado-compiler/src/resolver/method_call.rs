@@ -416,9 +416,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         // Special handling for Option::Some and Option::None
-        if let ResolvedType::Option(inner_type) =
-            self.type_table.borrow().get(target_type_id).clone()
-        {
+        if let Some(_inner_type) = self.type_table.borrow().as_option(target_type_id) {
             match static_call.method.as_str() {
                 "Some" => {
                     // Option::Some(value) - wrap in OptionSome
@@ -450,8 +448,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                     }
-                    // Inner type comes from the Option type annotation
-                    let _ = inner_type; // Used to verify type is known
                     return TirExpr::new(TirExprKind::Null, target_type_id, static_call.span);
                 }
                 _ => {

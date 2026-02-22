@@ -1,0 +1,18 @@
+// Test: inspect Option<Option<i32>> (nested Option)
+// Option<Option<i32>> should use SubtypeHierarchy representation
+// because the payload is itself nullable.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let some_some: Option<Option<i32>> = Option::<Option<i32>>::Some(Option::<i32>::Some(42));
+    println(`{some_some:?}`);
+
+    let some_none: Option<Option<i32>> = Option::<Option<i32>>::Some(null);
+    println(`{some_none:?}`);
+
+    let none: Option<Option<i32>> = null;
+    println(`{none:?}`);
+}
+
+__DATA__
+{"stdout": "Some(Some(42))\nSome(null)\nnull\n"}

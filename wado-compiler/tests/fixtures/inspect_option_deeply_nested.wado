@@ -1,0 +1,16 @@
+// Test: inspect Option<Option<Option<i32>>> (deeply nested)
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let deep: Option<Option<Option<i32>>> = Option::<Option<Option<i32>>>::Some(Option::<Option<i32>>::Some(Option::<i32>::Some(7)));
+    println(`{deep:?}`);
+
+    let mid_null: Option<Option<Option<i32>>> = Option::<Option<Option<i32>>>::Some(Option::<Option<i32>>::Some(null));
+    println(`{mid_null:?}`);
+
+    let outer_null: Option<Option<Option<i32>>> = null;
+    println(`{outer_null:?}`);
+}
+
+__DATA__
+{"stdout": "Some(Some(Some(7)))\nSome(Some(null))\nnull\n"}

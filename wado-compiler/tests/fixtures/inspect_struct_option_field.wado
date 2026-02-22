@@ -1,0 +1,17 @@
+// Test: inspect a struct with Option<i32> field
+use { println, Stdout } from "core:cli";
+
+struct Wrapper {
+    value: Option<i32>,
+}
+
+export fn run() with Stdout {
+    let w1 = Wrapper { value: Option::<i32>::Some(42) };
+    println(`{w1:?}`);
+
+    let w2 = Wrapper { value: null };
+    println(`{w2:?}`);
+}
+
+__DATA__
+{"stdout": "Wrapper { value: Some(42) }\nWrapper { value: null }\n"}

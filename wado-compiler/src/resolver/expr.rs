@@ -625,10 +625,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .borrow_mut()
                     .intern(ResolvedType::BuiltinArray(new_elem))
             }
-            ResolvedType::Option(inner) => {
-                let new_inner = self.substitute_type_params(inner, type_args);
-                self.type_table.borrow_mut().make_option(new_inner)
-            }
             ResolvedType::Ref(inner) => {
                 let new_inner = self.substitute_type_params(inner, type_args);
                 self.type_table.borrow_mut().make_ref(new_inner)
@@ -1745,10 +1741,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Ref types
             (ResolvedType::Ref(expected_inner), ResolvedType::Ref(actual_inner))
             | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
-                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
-            }
-            // Option types
-            (ResolvedType::Option(expected_inner), ResolvedType::Option(actual_inner)) => {
                 self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
             }
             // Tuple types

@@ -474,6 +474,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         self.logger.ok_or_bail(tir_module)
     }
 
+
+    /// Get the type table (after resolution)
     pub fn into_type_table(self) -> Rc<RefCell<TypeTable>> {
         self.type_table
     }

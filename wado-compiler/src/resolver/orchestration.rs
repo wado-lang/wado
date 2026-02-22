@@ -633,7 +633,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Option(inner)
             | ResolvedType::BuiltinArray(inner)
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
@@ -795,7 +794,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         struct_fields,
                         resource_types,
                     );
-                    type_table.intern(ResolvedType::Option(inner))
+                    type_table.make_option(inner)
                 }
                 _ => {
                     // Check if it's a generic struct type
@@ -926,7 +925,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         resource_types,
                         type_params,
                     );
-                    type_table.intern(ResolvedType::Option(inner))
+                    type_table.make_option(inner)
                 }
                 _ => {
                     // Check if it's a generic struct type
