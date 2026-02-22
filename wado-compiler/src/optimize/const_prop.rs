@@ -166,7 +166,7 @@ fn propagate_constants_in_stmt(
         TirStmtKind::Continue => false,
         TirStmtKind::LetPattern { value, .. } => propagate_constants_in_expr(value, constants),
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }

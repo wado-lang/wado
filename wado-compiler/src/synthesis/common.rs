@@ -1,0 +1,350 @@
+//! Common utilities for TIR synthesis phases.
+//!
+//! Provides shared helpers for constructing synthetic TIR nodes:
+//! - Synthetic span generation
+//! - TIR expression and statement builders
+//! - Synthetic function creation
+
+use indexmap::IndexSet;
+
+use crate::name::{LocalMethodName, ModuleSource};
+use crate::tir::{
+    FunctionRef, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam,
+    TirStmt, TirStmtKind, TypeId, TypeTable,
+};
+use crate::token::Span;
+
+/// Synthetic span used for all generated code.
+///
+/// All synthesized TIR nodes share this span, making them identifiable
+/// as compiler-generated rather than user-written code.
+pub fn synth_span() -> Span {
+    Span::new(0, 0, 1, 1)
+}
+
+/// Create a call to a builtin function (e.g., `builtin::i32_load`).
+pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::External {
+                module_source: ModuleSource::builtin(),
+                name: name.to_string(),
+                monomorph_info: None,
+                method_info: None,
+            },
+            type_args: vec![],
+            args,
+        },
+        return_type,
+        synth_span(),
+    )
+}
+
+/// Create a call to an internal function (e.g., `internal::cm_lower_string`).
+pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::External {
+                module_source: ModuleSource::internal(),
+                name: name.to_string(),
+                monomorph_info: None,
+                method_info: None,
+            },
+            type_args: vec![],
+            args,
+        },
+        return_type,
+        synth_span(),
+    )
+}
+
+/// Create an i32 literal expression.
+#[allow(clippy::cast_sign_loss)]
+pub fn i32_const(value: i32) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: value as u64,
+            repr: value.to_string(),
+        },
+        TypeTable::I32,
+        synth_span(),
+    )
+}
+
+/// Create an i64 literal expression.
+#[allow(clippy::cast_sign_loss)]
+pub fn i64_const(value: i64) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: value as u64,
+            repr: value.to_string(),
+        },
+        TypeTable::I64,
+        synth_span(),
+    )
+}
+
+/// Create a local variable reference.
+pub fn local_ref(index: u32, name: &str, type_id: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Local {
+            index,
+            name: name.to_string(),
+        },
+        type_id,
+        synth_span(),
+    )
+}
+
+/// Create a binary expression.
+pub fn binary(op: TirBinaryOp, left: TirExpr, right: TirExpr, ty: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Binary {
+            op,
+            left: Box::new(left),
+            right: Box::new(right),
+        },
+        ty,
+        synth_span(),
+    )
+}
+
+/// Create a cast expression.
+pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(expr),
+            target_type,
+        },
+        target_type,
+        synth_span(),
+    )
+}
+
+/// Create a let statement.
+pub fn let_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -> TirStmt {
+    TirStmt::new(
+        TirStmtKind::Let {
+            name: name.to_string(),
+            local_index,
+            is_mut: false,
+            is_reactive: false,
+            type_id,
+            value,
+        },
+        synth_span(),
+    )
+}
+
+/// Create a mutable let statement.
+pub fn let_mut_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -> TirStmt {
+    TirStmt::new(
+        TirStmtKind::Let {
+            name: name.to_string(),
+            local_index,
+            is_mut: true,
+            is_reactive: false,
+            type_id,
+            value,
+        },
+        synth_span(),
+    )
+}
+
+/// Create an expression statement.
+pub fn expr_stmt(expr: TirExpr) -> TirStmt {
+    TirStmt::new(TirStmtKind::Expr(expr), synth_span())
+}
+
+/// Create a return statement.
+pub fn return_stmt(value: Option<TirExpr>) -> TirStmt {
+    TirStmt::new(TirStmtKind::Return { value }, synth_span())
+}
+
+/// Create an if statement.
+pub fn if_stmt(condition: TirExpr, then_block: TirBlock, else_block: Option<TirBlock>) -> TirStmt {
+    TirStmt::new(
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        },
+        synth_span(),
+    )
+}
+
+/// Create a loop statement.
+pub fn loop_stmt(body: TirBlock) -> TirStmt {
+    TirStmt::new(TirStmtKind::Loop { body }, synth_span())
+}
+
+/// Create a break statement.
+pub fn break_stmt() -> TirStmt {
+    TirStmt::new(
+        TirStmtKind::Break {
+            label: None,
+            value: None,
+        },
+        synth_span(),
+    )
+}
+
+/// Create a local assignment expression.
+pub fn assign(target: TirExpr, value: TirExpr) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Assign {
+            target: Box::new(target),
+            value: Box::new(value),
+        },
+        TypeTable::UNIT,
+        synth_span(),
+    )
+}
+
+/// Create a `CmRawCall` expression targeting a lowered WASI import.
+pub fn cm_raw_call(local_name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::CmRawCall {
+            local_name: local_name.to_string(),
+            args,
+        },
+        return_type,
+        synth_span(),
+    )
+}
+
+/// Create an `Option::Some(value)` expression.
+pub fn option_some(value: TirExpr, option_type_id: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::OptionSome {
+            value: Box::new(value),
+        },
+        option_type_id,
+        synth_span(),
+    )
+}
+
+/// Create a `null` (`Option::None`) expression.
+pub fn null_expr(type_id: TypeId) -> TirExpr {
+    TirExpr::new(TirExprKind::Null, type_id, synth_span())
+}
+
+/// Create a TIR block from statements.
+pub fn block(stmts: Vec<TirStmt>) -> TirBlock {
+    TirBlock {
+        stmts,
+        span: synth_span(),
+    }
+}
+
+/// Allocate a local variable, returning its index.
+pub fn alloc_local(next_local: &mut u32, local_types: &mut Vec<TypeId>, ty: TypeId) -> u32 {
+    let idx = *next_local;
+    *next_local += 1;
+    local_types.push(ty);
+    idx
+}
+
+/// Create a static call to a generic struct method with proper monomorphization info.
+///
+/// For example, `Array::<String>::with_capacity(n)` needs:
+/// - `method_info` with `struct_name: "Array"`, `method_name: "with_capacity"`
+/// - `monomorph_info` with `generic_name: "Array::with_capacity"`, `type_args: [String]`
+///
+/// Without these, the monomorphizer won't instantiate the generic method.
+pub fn generic_static_call(
+    struct_name: &str,
+    method_name: &str,
+    module_source: crate::name::ModuleSource,
+    type_args: Vec<TypeId>,
+    args: Vec<TirExpr>,
+    return_type: TypeId,
+) -> TirExpr {
+    let info = LocalMethodName::new(struct_name.to_string(), None, method_name.to_string());
+    let mangled_name = info.to_mangled_name();
+    let monomorph_info = if type_args.is_empty() {
+        None
+    } else {
+        Some(MonomorphInfo {
+            generic_name: mangled_name.clone(),
+            type_args,
+        })
+    };
+    TirExpr::new(
+        TirExprKind::StaticCall {
+            func: FunctionRef::External {
+                module_source,
+                name: mangled_name,
+                monomorph_info,
+                method_info: Some(info),
+            },
+            args,
+        },
+        return_type,
+        synth_span(),
+    )
+}
+
+/// Create a method call on a generic struct with proper monomorphization info.
+///
+/// For example, `arr.append(elem)` where `arr: Array<String>` needs:
+/// - `method_info` with `struct_name: "Array"`, `method_name: "append"`
+/// - The receiver's `type_id` must be the concrete `Array<String>` `TypeId`
+pub fn generic_method_call(
+    receiver: TirExpr,
+    struct_name: &str,
+    method_name: &str,
+    method_module_source: crate::name::ModuleSource,
+    args: Vec<TirExpr>,
+    return_type: TypeId,
+) -> TirExpr {
+    let info = LocalMethodName::new(struct_name.to_string(), None, method_name.to_string());
+    let mangled_name = info.to_mangled_name();
+    TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(receiver),
+            func: FunctionRef::External {
+                module_source: method_module_source,
+                name: mangled_name,
+                monomorph_info: None,
+                method_info: Some(info),
+            },
+            type_args: vec![],
+            args,
+        },
+        return_type,
+        synth_span(),
+    )
+}
+
+/// Create a synthetic `TirFunction` for an auto-derived trait method.
+pub fn make_synthetic_method(
+    name: String,
+    method_info: LocalMethodName,
+    params: Vec<TirParam>,
+    return_type: TypeId,
+    body: TirBlock,
+    local_types: Vec<TypeId>,
+) -> TirFunction {
+    let local_count = local_types.len() as u32;
+
+    TirFunction {
+        name,
+        is_pub: true,
+        is_export: false,
+        is_async: false,
+        type_params: Vec::new(),
+        impl_type_params: Vec::new(),
+        monomorph_info: None,
+        method_info: Some(method_info),
+        params,
+        return_type,
+        effects: Vec::new(),
+        body: Some(body),
+        span: synth_span(),
+        local_count,
+        local_types,
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+    }
+}

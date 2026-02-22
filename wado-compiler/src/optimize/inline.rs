@@ -136,7 +136,7 @@ fn count_block_exprs(block: &TirBlock) -> usize {
             }
             TirStmtKind::Break { .. } | TirStmtKind::Continue => 0,
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         })
         .sum()
@@ -272,7 +272,7 @@ fn stmt_has_complex_generic_types(stmt: &TirStmt, type_table: &TypeTable) -> boo
         TirStmtKind::Continue => false,
         TirStmtKind::LetPattern { value, .. } => expr_has_complex_generic_types(value, type_table),
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -472,7 +472,7 @@ fn collect_callees_from_stmt(stmt: &TirStmt, callees: &mut IndexSet<String>) {
             collect_callees_from_expr(value, callees);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -1158,7 +1158,7 @@ fn inline_calls_in_block(
                 ));
             }
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         }
     }
@@ -1939,7 +1939,7 @@ fn remap_stmt_with_label(
             ),
         },
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     };
 
@@ -2728,7 +2728,7 @@ fn remap_stmt(
             ),
         },
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     };
 

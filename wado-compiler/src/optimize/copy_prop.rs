@@ -168,7 +168,7 @@ fn collect_usage_in_stmt(stmt: &TirStmt, usage: &mut IndexMap<u32, LocalUsage>, 
             collect_usage_in_expr(value, usage, in_loop, false);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -483,7 +483,7 @@ fn substitute_in_stmt(stmt: &mut TirStmt, substitutions: &IndexMap<u32, CopySour
             substitute_in_expr(value, substitutions);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -722,7 +722,7 @@ fn collect_copy_bindings_in_stmt(stmt: &TirStmt, bindings: &mut Vec<CopyBinding>
             collect_copy_bindings_in_expr(value, bindings);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -924,7 +924,7 @@ fn remove_copy_bindings_in_stmt(stmt: &mut TirStmt, dead_locals: &IndexSet<u32>)
             remove_copy_bindings_in_expr(value, dead_locals);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
