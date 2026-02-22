@@ -1,0 +1,65 @@
+// Test: Intraprocedural SROA patterns
+// Tests struct field access patterns that should benefit from SROA optimization.
+// Uses #[inline(never)] to isolate intraprocedural patterns from inlining.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Rect {
+    origin: Point,
+    width: i32,
+    height: i32,
+}
+
+// Pattern 1: Basic struct literal with field access (baseline - already works)
+#[inline(never)]
+fn basic_sroa() -> i32 {
+    let p = Point { x: 10, y: 20 };
+    return p.x + p.y;
+}
+
+// Pattern 2: Mutable struct with field write then read
+#[inline(never)]
+fn mutable_field_write() -> i32 {
+    let mut p = Point { x: 0, y: 0 };
+    p.x = 42;
+    p.y = 58;
+    return p.x + p.y;
+}
+
+// Pattern 3: Struct where only some fields escape (currently all-or-nothing)
+// Ideally, field y should still be SROA'd even though x is used in a call
+#[inline(never)]
+fn partial_escape(x: i32) -> i32 {
+    let p = Point { x, y: 100 };
+    // p.x comes from a parameter (escapes via call), but p.y is constant
+    return p.x + p.y;
+}
+
+// Pattern 4: Nested struct literal with field access
+#[inline(never)]
+fn nested_struct() -> i32 {
+    let r = Rect { origin: Point { x: 1, y: 2 }, width: 10, height: 20 };
+    return r.origin.x + r.origin.y + r.width + r.height;
+}
+
+// Pattern 5: Multiple structs in same function, independent lifetimes
+#[inline(never)]
+fn multiple_structs() -> i32 {
+    let a = Point { x: 1, y: 2 };
+    let b = Point { x: 3, y: 4 };
+    return a.x * b.y + a.y * b.x;
+}
+
+export fn run() {
+    assert basic_sroa() == 30;
+    assert mutable_field_write() == 100;
+    assert partial_escape(50) == 150;
+    assert nested_struct() == 33;
+    assert multiple_structs() == 10;
+}
+
+__DATA__
+{"stdout": ""}

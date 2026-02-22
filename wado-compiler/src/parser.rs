@@ -451,12 +451,20 @@ impl Parser {
 
         let args = if self.check(&TokenKind::LParen) {
             self.advance();
-            // Parse comma-separated string literal arguments
+            // Parse comma-separated arguments (string literals or identifiers)
             let mut args = Vec::new();
-            while let TokenKind::StringLit { value, .. } = self.peek_kind().clone() {
-                self.advance();
-                args.push(value);
-                // Check for comma to continue parsing more arguments
+            loop {
+                match self.peek_kind().clone() {
+                    TokenKind::StringLit { value, .. } => {
+                        self.advance();
+                        args.push(value);
+                    }
+                    TokenKind::Ident(value) => {
+                        self.advance();
+                        args.push(value);
+                    }
+                    _ => break,
+                }
                 if self.check(&TokenKind::Comma) {
                     self.advance();
                 } else {

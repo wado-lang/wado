@@ -2707,6 +2707,21 @@ impl<'a> TirUnparser<'a> {
     }
 
     fn unparse_function(&mut self, f: &TirFunction) {
+        match f.inline_hint {
+            crate::tir::InlineHint::Auto => {}
+            crate::tir::InlineHint::Hint => {
+                self.write_indent();
+                self.output.push_str("#[inline]\n");
+            }
+            crate::tir::InlineHint::Always => {
+                self.write_indent();
+                self.output.push_str("#[inline(always)]\n");
+            }
+            crate::tir::InlineHint::Never => {
+                self.write_indent();
+                self.output.push_str("#[inline(never)]\n");
+            }
+        }
         self.write_indent();
         if f.is_pub {
             self.output.push_str("pub ");

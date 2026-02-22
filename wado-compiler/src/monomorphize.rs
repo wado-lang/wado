@@ -2084,6 +2084,7 @@ impl Monomorphizer {
             address_taken_locals: generic.address_taken_locals.clone(),
             // Scratch local fields - computed by lower phase (after monomorphization)
             is_cm_adapter: false,
+            inline_hint: generic.inline_hint,
         })
     }
 

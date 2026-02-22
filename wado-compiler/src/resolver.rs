@@ -2592,6 +2592,19 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
     }
 
+    /// Extract inline hint from function attributes.
+    fn extract_inline_hint(attrs: &[crate::ast::Attribute]) -> crate::tir::InlineHint {
+        let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
+            return crate::tir::InlineHint::Auto;
+        };
+        match attr.args.first().map(String::as_str) {
+            Some("always") => crate::tir::InlineHint::Always,
+            Some("never") => crate::tir::InlineHint::Never,
+            None => crate::tir::InlineHint::Hint,
+            _ => crate::tir::InlineHint::Auto,
+        }
+    }
+
     /// Resolve a function
     fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
         // Set up type parameters in scope before resolving types
@@ -2700,6 +2713,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             address_taken_locals: ctx.address_taken_locals,
             // Scratch local fields - computed by lower phase
             is_cm_adapter: false,
+            inline_hint: Self::extract_inline_hint(&func.attrs),
         })
     }
 
@@ -2760,6 +2774,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
             is_cm_adapter: false,
+            inline_hint: crate::tir::InlineHint::Auto,
         };
 
         let tir_test = TirTest {
@@ -2950,6 +2965,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             local_types: ctx.local_types,
             address_taken_locals: ctx.address_taken_locals,
             is_cm_adapter: false,
+            inline_hint: Self::extract_inline_hint(&func.attrs),
         })
     }
 
