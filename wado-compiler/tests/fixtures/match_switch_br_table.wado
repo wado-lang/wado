@@ -1,0 +1,29 @@
+// Test match expression with enough cases to trigger br_table optimization (≥8 cases)
+
+use { println, Stdout } from "core:cli";
+
+fn describe(n: i32) -> String {
+    return match n {
+        0 => "zero",
+        1 => "one",
+        2 => "two",
+        3 => "three",
+        4 => "four",
+        5 => "five",
+        6 => "six",
+        7 => "seven",
+        8 => "eight",
+        9 => "nine",
+        _ => "other",
+    };
+}
+
+export fn run() with Stdout {
+    // Test all 10 cases plus the default
+    for let mut i = 0; i <= 10; i += 1 {
+        println(describe(i));
+    }
+}
+
+__DATA__
+{"stdout": "zero\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nother\n"}
