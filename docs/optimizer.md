@@ -302,7 +302,7 @@ Note: A WIR optimization framework may be useful in the future for other purpose
 1. **TIR analysis pass** (new pass in `optimize/`): Scan all internal functions that return a struct or tuple. For each, check that ALL call sites either:
    - Immediately destructure via `LetPattern` (tuple or struct destructuring)
    - Only access fields without escaping the value (SROA will have decomposed these)
-   Mark qualifying functions with a metadata flag (e.g., `multivalue_return: true`).
+     Mark qualifying functions with a metadata flag (e.g., `multivalue_return: true`).
 
 2. **Callee rewrite at WIR build**: When generating a marked function, emit multiple Wasm result types instead of a single struct ref. Replace `struct.new` at return sites with bare stack values.
 
