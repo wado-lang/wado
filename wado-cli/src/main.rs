@@ -47,6 +47,7 @@ fn print_usage() {
     eprintln!();
     eprintln!("Run options:");
     eprintln!("  -O<n>            Optimization level: -O0, -O1, -O2, -O3, -Os");
+    eprintln!("  --profile <mode> Profiling: guest, jitdump, perfmap");
     eprintln!();
     eprintln!("Serve options:");
     eprintln!("  --addr <addr>    Address to listen on (default: 0.0.0.0:8080)");
