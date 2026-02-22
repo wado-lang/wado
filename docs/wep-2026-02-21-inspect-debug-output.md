@@ -270,35 +270,35 @@ Both paths produce compile-time constants — no runtime overhead.
 
 The core `synthesize_inspect` phase and the full pipeline integration are implemented. The following table tracks coverage by type:
 
-| Type                       | Status | Notes                                                          |
-| -------------------------- | ------ | -------------------------------------------------------------- |
-| `i32`, `i64`, etc.         | Done   | Delegates to `Display::fmt`                                    |
-| `u8`, `u16`, etc.          | Done   | Delegates to `Display::fmt`                                    |
-| `f32`, `f64`               | Done   | Includes special values (`inf`, `-inf`, `0.0`, `-0.0`)         |
-| `bool`                     | Done   | Delegates to `Display::fmt`                                    |
-| `char`                     | Done   | Wrapped in single quotes                                       |
-| `String`                   | Done   | Escaped, quoted                                                |
-| `()` (unit)                | Done   | Outputs `()`                                                   |
-| Struct                     | Done   | Fields in declaration order                                    |
-| Struct (generic)           | Done   | Type args substituted for field types; type args omitted in name |
+| Type                       | Status | Notes                                                                    |
+| -------------------------- | ------ | ------------------------------------------------------------------------ |
+| `i32`, `i64`, etc.         | Done   | Delegates to `Display::fmt`                                              |
+| `u8`, `u16`, etc.          | Done   | Delegates to `Display::fmt`                                              |
+| `f32`, `f64`               | Done   | Includes special values (`inf`, `-inf`, `0.0`, `-0.0`)                   |
+| `bool`                     | Done   | Delegates to `Display::fmt`                                              |
+| `char`                     | Done   | Wrapped in single quotes                                                 |
+| `String`                   | Done   | Escaped, quoted                                                          |
+| `()` (unit)                | Done   | Outputs `()`                                                             |
+| Struct                     | Done   | Fields in declaration order                                              |
+| Struct (generic)           | Done   | Type args substituted for field types; type args omitted in name         |
 | Struct (`#[hidden]` field) | Done   | Hidden fields skipped with `..` hint; `is_hidden` propagated through TIR |
-| Tuple                      | Done   |                                                                |
-| `Array<T>`                 | Done   | Loop-based with comma separation                               |
-| `Option::Some(v)`          | Done   | Renders as `Some(inspect(v))`                                  |
-| `Option::None` / `null`    | Done   | Renders as `null`                                              |
-| Enum                       | Done   | `TypeName::CaseName`                                           |
-| Variant (no payload)       | Done   |                                                                |
-| Variant (with payload)     | Done   |                                                                |
-| Flags                      | Done   | Bitwise decomposition with `\|` join                           |
-| Newtype                    | Done   | `value as TypeName`                                            |
-| Resource (opaque handle)   | Done   | `TypeName#0xHH` using `LowerHex::fmt`                         |
-| `&T`                       | Done   | `&inspect(inner)`                                              |
-| `&mut T`                   | Done   | `&mut inspect(inner)`                                          |
-| Closure (default)          | Done   | Signature only                                                 |
-| Closure (`#` alternate)    | Done   | TIR unparsed source                                            |
-| Display fallback           | Done   | `{expr}` falls back to inspect when no `Display` impl exists  |
-| Nested structs/arrays      | Done   | Recursive inspect for composite fields                         |
-| `Array<Array<T>>`          | TODO   | Nested array codegen bug (tracked as TODO test)                |
+| Tuple                      | Done   |                                                                          |
+| `Array<T>`                 | Done   | Loop-based with comma separation                                         |
+| `Option::Some(v)`          | Done   | Renders as `Some(inspect(v))`                                            |
+| `Option::None` / `null`    | Done   | Renders as `null`                                                        |
+| Enum                       | Done   | `TypeName::CaseName`                                                     |
+| Variant (no payload)       | Done   |                                                                          |
+| Variant (with payload)     | Done   |                                                                          |
+| Flags                      | Done   | Bitwise decomposition with `\|` join                                     |
+| Newtype                    | Done   | `value as TypeName`                                                      |
+| Resource (opaque handle)   | Done   | `TypeName#0xHH` using `LowerHex::fmt`                                    |
+| `&T`                       | Done   | `&inspect(inner)`                                                        |
+| `&mut T`                   | Done   | `&mut inspect(inner)`                                                    |
+| Closure (default)          | Done   | Signature only                                                           |
+| Closure (`#` alternate)    | Done   | TIR unparsed source                                                      |
+| Display fallback           | Done   | `{expr}` falls back to inspect when no `Display` impl exists             |
+| Nested structs/arrays      | Done   | Recursive inspect for composite fields                                   |
+| `Array<Array<T>>`          | TODO   | Nested array codegen bug (tracked as TODO test)                          |
 
 ### Additional Fixes
 
