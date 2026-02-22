@@ -49,96 +49,96 @@ test "log2_pow10 approximation" {
 }
 
 test "u64_bit_len" {
-    assert u64_bit_len(0 as u64) == 0;
-    assert u64_bit_len(1 as u64) == 1;
-    assert u64_bit_len(2 as u64) == 2;
-    assert u64_bit_len(3 as u64) == 2;
-    assert u64_bit_len(4 as u64) == 3;
-    assert u64_bit_len(7 as u64) == 3;
-    assert u64_bit_len(8 as u64) == 4;
-    assert u64_bit_len(255 as u64) == 8;
-    assert u64_bit_len(256 as u64) == 9;
-    assert u64_bit_len(0x7FFFFFFFFFFFFFFF as u64) == 63;
-    assert u64_bit_len(0x8000000000000000 as u64) == 64;
+    assert u64_bit_len(0) == 0;
+    assert u64_bit_len(1) == 1;
+    assert u64_bit_len(2) == 2;
+    assert u64_bit_len(3) == 2;
+    assert u64_bit_len(4) == 3;
+    assert u64_bit_len(7) == 3;
+    assert u64_bit_len(8) == 4;
+    assert u64_bit_len(255) == 8;
+    assert u64_bit_len(256) == 9;
+    assert u64_bit_len(0x7FFFFFFFFFFFFFFF) == 63;
+    assert u64_bit_len(0x8000000000000000) == 64;
 }
 
 test "pow10 lookup" {
-    assert pow10(0) == 1 as u64;
-    assert pow10(1) == 10 as u64;
-    assert pow10(2) == 100 as u64;
-    assert pow10(3) == 1000 as u64;
-    assert pow10(9) == 1000000000 as u64;
-    assert pow10(18) == 1000000000000000000 as u64;
+    assert pow10(0) == 1;
+    assert pow10(1) == 10;
+    assert pow10(2) == 100;
+    assert pow10(3) == 1000;
+    assert pow10(9) == 1000000000;
+    assert pow10(18) == 1000000000000000000;
     // pow10(19) = 10^19 = 0x8AC7230489E80000
 }
 
 test "digits count" {
-    assert digits(0 as u64) == 0;
-    assert digits(1 as u64) == 1;
-    assert digits(9 as u64) == 1;
-    assert digits(10 as u64) == 2;
-    assert digits(99 as u64) == 2;
-    assert digits(100 as u64) == 3;
-    assert digits(999 as u64) == 3;
-    assert digits(1000 as u64) == 4;
-    assert digits(9999999999999999 as u64) == 16;
-    assert digits(10000000000000000 as u64) == 17;
+    assert digits(0) == 0;
+    assert digits(1) == 1;
+    assert digits(9) == 1;
+    assert digits(10) == 2;
+    assert digits(99) == 2;
+    assert digits(100) == 3;
+    assert digits(999) == 3;
+    assert digits(1000) == 4;
+    assert digits(9999999999999999) == 16;
+    assert digits(10000000000000000) == 17;
 }
 
 
 test "rotate_right" {
     // Rotate 1 right by 1 puts it in MSB
-    let r1 = rotate_right(1 as u64, 1);
-    assert r1 == 0x8000000000000000 as u64;
+    let r1 = rotate_right(1, 1);
+    assert r1 == 0x8000000000000000;
 
     // Rotate MSB right by 1 puts it in bit 62
-    let r2 = rotate_right(0x8000000000000000 as u64, 1);
-    assert r2 == 0x4000000000000000 as u64;
+    let r2 = rotate_right(0x8000000000000000, 1);
+    assert r2 == 0x4000000000000000;
 
     // Full rotation
-    let r64 = rotate_right(1 as u64, 64);
-    assert r64 == 1 as u64;
+    let r64 = rotate_right(1, 64);
+    assert r64 == 1;
 
     // Rotate by 32
-    let r32 = rotate_right(0x00000001FFFFFFFF as u64, 32);
-    assert r32 == 0xFFFFFFFF00000001 as u64;
+    let r32 = rotate_right(0x00000001FFFFFFFF, 32);
+    assert r32 == 0xFFFFFFFF00000001;
 }
 
 test "trim_zeros basic" {
     // 1000 should trim to 1 with exponent +3
-    let t1 = trim_zeros(1000 as u64, 0);
-    assert t1.0 == 1 as u64;
+    let t1 = trim_zeros(1000, 0);
+    assert t1.0 == 1;
     assert t1.1 == 3;
 
     // 1200 should trim to 12 with exponent +2
-    let t2 = trim_zeros(1200 as u64, 0);
-    assert t2.0 == 12 as u64;
+    let t2 = trim_zeros(1200, 0);
+    assert t2.0 == 12;
     assert t2.1 == 2;
 
     // 123 has no trailing zeros
-    let t3 = trim_zeros(123 as u64, 0);
-    assert t3.0 == 123 as u64;
+    let t3 = trim_zeros(123, 0);
+    assert t3.0 == 123;
     assert t3.1 == 0;
 
     // 10 trims to 1
-    let t4 = trim_zeros(10 as u64, 0);
-    assert t4.0 == 1 as u64;
+    let t4 = trim_zeros(10, 0);
+    assert t4.0 == 1;
     assert t4.1 == 1;
 
     // 100000000 (10^8) trims to 1 with exp +8
-    let t5 = trim_zeros(100000000 as u64, 0);
-    assert t5.0 == 1 as u64;
+    let t5 = trim_zeros(100000000, 0);
+    assert t5.0 == 1;
     assert t5.1 == 8;
 }
 
 test "trim_zeros with initial exponent" {
     // With initial exponent -3
-    let t1 = trim_zeros(1000 as u64, -3);
-    assert t1.0 == 1 as u64;
+    let t1 = trim_zeros(1000, -3);
+    assert t1.0 == 1;
     assert t1.1 == 0;  // -3 + 3 = 0
 
-    let t2 = trim_zeros(500 as i64, -2);
-    assert t2.0 == 5 as i64;
+    let t2 = trim_zeros(500, -2);
+    assert t2.0 == 5;
     assert t2.1 == 0;  // -2 + 2 = 0
 }
 
@@ -146,12 +146,12 @@ test "trim_zeros with initial exponent" {
 test "unpack64 normal numbers" {
     // 1.0 = 0x3FF0000000000000
     let r1 = unpack64(1.0);
-    assert r1.mantissa != 0 as i64;
+    assert r1.mantissa != 0;
     assert r1.exponent != 0;
 
     // 2.0 = 0x4000000000000000
     let r2 = unpack64(2.0);
-    assert r2.mantissa != 0 as i64;
+    assert r2.mantissa != 0;
 
     // -1.0 should have same mantissa magnitude
     let rm1 = unpack64(-1.0);
@@ -166,101 +166,101 @@ test "unpack64 powers of 2" {
     let r_half = unpack64(0.5);
 
     // All should have high bit set in mantissa
-    assert (r_1.mantissa & 0x8000000000000000 as i64) != 0 as i64;
-    assert (r_2.mantissa & 0x8000000000000000 as i64) != 0 as i64;
-    assert (r_4.mantissa & 0x8000000000000000 as i64) != 0 as i64;
-    assert (r_half.mantissa & 0x8000000000000000 as i64) != 0 as i64;
+    assert (r_1.mantissa & 0x8000000000000000) != 0;
+    assert (r_2.mantissa & 0x8000000000000000) != 0;
+    assert (r_4.mantissa & 0x8000000000000000) != 0;
+    assert (r_half.mantissa & 0x8000000000000000) != 0;
 }
 
 test "unpack64 zero" {
     let r0 = unpack64(0.0);
-    assert r0.mantissa == 0 as i64;
+    assert r0.mantissa == 0;
     assert r0.exponent == 0;
 }
 
 
 test "short integers 1-9" {
     let r1 = short(1.0);
-    assert r1.digits == 1 as i64;
+    assert r1.digits == 1;
     assert r1.exponent == 0;
 
     let r2 = short(2.0);
-    assert r2.digits == 2 as i64;
+    assert r2.digits == 2;
     assert r2.exponent == 0;
 
     let r3 = short(3.0);
-    assert r3.digits == 3 as i64;
+    assert r3.digits == 3;
     assert r3.exponent == 0;
 
     let r5 = short(5.0);
-    assert r5.digits == 5 as i64;
+    assert r5.digits == 5;
     assert r5.exponent == 0;
 
     let r9 = short(9.0);
-    assert r9.digits == 9 as i64;
+    assert r9.digits == 9;
     assert r9.exponent == 0;
 }
 
 test "short powers of 10" {
     let r10 = short(10.0);
-    assert r10.digits == 1 as i64;
+    assert r10.digits == 1;
     assert r10.exponent == 1;
 
     let r100 = short(100.0);
-    assert r100.digits == 1 as i64;
+    assert r100.digits == 1;
     assert r100.exponent == 2;
 
     let r1000 = short(1000.0);
-    assert r1000.digits == 1 as i64;
+    assert r1000.digits == 1;
     assert r1000.exponent == 3;
 
     let r1e6 = short(1000000.0);
-    assert r1e6.digits == 1 as i64;
+    assert r1e6.digits == 1;
     assert r1e6.exponent == 6;
 
     let r1e9 = short(1000000000.0);
-    assert r1e9.digits == 1 as i64;
+    assert r1e9.digits == 1;
     assert r1e9.exponent == 9;
 }
 
 test "short powers of 2" {
     // 2^0 = 1
     let r0 = short(1.0);
-    assert r0.digits == 1 as i64;
+    assert r0.digits == 1;
     assert r0.exponent == 0;
 
     // 2^1 = 2
     let r1 = short(2.0);
-    assert r1.digits == 2 as i64;
+    assert r1.digits == 2;
     assert r1.exponent == 0;
 
     // 2^2 = 4
     let r2 = short(4.0);
-    assert r2.digits == 4 as i64;
+    assert r2.digits == 4;
     assert r2.exponent == 0;
 
     // 2^3 = 8
     let r3 = short(8.0);
-    assert r3.digits == 8 as i64;
+    assert r3.digits == 8;
     assert r3.exponent == 0;
 
     // 2^10 = 1024
     let r10 = short(1024.0);
-    assert r10.digits > 0 as i64;
+    assert r10.digits > 0;
 
     // 2^-1 = 0.5
     let rm1 = short(0.5);
-    assert rm1.digits == 5 as i64;
+    assert rm1.digits == 5;
     assert rm1.exponent == -1;
 
     // 2^-2 = 0.25
     let rm2 = short(0.25);
-    assert rm2.digits == 25 as i64;
+    assert rm2.digits == 25;
     assert rm2.exponent == -2;
 
     // 2^-3 = 0.125
     let rm3 = short(0.125);
-    assert rm3.digits == 125 as i64;
+    assert rm3.digits == 125;
     assert rm3.exponent == -3;
 }
 
@@ -269,84 +269,84 @@ test "short dyadic fractions" {
 
     // 1.5 = 3/2
     let r15 = short(1.5);
-    assert r15.digits == 15 as i64;
+    assert r15.digits == 15;
     assert r15.exponent == -1;
 
     // 1.25 = 5/4
     let r125 = short(1.25);
-    assert r125.digits == 125 as i64;
+    assert r125.digits == 125;
     assert r125.exponent == -2;
 
     // 1.125 = 9/8
     let r1125 = short(1.125);
-    assert r1125.digits == 1125 as i64;
+    assert r1125.digits == 1125;
     assert r1125.exponent == -3;
 
     // 1.75 = 7/4
     let r175 = short(1.75);
-    assert r175.digits == 175 as i64;
+    assert r175.digits == 175;
     assert r175.exponent == -2;
 
     // 2.5 = 5/2
     let r25 = short(2.5);
-    assert r25.digits == 25 as i64;
+    assert r25.digits == 25;
     assert r25.exponent == -1;
 }
 
 test "short two-digit integers" {
     let r11 = short(11.0);
-    assert r11.digits == 11 as i64;
+    assert r11.digits == 11;
     assert r11.exponent == 0;
 
     let r42 = short(42.0);
-    assert r42.digits == 42 as i64;
+    assert r42.digits == 42;
     assert r42.exponent == 0;
 
     let r99 = short(99.0);
-    assert r99.digits == 99 as i64;
+    assert r99.digits == 99;
     assert r99.exponent == 0;
 }
 
 test "short three-digit integers" {
     let r100 = short(100.0);
-    assert r100.digits == 1 as i64;  // Trimmed
+    assert r100.digits == 1;  // Trimmed
     assert r100.exponent == 2;
 
     let r101 = short(101.0);
-    assert r101.digits == 101 as i64;
+    assert r101.digits == 101;
     assert r101.exponent == 0;
 
     let r256 = short(256.0);  // 2^8
-    assert r256.digits == 256 as i64;
+    assert r256.digits == 256;
     assert r256.exponent == 0;
 
     let r999 = short(999.0);
-    assert r999.digits == 999 as i64;
+    assert r999.digits == 999;
     assert r999.exponent == 0;
 }
 
 test "short non-representable decimals" {
     // 0.1 cannot be exactly represented in binary
     let r01 = short(0.1);
-    assert r01.digits > 0 as i64;
+    assert r01.digits > 0;
     assert r01.exponent < 0;
     // May have more than 1 digit
 
     // 0.2
     let r02 = short(0.2);
-    assert r02.digits > 0 as i64;
+    assert r02.digits > 0;
     assert r02.exponent < 0;
 
     // 0.3
     let r03 = short(0.3);
-    assert r03.digits > 0 as i64;
+    assert r03.digits > 0;
     assert r03.exponent < 0;
 }
 
 test "short pi" {
     let pi = 3.141592653589793;
     let r = short(pi);
-    assert r.digits > 0 as i64;
+    assert r.digits > 0;
     // Pi needs 15-17 digits for shortest representation
     assert digits(r.digits) >= 15;
     assert digits(r.digits) <= 17;
@@ -355,7 +355,7 @@ test "short pi" {
 test "short euler number" {
     let e = 2.718281828459045;
     let r = short(e);
-    assert r.digits > 0 as i64;
+    assert r.digits > 0;
     assert digits(r.digits) >= 15;
     assert digits(r.digits) <= 17;
 }
@@ -382,13 +382,13 @@ test "short negative values symmetry" {
 
 test "fixed_width 1 digit" {
     let r1 = fixed_width(1.0, 1);
-    assert r1.digits == 1 as i64;
+    assert r1.digits == 1;
 
     let r9 = fixed_width(9.0, 1);
-    assert r9.digits == 9 as i64;
+    assert r9.digits == 9;
 
     let rpi = fixed_width(3.14159, 1);
-    assert rpi.digits == 3 as i64;
+    assert rpi.digits == 3;
 }
 
 test "fixed_width various digits" {
@@ -430,22 +430,22 @@ test "fixed_width various digits" {
 test "fixed_width powers of 10" {
     // 1.0 with 1 digit
     let r1 = fixed_width(1.0, 1);
-    assert r1.digits == 1 as i64;
+    assert r1.digits == 1;
     assert r1.exponent == 0;
 
     // 10.0 with 1 digit
     let r10 = fixed_width(10.0, 1);
-    assert r10.digits == 1 as i64;
+    assert r10.digits == 1;
     assert r10.exponent == 1;
 
     // 100.0 with 1 digit
     let r100 = fixed_width(100.0, 1);
-    assert r100.digits == 1 as i64;
+    assert r100.digits == 1;
     assert r100.exponent == 2;
 
     // 0.1 with 1 digit
     let r01 = fixed_width(0.1, 1);
-    assert r01.digits == 1 as i64;
+    assert r01.digits == 1;
     assert r01.exponent == -1;
 }
 
@@ -509,7 +509,7 @@ test "f64_to_string_exp negative values" {
     assert f64_to_string_exp(-0.1, false) == "-1e-01";
 
     let neg_pi = f64_to_string_exp(-3.141592653589793, false);
-    assert neg_pi.get_byte(0) == '-' as i32;
+    assert neg_pi.get_byte(0) == '-' as u8;
 }
 
 test "f64_to_string_exp two digit exponent" {
@@ -527,9 +527,9 @@ test "f64_to_string_exp three digit exponent" {
     assert large.len() > 0;
     // Check last 3 chars are "100"
     let n = large.len();
-    assert large.get_byte(n - 3) == '1' as i32;
-    assert large.get_byte(n - 2) == '0' as i32;
-    assert large.get_byte(n - 1) == '0' as i32;
+    assert large.get_byte(n - 3) == '1' as u8;
+    assert large.get_byte(n - 2) == '0' as u8;
+    assert large.get_byte(n - 1) == '0' as u8;
 
     let small = f64_to_string_exp(1.0e-100, false);
     assert small.len() > 0;
@@ -544,10 +544,10 @@ test "f64_to_string_exp pi precision" {
     assert s.len() > 10;
 
     // Should start with "3.14"
-    assert s.get_byte(0) == '3' as i32;
-    assert s.get_byte(1) == '.' as i32;
-    assert s.get_byte(2) == '1' as i32;
-    assert s.get_byte(3) == '4' as i32;
+    assert s.get_byte(0) == '3' as u8;
+    assert s.get_byte(1) == '.' as u8;
+    assert s.get_byte(2) == '1' as u8;
+    assert s.get_byte(3) == '4' as u8;
 }
 
 test "f64_to_string_exp round trip consistency" {
@@ -558,10 +558,10 @@ test "f64_to_string_exp round trip consistency" {
 
     // First digit should match
     let mut first_digit = short_result.digits;
-    while first_digit >= 10 as i64 {
-        first_digit = first_digit / 10 as i64;
+    while first_digit >= 10 {
+        first_digit = first_digit / 10;
     }
-    assert str_result.get_byte(0) == ('0' as i32) + (first_digit as i32);
+    assert str_result.get_byte(0) == ('0' as u8) + (first_digit as u8);
 }
 
 
@@ -570,14 +570,14 @@ test "IEEE 754 specific bit patterns" {
     let one_bits = 0x3FF0000000000000 as i64;
     let one = builtin::f64_reinterpret_i64(one_bits);
     let r_one = short(one);
-    assert r_one.digits == 1 as i64;
+    assert r_one.digits == 1;
     assert r_one.exponent == 0;
 
     // 2.0 exactly: bit pattern 0x4000000000000000
     let two_bits = 0x4000000000000000 as i64;
     let two = builtin::f64_reinterpret_i64(two_bits);
     let r_two = short(two);
-    assert r_two.digits == 2 as i64;
+    assert r_two.digits == 2;
     assert r_two.exponent == 0;
 }
 
@@ -586,7 +586,7 @@ test "smallest positive normal number" {
     let min_normal_bits = 0x0010000000000000 as i64;
     let min_normal = builtin::f64_reinterpret_i64(min_normal_bits);
     let r = short(min_normal);
-    assert r.digits > 0 as i64;
+    assert r.digits > 0;
     // Exponent should be around -308
     assert r.exponent < -300;
 }
@@ -596,7 +596,7 @@ test "largest positive finite number" {
     let max_finite_bits = 0x7FEFFFFFFFFFFFFF as i64;
     let max_finite = builtin::f64_reinterpret_i64(max_finite_bits);
     let r = short(max_finite);
-    assert r.digits > 0 as i64;
+    assert r.digits > 0;
     // Exponent should be around +308 minus number of digits
     // max f64 ≈ 1.7976931348623157e+308, so exp + digits = 308
     assert r.exponent > 290;
@@ -609,14 +609,14 @@ test "nextafter 1.0" {
     let above_one = builtin::f64_reinterpret_i64(above_one_bits);
     let r_above = short(above_one);
     // Should need more than 1 digit
-    assert r_above.digits > 1 as i64;
+    assert r_above.digits > 1;
 
     // Just below 1.0: 0x3FEFFFFFFFFFFFFF
     let below_one_bits = 0x3FEFFFFFFFFFFFFF as i64;
     let below_one = builtin::f64_reinterpret_i64(below_one_bits);
     let r_below = short(below_one);
     // Should be less than 1, so different representation
-    assert r_below.digits > 0 as i64;
+    assert r_below.digits > 0;
 }
 
 
@@ -625,7 +625,7 @@ test "smallest subnormal" {
     let min_subnormal_bits = 0x0000000000000001 as i64;
     let min_subnormal = builtin::f64_reinterpret_i64(min_subnormal_bits);
     let r = short(min_subnormal);
-    assert r.digits > 0 as i64;
+    assert r.digits > 0;
     // Exponent should be around -324
     assert r.exponent < -320;
 }
@@ -635,7 +635,7 @@ test "largest subnormal" {
     let max_subnormal_bits = 0x000FFFFFFFFFFFFF as i64;
     let max_subnormal = builtin::f64_reinterpret_i64(max_subnormal_bits);
     let r = short(max_subnormal);
-    assert r.digits > 0 as i64;
+    assert r.digits > 0;
     // Exponent should be around -308
     assert r.exponent < -300;
 }
@@ -651,77 +651,77 @@ test "hard boundary case 1" {
 test "hard boundary integers" {
     // Values at digit boundaries: 9, 99, 999, etc.
     let r9 = short(9.0);
-    assert r9.digits == 9 as i64;
+    assert r9.digits == 9;
     assert r9.exponent == 0;
 
     let r99 = short(99.0);
-    assert r99.digits == 99 as i64;
+    assert r99.digits == 99;
     assert r99.exponent == 0;
 
     let r999 = short(999.0);
-    assert r999.digits == 999 as i64;
+    assert r999.digits == 999;
     assert r999.exponent == 0;
 
     let r9999 = short(9999.0);
-    assert r9999.digits == 9999 as i64;
+    assert r9999.digits == 9999;
     assert r9999.exponent == 0;
 }
 
 test "hard boundary near powers of 10" {
     // Values just above/below powers of 10
     let r11 = short(11.0);
-    assert r11.digits == 11 as i64;
+    assert r11.digits == 11;
     assert r11.exponent == 0;
 
     let r101 = short(101.0);
-    assert r101.digits == 101 as i64;
+    assert r101.digits == 101;
     assert r101.exponent == 0;
 
     let r1001 = short(1001.0);
-    assert r1001.digits == 1001 as i64;
+    assert r1001.digits == 1001;
     assert r1001.exponent == 0;
 }
 
 
 test "format_exp basic" {
     // 1 digit
-    let s1 = format_exp(1 as i64, 0, 1, false);
+    let s1 = format_exp(1, 0, 1, false);
     assert s1 == "1e+00";
 
     // 2 digits, exp 0
-    let s2 = format_exp(12 as i64, -1, 2, false);
+    let s2 = format_exp(12, -1, 2, false);
     assert s2 == "1.2e+00";
 
     // 3 digits, exp 0
-    let s3 = format_exp(314 as i64, -2, 3, false);
+    let s3 = format_exp(314, -2, 3, false);
     assert s3 == "3.14e+00";
 }
 
 test "format_exp negative exponent" {
     // 1 digit, exp -1
-    let s1 = format_exp(1 as i64, -1, 1, false);
+    let s1 = format_exp(1, -1, 1, false);
     assert s1 == "1e-01";
 
     // exp -10
-    let s2 = format_exp(1 as i64, -10, 1, false);
+    let s2 = format_exp(1, -10, 1, false);
     assert s2 == "1e-10";
 
     // exp -100
-    let s3 = format_exp(1 as i64, -100, 1, false);
+    let s3 = format_exp(1, -100, 1, false);
     assert s3 == "1e-100";
 }
 
 test "format_exp positive exponent" {
     // exp +1
-    let s1 = format_exp(1 as i64, 1, 1, false);
+    let s1 = format_exp(1, 1, 1, false);
     assert s1 == "1e+01";
 
     // exp +10
-    let s2 = format_exp(1 as i64, 10, 1, false);
+    let s2 = format_exp(1, 10, 1, false);
     assert s2 == "1e+10";
 
     // exp +100
-    let s3 = format_exp(1 as i64, 100, 1, false);
+    let s3 = format_exp(1, 100, 1, false);
     assert s3 == "1e+100";
 }
 
@@ -776,52 +776,52 @@ test "specific hard values from Go tests" {
     // Test exact power of 2
     let val3 = 1.0 / 1024.0;  // 2^-10 = 0.0009765625
     let r3 = short(val3);
-    assert r3.digits > 0 as i64;
+    assert r3.digits > 0;
 }
 
 
 test "powers of 2 negative exponents" {
     // 2^-1 = 0.5
-    assert short(0.5).digits == 5 as i64;
+    assert short(0.5).digits == 5;
     assert short(0.5).exponent == -1;
 
     // 2^-2 = 0.25
-    assert short(0.25).digits == 25 as i64;
+    assert short(0.25).digits == 25;
     assert short(0.25).exponent == -2;
 
     // 2^-3 = 0.125
-    assert short(0.125).digits == 125 as i64;
+    assert short(0.125).digits == 125;
     assert short(0.125).exponent == -3;
 
     // 2^-4 = 0.0625
-    assert short(0.0625).digits == 625 as i64;
+    assert short(0.0625).digits == 625;
     assert short(0.0625).exponent == -4;
 
     // 2^-10 = 0.0009765625
     let r = short(0.0009765625);
-    assert r.digits > 0 as i64;
+    assert r.digits > 0;
 }
 
 test "powers of 2 positive exponents" {
     // 2^4 = 16
-    assert short(16.0).digits == 16 as i64;
+    assert short(16.0).digits == 16;
     assert short(16.0).exponent == 0;
 
     // 2^5 = 32
-    assert short(32.0).digits == 32 as i64;
+    assert short(32.0).digits == 32;
     assert short(32.0).exponent == 0;
 
     // 2^6 = 64
-    assert short(64.0).digits == 64 as i64;
+    assert short(64.0).digits == 64;
     assert short(64.0).exponent == 0;
 
     // 2^10 = 1024
-    assert short(1024.0).digits == 1024 as i64;
+    assert short(1024.0).digits == 1024;
     assert short(1024.0).exponent == 0;
 
     // 2^20 = 1048576
     let r = short(1048576.0);
-    assert r.digits > 0 as i64;
+    assert r.digits > 0;
 }
 
 
@@ -855,7 +855,7 @@ test "many consecutive integers" {
     for let mut i = 1; i <= 20; i += 1 {
         let f = i as f64;
         let r = short(f);
-        assert r.digits > 0 as i64;
+        assert r.digits > 0;
     }
 }
 
@@ -864,7 +864,7 @@ test "many powers of 2" {
     let mut p = 1.0;
     for let mut i = 0; i <= 20; i += 1 {
         let r = short(p);
-        assert r.digits > 0 as i64;
+        assert r.digits > 0;
         p = p * 2.0;
     }
 }
@@ -1153,46 +1153,46 @@ test "f64_to_string_auto special values" {
 
 test "format_decimal basic" {
     // digits=314, exponent=-2, nd=3 → "3.14"
-    assert format_decimal(314 as i64, -2, 3) == "3.14";
+    assert format_decimal(314, -2, 3) == "3.14";
 
     // digits=1, exponent=0, nd=1 → "1"
-    assert format_decimal(1 as i64, 0, 1) == "1";
+    assert format_decimal(1, 0, 1) == "1";
 
     // digits=12345, exponent=0, nd=5 → "12345"
-    assert format_decimal(12345 as i64, 0, 5) == "12345";
+    assert format_decimal(12345, 0, 5) == "12345";
 }
 
 test "format_decimal leading zeros" {
     // digits=1, exponent=-1, nd=1 → "0.1"
-    assert format_decimal(1 as i64, -1, 1) == "0.1";
+    assert format_decimal(1, -1, 1) == "0.1";
 
     // digits=1, exponent=-2, nd=1 → "0.01"
-    assert format_decimal(1 as i64, -2, 1) == "0.01";
+    assert format_decimal(1, -2, 1) == "0.01";
 
     // digits=1, exponent=-5, nd=1 → "0.00001"
-    assert format_decimal(1 as i64, -5, 1) == "0.00001";
+    assert format_decimal(1, -5, 1) == "0.00001";
 }
 
 test "format_decimal trailing zeros" {
     // digits=5, exponent=1, nd=1 → "50"
-    assert format_decimal(5 as i64, 1, 1) == "50";
+    assert format_decimal(5, 1, 1) == "50";
 
     // digits=1, exponent=3, nd=1 → "1000"
-    assert format_decimal(1 as i64, 3, 1) == "1000";
+    assert format_decimal(1, 3, 1) == "1000";
 
     // digits=25, exponent=2, nd=2 → "2500"
-    assert format_decimal(25 as i64, 2, 2) == "2500";
+    assert format_decimal(25, 2, 2) == "2500";
 }
 
 test "format_decimal decimal in middle" {
     // digits=12345, exponent=-2, nd=5 → "123.45"
-    assert format_decimal(12345 as i64, -2, 5) == "123.45";
+    assert format_decimal(12345, -2, 5) == "123.45";
 
     // digits=12345, exponent=-3, nd=5 → "12.345"
-    assert format_decimal(12345 as i64, -3, 5) == "12.345";
+    assert format_decimal(12345, -3, 5) == "12.345";
 
     // digits=12345, exponent=-4, nd=5 → "1.2345"
-    assert format_decimal(12345 as i64, -4, 5) == "1.2345";
+    assert format_decimal(12345, -4, 5) == "1.2345";
 }
 
 
@@ -1414,14 +1414,14 @@ fn i32_to_str(n: i32) -> String {
 }
 
 fn u64_to_str(n: u64) -> String {
-    if n == 0 as u64 { return "0"; }
+    if n == 0 { return "0"; }
     let mut result = String::with_capacity(20);
     let mut val = n;
 
     let mut digits: Array<i32> = [];
-    while val > 0 as u64 {
-        digits.append((val % 10 as u64) as i32);
-        val = val / 10 as u64;
+    while val > 0 {
+        digits.append((val % 10) as i32);
+        val = val / 10;
     }
 
     let mut i = digits.len() - 1;

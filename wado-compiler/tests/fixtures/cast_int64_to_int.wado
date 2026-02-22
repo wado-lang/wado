@@ -1,0 +1,136 @@
+// i64/u64 → smaller integer type casts
+// All patterns must emit i32.wrap_i64 (including struct field access)
+use { println, Stdout } from "core:cli";
+
+struct U64Box { value: u64 }
+struct I64Box { value: i64 }
+
+fn test_u64_casts() {
+    let x: u64 = 300;
+    let bx = U64Box { value: 300 };
+
+    // u64 → u8 (truncates to lower 8 bits: 300 & 0xFF = 44)
+    let a = x as u8;
+    assert a == 44 as u8;
+    let a2 = bx.value as u8;
+    assert a2 == 44 as u8;
+
+    // u64 → u16
+    let b = x as u16;
+    assert b == 300 as u16;
+    let b2 = bx.value as u16;
+    assert b2 == 300 as u16;
+
+    // u64 → u32
+    let c = x as u32;
+    assert c == 300 as u32;
+    let c2 = bx.value as u32;
+    assert c2 == 300 as u32;
+
+    // u64 → i8 (300 & 0xFF = 44)
+    let d = x as i8;
+    assert d == 44 as i8;
+    let d2 = bx.value as i8;
+    assert d2 == 44 as i8;
+
+    // u64 → i16
+    let e = x as i16;
+    assert e == 300 as i16;
+    let e2 = bx.value as i16;
+    assert e2 == 300 as i16;
+
+    // u64 → i32
+    let f = x as i32;
+    assert f == 300;
+    let f2 = bx.value as i32;
+    assert f2 == 300;
+}
+
+fn test_i64_casts() {
+    let x: i64 = 300;
+    let bx = I64Box { value: 300 };
+
+    // i64 → u8
+    let a = x as u8;
+    assert a == 44 as u8;
+    let a2 = bx.value as u8;
+    assert a2 == 44 as u8;
+
+    // i64 → u16
+    let b = x as u16;
+    assert b == 300 as u16;
+    let b2 = bx.value as u16;
+    assert b2 == 300 as u16;
+
+    // i64 → u32
+    let c = x as u32;
+    assert c == 300 as u32;
+    let c2 = bx.value as u32;
+    assert c2 == 300 as u32;
+
+    // i64 → i8
+    let d = x as i8;
+    assert d == 44 as i8;
+    let d2 = bx.value as i8;
+    assert d2 == 44 as i8;
+
+    // i64 → i16
+    let e = x as i16;
+    assert e == 300 as i16;
+    let e2 = bx.value as i16;
+    assert e2 == 300 as i16;
+
+    // i64 → i32
+    let f = x as i32;
+    assert f == 300;
+    let f2 = bx.value as i32;
+    assert f2 == 300;
+}
+
+fn test_negative_i64_casts() {
+    let x: i64 = -1;
+    let bx = I64Box { value: -1 };
+
+    // -1 as i64 is 0xFFFFFFFFFFFFFFFF
+    // i32.wrap_i64 takes lower 32 bits → 0xFFFFFFFF = -1 as i32
+
+    // i64 → i32
+    let a = x as i32;
+    assert a == -1;
+    let a2 = bx.value as i32;
+    assert a2 == -1;
+
+    // i64 → i8 (lower 8 bits of -1 = 0xFF, sign-extended = -1)
+    let b = x as i8;
+    assert b == -1 as i8;
+    let b2 = bx.value as i8;
+    assert b2 == -1 as i8;
+
+    // i64 → i16
+    let c = x as i16;
+    assert c == -1 as i16;
+    let c2 = bx.value as i16;
+    assert c2 == -1 as i16;
+
+    // i64 → u8 (0xFF = 255)
+    let d = x as u8;
+    assert d == 255 as u8;
+    let d2 = bx.value as u8;
+    assert d2 == 255 as u8;
+
+    // i64 → u16 (0xFFFF = 65535)
+    let e = x as u16;
+    assert e == 65535 as u16;
+    let e2 = bx.value as u16;
+    assert e2 == 65535 as u16;
+}
+
+export fn run() with Stdout {
+    test_u64_casts();
+    test_i64_casts();
+    test_negative_i64_casts();
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

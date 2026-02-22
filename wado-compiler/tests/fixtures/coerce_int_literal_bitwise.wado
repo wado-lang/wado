@@ -1,0 +1,66 @@
+// Test integer literal coercion in bitwise operators
+// Covers: &, |, ^ with literal on both lhs and rhs
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x_u64: u64 = 0xFF00;
+    let x_i64: i64 = 0xFF;
+    let x_u8: u8 = 0xAB;
+    let x_i8: i8 = 0x7F;
+
+    // & with literal on rhs
+    let a1 = x_u64 & 0xFF;
+    assert a1 == 0 as u64;
+    let a2 = x_i64 & 0x0F;
+    assert a2 == 0x0F as i64;
+    let a3 = x_u8 & 0x0F;
+    assert a3 == 0x0B as u8;
+    let a4 = x_i8 & 0x70;
+    assert a4 == 0x70 as i8;
+
+    // & with literal on lhs
+    let b1 = 0xFF & x_u64;
+    assert b1 == 0 as u64;
+    let b2 = 0x0F & x_i64;
+    assert b2 == 0x0F as i64;
+    let b3 = 0x0F & x_u8;
+    assert b3 == 0x0B as u8;
+    let b4 = 0x70 & x_i8;
+    assert b4 == 0x70 as i8;
+
+    // | with literal on rhs
+    let c1 = x_u64 | 0xFF;
+    assert c1 == 0xFFFF as u64;
+    let c2 = x_i64 | 0x100;
+    assert c2 == 0x1FF as i64;
+
+    // | with literal on lhs
+    let d1 = 0xFF | x_u64;
+    assert d1 == 0xFFFF as u64;
+    let d2 = 0x100 | x_i64;
+    assert d2 == 0x1FF as i64;
+
+    // ^ with literal on rhs
+    let e1 = x_u64 ^ 0xFFFF;
+    assert e1 == 0x00FF as u64;
+    let e2 = x_i64 ^ 0xFF;
+    assert e2 == 0 as i64;
+
+    // ^ with literal on lhs
+    let f1 = 0xFFFF ^ x_u64;
+    assert f1 == 0x00FF as u64;
+    let f2 = 0xFF ^ x_i64;
+    assert f2 == 0 as i64;
+
+    // Large hex values for u64
+    let mask: u64 = 0x8000000000000000;
+    let high = mask & 0x8000000000000000;
+    assert high == 0x8000000000000000 as u64;
+    let high2 = 0x8000000000000000 & mask;
+    assert high2 == 0x8000000000000000 as u64;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

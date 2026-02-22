@@ -1810,6 +1810,22 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Wrap an i32-producing instruction with sub-32-bit truncation if the
+    /// target type is narrower than i32.
+    fn truncate_to_sub_i32(instr: WirInstr, target: &PrimitiveType) -> WirInstr {
+        match target {
+            PrimitiveType::I8 => WirInstr::I32Extend8S(Box::new(instr)),
+            PrimitiveType::U8 => {
+                WirInstr::I32And(Box::new(instr), Box::new(WirInstr::I32Const(0xFF)))
+            }
+            PrimitiveType::I16 => WirInstr::I32Extend16S(Box::new(instr)),
+            PrimitiveType::U16 => {
+                WirInstr::I32And(Box::new(instr), Box::new(WirInstr::I32Const(0xFFFF)))
+            }
+            _ => instr,
+        }
+    }
+
     /// Translate a type cast.
     fn translate_cast(&mut self, inner: &TirExpr, from_type: TypeId, to_type: TypeId) -> WirInstr {
         // Optimize: IntLiteral cast to i64/u64 → emit I64Const directly to avoid i32 truncation
@@ -1859,10 +1875,31 @@ impl FunctionTranslator<'_, '_> {
             ) => WirInstr::I64ExtendI32U(Box::new(inner_instr)),
             (
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64),
-                ResolvedType::Primitive(PrimitiveType::I32 | PrimitiveType::U32),
-            ) => WirInstr::I32WrapI64(Box::new(inner_instr)),
+                ResolvedType::Primitive(
+                    to_prim @ (PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8
+                    | PrimitiveType::Bool
+                    | PrimitiveType::Char),
+                ),
+            ) => {
+                let wrapped = WirInstr::I32WrapI64(Box::new(inner_instr));
+                Self::truncate_to_sub_i32(wrapped, to_prim)
+            }
             (
-                ResolvedType::Primitive(PrimitiveType::I32 | PrimitiveType::U32),
+                ResolvedType::Primitive(
+                    PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8
+                    | PrimitiveType::Bool
+                    | PrimitiveType::Char,
+                ),
                 ResolvedType::Primitive(PrimitiveType::F64),
             ) => WirInstr::F64ConvertI32S(Box::new(inner_instr)),
             (
@@ -1871,8 +1908,18 @@ impl FunctionTranslator<'_, '_> {
             ) => WirInstr::F64ConvertI64S(Box::new(inner_instr)),
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
-                ResolvedType::Primitive(PrimitiveType::I32),
-            ) => WirInstr::I32TruncF64S(Box::new(inner_instr)),
+                ResolvedType::Primitive(
+                    to_prim @ (PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8),
+                ),
+            ) => {
+                let truncated = WirInstr::I32TruncF64S(Box::new(inner_instr));
+                Self::truncate_to_sub_i32(truncated, to_prim)
+            }
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
                 ResolvedType::Primitive(PrimitiveType::F32),
@@ -1881,6 +1928,25 @@ impl FunctionTranslator<'_, '_> {
                 ResolvedType::Primitive(PrimitiveType::F32),
                 ResolvedType::Primitive(PrimitiveType::F64),
             ) => WirInstr::F64PromoteF32(Box::new(inner_instr)),
+            // Same-Wasm-size narrowing (e.g., i32 → u8, u32 → i16)
+            (
+                ResolvedType::Primitive(
+                    PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8
+                    | PrimitiveType::Bool
+                    | PrimitiveType::Char,
+                ),
+                ResolvedType::Primitive(
+                    to_prim @ (PrimitiveType::I8
+                    | PrimitiveType::U8
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16),
+                ),
+            ) => Self::truncate_to_sub_i32(inner_instr, to_prim),
             _ => {
                 // For other casts (struct casts, etc.), just pass through
                 inner_instr
