@@ -590,6 +590,7 @@ fn translate_global_init(
             }
         }
         TirExprKind::BoolLiteral(b) => WirInstr::I32Const(i32::from(*b)),
+        TirExprKind::CharLiteral(c) => WirInstr::I32Const(*c as i32),
         TirExprKind::Null | TirExprKind::Unit => WirInstr::RefNull {
             heap_type: crate::wir::WirAbstractHeapType::None,
         },
@@ -597,6 +598,22 @@ fn translate_global_init(
             // For casts, evaluate the inner expression with the cast's target type
             let typed_inner = crate::tir::TirExpr::new(inner.kind.clone(), init.type_id, init.span);
             translate_global_init(&typed_inner, type_table)
+        }
+        TirExprKind::Unary {
+            op: crate::tir::TirUnaryOp::Neg,
+            expr: inner,
+        } => {
+            // Negation of constant (normally folded by resolver, but handle for robustness)
+            let inner_wir = translate_global_init(inner, type_table);
+            match inner_wir {
+                WirInstr::I32Const(v) => WirInstr::I32Const(v.wrapping_neg()),
+                WirInstr::I64Const(v) => WirInstr::I64Const(v.wrapping_neg()),
+                WirInstr::F32Const(v) => WirInstr::F32Const(-v),
+                WirInstr::F64Const(v) => WirInstr::F64Const(-v),
+                _ => WirInstr::RefNull {
+                    heap_type: crate::wir::WirAbstractHeapType::None,
+                },
+            }
         }
         _ => {
             // Non-constant initializers use null placeholder (lazy init at runtime)

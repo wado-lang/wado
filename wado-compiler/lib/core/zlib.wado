@@ -132,15 +132,10 @@ pub fn adler32_combine(adler1: u32, adler2: u32, len2: i32) -> u32 {
 }
 
 
-// Cached CRC32 table (lazy initialized)
-global mut CRC_TABLE: Array<u32> = [];
-global mut CRC_TABLE_READY: bool = false;
+global CRC_TABLE: Array<u32> = build_crc_table();
 
-fn ensure_crc_table() {
-    if CRC_TABLE_READY {
-        return;
-    }
-    CRC_TABLE = Array::<u32>::filled(256, 0);
+fn build_crc_table() -> Array<u32> {
+    let mut table = Array::<u32>::filled(256, 0);
     for let mut i = 0; i < 256; i += 1 {
         let mut c = i as u32;
         for let mut j = 0; j < 8; j += 1 {
@@ -150,13 +145,12 @@ fn ensure_crc_table() {
                 c = c >> 1;
             }
         }
-        CRC_TABLE[i] = c;
+        table[i] = c;
     }
-    CRC_TABLE_READY = true;
+    return table;
 }
 
 pub fn crc32(crc: u32, buf: &Array<u8>, offset: i32, len: i32) -> u32 {
-    ensure_crc_table();
     let table = CRC_TABLE;
     let mut c = crc ^ 0xFFFFFFFF as u32;
     for let mut i = 0; i < len; i += 1 {
