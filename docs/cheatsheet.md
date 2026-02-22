@@ -229,12 +229,15 @@ let message = `Dear {name},
 
 Welcome to Wado!`;
 
-// Inspect (debug output) — `:?` specifier
-// Works for any type; also the fallback when no Display impl exists
+// Format specifiers (see docs/wep-2026-01-17-template-format-specifiers.md)
+let pi = 3.14159;
+let formatted = `{pi:0.2f}`;            // "3.14"
+let hex = `{255:x}`;                    // "ff"
+
+// Inspect — debug output for any type (see docs/wep-2026-02-21-inspect-debug-output.md)
 let p = Point { x: 10, y: 20 };
-println(`{p:?}`);                    // "Point { x: 10, y: 20 }"
-println(`{p}`);                      // same — falls back to inspect
-// See docs/wep-2026-02-21-inspect-debug-output.md for full format spec
+println(`{p:?}`);                        // "Point { x: 10, y: 20 }"
+println(`{p}`);                          // same — falls back to inspect when no Display impl
 
 // String constructors
 let s = String::with_capacity(100);      // empty string with pre-allocated capacity

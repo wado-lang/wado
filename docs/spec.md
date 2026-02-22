@@ -1253,16 +1253,18 @@ let greeting = `Hello, {name}!`;  // "Hello, Alice!"
 let count = 42;
 let message = `Count: {count}`;   // "Count: 42"
 
-// With formatting
+// Format specifiers
 let pi = 3.14159;
 let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
+let hex = `{255:x}`;              // "ff"
 
 // Inspect (debug) format — works for any type
 let p = Point { x: 10, y: 20 };
 let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
+let fallback = `{p}`;            // same — falls back to inspect when no Display impl
 ```
 
-**Inspect specifier (`:?`)**: The `:?` format specifier produces a debug representation using Wado literal syntax. It works for every type without requiring trait implementations. For types without a `Display` implementation, `{expr}` (without specifier) falls back to inspect automatically. See [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md) for the full output format specification.
+See [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md) for the full specifier table, [WEP: Format Traits](./wep-2026-02-01-format-traits.md) for the trait/Formatter infrastructure, and [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md) for the `:?` debug output format.
 
 **Multiline strings** are supported in both regular and template strings. Literal newlines are preserved:
 
