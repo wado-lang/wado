@@ -36,6 +36,7 @@ impl CliExit {
     }
 
     /// Create a help exit (exit code 0).
+    #[must_use]
     pub fn help(usage: String) -> Self {
         Self {
             message: usage,
@@ -57,12 +58,12 @@ pub fn exit_error(msg: &str) -> ! {
 
 /// Get the next argument, returning an error on failure.
 pub fn next_arg(parser: &mut Parser) -> Result<Option<lexopt::Arg<'_>>, CliExit> {
-    parser.next().map_err(|e| CliExit::error(e))
+    parser.next().map_err(CliExit::error)
 }
 
 /// Get a required value for an option.
 pub fn require_value(parser: &mut Parser) -> Result<OsString, CliExit> {
-    parser.value().map_err(|e| CliExit::error(e))
+    parser.value().map_err(CliExit::error)
 }
 
 /// Get a required string value for an option.
@@ -78,10 +79,7 @@ pub fn require_input(input: Option<String>, usage: &str) -> Result<String, CliEx
 /// Require that at least one input file was specified.
 pub fn require_inputs(inputs: Vec<String>, usage: &str) -> Result<Vec<String>, CliExit> {
     if inputs.is_empty() {
-        Err(CliExit::error_with_usage(
-            "no input file specified",
-            usage,
-        ))
+        Err(CliExit::error_with_usage("no input file specified", usage))
     } else {
         Ok(inputs)
     }
@@ -97,6 +95,7 @@ pub fn reject_multiple_inputs(input: &Option<String>) -> Result<(), CliExit> {
 }
 
 /// Create an error for an unexpected argument.
+#[must_use]
 pub fn unexpected_arg(arg: lexopt::Arg, usage: &str) -> CliExit {
     CliExit::error_with_usage(arg.unexpected(), usage)
 }
@@ -208,6 +207,7 @@ pub fn print_opts_help<T>(all: &[T], spec: impl Fn(&T) -> OptSpec) {
 }
 
 /// Parse log level from string (consolidated from duplicate implementations).
+#[must_use]
 pub fn parse_log_level(s: &str) -> Option<LogLevel> {
     match s.to_lowercase().as_str() {
         "debug" => Some(LogLevel::Debug),

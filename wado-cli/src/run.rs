@@ -79,22 +79,42 @@ fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado run [options] <file.wado>").unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Compile and run a Wado CLI program (wasi:cli/command world).").unwrap();
+    writeln!(
+        buf,
+        "Compile and run a Wado CLI program (wasi:cli/command world)."
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "By default, the current directory is preopened as '.' for WASI filesystem access.").unwrap();
+    writeln!(
+        buf,
+        "By default, the current directory is preopened as '.' for WASI filesystem access."
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Profiling examples:").unwrap();
     writeln!(buf, "  wado run --profile guest prog.wado").unwrap();
-    writeln!(buf, "    => writes profile.json, view at https://profiler.firefox.com/").unwrap();
+    writeln!(
+        buf,
+        "    => writes profile.json, view at https://profiler.firefox.com/"
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "  wado run --profile guest,output.json,5 prog.wado").unwrap();
     writeln!(buf, "    => custom output path and 5ms sampling interval").unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "  perf record -k mono wado run --profile jitdump prog.wado").unwrap();
-    writeln!(buf, "  perf inject --jit --input perf.data --output perf.jit.data").unwrap();
+    writeln!(
+        buf,
+        "  perf record -k mono wado run --profile jitdump prog.wado"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "  perf inject --jit --input perf.data --output perf.jit.data"
+    )
+    .unwrap();
     writeln!(buf, "  perf report --input perf.jit.data").unwrap();
     buf
 }
@@ -124,9 +144,9 @@ fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
             parts[0].to_owned()
         };
         let interval_ms = if parts.len() > 1 {
-            parts[1].parse::<u64>().map_err(|_| {
-                CliExit::error(format!("invalid profiling interval '{}'", parts[1]))
-            })?
+            parts[1]
+                .parse::<u64>()
+                .map_err(|_| CliExit::error(format!("invalid profiling interval '{}'", parts[1])))?
         } else {
             10
         };

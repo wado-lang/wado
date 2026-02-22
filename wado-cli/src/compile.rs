@@ -162,9 +162,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
                 Opt::Format => {
                     let fmt_str = args::require_string(&mut parser)?;
                     format = Some(OutputFormat::from_str(&fmt_str).ok_or_else(|| {
-                        CliExit::error(format!(
-                            "unknown format '{fmt_str}'. Use 'wasm' or 'wat'"
-                        ))
+                        CliExit::error(format!("unknown format '{fmt_str}'. Use 'wasm' or 'wat'"))
                     })?);
                 }
                 Opt::WatToStdout => wat_to_stdout = true,

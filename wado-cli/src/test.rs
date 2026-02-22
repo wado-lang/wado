@@ -52,7 +52,11 @@ fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado test [options] [files...]").unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "If no files are specified, searches for **/*_test.wado recursively.").unwrap();
+    writeln!(
+        buf,
+        "If no files are specified, searches for **/*_test.wado recursively."
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
@@ -75,9 +79,7 @@ fn find_test_files() -> Result<Vec<String>, CliExit> {
             }
         }
         Err(e) => {
-            return Err(CliExit::error(format!(
-                "failed to glob pattern: {e}"
-            )));
+            return Err(CliExit::error(format!("failed to glob pattern: {e}")));
         }
     }
 
@@ -101,9 +103,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                     match val.parse::<usize>() {
                         Ok(n) if n > 0 => jobs = Some(n),
                         _ => {
-                            return Err(CliExit::error(
-                                "--parallel requires a positive integer",
-                            ));
+                            return Err(CliExit::error("--parallel requires a positive integer"));
                         }
                     }
                 }

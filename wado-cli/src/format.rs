@@ -50,7 +50,11 @@ fn format_usage() -> String {
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Without -w, outputs formatted code to stdout (single file only).").unwrap();
+    writeln!(
+        buf,
+        "Without -w, outputs formatted code to stdout (single file only)."
+    )
+    .unwrap();
     buf
 }
 
@@ -79,10 +83,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> 
     }
 
     if inputs.is_empty() {
-        return Err(CliExit::error_with_usage(
-            "no input file specified",
-            &usage,
-        ));
+        return Err(CliExit::error_with_usage("no input file specified", &usage));
     }
 
     // Multiple files require -w or --check

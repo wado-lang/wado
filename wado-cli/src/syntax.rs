@@ -13,7 +13,7 @@ use serde_json::json;
 
 use wado_compiler::syntax::SyntaxDefinition;
 
-use crate::args::{self, exit_error, CliExit};
+use crate::args::{self, CliExit, exit_error};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxFormat {
@@ -69,14 +69,26 @@ fn format_usage() -> String {
     let mut buf = String::new();
     writeln!(buf, "Usage: wado syntax [options]").unwrap();
     writeln!(buf).unwrap();
-    writeln!(buf, "Generate syntax definition files for editor integrations.").unwrap();
+    writeln!(
+        buf,
+        "Generate syntax definition files for editor integrations."
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Options:").unwrap();
     write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Examples:").unwrap();
-    writeln!(buf, "  wado syntax --format tmLanguage -o wado.tmLanguage.json").unwrap();
-    writeln!(buf, "  wado syntax --format language-config -o language-configuration.json").unwrap();
+    writeln!(
+        buf,
+        "  wado syntax --format tmLanguage -o wado.tmLanguage.json"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "  wado syntax --format language-config -o language-configuration.json"
+    )
+    .unwrap();
     buf
 }
 
@@ -90,9 +102,8 @@ pub fn parse_args(mut parser: Parser) -> Result<SyntaxOptions, CliExit> {
             match opt {
                 Opt::Format => {
                     let fmt_str = args::require_string(&mut parser)?;
-                    format = SyntaxFormat::from_str(&fmt_str).ok_or_else(|| {
-                        CliExit::error(format!("unknown format: {fmt_str}"))
-                    })?;
+                    format = SyntaxFormat::from_str(&fmt_str)
+                        .ok_or_else(|| CliExit::error(format!("unknown format: {fmt_str}")))?;
                 }
                 Opt::Output => {
                     output = Some(args::require_string(&mut parser)?);

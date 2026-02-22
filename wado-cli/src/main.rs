@@ -112,38 +112,34 @@ async fn main() {
             if let Some(cmd) = Cmd::from_name(&cmd_str) {
                 match cmd {
                     Cmd::Compile => {
-                        let opts = wado_cli::compile::parse_args(parser)
-                            .unwrap_or_else(|e| e.exit());
+                        let opts =
+                            wado_cli::compile::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::compile::run(opts).await;
                     }
                     Cmd::Run => {
-                        let opts = wado_cli::run::parse_args(parser)
-                            .unwrap_or_else(|e| e.exit());
+                        let opts = wado_cli::run::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::run::run(opts).await;
                     }
                     Cmd::Serve => {
-                        let opts = wado_cli::serve::parse_args(parser)
-                            .unwrap_or_else(|e| e.exit());
+                        let opts = wado_cli::serve::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::serve::run(opts).await;
                     }
                     Cmd::Test => {
-                        let opts = wado_cli::test::parse_args(parser)
-                            .unwrap_or_else(|e| e.exit());
+                        let opts = wado_cli::test::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::test::run(opts).await;
                     }
                     Cmd::Format => {
-                        let opts = wado_cli::format::parse_args(parser)
-                            .unwrap_or_else(|e| e.exit());
+                        let opts =
+                            wado_cli::format::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::format::run(opts);
                     }
                     Cmd::Dump => {
-                        let opts = wado_cli::dump::parse_args(parser)
-                            .unwrap_or_else(|e| e.exit());
+                        let opts = wado_cli::dump::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::dump::run(opts).await;
                     }
                     Cmd::Syntax => {
-                        let opts = wado_cli::syntax::parse_args(parser)
-                            .unwrap_or_else(|e| e.exit());
+                        let opts =
+                            wado_cli::syntax::parse_args(parser).unwrap_or_else(|e| e.exit());
                         wado_cli::syntax::run(opts);
                     }
                 }
