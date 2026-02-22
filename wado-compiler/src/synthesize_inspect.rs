@@ -956,7 +956,7 @@ fn synth_struct(
     let mut s = Vec::new();
 
     match fields {
-        Some(fields) if !fields.is_empty() => {
+        Some((fields, has_hidden)) if !fields.is_empty() => {
             s.push(ws(&format!("{name} {{ "), fmt.clone(), tt, span));
             for (i, (fn_, ft, fi)) in fields.iter().enumerate() {
                 if i > 0 {
@@ -983,24 +983,35 @@ fn synth_struct(
                     span,
                 ));
             }
+            if has_hidden {
+                s.push(ws(", ..", fmt.clone(), tt, span));
+            }
             s.push(ws(" }", fmt, tt, span));
         }
+        Some((_, true)) => s.push(ws(&format!("{name} {{ .. }}"), fmt, tt, span)),
         Some(_) => s.push(ws(&format!("{name} {{}}"), fmt, tt, span)),
         None => s.push(ws(&format!("{name} {{ ... }}"), fmt, tt, span)),
     }
     s
 }
 
-fn find_struct_fields(name: &str, mods: &[&TirModule]) -> Option<Vec<(String, TypeId, u32)>> {
+/// Returns `(visible_fields, has_hidden)` for the named struct.
+fn find_struct_fields(
+    name: &str,
+    mods: &[&TirModule],
+) -> Option<(Vec<(String, TypeId, u32)>, bool)> {
     for m in mods {
         if let Some(s) = m.find_struct(name) {
-            return Some(
-                s.fields
-                    .iter()
-                    .filter(|f| !f.is_hidden)
-                    .map(|f| (f.name.clone(), f.type_id, f.index))
-                    .collect(),
-            );
+            let mut visible = Vec::new();
+            let mut has_hidden = false;
+            for f in &s.fields {
+                if f.is_hidden {
+                    has_hidden = true;
+                } else {
+                    visible.push((f.name.clone(), f.type_id, f.index));
+                }
+            }
+            return Some((visible, has_hidden));
         }
     }
     None
@@ -1022,7 +1033,7 @@ fn synth_generic_struct(
     let mut s = Vec::new();
 
     match fields {
-        Some(fields) if !fields.is_empty() => {
+        Some((fields, has_hidden)) if !fields.is_empty() => {
             s.push(ws(&format!("{name} {{ "), fmt.clone(), tt, span));
             let subst = SubstitutionContext::new().with_impl_args(type_args);
             for (i, (fn_, ft, fi)) in fields.iter().enumerate() {
@@ -1051,8 +1062,12 @@ fn synth_generic_struct(
                     span,
                 ));
             }
+            if has_hidden {
+                s.push(ws(", ..", fmt.clone(), tt, span));
+            }
             s.push(ws(" }", fmt, tt, span));
         }
+        Some((_, true)) => s.push(ws(&format!("{name} {{ .. }}"), fmt, tt, span)),
         Some(_) => s.push(ws(&format!("{name} {{}}"), fmt, tt, span)),
         None => s.push(ws(&format!("{name} {{ ... }}"), fmt, tt, span)),
     }

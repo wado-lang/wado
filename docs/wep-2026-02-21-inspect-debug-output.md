@@ -38,7 +38,7 @@ Inspect output follows Wado literal syntax where possible:
 | `()` (unit)                | `()`                                   | `()`                          |
 | Struct                     | `Name { field: value, ... }`           | `Point { x: 10, y: 20 }`      |
 | Struct (generic)           | `Name { field: value }` (no type args) | `Box { value: 42 }`           |
-| Struct (`#[hidden]` field) | Field omitted                          | `Foo { visible: 1 }`          |
+| Struct (`#[hidden]` field) | Field omitted, `..` appended           | `Foo { visible: 1, .. }`      |
 | Tuple                      | `[elem, ...]`                          | `[1, "a", true]`              |
 | `Array<T>`                 | `[elem, ...]`                          | `[1, 2, 3]`                   |
 | `Option::Some(v)`          | `Some(inspect(v))`                     | `Some(42)`                    |
@@ -57,7 +57,7 @@ Inspect output follows Wado literal syntax where possible:
 
 #### Detailed Format Rules
 
-**Struct fields**: Iterate fields in declaration order. Skip fields annotated with `#[hidden]`. Recursively inspect each field value.
+**Struct fields**: Iterate fields in declaration order. Skip fields annotated with `#[hidden]`, but append `..` to indicate their presence. If all fields are hidden, output `Name { .. }`. Recursively inspect each visible field value.
 
 **Enum/Variant/Flags type name**: Always include the type name prefix (`Color::Red`, not just `Red`). This is unambiguous and matches construction syntax.
 
@@ -138,7 +138,9 @@ fn synthesize_inspect_for_type(T, expr, f_ref) -> Vec<TirStmt>:
                 if i > 0: f.write_str(", ")
                 f.write_str("field_name: ")
                 synthesize_inspect_for_type(field.type, expr.field, f_ref)
+            if has_hidden_fields: f.write_str(", ..")
             f.write_str(" }")
+            // All fields hidden → "Name { .. }"
 
         Tuple(element_types) →
             f.write_char('[')
@@ -279,7 +281,7 @@ The core `synthesize_inspect` phase and the full pipeline integration are implem
 | `()` (unit)                | Done   | Outputs `()`                                                   |
 | Struct                     | Done   | Fields in declaration order                                    |
 | Struct (generic)           | Done   | Type args substituted for field types; type args omitted in name |
-| Struct (`#[hidden]` field) | Done   | Hidden fields skipped; `is_hidden` propagated through TIR      |
+| Struct (`#[hidden]` field) | Done   | Hidden fields skipped with `..` hint; `is_hidden` propagated through TIR |
 | Tuple                      | Done   |                                                                |
 | `Array<T>`                 | Done   | Loop-based with comma separation                               |
 | `Option::Some(v)`          | Done   | Renders as `Some(inspect(v))`                                  |
