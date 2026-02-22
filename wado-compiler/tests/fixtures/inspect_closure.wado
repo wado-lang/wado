@@ -1,0 +1,32 @@
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Simple expression closure
+    let add_one = |x: i32| x + 1;
+    println(`{add_one:?}`);
+
+    // Multi-param closure
+    let add = |a: i32, b: i32| a + b;
+    println(`{add:?}`);
+
+    // Closure with block body
+    let compute = |x: i32| {
+        let doubled = x * 2;
+        return doubled;
+    };
+    println(`{compute:?}`);
+
+    // Closure with captures
+    let multiplier = 10;
+    let scale = |x: i32| x * multiplier;
+    println(`{scale:?}`);
+
+    // Closure with template string body (should show original template)
+    let greet = |name: String| `Hello, {name}!`;
+    println(`{greet:?}`);
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "|x: i32| x + 1\n|a: i32, b: i32| a + b\n|x: i32| { let doubled = x * 2; return doubled; }\n|x: i32| x * multiplier\n|name: String| `Hello, {name}!`\nok\n"}

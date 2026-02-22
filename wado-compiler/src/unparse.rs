@@ -2095,9 +2095,328 @@ fn unparse_expr_into(expr: &Expr, output: &mut String, _parens_for_binary: bool)
             }
             output.push(')');
         }
-        // For complex expressions, use a placeholder
-        _ => output.push_str("<expr>"),
+        Expr::Closure(c) => unparse_closure_into(c, output),
+        Expr::TemplateString(t) => unparse_template_string_into(t, output),
+        Expr::Block(b) => unparse_block_expr_into(b, output),
+        Expr::If(i) => unparse_if_expr_into(i, output),
+        Expr::Match(m) => unparse_match_into(m, output),
+        Expr::Matches(m) => {
+            unparse_expr_into(&m.expr, output, false);
+            output.push_str(" matches { ");
+            unparse_pattern_into(&m.pattern, output);
+            if let Some(guard) = &m.guard {
+                output.push_str(" && ");
+                unparse_expr_into(guard, output, false);
+            }
+            output.push_str(" }");
+        }
+        Expr::Assign(a) => {
+            unparse_expr_into(&a.target, output, false);
+            output.push_str(" = ");
+            unparse_expr_into(&a.value, output, false);
+        }
+        Expr::CompoundAssign(ca) => {
+            unparse_expr_into(&ca.target, output, false);
+            output.push_str(match ca.op {
+                CompoundAssignOp::Add => " += ",
+                CompoundAssignOp::Sub => " -= ",
+                CompoundAssignOp::Mul => " *= ",
+                CompoundAssignOp::Div => " /= ",
+                CompoundAssignOp::Mod => " %= ",
+            });
+            unparse_expr_into(&ca.value, output, false);
+        }
+        Expr::ComparisonChain(chain) => {
+            unparse_expr_into(&chain.first, output, false);
+            for cmp in &chain.comparisons {
+                output.push(' ');
+                output.push_str(binary_op_str(cmp.op));
+                output.push(' ');
+                unparse_expr_into(&cmp.right, output, false);
+            }
+        }
+        Expr::StructLiteral(s) => {
+            if let Some(name) = &s.name {
+                output.push_str(name);
+                output.push(' ');
+            }
+            output.push_str("{ ");
+            for (i, f) in s.fields.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                if f.is_shorthand {
+                    output.push_str(&f.name);
+                } else {
+                    output.push_str(&f.name);
+                    output.push_str(": ");
+                    unparse_expr_into(&f.value, output, false);
+                }
+            }
+            output.push_str(" }");
+        }
+        Expr::TupleLiteral(t) => {
+            output.push('[');
+            for (i, e) in t.elements.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                unparse_expr_into(e, output, false);
+            }
+            output.push(']');
+        }
+        Expr::LabeledBlock(_) => output.push_str("<labeled-block>"),
     }
+}
+
+fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
+    output.push('|');
+    for (i, param) in c.params.iter().enumerate() {
+        if i > 0 {
+            output.push_str(", ");
+        }
+        output.push_str(&param.name);
+        if let Some(ty) = &param.ty {
+            output.push_str(": ");
+            unparse_type_into(ty, output);
+        }
+    }
+    output.push_str("| ");
+    unparse_expr_into(&c.body, output, false);
+}
+
+fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
+    use crate::ast::TemplatePart;
+    output.push('`');
+    for part in &t.parts {
+        match part {
+            TemplatePart::String(s) => {
+                for c in s.chars() {
+                    match c {
+                        '`' => output.push_str("\\`"),
+                        '{' => output.push_str("{{"),
+                        '}' => output.push_str("}}"),
+                        _ => output.push(c),
+                    }
+                }
+            }
+            TemplatePart::Interpolation { expr, format } => {
+                output.push('{');
+                unparse_expr_into(expr, output, false);
+                if let Some(fmt) = format {
+                    output.push(':');
+                    output.push_str(&fmt.spec);
+                }
+                output.push('}');
+            }
+        }
+    }
+    output.push('`');
+}
+
+fn unparse_block_expr_into(b: &Block, output: &mut String) {
+    if b.stmts.is_empty() {
+        output.push_str("{}");
+        return;
+    }
+    output.push_str("{ ");
+    for (i, stmt) in b.stmts.iter().enumerate() {
+        if i > 0 {
+            output.push(' ');
+        }
+        unparse_stmt_into(stmt, output);
+    }
+    output.push_str(" }");
+}
+
+fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
+    match stmt {
+        Stmt::Let(l) => {
+            output.push_str("let ");
+            if l.is_mut {
+                output.push_str("mut ");
+            }
+            unparse_pattern_into(&l.pattern, output);
+            if let Some(ty) = &l.ty {
+                output.push_str(": ");
+                unparse_type_into(ty, output);
+            }
+            output.push_str(" = ");
+            unparse_expr_into(&l.value, output, false);
+            output.push(';');
+        }
+        Stmt::Expr(e) => {
+            unparse_expr_into(&e.expr, output, false);
+            output.push(';');
+        }
+        Stmt::Return(r) => {
+            output.push_str("return");
+            if let Some(v) = &r.value {
+                output.push(' ');
+                unparse_expr_into(v, output, false);
+            }
+            output.push(';');
+        }
+        Stmt::If(i) => {
+            output.push_str("if ");
+            unparse_condition_into(&i.condition, output);
+            output.push(' ');
+            unparse_block_expr_into(&i.then_block, output);
+            if let Some(else_block) = &i.else_block {
+                output.push_str(" else ");
+                unparse_block_expr_into(else_block, output);
+            }
+        }
+        Stmt::While(w) => {
+            output.push_str("while ");
+            unparse_condition_into(&w.condition, output);
+            output.push(' ');
+            unparse_block_expr_into(&w.body, output);
+        }
+        Stmt::For(f) => {
+            output.push_str("for ");
+            if let Some(init) = &f.init {
+                unparse_stmt_into(init, output);
+            }
+            output.push(' ');
+            if let Some(cond) = &f.condition {
+                unparse_condition_into(cond, output);
+            }
+            output.push_str("; ");
+            if let Some(update) = &f.update {
+                unparse_expr_into(update, output, false);
+            }
+            output.push(' ');
+            unparse_block_expr_into(&f.body, output);
+        }
+        Stmt::ForOf(f) => {
+            output.push_str("for let ");
+            if f.is_mut {
+                output.push_str("mut ");
+            }
+            output.push_str(&f.binding);
+            output.push_str(" of ");
+            unparse_expr_into(&f.iterable, output, false);
+            output.push(' ');
+            unparse_block_expr_into(&f.body, output);
+        }
+        Stmt::Loop(l) => {
+            output.push_str("loop ");
+            unparse_block_expr_into(&l.body, output);
+        }
+        Stmt::Break(_) => output.push_str("break;"),
+        Stmt::Continue(_) => output.push_str("continue;"),
+        Stmt::Assert(a) => {
+            output.push_str("assert ");
+            unparse_expr_into(&a.condition, output, false);
+            if let Some(msg) = &a.message {
+                output.push_str(", ");
+                unparse_expr_into(msg, output, false);
+            }
+            output.push(';');
+        }
+        Stmt::TaskReturn(tr) => {
+            output.push_str("task return ");
+            unparse_expr_into(&tr.value, output, false);
+            output.push(';');
+        }
+        Stmt::LabeledBlock(lb) => {
+            output.push_str(&lb.label);
+            output.push_str(": ");
+            unparse_block_expr_into(&lb.block, output);
+        }
+    }
+}
+
+fn unparse_condition_into(cond: &Condition, output: &mut String) {
+    match cond {
+        Condition::Expr(e) => unparse_expr_into(e, output, false),
+        Condition::Pattern { pattern, expr, .. } => {
+            output.push_str("let ");
+            unparse_pattern_into(pattern, output);
+            output.push_str(" = ");
+            unparse_expr_into(expr, output, false);
+        }
+    }
+}
+
+fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
+    match pattern {
+        Pattern::Ident(name) => output.push_str(name),
+        Pattern::Literal(lit) => unparse_literal_into(lit, output),
+        Pattern::Wildcard => output.push('_'),
+        Pattern::Tuple(pats) => {
+            output.push('[');
+            for (i, p) in pats.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                unparse_pattern_into(p, output);
+            }
+            output.push(']');
+        }
+        Pattern::Variant {
+            variant_name,
+            bindings,
+            ..
+        } => {
+            output.push_str(variant_name);
+            if !bindings.is_empty() {
+                output.push('(');
+                for (i, b) in bindings.iter().enumerate() {
+                    if i > 0 {
+                        output.push_str(", ");
+                    }
+                    unparse_pattern_into(b, output);
+                }
+                output.push(')');
+            }
+        }
+    }
+}
+
+fn unparse_if_expr_into(i: &IfExpr, output: &mut String) {
+    output.push_str("if ");
+    if let Some(init) = &i.init {
+        output.push_str("let ");
+        if init.is_mut {
+            output.push_str("mut ");
+        }
+        unparse_pattern_into(&init.pattern, output);
+        if let Some(ty) = &init.ty {
+            output.push_str(": ");
+            unparse_type_into(ty, output);
+        }
+        output.push_str(" = ");
+        unparse_expr_into(&init.value, output, false);
+        output.push_str("; ");
+    }
+    unparse_condition_into(&i.condition, output);
+    output.push(' ');
+    unparse_block_expr_into(&i.then_block, output);
+    if let Some(else_block) = &i.else_block {
+        output.push_str(" else ");
+        unparse_block_expr_into(else_block, output);
+    }
+}
+
+fn unparse_match_into(m: &MatchExpr, output: &mut String) {
+    output.push_str("match ");
+    unparse_expr_into(&m.expr, output, false);
+    output.push_str(" { ");
+    for (i, arm) in m.arms.iter().enumerate() {
+        if i > 0 {
+            output.push_str(", ");
+        }
+        unparse_pattern_into(&arm.pattern, output);
+        if let Some(guard) = &arm.guard {
+            output.push_str(" && ");
+            unparse_expr_into(guard, output, false);
+        }
+        output.push_str(" => ");
+        unparse_expr_into(&arm.body, output, false);
+    }
+    output.push_str(" }");
 }
 
 fn unparse_type_into(ty: &Type, output: &mut String) {
@@ -3027,7 +3346,7 @@ impl<'a> TirUnparser<'a> {
                 params,
                 body,
                 captures,
-                functor_id: _,
+                ..
             } => {
                 self.output.push('|');
                 for (i, (name, type_id)) in params.iter().enumerate() {

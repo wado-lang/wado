@@ -3690,7 +3690,7 @@ impl ClosureLowerer {
                 params,
                 body,
                 captures,
-                functor_id: _,
+                ..
             } => {
                 // Assign ID and collect this closure
                 let closure_id = self.closure_counter;
@@ -6264,12 +6264,14 @@ impl ClosureLowerer {
                 body,
                 captures,
                 functor_id,
+                source_text,
             } => TirExpr::new(
                 TirExprKind::Closure {
                     params: params.clone(),
                     body: Box::new(self.specialize_expr(body, param_to_functor, type_table)),
                     captures: captures.clone(),
                     functor_id: *functor_id,
+                    source_text: source_text.clone(),
                 },
                 expr.type_id,
                 expr.span,
@@ -6615,10 +6617,10 @@ impl ClosureLowerer {
     fn transform_expr(&mut self, expr: &mut TirExpr, type_table: &mut TypeTable) {
         match &mut expr.kind {
             TirExprKind::Closure {
-                params: _,
                 body,
                 captures,
                 functor_id,
+                ..
             } => {
                 // Get the current closure ID
                 let closure_id = self.closure_counter;

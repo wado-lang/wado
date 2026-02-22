@@ -10601,6 +10601,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 body: Box::new(body),
                 captures,
                 functor_id: None,
+                source_text: closure.source_text.clone(),
             },
             func_type,
             closure.span,
@@ -10681,6 +10682,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 body: Box::new(body),
                 captures,
                 functor_id: None, // Assigned during lowering
+                source_text: closure.source_text.clone(),
             },
             func_type,
             closure.span,

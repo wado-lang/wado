@@ -945,6 +945,8 @@ pub enum Pattern {
 pub struct ClosureExpr {
     pub params: Vec<ClosureParam>,
     pub body: Expr,
+    /// Pre-desugar source text, set by the desugar phase before transforming the body.
+    pub source_text: Option<String>,
     pub span: Span,
 }
 

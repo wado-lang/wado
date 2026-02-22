@@ -12,6 +12,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use indexmap::IndexMap;
+
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::{
@@ -37,11 +39,18 @@ pub fn synthesize_inspect(project: Project) -> Project {
             let mut func = func_rc.borrow_mut();
             let start_index = func.local_count;
             if let Some(ref mut body) = func.body {
+                let closure_sources = collect_closure_sources(body);
                 let mut alloc = LocalAlloc {
                     next_index: start_index,
                     new_types: Vec::new(),
                 };
-                synthesize_in_block(body, &type_table, &all_modules, &mut alloc);
+                synthesize_in_block(
+                    body,
+                    &type_table,
+                    &all_modules,
+                    &mut alloc,
+                    &closure_sources,
+                );
                 func.local_count = alloc.next_index;
                 func.local_types.extend(alloc.new_types);
             }
@@ -66,6 +75,88 @@ impl LocalAlloc {
     }
 }
 
+/// Collect closure source texts from Let statements in a function body.
+/// Maps `local_index` → `source_text` for closures that have pre-desugar source.
+fn collect_closure_sources(block: &TirBlock) -> IndexMap<u32, String> {
+    let mut map = IndexMap::new();
+    collect_closure_sources_block(block, &mut map);
+    map
+}
+
+fn collect_closure_sources_block(block: &TirBlock, map: &mut IndexMap<u32, String>) {
+    for stmt in &block.stmts {
+        collect_closure_sources_stmt(stmt, map);
+    }
+}
+
+fn collect_closure_sources_stmt(stmt: &TirStmt, map: &mut IndexMap<u32, String>) {
+    match &stmt.kind {
+        TirStmtKind::Let {
+            local_index, value, ..
+        } => {
+            if let TirExprKind::Closure {
+                source_text: Some(text),
+                ..
+            } = &value.kind
+            {
+                map.insert(*local_index, text.clone());
+            }
+            collect_closure_sources_expr(value, map);
+        }
+        TirStmtKind::Expr(e) => collect_closure_sources_expr(e, map),
+        TirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_closure_sources_block(then_block, map);
+            if let Some(b) = else_block {
+                collect_closure_sources_block(b, map);
+            }
+        }
+        TirStmtKind::Loop { body } => collect_closure_sources_block(body, map),
+        TirStmtKind::IfPattern {
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_closure_sources_block(then_block, map);
+            if let Some(b) = else_block {
+                collect_closure_sources_block(b, map);
+            }
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            collect_closure_sources_block(block, map);
+        }
+        TirStmtKind::LetPattern { value, .. } | TirStmtKind::TaskReturn { value, .. } => {
+            collect_closure_sources_expr(value, map);
+        }
+        _ => {}
+    }
+}
+
+fn collect_closure_sources_expr(expr: &TirExpr, map: &mut IndexMap<u32, String>) {
+    match &expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            collect_closure_sources_block(block, map);
+        }
+        TirExprKind::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_closure_sources_block(then_branch, map);
+            if let Some(b) = else_branch {
+                collect_closure_sources_block(b, map);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            collect_closure_sources_expr(body, map);
+        }
+        _ => {}
+    }
+}
+
 // ─── TIR tree walking ───
 
 fn synthesize_in_block(
@@ -73,6 +164,7 @@ fn synthesize_in_block(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    closure_sources: &IndexMap<u32, String>,
 ) {
     let mut i = 0;
     while i < block.stmts.len() {
@@ -93,15 +185,23 @@ fn synthesize_in_block(
                 let type_id = value_expr.type_id;
                 let span = expr.span;
 
-                let new_stmts =
-                    synthesize_for_type(type_id, value_expr, fmt_ref, tt, mods, alloc, span);
+                let new_stmts = synthesize_for_type(
+                    type_id,
+                    value_expr,
+                    fmt_ref,
+                    tt,
+                    mods,
+                    alloc,
+                    closure_sources,
+                    span,
+                );
                 for (j, s) in new_stmts.into_iter().enumerate() {
                     block.stmts.insert(i + j, s);
                 }
                 continue;
             }
         } else {
-            synthesize_in_stmt(&mut block.stmts[i], tt, mods, alloc);
+            synthesize_in_stmt(&mut block.stmts[i], tt, mods, alloc, closure_sources);
         }
         i += 1;
     }
@@ -116,38 +216,39 @@ fn synthesize_in_stmt(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Expr(e) => walk_expr(e, tt, mods, alloc),
-        TirStmtKind::Let { value, .. } => walk_expr(value, tt, mods, alloc),
+        TirStmtKind::Expr(e) => walk_expr(e, tt, mods, alloc, cs),
+        TirStmtKind::Let { value, .. } => walk_expr(value, tt, mods, alloc, cs),
         TirStmtKind::Return { value: Some(e) } | TirStmtKind::Break { value: Some(e), .. } => {
-            walk_expr(e, tt, mods, alloc);
+            walk_expr(e, tt, mods, alloc, cs);
         }
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            walk_expr(condition, tt, mods, alloc);
-            synthesize_in_block(then_block, tt, mods, alloc);
+            walk_expr(condition, tt, mods, alloc, cs);
+            synthesize_in_block(then_block, tt, mods, alloc, cs);
             if let Some(eb) = else_block {
-                synthesize_in_block(eb, tt, mods, alloc);
+                synthesize_in_block(eb, tt, mods, alloc, cs);
             }
         }
-        TirStmtKind::Loop { body } => synthesize_in_block(body, tt, mods, alloc),
+        TirStmtKind::Loop { body } => synthesize_in_block(body, tt, mods, alloc, cs),
         TirStmtKind::IfPattern {
             scrutinee,
             then_block,
             else_block,
             ..
         } => {
-            walk_expr(scrutinee, tt, mods, alloc);
-            synthesize_in_block(then_block, tt, mods, alloc);
+            walk_expr(scrutinee, tt, mods, alloc, cs);
+            synthesize_in_block(then_block, tt, mods, alloc, cs);
             if let Some(eb) = else_block {
-                synthesize_in_block(eb, tt, mods, alloc);
+                synthesize_in_block(eb, tt, mods, alloc, cs);
             }
         }
-        TirStmtKind::LetPattern { value, .. } => walk_expr(value, tt, mods, alloc),
+        TirStmtKind::LetPattern { value, .. } => walk_expr(value, tt, mods, alloc, cs),
         _ => {}
     }
 }
@@ -157,42 +258,43 @@ fn walk_expr(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
 ) {
     match &mut expr.kind {
         TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
-            synthesize_in_block(b, tt, mods, alloc);
+            synthesize_in_block(b, tt, mods, alloc, cs);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            walk_expr(condition, tt, mods, alloc);
-            synthesize_in_block(then_branch, tt, mods, alloc);
+            walk_expr(condition, tt, mods, alloc, cs);
+            synthesize_in_block(then_branch, tt, mods, alloc, cs);
             if let Some(eb) = else_branch {
-                synthesize_in_block(eb, tt, mods, alloc);
+                synthesize_in_block(eb, tt, mods, alloc, cs);
             }
         }
         TirExprKind::Match { expr: s, arms } => {
-            walk_expr(s, tt, mods, alloc);
+            walk_expr(s, tt, mods, alloc, cs);
             for arm in arms {
-                walk_expr(&mut arm.body, tt, mods, alloc);
+                walk_expr(&mut arm.body, tt, mods, alloc, cs);
             }
         }
         TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
             for a in args {
-                walk_expr(a, tt, mods, alloc);
+                walk_expr(a, tt, mods, alloc, cs);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            walk_expr(receiver, tt, mods, alloc);
+            walk_expr(receiver, tt, mods, alloc, cs);
             for a in args {
-                walk_expr(a, tt, mods, alloc);
+                walk_expr(a, tt, mods, alloc, cs);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
-            walk_expr(left, tt, mods, alloc);
-            walk_expr(right, tt, mods, alloc);
+            walk_expr(left, tt, mods, alloc, cs);
+            walk_expr(right, tt, mods, alloc, cs);
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
@@ -203,34 +305,34 @@ fn walk_expr(
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            walk_expr(inner, tt, mods, alloc);
+            walk_expr(inner, tt, mods, alloc, cs);
         }
         TirExprKind::Assign { target, value } => {
-            walk_expr(target, tt, mods, alloc);
-            walk_expr(value, tt, mods, alloc);
+            walk_expr(target, tt, mods, alloc, cs);
+            walk_expr(value, tt, mods, alloc, cs);
         }
         TirExprKind::Index {
             expr: e,
             index: idx,
         } => {
-            walk_expr(e, tt, mods, alloc);
-            walk_expr(idx, tt, mods, alloc);
+            walk_expr(e, tt, mods, alloc, cs);
+            walk_expr(idx, tt, mods, alloc, cs);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
-                walk_expr(&mut f.value, tt, mods, alloc);
+                walk_expr(&mut f.value, tt, mods, alloc, cs);
             }
         }
         TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
             for e in elements {
-                walk_expr(e, tt, mods, alloc);
+                walk_expr(e, tt, mods, alloc, cs);
             }
         }
-        TirExprKind::Closure { body, .. } => walk_expr(body, tt, mods, alloc),
+        TirExprKind::Closure { body, .. } => walk_expr(body, tt, mods, alloc, cs),
         TirExprKind::IndirectCall { callee, args } => {
-            walk_expr(callee, tt, mods, alloc);
+            walk_expr(callee, tt, mods, alloc, cs);
             for a in args {
-                walk_expr(a, tt, mods, alloc);
+                walk_expr(a, tt, mods, alloc, cs);
             }
         }
         _ => {}
@@ -371,6 +473,7 @@ fn synthesize_for_type(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
     span: Span,
 ) -> Vec<TirStmt> {
     let resolved = tt.borrow().get(type_id).clone();
@@ -397,7 +500,7 @@ fn synthesize_for_type(
             if n == "String" && ms == ModuleSource::core("prelude/string.wado") {
                 synth_string(val, fmt, tt, span)
             } else {
-                synth_struct(&n, type_id, val, fmt, tt, mods, alloc, span)
+                synth_struct(&n, type_id, val, fmt, tt, mods, alloc, cs, span)
             }
         }
         ResolvedType::Enum { ref name, .. } => {
@@ -405,11 +508,11 @@ fn synthesize_for_type(
             synth_enum(&n, type_id, val, fmt, tt, mods, span)
         }
         ResolvedType::Option(inner) => {
-            synth_option(type_id, inner, val, fmt, tt, mods, alloc, span)
+            synth_option(type_id, inner, val, fmt, tt, mods, alloc, cs, span)
         }
         ResolvedType::Tuple(ref elems) => {
             let e = elems.clone();
-            synth_tuple(&e, val, fmt, tt, mods, alloc, span)
+            synth_tuple(&e, val, fmt, tt, mods, alloc, cs, span)
         }
         ResolvedType::GenericInstance {
             ref name,
@@ -417,21 +520,21 @@ fn synthesize_for_type(
             ..
         } if name == "Array" && type_args.len() == 1 => {
             let elem = type_args[0];
-            synth_array(type_id, elem, val, fmt, tt, mods, alloc, span)
+            synth_array(type_id, elem, val, fmt, tt, mods, alloc, cs, span)
         }
-        ResolvedType::Ref(inner) => synth_ref(false, inner, val, fmt, tt, mods, alloc, span),
-        ResolvedType::MutRef(inner) => synth_ref(true, inner, val, fmt, tt, mods, alloc, span),
+        ResolvedType::Ref(inner) => synth_ref(false, inner, val, fmt, tt, mods, alloc, cs, span),
+        ResolvedType::MutRef(inner) => synth_ref(true, inner, val, fmt, tt, mods, alloc, cs, span),
         ResolvedType::Newtype {
             ref name,
             base_type,
             ..
         } => {
             let n = name.clone();
-            synth_newtype(&n, base_type, val, fmt, tt, mods, alloc, span)
+            synth_newtype(&n, base_type, val, fmt, tt, mods, alloc, cs, span)
         }
         ResolvedType::Variant { ref name, .. } => {
             let n = name.clone();
-            synth_variant(&n, type_id, val, fmt, tt, mods, alloc, span)
+            synth_variant(&n, type_id, val, fmt, tt, mods, alloc, cs, span)
         }
         ResolvedType::Resource { ref name, .. } => {
             let n = name.clone();
@@ -442,8 +545,17 @@ fn synthesize_for_type(
             return_type,
             ..
         } => {
+            // Try to find pre-desugar source text from the value expression
+            let source = match &val.kind {
+                TirExprKind::Closure {
+                    source_text: Some(text),
+                    ..
+                } => Some(text.clone()),
+                TirExprKind::Local { index, .. } => cs.get(index).cloned(),
+                _ => None,
+            };
             let p = params.clone();
-            synth_fn_type(&p, return_type, fmt, tt, span)
+            synth_fn_type(&p, return_type, source.as_deref(), fmt, tt, span)
         }
         _ => {
             let tn = tt.borrow().type_name(type_id);
@@ -487,6 +599,7 @@ fn synth_struct(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
     span: Span,
 ) -> Vec<TirStmt> {
     let fields = find_struct_fields(name, mods);
@@ -516,6 +629,7 @@ fn synth_struct(
                     tt,
                     mods,
                     alloc,
+                    cs,
                     span,
                 ));
             }
@@ -609,6 +723,7 @@ fn synth_option(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
     span: Span,
 ) -> Vec<TirStmt> {
     let is_some = TirExpr::new(
@@ -635,6 +750,7 @@ fn synth_option(
         tt,
         mods,
         alloc,
+        cs,
         span,
     ));
     then_stmts.push(wc(')', fmt.clone(), span));
@@ -660,6 +776,7 @@ fn synth_tuple(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
     span: Span,
 ) -> Vec<TirStmt> {
     let mut s = vec![wc('[', fmt.clone(), span)];
@@ -683,6 +800,7 @@ fn synth_tuple(
             tt,
             mods,
             alloc,
+            cs,
             span,
         ));
     }
@@ -698,6 +816,7 @@ fn synth_array(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
     span: Span,
 ) -> Vec<TirStmt> {
     let mut s = vec![wc('[', fmt.clone(), span)];
@@ -829,6 +948,7 @@ fn synth_array(
         tt,
         mods,
         alloc,
+        cs,
         span,
     ));
 
@@ -902,6 +1022,7 @@ fn synth_ref(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
     span: Span,
 ) -> Vec<TirStmt> {
     let mut s = Vec::new();
@@ -919,7 +1040,7 @@ fn synth_ref(
         span,
     );
     s.extend(synthesize_for_type(
-        inner, deref, fmt, tt, mods, alloc, span,
+        inner, deref, fmt, tt, mods, alloc, cs, span,
     ));
     s
 }
@@ -932,6 +1053,7 @@ fn synth_newtype(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
     span: Span,
 ) -> Vec<TirStmt> {
     if let Some(fd) = find_flags(name, mods) {
@@ -946,7 +1068,7 @@ fn synth_newtype(
         base,
         span,
     );
-    let mut s = synthesize_for_type(base, cast, fmt.clone(), tt, mods, alloc, span);
+    let mut s = synthesize_for_type(base, cast, fmt.clone(), tt, mods, alloc, cs, span);
     s.push(ws(&format!(" as {name}"), fmt, tt, span));
     s
 }
@@ -970,6 +1092,7 @@ fn synth_variant(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
+    cs: &IndexMap<u32, String>,
     span: Span,
 ) -> Vec<TirStmt> {
     let vd = find_variant(name, mods);
@@ -1007,6 +1130,7 @@ fn synth_variant(
                         tt,
                         mods,
                         alloc,
+                        cs,
                         span,
                     ));
                     then_stmts.push(wc(')', fmt.clone(), span));
@@ -1241,10 +1365,14 @@ fn synth_flags(
 fn synth_fn_type(
     params: &[TypeId],
     ret: TypeId,
+    source_text: Option<&str>,
     fmt: TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
     span: Span,
 ) -> Vec<TirStmt> {
+    if let Some(text) = source_text {
+        return vec![ws(text, fmt, tt, span)];
+    }
     let t = tt.borrow();
     let mut sig = String::from("|");
     for (i, p) in params.iter().enumerate() {
