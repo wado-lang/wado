@@ -1077,6 +1077,7 @@ impl Monomorphizer {
                     type_id: new_type_id,
                     index: field.index,
                     span: field.span,
+                    is_hidden: field.is_hidden,
                 }
             })
             .collect();

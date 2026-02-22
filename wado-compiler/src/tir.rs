@@ -1731,6 +1731,8 @@ pub struct TirField {
     pub type_id: TypeId,
     pub index: u32,
     pub span: Span,
+    /// `#[hidden]` — field not shown in debug inspect output.
+    pub is_hidden: bool,
 }
 
 #[derive(Debug, Clone)]

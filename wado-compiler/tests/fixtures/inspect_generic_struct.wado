@@ -1,0 +1,24 @@
+// Test: inspect generic struct instances
+use { println, Stdout } from "core:cli";
+
+struct Box<T> {
+    value: T,
+}
+
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+export fn run() with Stdout {
+    let b = Box { value: 42 };
+    println(`{b:?}`);
+
+    let p = Pair { first: "hello", second: "world" };
+    println(`{p:?}`);
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "Box { value: 42 }\nPair { first: \"hello\", second: \"world\" }\nok\n"}
