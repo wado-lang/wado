@@ -21,13 +21,13 @@ This is verbose and doesn't compose well with nested patterns or variant struct 
 
 ### Rust vs JS/TS Comparison
 
-| Feature | Rust | JS/TS | Wado (this WEP) |
-| --- | --- | --- | --- |
-| Type name | Required: `let Point { x, y } = p;` | None: `const { x, y } = p;` | Optional: both work |
-| Renaming | `field: binding` | `field: binding` | `field: binding` |
-| Rest | `..` (ignore) | `...rest` (collect) | `..` (ignore) |
-| Nested | Via rename: `{ a: { b } }` | Via rename: `{ a: { b } }` | Via rename: `{ a: { b } }` |
-| Default values | No | `{ x = 0 }` | No |
+| Feature        | Rust                                | JS/TS                       | Wado (this WEP)            |
+| -------------- | ----------------------------------- | --------------------------- | -------------------------- |
+| Type name      | Required: `let Point { x, y } = p;` | None: `const { x, y } = p;` | Optional: both work        |
+| Renaming       | `field: binding`                    | `field: binding`            | `field: binding`           |
+| Rest           | `..` (ignore)                       | `...rest` (collect)         | `..` (ignore)              |
+| Nested         | Via rename: `{ a: { b } }`          | Via rename: `{ a: { b } }`  | Via rename: `{ a: { b } }` |
+| Default values | No                                  | `{ x = 0 }`                 | No                         |
 
 ## Decision
 
@@ -224,12 +224,12 @@ This is different from `..` which ignores all unmentioned fields. With `_`, the 
 
 Struct patterns use `{` which requires disambiguation from blocks and struct literals:
 
-| Context | Syntax | Interpretation |
-| --- | --- | --- |
-| Pattern position after `let` | `let { x, y } = ...` | Struct destructuring pattern |
+| Context                      | Syntax                     | Interpretation                     |
+| ---------------------------- | -------------------------- | ---------------------------------- |
+| Pattern position after `let` | `let { x, y } = ...`       | Struct destructuring pattern       |
 | Pattern position after `let` | `let Point { x, y } = ...` | Named struct destructuring pattern |
-| Expression position | `Point { x, y }` | Struct construction |
-| Expression position (typed) | `let p: Point = { x, y }` | Implicit struct literal |
+| Expression position          | `Point { x, y }`           | Struct construction                |
+| Expression position (typed)  | `let p: Point = { x, y }`  | Implicit struct literal            |
 
 In pattern position, `{` unambiguously starts a struct pattern because blocks are not valid patterns.
 
