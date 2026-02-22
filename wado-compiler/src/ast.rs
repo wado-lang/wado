@@ -939,6 +939,20 @@ pub enum Pattern {
         bindings: Vec<Pattern>,
         span: Span,
     },
+    /// Struct destructuring pattern: `{ x, y }` or `Point { x, y }`
+    Struct {
+        type_name: Option<String>,
+        fields: Vec<StructPatternField>,
+        has_rest: bool,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct StructPatternField {
+    pub field_name: String,
+    pub pattern: Pattern,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

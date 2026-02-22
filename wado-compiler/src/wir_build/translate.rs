@@ -3312,8 +3312,8 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32Const(0)
                 }
             }
-            TirPattern::Tuple(_) => {
-                // Tuple patterns: for now just return true (irrefutable)
+            TirPattern::Tuple(_) | TirPattern::Struct { .. } => {
+                // Tuple/struct patterns: always irrefutable
                 WirInstr::I32Const(1)
             }
         }
@@ -3525,6 +3525,9 @@ impl FunctionTranslator<'_, '_> {
                 for sub in sub_patterns {
                     self.emit_pattern_bindings(sub, scrut_local, scrut_type, instrs);
                 }
+            }
+            TirPattern::Struct { .. } => {
+                // Struct patterns should be lowered before reaching WIR
             }
         }
     }

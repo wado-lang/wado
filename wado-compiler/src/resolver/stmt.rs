@@ -7,7 +7,7 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::tir::{
     PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirPattern,
-    TirStmt, TirStmtKind, TirStructField, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -299,6 +299,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let_stmt.span,
                 )
             }
+            ast::Pattern::Struct { .. } => {
+                // Struct destructuring: let { x, y } = struct_expr;
+                let tir_pattern = self.resolve_let_pattern(
+                    &let_stmt.pattern,
+                    type_id,
+                    let_stmt.is_mut,
+                    let_stmt.span,
+                    ctx,
+                );
+                TirStmt::new(
+                    TirStmtKind::LetPattern {
+                        pattern: tir_pattern,
+                        is_mut: let_stmt.is_mut,
+                        value,
+                    },
+                    let_stmt.span,
+                )
+            }
             ast::Pattern::Wildcard => {
                 // Wildcard pattern: let _ = expr; - evaluate but don't bind
                 // We still need a local to store the value temporarily
@@ -375,6 +393,100 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .collect();
 
                 TirPattern::Tuple(tir_patterns)
+            }
+            ast::Pattern::Struct {
+                type_name,
+                fields,
+                has_rest,
+                span: pat_span,
+            } => {
+                // Get struct name from type
+                let struct_name = {
+                    let type_table = self.type_table.borrow();
+                    match type_table.get(type_id) {
+                        ResolvedType::Struct { name, .. } => Some(name.clone()),
+                        _ => None,
+                    }
+                };
+
+                // If named pattern, verify the type matches
+                if let Some(expected_name) = type_name
+                    && let Some(actual_name) = &struct_name
+                {
+                    // Compare the short name (strip module prefix if needed)
+                    let actual_short = actual_name.rsplit("::").next().unwrap_or(actual_name);
+                    if actual_short != expected_name {
+                        let _ = self.logger.error(TypeError::TypeMismatch {
+                            expected: expected_name.clone(),
+                            found: self.type_table.borrow().type_name(type_id),
+                            span: *pat_span,
+                        });
+                    }
+                }
+
+                if struct_name.is_none() {
+                    let _ = self.logger.error(TypeError::TypeMismatch {
+                        expected: "struct type".to_string(),
+                        found: self.type_table.borrow().type_name(type_id),
+                        span: *pat_span,
+                    });
+                    return TirPattern::Wildcard;
+                }
+
+                // Resolve each field pattern
+                let mut tir_fields = Vec::new();
+                for field in fields {
+                    let (field_index, field_type) =
+                        self.lookup_field_type(type_id, &field.field_name, field.span);
+                    let sub_pattern = self.resolve_let_pattern(
+                        &field.pattern,
+                        field_type,
+                        is_mut,
+                        field.span,
+                        ctx,
+                    );
+                    tir_fields.push(TirStructPatternField {
+                        field_name: field.field_name.clone(),
+                        field_index,
+                        pattern: sub_pattern,
+                    });
+                }
+
+                // Exhaustiveness check: without `..`, all fields must be listed
+                if !has_rest
+                    && let Some(ref sname) = struct_name
+                    && let Some(struct_info) = self.struct_fields.get(sname)
+                {
+                    let total_fields = struct_info.fields.len();
+                    if fields.len() != total_fields {
+                        let missing: Vec<_> = struct_info
+                            .fields
+                            .iter()
+                            .filter(|(name, _)| !fields.iter().any(|f| f.field_name == *name))
+                            .map(|(name, _)| name.clone())
+                            .collect();
+                        if !missing.is_empty() {
+                            let _ = self.logger.error(TypeError::TypeMismatch {
+                                        expected: format!(
+                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
+                                            missing.join(", ")
+                                        ),
+                                        found: format!(
+                                            "pattern with {} of {} fields",
+                                            fields.len(),
+                                            total_fields
+                                        ),
+                                        span: *pat_span,
+                                    });
+                        }
+                    }
+                }
+
+                TirPattern::Struct {
+                    struct_type: type_id,
+                    fields: tir_fields,
+                    has_rest: *has_rest,
+                }
             }
             ast::Pattern::Wildcard => TirPattern::Wildcard,
             ast::Pattern::Literal(_) | ast::Pattern::Variant { .. } => {
@@ -708,6 +820,84 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     variant_name: variant_name.clone(),
                     bindings: resolved_bindings,
                     payload_type,
+                }
+            }
+            Pattern::Struct {
+                type_name,
+                fields,
+                has_rest,
+                span: pat_span,
+            } => {
+                // Verify type if named
+                if let Some(expected_name) = type_name {
+                    let resolved = self.type_table.borrow().get(scrutinee_type).clone();
+                    if let ResolvedType::Struct { ref name, .. } = resolved {
+                        let actual_short = name.rsplit("::").next().unwrap_or(name);
+                        if actual_short != expected_name {
+                            let _ = self.logger.error(TypeError::TypeMismatch {
+                                expected: expected_name.clone(),
+                                found: self.type_table.borrow().type_name(scrutinee_type),
+                                span: *pat_span,
+                            });
+                        }
+                    }
+                }
+
+                let mut tir_fields = Vec::new();
+                for field in fields {
+                    let (field_index, field_type) =
+                        self.lookup_field_type(scrutinee_type, &field.field_name, field.span);
+                    let sub_pattern =
+                        self.resolve_if_pattern(&field.pattern, field_type, ctx, field.span);
+                    tir_fields.push(TirStructPatternField {
+                        field_name: field.field_name.clone(),
+                        field_index,
+                        pattern: sub_pattern,
+                    });
+                }
+
+                // Exhaustiveness check
+                if !has_rest {
+                    let struct_name = {
+                        let type_table = self.type_table.borrow();
+                        match type_table.get(scrutinee_type) {
+                            ResolvedType::Struct { name, .. } => Some(name.clone()),
+                            _ => None,
+                        }
+                    };
+                    if let Some(ref sname) = struct_name
+                        && let Some(struct_info) = self.struct_fields.get(sname)
+                    {
+                        let total_fields = struct_info.fields.len();
+                        if fields.len() != total_fields {
+                            let missing: Vec<_> = struct_info
+                                .fields
+                                .iter()
+                                .filter(|(name, _)| !fields.iter().any(|f| f.field_name == *name))
+                                .map(|(name, _)| name.clone())
+                                .collect();
+                            if !missing.is_empty() {
+                                let _ = self.logger.error(TypeError::TypeMismatch {
+                                        expected: format!(
+                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
+                                            missing.join(", ")
+                                        ),
+                                        found: format!(
+                                            "pattern with {} of {} fields",
+                                            fields.len(),
+                                            total_fields
+                                        ),
+                                        span: *pat_span,
+                                    });
+                            }
+                        }
+                    }
+                }
+
+                TirPattern::Struct {
+                    struct_type: scrutinee_type,
+                    fields: tir_fields,
+                    has_rest: *has_rest,
                 }
             }
         }

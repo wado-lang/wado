@@ -314,6 +314,11 @@ fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut IndexSet<u32>) 
                 collect_pattern_bindings(p, modified);
             }
         }
+        TirPattern::Struct { fields, .. } => {
+            for field in fields {
+                collect_pattern_bindings(&field.pattern, modified);
+            }
+        }
         TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => {
             // No bindings
         }

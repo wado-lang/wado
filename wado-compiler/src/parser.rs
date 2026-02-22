@@ -11,9 +11,10 @@ use crate::ast::{
     Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr,
     MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, NumberLiteral,
     Param, Pattern, ResourceDecl, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StringLiteral,
-    StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TestDecl,
-    TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl, WorldExport, WorldImport,
+    StructDecl, StructField, StructLiteralExpr, StructLiteralField, StructPatternField,
+    TaskReturnStmt, TestDecl, TraitDecl, TupleLiteralExpr, Type, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, WasiImport, WhileStmt, WorldDecl,
+    WorldExport, WorldImport,
 };
 use crate::token::{Span, Token, TokenKind};
 
@@ -187,6 +188,12 @@ impl Parser {
 
     fn check(&self, kind: &TokenKind) -> bool {
         std::mem::discriminant(self.peek_kind()) == std::mem::discriminant(kind)
+    }
+
+    /// Check for `..` (two consecutive dots)
+    fn check_dot_dot(&self) -> bool {
+        matches!(self.peek_kind(), TokenKind::Dot)
+            && matches!(self.peek_nth(1).kind, TokenKind::Dot)
     }
 
     fn expect(&mut self, kind: &TokenKind) -> ParseResult<&Token> {
@@ -1157,15 +1164,25 @@ impl Parser {
         }))
     }
 
-    /// Check if the next tokens look like a variant pattern start.
-    /// Detects patterns by presence of parentheses after identifier: `Some(`.
-    /// This detects patterns structurally, not by naming convention.
+    /// Check if the next tokens look like a pattern start (variant or struct).
+    /// Detects patterns by presence of parentheses/braces after identifier: `Some(`, `Point {`.
+    /// Also detects unnamed struct patterns starting with `{`.
     /// Note: Unit variants like `None` are detected by uppercase first letter convention.
     fn is_variant_pattern_start(&self) -> bool {
+        // Unnamed struct pattern: `{ x, y } = expr`
+        if matches!(self.peek_kind(), TokenKind::LBrace) {
+            return true;
+        }
         if let TokenKind::Ident(name) = self.peek_kind() {
             let next = self.peek_nth(1);
             // Check if identifier is followed by `(` (variant with payload like `Some(x)`)
             if matches!(next.kind, TokenKind::LParen) {
+                return true;
+            }
+            // Check if identifier is followed by `{` (named struct pattern like `Point { x, y }`)
+            if matches!(next.kind, TokenKind::LBrace)
+                && name.chars().next().is_some_and(char::is_uppercase)
+            {
                 return true;
             }
             // For unit variants like `None`, check if identifier starts with uppercase
@@ -1465,6 +1482,9 @@ impl Parser {
             }
             self.expect(&TokenKind::RBracket)?;
             Ok(Pattern::Tuple(patterns))
+        } else if self.check(&TokenKind::LBrace) {
+            // Unnamed struct pattern: { x, y }
+            self.parse_struct_pattern_fields(None)
         } else if let Some(name) = self.peek_kind().as_ident_name() {
             // Accept identifiers and contextual keywords (flags, type) as pattern names
             let name = name.to_string();
@@ -1473,7 +1493,7 @@ impl Parser {
             if name == "_" {
                 Ok(Pattern::Wildcard)
             } else if name.chars().next().is_some_and(char::is_uppercase) {
-                // Uppercase identifier - could be variant pattern like Some(x) or None
+                // Uppercase identifier - could be variant, struct, or enum pattern
                 if self.check(&TokenKind::LParen) {
                     // Variant with bindings: Some(x)
                     self.advance(); // consume (
@@ -1495,6 +1515,9 @@ impl Parser {
                         bindings,
                         span: start_span.merge(&end_span),
                     })
+                } else if self.check(&TokenKind::LBrace) {
+                    // Named struct pattern: Point { x, y }
+                    self.parse_struct_pattern_fields(Some(name))
                 } else {
                     // Variant without bindings: None
                     Ok(Pattern::Variant {
@@ -1559,7 +1582,8 @@ impl Parser {
     }
 
     /// Parse a pattern for let statements
-    /// Supports: identifier, wildcard `_`, and tuple pattern `[a, b, c]`
+    /// Supports: identifier, wildcard `_`, tuple pattern `[a, b, c]`,
+    /// struct pattern `{ x, y }`, and named struct pattern `Point { x, y }`
     fn parse_let_pattern(&mut self) -> ParseResult<Pattern> {
         if self.check(&TokenKind::LBracket) {
             // Tuple pattern: [a, b, c]
@@ -1577,24 +1601,115 @@ impl Parser {
             }
             self.expect(&TokenKind::RBracket)?;
             Ok(Pattern::Tuple(patterns))
+        } else if self.check(&TokenKind::LBrace) {
+            // Unnamed struct pattern: { x, y }
+            self.parse_struct_pattern_fields(None)
         } else if let Some(name) = self.peek_kind().as_ident_name() {
             // Accept identifiers and contextual keywords (flags, type) as pattern names
             let name = name.to_string();
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
+            } else if name.chars().next().is_some_and(char::is_uppercase)
+                && self.check(&TokenKind::LBrace)
+            {
+                // Named struct pattern: Point { x, y }
+                self.parse_struct_pattern_fields(Some(name))
             } else {
                 Ok(Pattern::Ident(name))
             }
         } else {
             Err(ParseError {
                 message: format!(
-                    "expected identifier or tuple pattern, found {:?}",
+                    "expected identifier, tuple pattern, or struct pattern, found {:?}",
                     self.peek_kind()
                 ),
                 span: self.peek().span,
             })
         }
+    }
+
+    /// Parse `{ field, field: pattern, .. }` for struct destructuring.
+    /// The `{` token must be the current token.
+    fn parse_struct_pattern_fields(&mut self, type_name: Option<String>) -> ParseResult<Pattern> {
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut fields = Vec::new();
+        let mut has_rest = false;
+
+        if !self.check(&TokenKind::RBrace) {
+            // Check for leading `..`
+            if self.check_dot_dot() {
+                self.advance();
+                self.advance();
+                has_rest = true;
+            } else {
+                loop {
+                    // Check for `..` (rest pattern)
+                    if self.check_dot_dot() {
+                        self.advance();
+                        self.advance();
+                        has_rest = true;
+                        // Trailing comma after `..` is optional
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        }
+                        break;
+                    }
+
+                    let field_span = self.peek().span;
+                    let field_name = if let Some(name) = self.peek_kind().as_ident_name() {
+                        let name = name.to_string();
+                        self.advance();
+                        name
+                    } else {
+                        return Err(ParseError {
+                            message: format!(
+                                "expected field name in struct pattern, found {:?}",
+                                self.peek_kind()
+                            ),
+                            span: self.peek().span,
+                        });
+                    };
+
+                    // Check for `: pattern` (rename/nested)
+                    let pattern = if self.check(&TokenKind::Colon) {
+                        self.advance();
+                        self.parse_let_pattern()?
+                    } else if field_name == "_" {
+                        Pattern::Wildcard
+                    } else {
+                        // Shorthand: `{ x }` means `{ x: x }`
+                        Pattern::Ident(field_name.clone())
+                    };
+
+                    fields.push(StructPatternField {
+                        field_name,
+                        pattern,
+                        span: field_span,
+                    });
+
+                    if !self.check(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance();
+                    if self.check(&TokenKind::RBrace) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        let end_span = self.peek().span;
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(Pattern::Struct {
+            type_name,
+            fields,
+            has_rest,
+            span: start_span.merge(&end_span),
+        })
     }
 
     // Expression parsing with precedence climbing

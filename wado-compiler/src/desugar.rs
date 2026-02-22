@@ -185,6 +185,24 @@ fn desugar_pattern(p: &Pattern) -> Pattern {
             bindings: bindings.iter().map(desugar_pattern).collect(),
             span: *span,
         },
+        Pattern::Struct {
+            type_name,
+            fields,
+            has_rest,
+            span,
+        } => Pattern::Struct {
+            type_name: type_name.clone(),
+            fields: fields
+                .iter()
+                .map(|f| crate::ast::StructPatternField {
+                    field_name: f.field_name.clone(),
+                    pattern: desugar_pattern(&f.pattern),
+                    span: f.span,
+                })
+                .collect(),
+            has_rest: *has_rest,
+            span: *span,
+        },
     }
 }
 

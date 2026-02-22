@@ -289,6 +289,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             crate::ast::Pattern::Wildcard => {
                 // No variable introduced for wildcard
             }
+            crate::ast::Pattern::Struct { fields, .. } => {
+                for field in fields {
+                    self.bind_let_pattern(&field.pattern, is_mut, is_reactive, span)?;
+                }
+            }
             crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Variant { .. } => {
                 // Literal and variant patterns are not valid in let statements
                 // This would be caught by the type checker
@@ -679,6 +684,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 // Bind nested patterns in variant
                 for p in bindings {
                     self.bind_pattern(p, *variant_span)?;
+                }
+            }
+            crate::ast::Pattern::Struct { fields, .. } => {
+                for field in fields {
+                    self.bind_pattern(&field.pattern, span)?;
                 }
             }
             crate::ast::Pattern::Literal(_) | crate::ast::Pattern::Wildcard => {

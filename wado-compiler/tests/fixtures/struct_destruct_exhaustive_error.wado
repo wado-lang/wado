@@ -1,0 +1,14 @@
+// Struct destructuring exhaustiveness error - missing fields without ..
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() {
+    let p = Point { x: 10, y: 20 };
+    let { x } = p;
+}
+
+__DATA__
+{"compile_error": "missing: y"}
