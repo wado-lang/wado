@@ -169,10 +169,10 @@ If `wado.lock` exists, `wado fetch` downloads the exact versions recorded in the
 
 ### Dependency Cache Layout
 
-Dependencies are stored in a structured directory tree under `~/.wado/src/`, mirroring the source URL hierarchy (inspired by [ghq](https://github.com/x-motemen/ghq)). This makes cached packages browsable — `ls` or `find` is all you need to explore what's been fetched.
+Dependencies are stored in a structured directory tree under `~/wado/`, mirroring the source URL hierarchy (inspired by [ghq](https://github.com/x-motemen/ghq)). Not hidden — the cache is a first-class part of the filesystem, just like `~/ghq/`. This makes cached packages browsable with standard tools.
 
 ```
-~/.wado/src/
+~/wado/
 ├── wa.dev/                          # registry host
 │   ├── docs/regex/
 │   │   └── 0.1.2/
@@ -201,10 +201,10 @@ Git dependencies include a short commit prefix (8 hex chars) in the directory na
 
 #### Cache Root
 
-The default cache root is `~/.wado/src/`. This can be overridden via the `WADO_CACHE_DIR` environment variable:
+The default cache root is `~/wado/`. This can be overridden via the `WADO_ROOT` environment variable:
 
 ```sh
-WADO_CACHE_DIR=/tmp/wado-cache wado fetch    # custom cache location
+WADO_ROOT=/tmp/wado-cache wado fetch    # custom cache location
 ```
 
 ### `wado list`
@@ -233,10 +233,10 @@ Columns: package identity, version, source host. Sorted by source host then pack
 
 ```
 $ wado list --path
-/home/user/.wado/src/wa.dev/docs/regex/0.1.2
-/home/user/.wado/src/wa.dev/std/json/1.2.0
-/home/user/.wado/src/github.com/user/router/1.0.2-abc1234d
-/home/user/.wado/src/gitlab.com/user/bench/0.1.0-def56789
+/home/user/wado/wa.dev/docs/regex/0.1.2
+/home/user/wado/wa.dev/std/json/1.2.0
+/home/user/wado/github.com/user/router/1.0.2-abc1234d
+/home/user/wado/gitlab.com/user/bench/0.1.0-def56789
 ```
 
 One absolute path per line. Designed for piping into other tools:
@@ -306,3 +306,4 @@ The lock file's `command` field for the dependency determines which source file 
 - **`--breaking` as a flag, not a separate command**: keeps the update family unified. A separate `wado upgrade` command (like cargo-edit) would fragment the mental model.
 - **No `--locked` here**: `--locked` is a build-time flag (`wado compile --locked`, `wado run --locked`) that rejects stale lock files. It belongs on build commands, not on `wado update` which always writes the lock file.
 - **ghq-style cache over content-addressed store**: Cargo uses a content-addressed store (`~/.cargo/registry/cache/` with `.crate` archives + `src/` extraction). The ghq-style `host/owner/name/version/` layout trades deduplication for direct browsability — `cd` into any package without extraction or special tooling. For a Wasm ecosystem where packages are typically small, the storage overhead is negligible.
+- **`~/wado/` over `~/.wado/`**: ghq uses `~/ghq/` — visible, not hidden. Dependencies are source code you depend on; hiding them behind a dot prefix makes them feel opaque. A visible directory signals that the cache is a transparent, browsable workspace.
