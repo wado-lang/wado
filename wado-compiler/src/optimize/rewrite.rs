@@ -308,7 +308,7 @@ fn try_lower_to_select(
 
     // Construct: builtin::select(condition, true_val, false_val)
     let func_ref = FunctionRef::External {
-        module_source: ModuleSource::core("builtin"),
+        module_source: ModuleSource::builtin(),
         name: "select".to_string(),
         monomorph_info: Some(MonomorphInfo {
             generic_name: "select".to_string(),
