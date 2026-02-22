@@ -889,7 +889,7 @@ impl FunctionTranslator<'_, '_> {
                 self.translate_let_pattern(pattern, value)
             }
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         }
     }

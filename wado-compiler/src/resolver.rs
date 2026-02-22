@@ -10979,7 +10979,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     );
 
                     if is_inspect {
-                        // Emit builtin::inspect marker — replaced by synthesize_inspect phase
+                        // Emit builtin::inspect marker — replaced by synthesis::inspect phase
                         // Pass alternate flag (#) as 3rd arg for closure pretty-print
                         let alternate = parsed.as_ref().is_some_and(|pf| pf.alternate);
                         let alternate_expr = TirExpr::new(

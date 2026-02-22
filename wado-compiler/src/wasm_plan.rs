@@ -156,7 +156,7 @@ fn build_world_export_plans(project: &Project) -> Vec<WorldExportPlan> {
         .into_iter()
         .map(|export| {
             let is_http_handler = export.returns_http_response();
-            // Use export adapter if one was synthesized by cm_adapter_gen
+            // Use export adapter if one was synthesized by synthesis::cm_adapter
             let core_func_name = project
                 .export_adapter_names
                 .get(&export.name)

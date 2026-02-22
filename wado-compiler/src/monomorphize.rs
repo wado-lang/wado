@@ -662,7 +662,7 @@ impl Monomorphizer {
                 self.rewrite_types_in_expr(value, type_table);
             }
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         }
     }
@@ -1354,7 +1354,7 @@ impl Monomorphizer {
                 self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
             }
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         }
     }
@@ -2154,7 +2154,7 @@ impl Monomorphizer {
                 self.substitute_types_in_expr(value, substitution, type_table);
             }
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         }
     }
@@ -2806,7 +2806,7 @@ impl Monomorphizer {
                 self.rewrite_function_calls_in_expr(value, type_table);
             }
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         }
     }

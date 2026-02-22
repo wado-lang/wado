@@ -93,7 +93,7 @@ fn simplify_labeled_blocks_in_stmt(stmt: &mut TirStmt) -> bool {
         TirStmtKind::Continue => false,
         TirStmtKind::LetPattern { value, .. } => simplify_labeled_blocks_in_expr(value),
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -472,7 +472,7 @@ fn insert_moves_in_stmt(stmt: &mut TirStmt, type_table: &TypeTable) {
             }
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }

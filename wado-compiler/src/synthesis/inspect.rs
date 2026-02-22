@@ -4,7 +4,7 @@
 //! synthesized inspect functions. Each unique type gets a single inspect
 //! function, avoiding code duplication at every `:?` usage site.
 //!
-//! Pipeline position: after `effect_check`, before `cm_adapter_gen`.
+//! Pipeline position: after `effect_check`, before CM adapter synthesis.
 //! This ensures synthesized code goes through monomorphization, lowering,
 //! and optimization.
 //!
@@ -24,9 +24,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-fn synth_span() -> Span {
-    Span::new(0, 0, 1, 1)
-}
+use super::common::synth_span;
 
 /// Run the inspect synthesis pass on the entire project.
 ///

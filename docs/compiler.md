@@ -7,7 +7,7 @@ This document describes the Wado compiler architecture and implementation status
 The compiler follows a multi-phase pipeline:
 
 ```
-Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → CM Adapter → Monomorphize → Lower → Optimize → WIR Build → Codegen
+Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve → Effect Check → Synthesis → Monomorphize → Lower → Optimize → WIR Build → Codegen
 ```
 
 ### Compilation Pipeline
@@ -21,8 +21,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
 | Effect Check | Project       | Project         | Validate function effect requirements                     |
-| Inspect Syn  | Project       | Project         | Synthesize `builtin::inspect` into concrete TIR           |
-| CM Adapter   | Project       | Project         | Synthesize TIR adapter functions for CM boundary crossing |
+| Synthesis    | Project       | Project         | Enum traits, inspect debug output, CM adapter synthesis   |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
 | Optimize     | Project       | Project         | Inlining, copy-prop, LICM, DCE, post-opt rewrite          |
@@ -50,8 +49,11 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Name              | `name.rs`                | Name mangling utilities for methods and symbols           |
 | Resolver          | `resolver.rs`            | Type resolution, AST to TIR, produces Project             |
 | TIR               | `tir.rs`                 | Typed Intermediate Representation                         |
-| SynthesizeInspect | `synthesize_inspect.rs`  | Inspect debug output synthesis (type→TIR)                 |
-| CmAdapterGen      | `cm_adapter_gen.rs`      | CM boundary adapter synthesis (TIR functions)             |
+| Synthesis         | `synthesis.rs`           | Unified synthesis phase (`synthesis/`)                    |
+| SynthCommon       | `synthesis/common.rs`    | Shared TIR builders for synthesis phases                  |
+| SynthEnumTraits   | `synthesis/enum_traits.rs` | Auto-derived Eq/Ord for enum types                      |
+| SynthInspect      | `synthesis/inspect.rs`   | Inspect debug output synthesis (type→TIR)                 |
+| SynthCmAdapter    | `synthesis/cm_adapter.rs`| CM boundary adapter synthesis (TIR functions)             |
 | CmAbi             | `cm_abi.rs`              | Canonical ABI layout computation                          |
 | Monomorphize      | `monomorphize.rs`        | Generic type/function instantiation (Project→Project)     |
 | Lower             | `lower.rs`               | Closure, i128 match, global init, string lowering         |
