@@ -53,6 +53,23 @@ fn multiple_structs() -> i32 {
     return 10;
 }
 
+#[inline(never)]
+fn sum_point(p: Point) -> i32 {
+    return (p.x + p.y);
+}
+
+#[inline(never)]
+fn use_then_pass() -> i32 {
+    let passed: i32 = sum_point(move Point { x: 10, y: 20 });
+    return (30 + passed);
+}
+
+#[inline(never)]
+fn build_and_return(x: i32, y: i32) -> Point {
+    let p: Point = move Point { x: x, y: y };
+    return p;
+}
+
 export fn run() {
     __assert_0: {
         let __v0: i32 = basic_sroa();
@@ -70,7 +87,7 @@ export fn run() {
                     break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_2: {
-                    let self: Box<i32> = move Box<i32> { value: 57 };
+                    let self: Box<i32> = move Box<i32> { value: 80 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
@@ -106,7 +123,7 @@ export fn run() {
                     break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_7: {
-                    let self: Box<i32> = move Box<i32> { value: 58 };
+                    let self: Box<i32> = move Box<i32> { value: 81 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
@@ -142,7 +159,7 @@ export fn run() {
                     break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_12: {
-                    let self: Box<i32> = move Box<i32> { value: 59 };
+                    let self: Box<i32> = move Box<i32> { value: 82 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
@@ -178,7 +195,7 @@ export fn run() {
                     break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_17: {
-                    let self: Box<i32> = move Box<i32> { value: 60 };
+                    let self: Box<i32> = move Box<i32> { value: 83 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
@@ -214,7 +231,7 @@ export fn run() {
                     break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_22: {
-                    let self: Box<i32> = move Box<i32> { value: 61 };
+                    let self: Box<i32> = move Box<i32> { value: 84 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
@@ -226,6 +243,103 @@ export fn run() {
                 };
                 __inline_i32_Display__fmt_24: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                };
+                __r.String::append(move "\n");
+                break __tmpl: __r;
+            });
+        }
+    }
+    __assert_5: {
+        let __v0: i32 = use_then_pass();
+        let __cond: bool = (__v0 == 60);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = move String { repr: "array_new<u8>"(141), used: 0 };
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado");
+                __r.String::append(move ":");
+                let mut __f: Formatter = __inline_Formatter__new_26: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_27: {
+                    let self: Box<i32> = move Box<i32> { value: 85 };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                };
+                __r.String::append(move "\ncondition: use_then_pass() == 60\n");
+                __r.String::append(move "use_then_pass(): ");
+                __f = __inline_Formatter__new_28: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_29: {
+                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                };
+                __r.String::append(move "\n");
+                break __tmpl: __r;
+            });
+        }
+    }
+    let built: Point = move build_and_return(5, 15);
+    __assert_6: {
+        let __v0: i32 = built.x;
+        let __v1: i32 = built.y;
+        let __v2: i32 = (built.x + built.y);
+        let __cond: bool = (__v2 == 20);
+        if !__cond {
+            core::internal::panic(__tmpl: {
+                let mut __r: String = move String { repr: "array_new<u8>"(197), used: 0 };
+                __r.String::append(move "Assertion failed in ");
+                __r.String::append(move "run");
+                __r.String::append(move " at ");
+                __r.String::append(move "wado-compiler/tests/fixtures/opt_sroa_intraprocedural.wado");
+                __r.String::append(move ":");
+                let mut __f: Formatter = __inline_Formatter__new_31: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_31: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_32: {
+                    let self: Box<i32> = move Box<i32> { value: 87 };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                };
+                __r.String::append(move "\ncondition: built.x + built.y == 20\n");
+                __r.String::append(move "built.x: ");
+                __f = __inline_Formatter__new_33: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_33: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_34: {
+                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                };
+                __r.String::append(move "\n");
+                __r.String::append(move "built.y: ");
+                __f = __inline_Formatter__new_35: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_35: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_36: {
+                    let self: Box<i32> = move Box<i32> { value: __v1 };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                };
+                __r.String::append(move "\n");
+                __r.String::append(move "built.x + built.y: ");
+                __f = __inline_Formatter__new_37: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_37: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_38: {
+                    let self: Box<i32> = move Box<i32> { value: __v2 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };

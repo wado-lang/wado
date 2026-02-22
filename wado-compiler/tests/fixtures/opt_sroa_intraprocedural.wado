@@ -53,12 +53,38 @@ fn multiple_structs() -> i32 {
     return a.x * b.y + a.y * b.x;
 }
 
+// Pattern 6: Struct constructed, fields accessed, then passed to call (soft escape)
+// SROA should decompose the struct and reconstruct it at the call site
+#[inline(never)]
+fn sum_point(p: Point) -> i32 {
+    return p.x + p.y;
+}
+
+#[inline(never)]
+fn use_then_pass() -> i32 {
+    let p = Point { x: 10, y: 20 };
+    let sum = p.x + p.y;  // field access (benefits from SROA)
+    let passed = sum_point(p);  // escape via call (should reconstruct)
+    return sum + passed;
+}
+
+// Pattern 7: Struct constructed and returned (soft escape via return)
+#[inline(never)]
+fn build_and_return(x: i32, y: i32) -> Point {
+    let p = Point { x, y };
+    // Currently p escapes via return; with reconstruction, fields stay as scalars
+    return p;
+}
+
 export fn run() {
     assert basic_sroa() == 30;
     assert mutable_field_write() == 100;
     assert partial_escape(50) == 150;
     assert nested_struct() == 33;
     assert multiple_structs() == 10;
+    assert use_then_pass() == 60;
+    let built = build_and_return(5, 15);
+    assert built.x + built.y == 20;
 }
 
 __DATA__

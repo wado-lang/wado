@@ -14,9 +14,10 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
-    let mut opts: Options = move Options { align: Align::Right, width: 0 };
-    opts.width = 10;
-    let s1: String = move "./variant_import_struct_module.wado::format_with_opts"(move "hi", opts);
+    let mut __sroa_opts_align: Align = move Align::Right;
+    let mut __sroa_opts_width: i32 = 0;
+    __sroa_opts_width = 10;
+    let s1: String = move "./variant_import_struct_module.wado::format_with_opts"(move "hi", move Options { align: __sroa_opts_align, width: __sroa_opts_width });
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(18), used: 0 };
         __r.String::append(move "[");
@@ -24,8 +25,8 @@ export fn run() with Stdout {
         __r.String::append(move "]");
         break __tmpl: __r;
     });
-    opts.align = move Align::Left;
-    let s2: String = move "./variant_import_struct_module.wado::format_with_opts"(move "hi", opts);
+    __sroa_opts_align = move Align::Left;
+    let s2: String = move "./variant_import_struct_module.wado::format_with_opts"(move "hi", move Options { align: __sroa_opts_align, width: __sroa_opts_width });
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(18), used: 0 };
         __r.String::append(move "[");
@@ -33,8 +34,8 @@ export fn run() with Stdout {
         __r.String::append(move "]");
         break __tmpl: __r;
     });
-    opts.align = move Align::Center;
-    let s3: String = move "./variant_import_struct_module.wado::format_with_opts"(move "hi", opts);
+    __sroa_opts_align = move Align::Center;
+    let s3: String = move "./variant_import_struct_module.wado::format_with_opts"(move "hi", move Options { align: __sroa_opts_align, width: __sroa_opts_width });
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(18), used: 0 };
         __r.String::append(move "[");
