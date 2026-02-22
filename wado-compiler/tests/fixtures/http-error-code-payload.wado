@@ -2,16 +2,10 @@
 // Tests that returning Err(ErrorCode::InternalError(Some("custom error")))
 // properly lowers the Option<String> payload through task-return.
 
-use {
-    Request,
-    Response,
-    ErrorCode,
-} from "wasi:http";
+use { Request, Response, ErrorCode } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    task return Result::<Response, ErrorCode>::Err(
-        ErrorCode::InternalError(Option::<String>::Some("custom error"))
-    );
+    task return Result::<Response, ErrorCode>::Err(ErrorCode::InternalError(Option::<String>::Some("custom error")));
 }
 
 __DATA__

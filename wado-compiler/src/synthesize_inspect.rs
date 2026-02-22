@@ -94,12 +94,8 @@ fn collect_closure_sources_stmt(stmt: &TirStmt, map: &mut IndexMap<u32, String>)
         TirStmtKind::Let {
             local_index, value, ..
         } => {
-            if let TirExprKind::Closure {
-                source_text: Some(text),
-                ..
-            } = &value.kind
-            {
-                map.insert(*local_index, text.clone());
+            if let Some(text) = extract_closure_source(value) {
+                map.insert(*local_index, text);
             }
             collect_closure_sources_expr(value, map);
         }
@@ -154,6 +150,26 @@ fn collect_closure_sources_expr(expr: &TirExpr, map: &mut IndexMap<u32, String>)
             collect_closure_sources_expr(body, map);
         }
         _ => {}
+    }
+}
+
+/// Extract closure source text from an expression.
+/// Handles both direct closures and mutable closures wrapped in a Block.
+fn extract_closure_source(expr: &TirExpr) -> Option<String> {
+    match &expr.kind {
+        TirExprKind::Closure {
+            source_text: Some(text),
+            ..
+        } => Some(text.clone()),
+        // Mutable closures are wrapped: Block { let __ref_x = &mut x; Closure { ... } }
+        TirExprKind::Block(block) => block.stmts.last().and_then(|stmt| {
+            if let TirStmtKind::Expr(inner) = &stmt.kind {
+                extract_closure_source(inner)
+            } else {
+                None
+            }
+        }),
+        _ => None,
     }
 }
 

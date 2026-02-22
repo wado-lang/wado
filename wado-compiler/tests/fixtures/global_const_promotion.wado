@@ -5,15 +5,15 @@ use { println, Stdout } from "core:cli";
 
 // Chain of dependent globals: each depends on the previous
 global BASE: i32 = 10;
-global STEP: i32 = BASE + 5;       // should promote to 15
-global DOUBLED: i32 = STEP * 2;    // should promote to 30
-global COMBINED: i32 = BASE + DOUBLED; // should promote to 40
+global STEP: i32 = BASE + 5;  // should promote to 15
+global DOUBLED: i32 = STEP * 2;  // should promote to 30
+global COMBINED: i32 = BASE + DOUBLED;  // should promote to 40
 
 // Arithmetic that folds to a constant
-global PRODUCT: i32 = 7 * 6;       // should promote to 42
+global PRODUCT: i32 = 7 * 6;  // should promote to 42
 
 // Mixed types
-global LONG: i64 = 1000 as i64 + 234 as i64; // should promote to 1234
+global LONG: i64 = 1000 as i64 + 234 as i64;  // should promote to 1234
 
 // User-declared mutable globals should NOT be promoted
 global mut COUNTER: i32 = 0;

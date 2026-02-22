@@ -29,6 +29,16 @@ struct __Closure_3 {
 struct __Closure_4 {
 }
 
+struct __Closure_5 {
+    __capture_0: Box<i32>,
+}
+
+struct __Closure_6 {
+}
+
+struct __Closure_7 {
+}
+
 export fn run() with Stdout {
     let add_one: fn(i32) -> i32 = &__Closure_0 {  };
     core::cli::println(__tmpl: {
@@ -91,6 +101,44 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
+    let mut count: Box<i32> = move Box<i32> { value: 0 };
+    let inc: fn() -> () = &__Closure_5 { __capture_0: count };
+    core::cli::println(__tmpl: {
+        let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
+        let mut __f: Formatter = __inline_Formatter__new_16: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_Formatter__write_str_17: {
+            let s: String = move "|| { count += 1; }";
+            __f.buf.String::append(s);
+        };
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
+        let mut __f: Formatter = __inline_Formatter__new_19: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_Formatter__write_str_20: {
+            let s: String = move "|x: i32| if x > 0 { \"positive\"; } else { \"non-positive\"; }";
+            __f.buf.String::append(s);
+        };
+        break __tmpl: __r;
+    });
+    core::cli::println(__tmpl: {
+        let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
+        let mut __f: Formatter = __inline_Formatter__new_22: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_Formatter__write_str_23: {
+            let s: String = move "|| 42";
+            __f.buf.String::append(s);
+        };
+        break __tmpl: __r;
+    });
     core::cli::println(move "ok");
 }
 
@@ -101,5 +149,9 @@ export fn __cm_export__run() {
 
 fn __Closure_0::__call(self: &__Closure_0, x: i32) -> i32 {
     return (x + 1);
+}
+
+fn __Closure_5::__call(self: &__Closure_5) {
+    self.__capture_0.value = (self.__capture_0.value + 1);
 }
 
