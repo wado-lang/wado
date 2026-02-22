@@ -7,13 +7,15 @@ struct Pair {
 }
 
 // #[inline(never)] - should NOT be inlined even though it's small
-#[inline(never)]
+
+#[inline("never")]
 fn never_inline_add(x: i32, y: i32) -> i32 {
     return x + y;
 }
 
 // #[inline(always)] - should be inlined even if large
-#[inline(always)]
+
+#[inline("always")]
 fn always_inline_compute(x: i32) -> i32 {
     let a = x + 1;
     let b = a * 2;
@@ -30,6 +32,7 @@ fn always_inline_compute(x: i32) -> i32 {
 }
 
 // #[inline] - hint to inline with raised threshold
+
 #[inline]
 fn hint_inline_sum(p: Pair) -> i32 {
     let x = p.a;

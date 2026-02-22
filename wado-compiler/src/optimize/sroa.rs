@@ -25,8 +25,8 @@
 
 use crate::project::Project;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField,
-    TirUnaryOp, TypeId, TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 use indexmap::IndexMap;
@@ -93,7 +93,11 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     }
 
     // Combined set of all SROA'd candidates (safe + reconstruct)
-    let all_sroa: IndexSet<u32> = safe_set.iter().chain(reconstruct_set.iter()).copied().collect();
+    let all_sroa: IndexSet<u32> = safe_set
+        .iter()
+        .chain(reconstruct_set.iter())
+        .copied()
+        .collect();
     if all_sroa.is_empty() {
         return false;
     }
@@ -196,7 +200,9 @@ fn collect_candidates_in_stmt(
             };
             match &inner_value.kind {
                 TirExprKind::StructLiteral {
-                    struct_name, fields, ..
+                    struct_name,
+                    fields,
+                    ..
                 } => {
                     let field_info: Vec<(String, TypeId)> = fields
                         .iter()
@@ -698,7 +704,8 @@ fn check_has_field_access_stmt(
                 check_has_field_access_expr(v, candidates, has_access);
             }
         }
-        TirStmtKind::Continue | TirStmtKind::LetPattern { .. } | TirStmtKind::TaskReturn { .. } => {}
+        TirStmtKind::Continue | TirStmtKind::LetPattern { .. } | TirStmtKind::TaskReturn { .. } => {
+        }
     }
 }
 
@@ -739,7 +746,11 @@ fn check_has_field_access_expr(
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
             check_has_field_access(block, candidates, has_access);
         }
-        TirExprKind::If { condition, then_branch, else_branch } => {
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
             check_has_field_access_expr(condition, candidates, has_access);
             check_has_field_access(then_branch, candidates, has_access);
             if let Some(eb) = else_branch {
@@ -925,14 +936,20 @@ fn check_soft_escape_in_expr(
         TirExprKind::Cast { expr: inner, .. } => {
             check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
         }
-        TirExprKind::Index { expr: inner, index, .. } => {
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
             check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
             check_soft_escape_in_expr(index, candidates, hard_escaped, false);
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
             check_soft_escape_in_block(block, candidates, hard_escaped);
         }
-        TirExprKind::If { condition, then_branch, else_branch } => {
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
             check_soft_escape_in_expr(condition, candidates, hard_escaped, false);
             check_soft_escape_in_block(then_branch, candidates, hard_escaped);
             if let Some(eb) = else_branch {
@@ -976,7 +993,12 @@ fn check_soft_escape_in_expr(
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
         }
-        TirExprKind::Switch { scrutinee, arms, default, .. } => {
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
             check_soft_escape_in_expr(scrutinee, candidates, hard_escaped, false);
             for arm in arms {
                 check_soft_escape_in_block(arm, candidates, hard_escaped);
@@ -1061,7 +1083,14 @@ fn rewrite_block(
         }
 
         // Not a candidate Let — rewrite field accesses in the statement.
-        rewrite_stmt(&mut stmt, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+        rewrite_stmt(
+            &mut stmt,
+            safe_set,
+            field_map,
+            info_map,
+            candidate_mut,
+            reconstruct_info,
+        );
         new_stmts.push(stmt);
     }
 
@@ -1155,14 +1184,35 @@ fn rewrite_stmt(
 ) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::Expr(expr) => {
-            rewrite_expr(expr, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                expr,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                rewrite_expr(v, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    v,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirStmtKind::If {
@@ -1170,17 +1220,52 @@ fn rewrite_stmt(
             then_block,
             else_block,
         } => {
-            rewrite_expr(condition, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
-            rewrite_block(then_block, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                condition,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_block(
+                then_block,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             if let Some(eb) = else_block {
-                rewrite_block(eb, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_block(
+                    eb,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirStmtKind::Loop { body } => {
-            rewrite_block(body, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_block(
+                body,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            rewrite_block(block, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_block(
+                block,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::IfPattern {
             scrutinee,
@@ -1188,20 +1273,55 @@ fn rewrite_stmt(
             else_block,
             ..
         } => {
-            rewrite_expr(scrutinee, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
-            rewrite_block(then_block, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                scrutinee,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_block(
+                then_block,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             if let Some(eb) = else_block {
-                rewrite_block(eb, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_block(
+                    eb,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                rewrite_expr(v, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    v,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetPattern { value, .. } => {
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -1272,7 +1392,14 @@ fn rewrite_expr(
                 index: new_local,
                 name: new_name.clone(),
             };
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             return;
         }
     }
@@ -1290,108 +1417,325 @@ fn rewrite_expr(
     // Recurse into child expressions
     match &mut expr.kind {
         TirExprKind::FieldAccess { expr: inner, .. } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Assign { target, value } => {
-            rewrite_expr(target, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                target,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Binary { left, right, .. } => {
-            rewrite_expr(left, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
-            rewrite_expr(right, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                left,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_expr(
+                right,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Unary { expr: inner, .. } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Cast { expr: inner, .. } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Move { expr: inner } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
         | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                rewrite_expr(arg, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    arg,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_expr(receiver, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                receiver,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             for arg in args {
-                rewrite_expr(arg, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    arg,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            rewrite_expr(callee, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                callee,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             for arg in args {
-                rewrite_expr(arg, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    arg,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            rewrite_expr(functor, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                functor,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
-            rewrite_expr(index, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_expr(
+                index,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_block(block, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_block(
+                block,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            rewrite_expr(condition, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
-            rewrite_block(then_branch, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                condition,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_block(
+                then_branch,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             if let Some(eb) = else_branch {
-                rewrite_block(eb, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_block(
+                    eb,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::Match { expr: inner, arms } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    rewrite_expr(guard, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                    rewrite_expr(
+                        guard,
+                        safe_set,
+                        field_map,
+                        info_map,
+                        candidate_mut,
+                        reconstruct_info,
+                    );
                 }
-                rewrite_expr(&mut arm.body, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    &mut arm.body,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
-                rewrite_expr(&mut field.value, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    &mut field.value,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                rewrite_expr(elem, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    elem,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::OptionSome { value } => {
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                rewrite_expr(p, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_expr(
+                    p,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::Closure { body, .. } => {
-            rewrite_expr(body, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                body,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. } => {
-            rewrite_expr(expr, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                expr,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            rewrite_expr(expr, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                expr,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Switch {
             scrutinee,
@@ -1399,11 +1743,32 @@ fn rewrite_expr(
             default,
             ..
         } => {
-            rewrite_expr(scrutinee, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_expr(
+                scrutinee,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             for arm in arms {
-                rewrite_block(arm, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+                rewrite_block(
+                    arm,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
-            rewrite_block(default, safe_set, field_map, info_map, candidate_mut, reconstruct_info);
+            rewrite_block(
+                default,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         // Leaf nodes — nothing to rewrite
         TirExprKind::Local { .. }
