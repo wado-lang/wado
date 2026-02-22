@@ -22,9 +22,10 @@ use crate::name::{LocalMethodName, MethodName, ModuleSource, mangle_generic_name
 use crate::project::Project;
 use crate::tir::FunctionRef;
 use crate::tir::{
-    ClosureFunctor, MonomorphInfo, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirCapture,
-    TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLiteralPattern, TirModule, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    ClosureFunctor, InlineHint, MonomorphInfo, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock,
+    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLiteralPattern,
+    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -2029,6 +2030,7 @@ fn lower_global_initializers(module: &mut TirModule) {
         local_types: Vec::new(),
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -2352,6 +2354,7 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         local_types: Vec::new(),
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
     };
 
     entry_module
@@ -4202,6 +4205,7 @@ impl ClosureLowerer {
                 local_types,
                 address_taken_locals: IndexSet::new(),
                 is_cm_adapter: false,
+                inline_hint: InlineHint::Auto,
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -5823,6 +5827,7 @@ impl ClosureLowerer {
             local_types: new_local_types,
             address_taken_locals: callee.address_taken_locals.clone(),
             is_cm_adapter: false,
+            inline_hint: callee.inline_hint,
         };
 
         self.generated_functions

@@ -18,9 +18,9 @@ use indexmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFlags, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirUnaryOp,
-    TirVariantDecl, TypeId, TypeTable,
+    FunctionRef, InlineHint, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFlags, TirFunction, TirModule, TirParam, TirStmt,
+    TirStmtKind, TirUnaryOp, TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -152,6 +152,7 @@ fn ensure_inspect_fn(
         local_types: vec![type_id, fmt_type],
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
     };
     let rc = Rc::new(RefCell::new(func));
     reg.functions.insert(type_id, Rc::clone(&rc));

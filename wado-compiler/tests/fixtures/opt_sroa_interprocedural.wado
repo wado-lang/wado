@@ -1,0 +1,110 @@
+// Test: Interprocedural SROA patterns (struct → multi-value)
+// Tests patterns where structs cross function boundaries.
+// Uses #[inline(never)] to prevent inlining, isolating interprocedural patterns.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Vec3 {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+// Pattern 1: Function returns a struct, caller only uses fields
+// Ideally the struct allocation could be eliminated by passing fields as multi-value
+
+#[inline("never")]
+fn make_point(x: i32, y: i32) -> Point {
+    return Point { x, y };
+}
+
+
+#[inline("never")]
+fn use_returned_point() -> i32 {
+    let p = make_point(10, 20);
+    return p.x + p.y;
+}
+
+// Pattern 2: Struct passed as argument, callee only reads fields
+// Ideally struct could be decomposed into scalar arguments
+
+#[inline("never")]
+fn sum_point(p: Point) -> i32 {
+    return p.x + p.y;
+}
+
+
+#[inline("never")]
+fn pass_struct_arg() -> i32 {
+    let p = Point { x: 3, y: 7 };
+    return sum_point(p);
+}
+
+// Pattern 3: Struct returned then immediately passed to another function
+// Chain of struct creation → field extraction
+
+#[inline("never")]
+fn double_point(p: Point) -> Point {
+    return Point { x: p.x * 2, y: p.y * 2 };
+}
+
+
+#[inline("never")]
+fn chain_struct_ops() -> i32 {
+    let p1 = make_point(5, 10);
+    let p2 = double_point(p1);
+    return p2.x + p2.y;
+}
+
+// Pattern 4: Struct with floating-point fields (different register types)
+
+#[inline("never")]
+fn make_vec3(x: f64, y: f64, z: f64) -> Vec3 {
+    return Vec3 { x, y, z };
+}
+
+
+#[inline("never")]
+fn dot_product(a: Vec3, b: Vec3) -> f64 {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+
+#[inline("never")]
+fn float_struct_ops() -> f64 {
+    let a = make_vec3(1.0, 2.0, 3.0);
+    let b = make_vec3(4.0, 5.0, 6.0);
+    return dot_product(a, b);
+}
+
+// Pattern 5: Method call returning struct (common OOP pattern)
+impl Point {
+    fn offset(&self, dx: i32, dy: i32) -> Point {
+        return Point { x: self.x + dx, y: self.y + dy };
+    }
+}
+
+
+#[inline("never")]
+fn method_returns_struct() -> i32 {
+    let p = Point { x: 1, y: 2 };
+    let q = p.offset(10, 20);
+    return q.x + q.y;
+}
+
+export fn run() {
+    assert use_returned_point() == 30;
+    assert pass_struct_arg() == 10;
+    assert chain_struct_ops() == 30;
+
+    let dot = float_struct_ops();
+    assert dot == 32.0;
+
+    assert method_returns_struct() == 33;
+}
+
+__DATA__
+{"stdout": ""}

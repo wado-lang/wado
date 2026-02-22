@@ -2902,8 +2902,10 @@ impl FunctionTranslator<'_, '_> {
 
         let num_arms = arms.len();
 
-        // br_table targets: target[i] = num_arms - i (arm[0] is outermost block)
-        let targets: Vec<u32> = (0..num_arms as u32).map(|i| num_arms as u32 - i).collect();
+        // br_table targets: target[i] = i + 1 (depth to arm[i]'s wrapper block)
+        // Block nesting (innermost to outermost): default, arm[0], arm[1], ..., arm[n-1], result
+        // From br_table: depth 0 = default block, depth i+1 = arm[i]'s block
+        let targets: Vec<u32> = (1..=num_arms as u32).collect();
         let default_target = 0u32; // Default block is innermost
 
         let br_table = WirInstr::BrTable {

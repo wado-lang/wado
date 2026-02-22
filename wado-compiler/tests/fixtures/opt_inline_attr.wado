@@ -1,0 +1,67 @@
+// Test: #[inline] attribute variants
+// Verifies that #[inline(never)], #[inline], and #[inline(always)] work correctly.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+// #[inline(never)] - should NOT be inlined even though it's small
+
+#[inline("never")]
+fn never_inline_add(x: i32, y: i32) -> i32 {
+    return x + y;
+}
+
+// #[inline(always)] - should be inlined even if large
+
+#[inline("always")]
+fn always_inline_compute(x: i32) -> i32 {
+    let a = x + 1;
+    let b = a * 2;
+    let c = b - 3;
+    let d = c + 4;
+    let e = d * 5;
+    let f = e - 6;
+    let g = f + 7;
+    let h = g * 8;
+    let i = h - 9;
+    let j = i + 10;
+    let k = j * 11;
+    return k;
+}
+
+// #[inline] - hint to inline with raised threshold
+
+#[inline]
+fn hint_inline_sum(p: Pair) -> i32 {
+    let x = p.a;
+    let y = p.b;
+    let sum = x + y;
+    let doubled = sum * 2;
+    let halved = doubled / 2;
+    return halved;
+}
+
+// No attribute - normal heuristic
+fn normal_add(x: i32, y: i32) -> i32 {
+    return x + y;
+}
+
+export fn run() {
+    let a = never_inline_add(10, 20);
+    assert a == 30;
+
+    let b = always_inline_compute(1);
+    assert b == 2299;
+
+    let p = Pair { a: 5, b: 15 };
+    let c = hint_inline_sum(p);
+    assert c == 20;
+
+    let d = normal_add(3, 7);
+    assert d == 10;
+}
+
+__DATA__
+{"stdout": ""}

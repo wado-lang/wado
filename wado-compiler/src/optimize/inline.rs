@@ -6,8 +6,8 @@
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
+    FunctionRef, InlineHint, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use indexmap::IndexMap;
 use indexmap::IndexSet;
@@ -150,6 +150,11 @@ fn is_inline_eligible(
     type_table: &TypeTable,
     inline_threshold: usize,
 ) -> bool {
+    // #[inline(never)] unconditionally prevents inlining
+    if func.inline_hint == InlineHint::Never {
+        return false;
+    }
+
     // Must have a body
     let Some(body) = &func.body else {
         return false;
@@ -159,6 +164,11 @@ fn is_inline_eligible(
     // Wado GC types and CM linear memory that must remain as separate functions
     if func.is_cm_adapter {
         return false;
+    }
+
+    // #[inline(always)] skips all heuristic checks (but still requires a body and non-adapter)
+    if func.inline_hint == InlineHint::Always {
+        return true;
     }
 
     // Don't inline functions that return Never (!)
@@ -198,8 +208,15 @@ fn is_inline_eligible(
         return false;
     }
 
+    // #[inline] raises the threshold (2x the configured threshold)
+    let effective_threshold = if func.inline_hint == InlineHint::Hint {
+        inline_threshold * 2
+    } else {
+        inline_threshold
+    };
+
     // Small enough (based on expression count)
-    count_block_exprs(body) < inline_threshold
+    count_block_exprs(body) < effective_threshold
 }
 
 /// Check if a type has complex nested generics that could cause type normalization issues.

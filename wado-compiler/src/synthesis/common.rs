@@ -9,8 +9,8 @@ use indexmap::IndexSet;
 
 use crate::name::{LocalMethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam,
-    TirStmt, TirStmtKind, TypeId, TypeTable,
+    FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirParam, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -346,5 +346,6 @@ pub fn make_synthetic_method(
         local_types,
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: false,
+        inline_hint: InlineHint::Auto,
     }
 }

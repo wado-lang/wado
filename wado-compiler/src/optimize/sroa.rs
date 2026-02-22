@@ -25,9 +25,10 @@
 
 use crate::project::Project;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField, TirUnaryOp,
+    TypeId, TypeTable,
 };
+use crate::token::Span;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 
@@ -41,6 +42,10 @@ struct SroaCandidate {
     fields: Vec<(String, TypeId)>,
     /// Whether the original let binding was mutable
     is_mut: bool,
+    /// The type of the aggregate (needed for reconstruction at escape sites)
+    aggregate_type_id: TypeId,
+    /// The struct name (for `StructLiteral` reconstruction; empty for tuples)
+    struct_name: String,
 }
 
 /// Apply SROA to all functions in the project.
@@ -71,23 +76,42 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
     // Step 2: Escape analysis — check every use of each candidate.
     let escaped = find_escaped_locals(body, &candidates);
 
-    // Filter to non-escaped candidates.
-    let safe: Vec<SroaCandidate> = candidates
-        .into_iter()
-        .filter(|c| !escaped.contains(&c.local_index))
+    // Step 2b: For escaped candidates, check if all escapes are "soft" (reconstructible).
+    // Soft escapes: used as call argument, returned, or used in struct/tuple literal.
+    // Hard escapes: address taken, closure capture, bare local assignment, etc.
+    let soft_escaped = find_soft_escaped_locals(body, &candidates, &escaped);
+
+    // Filter candidates: non-escaped are "safe", soft-escaped are "reconstruct".
+    let mut safe_set: IndexSet<u32> = IndexSet::new();
+    let mut reconstruct_set: IndexSet<u32> = IndexSet::new();
+    for c in &candidates {
+        if !escaped.contains(&c.local_index) {
+            safe_set.insert(c.local_index);
+        } else if soft_escaped.contains(&c.local_index) {
+            reconstruct_set.insert(c.local_index);
+        }
+    }
+
+    // Combined set of all SROA'd candidates (safe + reconstruct)
+    let all_sroa: IndexSet<u32> = safe_set
+        .iter()
+        .chain(reconstruct_set.iter())
+        .copied()
         .collect();
-    if safe.is_empty() {
+    if all_sroa.is_empty() {
         return false;
     }
 
-    // Step 3: Allocate scalar locals for each field of each safe candidate.
+    // Step 3: Allocate scalar locals for each field of each SROA'd candidate.
     // Map: (original_local, field_index) → new_local_index
     let mut field_local_map: IndexMap<(u32, u32), u32> = IndexMap::new();
     // Map: (original_local, field_index) → (new_local_name, field_type)
     let mut field_info_map: IndexMap<(u32, u32), (String, TypeId)> = IndexMap::new();
-    let safe_set: IndexSet<u32> = safe.iter().map(|c| c.local_index).collect();
 
-    for candidate in &safe {
+    for candidate in &candidates {
+        if !all_sroa.contains(&candidate.local_index) {
+            continue;
+        }
         let base = func.local_count;
         for (i, (field_name, field_type)) in candidate.fields.iter().enumerate() {
             let new_index = base + i as u32;
@@ -99,22 +123,44 @@ fn sroa_in_function(func: &mut TirFunction, type_table: &TypeTable) -> bool {
         func.local_count += candidate.fields.len() as u32;
     }
 
-    // Collect mutability info for safe candidates.
+    // Collect mutability and reconstruction info for SROA'd candidates.
     let mut candidate_mut: IndexMap<u32, bool> = IndexMap::new();
-    for candidate in &safe {
+    let mut reconstruct_info: IndexMap<u32, ReconstructInfo> = IndexMap::new();
+    for candidate in &candidates {
+        if !all_sroa.contains(&candidate.local_index) {
+            continue;
+        }
         candidate_mut.insert(candidate.local_index, candidate.is_mut);
+        if reconstruct_set.contains(&candidate.local_index) {
+            reconstruct_info.insert(
+                candidate.local_index,
+                ReconstructInfo {
+                    struct_name: candidate.struct_name.clone(),
+                    aggregate_type_id: candidate.aggregate_type_id,
+                    fields: candidate.fields.clone(),
+                },
+            );
+        }
     }
 
     // Step 4: Rewrite — expand Let statements and replace field accesses.
     rewrite_block(
         body,
-        &safe_set,
+        &all_sroa,
         &field_local_map,
         &field_info_map,
         &candidate_mut,
+        &reconstruct_info,
     );
 
     true
+}
+
+/// Info needed to reconstruct a struct literal from SROA'd fields at escape sites.
+struct ReconstructInfo {
+    struct_name: String,
+    aggregate_type_id: TypeId,
+    fields: Vec<(String, TypeId)>,
 }
 
 /// Collect SROA candidates from `Let` statements binding struct/tuple literals.
@@ -147,9 +193,17 @@ fn collect_candidates_in_stmt(
             value,
             ..
         } => {
-            // Check if value is a struct literal or tuple literal
-            match &value.kind {
-                TirExprKind::StructLiteral { fields, .. } => {
+            // Check if value is a struct/tuple literal (possibly wrapped in Move)
+            let inner_value = match &value.kind {
+                TirExprKind::Move { expr: inner } => &**inner,
+                _ => value,
+            };
+            match &inner_value.kind {
+                TirExprKind::StructLiteral {
+                    struct_name,
+                    fields,
+                    ..
+                } => {
                     let field_info: Vec<(String, TypeId)> = fields
                         .iter()
                         .map(|f| (f.name.clone(), f.value.type_id))
@@ -159,6 +213,8 @@ fn collect_candidates_in_stmt(
                         local_name: name.clone(),
                         fields: field_info,
                         is_mut: *is_mut,
+                        aggregate_type_id: inner_value.type_id,
+                        struct_name: struct_name.clone(),
                     });
                 }
                 TirExprKind::TupleLiteral { elements, .. } => {
@@ -172,6 +228,8 @@ fn collect_candidates_in_stmt(
                         local_name: name.clone(),
                         fields: field_info,
                         is_mut: *is_mut,
+                        aggregate_type_id: inner_value.type_id,
+                        struct_name: String::new(),
                     });
                 }
                 _ => {}
@@ -550,6 +608,428 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
     }
 }
 
+/// Determine which escaped candidates have ONLY "soft" escapes (reconstructible).
+///
+/// A "soft escape" means the candidate is used as:
+/// - A function call argument (`Call`, `MethodCall`, `StaticCall`), possibly wrapped in Move
+/// - A return value
+///
+/// These can be handled by reconstructing the struct literal from SROA'd fields.
+/// Candidates with hard escapes (address taken, closure capture, etc.) are excluded.
+fn find_soft_escaped_locals(
+    body: &TirBlock,
+    candidates: &[SroaCandidate],
+    escaped: &IndexSet<u32>,
+) -> IndexSet<u32> {
+    // Only check candidates that actually escaped
+    let escaped_candidates: IndexSet<u32> = candidates
+        .iter()
+        .map(|c| c.local_index)
+        .filter(|idx| escaped.contains(idx))
+        .collect();
+    if escaped_candidates.is_empty() {
+        return IndexSet::new();
+    }
+
+    // Check: does every non-field-access use of this candidate appear as a call arg or return?
+    let mut hard_escaped = IndexSet::new();
+    check_soft_escape_in_block(body, &escaped_candidates, &mut hard_escaped);
+
+    // Soft-escaped = escaped but NOT hard-escaped, AND has at least one field access
+    let mut has_field_access = IndexSet::new();
+    check_has_field_access(body, &escaped_candidates, &mut has_field_access);
+
+    escaped_candidates
+        .into_iter()
+        .filter(|idx| !hard_escaped.contains(idx) && has_field_access.contains(idx))
+        .collect()
+}
+
+/// Check if a block contains any field accesses on the given candidates.
+fn check_has_field_access(
+    block: &TirBlock,
+    candidates: &IndexSet<u32>,
+    has_access: &mut IndexSet<u32>,
+) {
+    for stmt in &block.stmts {
+        check_has_field_access_stmt(stmt, candidates, has_access);
+    }
+}
+
+fn check_has_field_access_stmt(
+    stmt: &TirStmt,
+    candidates: &IndexSet<u32>,
+    has_access: &mut IndexSet<u32>,
+) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } => {
+            check_has_field_access_expr(value, candidates, has_access);
+        }
+        TirStmtKind::Expr(expr) => {
+            check_has_field_access_expr(expr, candidates, has_access);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                check_has_field_access_expr(v, candidates, has_access);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            check_has_field_access_expr(condition, candidates, has_access);
+            check_has_field_access(then_block, candidates, has_access);
+            if let Some(eb) = else_block {
+                check_has_field_access(eb, candidates, has_access);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            check_has_field_access(body, candidates, has_access);
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            check_has_field_access_expr(scrutinee, candidates, has_access);
+            check_has_field_access(then_block, candidates, has_access);
+            if let Some(eb) = else_block {
+                check_has_field_access(eb, candidates, has_access);
+            }
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                check_has_field_access_expr(v, candidates, has_access);
+            }
+        }
+        TirStmtKind::Continue | TirStmtKind::LetPattern { .. } | TirStmtKind::TaskReturn { .. } => {
+        }
+    }
+}
+
+fn check_has_field_access_expr(
+    expr: &TirExpr,
+    candidates: &IndexSet<u32>,
+    has_access: &mut IndexSet<u32>,
+) {
+    match &expr.kind {
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            if let Some(idx) = is_candidate_local_ref(inner, candidates) {
+                has_access.insert(idx);
+                return;
+            }
+            if let TirExprKind::Move { expr: move_inner } = &inner.kind
+                && let Some(idx) = is_candidate_local_ref(move_inner, candidates)
+            {
+                has_access.insert(idx);
+                return;
+            }
+            check_has_field_access_expr(inner, candidates, has_access);
+        }
+        TirExprKind::Assign { target, value } => {
+            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
+                && let Some(idx) = is_candidate_local_ref(inner, candidates)
+            {
+                has_access.insert(idx);
+                check_has_field_access_expr(value, candidates, has_access);
+                return;
+            }
+            check_has_field_access_expr(target, candidates, has_access);
+            check_has_field_access_expr(value, candidates, has_access);
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            check_has_field_access_expr(left, candidates, has_access);
+            check_has_field_access_expr(right, candidates, has_access);
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            check_has_field_access(block, candidates, has_access);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            check_has_field_access_expr(condition, candidates, has_access);
+            check_has_field_access(then_branch, candidates, has_access);
+            if let Some(eb) = else_branch {
+                check_has_field_access(eb, candidates, has_access);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Check if all non-field-access uses of escaped candidates are "soft" (reconstructible).
+/// Marks candidates as "hard escaped" if any use is non-reconstructible.
+fn check_soft_escape_in_block(
+    block: &TirBlock,
+    candidates: &IndexSet<u32>,
+    hard_escaped: &mut IndexSet<u32>,
+) {
+    for stmt in &block.stmts {
+        check_soft_escape_in_stmt(stmt, candidates, hard_escaped);
+    }
+}
+
+fn check_soft_escape_in_stmt(
+    stmt: &TirStmt,
+    candidates: &IndexSet<u32>,
+    hard_escaped: &mut IndexSet<u32>,
+) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } => {
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+        }
+        TirStmtKind::Expr(expr) => {
+            check_soft_escape_in_expr(expr, candidates, hard_escaped, false);
+        }
+        TirStmtKind::Return { value } => {
+            // Return is a soft escape (reconstructible)
+            if let Some(v) = value {
+                check_soft_escape_in_expr(v, candidates, hard_escaped, true);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            check_soft_escape_in_expr(condition, candidates, hard_escaped, false);
+            check_soft_escape_in_block(then_block, candidates, hard_escaped);
+            if let Some(eb) = else_block {
+                check_soft_escape_in_block(eb, candidates, hard_escaped);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            check_soft_escape_in_block(body, candidates, hard_escaped);
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            check_soft_escape_in_expr(scrutinee, candidates, hard_escaped, false);
+            check_soft_escape_in_block(then_block, candidates, hard_escaped);
+            if let Some(eb) = else_block {
+                check_soft_escape_in_block(eb, candidates, hard_escaped);
+            }
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                // Break values go to labeled blocks — treat as soft escape for now
+                check_soft_escape_in_expr(v, candidates, hard_escaped, true);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+        }
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+        }
+    }
+}
+
+/// Check if an expression's use of candidates is soft-escapable.
+/// `in_soft_context` is true when the expression result is in a reconstructible position
+/// (e.g., as a return value or call argument).
+fn check_soft_escape_in_expr(
+    expr: &TirExpr,
+    candidates: &IndexSet<u32>,
+    hard_escaped: &mut IndexSet<u32>,
+    in_soft_context: bool,
+) {
+    match &expr.kind {
+        // FieldAccess on candidate is always safe — skip
+        TirExprKind::FieldAccess { expr: inner, .. } => {
+            if is_candidate_local_ref(inner, candidates).is_some() {
+                return;
+            }
+            if let TirExprKind::Move { expr: move_inner } = &inner.kind
+                && is_candidate_local_ref(move_inner, candidates).is_some()
+            {
+                return;
+            }
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+        }
+
+        // Assign to field of candidate is safe
+        TirExprKind::Assign { target, value } => {
+            if let TirExprKind::FieldAccess { expr: inner, .. } = &target.kind
+                && is_candidate_local_ref(inner, candidates).is_some()
+            {
+                check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+                return;
+            }
+            // Assign to the whole candidate (not a field) → hard escape
+            check_soft_escape_in_expr(target, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+        }
+
+        TirExprKind::Move { expr: inner } => {
+            // Move preserves the context — if we're in a soft context, inner is too
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, in_soft_context);
+        }
+
+        // Bare Local in a soft context (return, call arg) → soft escape (OK)
+        // Bare Local in a non-soft context → hard escape
+        TirExprKind::Local { index, .. } => {
+            if candidates.contains(index) && !in_soft_context {
+                hard_escaped.insert(*index);
+            }
+        }
+
+        // Address taken → always hard escape
+        TirExprKind::Unary { op, expr: inner } => {
+            if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                && let TirExprKind::Local { index, .. } = &inner.kind
+                && candidates.contains(index)
+            {
+                hard_escaped.insert(*index);
+                return;
+            }
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+        }
+
+        // Closure captures → hard escape
+        TirExprKind::Closure { body, captures, .. } => {
+            for capture in captures {
+                if candidates.contains(&capture.outer_index) {
+                    hard_escaped.insert(capture.outer_index);
+                }
+            }
+            check_soft_escape_in_expr(body, candidates, hard_escaped, false);
+        }
+
+        // Function call args are soft contexts
+        TirExprKind::Call { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                check_soft_escape_in_expr(arg, candidates, hard_escaped, true);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            check_soft_escape_in_expr(receiver, candidates, hard_escaped, true);
+            for arg in args {
+                check_soft_escape_in_expr(arg, candidates, hard_escaped, true);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args, .. } => {
+            check_soft_escape_in_expr(callee, candidates, hard_escaped, false);
+            for arg in args {
+                check_soft_escape_in_expr(arg, candidates, hard_escaped, true);
+            }
+        }
+
+        // Recurse into children
+        TirExprKind::Binary { left, right, .. } => {
+            check_soft_escape_in_expr(left, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(right, candidates, hard_escaped, false);
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            check_soft_escape_in_expr(functor, candidates, hard_escaped, false);
+        }
+        TirExprKind::Cast { expr: inner, .. } => {
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+        }
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+            check_soft_escape_in_expr(index, candidates, hard_escaped, false);
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            check_soft_escape_in_block(block, candidates, hard_escaped);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            check_soft_escape_in_expr(condition, candidates, hard_escaped, false);
+            check_soft_escape_in_block(then_branch, candidates, hard_escaped);
+            if let Some(eb) = else_branch {
+                check_soft_escape_in_block(eb, candidates, hard_escaped);
+            }
+        }
+        TirExprKind::Match { expr: inner, arms } => {
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    check_soft_escape_in_expr(guard, candidates, hard_escaped, false);
+                }
+                check_soft_escape_in_expr(&arm.body, candidates, hard_escaped, false);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                check_soft_escape_in_expr(&field.value, candidates, hard_escaped, false);
+            }
+        }
+        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+            for elem in elements {
+                check_soft_escape_in_expr(elem, candidates, hard_escaped, false);
+            }
+        }
+        TirExprKind::OptionSome { value } => {
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                check_soft_escape_in_expr(p, candidates, hard_escaped, false);
+            }
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
+        }
+        TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
+            check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            check_soft_escape_in_expr(scrutinee, candidates, hard_escaped, false);
+            for arm in arms {
+                check_soft_escape_in_block(arm, candidates, hard_escaped);
+            }
+            check_soft_escape_in_block(default, candidates, hard_escaped);
+        }
+        // Leaf nodes
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Global { .. }
+        | TirExprKind::GlobalVarGet { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+/// Check if an expression is a `Local` node referencing a candidate (non-consuming check).
+fn is_candidate_local_ref(expr: &TirExpr, candidates: &IndexSet<u32>) -> Option<u32> {
+    if let TirExprKind::Local { index, .. } = &expr.kind
+        && candidates.contains(index)
+    {
+        return Some(*index);
+    }
+    None
+}
+
 /// Check if an expression is a `Local` node referencing a candidate.
 fn is_candidate_local(expr: &TirExpr, candidates: &IndexSet<u32>) -> Option<u32> {
     if let TirExprKind::Local { index, .. } = &expr.kind
@@ -567,6 +1047,7 @@ fn rewrite_block(
     field_map: &IndexMap<(u32, u32), u32>,
     info_map: &IndexMap<(u32, u32), (String, TypeId)>,
     candidate_mut: &IndexMap<u32, bool>,
+    reconstruct_info: &IndexMap<u32, ReconstructInfo>,
 ) {
     // Process statements, potentially expanding one statement into multiple.
     let old_stmts = std::mem::take(&mut block.stmts);
@@ -583,64 +1064,18 @@ fn rewrite_block(
             // Expand into per-field Let statements
             match stmt.kind {
                 TirStmtKind::Let { value, .. } => {
-                    match value.kind {
-                        TirExprKind::StructLiteral { fields, .. } => {
-                            // Sort fields by field_index to match the candidate's field order
-                            let mut sorted_fields: Vec<_> = fields.into_iter().collect();
-                            sorted_fields.sort_by_key(|f| f.field_index);
-                            for mut field in sorted_fields {
-                                // Rewrite references to other SROA'd locals
-                                // within the field value expression.
-                                rewrite_expr(
-                                    &mut field.value,
-                                    safe_set,
-                                    field_map,
-                                    info_map,
-                                    candidate_mut,
-                                );
-                                let key = (local_idx, field.field_index);
-                                let new_local = field_map[&key];
-                                let (new_name, field_type) = &info_map[&key];
-                                new_stmts.push(TirStmt::new(
-                                    TirStmtKind::Let {
-                                        name: new_name.clone(),
-                                        local_index: new_local,
-                                        is_mut,
-                                        is_reactive: false,
-                                        type_id: *field_type,
-                                        value: field.value,
-                                    },
-                                    span,
-                                ));
-                            }
-                        }
-                        TirExprKind::TupleLiteral { elements, .. } => {
-                            for (i, mut elem) in elements.into_iter().enumerate() {
-                                rewrite_expr(
-                                    &mut elem,
-                                    safe_set,
-                                    field_map,
-                                    info_map,
-                                    candidate_mut,
-                                );
-                                let key = (local_idx, i as u32);
-                                let new_local = field_map[&key];
-                                let (new_name, field_type) = &info_map[&key];
-                                new_stmts.push(TirStmt::new(
-                                    TirStmtKind::Let {
-                                        name: new_name.clone(),
-                                        local_index: new_local,
-                                        is_mut,
-                                        is_reactive: false,
-                                        type_id: *field_type,
-                                        value: elem,
-                                    },
-                                    span,
-                                ));
-                            }
-                        }
-                        _ => unreachable!("candidate must be struct or tuple literal"),
-                    }
+                    expand_struct_let(
+                        value,
+                        local_idx,
+                        is_mut,
+                        span,
+                        safe_set,
+                        field_map,
+                        info_map,
+                        candidate_mut,
+                        reconstruct_info,
+                        &mut new_stmts,
+                    );
                 }
                 _ => unreachable!("candidate must be Let statement"),
             }
@@ -648,11 +1083,95 @@ fn rewrite_block(
         }
 
         // Not a candidate Let — rewrite field accesses in the statement.
-        rewrite_stmt(&mut stmt, safe_set, field_map, info_map, candidate_mut);
+        rewrite_stmt(
+            &mut stmt,
+            safe_set,
+            field_map,
+            info_map,
+            candidate_mut,
+            reconstruct_info,
+        );
         new_stmts.push(stmt);
     }
 
     block.stmts = new_stmts;
+}
+
+/// Expand a Let value (`StructLiteral`, `TupleLiteral`, or Move-wrapped) into per-field Lets.
+fn expand_struct_let(
+    value: TirExpr,
+    local_idx: u32,
+    is_mut: bool,
+    span: Span,
+    safe_set: &IndexSet<u32>,
+    field_map: &IndexMap<(u32, u32), u32>,
+    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
+    candidate_mut: &IndexMap<u32, bool>,
+    reconstruct_info: &IndexMap<u32, ReconstructInfo>,
+    new_stmts: &mut Vec<TirStmt>,
+) {
+    // Unwrap Move if present
+    let inner_value = match value.kind {
+        TirExprKind::Move { expr: inner } => *inner,
+        _ => value,
+    };
+    match inner_value.kind {
+        TirExprKind::StructLiteral { fields, .. } => {
+            let mut sorted_fields: Vec<_> = fields.into_iter().collect();
+            sorted_fields.sort_by_key(|f| f.field_index);
+            for mut field in sorted_fields {
+                rewrite_expr(
+                    &mut field.value,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
+                let key = (local_idx, field.field_index);
+                let new_local = field_map[&key];
+                let (new_name, field_type) = &info_map[&key];
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: new_name.clone(),
+                        local_index: new_local,
+                        is_mut,
+                        is_reactive: false,
+                        type_id: *field_type,
+                        value: field.value,
+                    },
+                    span,
+                ));
+            }
+        }
+        TirExprKind::TupleLiteral { elements, .. } => {
+            for (i, mut elem) in elements.into_iter().enumerate() {
+                rewrite_expr(
+                    &mut elem,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
+                let key = (local_idx, i as u32);
+                let new_local = field_map[&key];
+                let (new_name, field_type) = &info_map[&key];
+                new_stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: new_name.clone(),
+                        local_index: new_local,
+                        is_mut,
+                        is_reactive: false,
+                        type_id: *field_type,
+                        value: elem,
+                    },
+                    span,
+                ));
+            }
+        }
+        _ => unreachable!("candidate must be struct or tuple literal"),
+    }
 }
 
 fn rewrite_stmt(
@@ -661,17 +1180,39 @@ fn rewrite_stmt(
     field_map: &IndexMap<(u32, u32), u32>,
     info_map: &IndexMap<(u32, u32), (String, TypeId)>,
     candidate_mut: &IndexMap<u32, bool>,
+    reconstruct_info: &IndexMap<u32, ReconstructInfo>,
 ) {
     match &mut stmt.kind {
         TirStmtKind::Let { value, .. } => {
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::Expr(expr) => {
-            rewrite_expr(expr, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                expr,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::Return { value } => {
             if let Some(v) = value {
-                rewrite_expr(v, safe_set, field_map, info_map, candidate_mut);
+                rewrite_expr(
+                    v,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirStmtKind::If {
@@ -679,17 +1220,52 @@ fn rewrite_stmt(
             then_block,
             else_block,
         } => {
-            rewrite_expr(condition, safe_set, field_map, info_map, candidate_mut);
-            rewrite_block(then_block, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                condition,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_block(
+                then_block,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             if let Some(eb) = else_block {
-                rewrite_block(eb, safe_set, field_map, info_map, candidate_mut);
+                rewrite_block(
+                    eb,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirStmtKind::Loop { body } => {
-            rewrite_block(body, safe_set, field_map, info_map, candidate_mut);
+            rewrite_block(
+                body,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::LabeledBlock { block, .. } => {
-            rewrite_block(block, safe_set, field_map, info_map, candidate_mut);
+            rewrite_block(
+                block,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::IfPattern {
             scrutinee,
@@ -697,20 +1273,55 @@ fn rewrite_stmt(
             else_block,
             ..
         } => {
-            rewrite_expr(scrutinee, safe_set, field_map, info_map, candidate_mut);
-            rewrite_block(then_block, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                scrutinee,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_block(
+                then_block,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             if let Some(eb) = else_block {
-                rewrite_block(eb, safe_set, field_map, info_map, candidate_mut);
+                rewrite_block(
+                    eb,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirStmtKind::Break { value, .. } => {
             if let Some(v) = value {
-                rewrite_expr(v, safe_set, field_map, info_map, candidate_mut);
+                rewrite_expr(
+                    v,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirStmtKind::Continue => {}
         TirStmtKind::LetPattern { value, .. } => {
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirStmtKind::TaskReturn { .. } => {
             unreachable!("TaskReturn should be eliminated by synthesis before this phase")
@@ -718,13 +1329,15 @@ fn rewrite_stmt(
     }
 }
 
-/// Rewrite an expression: replace `s.field` with the corresponding scalar local.
+/// Rewrite an expression: replace `s.field` with the corresponding scalar local,
+/// and reconstruct struct literals at soft-escape sites.
 fn rewrite_expr(
     expr: &mut TirExpr,
     safe_set: &IndexSet<u32>,
     field_map: &IndexMap<(u32, u32), u32>,
     info_map: &IndexMap<(u32, u32), (String, TypeId)>,
     candidate_mut: &IndexMap<u32, bool>,
+    reconstruct_info: &IndexMap<u32, ReconstructInfo>,
 ) {
     // Check for field access on a candidate local: s.field → scalar local
     if let TirExprKind::FieldAccess {
@@ -779,82 +1392,260 @@ fn rewrite_expr(
                 index: new_local,
                 name: new_name.clone(),
             };
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             return;
         }
+    }
+
+    // Reconstruct: bare Local reference to a soft-escape candidate → re-materialize struct/tuple
+    if let TirExprKind::Local { index, .. } = &expr.kind
+        && let Some(info) = reconstruct_info.get(index)
+    {
+        let idx = *index;
+        let span = expr.span;
+        reconstruct_aggregate(expr, idx, info, field_map, info_map, span);
+        return;
     }
 
     // Recurse into child expressions
     match &mut expr.kind {
         TirExprKind::FieldAccess { expr: inner, .. } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Assign { target, value } => {
-            rewrite_expr(target, safe_set, field_map, info_map, candidate_mut);
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                target,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Binary { left, right, .. } => {
-            rewrite_expr(left, safe_set, field_map, info_map, candidate_mut);
-            rewrite_expr(right, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                left,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_expr(
+                right,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Unary { expr: inner, .. } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Cast { expr: inner, .. } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Move { expr: inner } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Call { args, .. }
         | TirExprKind::StaticCall { args, .. }
         | TirExprKind::CmRawCall { args, .. } => {
             for arg in args {
-                rewrite_expr(arg, safe_set, field_map, info_map, candidate_mut);
+                rewrite_expr(
+                    arg,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            rewrite_expr(receiver, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                receiver,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             for arg in args {
-                rewrite_expr(arg, safe_set, field_map, info_map, candidate_mut);
+                rewrite_expr(
+                    arg,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {
-            rewrite_expr(callee, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                callee,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             for arg in args {
-                rewrite_expr(arg, safe_set, field_map, info_map, candidate_mut);
+                rewrite_expr(
+                    arg,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
-            rewrite_expr(functor, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                functor,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Index {
             expr: inner, index, ..
         } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut);
-            rewrite_expr(index, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_expr(
+                index,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_block(block, safe_set, field_map, info_map, candidate_mut);
+            rewrite_block(
+                block,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            rewrite_expr(condition, safe_set, field_map, info_map, candidate_mut);
-            rewrite_block(then_branch, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                condition,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
+            rewrite_block(
+                then_branch,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             if let Some(eb) = else_branch {
-                rewrite_block(eb, safe_set, field_map, info_map, candidate_mut);
+                rewrite_block(
+                    eb,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::Match { expr: inner, arms } => {
-            rewrite_expr(inner, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                inner,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             for arm in arms {
                 if let Some(guard) = &mut arm.guard {
-                    rewrite_expr(guard, safe_set, field_map, info_map, candidate_mut);
+                    rewrite_expr(
+                        guard,
+                        safe_set,
+                        field_map,
+                        info_map,
+                        candidate_mut,
+                        reconstruct_info,
+                    );
                 }
-                rewrite_expr(&mut arm.body, safe_set, field_map, info_map, candidate_mut);
+                rewrite_expr(
+                    &mut arm.body,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::StructLiteral { fields, .. } => {
@@ -865,36 +1656,86 @@ fn rewrite_expr(
                     field_map,
                     info_map,
                     candidate_mut,
+                    reconstruct_info,
                 );
             }
         }
         TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
-                rewrite_expr(elem, safe_set, field_map, info_map, candidate_mut);
+                rewrite_expr(
+                    elem,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::OptionSome { value } => {
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
-                rewrite_expr(p, safe_set, field_map, info_map, candidate_mut);
+                rewrite_expr(
+                    p,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
         }
         TirExprKind::Closure { body, .. } => {
-            rewrite_expr(body, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                body,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::GlobalVarSet { value, .. } => {
-            rewrite_expr(value, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                value,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::IsNotNull { expr }
         | TirExprKind::UnwrapOption { expr, .. }
         | TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. } => {
-            rewrite_expr(expr, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                expr,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::VariantPayload { expr, .. } => {
-            rewrite_expr(expr, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                expr,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         TirExprKind::Switch {
             scrutinee,
@@ -902,11 +1743,32 @@ fn rewrite_expr(
             default,
             ..
         } => {
-            rewrite_expr(scrutinee, safe_set, field_map, info_map, candidate_mut);
+            rewrite_expr(
+                scrutinee,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
             for arm in arms {
-                rewrite_block(arm, safe_set, field_map, info_map, candidate_mut);
+                rewrite_block(
+                    arm,
+                    safe_set,
+                    field_map,
+                    info_map,
+                    candidate_mut,
+                    reconstruct_info,
+                );
             }
-            rewrite_block(default, safe_set, field_map, info_map, candidate_mut);
+            rewrite_block(
+                default,
+                safe_set,
+                field_map,
+                info_map,
+                candidate_mut,
+                reconstruct_info,
+            );
         }
         // Leaf nodes — nothing to rewrite
         TirExprKind::Local { .. }
@@ -921,5 +1783,67 @@ fn rewrite_expr(
         | TirExprKind::GlobalVarGet { .. }
         | TirExprKind::Capture { .. }
         | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+/// Build a reconstructed struct or tuple literal from SROA'd scalar locals.
+fn reconstruct_aggregate(
+    expr: &mut TirExpr,
+    local_idx: u32,
+    info: &ReconstructInfo,
+    field_map: &IndexMap<(u32, u32), u32>,
+    info_map: &IndexMap<(u32, u32), (String, TypeId)>,
+    span: Span,
+) {
+    if info.struct_name.is_empty() {
+        // Tuple reconstruction
+        let elements: Vec<TirExpr> = info
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(i, (_, type_id))| {
+                let key = (local_idx, i as u32);
+                let field_local = field_map[&key];
+                let (field_name, _) = &info_map[&key];
+                TirExpr {
+                    kind: TirExprKind::Local {
+                        index: field_local,
+                        name: field_name.clone(),
+                    },
+                    type_id: *type_id,
+                    span,
+                }
+            })
+            .collect();
+        expr.kind = TirExprKind::TupleLiteral { elements };
+    } else {
+        // Struct reconstruction
+        let fields: Vec<TirStructField> = info
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(i, (name, type_id))| {
+                let key = (local_idx, i as u32);
+                let field_local = field_map[&key];
+                let (field_name, _) = &info_map[&key];
+                TirStructField {
+                    name: name.clone(),
+                    value: TirExpr {
+                        kind: TirExprKind::Local {
+                            index: field_local,
+                            name: field_name.clone(),
+                        },
+                        type_id: *type_id,
+                        span,
+                    },
+                    field_index: i as u32,
+                }
+            })
+            .collect();
+        expr.kind = TirExprKind::StructLiteral {
+            struct_type: info.aggregate_type_id,
+            struct_name: info.struct_name.clone(),
+            fields,
+        };
     }
 }

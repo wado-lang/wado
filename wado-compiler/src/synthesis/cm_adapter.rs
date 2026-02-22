@@ -21,8 +21,8 @@ use crate::component_model::{WasiFunctionInfo, WasiRegistry};
 use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    FunctionRef, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirStmt,
+    TirStmtKind, TypeId, TypeTable,
 };
 
 use super::common::{
@@ -1257,6 +1257,7 @@ fn make_adapter_function(
         local_types,
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: true,
+        inline_hint: InlineHint::Auto,
     }))
 }
 
