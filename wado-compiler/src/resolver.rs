@@ -836,6 +836,8 @@ struct ArithmeticTraitInfo {
     self_kind: ast::SelfKind,
     /// The trait name (e.g., "Add", "Sub")
     trait_name: String,
+    /// The resolved type of the rhs parameter (first non-self parameter)
+    rhs_type: Option<TypeId>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -4135,43 +4137,37 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         expected_type: Option<TypeId>,
     ) -> TirExpr {
         // Bidirectional coercion: if one operand is a numeric literal and the other is not,
-        // resolve the non-literal first and use its type to coerce the literal
+        // resolve the non-literal first and use its type to coerce the literal.
+        //
+        // For primitive numeric types: coerce the literal to the other operand's type.
+        // For struct types (e.g., i128/u128): look up the operator trait to determine
+        // the expected type for each operand from the method signature. This naturally
+        // handles operators with asymmetric parameter types (e.g., Shl::shl(&self, rhs: u32))
+        // without special-casing specific operators.
         let left_is_numeric_literal = self.is_numeric_literal(&binary.left);
         let right_is_numeric_literal = self.is_numeric_literal(&binary.right);
 
-        // Shift operations have asymmetric types (lhs: value, rhs: shift amount),
-        // so don't coerce rhs to lhs type for i128/u128 structs
-        let is_shift = matches!(binary.op, BinaryOp::Shl | BinaryOp::Shr);
-
         let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
-            // Resolve right first, then coerce left to right's type
+            // Resolve right first, then coerce left
             let right = self.resolve_expr(&binary.right, ctx, expected_type);
-            let coerce_type = if if is_shift {
-                self.type_table.borrow().is_numeric(right.type_id)
-            } else {
-                self.type_table
-                    .borrow()
-                    .is_numeric_coercion_target(right.type_id)
-            } {
+            let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
+                // Primitive type: coerce literal to the same type
                 Some(right.type_id)
             } else {
-                None
+                // Struct type: look up operator trait and use self type for lhs literal
+                self.find_operator_self_type(right.type_id, &binary.op)
             };
             let left = self.resolve_expr(&binary.left, ctx, coerce_type);
             (left, right)
         } else if right_is_numeric_literal && !left_is_numeric_literal {
-            // Resolve left first, then coerce right to left's type
+            // Resolve left first, then coerce right
             let left = self.resolve_expr(&binary.left, ctx, expected_type);
-            let coerce_type = if if is_shift {
-                self.type_table.borrow().is_numeric(left.type_id)
-            } else {
-                self.type_table
-                    .borrow()
-                    .is_numeric_coercion_target(left.type_id)
-            } {
+            let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
+                // Primitive type: coerce literal to the same type
                 Some(left.type_id)
             } else {
-                None
+                // Struct type: look up operator trait and use rhs parameter type
+                self.find_operator_rhs_type(left.type_id, &binary.op)
             };
             let right = self.resolve_expr(&binary.right, ctx, coerce_type);
             (left, right)
@@ -7327,6 +7323,73 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         Vec::new()
     }
 
+    /// Get the operator trait and method name for a binary operator.
+    fn operator_trait_method(op: &BinaryOp) -> Option<(&'static str, &'static str)> {
+        match op {
+            BinaryOp::Add => Some(("Add", "add")),
+            BinaryOp::Sub => Some(("Sub", "sub")),
+            BinaryOp::Mul => Some(("Mul", "mul")),
+            BinaryOp::Div => Some(("Div", "div")),
+            BinaryOp::Mod => Some(("Rem", "rem")),
+            BinaryOp::BitAnd => Some(("BitAnd", "bitand")),
+            BinaryOp::BitOr => Some(("BitOr", "bitor")),
+            BinaryOp::BitXor => Some(("BitXor", "bitxor")),
+            BinaryOp::Shl => Some(("Shl", "shl")),
+            BinaryOp::Shr => Some(("Shr", "shr")),
+            BinaryOp::Eq | BinaryOp::NotEq => Some(("Eq", "eq")),
+            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
+                Some(("Ord", "cmp"))
+            }
+            _ => None,
+        }
+    }
+
+    /// Get the struct name from a type ID, if it's a struct or generic instance.
+    fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
+        match self.type_table.borrow().get(type_id) {
+            ResolvedType::Struct { name, .. } | ResolvedType::GenericInstance { name, .. } => {
+                Some(name.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// Find the rhs parameter type for an operator trait on a struct type.
+    /// Used to determine what type a literal rhs should be coerced to.
+    fn find_operator_rhs_type(
+        &mut self,
+        self_type_id: TypeId,
+        op: &BinaryOp,
+    ) -> Option<TypeId> {
+        let struct_name = self.struct_name_for_type(self_type_id)?;
+        let (trait_name, method_name) = Self::operator_trait_method(op)?;
+        let trait_info =
+            self.find_arithmetic_trait_impl(&struct_name, self_type_id, trait_name, method_name)?;
+        // Unwrap the &T reference wrapper if present (e.g., rhs: &Self → return Self)
+        trait_info.rhs_type.map(|t| {
+            let resolved = self.type_table.borrow().get(t).clone();
+            match resolved {
+                ResolvedType::Ref(inner) => inner,
+                _ => t,
+            }
+        })
+    }
+
+    /// Find the self type for an operator trait, given the rhs type.
+    /// Used to determine what type a literal lhs should be coerced to.
+    /// For most operators, the self type is the same struct type as rhs.
+    fn find_operator_self_type(
+        &mut self,
+        rhs_type_id: TypeId,
+        op: &BinaryOp,
+    ) -> Option<TypeId> {
+        let struct_name = self.struct_name_for_type(rhs_type_id)?;
+        let (trait_name, method_name) = Self::operator_trait_method(op)?;
+        // Verify the trait impl exists; the self type is the struct type itself
+        self.find_arithmetic_trait_impl(&struct_name, rhs_type_id, trait_name, method_name)?;
+        Some(rhs_type_id)
+    }
+
     /// Check if an expression is a numeric literal
     fn is_numeric_literal(&self, expr: &Expr) -> bool {
         match expr {
@@ -8776,10 +8839,20 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         .map(|p| p.self_kind)
                         .unwrap_or(ast::SelfKind::None);
 
+                    // Resolve the rhs parameter type (first non-self parameter)
+                    let rhs_type = method
+                        .params
+                        .iter()
+                        .find(|p| p.self_kind == ast::SelfKind::None)
+                        .map(|p| {
+                            self.resolve_type_with_param_mapping(&p.ty, &type_param_mapping)
+                        });
+
                     return Some(ArithmeticTraitInfo {
                         output_type,
                         self_kind,
                         trait_name: trait_name.to_string(),
+                        rhs_type,
                     });
                 }
             }

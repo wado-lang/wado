@@ -451,19 +451,6 @@ impl TypeTable {
         self.is_integer(id) || self.is_float(id)
     }
 
-    /// Check if a type is a valid target for numeric literal coercion.
-    /// This includes primitive numeric types and i128/u128 struct types
-    /// (which are implemented as structs but accept literal coercion).
-    pub fn is_numeric_coercion_target(&self, id: TypeId) -> bool {
-        if self.is_numeric(id) {
-            return true;
-        }
-        matches!(
-            self.get(id),
-            ResolvedType::Struct { name, .. } if name == "i128" || name == "u128"
-        )
-    }
-
     pub fn len(&self) -> usize {
         self.types.len()
     }
