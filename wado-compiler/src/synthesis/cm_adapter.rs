@@ -60,10 +60,7 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
             "char" => TypeTable::CHAR,
             // Unit type written as a named type "()"
             "()" => TypeTable::UNIT,
-            "String" => type_table.make_struct(
-                "String".to_string(),
-                ModuleSource::core("prelude/string.wado"),
-            ),
+            "String" => type_table.make_struct("String".to_string(), ModuleSource::string()),
             // Resource/enum/variant types - look up the already-resolved TypeId if available.
             // We try resource, enum, then variant to find the most specific match.
             _ => type_table
@@ -86,7 +83,7 @@ pub fn wasi_type_to_type_id(ty: &Type, type_table: &mut TypeTable) -> TypeId {
                 let err_type = wasi_type_to_type_id(&g.args[1], type_table);
                 type_table.make_generic_instance(
                     "Result".to_string(),
-                    ModuleSource::core("prelude/types.wado"),
+                    ModuleSource::types(),
                     vec![ok_type, err_type],
                 )
             }
@@ -179,10 +176,9 @@ fn synthesize_lift_inner(
                     TypeTable::I32,
                 );
                 let string_type_id = ctx.map_or(TypeTable::I32, |c| {
-                    c.type_table.borrow_mut().make_struct(
-                        "String".to_string(),
-                        ModuleSource::core("prelude/string.wado"),
-                    )
+                    c.type_table
+                        .borrow_mut()
+                        .make_struct("String".to_string(), ModuleSource::string())
                 });
                 internal_call("memory_to_gc_string", vec![ptr, len], string_type_id)
             }
@@ -536,7 +532,7 @@ fn synthesize_lift_list(
         generic_static_call(
             "Array",
             "with_capacity",
-            ModuleSource::core("prelude"),
+            ModuleSource::prelude(),
             vec![elem_type_id],
             vec![local_ref(count_local, "__count", TypeTable::I32)],
             array_type_id,
@@ -595,7 +591,7 @@ fn synthesize_lift_list(
         local_ref(result_local, "__result", array_type_id),
         "Array",
         "append",
-        ModuleSource::core("prelude"),
+        ModuleSource::prelude(),
         vec![lifted_elem],
         TypeTable::UNIT,
     )));
@@ -749,7 +745,7 @@ fn synthesize_lift_result_inner(
         let err_type_id = wasi_type_to_type_id(err_ty, &mut tt);
         tt.make_generic_instance(
             "Result".to_string(),
-            ModuleSource::core("prelude/types.wado"),
+            ModuleSource::types(),
             vec![ok_type_id, err_type_id],
         )
     } else {

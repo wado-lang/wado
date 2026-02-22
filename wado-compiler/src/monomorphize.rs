@@ -3245,7 +3245,7 @@ impl Monomorphizer {
             let method_call = TirExprKind::MethodCall {
                 receiver: Box::new(receiver),
                 func: FunctionRef::External {
-                    module_source: ModuleSource::core("prelude"),
+                    module_source: ModuleSource::prelude(),
                     name: mangled_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
@@ -3296,7 +3296,7 @@ impl Monomorphizer {
             // Get Ordering type for cmp return value
             let ordering_type_id = type_table.intern(ResolvedType::Enum {
                 name: "Ordering".to_string(),
-                module_source: ModuleSource::core("prelude"),
+                module_source: ModuleSource::prelude(),
             });
 
             let method_info =
@@ -3308,7 +3308,7 @@ impl Monomorphizer {
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     func: FunctionRef::External {
-                        module_source: ModuleSource::core("prelude"),
+                        module_source: ModuleSource::prelude(),
                         name: mangled_name,
                         monomorph_info: None,
                         method_info: Some(method_info),
@@ -3360,8 +3360,8 @@ impl Monomorphizer {
 /// to set the correct `module_source` so DCE can find the target function.
 fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Option<ModuleSource> {
     match type_table.get(type_id) {
-        ResolvedType::Primitive(_) => Some(ModuleSource::core("prelude/primitives.wado")),
-        ResolvedType::BuiltinArray(_) => Some(ModuleSource::core("prelude")),
+        ResolvedType::Primitive(_) => Some(ModuleSource::primitives()),
+        ResolvedType::BuiltinArray(_) => Some(ModuleSource::prelude()),
         ResolvedType::Struct { module_source, .. }
         | ResolvedType::GenericInstance { module_source, .. }
         | ResolvedType::Enum { module_source, .. }

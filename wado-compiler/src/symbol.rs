@@ -510,7 +510,7 @@ mod tests {
     fn test_define_and_lookup() {
         let mut table = SymbolTable::new();
 
-        let core_cli = ModuleSource::core("cli");
+        let core_cli = ModuleSource::cli();
         let id = table.define(
             "println",
             SymbolKind::Function(FunctionSymbol {
@@ -534,7 +534,7 @@ mod tests {
     fn test_import_lookup() {
         let mut table = SymbolTable::new();
 
-        let core_cli = ModuleSource::core("cli");
+        let core_cli = ModuleSource::cli();
         let id = table.define(
             "println",
             SymbolKind::Function(FunctionSymbol {

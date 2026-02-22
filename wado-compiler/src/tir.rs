@@ -659,11 +659,7 @@ impl TypeTable {
 
     /// Create an Array<T> type (`GenericInstance` { name: "Array", ... })
     pub fn make_array(&mut self, element: TypeId) -> TypeId {
-        self.make_generic_instance(
-            "Array".to_string(),
-            ModuleSource::core("prelude/array.wado"),
-            vec![element],
-        )
+        self.make_generic_instance("Array".to_string(), ModuleSource::array(), vec![element])
     }
 
     /// Create a newtype wrapping a base type

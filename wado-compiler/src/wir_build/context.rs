@@ -369,10 +369,7 @@ impl<'a> WirContext<'a> {
                 let struct_name = StructName::new(module_source.clone(), name.clone());
                 // Special case: String struct
                 let lookup_name = if name == "String" {
-                    StructName::new(
-                        ModuleSource::core("prelude/string.wado"),
-                        "String".to_string(),
-                    )
+                    StructName::new(ModuleSource::string(), "String".to_string())
                 } else {
                     struct_name
                 };

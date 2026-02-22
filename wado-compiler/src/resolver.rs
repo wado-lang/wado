@@ -39,11 +39,6 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Helper to get the `ModuleSource` for String type (core:prelude/string.wado)
-fn string_module_source() -> ModuleSource {
-    ModuleSource::core("prelude/string.wado")
-}
-
 /// Parsed format specification from a template string interpolation.
 /// Syntax: `[[fill]align][sign][#][0][width][.precision]type`
 #[allow(dead_code)]
@@ -3538,7 +3533,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 let tir_lit = match lit {
                     Literal::Number(n) => {
                         // Float literals cannot be used in match patterns
-                        if Self::is_float_only_literal(&n.repr) {
+                        if util::is_float_only_literal(&n.repr) {
                             let _ = self.logger.error(TypeError::InvalidPattern {
                                 message: "float literals cannot be used in match patterns"
                                     .to_string(),
@@ -3563,12 +3558,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             ResolvedType::Struct { ref name, .. } if name == "u128"
                         );
                         if is_unsigned {
-                            match Self::parse_u128_literal(&n.repr) {
+                            match util::parse_u128_literal(&n.repr) {
                                 Ok(value) => TirLiteralPattern::U128(value),
                                 Err(_) => TirLiteralPattern::U128(0),
                             }
                         } else {
-                            match Self::parse_i128_literal(&n.repr) {
+                            match util::parse_i128_literal(&n.repr) {
                                 Ok(value) => TirLiteralPattern::I128(value),
                                 Err(_) => TirLiteralPattern::I128(0),
                             }
@@ -3804,179 +3799,14 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         TirStmt::new(TirStmtKind::Continue, continue_stmt.span)
     }
 
-    /// Resolve an expression
-    /// Parse an integer literal string into a u64 value
-    /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10")
-    #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
-    fn parse_int_literal(repr: &str) -> Result<u64, String> {
-        // Remove underscores for parsing
-        let clean: String = repr.chars().filter(|&c| c != '_').collect();
-
-        // Handle negative numbers by parsing as i64 and reinterpreting bits
-        if clean.starts_with('-') {
-            // Check for scientific notation in negative numbers
-            if clean.to_lowercase().contains('e') {
-                let value: f64 = clean
-                    .parse()
-                    .map_err(|_| format!("invalid integer literal: {repr}"))?;
-                if value.fract() != 0.0 {
-                    return Err(format!("integer literal has fractional part: {repr}"));
-                }
-                if value < i64::MIN as f64 || value > i64::MAX as f64 {
-                    return Err(format!("integer literal out of range: {repr}"));
-                }
-                return Ok((value as i64) as u64);
-            }
-            let value: i64 = clean
-                .parse()
-                .map_err(|_| format!("invalid integer literal: {repr}"))?;
-            // Reinterpret i64 bits as u64 for storage
-            return Ok(value as u64);
-        }
-
-        if clean.starts_with("0x") || clean.starts_with("0X") {
-            u64::from_str_radix(&clean[2..], 16).map_err(|_| format!("invalid hex literal: {repr}"))
-        } else if clean.starts_with("0b") || clean.starts_with("0B") {
-            u64::from_str_radix(&clean[2..], 2)
-                .map_err(|_| format!("invalid binary literal: {repr}"))
-        } else if clean.starts_with("0o") || clean.starts_with("0O") {
-            u64::from_str_radix(&clean[2..], 8)
-                .map_err(|_| format!("invalid octal literal: {repr}"))
-        } else if clean.to_lowercase().contains('e') {
-            // Scientific notation: parse as f64 first, then convert to u64
-            let value: f64 = clean
-                .parse()
-                .map_err(|_| format!("invalid integer literal: {repr}"))?;
-            if value.fract() != 0.0 {
-                return Err(format!("integer literal has fractional part: {repr}"));
-            }
-            if value < 0.0 || value > u64::MAX as f64 {
-                return Err(format!("integer literal out of range: {repr}"));
-            }
-            Ok(value as u64)
-        } else {
-            clean
-                .parse()
-                .map_err(|_| format!("invalid integer literal: {repr}"))
-        }
-    }
-
-    /// Parse a float literal string into an f64 value
-    #[allow(clippy::cast_precision_loss)]
-    fn parse_float_literal(repr: &str) -> Result<f64, String> {
-        // Remove underscores for parsing
-        let clean: String = repr.chars().filter(|&c| c != '_').collect();
-
-        // Handle hex/binary/octal literals as float values (not bit patterns)
-        if clean.starts_with("0x") || clean.starts_with("0X") {
-            let value = u64::from_str_radix(&clean[2..], 16)
-                .map_err(|_| format!("invalid hex literal: {repr}"))?;
-            return Ok(value as f64);
-        } else if clean.starts_with("0b") || clean.starts_with("0B") {
-            let value = u64::from_str_radix(&clean[2..], 2)
-                .map_err(|_| format!("invalid binary literal: {repr}"))?;
-            return Ok(value as f64);
-        } else if clean.starts_with("0o") || clean.starts_with("0O") {
-            let value = u64::from_str_radix(&clean[2..], 8)
-                .map_err(|_| format!("invalid octal literal: {repr}"))?;
-            return Ok(value as f64);
-        }
-
-        clean
-            .parse()
-            .map_err(|_| format!("invalid float literal: {repr}"))
-    }
-
-    /// Check if a number literal can only be a float (has decimal point or negative exponent)
-    fn is_float_only_literal(repr: &str) -> bool {
-        // Has decimal point → float only
-        if repr.contains('.') {
-            return true;
-        }
-
-        // Check for negative exponent (e.g., "1e-5")
-        let lower = repr.to_lowercase();
-        if let Some(e_pos) = lower.find('e') {
-            let after_e = &repr[e_pos + 1..];
-            if after_e.starts_with('-') {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    /// Parse an unsigned integer literal into a u128 value
-    /// Supports decimal, hex, binary, and octal formats
-    fn parse_u128_literal(repr: &str) -> Result<u128, String> {
-        let clean: String = repr.chars().filter(|&c| c != '_').collect();
-
-        if clean.starts_with("0x") || clean.starts_with("0X") {
-            u128::from_str_radix(&clean[2..], 16)
-                .map_err(|_| format!("invalid hex literal: {repr}"))
-        } else if clean.starts_with("0b") || clean.starts_with("0B") {
-            u128::from_str_radix(&clean[2..], 2)
-                .map_err(|_| format!("invalid binary literal: {repr}"))
-        } else if clean.starts_with("0o") || clean.starts_with("0O") {
-            u128::from_str_radix(&clean[2..], 8)
-                .map_err(|_| format!("invalid octal literal: {repr}"))
-        } else {
-            clean
-                .parse()
-                .map_err(|_| format!("invalid integer literal: {repr}"))
-        }
-    }
-
-    /// Parse a signed integer literal into an i128 value
-    /// Supports decimal, hex, binary, and octal formats (negative decimals supported)
-    fn parse_i128_literal(repr: &str) -> Result<i128, String> {
-        let clean: String = repr.chars().filter(|&c| c != '_').collect();
-
-        if clean.starts_with("0x") || clean.starts_with("0X") {
-            // Hex literals are always positive, parse as u128 then convert
-            let unsigned = u128::from_str_radix(&clean[2..], 16)
-                .map_err(|_| format!("invalid hex literal: {repr}"))?;
-            Ok(unsigned as i128)
-        } else if clean.starts_with("0b") || clean.starts_with("0B") {
-            let unsigned = u128::from_str_radix(&clean[2..], 2)
-                .map_err(|_| format!("invalid binary literal: {repr}"))?;
-            Ok(unsigned as i128)
-        } else if clean.starts_with("0o") || clean.starts_with("0O") {
-            let unsigned = u128::from_str_radix(&clean[2..], 8)
-                .map_err(|_| format!("invalid octal literal: {repr}"))?;
-            Ok(unsigned as i128)
-        } else {
-            // Decimal - may be negative
-            clean
-                .parse()
-                .map_err(|_| format!("invalid integer literal: {repr}"))
-        }
-    }
-
-    /// Unpack u128 into (low, high) pair for codegen
-    fn unpack_u128(value: u128) -> (u64, u64) {
-        (value as u64, (value >> 64) as u64)
-    }
-
-    /// Unpack i128 into (low, high) pair for codegen
-    #[allow(clippy::cast_sign_loss)]
-    fn unpack_i128(value: i128) -> (u64, i64) {
-        (value as u64, (value >> 64) as i64)
-    }
-
-    /// Get the clean representation of a literal (without underscores)
-    fn clean_literal_repr(repr: &str) -> String {
-        repr.chars().filter(|&c| c != '_').collect()
-    }
-
     /// Resolve a literal expression
     fn resolve_literal(&mut self, lit: &ast::LiteralExpr, ctx: &FunctionContext) -> TirExpr {
         let (kind, type_id) = match &lit.value {
             Literal::Number(num_lit) => {
                 // Default type: i32 if integer-compatible, f64 if float-only
-                if Self::is_float_only_literal(&num_lit.repr) {
+                if util::is_float_only_literal(&num_lit.repr) {
                     // Must be float (has decimal point or negative exponent)
-                    match Self::parse_float_literal(&num_lit.repr) {
+                    match util::parse_float_literal(&num_lit.repr) {
                         Ok(value) => (
                             TirExprKind::FloatLiteral {
                                 value,
@@ -4000,7 +3830,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     }
                 } else {
                     // Can be integer (default to i32)
-                    match Self::parse_int_literal(&num_lit.repr) {
+                    match util::parse_int_literal(&num_lit.repr) {
                         Ok(value) => (
                             TirExprKind::IntLiteral {
                                 value,
@@ -4281,7 +4111,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         if matches!(ident.name.as_str(), "panic" | "unreachable") {
             return TirExpr::new(
                 TirExprKind::Global {
-                    module_source: ModuleSource::core("internal"),
+                    module_source: ModuleSource::internal(),
                     name: ident.name.clone(),
                 },
                 TypeTable::UNKNOWN,
@@ -4394,7 +4224,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4456,7 +4286,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     let ordering_type_id =
                         self.type_table.borrow_mut().intern(ResolvedType::Enum {
                             name: "Ordering".to_string(),
-                            module_source: ModuleSource::core("prelude"),
+                            module_source: ModuleSource::prelude(),
                         });
 
                     let mangled_method_name =
@@ -4466,7 +4296,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4595,7 +4425,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4659,7 +4489,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4710,7 +4540,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
         }
 
-        let op = convert_binary_op(binary.op);
+        let op = util::convert_binary_op(binary.op);
 
         // Type check: both operands of a binary operation must have the same type.
         // This applies to primitives, newtypes, and all non-overloaded binary ops.
@@ -4771,7 +4601,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         }
 
         let expr = self.resolve_expr(&unary.expr, ctx, None);
-        let op = convert_unary_op(unary.op);
+        let op = util::convert_unary_op(unary.op);
 
         // Track address-taken locals for &x and &mut x
         if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef)
@@ -4847,7 +4677,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -4897,7 +4727,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(receiver),
                             func: FunctionRef::External {
-                                module_source: ModuleSource::core("prelude"),
+                                module_source: ModuleSource::prelude(),
                                 name: mangled_method_name,
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -5339,11 +5169,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                     // Builtin functions: resolve through core:builtin module
                     if prefix == "builtin" {
-                        (
-                            Some(ModuleSource::core("builtin")),
-                            suffix.to_string(),
-                            true,
-                        )
+                        (Some(ModuleSource::builtin()), suffix.to_string(), true)
                     }
                     // Check if this is a static method call (Type::method)
                     // Static methods are registered with mangled names "Type::method"
@@ -5459,11 +5285,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 // Check for prelude functions (panic, unreachable)
                 // These are defined in core:internal and re-exported by core:prelude
                 else if matches!(ident.name.as_str(), "panic" | "unreachable") {
-                    (
-                        Some(ModuleSource::core("internal")),
-                        ident.name.clone(),
-                        true,
-                    )
+                    (Some(ModuleSource::internal()), ident.name.clone(), true)
                 }
                 // Check if this is an imported function (per-module imports)
                 else if self.imported_functions.contains(&ident.name) {
@@ -5785,10 +5607,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
     /// Get the String struct type (from core:prelude/string.wado)
     fn get_string_struct_type(&mut self) -> TypeId {
-        self.type_table.borrow_mut().make_struct(
-            "String".to_string(),
-            ModuleSource::core("prelude/string.wado"),
-        )
+        self.type_table
+            .borrow_mut()
+            .make_struct("String".to_string(), ModuleSource::string())
     }
 
     /// Build a `from_pair` call for i128/u128 large literal construction
@@ -5828,7 +5649,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source: ModuleSource::core("prelude/int128.wado"),
+                    module_source: ModuleSource::int128(),
                     name: mangled_func_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
@@ -5919,7 +5740,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             && let Literal::Number(num_lit) = &lit.value
             && self.type_table.borrow().is_integer(target_type)
         {
-            if Self::is_float_only_literal(&num_lit.repr) {
+            if util::is_float_only_literal(&num_lit.repr) {
                 let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!(
                         "cannot use float literal '{}' as integer (has decimal point or negative exponent)",
@@ -5936,7 +5757,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     lit.span,
                 ));
             }
-            return Some(match Self::parse_int_literal(&num_lit.repr) {
+            return Some(match util::parse_int_literal(&num_lit.repr) {
                 Ok(value) => {
                     if let Some(err_msg) = util::check_int_range_positive(
                         value,
@@ -5982,7 +5803,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             && let Literal::Number(num_lit) = &lit.value
             && self.type_table.borrow().is_integer(target_type)
         {
-            if Self::is_float_only_literal(&num_lit.repr) {
+            if util::is_float_only_literal(&num_lit.repr) {
                 let _ = self.logger.error(TypeError::InvalidLiteral {
                     message: format!(
                         "cannot use float literal '-{}' as integer (has decimal point or negative exponent)",
@@ -5999,7 +5820,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     unary.span,
                 ));
             }
-            return Some(match Self::parse_int_literal(&num_lit.repr) {
+            return Some(match util::parse_int_literal(&num_lit.repr) {
                 Ok(value) => {
                     if let Some(err_msg) = util::check_int_range_negative(
                         value,
@@ -6044,7 +5865,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             && let Literal::Number(num_lit) = &lit.value
             && self.type_table.borrow().is_float(target_type)
         {
-            return Some(match Self::parse_float_literal(&num_lit.repr) {
+            return Some(match util::parse_float_literal(&num_lit.repr) {
                 Ok(value) => TirExpr::new(
                     TirExprKind::FloatLiteral {
                         value,
@@ -6077,7 +5898,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             && let Literal::Number(num_lit) = &lit.value
             && self.type_table.borrow().is_float(target_type)
         {
-            return Some(match Self::parse_float_literal(&num_lit.repr) {
+            return Some(match util::parse_float_literal(&num_lit.repr) {
                 Ok(value) => TirExpr::new(
                     TirExprKind::FloatLiteral {
                         value: -value,
@@ -6106,7 +5927,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // i128/u128 literal coercion
         if let Expr::Literal(lit) = expr
             && let Literal::Number(num_lit) = &lit.value
-            && !Self::is_float_only_literal(&num_lit.repr)
+            && !util::is_float_only_literal(&num_lit.repr)
         {
             let struct_name = match self.type_table.borrow().get(target_type).clone() {
                 ResolvedType::Struct { name, .. } => Some(name),
@@ -6116,7 +5937,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             if let Some(name) = struct_name
                 && (name == "u128" || name == "i128")
             {
-                if let Ok(value) = Self::parse_int_literal(&num_lit.repr) {
+                if let Ok(value) = util::parse_int_literal(&num_lit.repr) {
                     let use_from_u64_or_i64 = if name == "u128" {
                         true
                     } else {
@@ -6146,7 +5967,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         return Some(TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("prelude/int128.wado"),
+                                    module_source: ModuleSource::int128(),
                                     name: mangled_func_name,
                                     monomorph_info: None,
                                     method_info: Some(method_info),
@@ -6161,8 +5982,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                 // Value doesn't fit in u64 (or i64 for i128), use from_pair
                 if name == "u128" {
-                    if let Ok(value) = Self::parse_u128_literal(&num_lit.repr) {
-                        let (low, high) = Self::unpack_u128(value);
+                    if let Ok(value) = util::parse_u128_literal(&num_lit.repr) {
+                        let (low, high) = util::unpack_u128(value);
                         return Some(self.build_from_pair_call(
                             &name,
                             low,
@@ -6176,8 +5997,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         span: lit.span,
                     });
                 } else {
-                    if let Ok(value) = Self::parse_i128_literal(&num_lit.repr) {
-                        let (low, high) = Self::unpack_i128(value);
+                    if let Ok(value) = util::parse_i128_literal(&num_lit.repr) {
+                        let (low, high) = util::unpack_i128(value);
                         return Some(self.build_from_pair_call(
                             &name,
                             low,
@@ -6199,7 +6020,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             && unary.op == ast::UnaryOp::Neg
             && let Expr::Literal(lit) = &unary.expr
             && let Literal::Number(num_lit) = &lit.value
-            && !Self::is_float_only_literal(&num_lit.repr)
+            && !util::is_float_only_literal(&num_lit.repr)
         {
             let struct_name = match self.type_table.borrow().get(target_type).clone() {
                 ResolvedType::Struct { name, .. } => Some(name),
@@ -6209,9 +6030,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             if let Some(name) = struct_name
                 && name == "i128"
             {
-                let negated_repr = format!("-{}", Self::clean_literal_repr(&num_lit.repr));
-                if let Ok(value) = Self::parse_i128_literal(&negated_repr) {
-                    let (low, high) = Self::unpack_i128(value);
+                let negated_repr = format!("-{}", util::clean_literal_repr(&num_lit.repr));
+                if let Ok(value) = util::parse_i128_literal(&negated_repr) {
+                    let (low, high) = util::unpack_i128(value);
                     return Some(self.build_from_pair_call(
                         &name,
                         low,
@@ -6427,34 +6248,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ..
             } => (name.clone(), module_source.clone()),
             // Primitive types have impl blocks in core:prelude/primitives
-            ResolvedType::Primitive(_) => {
-                let prim_module = ModuleSource::Core {
-                    name: "prelude/primitives.wado".to_string(),
-                };
-                (
-                    self.type_table.borrow().mangle_type_name(base_type_id),
-                    prim_module,
-                )
-            }
+            ResolvedType::Primitive(_) => (
+                self.type_table.borrow().mangle_type_name(base_type_id),
+                ModuleSource::primitives(),
+            ),
             // BuiltinArray is Array - impl blocks are in core:prelude/array.wado
-            ResolvedType::BuiltinArray(_) => {
-                let array_module = ModuleSource::Core {
-                    name: "prelude/array.wado".to_string(),
-                };
-                ("Array".to_string(), array_module)
-            }
+            ResolvedType::BuiltinArray(_) => ("Array".to_string(), ModuleSource::array()),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
             // FutureWritable<T> - resource methods declared in core:prelude/types.wado
-            ResolvedType::FutureWritable(_) => (
-                "FutureWritable".to_string(),
-                ModuleSource::Core {
-                    name: "prelude/types.wado".to_string(),
-                },
-            ),
+            ResolvedType::FutureWritable(_) => {
+                ("FutureWritable".to_string(), ModuleSource::types())
+            }
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -6943,7 +6751,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 return TirExpr::new(
                     TirExprKind::Call {
                         func: FunctionRef::External {
-                            module_source: ModuleSource::core("builtin"),
+                            module_source: ModuleSource::builtin(),
                             name: builtin_name.to_string(),
                             monomorph_info: None,
                             method_info: None,
@@ -7694,9 +7502,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 | "bool"
                 | "char"
         ) {
-            return ModuleSource::Core {
-                name: "prelude/primitives.wado".to_string(),
-            };
+            return ModuleSource::primitives();
         }
 
         // Check current module
@@ -7797,9 +7603,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             // FutureWritable<T> - resource methods declared in core:prelude/types.wado
             ResolvedType::FutureWritable(inner) => (
                 "FutureWritable".to_string(),
-                Some(ModuleSource::Core {
-                    name: "prelude/types.wado".to_string(),
-                }),
+                Some(ModuleSource::types()),
                 Some(vec![*inner]),
                 None,
             ),
@@ -10044,7 +9848,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 value: ast::Literal::Number(num_lit),
                 ..
             }) = &index.index
-                && !Self::is_float_only_literal(&num_lit.repr)
+                && !util::is_float_only_literal(&num_lit.repr)
                 && let Ok(idx) = num_lit.repr.parse::<usize>()
             {
                 if idx < elements.len() {
@@ -10753,7 +10557,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let with_capacity_call = TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source: string_module_source(),
+                    module_source: ModuleSource::string(),
                     name: "String::with_capacity".to_string(),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
@@ -10787,10 +10591,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         )];
 
         // Prepare Formatter type and its &mut type
-        let formatter_type = self.type_table.borrow_mut().make_struct(
-            "Formatter".to_string(),
-            ModuleSource::core("prelude/format.wado"),
-        );
+        let formatter_type = self
+            .type_table
+            .borrow_mut()
+            .make_struct("Formatter".to_string(), ModuleSource::format());
         let mut_ref_formatter = self.type_table.borrow_mut().make_mut_ref(formatter_type);
 
         // Track whether we've created the __f local yet
@@ -10816,7 +10620,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         TirExprKind::MethodCall {
                             receiver: Box::new(buf_ref),
                             func: FunctionRef::External {
-                                module_source: string_module_source(),
+                                module_source: ModuleSource::string(),
                                 name: "String::append".to_string(),
                                 monomorph_info: None,
                                 method_info: Some(LocalMethodName::new(
@@ -10854,7 +10658,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             TirExprKind::MethodCall {
                                 receiver: Box::new(buf_ref),
                                 func: FunctionRef::External {
-                                    module_source: string_module_source(),
+                                    module_source: ModuleSource::string(),
                                     name: "String::append".to_string(),
                                     monomorph_info: None,
                                     method_info: Some(LocalMethodName::new(
@@ -10990,7 +10794,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         let inspect_call = TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("builtin"),
+                                    module_source: ModuleSource::builtin(),
                                     name: "builtin::inspect".to_string(),
                                     monomorph_info: None,
                                     method_info: None,
@@ -11015,7 +10819,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         let fmt_call = TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("prelude/primitives.wado"),
+                                    module_source: ModuleSource::primitives(),
                                     name: func_name.to_string(),
                                     monomorph_info: None,
                                     method_info: None,
@@ -11091,7 +10895,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             let inspect_call = TirExpr::new(
                                 TirExprKind::StaticCall {
                                     func: FunctionRef::External {
-                                        module_source: ModuleSource::core("builtin"),
+                                        module_source: ModuleSource::builtin(),
                                         name: "builtin::inspect".to_string(),
                                         monomorph_info: None,
                                         method_info: None,
@@ -11265,7 +11069,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return TirExpr::new(
                 TirExprKind::StaticCall {
                     func: FunctionRef::External {
-                        module_source: ModuleSource::core("prelude/format.wado"),
+                        module_source: ModuleSource::format(),
                         name: "Formatter::new".to_string(),
                         monomorph_info: None,
                         method_info: Some(LocalMethodName::new(
@@ -11283,10 +11087,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         // Construct Formatter struct literal with custom fields
         let pf = parsed.as_ref().unwrap();
-        let alignment_type = self.type_table.borrow_mut().make_enum(
-            "Alignment".to_string(),
-            ModuleSource::core("prelude/format.wado"),
-        );
+        let alignment_type = self
+            .type_table
+            .borrow_mut()
+            .make_enum("Alignment".to_string(), ModuleSource::format());
         let fill_char = pf.fill.unwrap_or(if pf.zero_pad { '0' } else { ' ' });
         let align_index: u32 = match pf.align {
             Some('<') => 0, // Left
@@ -11439,10 +11243,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             self.type_table.borrow().get(base_type_id),
             ResolvedType::Primitive(_)
         ) {
-            let prim_module = ModuleSource::Core {
-                name: "prelude/primitives.wado".to_string(),
-            };
-            return Some((type_name, prim_module));
+            return Some((type_name, ModuleSource::primitives()));
         }
 
         None
@@ -11500,10 +11301,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             // Handle number literal cast specially to support values > u64
             if let ast::Expr::Literal(lit) = &cast.expr
                 && let Literal::Number(num_lit) = &lit.value
-                && !Self::is_float_only_literal(&num_lit.repr)
+                && !util::is_float_only_literal(&num_lit.repr)
             {
                 // Try to parse as u64
-                if let Ok(value) = Self::parse_int_literal(&num_lit.repr) {
+                if let Ok(value) = util::parse_int_literal(&num_lit.repr) {
                     // For u128: value fits in u64, use from_u64
                     // For i128: value must also fit in i64 (positive range), otherwise use from_string
                     let use_from_u64_or_i64 = if name == "u128" {
@@ -11536,7 +11337,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         return TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
-                                    module_source: ModuleSource::core("prelude/int128.wado"),
+                                    module_source: ModuleSource::int128(),
                                     name: mangled_func_name,
                                     monomorph_info: None,
                                     method_info: Some(method_info),
@@ -11551,8 +11352,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                 // Value doesn't fit in u64 (or i64 for i128), use from_pair
                 if name == "u128" {
-                    if let Ok(value) = Self::parse_u128_literal(&num_lit.repr) {
-                        let (low, high) = Self::unpack_u128(value);
+                    if let Ok(value) = util::parse_u128_literal(&num_lit.repr) {
+                        let (low, high) = util::unpack_u128(value);
                         return self.build_from_pair_call(
                             name,
                             low,
@@ -11567,8 +11368,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     });
                 } else {
                     // i128
-                    if let Ok(value) = Self::parse_i128_literal(&num_lit.repr) {
-                        let (low, high) = Self::unpack_i128(value);
+                    if let Ok(value) = util::parse_i128_literal(&num_lit.repr) {
+                        let (low, high) = util::unpack_i128(value);
                         return self.build_from_pair_call(name, low, high, target_type, cast.span);
                     }
                     let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -11583,13 +11384,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 && unary.op == ast::UnaryOp::Neg
                 && let ast::Expr::Literal(lit) = &unary.expr
                 && let Literal::Number(num_lit) = &lit.value
-                && !Self::is_float_only_literal(&num_lit.repr)
+                && !util::is_float_only_literal(&num_lit.repr)
                 && name == "i128"
             {
                 // Parse the negated value directly using Rust's i128
-                let negated_repr = format!("-{}", Self::clean_literal_repr(&num_lit.repr));
-                if let Ok(value) = Self::parse_i128_literal(&negated_repr) {
-                    let (low, high) = Self::unpack_i128(value);
+                let negated_repr = format!("-{}", util::clean_literal_repr(&num_lit.repr));
+                if let Ok(value) = util::parse_i128_literal(&negated_repr) {
+                    let (low, high) = util::unpack_i128(value);
                     return self.build_from_pair_call(name, low, high, target_type, unary.span);
                 }
                 let _ = self.logger.error(TypeError::InvalidLiteral {
@@ -11631,7 +11432,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 return TirExpr::new(
                     TirExprKind::StaticCall {
                         func: FunctionRef::External {
-                            module_source: ModuleSource::core("prelude/int128.wado"),
+                            module_source: ModuleSource::int128(),
                             name: mangled_func_name,
                             monomorph_info: None,
                             method_info: Some(method_info),
@@ -12279,7 +12080,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Resolve a generic type
     fn resolve_generic_type(&mut self, name: &str, args: &[Type], span: Span) -> TypeId {
         // Prelude module path for looking up Option/Result
-        let prelude_source = ModuleSource::core("prelude");
+        let prelude_source = ModuleSource::prelude();
 
         match name {
             "Option" => {
@@ -12395,42 +12196,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     /// Get the type table (after resolution)
     pub fn into_type_table(self) -> Rc<RefCell<TypeTable>> {
         self.type_table
-    }
-}
-
-/// Convert AST `BinaryOp` to TIR `BinaryOp`
-fn convert_binary_op(op: BinaryOp) -> TirBinaryOp {
-    match op {
-        BinaryOp::Add => TirBinaryOp::Add,
-        BinaryOp::Sub => TirBinaryOp::Sub,
-        BinaryOp::Mul => TirBinaryOp::Mul,
-        BinaryOp::Div => TirBinaryOp::Div,
-        BinaryOp::Mod => TirBinaryOp::Mod,
-        BinaryOp::Eq => TirBinaryOp::Eq,
-        BinaryOp::NotEq => TirBinaryOp::NotEq,
-        BinaryOp::Lt => TirBinaryOp::Lt,
-        BinaryOp::LtEq => TirBinaryOp::LtEq,
-        BinaryOp::Gt => TirBinaryOp::Gt,
-        BinaryOp::GtEq => TirBinaryOp::GtEq,
-        BinaryOp::And => TirBinaryOp::And,
-        BinaryOp::Or => TirBinaryOp::Or,
-        BinaryOp::BitAnd => TirBinaryOp::BitAnd,
-        BinaryOp::BitOr => TirBinaryOp::BitOr,
-        BinaryOp::BitXor => TirBinaryOp::BitXor,
-        BinaryOp::Shl => TirBinaryOp::Shl,
-        BinaryOp::Shr => TirBinaryOp::Shr,
-    }
-}
-
-/// Convert AST `UnaryOp` to TIR `UnaryOp`
-fn convert_unary_op(op: UnaryOp) -> TirUnaryOp {
-    match op {
-        UnaryOp::Neg => TirUnaryOp::Neg,
-        UnaryOp::Not => TirUnaryOp::Not,
-        UnaryOp::BitNot => TirUnaryOp::BitNot,
-        UnaryOp::Ref => TirUnaryOp::Ref,
-        UnaryOp::MutRef => TirUnaryOp::MutRef,
-        UnaryOp::Deref => TirUnaryOp::Deref,
     }
 }
 

@@ -155,7 +155,7 @@ pub fn lower_modules_indexed(
         // Inject generated Box structs into core:internal module (where they logically live).
         // Falls back to entry module if core:internal doesn't exist (e.g., single-module tests).
         if !box_lowerer.generated_structs.is_empty() {
-            let internal_source = ModuleSource::core("internal");
+            let internal_source = ModuleSource::internal();
             let has_internal = modules.contains_key(&internal_source);
             let target_module = if has_internal {
                 modules.get_mut(&internal_source).unwrap()
@@ -200,7 +200,7 @@ fn create_i128_literal(value: i128, type_id: TypeId, span: Span) -> TirExpr {
     TirExpr::new(
         TirExprKind::StaticCall {
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/int128.wado"),
+                module_source: ModuleSource::int128(),
                 name: "i128::from_i64".to_string(),
                 monomorph_info: None,
                 method_info: Some(method_info),
@@ -229,7 +229,7 @@ fn create_u128_literal(value: u128, type_id: TypeId, span: Span) -> TirExpr {
     TirExpr::new(
         TirExprKind::StaticCall {
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/int128.wado"),
+                module_source: ModuleSource::int128(),
                 name: "u128::from_u64".to_string(),
                 monomorph_info: None,
                 method_info: Some(method_info),
@@ -281,7 +281,7 @@ fn create_i128_eq_call(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/int128.wado"),
+                module_source: ModuleSource::int128(),
                 name: mangled_method_name,
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
@@ -338,7 +338,7 @@ fn create_u128_eq_call(
         TirExprKind::MethodCall {
             receiver: Box::new(receiver),
             func: FunctionRef::External {
-                module_source: ModuleSource::core("prelude/int128.wado"),
+                module_source: ModuleSource::int128(),
                 name: mangled_method_name,
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
@@ -803,7 +803,7 @@ fn match_to_switch(
                 TirStmtKind::Expr(TirExpr::new(
                     TirExprKind::Call {
                         func: FunctionRef::External {
-                            module_source: ModuleSource::core("internal"),
+                            module_source: ModuleSource::internal(),
                             name: "unreachable".to_string(),
                             monomorph_info: None,
                             method_info: None,
@@ -960,7 +960,7 @@ impl<'a> PatternLowerer<'a> {
         let is_builtin_call = match &inner_value.kind {
             TirExprKind::Call { func: func_ref, .. } => {
                 if let FunctionRef::External { module_source, .. } = func_ref {
-                    matches!(module_source, ModuleSource::Core { name } if name == "builtin")
+                    module_source.is_core_builtin()
                 } else {
                     false
                 }

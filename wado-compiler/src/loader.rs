@@ -410,18 +410,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let cache = cached_core_stdlib();
 
         let implicit_module_sources = [
-            ModuleSource::Core {
-                name: "builtin".to_string(),
-            },
-            ModuleSource::Core {
-                name: "prelude/string.wado".to_string(),
-            },
-            ModuleSource::Core {
-                name: "prelude".to_string(),
-            },
-            ModuleSource::Core {
-                name: "internal".to_string(),
-            },
+            ModuleSource::builtin(),
+            ModuleSource::string(),
+            ModuleSource::prelude(),
+            ModuleSource::internal(),
         ];
 
         for module_source in implicit_module_sources {
