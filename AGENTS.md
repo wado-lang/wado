@@ -199,6 +199,34 @@ export fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 ```
 
+### Profiling
+
+Use `--profile` with `wado run` to profile Wado programs:
+
+```sh
+# Cross-platform guest profiling (outputs Firefox Profiler JSON)
+wado run --profile guest prog.wado                     # writes profile.json
+wado run --profile guest,output.json prog.wado          # custom output path
+wado run --profile guest,output.json,5 prog.wado        # 5ms sampling interval
+
+# View the profile at https://profiler.firefox.com/
+
+# Linux perf profiling (jitdump - detailed)
+perf record -k mono wado run --profile jitdump prog.wado
+perf inject --jit --input perf.data --output perf.jit.data
+perf report --input perf.jit.data
+
+# Linux perf profiling (perfmap - simpler)
+perf record -k mono wado run --profile perfmap prog.wado
+perf report --input perf.data
+```
+
+| Mode      | Platform        | Output                 | Viewer                          |
+| --------- | --------------- | ---------------------- | ------------------------------- |
+| `guest`   | All             | Firefox Profiler JSON  | https://profiler.firefox.com/   |
+| `jitdump` | Linux           | perf jitdump           | `perf report`                   |
+| `perfmap` | Linux           | `/tmp/perf-<pid>.map`  | `perf report`                   |
+
 ### Dump Command
 
 Use `wado dump` to inspect compiler internal state for debugging:

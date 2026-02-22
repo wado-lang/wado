@@ -1,6 +1,6 @@
 use anyhow::Result;
 use wasmtime::component::{Linker, ResourceTable};
-use wasmtime::{Config, Engine, OptLevel, Store};
+use wasmtime::{Config, Engine, OptLevel, ProfilingStrategy, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 
 pub struct WasiState {
@@ -34,8 +34,26 @@ impl WasiView for WasiState {
     }
 }
 
+/// Profiling mode for wasmtime execution.
+#[derive(Clone, Debug)]
+pub enum ProfileMode {
+    /// No profiling.
+    None,
+    /// Linux perf jitdump profiling. Use with `perf record -k mono`.
+    JitDump,
+    /// Linux perf map profiling. Use with `perf record -k mono`.
+    PerfMap,
+    /// Cross-platform guest profiling. Produces Firefox Profiler JSON.
+    Guest {
+        /// Output file path.
+        path: String,
+        /// Sampling interval in milliseconds.
+        interval_ms: u64,
+    },
+}
+
 /// Create a wasmtime Config with all required Wasm features enabled.
-pub fn create_config(opt_level: OptLevel) -> Config {
+pub fn create_config(opt_level: OptLevel, profile: &ProfileMode) -> Config {
     let mut config = Config::new();
     config.async_support(true);
     config.wasm_component_model(true);
@@ -52,12 +70,25 @@ pub fn create_config(opt_level: OptLevel) -> Config {
 
     config.cranelift_opt_level(opt_level);
 
+    match profile {
+        ProfileMode::None => {}
+        ProfileMode::JitDump => {
+            config.profiler(ProfilingStrategy::JitDump);
+        }
+        ProfileMode::PerfMap => {
+            config.profiler(ProfilingStrategy::PerfMap);
+        }
+        ProfileMode::Guest { .. } => {
+            config.epoch_interruption(true);
+        }
+    }
+
     config
 }
 
 /// Create a wasmtime Engine with the standard configuration.
-pub fn create_engine(opt_level: OptLevel) -> Result<Engine> {
-    Engine::new(&create_config(opt_level))
+pub fn create_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engine> {
+    Engine::new(&create_config(opt_level, profile))
 }
 
 /// Create a Store with WASI state, preopened directories, and program arguments.
