@@ -295,32 +295,43 @@ TirStructPatternField {
 }
 ```
 
-### Lowering
+### Lowering: Preserve `LetPattern` in TIR
 
-Struct patterns lower to field access expressions, similar to how tuple patterns lower to element access:
+**Design principle**: Struct destructuring patterns are **not** lowered to `Let + FieldAccess` sequences. Instead, `LetPattern` with `TirPattern::Struct` is preserved through the TIR optimization pipeline and lowered at the WIR level.
+
+This is the same approach that should apply to tuple destructuring. The key insight is that SROA (Scalar Replacement of Aggregates) benefits from seeing the destructuring pattern directly:
 
 ```wado
 // Source
 let { x, y } = point;
 
-// Lowers to
-let __tmp = point;
-let x = __tmp.x;
-let y = __tmp.y;
+// TIR: preserved as LetPattern
+LetPattern {
+    pattern: Struct { fields: [x, y] },
+    value: point,
+}
+
+// NOT lowered to:
+//   let __tmp = point;
+//   let x = __tmp.x;   ← SROA must re-discover this pattern
+//   let y = __tmp.y;
 ```
 
-For nested patterns:
+When the optimizer sees `LetPattern` + `StructLiteral` in sequence, SROA can directly eliminate the allocation:
 
 ```wado
-// Source
-let { start: { x, y }, .. } = line;
+// Before SROA
+let p = Point { x: a + 1, y: b + 2 };
+let { x, y } = p;
 
-// Lowers to
-let __tmp = line;
-let __tmp_start = __tmp.start;
-let x = __tmp_start.x;
-let y = __tmp_start.y;
+// After SROA: aggregate eliminated, fields forwarded directly
+let x = a + 1;
+let y = b + 2;
 ```
+
+The pattern is then translated at the WIR level to field access instructions (struct.get), or further optimized to Wasm multi-value returns when applicable.
+
+**Current status**: Tuple `LetPattern` is currently lowered to `Let + FieldAccess` in `lower.rs` Phase 1.5 (except for multi-value builtins). This is a known limitation; ideally both tuple and struct `LetPattern` should be preserved through TIR and lowered at WIR translation.
 
 ### Exhaustiveness
 
