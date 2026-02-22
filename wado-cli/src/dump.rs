@@ -161,35 +161,72 @@ impl Opt {
 
 fn format_usage() -> String {
     let mut buf = String::new();
-    writeln!(buf, "Usage: wado dump [options] <file.wado> [file2.wado ...]").unwrap();
+    writeln!(
+        buf,
+        "Usage: wado dump [options] <file.wado> [file2.wado ...]"
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Dump compiler internal state for debugging.").unwrap();
     writeln!(buf, "Supports multiple input files for batch processing.").unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Compilation Phases:").unwrap();
-    write!(buf, "{}", args::format_opts_help(
-        &[
-            Opt::Tokens, Opt::Ast, Opt::Desugar, Opt::Modules, Opt::Symbols,
-            Opt::Tir, Opt::Monomorphize, Opt::Lower, Opt::Optimize, Opt::Wir, Opt::All,
-        ],
-        |o| o.spec(),
-    )).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(
+            &[
+                Opt::Tokens,
+                Opt::Ast,
+                Opt::Desugar,
+                Opt::Modules,
+                Opt::Symbols,
+                Opt::Tir,
+                Opt::Monomorphize,
+                Opt::Lower,
+                Opt::Optimize,
+                Opt::Wir,
+                Opt::All,
+            ],
+            |o| o.spec(),
+        )
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Display Options:").unwrap();
-    write!(buf, "{}", args::format_opts_help(&[Opt::Unparse], |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(&[Opt::Unparse], |o| o.spec())
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Optimization Level (for --optimize phase):").unwrap();
     writeln!(buf, "  -O0          No optimizations").unwrap();
-    writeln!(buf, "  -O1          Development optimizations (all passes except DCE)").unwrap();
+    writeln!(
+        buf,
+        "  -O1          Development optimizations (all passes except DCE)"
+    )
+    .unwrap();
     writeln!(buf, "  -O2          Production optimizations (default)").unwrap();
     writeln!(buf, "  -O3          Aggressive optimizations").unwrap();
     writeln!(buf, "  -Os          Size optimizations (O2 + strip names)").unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Output:").unwrap();
-    write!(buf, "{}", args::format_opts_help(&[Opt::Output], |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(&[Opt::Output], |o| o.spec())
+    )
+    .unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Other:").unwrap();
-    write!(buf, "{}", args::format_opts_help(&[Opt::Help], |o| o.spec())).unwrap();
+    write!(
+        buf,
+        "{}",
+        args::format_opts_help(&[Opt::Help], |o| o.spec())
+    )
+    .unwrap();
     buf
 }
 
@@ -242,9 +279,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                 }
                 Opt::Unparse => unparse = true,
                 Opt::OptLevel => {
-                    let level = args::require_value(&mut parser).map_err(|_| {
-                        CliExit::error("-O requires a level (0, 1, 2, 3, or s)")
-                    })?;
+                    let level = args::require_value(&mut parser)
+                        .map_err(|_| CliExit::error("-O requires a level (0, 1, 2, 3, or s)"))?;
                     let level_str = level.to_string_lossy();
                     opt_level = match level_str.as_ref() {
                         "0" => OptLevel::O0,
@@ -260,9 +296,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
                     };
                 }
                 Opt::Output => {
-                    let template = args::require_value(&mut parser).map_err(|_| {
-                        CliExit::error("-o requires an output template")
-                    })?;
+                    let template = args::require_value(&mut parser)
+                        .map_err(|_| CliExit::error("-o requires an output template"))?;
                     output_template = Some(template.to_string_lossy().into_owned());
                 }
                 Opt::Help => return Err(CliExit::help(usage)),

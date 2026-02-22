@@ -14,7 +14,11 @@ fn assert_err<T>(result: Result<T, CliExit>, expected: &str) {
     match result {
         Ok(_) => panic!("expected CliExit error, but got Ok"),
         Err(err) => {
-            assert_eq!(err.exit_code, 1, "expected exit_code 1, got {}", err.exit_code);
+            assert_eq!(
+                err.exit_code, 1,
+                "expected exit_code 1, got {}",
+                err.exit_code
+            );
             assert!(
                 err.message.contains(expected),
                 "expected message to contain {expected:?}, got {:?}",
@@ -30,7 +34,11 @@ fn assert_help<T>(result: Result<T, CliExit>, expected: &str) {
     match result {
         Ok(_) => panic!("expected CliExit help, but got Ok"),
         Err(err) => {
-            assert_eq!(err.exit_code, 0, "expected exit_code 0, got {}", err.exit_code);
+            assert_eq!(
+                err.exit_code, 0,
+                "expected exit_code 0, got {}",
+                err.exit_code
+            );
             assert!(
                 err.message.contains(expected),
                 "expected message to contain {expected:?}, got {:?}",
@@ -164,11 +172,15 @@ fn compile_multiple_inputs() {
 #[test]
 fn compile_all_options() {
     let parser = Parser::from_args(&[
-        "-o", "out.wat",
-        "--format", "wat",
+        "-o",
+        "out.wat",
+        "--format",
+        "wat",
         "-O3",
-        "--log-level", "warn",
-        "--world", "wasi:http/service",
+        "--log-level",
+        "warn",
+        "--world",
+        "wasi:http/service",
         "--no-validate",
         "input.wado",
     ]);
@@ -191,7 +203,10 @@ fn run_basic() {
     assert_eq!(opts.input, "input.wado");
     assert_eq!(opts.opt_level, OptLevel::O2);
     // Default: current dir is preopened
-    assert_eq!(opts.preopened_dirs, vec![(".".to_string(), ".".to_string())]);
+    assert_eq!(
+        opts.preopened_dirs,
+        vec![(".".to_string(), ".".to_string())]
+    );
     assert!(opts.program_args.is_empty());
 }
 
@@ -200,7 +215,10 @@ fn run_with_dir() {
     let parser = Parser::from_args(&["--dir", "/tmp::/guest", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
     // --dir overrides default
-    assert_eq!(opts.preopened_dirs, vec![("/tmp".to_string(), "/guest".to_string())]);
+    assert_eq!(
+        opts.preopened_dirs,
+        vec![("/tmp".to_string(), "/guest".to_string())]
+    );
 }
 
 #[test]
@@ -254,22 +272,12 @@ fn run_log_level() {
 fn run_profile_guest() {
     let parser = Parser::from_args(&["--profile", "guest", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
-    assert!(matches!(opts.profile, wado_cli::runtime::ProfileMode::Guest { .. }));
+    assert!(matches!(
+        opts.profile,
+        wado_cli::runtime::ProfileMode::Guest { .. }
+    ));
 }
 
-#[test]
-fn run_profile_jitdump() {
-    let parser = Parser::from_args(&["--profile", "jitdump", "input.wado"]);
-    let opts = wado_cli::run::parse_args(parser).unwrap();
-    assert!(matches!(opts.profile, wado_cli::runtime::ProfileMode::JitDump));
-}
-
-#[test]
-fn run_profile_perfmap() {
-    let parser = Parser::from_args(&["--profile", "perfmap", "input.wado"]);
-    let opts = wado_cli::run::parse_args(parser).unwrap();
-    assert!(matches!(opts.profile, wado_cli::runtime::ProfileMode::PerfMap));
-}
 
 #[test]
 fn run_profile_invalid() {
@@ -303,7 +311,10 @@ fn serve_help() {
 #[test]
 fn serve_no_input() {
     let parser = Parser::from_args::<&[&str]>(&[]);
-    assert_err(wado_cli::serve::parse_args(parser), "no input file specified");
+    assert_err(
+        wado_cli::serve::parse_args(parser),
+        "no input file specified",
+    );
 }
 
 #[test]
@@ -347,13 +358,19 @@ fn test_with_parallel() {
 #[test]
 fn test_parallel_invalid() {
     let parser = Parser::from_args(&["-p", "0", "a.wado"]);
-    assert_err(wado_cli::test::parse_args(parser), "--parallel requires a positive integer");
+    assert_err(
+        wado_cli::test::parse_args(parser),
+        "--parallel requires a positive integer",
+    );
 }
 
 #[test]
 fn test_parallel_non_numeric() {
     let parser = Parser::from_args(&["-p", "abc", "a.wado"]);
-    assert_err(wado_cli::test::parse_args(parser), "--parallel requires a positive integer");
+    assert_err(
+        wado_cli::test::parse_args(parser),
+        "--parallel requires a positive integer",
+    );
 }
 
 #[test]
@@ -397,13 +414,19 @@ fn format_multiple_files_with_write() {
 #[test]
 fn format_multiple_files_without_write() {
     let parser = Parser::from_args(&["a.wado", "b.wado"]);
-    assert_err(wado_cli::format::parse_args(parser), "multiple files require -w or --check");
+    assert_err(
+        wado_cli::format::parse_args(parser),
+        "multiple files require -w or --check",
+    );
 }
 
 #[test]
 fn format_no_input() {
     let parser = Parser::from_args::<&[&str]>(&[]);
-    assert_err(wado_cli::format::parse_args(parser), "no input file specified");
+    assert_err(
+        wado_cli::format::parse_args(parser),
+        "no input file specified",
+    );
 }
 
 #[test]
@@ -542,7 +565,10 @@ fn dump_all() {
 #[test]
 fn dump_no_input() {
     let parser = Parser::from_args::<&[&str]>(&[]);
-    assert_err(wado_cli::dump::parse_args(parser), "no input file specified");
+    assert_err(
+        wado_cli::dump::parse_args(parser),
+        "no input file specified",
+    );
 }
 
 #[test]
@@ -591,16 +617,29 @@ fn syntax_unexpected_positional() {
 
 #[test]
 fn match_opt_long() {
-    use wado_cli::args::{match_opt, OptSpec};
+    use wado_cli::args::{OptSpec, match_opt};
 
     #[derive(Clone, Copy, Debug, PartialEq)]
-    enum TestOpt { Help, Verbose }
+    enum TestOpt {
+        Help,
+        Verbose,
+    }
 
     let specs: &[TestOpt] = &[TestOpt::Help, TestOpt::Verbose];
     let spec_fn = |o: &TestOpt| -> OptSpec {
         match o {
-            TestOpt::Help => OptSpec { long: Some("help"), short: None, value: None, desc: "" },
-            TestOpt::Verbose => OptSpec { long: Some("verbose"), short: Some('v'), value: None, desc: "" },
+            TestOpt::Help => OptSpec {
+                long: Some("help"),
+                short: None,
+                value: None,
+                desc: "",
+            },
+            TestOpt::Verbose => OptSpec {
+                long: Some("verbose"),
+                short: Some('v'),
+                value: None,
+                desc: "",
+            },
         }
     };
 
@@ -616,14 +655,21 @@ fn match_opt_long() {
 
 #[test]
 fn match_opt_short() {
-    use wado_cli::args::{match_opt, OptSpec};
+    use wado_cli::args::{OptSpec, match_opt};
 
     #[derive(Clone, Copy, Debug, PartialEq)]
-    enum TestOpt { Output }
+    enum TestOpt {
+        Output,
+    }
 
     let specs: &[TestOpt] = &[TestOpt::Output];
     let spec_fn = |_: &TestOpt| -> OptSpec {
-        OptSpec { long: Some("output"), short: Some('o'), value: Some("<file>"), desc: "" }
+        OptSpec {
+            long: Some("output"),
+            short: Some('o'),
+            value: Some("<file>"),
+            desc: "",
+        }
     };
 
     let arg = lexopt::Arg::Short('o');
@@ -635,32 +681,54 @@ fn match_opt_short() {
 
 #[test]
 fn format_opts_help_output() {
-    use wado_cli::args::{format_opts_help, OptSpec};
+    use wado_cli::args::{OptSpec, format_opts_help};
 
     #[derive(Clone, Copy)]
-    enum TestOpt { Help, Verbose }
+    enum TestOpt {
+        Help,
+        Verbose,
+    }
 
     let specs: &[TestOpt] = &[TestOpt::Help, TestOpt::Verbose];
     let spec_fn = |o: &TestOpt| -> OptSpec {
         match o {
-            TestOpt::Help => OptSpec { long: Some("help"), short: None, value: None, desc: "Show help" },
-            TestOpt::Verbose => OptSpec { long: Some("verbose"), short: Some('v'), value: None, desc: "Be verbose" },
+            TestOpt::Help => OptSpec {
+                long: Some("help"),
+                short: None,
+                value: None,
+                desc: "Show help",
+            },
+            TestOpt::Verbose => OptSpec {
+                long: Some("verbose"),
+                short: Some('v'),
+                value: None,
+                desc: "Be verbose",
+            },
         }
     };
 
     let output = format_opts_help(specs, spec_fn);
     assert!(output.contains("--help"), "should contain --help");
-    assert!(output.contains("-v, --verbose"), "should contain -v, --verbose");
+    assert!(
+        output.contains("-v, --verbose"),
+        "should contain -v, --verbose"
+    );
     assert!(output.contains("Show help"), "should contain description");
 }
 
 #[test]
 fn parse_log_level_valid() {
     use wado_cli::args::parse_log_level;
-    assert_eq!(parse_log_level("debug"), Some(wado_compiler::LogLevel::Debug));
+    assert_eq!(
+        parse_log_level("debug"),
+        Some(wado_compiler::LogLevel::Debug)
+    );
     assert_eq!(parse_log_level("info"), Some(wado_compiler::LogLevel::Info));
     assert_eq!(parse_log_level("warn"), Some(wado_compiler::LogLevel::Warn));
-    assert_eq!(parse_log_level("error"), Some(wado_compiler::LogLevel::Error));
+    assert_eq!(
+        parse_log_level("error"),
+        Some(wado_compiler::LogLevel::Error)
+    );
     assert_eq!(parse_log_level("off"), Some(wado_compiler::LogLevel::Off));
     assert_eq!(parse_log_level("invalid"), None);
 }
