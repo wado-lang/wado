@@ -44,6 +44,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
     let mantissa_mask = 0x000FFFFFFFFFFFFF as u64;
     let exp_mask = 0x7FF as u64;
     let shift = 64 - 53;
+    let shift_u64 = shift as u64;
     let min_exp = -(1074 + shift);
 
     let raw_mantissa = bits & mantissa_mask;
@@ -53,13 +54,13 @@ pub fn unpack64(f: f64) -> UnpackResult {
         if raw_mantissa == 0 {
             return UnpackResult { mantissa: 0, exponent: 0 };
         }
-        let m = raw_mantissa << shift;
+        let m = raw_mantissa << shift_u64;
         let e = min_exp;
-        let s = 64 - u64_bit_len(m);
-        return UnpackResult { mantissa: m << s, exponent: e - s };
+        let s = (64 - u64_bit_len(m)) as u64;
+        return UnpackResult { mantissa: m << s, exponent: e - s as i32 };
     }
 
-    let m = (0x8000000000000000 as u64) | (raw_mantissa << shift);
+    let m = (0x8000000000000000 as u64) | (raw_mantissa << shift_u64);
     let e = (raw_exp - 1) + min_exp;
     return UnpackResult { mantissa: m, exponent: e };
 }
@@ -232,7 +233,7 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
 
     let mut sticky = 1 as u64;
 
-    let s_mod_64 = s & 63;
+    let s_mod_64 = (s & 63) as u64;
     let check_mask = (1 as u64 << s_mod_64) - 1;
     if (hi & check_mask) == 0 {
         // Go: mid2, _ := bits.Mul64(x, pm_lo) → mid2=high part, _=low part
@@ -243,7 +244,7 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
         hi = hi - (mid < mid2) as u64;
     }
 
-    return (hi >> s) | sticky;
+    return (hi >> s as u64) | sticky;
 }
 
 // Result of formatting
@@ -291,17 +292,17 @@ pub fn short(f: f64) -> FormatResult {
     let m_is_power_of_2 = m == (0x8000000000000000 as u64);
     if m_is_power_of_2 && e > min_exp {
         p = -skewed(e + z);
-        min_m = m - (1 as u64 << (z - 2));
+        min_m = m - (1 as u64 << (z - 2) as u64);
     } else {
         if e < min_exp {
             z = 11 + (min_exp - e);
         }
         p = -log10_pow2(e + z);
-        min_m = m - (1 as u64 << (z - 1));
+        min_m = m - (1 as u64 << (z - 1) as u64);
     }
 
-    let max_m = m + (1 as u64 << (z - 1));
-    let odd = ((m >> z) & 1) as i32;
+    let max_m = m + (1 as u64 << (z - 1) as u64);
+    let odd = ((m >> z as u64) & 1) as i32;
 
     let lp = log2_pow10(p);
     let pm = get_pow10(p);
@@ -387,7 +388,7 @@ pub fn trim_zeros(x: u64, p: i32) -> [u64, i32] {
     return [xv, pv];
 }
 
-pub fn rotate_right(x: u64, n: i32) -> u64 {
+pub fn rotate_right(x: u64, n: u64) -> u64 {
     return (x >> n) | (x << (64 - n));
 }
 
@@ -806,7 +807,7 @@ pub fn apply_padding(s: String, spec: FormatSpec, is_neg: bool) -> String {
 
         // Add sign prefix if present in original string
         let mut start_idx = 0;
-        if s.len() > 0 && (s.get_byte(0) == '-' as i32 || s.get_byte(0) == '+' as i32) {
+        if s.len() > 0 && (s.get_byte(0) == '-' as u8 || s.get_byte(0) == '+' as u8) {
             result.append_char(char::from_u32_unchecked(s.get_byte(0) as u32));
             start_idx = 1;
         }

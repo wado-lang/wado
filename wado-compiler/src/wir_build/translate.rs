@@ -1012,7 +1012,7 @@ impl FunctionTranslator<'_, '_> {
                 }
                 let l = Box::new(self.translate_expr(left));
                 let r = Box::new(self.translate_expr(right));
-                self.translate_binary_op(op, l, r, left.type_id, right.type_id)
+                self.translate_binary_op(op, l, r, left.type_id)
             }
 
             // === Unary Operations ===
@@ -1498,7 +1498,6 @@ impl FunctionTranslator<'_, '_> {
         left: Box<WirInstr>,
         right: Box<WirInstr>,
         left_type_id: TypeId,
-        right_type_id: TypeId,
     ) -> WirInstr {
         // Resolve newtypes to their base primitive type
         let base_type_id = self.type_table.get_ultimate_base_type(left_type_id);
@@ -1712,7 +1711,6 @@ impl FunctionTranslator<'_, '_> {
             }
             TirBinaryOp::Shl => {
                 if is_i64 {
-                    let right = self.ensure_i64_operand(right, right_type_id);
                     WirInstr::I64Shl(left, right)
                 } else {
                     WirInstr::I32Shl(left, right)
@@ -1720,7 +1718,6 @@ impl FunctionTranslator<'_, '_> {
             }
             TirBinaryOp::Shr => {
                 if is_i64 {
-                    let right = self.ensure_i64_operand(right, right_type_id);
                     if is_unsigned {
                         WirInstr::I64ShrU(left, right)
                     } else {
@@ -1732,29 +1729,6 @@ impl FunctionTranslator<'_, '_> {
                     WirInstr::I32ShrS(left, right)
                 }
             }
-        }
-    }
-
-    /// Wrap an operand with `i64.extend_i32_s` if it is an i32-sized type.
-    /// Wasm shift instructions require both operands to be the same type.
-    fn ensure_i64_operand(&self, operand: Box<WirInstr>, type_id: TypeId) -> Box<WirInstr> {
-        let base = self.type_table.get_ultimate_base_type(type_id);
-        let is_i32_sized = matches!(
-            self.type_table.get(base),
-            ResolvedType::Primitive(
-                PrimitiveType::I8
-                    | PrimitiveType::I16
-                    | PrimitiveType::I32
-                    | PrimitiveType::U8
-                    | PrimitiveType::U16
-                    | PrimitiveType::U32
-                    | PrimitiveType::Bool
-            )
-        );
-        if is_i32_sized {
-            Box::new(WirInstr::I64ExtendI32S(operand))
-        } else {
-            operand
         }
     }
 

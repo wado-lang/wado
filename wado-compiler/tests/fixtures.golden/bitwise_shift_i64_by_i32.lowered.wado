@@ -4,58 +4,12 @@
 
 // Imports
 // mem::realloc
-// wasi::stream-drop-writable
-// wasi::stream-new
-// wasi::stream-write
-// wasi::subtask-drop
 // wasi::task-return
-// wasi::waitable-join
-// wasi::waitable-set-new
-// wasi::waitable-set-wait
 
 export fn run() {
-    let mut n: i32 = 0;
-    n = (n + 5);
-    let shifted: u64 = (1 << n);
-    __assert_4: {
-        let __cond: bool = (shifted == 32);
-        if !__cond {
-            core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(125), used: 0 };
-                __r.String::append(move "Assertion failed in ");
-                __r.String::append(move "run");
-                __r.String::append(move " at ");
-                __r.String::append(move "wado-compiler/tests/fixtures/bitwise_shift_i64_by_i32.wado");
-                __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_21: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_i32_Display__fmt_22: {
-                    let self: Box<i32> = move Box<i32> { value: 31 };
-                    let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-                };
-                __r.String::append(move "\ncondition: shifted == 32\n");
-                __r.String::append(move "shifted: ");
-                __f = __inline_Formatter__new_23: {
-                    let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                };
-                __inline_u64_Display__fmt_24: {
-                    let self: Box<u64> = move Box<u64> { value: shifted };
-                    let f: &mut Formatter = &mut __f;
-                    "core::prelude/primitives.wado::fmt_u64_decimal"(self.value, f);
-                };
-                __r.String::append(move "\n");
-                break __tmpl: __r;
-            });
-        }
-    }
 }
 
 export fn __cm_export__run() {
-    run();
     cm_raw_call task-return(0);
 }
 

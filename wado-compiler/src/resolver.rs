@@ -4711,18 +4711,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
         let op = convert_binary_op(binary.op);
 
-        // Type check for newtypes: if either operand is a newtype, they must be the same type
-        // (This prevents mixing Meters and Seconds even though both wrap i32)
+        // Type check: both operands of a binary operation must have the same type.
+        // This applies to primitives, newtypes, and all non-overloaded binary ops.
+        // (Operator overloading via traits is dispatched earlier and doesn't reach here.)
+        // Logical operators (&&, ||) are excluded since both sides are always bool.
+        // We compare resolved types (not just TypeIds) because generic instantiation
+        // can create distinct TypeIds for the same logical type.
+        if !matches!(binary.op, BinaryOp::And | BinaryOp::Or)
+            && left.type_id != right.type_id
+            && left.type_id != TypeTable::ERROR
+            && right.type_id != TypeTable::ERROR
+            && left.type_id != TypeTable::NEVER
+            && right.type_id != TypeTable::NEVER
         {
             let type_table = self.type_table.borrow();
-            let left_is_newtype =
-                matches!(type_table.get(left.type_id), ResolvedType::Newtype { .. });
-            let right_is_newtype =
-                matches!(type_table.get(right.type_id), ResolvedType::Newtype { .. });
-
-            if (left_is_newtype || right_is_newtype) && left.type_id != right.type_id {
-                let left_name = type_table.type_name(left.type_id);
-                let right_name = type_table.type_name(right.type_id);
+            let left_name = type_table.type_name(left.type_id);
+            let right_name = type_table.type_name(right.type_id);
+            if left_name != right_name {
                 let _ = self.logger.error(TypeError::TypeMismatch {
                     expected: left_name,
                     found: right_name,
