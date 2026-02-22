@@ -24,7 +24,7 @@ pub fn emit_wasm(project: &Project, wir_module: &WirModule) -> Vec<u8> {
     }
 
     // Step 3: Wrap in Component Model
-    let wasm = component::build_component(project, &core_module);
+    let wasm = component::build_component(project, &core_module, &wir_module.import_name_map);
 
     // Step 4: Validate
     if !project.skip_validation {

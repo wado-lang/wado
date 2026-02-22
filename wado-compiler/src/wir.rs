@@ -54,6 +54,10 @@ pub struct WirModule {
     pub variant_case_info: IndexMap<u32, (u32, u32)>,
     /// Entry-point module path string (for display shortening in unparse).
     pub entry_point_path: Option<String>,
+    /// Mapping from original import names to shortened names for `-Os`.
+    /// Key: original field name, Value: shortened name.
+    /// Empty when `strip_names` is false.
+    pub import_name_map: IndexMap<String, String>,
 }
 
 impl WirModule {
@@ -73,6 +77,7 @@ impl WirModule {
             component: WirComponent::default(),
             variant_case_info: IndexMap::new(),
             entry_point_path: None,
+            import_name_map: IndexMap::new(),
         }
     }
 }

@@ -23,7 +23,15 @@ use wasm_encoder::{
 };
 
 /// Build a complete Wasm Component from a pre-built core module and project metadata.
-pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
+///
+/// `import_name_map` maps original import field names to shortened names (for `-Os`).
+/// When non-empty, the core module uses shortened import names, so the component
+/// wiring must use the same shortened names for the synthetic instances.
+pub fn build_component(
+    project: &Project,
+    core_module: &[u8],
+    import_name_map: &IndexMap<String, String>,
+) -> Vec<u8> {
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
@@ -136,35 +144,44 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
     ctx.register_core_module("main-mod");
     builder.core_module_raw(Some("main-mod"), core_module);
 
+    // Helper: map an original import field name to its shortened form (for -Os).
+    let short_name = |original: &str| -> String {
+        import_name_map
+            .get(original)
+            .cloned()
+            .unwrap_or_else(|| original.to_string())
+    };
+    let strip = !import_name_map.is_empty();
+
     // Build wasi instance
     let mut wasi_exports: Vec<(String, ExportKind, u32)> = Vec::new();
     for intrinsic_name in &component_plan.canonical_intrinsics {
         wasi_exports.push((
-            intrinsic_name.clone(),
+            short_name(intrinsic_name),
             ExportKind::Func,
             ctx.core_func_idx(intrinsic_name),
         ));
     }
     for local_name in &available_wasi_funcs {
         wasi_exports.push((
-            local_name.clone(),
+            short_name(local_name),
             ExportKind::Func,
             ctx.core_func_idx(local_name),
         ));
     }
     if project.has_http_handler_export && ctx.has_core_func("http-fields-constructor") {
         wasi_exports.push((
-            "http-fields-constructor".to_string(),
+            short_name("http-fields-constructor"),
             ExportKind::Func,
             ctx.core_func_idx("http-fields-constructor"),
         ));
         wasi_exports.push((
-            "http-response-new".to_string(),
+            short_name("http-response-new"),
             ExportKind::Func,
             ctx.core_func_idx("http-response-new"),
         ));
         wasi_exports.push((
-            "wasi:http/Response::new".to_string(),
+            short_name("wasi:http/Response::new"),
             ExportKind::Func,
             ctx.core_func_idx("http-response-new"),
         ));
@@ -177,10 +194,16 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
     let wasi_instance = builder.core_instantiate_exports(Some("wasi-instance"), wasi_exports_refs);
     ctx.register_core_instance("wasi");
 
-    // Build mem instance
+    // Build mem instance — use shortened names if -Os
+    let mem_short = short_name("memory");
+    let realloc_short = short_name("realloc");
     let mem_exports: Vec<(&str, ExportKind, u32)> = vec![
-        ("memory", ExportKind::Memory, ctx.memory_idx()),
-        ("realloc", ExportKind::Func, ctx.core_func_idx("realloc")),
+        (&mem_short, ExportKind::Memory, ctx.memory_idx()),
+        (
+            &realloc_short,
+            ExportKind::Func,
+            ctx.core_func_idx("realloc"),
+        ),
     ];
     let mem_instance = builder.core_instantiate_exports(Some("mem-instance"), mem_exports);
     ctx.register_core_instance("mem-inst");
@@ -190,7 +213,7 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
         .iter()
         .map(|func_name| {
             (
-                func_name.clone(),
+                short_name(func_name),
                 ExportKind::Func,
                 ctx.core_func_idx(func_name),
             )
@@ -210,14 +233,17 @@ pub fn build_component(project: &Project, core_module: &[u8]) -> Vec<u8> {
         Some(instance)
     };
 
-    // Instantiate core module
+    // Instantiate core module — use shortened module names if -Os
+    let wasi_mod_name = if strip { "w" } else { "wasi" };
+    let mem_mod_name = if strip { "m" } else { "mem" };
+    let bundled_mod_name = if strip { "b" } else { "bundled" };
     ctx.register_core_instance("main");
     let mut main_args: Vec<(&str, ModuleArg)> = vec![
-        ("wasi", ModuleArg::Instance(wasi_instance)),
-        ("mem", ModuleArg::Instance(mem_instance)),
+        (wasi_mod_name, ModuleArg::Instance(wasi_instance)),
+        (mem_mod_name, ModuleArg::Instance(mem_instance)),
     ];
     if let Some(bundled_inst) = bundled_instance {
-        main_args.push(("bundled", ModuleArg::Instance(bundled_inst)));
+        main_args.push((bundled_mod_name, ModuleArg::Instance(bundled_inst)));
     }
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 

@@ -14,6 +14,16 @@ use crate::wir::{
     WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType, WirTypeDef, WirTypeId,
 };
 
+/// Shorten an import module name for `-Os`.
+pub fn shorten_import_module(module: &str) -> String {
+    match module {
+        "wasi" => "w".to_string(),
+        "mem" => "m".to_string(),
+        "bundled" => "b".to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// Builder context for the `tir_to_wir` translation.
 ///
 /// Accumulates all WIR entities and provides lookup maps for resolving
@@ -87,6 +97,8 @@ pub struct WirContext<'a> {
     pub string_literals: Vec<String>,
     /// Available WASI function names (computed during component generation).
     pub available_wasi_funcs: IndexSet<String>,
+    /// Mapping from original import field names to shortened names for `-Os`.
+    pub import_name_map: IndexMap<String, String>,
 
     // === Function body translation helpers ===
     /// Pending function bodies: (function index in self.functions, `TirFunction` ref, `TypeTable` ref)
@@ -144,6 +156,7 @@ impl<'a> WirContext<'a> {
             canonical_closure_counter: 0,
             string_literals,
             available_wasi_funcs: IndexSet::new(),
+            import_name_map: IndexMap::new(),
             pending_bodies: Vec::new(),
         }
     }
@@ -211,9 +224,21 @@ impl<'a> WirContext<'a> {
         let fq_rc: Rc<str> = Rc::from(fq.as_str());
         let func_id = WirFuncId::new(func_idx, fq_rc);
 
+        // When strip_names is enabled, shorten import module/field names to save binary size.
+        // The shortened field name is a numeric index. Record the mapping so component.rs
+        // can use the same shortened names when wiring the core module instance.
+        let (short_module, short_field) = if self.project.strip_names {
+            let short = format!("{}", self.import_name_map.len());
+            self.import_name_map.insert(field.clone(), short.clone());
+            let short_mod = shorten_import_module(&module);
+            (short_mod, short)
+        } else {
+            (module, field)
+        };
+
         self.imports.push(WirImport {
-            module,
-            field,
+            module: short_module,
+            field: short_field,
             desc: WirImportDesc::Func {
                 type_id,
                 name: name.clone(),
@@ -602,6 +627,7 @@ impl<'a> WirContext<'a> {
             component: WirComponent::default(),
             variant_case_info: self.variant_case_info,
             entry_point_path: Some(self.project.entry_module_source.to_string()),
+            import_name_map: self.import_name_map,
         }
     }
 }
