@@ -229,6 +229,26 @@ let message = `Dear {name},
 
 Welcome to Wado!`;
 
+// Inspect (debug output) — `:?` specifier
+let p = Point { x: 10, y: 20 };
+println(`{p:?}`);                    // "Point { x: 10, y: 20 }"
+println(`{p}`);                      // same — falls back to inspect when no Display impl
+
+// Inspect works for any type: primitives, structs, arrays, variants, etc.
+let arr: Array<i32> = [1, 2, 3];
+println(`{arr:?}`);                  // "[1, 2, 3]"
+let opt: Option<i32> = Option::<i32>::Some(42);
+println(`{opt:?}`);                  // "Some(42)"
+
+// #[hidden] fields are omitted but hinted with `..`
+struct User {
+    name: String,
+    #[hidden]
+    password: String,
+}
+let u = User { name: "Alice", password: "secret" };
+println(`{u:?}`);                    // "User { name: \"Alice\", .. }"
+
 // String constructors
 let s = String::with_capacity(100);      // empty string with pre-allocated capacity
 

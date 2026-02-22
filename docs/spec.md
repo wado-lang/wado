@@ -1256,7 +1256,13 @@ let message = `Count: {count}`;   // "Count: 42"
 // With formatting
 let pi = 3.14159;
 let formatted = `Pi: {pi:0.2f}`;  // "Pi: 3.14"
+
+// Inspect (debug) format — works for any type
+let p = Point { x: 10, y: 20 };
+let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
 ```
+
+**Inspect specifier (`:?`)**: The `:?` format specifier produces a debug representation using Wado literal syntax. It works for every type without requiring trait implementations. For types without a `Display` implementation, `{expr}` (without specifier) falls back to inspect automatically.
 
 **Multiline strings** are supported in both regular and template strings. Literal newlines are preserved:
 
