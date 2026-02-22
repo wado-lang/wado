@@ -20,71 +20,11 @@ unsafe fn copy_to_ptr(dest_ptr: i32, src: &[u8]) {
     }
 }
 
-/// Pair table for fast digit formatting: "00" through "99" concatenated.
-const I2A: &[u8; 200] = b"\
-00010203040506070809\
-10111213141516171819\
-20212223242526272829\
-30313233343536373839\
-40414243444546474849\
-50515253545556575859\
-60616263646566676869\
-70717273747576777879\
-80818283848586878889\
-90919293949596979899";
-
 /// Write the decimal digits of `d` into `buf[0..nd]`.
-///
-/// Uses pair-based formatting with the `I2A` lookup table:
-/// processes 8 digits at a time (4 pairs), then 4, 2, 1.
-/// This halves the number of divisions compared to the naive digit-by-digit approach.
-#[allow(clippy::cast_possible_truncation)]
 fn write_digits(buf: &mut [u8], mut d: u64, nd: usize) {
-    let mut i = nd;
-
-    // Process 8 digits at a time (4 pairs)
-    while i >= 8 {
-        let x3210 = (d % 100_000_000) as u32;
-        d /= 100_000_000;
-        let (x32, x10) = (x3210 / 10_000, x3210 % 10_000);
-        let (x1, x0) = ((x10 / 100) as usize * 2, (x10 % 100) as usize * 2);
-        let (x3, x2) = ((x32 / 100) as usize * 2, (x32 % 100) as usize * 2);
-        buf[i - 1] = I2A[x0 + 1];
-        buf[i - 2] = I2A[x0];
-        buf[i - 3] = I2A[x1 + 1];
-        buf[i - 4] = I2A[x1];
-        buf[i - 5] = I2A[x2 + 1];
-        buf[i - 6] = I2A[x2];
-        buf[i - 7] = I2A[x3 + 1];
-        buf[i - 8] = I2A[x3];
-        i -= 8;
-    }
-
-    // Process remaining 4 digits (2 pairs)
-    let mut x = d as u32;
-    if i >= 4 {
-        let x10 = x % 10_000;
-        x /= 10_000;
-        let (x1, x0) = ((x10 / 100) as usize * 2, (x10 % 100) as usize * 2);
-        buf[i - 1] = I2A[x0 + 1];
-        buf[i - 2] = I2A[x0];
-        buf[i - 3] = I2A[x1 + 1];
-        buf[i - 4] = I2A[x1];
-        i -= 4;
-    }
-
-    // Process remaining 2 digits (1 pair)
-    if i >= 2 {
-        let x0 = (x % 100) as usize * 2;
-        x /= 100;
-        buf[i - 1] = I2A[x0 + 1];
-        buf[i - 2] = I2A[x0];
-        i -= 2;
-    }
-
-    // Process final digit
-    if i > 0 {
-        buf[0] = b'0' + x as u8;
+    for i in (0..nd).rev() {
+        buf[i] = b'0' + (d % 10) as u8;
+        d /= 10;
     }
 }
 
@@ -201,31 +141,25 @@ fn fmt_shortest(buf: &mut [u8], d: u64, p: i32, nd: i32) -> usize {
 
 /// Find shortest decimal representation `(d, p)` that round-trips through f32.
 ///
-/// Uses binary search over digit counts \[1, 9\] to find the minimum number of
-/// significant digits needed for a round-trip. This exploits the monotonicity
-/// property: if n digits round-trip, then n+1 digits also round-trip.
-/// Binary search needs at most 4 calls vs. 9 for linear scan.
+/// Uses fpfmt's f64 `fixed_width` with increasing digit counts, verifying
+/// each candidate via `parse` -> `as f32` round-trip.
+/// f32 needs at most 9 significant digits for unique identification.
 #[allow(clippy::cast_possible_truncation)]
 fn f32_short(f: f32) -> (u64, i32) {
     let f64_val = f64::from(f);
 
-    // Binary search for minimum digit count that round-trips through f32.
-    // Invariant: lo is the smallest candidate, hi is the largest.
-    // At each step, if mid digits round-trip, the answer is in [lo, mid];
-    // otherwise it's in [mid+1, hi].
-    let mut lo: i32 = 1;
-    let mut hi: i32 = 9;
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        let (d, p) = fpfmt::fixed_width(f64_val, mid);
+    // Linear scan: try increasing digit counts until round-trip succeeds
+    let mut n = 1;
+    while n <= 9 {
+        let (d, p) = fpfmt::fixed_width(f64_val, n);
         if fpfmt::parse(d, p) as f32 == f {
-            hi = mid;
-        } else {
-            lo = mid + 1;
+            return (d, p);
         }
+        n += 1;
     }
 
-    fpfmt::fixed_width(f64_val, lo)
+    // Fallback: 9 digits always suffices for f32
+    fpfmt::fixed_width(f64_val, 9)
 }
 
 /// Format an f64 using shortest representation into `buf`.
@@ -353,21 +287,29 @@ fn f64_fmt_fixed(value: f64, precision: i32, buf: &mut [u8]) -> usize {
         value
     };
 
-    // Determine magnitude using fixed_width(f, 1) — much cheaper than short().
-    // short() does interval arithmetic (2-3 uscale calls + trim_zeros),
-    // while fixed_width(f, 1) does a single uscale call.
-    let (_, p_mag) = fpfmt::fixed_width(f, 1);
-    let int_len = 1 + p_mag; // number of integer digits
+    // Get the shortest representation to determine magnitude
+    let (d_short, p_short) = fpfmt::short(f);
+    let nd_short = fpfmt::digits(d_short);
+    let int_len = nd_short + p_short; // number of integer digits
 
     // Compute how many significant digits we need
     let nd_needed = if int_len <= 0 {
         let needed = precision + (-int_len);
         if needed <= 0 { 1 } else { needed.min(18) }
     } else {
-        (int_len + precision).min(18)
+        let needed = int_len + precision;
+        needed.min(18)
     };
 
-    let (d, p) = fpfmt::fixed_width(f, nd_needed.max(1));
+    let nd_needed = nd_needed.max(1);
+
+    let (d, p) = if nd_needed <= nd_short {
+        fpfmt::fixed_width(f, nd_needed)
+    } else if nd_needed > 17 {
+        fpfmt::fixed_width(f, 17.min(nd_needed))
+    } else {
+        fpfmt::fixed_width(f, nd_needed)
+    };
     let nd = fpfmt::digits(d);
 
     let len = fmt_fixed(&mut buf[pos..], d, p, nd, precision);
