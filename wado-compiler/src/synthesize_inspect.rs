@@ -392,13 +392,6 @@ fn replace_markers_in_block(
 
                 let resolved = tt.borrow().get(type_id).clone();
 
-                // Special case: unit type has no Wasm representation, inline directly
-                if matches!(resolved, ResolvedType::Unit) {
-                    block.stmts.insert(i, ws("()", fmt_ref, tt, span));
-                    i += 1;
-                    continue;
-                }
-
                 // Special case: closure with alternate=true => inline source text
                 let new_stmt = if alternate && matches!(resolved, ResolvedType::Function { .. }) {
                     let source = match &value_expr.kind {
