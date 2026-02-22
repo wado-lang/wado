@@ -1279,7 +1279,7 @@ impl Parser {
         let start_span = self.peek().span;
         self.expect(&TokenKind::For)?;
 
-        // Check for for-of syntax: `for let [mut] item of array { ... }`
+        // Check for for-of syntax: `for let [mut] pattern of array { ... }`
         if self.check(&TokenKind::Let) {
             // Save position for potential backtrack
             let saved_pos = self.pos;
@@ -1292,28 +1292,24 @@ impl Parser {
                 self.advance();
             }
 
-            // Check if identifier followed by 'of'
-            // Accept identifiers and contextual keywords (flags, type)
-            if let Some(binding) = self.peek_kind().as_ident_name() {
-                let binding = binding.to_string();
-                self.advance(); // consume identifier
+            // Try to parse a let-pattern followed by 'of'
+            let pattern = self.parse_let_pattern();
+            if let Ok(binding) = pattern
+                && matches!(self.peek().kind, TokenKind::Of)
+            {
+                // This is a for-of loop
+                self.advance(); // consume 'of'
+                let iterable = self.parse_expr_no_struct_literal()?;
+                let body = self.parse_block()?;
+                let span = start_span.merge(&body.span);
 
-                // Check if next token is 'of'
-                if matches!(self.peek().kind, TokenKind::Of) {
-                    // This is a for-of loop
-                    self.advance(); // consume 'of'
-                    let iterable = self.parse_expr_no_struct_literal()?;
-                    let body = self.parse_block()?;
-                    let span = start_span.merge(&body.span);
-
-                    return Ok(Stmt::ForOf(ForOfStmt {
-                        binding,
-                        is_mut,
-                        iterable,
-                        body,
-                        span,
-                    }));
-                }
+                return Ok(Stmt::ForOf(ForOfStmt {
+                    binding,
+                    is_mut,
+                    iterable,
+                    body,
+                    span,
+                }));
             }
 
             // Not a for-of loop, backtrack and parse as C-style for

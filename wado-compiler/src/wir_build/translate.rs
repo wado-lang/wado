@@ -3131,10 +3131,10 @@ impl FunctionTranslator<'_, '_> {
                 scrutinee.type_id,
             );
 
-            // For irrefutable patterns (wildcard, binding), just use the body
+            // For irrefutable patterns (wildcard, binding, struct), just use the body
             let is_irrefutable = matches!(
                 arm.pattern,
-                TirPattern::Wildcard | TirPattern::Binding { .. }
+                TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Struct { .. }
             );
 
             if is_irrefutable && arm.guard.is_none() {
@@ -3526,8 +3526,51 @@ impl FunctionTranslator<'_, '_> {
                     self.emit_pattern_bindings(sub, scrut_local, scrut_type, instrs);
                 }
             }
-            TirPattern::Struct { .. } => {
-                // Struct patterns should be lowered before reaching WIR
+            TirPattern::Struct { fields, .. } => {
+                // Emit field bindings for struct patterns in match arms
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
+                if let WirType::Ref { type_id, .. } = wir_type {
+                    for field in fields {
+                        let field_get = WirInstr::StructGet {
+                            type_id: type_id.clone(),
+                            field_name: field.field_name.clone(),
+                            expr: Box::new(WirInstr::LocalGet {
+                                name: scrut_local.to_string(),
+                            }),
+                        };
+                        match &field.pattern {
+                            TirPattern::Binding { local_index, .. } => {
+                                instrs.push(WirInstr::LocalSet {
+                                    name: self.local_name(*local_index),
+                                    value: Box::new(field_get),
+                                });
+                            }
+                            TirPattern::Wildcard => {}
+                            _ => {
+                                // For nested patterns, store in a temp and recurse
+                                let temp_name = format!("__struct_field_{}", field.field_name);
+                                let field_type =
+                                    self.resolve_struct_field_type(scrut_type, &field.field_name);
+                                let field_wir_type =
+                                    self.ctx.type_id_to_wir_type(self.type_table, field_type);
+                                instrs.push(WirInstr::DeclareLocal {
+                                    name: temp_name.clone(),
+                                    ty: field_wir_type,
+                                });
+                                instrs.push(WirInstr::LocalSet {
+                                    name: temp_name.clone(),
+                                    value: Box::new(field_get),
+                                });
+                                self.emit_pattern_bindings(
+                                    &field.pattern,
+                                    &temp_name,
+                                    field_type,
+                                    instrs,
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -3549,6 +3592,31 @@ impl FunctionTranslator<'_, '_> {
             }
         }
         None
+    }
+
+    /// Resolve the `TypeId` of a struct field by name.
+    fn resolve_struct_field_type(&self, struct_type: TypeId, field_name: &str) -> TypeId {
+        if let ResolvedType::Struct {
+            name,
+            module_source,
+            ..
+        } = self.type_table.get(struct_type)
+        {
+            for module in self.ctx.project.tir_modules.values() {
+                if module.module_source == *module_source {
+                    for s in &module.structs {
+                        if s.name == *name {
+                            for f in &s.fields {
+                                if f.name == field_name {
+                                    return f.type_id;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        TypeTable::UNKNOWN
     }
 
     /// Translate variant construction: `Shape::Circle(5.0)`

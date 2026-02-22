@@ -453,8 +453,8 @@ pub struct ForStmt {
 /// Iterates over elements of an Array<T>
 #[derive(Debug, Clone)]
 pub struct ForOfStmt {
-    /// Variable name to bind each element
-    pub binding: String,
+    /// Pattern to bind each element (Ident for simple, Struct/Tuple for destructuring)
+    pub binding: Pattern,
     /// Whether the binding is mutable
     pub is_mut: bool,
     /// The array expression to iterate over

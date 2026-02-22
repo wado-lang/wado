@@ -1170,7 +1170,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str("mut ");
         }
 
-        self.output.push_str(&f.binding);
+        self.unparse_let_pattern(&f.binding);
         self.output.push_str(" of ");
         self.unparse_expr(&f.iterable);
         self.output.push_str(" {\n");
@@ -2352,7 +2352,7 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             if f.is_mut {
                 output.push_str("mut ");
             }
-            output.push_str(&f.binding);
+            unparse_pattern_into(&f.binding, output);
             output.push_str(" of ");
             unparse_expr_into(&f.iterable, output, false);
             output.push(' ');

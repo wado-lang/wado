@@ -931,7 +931,7 @@ fn desugar_for_of(f: &ForOfStmt, ctx: &mut DesugarContext) -> Stmt {
     // Pattern: Some(binding)
     let some_pattern = Pattern::Variant {
         variant_name: "Some".to_string(),
-        bindings: vec![Pattern::Ident(f.binding.clone())],
+        bindings: vec![desugar_pattern(&f.binding)],
         span,
     };
 

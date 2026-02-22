@@ -402,8 +402,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         // Enter a new scope for the loop binding and body
         self.enter_scope();
 
-        // Define the loop variable
-        self.define(
+        // Define the loop variable(s)
+        self.bind_let_pattern(
             &for_of_stmt.binding,
             for_of_stmt.is_mut,
             false, // not reactive

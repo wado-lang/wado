@@ -1071,7 +1071,12 @@ impl<'a> PatternLowerer<'a> {
                         | ResolvedType::Enum { .. }
                 );
 
-                if can_lower {
+                if matches!(pattern, TirPattern::Struct { .. }) {
+                    // Struct patterns are always irrefutable — lower to let bindings + then block
+                    self.lower_if_pattern_struct(
+                        scrutinee, &pattern, then_block, stmt.span, out, type_table,
+                    );
+                } else if can_lower {
                     // Lower Option, Variant, and Enum patterns to Let + If
                     self.lower_if_pattern_option(
                         scrutinee, &pattern, then_block, else_block, stmt.span, out, type_table,
@@ -1584,6 +1589,83 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Literal(_) | TirPattern::Enum { .. } => {
                 // Just evaluate for side effects (no bindings)
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
+            }
+        }
+    }
+
+    /// Lower a struct `IfPattern` to let bindings + then block (unconditional).
+    ///
+    /// Struct patterns are always irrefutable, so the else branch is discarded.
+    #[allow(clippy::too_many_arguments)]
+    fn lower_if_pattern_struct(
+        &mut self,
+        scrutinee: TirExpr,
+        pattern: &TirPattern,
+        mut then_block: TirBlock,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
+    ) {
+        if let TirPattern::Struct { fields, .. } = pattern {
+            // Lower the scrutinee into a temp
+            let struct_temp_index = self.alloc_local(scrutinee.type_id);
+            let struct_temp_name = self.next_temp_name();
+
+            out.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: struct_temp_name.clone(),
+                    local_index: struct_temp_index,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: scrutinee.type_id,
+                    value: scrutinee.clone(),
+                },
+                span,
+            ));
+
+            let struct_fields_info = self.get_struct_fields(scrutinee.type_id, type_table);
+
+            for field in fields {
+                let field_type = struct_fields_info
+                    .as_ref()
+                    .and_then(|info| {
+                        info.iter()
+                            .find(|f| f.name == field.field_name)
+                            .map(|f| f.type_id)
+                    })
+                    .unwrap_or(TypeTable::UNKNOWN);
+
+                let field_access = TirExpr::new(
+                    TirExprKind::FieldAccess {
+                        expr: Box::new(TirExpr::new(
+                            TirExprKind::Local {
+                                index: struct_temp_index,
+                                name: struct_temp_name.clone(),
+                            },
+                            scrutinee.type_id,
+                            span,
+                        )),
+                        field_index: field.field_index,
+                        field_name: field.field_name.clone(),
+                    },
+                    field_type,
+                    span,
+                );
+
+                self.lower_pattern_to_lets(
+                    &field.pattern,
+                    false,
+                    field_access,
+                    span,
+                    out,
+                    type_table,
+                );
+            }
+
+            // Emit then block unconditionally (struct patterns are irrefutable)
+            self.lower_block(&mut then_block, type_table);
+            for s in then_block.stmts {
+                out.push(s);
             }
         }
     }
