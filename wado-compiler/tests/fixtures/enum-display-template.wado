@@ -1,4 +1,4 @@
-// Test: Enum inspect in template strings and match expressions
+// Test: Enum Display fallback in template strings and match expressions
 use { println, Stdout } from "core:cli";
 
 enum Fruit {
@@ -9,18 +9,18 @@ enum Fruit {
 
 fn describe(f: Fruit) -> String {
     return match f {
-        Apple => `I like {f:?}`,
-        Banana => `{f:?} is yellow`,
-        Cherry => `{f:?} is small`,
+        Apple => `I like {f}`,
+        Banana => `{f} is yellow`,
+        Cherry => `{f} is small`,
     };
 }
 
 export fn run() with Stdout {
-    // Template string interpolation
+    // Template string interpolation (no Display impl → inspect fallback)
     let f = Fruit::Apple;
-    println(`fruit: {f:?}`);
+    println(`fruit: {f}`);
 
-    // Inspect in function using match
+    // In function using match
     println(describe(Fruit::Apple));
     println(describe(Fruit::Banana));
     println(describe(Fruit::Cherry));

@@ -1,4 +1,4 @@
-// Test: Enum inspect in template strings
+// Test: Enum Display falls back to inspect when no Display impl
 use { println, Stdout } from "core:cli";
 
 enum Color {
@@ -12,9 +12,10 @@ export fn run() with Stdout {
     let g = Color::Green;
     let b = Color::Blue;
 
-    println(`{r:?}`);
-    println(`{g:?}`);
-    println(`{b:?}`);
+    // No Display impl → falls back to inspect (typename-qualified)
+    println(`{r}`);
+    println(`{g}`);
+    println(`{b}`);
 }
 
 __DATA__
