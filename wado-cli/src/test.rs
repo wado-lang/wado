@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::process;
 use std::sync::Arc;
 
@@ -8,7 +9,7 @@ use tokio::sync::mpsc;
 use wasmtime::Engine;
 use wasmtime::component::Component;
 
-use crate::args::{self, next_arg, unexpected_arg};
+use crate::args::{self, CliExit};
 use crate::compile;
 use crate::runtime;
 
@@ -47,17 +48,23 @@ impl Opt {
     }
 }
 
+fn format_usage() -> String {
+    let mut buf = String::new();
+    writeln!(buf, "Usage: wado test [options] [files...]").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "If no files are specified, searches for **/*_test.wado recursively.").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Options:").unwrap();
+    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    buf
+}
+
 pub fn print_usage() {
-    eprintln!("Usage: wado test [options] [files...]");
-    eprintln!();
-    eprintln!("If no files are specified, searches for **/*_test.wado recursively.");
-    eprintln!();
-    eprintln!("Options:");
-    args::print_opts_help(Opt::ALL, |o| o.spec());
+    eprint!("{}", format_usage());
 }
 
 /// Find all *_test.wado files recursively in the current directory
-fn find_test_files() -> Vec<String> {
+fn find_test_files() -> Result<Vec<String>, CliExit> {
     let pattern = "**/*_test.wado";
     let mut files: Vec<String> = Vec::new();
 
@@ -68,53 +75,55 @@ fn find_test_files() -> Vec<String> {
             }
         }
         Err(e) => {
-            eprintln!("Error: failed to glob pattern: {e}");
-            process::exit(1);
+            return Err(CliExit::error(format!(
+                "failed to glob pattern: {e}"
+            )));
         }
     }
 
     files.sort();
-    files
+    Ok(files)
 }
 
-pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
+pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
+    let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();
     let mut filter: Option<String> = None;
     let mut jobs: Option<usize> = None;
-    while let Some(arg) = next_arg(&mut parser) {
+    while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Filter => {
-                    filter = Some(parser.value().unwrap().to_string_lossy().into_owned());
+                    filter = Some(args::require_string(&mut parser)?);
                 }
                 Opt::Parallel => {
-                    let val = parser.value().unwrap().to_string_lossy().into_owned();
+                    let val = args::require_string(&mut parser)?;
                     match val.parse::<usize>() {
                         Ok(n) if n > 0 => jobs = Some(n),
                         _ => {
-                            eprintln!("Error: --parallel requires a positive integer");
-                            process::exit(1);
+                            return Err(CliExit::error(
+                                "--parallel requires a positive integer",
+                            ));
                         }
                     }
                 }
-                Opt::Help => {
-                    print_usage();
-                    process::exit(0);
-                }
+                Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
             paths.push(val.to_string_lossy().into_owned());
         } else {
-            unexpected_arg(arg, print_usage);
+            return Err(args::unexpected_arg(arg, &usage));
         }
     }
 
     // If no files specified, search for *_test.wado files
     if paths.is_empty() {
-        paths = find_test_files();
+        paths = find_test_files()?;
         if paths.is_empty() {
-            eprintln!("No test files found (looking for **/*_test.wado)");
-            process::exit(0);
+            return Err(CliExit {
+                message: "No test files found (looking for **/*_test.wado)\n".to_owned(),
+                exit_code: 0,
+            });
         }
     }
 
@@ -125,11 +134,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
         (cpus / 2).max(2)
     });
 
-    TestOptions {
+    Ok(TestOptions {
         paths,
         filter,
         jobs,
-    }
+    })
 }
 
 /// A compiled test module ready for parallel execution

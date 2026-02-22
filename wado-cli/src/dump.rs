@@ -1,3 +1,4 @@
+use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -6,7 +7,7 @@ use std::process;
 use lexopt::Arg::Value;
 use wado_compiler::OptLevel;
 
-use crate::args::{self, next_arg, require_inputs, unexpected_arg};
+use crate::args::{self, CliExit};
 use crate::compiler_host::FilesystemCompilerHost;
 
 pub struct DumpOptions {
@@ -158,40 +159,47 @@ impl Opt {
     }
 }
 
-pub fn print_usage() {
-    eprintln!("Usage: wado dump [options] <file.wado> [file2.wado ...]");
-    eprintln!();
-    eprintln!("Dump compiler internal state for debugging.");
-    eprintln!("Supports multiple input files for batch processing.");
-    eprintln!();
-    eprintln!("Compilation Phases:");
-    args::print_opts_help(
+fn format_usage() -> String {
+    let mut buf = String::new();
+    writeln!(buf, "Usage: wado dump [options] <file.wado> [file2.wado ...]").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Dump compiler internal state for debugging.").unwrap();
+    writeln!(buf, "Supports multiple input files for batch processing.").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Compilation Phases:").unwrap();
+    write!(buf, "{}", args::format_opts_help(
         &[
             Opt::Tokens, Opt::Ast, Opt::Desugar, Opt::Modules, Opt::Symbols,
             Opt::Tir, Opt::Monomorphize, Opt::Lower, Opt::Optimize, Opt::Wir, Opt::All,
         ],
         |o| o.spec(),
-    );
-    eprintln!();
-    eprintln!("Display Options:");
-    args::print_opts_help(&[Opt::Unparse], |o| o.spec());
-    eprintln!();
-    eprintln!("Optimization Level (for --optimize phase):");
-    eprintln!("  -O0          No optimizations");
-    eprintln!("  -O1          Development optimizations (all passes except DCE)");
-    eprintln!("  -O2          Production optimizations (default)");
-    eprintln!("  -O3          Aggressive optimizations");
-    eprintln!("  -Os          Size optimizations (O2 + strip names)");
-    eprintln!();
-    eprintln!("Output:");
-    args::print_opts_help(&[Opt::Output], |o| o.spec());
-    eprintln!();
-    eprintln!("Other:");
-    args::print_opts_help(&[Opt::Help], |o| o.spec());
+    )).unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Display Options:").unwrap();
+    write!(buf, "{}", args::format_opts_help(&[Opt::Unparse], |o| o.spec())).unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Optimization Level (for --optimize phase):").unwrap();
+    writeln!(buf, "  -O0          No optimizations").unwrap();
+    writeln!(buf, "  -O1          Development optimizations (all passes except DCE)").unwrap();
+    writeln!(buf, "  -O2          Production optimizations (default)").unwrap();
+    writeln!(buf, "  -O3          Aggressive optimizations").unwrap();
+    writeln!(buf, "  -Os          Size optimizations (O2 + strip names)").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Output:").unwrap();
+    write!(buf, "{}", args::format_opts_help(&[Opt::Output], |o| o.spec())).unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Other:").unwrap();
+    write!(buf, "{}", args::format_opts_help(&[Opt::Help], |o| o.spec())).unwrap();
+    buf
+}
+
+pub fn print_usage() {
+    eprint!("{}", format_usage());
 }
 
 #[allow(clippy::similar_names)] // show_tir and show_wir are intentional phase names
-pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
+pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
+    let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
     let mut show_tokens = false;
     let mut show_ast = false;
@@ -207,7 +215,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut opt_level = OptLevel::O2;
     let mut output_template: Option<String> = None;
 
-    while let Some(arg) = next_arg(&mut parser) {
+    while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Tokens => show_tokens = true,
@@ -234,10 +242,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                 }
                 Opt::Unparse => unparse = true,
                 Opt::OptLevel => {
-                    let level = parser.value().unwrap_or_else(|_| {
-                        eprintln!("Error: -O requires a level (0, 1, 2, 3, or s)");
-                        process::exit(1);
-                    });
+                    let level = args::require_value(&mut parser).map_err(|_| {
+                        CliExit::error("-O requires a level (0, 1, 2, 3, or s)")
+                    })?;
                     let level_str = level.to_string_lossy();
                     opt_level = match level_str.as_ref() {
                         "0" => OptLevel::O0,
@@ -246,32 +253,28 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
                         "3" => OptLevel::O3,
                         "s" => OptLevel::Os,
                         _ => {
-                            eprintln!("Error: Unknown optimization level: -O{level_str}");
-                            eprintln!("Valid levels: -O0, -O1, -O2, -O3, -Os");
-                            process::exit(1);
+                            return Err(CliExit::error(format!(
+                                "Unknown optimization level: -O{level_str}\nValid levels: -O0, -O1, -O2, -O3, -Os"
+                            )));
                         }
                     };
                 }
                 Opt::Output => {
-                    let template = parser.value().unwrap_or_else(|_| {
-                        eprintln!("Error: -o requires an output template");
-                        process::exit(1);
-                    });
+                    let template = args::require_value(&mut parser).map_err(|_| {
+                        CliExit::error("-o requires an output template")
+                    })?;
                     output_template = Some(template.to_string_lossy().into_owned());
                 }
-                Opt::Help => {
-                    print_usage();
-                    process::exit(0);
-                }
+                Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
             inputs.push(val.to_string_lossy().into_owned());
         } else {
-            unexpected_arg(arg, print_usage);
+            return Err(args::unexpected_arg(arg, &usage));
         }
     }
 
-    let inputs = require_inputs(inputs, print_usage);
+    let inputs = args::require_inputs(inputs, &usage)?;
 
     // Default: show all
     if !show_tokens
@@ -297,7 +300,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         show_wir = true;
     }
 
-    DumpOptions {
+    Ok(DumpOptions {
         inputs,
         show_tokens,
         show_ast,
@@ -312,7 +315,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
         unparse,
         opt_level,
         output_template,
-    }
+    })
 }
 
 pub async fn run(opts: DumpOptions) {

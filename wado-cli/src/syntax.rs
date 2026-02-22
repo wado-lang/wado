@@ -3,9 +3,9 @@
 //! Transforms canonical syntax definitions from wado-compiler into
 //! editor-specific formats (`TextMate` grammar, VS Code language configuration).
 
+use std::fmt::Write as _;
 use std::fs;
 use std::io::{self, Write};
-use std::process;
 
 use lexopt::Arg::Value;
 use lexopt::Parser;
@@ -13,7 +13,7 @@ use serde_json::json;
 
 use wado_compiler::syntax::SyntaxDefinition;
 
-use crate::args::{self, exit_error, next_arg, require_string, unexpected_arg};
+use crate::args::{self, exit_error, CliExit};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxFormat {
@@ -65,49 +65,49 @@ impl Opt {
     }
 }
 
-fn print_usage() {
-    eprintln!("Usage: wado syntax [options]");
-    eprintln!();
-    eprintln!("Generate syntax definition files for editor integrations.");
-    eprintln!();
-    eprintln!("Options:");
-    args::print_opts_help(Opt::ALL, |o| o.spec());
-    eprintln!();
-    eprintln!("Examples:");
-    eprintln!("  wado syntax --format tmLanguage -o wado.tmLanguage.json");
-    eprintln!("  wado syntax --format language-config -o language-configuration.json");
+fn format_usage() -> String {
+    let mut buf = String::new();
+    writeln!(buf, "Usage: wado syntax [options]").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Generate syntax definition files for editor integrations.").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Options:").unwrap();
+    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Examples:").unwrap();
+    writeln!(buf, "  wado syntax --format tmLanguage -o wado.tmLanguage.json").unwrap();
+    writeln!(buf, "  wado syntax --format language-config -o language-configuration.json").unwrap();
+    buf
 }
 
-pub fn parse_args(mut parser: Parser) -> SyntaxOptions {
+pub fn parse_args(mut parser: Parser) -> Result<SyntaxOptions, CliExit> {
+    let usage = format_usage();
     let mut format = SyntaxFormat::TmLanguage;
     let mut output = None;
 
-    while let Some(arg) = next_arg(&mut parser) {
+    while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Format => {
-                    let fmt_str = require_string(&mut parser);
-                    format = SyntaxFormat::from_str(&fmt_str).unwrap_or_else(|| {
-                        exit_error(&format!("unknown format: {fmt_str}"));
-                    });
+                    let fmt_str = args::require_string(&mut parser)?;
+                    format = SyntaxFormat::from_str(&fmt_str).ok_or_else(|| {
+                        CliExit::error(format!("unknown format: {fmt_str}"))
+                    })?;
                 }
                 Opt::Output => {
-                    output = Some(require_string(&mut parser));
+                    output = Some(args::require_string(&mut parser)?);
                 }
-                Opt::Help => {
-                    print_usage();
-                    process::exit(0);
-                }
+                Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(_) = arg {
             // No positional arguments expected
-            exit_error("unexpected argument");
+            return Err(CliExit::error("unexpected argument"));
         } else {
-            unexpected_arg(arg, print_usage);
+            return Err(args::unexpected_arg(arg, &usage));
         }
     }
 
-    SyntaxOptions { format, output }
+    Ok(SyntaxOptions { format, output })
 }
 
 pub fn run(opts: SyntaxOptions) {

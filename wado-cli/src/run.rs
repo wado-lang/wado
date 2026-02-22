@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::io::BufWriter;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,7 +10,7 @@ use lexopt::Arg::Value;
 use wasmtime::component::Component;
 use wasmtime::{GuestProfiler, UpdateDeadline};
 
-use crate::args::{self, next_arg, require_input, require_string, unexpected_arg};
+use crate::args::{self, CliExit};
 use crate::compile::{self, OptLevel};
 use crate::runtime::{self, ProfileMode};
 use wado_compiler::LogLevel;
@@ -74,40 +75,46 @@ impl Opt {
     }
 }
 
-pub fn print_usage() {
-    eprintln!("Usage: wado run [options] <file.wado>");
-    eprintln!();
-    eprintln!("Compile and run a Wado CLI program (wasi:cli/command world).");
-    eprintln!();
-    eprintln!("Options:");
-    args::print_opts_help(Opt::ALL, |o| o.spec());
-    eprintln!();
-    eprintln!("By default, the current directory is preopened as '.' for WASI filesystem access.");
-    eprintln!();
-    eprintln!("Profiling examples:");
-    eprintln!("  wado run --profile guest prog.wado");
-    eprintln!("    => writes profile.json, view at https://profiler.firefox.com/");
-    eprintln!();
-    eprintln!("  wado run --profile guest,output.json,5 prog.wado");
-    eprintln!("    => custom output path and 5ms sampling interval");
-    eprintln!();
-    eprintln!("  perf record -k mono wado run --profile jitdump prog.wado");
-    eprintln!("  perf inject --jit --input perf.data --output perf.jit.data");
-    eprintln!("  perf report --input perf.jit.data");
+fn format_usage() -> String {
+    let mut buf = String::new();
+    writeln!(buf, "Usage: wado run [options] <file.wado>").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Compile and run a Wado CLI program (wasi:cli/command world).").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Options:").unwrap();
+    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "By default, the current directory is preopened as '.' for WASI filesystem access.").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Profiling examples:").unwrap();
+    writeln!(buf, "  wado run --profile guest prog.wado").unwrap();
+    writeln!(buf, "    => writes profile.json, view at https://profiler.firefox.com/").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "  wado run --profile guest,output.json,5 prog.wado").unwrap();
+    writeln!(buf, "    => custom output path and 5ms sampling interval").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "  perf record -k mono wado run --profile jitdump prog.wado").unwrap();
+    writeln!(buf, "  perf inject --jit --input perf.data --output perf.jit.data").unwrap();
+    writeln!(buf, "  perf report --input perf.jit.data").unwrap();
+    buf
 }
 
-fn parse_profile(s: &str) -> ProfileMode {
+pub fn print_usage() {
+    eprint!("{}", format_usage());
+}
+
+fn parse_profile(s: &str) -> Result<ProfileMode, CliExit> {
     if s == "jitdump" {
-        return ProfileMode::JitDump;
+        return Ok(ProfileMode::JitDump);
     }
     if s == "perfmap" {
-        return ProfileMode::PerfMap;
+        return Ok(ProfileMode::PerfMap);
     }
     if s == "guest" {
-        return ProfileMode::Guest {
+        return Ok(ProfileMode::Guest {
             path: "profile.json".to_owned(),
             interval_ms: 10,
-        };
+        });
     }
     if let Some(rest) = s.strip_prefix("guest,") {
         let parts: Vec<&str> = rest.splitn(2, ',').collect();
@@ -117,20 +124,21 @@ fn parse_profile(s: &str) -> ProfileMode {
             parts[0].to_owned()
         };
         let interval_ms = if parts.len() > 1 {
-            parts[1].parse::<u64>().unwrap_or_else(|_| {
-                eprintln!("Error: invalid profiling interval '{}'", parts[1]);
-                process::exit(1);
-            })
+            parts[1].parse::<u64>().map_err(|_| {
+                CliExit::error(format!("invalid profiling interval '{}'", parts[1]))
+            })?
         } else {
             10
         };
-        return ProfileMode::Guest { path, interval_ms };
+        return Ok(ProfileMode::Guest { path, interval_ms });
     }
-    eprintln!("Error: unknown profile mode '{s}'. Use guest, jitdump, or perfmap");
-    process::exit(1);
+    Err(CliExit::error(format!(
+        "unknown profile mode '{s}'. Use guest, jitdump, or perfmap"
+    )))
 }
 
-pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
+pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
+    let usage = format_usage();
     let mut input: Option<String> = None;
     let mut opt_level = OptLevel::default();
     let mut log_level = LogLevel::default();
@@ -140,11 +148,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
     let mut explicit_dirs = false;
     let mut no_dir = false;
 
-    while let Some(arg) = next_arg(&mut parser) {
+    while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Dir => {
-                    let dir_spec = require_string(&mut parser);
+                    let dir_spec = args::require_string(&mut parser)?;
                     // Support "host::guest" or just "host" (guest defaults to host path).
                     let (host, guest) = if let Some((h, g)) = dir_spec.split_once("::") {
                         (h.to_owned(), g.to_owned())
@@ -168,22 +176,18 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
                         "3" => OptLevel::O3,
                         "s" => OptLevel::Os,
                         _ => {
-                            eprintln!(
-                                "Error: unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-                            );
-                            process::exit(1);
+                            return Err(CliExit::error(format!(
+                                "unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
+                            )));
                         }
                     };
                 }
-                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser),
+                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser)?,
                 Opt::Profile => {
-                    let spec = require_string(&mut parser);
-                    profile = parse_profile(&spec);
+                    let spec = args::require_string(&mut parser)?;
+                    profile = parse_profile(&spec)?;
                 }
-                Opt::Help => {
-                    print_usage();
-                    process::exit(0);
-                }
+                Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
             let s = val.to_string_lossy().into_owned();
@@ -194,7 +198,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
                 program_args.push(s);
             }
         } else {
-            unexpected_arg(arg, print_usage);
+            return Err(args::unexpected_arg(arg, &usage));
         }
     }
 
@@ -203,14 +207,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
         preopened_dirs.push((".".to_owned(), ".".to_owned()));
     }
 
-    RunOptions {
-        input: require_input(input, print_usage),
+    Ok(RunOptions {
+        input: args::require_input(input, &usage)?,
         opt_level,
         log_level,
         profile,
         preopened_dirs,
         program_args,
-    }
+    })
 }
 
 async fn run_cli_component(

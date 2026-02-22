@@ -1,30 +1,3 @@
-// Allow certain pedantic lints that are common in CLI code:
-// - ref_option: &Option<T> is fine when coming from struct fields
-// - missing_panics_doc: Mutex unwrap panics are obvious
-// - struct_excessive_bools: CLI option structs naturally have many bools
-// - too_many_lines: Large functions are acceptable in CLI code
-// - needless_pass_by_value: Ownership transfer is sometimes intentional
-#![allow(
-    clippy::ref_option,
-    clippy::missing_panics_doc,
-    clippy::struct_excessive_bools,
-    clippy::too_many_lines,
-    clippy::needless_pass_by_value
-)]
-
-mod args;
-mod compile;
-mod compiler_host;
-mod dump;
-mod format;
-mod run;
-mod runtime;
-mod serve;
-mod syntax;
-mod test;
-
-pub use compiler_host::FilesystemCompilerHost;
-
 use std::process;
 
 use lexopt::Arg::{Long, Value};
@@ -139,32 +112,39 @@ async fn main() {
             if let Some(cmd) = Cmd::from_name(&cmd_str) {
                 match cmd {
                     Cmd::Compile => {
-                        let opts = compile::parse_args(parser);
-                        compile::run(opts).await;
+                        let opts = wado_cli::compile::parse_args(parser)
+                            .unwrap_or_else(|e| e.exit());
+                        wado_cli::compile::run(opts).await;
                     }
                     Cmd::Run => {
-                        let opts = run::parse_args(parser);
-                        run::run(opts).await;
+                        let opts = wado_cli::run::parse_args(parser)
+                            .unwrap_or_else(|e| e.exit());
+                        wado_cli::run::run(opts).await;
                     }
                     Cmd::Serve => {
-                        let opts = serve::parse_args(parser);
-                        serve::run(opts).await;
+                        let opts = wado_cli::serve::parse_args(parser)
+                            .unwrap_or_else(|e| e.exit());
+                        wado_cli::serve::run(opts).await;
                     }
                     Cmd::Test => {
-                        let opts = test::parse_args(parser);
-                        test::run(opts).await;
+                        let opts = wado_cli::test::parse_args(parser)
+                            .unwrap_or_else(|e| e.exit());
+                        wado_cli::test::run(opts).await;
                     }
                     Cmd::Format => {
-                        let opts = format::parse_args(parser);
-                        format::run(opts);
+                        let opts = wado_cli::format::parse_args(parser)
+                            .unwrap_or_else(|e| e.exit());
+                        wado_cli::format::run(opts);
                     }
                     Cmd::Dump => {
-                        let opts = dump::parse_args(parser);
-                        dump::run(opts).await;
+                        let opts = wado_cli::dump::parse_args(parser)
+                            .unwrap_or_else(|e| e.exit());
+                        wado_cli::dump::run(opts).await;
                     }
                     Cmd::Syntax => {
-                        let opts = syntax::parse_args(parser);
-                        syntax::run(opts);
+                        let opts = wado_cli::syntax::parse_args(parser)
+                            .unwrap_or_else(|e| e.exit());
+                        wado_cli::syntax::run(opts);
                     }
                 }
             } else {

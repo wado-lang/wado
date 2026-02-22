@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 use std::process;
@@ -5,7 +6,7 @@ use std::time::Instant;
 
 use lexopt::Arg::Value;
 
-use crate::args::{self, next_arg, unexpected_arg};
+use crate::args::{self, CliExit};
 
 pub struct FormatOptions {
     pub inputs: Vec<String>,
@@ -42,55 +43,61 @@ impl Opt {
     }
 }
 
-pub fn print_usage() {
-    eprintln!("Usage: wado format [options] <file.wado>...");
-    eprintln!();
-    eprintln!("Options:");
-    args::print_opts_help(Opt::ALL, |o| o.spec());
-    eprintln!();
-    eprintln!("Without -w, outputs formatted code to stdout (single file only).");
+fn format_usage() -> String {
+    let mut buf = String::new();
+    writeln!(buf, "Usage: wado format [options] <file.wado>...").unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Options:").unwrap();
+    write!(buf, "{}", args::format_opts_help(Opt::ALL, |o| o.spec())).unwrap();
+    writeln!(buf).unwrap();
+    writeln!(buf, "Without -w, outputs formatted code to stdout (single file only).").unwrap();
+    buf
 }
 
-pub fn parse_args(mut parser: lexopt::Parser) -> FormatOptions {
+pub fn print_usage() {
+    eprint!("{}", format_usage());
+}
+
+pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> {
+    let usage = format_usage();
     let mut inputs: Vec<String> = Vec::new();
     let mut write_in_place = false;
     let mut check = false;
 
-    while let Some(arg) = next_arg(&mut parser) {
+    while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Write => write_in_place = true,
                 Opt::Check => check = true,
-                Opt::Help => {
-                    print_usage();
-                    process::exit(0);
-                }
+                Opt::Help => return Err(CliExit::help(usage)),
             }
         } else if let Value(val) = arg {
             inputs.push(val.to_string_lossy().into_owned());
         } else {
-            unexpected_arg(arg, print_usage);
+            return Err(args::unexpected_arg(arg, &usage));
         }
     }
 
     if inputs.is_empty() {
-        eprintln!("Error: no input file specified");
-        print_usage();
-        process::exit(1);
+        return Err(CliExit::error_with_usage(
+            "no input file specified",
+            &usage,
+        ));
     }
 
     // Multiple files require -w or --check
     if inputs.len() > 1 && !write_in_place && !check {
-        eprintln!("Error: multiple files require -w or --check");
-        print_usage();
-        process::exit(1);
+        return Err(CliExit::error_with_usage(
+            "multiple files require -w or --check",
+            &usage,
+        ));
     }
 
-    FormatOptions {
+    Ok(FormatOptions {
         inputs,
         write_in_place,
         check,
-    }
+    })
 }
 
 pub fn run(opts: FormatOptions) {
