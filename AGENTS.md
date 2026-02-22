@@ -382,6 +382,7 @@ WEPs combine language specification and implementation strategy in a single docu
 - [TIR-Level CM Adapter Synthesis](./docs/wep-2026-02-15-cm-adapter-synthesis.md)
 - [WASI HTTP Integration](./docs/wep-2026-02-21-wasi-http.md)
 - [Inspect (Debug Output)](./docs/wep-2026-02-21-inspect-debug-output.md)
+- [CLI Subcommands for Package Management](./docs/wep-2026-02-22-cli-subcommands.md)
 
 ### Structure
 
