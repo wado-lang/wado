@@ -1262,7 +1262,7 @@ let p = Point { x: 10, y: 20 };
 let debug = `{p:?}`;             // "Point { x: 10, y: 20 }"
 ```
 
-**Inspect specifier (`:?`)**: The `:?` format specifier produces a debug representation using Wado literal syntax. It works for every type without requiring trait implementations. For types without a `Display` implementation, `{expr}` (without specifier) falls back to inspect automatically.
+**Inspect specifier (`:?`)**: The `:?` format specifier produces a debug representation using Wado literal syntax. It works for every type without requiring trait implementations. For types without a `Display` implementation, `{expr}` (without specifier) falls back to inspect automatically. See [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md) for the full output format specification.
 
 **Multiline strings** are supported in both regular and template strings. Literal newlines are preserved:
 
