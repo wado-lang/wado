@@ -20,6 +20,7 @@ wado update [name]                 # update lock file (within version specs)
 wado update --pin [name]           # update lock file + tighten toml specs
 wado update --breaking [name]      # update across major versions
 wado fetch                         # download dependencies without building
+wado list [filter]                 # list cached packages
 wado exec <dep-name> [args...]     # run dependency's command entry point
 ```
 
@@ -166,6 +167,90 @@ RUN wado compile -o app.wasm       # rebuilds only when source changes
 
 If `wado.lock` exists, `wado fetch` downloads the exact versions recorded in the lock file. If `wado.lock` does not exist, it runs resolution first (generates `wado.lock`), then downloads.
 
+### Dependency Cache Layout
+
+Dependencies are stored in a structured directory tree under `~/.wado/src/`, mirroring the source URL hierarchy (inspired by [ghq](https://github.com/x-motemen/ghq)). This makes cached packages browsable — `ls` or `find` is all you need to explore what's been fetched.
+
+```
+~/.wado/src/
+├── wa.dev/                          # registry host
+│   ├── docs/regex/
+│   │   └── 0.1.2/
+│   │       ├── wado.toml
+│   │       └── src/
+│   └── std/json/
+│       └── 1.2.0/
+├── github.com/                      # git host
+│   └── user/router/
+│       └── 1.0.2-abc1234d/          # version + short commit
+│           ├── wado.toml
+│           └── src/
+└── gitlab.com/
+    └── user/bench/
+        └── 0.1.0-def56789/
+```
+
+#### Path Convention
+
+| Source   | Path pattern                                        | Example                                          |
+| -------- | --------------------------------------------------- | ------------------------------------------------ |
+| Registry | `{registry-host}/{namespace}/{name}/{version}/`     | `wa.dev/docs/regex/0.1.2/`                       |
+| Git      | `{git-host}/{owner}/{repo}/{version}-{short-ref}/`  | `github.com/user/router/1.0.2-abc1234d/`         |
+
+Git dependencies include a short commit prefix (8 hex chars) in the directory name to distinguish different commits that resolve to the same version tag. Registry dependencies use the exact resolved version.
+
+#### Cache Root
+
+The default cache root is `~/.wado/src/`. This can be overridden via the `WADO_CACHE_DIR` environment variable:
+
+```sh
+WADO_CACHE_DIR=/tmp/wado-cache wado fetch    # custom cache location
+```
+
+### `wado list`
+
+List packages in the local dependency cache.
+
+```sh
+wado list                            # all cached packages
+wado list regex                      # filter by name substring
+wado list --path                     # show full filesystem paths
+```
+
+#### Default Output
+
+```
+$ wado list
+docs/regex                0.1.2       wa.dev
+std/json                  1.2.0       wa.dev
+user/router               1.0.2       github.com
+user/bench                0.1.0       gitlab.com
+```
+
+Columns: package identity, version, source host. Sorted by source host then package identity.
+
+#### Path Output
+
+```
+$ wado list --path
+/home/user/.wado/src/wa.dev/docs/regex/0.1.2
+/home/user/.wado/src/wa.dev/std/json/1.2.0
+/home/user/.wado/src/github.com/user/router/1.0.2-abc1234d
+/home/user/.wado/src/gitlab.com/user/bench/0.1.0-def56789
+```
+
+One absolute path per line. Designed for piping into other tools:
+
+```sh
+# Open a cached package source in your editor
+code $(wado list --path | fzf)
+
+# Find all wado.toml files in cache
+wado list --path | xargs -I{} ls {}/wado.toml
+```
+
+`wado list` scans the cache directory — it does not require a `wado.toml` or project context. It reports what is physically present on disk, regardless of whether any project currently depends on it.
+
 ### Entry Point and CLI Commands
 
 When `wado.toml` is present, the existing CLI commands use the entry point fields:
@@ -207,6 +292,8 @@ The lock file's `command` field for the dependency determines which source file 
 - `wado update --breaking` makes major upgrades explicit and intentional
 - `wado fetch` enables efficient CI/Docker caching from day one
 - Version operator preservation means upgrading never silently changes the compatibility contract
+- Structured cache layout makes dependencies browsable with standard filesystem tools — no special commands needed to inspect cached source
+- `wado list` enables quick discovery and integrates naturally with Unix pipelines (`fzf`, `xargs`, etc.)
 
 ### Negative
 
@@ -218,3 +305,4 @@ The lock file's `command` field for the dependency determines which source file 
 - **`--pin` over `--sync-toml`**: `--pin` is shorter and conveys intent ("pin to what I resolved"). `--sync-toml` is more descriptive but verbose.
 - **`--breaking` as a flag, not a separate command**: keeps the update family unified. A separate `wado upgrade` command (like cargo-edit) would fragment the mental model.
 - **No `--locked` here**: `--locked` is a build-time flag (`wado compile --locked`, `wado run --locked`) that rejects stale lock files. It belongs on build commands, not on `wado update` which always writes the lock file.
+- **ghq-style cache over content-addressed store**: Cargo uses a content-addressed store (`~/.cargo/registry/cache/` with `.crate` archives + `src/` extraction). The ghq-style `host/owner/name/version/` layout trades deduplication for direct browsability — `cd` into any package without extraction or special tooling. For a Wasm ecosystem where packages are typically small, the storage overhead is negligible.
