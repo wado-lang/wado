@@ -5,11 +5,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Result;
-use lexopt::Arg::{Long, Short, Value};
+use lexopt::Arg::Value;
 use wasmtime::component::Component;
 use wasmtime::{GuestProfiler, UpdateDeadline};
 
-use crate::args::{next_arg, require_input, require_string, unexpected_arg};
+use crate::args::{self, next_arg, require_input, require_string, unexpected_arg};
 use crate::compile::{self, OptLevel};
 use crate::runtime::{self, ProfileMode};
 use wado_compiler::LogLevel;
@@ -26,24 +26,61 @@ pub struct RunOptions {
     pub program_args: Vec<String>,
 }
 
+#[derive(Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
+enum Opt {
+    Dir,
+    NoDir,
+    OptLevel,
+    LogLevel,
+    Profile,
+    Help,
+}
+
+impl Opt {
+    const ALL: &[Self] = &[
+        Self::Dir,
+        Self::NoDir,
+        Self::OptLevel,
+        Self::LogLevel,
+        Self::Profile,
+        Self::Help,
+    ];
+
+    const fn spec(self) -> args::OptSpec {
+        match self {
+            Self::Dir => args::OptSpec {
+                long: Some("dir"),
+                short: None,
+                value: Some("<path>"),
+                desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path\nOverrides the default of preopening the current directory",
+            },
+            Self::NoDir => args::OptSpec {
+                long: Some("no-dir"),
+                short: None,
+                value: None,
+                desc: "Do not preopen any directories (disables the default)",
+            },
+            Self::OptLevel => args::OPT_LEVEL_SPEC,
+            Self::LogLevel => args::LOG_LEVEL_SPEC,
+            Self::Profile => args::OptSpec {
+                long: Some("profile"),
+                short: None,
+                value: Some("<mode>"),
+                desc: "Enable profiling:\n  guest[,path[,interval_ms]]  Cross-platform guest profiling\n                               (default: profile.json, 10ms)\n  jitdump   Linux perf jitdump (use with perf record -k mono)\n  perfmap   Linux perf map (use with perf record -k mono)",
+            },
+            Self::Help => args::HELP_SPEC,
+        }
+    }
+}
+
 pub fn print_usage() {
     eprintln!("Usage: wado run [options] <file.wado>");
     eprintln!();
     eprintln!("Compile and run a Wado CLI program (wasi:cli/command world).");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  --dir <path>       Preopen directory for WASI filesystem access.");
-    eprintln!("                     Use --dir host::guest to specify different guest path.");
-    eprintln!("                     Overrides the default of preopening the current directory.");
-    eprintln!("  --no-dir           Do not preopen any directories (disables the default).");
-    eprintln!("  -O<n>              Optimization level: -O0, -O1, -O2, -O3, -Os");
-    eprintln!("  --log-level <l>    Log level: debug, info, warn, error, off (default: info)");
-    eprintln!("  --profile <mode>   Enable profiling:");
-    eprintln!("                       guest[,path[,interval_ms]]  Cross-platform guest profiling");
-    eprintln!("                                                   (default: profile.json, 10ms)");
-    eprintln!("                       jitdump   Linux perf jitdump (use with perf record -k mono)");
-    eprintln!("                       perfmap   Linux perf map (use with perf record -k mono)");
-    eprintln!("  --help             Show this help message");
+    args::print_opts_help(Opt::ALL, |o| o.spec());
     eprintln!();
     eprintln!("By default, the current directory is preopened as '.' for WASI filesystem access.");
     eprintln!();
@@ -57,17 +94,6 @@ pub fn print_usage() {
     eprintln!("  perf record -k mono wado run --profile jitdump prog.wado");
     eprintln!("  perf inject --jit --input perf.data --output perf.jit.data");
     eprintln!("  perf report --input perf.jit.data");
-}
-
-fn parse_log_level(s: &str) -> Option<LogLevel> {
-    match s.to_lowercase().as_str() {
-        "debug" => Some(LogLevel::Debug),
-        "info" => Some(LogLevel::Info),
-        "warn" | "warning" => Some(LogLevel::Warn),
-        "error" => Some(LogLevel::Error),
-        "off" | "none" => Some(LogLevel::Off),
-        _ => None,
-    }
 }
 
 fn parse_profile(s: &str) -> ProfileMode {
@@ -115,70 +141,60 @@ pub fn parse_args(mut parser: lexopt::Parser) -> RunOptions {
     let mut no_dir = false;
 
     while let Some(arg) = next_arg(&mut parser) {
-        match arg {
-            Long("help") => {
-                print_usage();
-                process::exit(0);
-            }
-            Long("dir") => {
-                let dir_spec = require_string(&mut parser);
-                // Support "host::guest" or just "host" (guest defaults to host path).
-                let (host, guest) = if let Some((h, g)) = dir_spec.split_once("::") {
-                    (h.to_owned(), g.to_owned())
-                } else {
-                    (dir_spec.clone(), dir_spec)
-                };
-                preopened_dirs.push((host, guest));
-                explicit_dirs = true;
-            }
-            Long("no-dir") => {
-                no_dir = true;
-            }
-            Long("profile") => {
-                let spec = require_string(&mut parser);
-                profile = parse_profile(&spec);
-            }
-            Short('O') => {
-                let val = parser.optional_value();
-                let level_str = val
-                    .as_ref()
-                    .map(|v| v.to_string_lossy())
-                    .unwrap_or_default();
-                opt_level = match level_str.as_ref() {
-                    "" | "0" | "g" => OptLevel::O0,
-                    "1" => OptLevel::O1,
-                    "2" => OptLevel::O2,
-                    "3" => OptLevel::O3,
-                    "s" => OptLevel::Os,
-                    _ => {
-                        eprintln!(
-                            "Error: unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
-                        );
-                        process::exit(1);
-                    }
-                };
-            }
-            Long("log-level") => {
-                let level_str = require_string(&mut parser);
-                if let Some(level) = parse_log_level(&level_str) {
-                    log_level = level;
-                } else {
-                    eprintln!(
-                        "Error: unknown log level '{level_str}'. Use debug, info, warn, error, or off"
-                    );
-                    process::exit(1);
+        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+            match opt {
+                Opt::Dir => {
+                    let dir_spec = require_string(&mut parser);
+                    // Support "host::guest" or just "host" (guest defaults to host path).
+                    let (host, guest) = if let Some((h, g)) = dir_spec.split_once("::") {
+                        (h.to_owned(), g.to_owned())
+                    } else {
+                        (dir_spec.clone(), dir_spec)
+                    };
+                    preopened_dirs.push((host, guest));
+                    explicit_dirs = true;
+                }
+                Opt::NoDir => no_dir = true,
+                Opt::OptLevel => {
+                    let val = parser.optional_value();
+                    let level_str = val
+                        .as_ref()
+                        .map(|v| v.to_string_lossy())
+                        .unwrap_or_default();
+                    opt_level = match level_str.as_ref() {
+                        "" | "0" | "g" => OptLevel::O0,
+                        "1" => OptLevel::O1,
+                        "2" => OptLevel::O2,
+                        "3" => OptLevel::O3,
+                        "s" => OptLevel::Os,
+                        _ => {
+                            eprintln!(
+                                "Error: unknown optimization level '-O{level_str}'. Use -O0, -O1, -O2, -O3, -Os, or -Og"
+                            );
+                            process::exit(1);
+                        }
+                    };
+                }
+                Opt::LogLevel => log_level = args::parse_log_level_arg(&mut parser),
+                Opt::Profile => {
+                    let spec = require_string(&mut parser);
+                    profile = parse_profile(&spec);
+                }
+                Opt::Help => {
+                    print_usage();
+                    process::exit(0);
                 }
             }
-            Value(val) => {
-                let s = val.to_string_lossy().into_owned();
-                if input.is_none() {
-                    input = Some(s);
-                } else {
-                    // Arguments after the source file are passed to the program.
-                    program_args.push(s);
-                }
+        } else if let Value(val) = arg {
+            let s = val.to_string_lossy().into_owned();
+            if input.is_none() {
+                input = Some(s);
+            } else {
+                // Arguments after the source file are passed to the program.
+                program_args.push(s);
             }
-            _ => unexpected_arg(arg, print_usage),
+        } else {
+            unexpected_arg(arg, print_usage);
         }
     }
 

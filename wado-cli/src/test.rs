@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use glob::glob;
-use lexopt::Arg::{Long, Short, Value};
+use lexopt::Arg::Value;
 use tokio::sync::mpsc;
 use wasmtime::Engine;
 use wasmtime::component::Component;
 
-use crate::args::{next_arg, unexpected_arg};
+use crate::args::{self, next_arg, unexpected_arg};
 use crate::compile;
 use crate::runtime;
 
@@ -18,15 +18,42 @@ pub struct TestOptions {
     pub jobs: usize,
 }
 
+#[derive(Clone, Copy)]
+enum Opt {
+    Filter,
+    Parallel,
+    Help,
+}
+
+impl Opt {
+    const ALL: &[Self] = &[Self::Filter, Self::Parallel, Self::Help];
+
+    const fn spec(self) -> args::OptSpec {
+        match self {
+            Self::Filter => args::OptSpec {
+                long: Some("filter"),
+                short: Some('f'),
+                value: Some("<pattern>"),
+                desc: "Filter tests by name pattern",
+            },
+            Self::Parallel => args::OptSpec {
+                long: Some("parallel"),
+                short: Some('p'),
+                value: Some("<N>"),
+                desc: "Number of parallel workers (default: num CPUs)",
+            },
+            Self::Help => args::HELP_SPEC,
+        }
+    }
+}
+
 pub fn print_usage() {
     eprintln!("Usage: wado test [options] [files...]");
     eprintln!();
     eprintln!("If no files are specified, searches for **/*_test.wado recursively.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -f, --filter <pattern>  Filter tests by name pattern");
-    eprintln!("  -p, --parallel <N>      Number of parallel workers (default: num CPUs)");
-    eprintln!("  --help                  Show this help message");
+    args::print_opts_help(Opt::ALL, |o| o.spec());
 }
 
 /// Find all *_test.wado files recursively in the current directory
@@ -55,28 +82,30 @@ pub fn parse_args(mut parser: lexopt::Parser) -> TestOptions {
     let mut filter: Option<String> = None;
     let mut jobs: Option<usize> = None;
     while let Some(arg) = next_arg(&mut parser) {
-        match arg {
-            Long("help") => {
-                print_usage();
-                process::exit(0);
-            }
-            Short('f') | Long("filter") => {
-                filter = Some(parser.value().unwrap().to_string_lossy().into_owned());
-            }
-            Short('p') | Long("parallel") => {
-                let val = parser.value().unwrap().to_string_lossy().into_owned();
-                match val.parse::<usize>() {
-                    Ok(n) if n > 0 => jobs = Some(n),
-                    _ => {
-                        eprintln!("Error: --parallel requires a positive integer");
-                        process::exit(1);
+        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+            match opt {
+                Opt::Filter => {
+                    filter = Some(parser.value().unwrap().to_string_lossy().into_owned());
+                }
+                Opt::Parallel => {
+                    let val = parser.value().unwrap().to_string_lossy().into_owned();
+                    match val.parse::<usize>() {
+                        Ok(n) if n > 0 => jobs = Some(n),
+                        _ => {
+                            eprintln!("Error: --parallel requires a positive integer");
+                            process::exit(1);
+                        }
                     }
                 }
+                Opt::Help => {
+                    print_usage();
+                    process::exit(0);
+                }
             }
-            Value(val) => {
-                paths.push(val.to_string_lossy().into_owned());
-            }
-            _ => unexpected_arg(arg, print_usage),
+        } else if let Value(val) = arg {
+            paths.push(val.to_string_lossy().into_owned());
+        } else {
+            unexpected_arg(arg, print_usage);
         }
     }
 

@@ -7,13 +7,13 @@ use std::fs;
 use std::io::{self, Write};
 use std::process;
 
-use lexopt::Arg::{Long, Short, Value};
+use lexopt::Arg::Value;
 use lexopt::Parser;
 use serde_json::json;
 
 use wado_compiler::syntax::SyntaxDefinition;
 
-use crate::args::{exit_error, next_arg, require_string, unexpected_arg};
+use crate::args::{self, exit_error, next_arg, require_string, unexpected_arg};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxFormat {
@@ -36,17 +36,42 @@ pub struct SyntaxOptions {
     pub output: Option<String>,
 }
 
+#[derive(Clone, Copy)]
+enum Opt {
+    Format,
+    Output,
+    Help,
+}
+
+impl Opt {
+    const ALL: &[Self] = &[Self::Format, Self::Output, Self::Help];
+
+    const fn spec(self) -> args::OptSpec {
+        match self {
+            Self::Format => args::OptSpec {
+                long: Some("format"),
+                short: None,
+                value: Some("<fmt>"),
+                desc: "Output format: tmLanguage, language-config (default: tmLanguage)",
+            },
+            Self::Output => args::OptSpec {
+                long: Some("output"),
+                short: Some('o'),
+                value: Some("<file>"),
+                desc: "Output file (default: stdout)",
+            },
+            Self::Help => args::HELP_SPEC,
+        }
+    }
+}
+
 fn print_usage() {
     eprintln!("Usage: wado syntax [options]");
     eprintln!();
     eprintln!("Generate syntax definition files for editor integrations.");
     eprintln!();
     eprintln!("Options:");
-    eprintln!(
-        "  --format <fmt>   Output format: tmLanguage, language-config (default: tmLanguage)"
-    );
-    eprintln!("  -o <file>        Output file (default: stdout)");
-    eprintln!("  --help           Show this help message");
+    args::print_opts_help(Opt::ALL, |o| o.spec());
     eprintln!();
     eprintln!("Examples:");
     eprintln!("  wado syntax --format tmLanguage -o wado.tmLanguage.json");
@@ -58,25 +83,27 @@ pub fn parse_args(mut parser: Parser) -> SyntaxOptions {
     let mut output = None;
 
     while let Some(arg) = next_arg(&mut parser) {
-        match arg {
-            Long("help") => {
-                print_usage();
-                process::exit(0);
+        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+            match opt {
+                Opt::Format => {
+                    let fmt_str = require_string(&mut parser);
+                    format = SyntaxFormat::from_str(&fmt_str).unwrap_or_else(|| {
+                        exit_error(&format!("unknown format: {fmt_str}"));
+                    });
+                }
+                Opt::Output => {
+                    output = Some(require_string(&mut parser));
+                }
+                Opt::Help => {
+                    print_usage();
+                    process::exit(0);
+                }
             }
-            Long("format") => {
-                let fmt_str = require_string(&mut parser);
-                format = SyntaxFormat::from_str(&fmt_str).unwrap_or_else(|| {
-                    exit_error(&format!("unknown format: {fmt_str}"));
-                });
-            }
-            Short('o') | Long("output") => {
-                output = Some(require_string(&mut parser));
-            }
-            Value(_) => {
-                // No positional arguments expected
-                exit_error("unexpected argument");
-            }
-            _ => unexpected_arg(arg, print_usage),
+        } else if let Value(_) = arg {
+            // No positional arguments expected
+            exit_error("unexpected argument");
+        } else {
+            unexpected_arg(arg, print_usage);
         }
     }
 

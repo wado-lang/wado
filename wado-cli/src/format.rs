@@ -3,9 +3,9 @@ use std::path::Path;
 use std::process;
 use std::time::Instant;
 
-use lexopt::Arg::{Long, Short, Value};
+use lexopt::Arg::Value;
 
-use crate::args::{next_arg, unexpected_arg};
+use crate::args::{self, next_arg, unexpected_arg};
 
 pub struct FormatOptions {
     pub inputs: Vec<String>,
@@ -13,13 +13,40 @@ pub struct FormatOptions {
     pub check: bool,
 }
 
+#[derive(Clone, Copy)]
+enum Opt {
+    Write,
+    Check,
+    Help,
+}
+
+impl Opt {
+    const ALL: &[Self] = &[Self::Write, Self::Check, Self::Help];
+
+    const fn spec(self) -> args::OptSpec {
+        match self {
+            Self::Write => args::OptSpec {
+                long: Some("write"),
+                short: Some('w'),
+                value: None,
+                desc: "Write formatted output back to file",
+            },
+            Self::Check => args::OptSpec {
+                long: Some("check"),
+                short: None,
+                value: None,
+                desc: "Check if file is formatted (exit 1 if not)",
+            },
+            Self::Help => args::HELP_SPEC,
+        }
+    }
+}
+
 pub fn print_usage() {
     eprintln!("Usage: wado format [options] <file.wado>...");
     eprintln!();
     eprintln!("Options:");
-    eprintln!("  -w, --write    Write formatted output back to file");
-    eprintln!("  --check        Check if file is formatted (exit 1 if not)");
-    eprintln!("  --help         Show this help message");
+    args::print_opts_help(Opt::ALL, |o| o.spec());
     eprintln!();
     eprintln!("Without -w, outputs formatted code to stdout (single file only).");
 }
@@ -30,15 +57,19 @@ pub fn parse_args(mut parser: lexopt::Parser) -> FormatOptions {
     let mut check = false;
 
     while let Some(arg) = next_arg(&mut parser) {
-        match arg {
-            Long("help") => {
-                print_usage();
-                process::exit(0);
+        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+            match opt {
+                Opt::Write => write_in_place = true,
+                Opt::Check => check = true,
+                Opt::Help => {
+                    print_usage();
+                    process::exit(0);
+                }
             }
-            Short('w') | Long("write") => write_in_place = true,
-            Long("check") => check = true,
-            Value(val) => inputs.push(val.to_string_lossy().into_owned()),
-            _ => unexpected_arg(arg, print_usage),
+        } else if let Value(val) = arg {
+            inputs.push(val.to_string_lossy().into_owned());
+        } else {
+            unexpected_arg(arg, print_usage);
         }
     }
 

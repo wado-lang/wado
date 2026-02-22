@@ -3,10 +3,10 @@ use std::io::Write;
 use std::path::Path;
 use std::process;
 
-use lexopt::Arg::{Long, Short, Value};
+use lexopt::Arg::Value;
 use wado_compiler::OptLevel;
 
-use crate::args::{next_arg, require_inputs, unexpected_arg};
+use crate::args::{self, next_arg, require_inputs, unexpected_arg};
 use crate::compiler_host::FilesystemCompilerHost;
 
 pub struct DumpOptions {
@@ -28,6 +28,136 @@ pub struct DumpOptions {
     pub output_template: Option<String>,
 }
 
+#[derive(Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
+enum Opt {
+    Tokens,
+    Ast,
+    Desugar,
+    Modules,
+    Symbols,
+    Tir,
+    Monomorphize,
+    Lower,
+    Optimize,
+    Wir,
+    All,
+    Unparse,
+    OptLevel,
+    Output,
+    Help,
+}
+
+impl Opt {
+    const ALL: &[Self] = &[
+        Self::Tokens,
+        Self::Ast,
+        Self::Desugar,
+        Self::Modules,
+        Self::Symbols,
+        Self::Tir,
+        Self::Monomorphize,
+        Self::Lower,
+        Self::Optimize,
+        Self::Wir,
+        Self::All,
+        Self::Unparse,
+        Self::OptLevel,
+        Self::Output,
+        Self::Help,
+    ];
+
+    const fn spec(self) -> args::OptSpec {
+        match self {
+            Self::Tokens => args::OptSpec {
+                long: Some("tokens"),
+                short: None,
+                value: None,
+                desc: "(Phase 1: Lexer) Show tokens",
+            },
+            Self::Ast => args::OptSpec {
+                long: Some("ast"),
+                short: None,
+                value: None,
+                desc: "(Phase 2: Parser) Show AST structure",
+            },
+            Self::Desugar => args::OptSpec {
+                long: Some("desugar"),
+                short: None,
+                value: None,
+                desc: "(Phase 3: Desugar) Show desugared AST",
+            },
+            Self::Modules => args::OptSpec {
+                long: Some("modules"),
+                short: None,
+                value: None,
+                desc: "(Phase 4: Load) Show loaded modules",
+            },
+            Self::Symbols => args::OptSpec {
+                long: Some("symbols"),
+                short: None,
+                value: None,
+                desc: "(Phase 5: Analyze) Show symbol table",
+            },
+            Self::Tir => args::OptSpec {
+                long: Some("tir"),
+                short: None,
+                value: None,
+                desc: "(Phase 6: Resolve) Show TIR (Typed IR)",
+            },
+            Self::Monomorphize => args::OptSpec {
+                long: Some("monomorphize"),
+                short: None,
+                value: None,
+                desc: "(Phase 7: Monomorphize) Show monomorphized TIR",
+            },
+            Self::Lower => args::OptSpec {
+                long: Some("lower"),
+                short: None,
+                value: None,
+                desc: "(Phase 8: Lower) Show lowered TIR",
+            },
+            Self::Optimize => args::OptSpec {
+                long: Some("optimize"),
+                short: None,
+                value: None,
+                desc: "(Phase 9: Optimize) Show optimization hints",
+            },
+            Self::Wir => args::OptSpec {
+                long: Some("wir"),
+                short: None,
+                value: None,
+                desc: "(Phase 10: WIR) Show Wasm IR",
+            },
+            Self::All => args::OptSpec {
+                long: Some("all"),
+                short: None,
+                value: None,
+                desc: "Show all phases (default if no phase specified)",
+            },
+            Self::Unparse => args::OptSpec {
+                long: Some("unparse"),
+                short: None,
+                value: None,
+                desc: "Unparse to Wado source code (for ast/desugar/tir/lower/optimize)\nDefault: Debug/tree format",
+            },
+            Self::OptLevel => args::OptSpec {
+                long: None,
+                short: Some('O'),
+                value: Some("<n>"),
+                desc: "Optimization level (for --optimize phase)",
+            },
+            Self::Output => args::OptSpec {
+                long: Some("output"),
+                short: Some('o'),
+                value: Some("<template>"),
+                desc: "Output template for bulk file generation\n{name} is replaced with input filename (without extension)\nExample: -o 'out/{name}.lowered.wado'",
+            },
+            Self::Help => args::HELP_SPEC,
+        }
+    }
+}
+
 pub fn print_usage() {
     eprintln!("Usage: wado dump [options] <file.wado> [file2.wado ...]");
     eprintln!();
@@ -35,21 +165,16 @@ pub fn print_usage() {
     eprintln!("Supports multiple input files for batch processing.");
     eprintln!();
     eprintln!("Compilation Phases:");
-    eprintln!("  --tokens       (Phase 1: Lexer) Show tokens");
-    eprintln!("  --ast          (Phase 2: Parser) Show AST structure");
-    eprintln!("  --desugar      (Phase 3: Desugar) Show desugared AST");
-    eprintln!("  --modules      (Phase 4: Load) Show loaded modules");
-    eprintln!("  --symbols      (Phase 5: Analyze) Show symbol table");
-    eprintln!("  --tir          (Phase 6: Resolve) Show TIR (Typed IR)");
-    eprintln!("  --monomorphize (Phase 7: Monomorphize) Show monomorphized TIR");
-    eprintln!("  --lower        (Phase 8: Lower) Show lowered TIR");
-    eprintln!("  --optimize     (Phase 9: Optimize) Show optimization hints");
-    eprintln!("  --wir          (Phase 10: WIR) Show Wasm IR");
-    eprintln!("  --all        Show all phases (default if no phase specified)");
+    args::print_opts_help(
+        &[
+            Opt::Tokens, Opt::Ast, Opt::Desugar, Opt::Modules, Opt::Symbols,
+            Opt::Tir, Opt::Monomorphize, Opt::Lower, Opt::Optimize, Opt::Wir, Opt::All,
+        ],
+        |o| o.spec(),
+    );
     eprintln!();
     eprintln!("Display Options:");
-    eprintln!("  --unparse    Unparse to Wado source code (for ast/desugar/tir/lower/optimize)");
-    eprintln!("               Default: Debug/tree format");
+    args::print_opts_help(&[Opt::Unparse], |o| o.spec());
     eprintln!();
     eprintln!("Optimization Level (for --optimize phase):");
     eprintln!("  -O0          No optimizations");
@@ -59,12 +184,10 @@ pub fn print_usage() {
     eprintln!("  -Os          Size optimizations (O2 + strip names)");
     eprintln!();
     eprintln!("Output:");
-    eprintln!("  -o <template>  Output template for bulk file generation");
-    eprintln!("                 {{name}} is replaced with input filename (without extension)");
-    eprintln!("                 Example: -o 'out/{{name}}.lowered.wado'");
+    args::print_opts_help(&[Opt::Output], |o| o.spec());
     eprintln!();
     eprintln!("Other:");
-    eprintln!("  --help       Show this help message");
+    args::print_opts_help(&[Opt::Help], |o| o.spec());
 }
 
 #[allow(clippy::similar_names)] // show_tir and show_wir are intentional phase names
@@ -85,64 +208,66 @@ pub fn parse_args(mut parser: lexopt::Parser) -> DumpOptions {
     let mut output_template: Option<String> = None;
 
     while let Some(arg) = next_arg(&mut parser) {
-        match arg {
-            Long("help") => {
-                print_usage();
-                process::exit(0);
-            }
-            Long("tokens") => show_tokens = true,
-            Long("ast") => show_ast = true,
-            Long("desugar") => show_desugar = true,
-            Long("symbols") => show_symbols = true,
-            Long("modules") => show_modules = true,
-            Long("tir") => show_tir = true,
-            Long("monomorphize") => show_monomorphize = true,
-            Long("lower") => show_lower = true,
-            Long("optimize") => show_optimize = true,
-            Long("wir") => show_wir = true,
-            Long("unparse") => unparse = true,
-            Long("all") => {
-                show_tokens = true;
-                show_ast = true;
-                show_desugar = true;
-                show_symbols = true;
-                show_modules = true;
-                show_tir = true;
-                show_monomorphize = true;
-                show_lower = true;
-                show_optimize = true;
-                show_wir = true;
-            }
-            Short('O') => {
-                let level = parser.value().unwrap_or_else(|_| {
-                    eprintln!("Error: -O requires a level (0, 1, 2, 3, or s)");
-                    process::exit(1);
-                });
-                let level_str = level.to_string_lossy();
-                opt_level = match level_str.as_ref() {
-                    "0" => OptLevel::O0,
-                    "1" => OptLevel::O1,
-                    "2" => OptLevel::O2,
-                    "3" => OptLevel::O3,
-                    "s" => OptLevel::Os,
-                    _ => {
-                        eprintln!("Error: Unknown optimization level: -O{level_str}");
-                        eprintln!("Valid levels: -O0, -O1, -O2, -O3, -Os");
+        if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
+            match opt {
+                Opt::Tokens => show_tokens = true,
+                Opt::Ast => show_ast = true,
+                Opt::Desugar => show_desugar = true,
+                Opt::Symbols => show_symbols = true,
+                Opt::Modules => show_modules = true,
+                Opt::Tir => show_tir = true,
+                Opt::Monomorphize => show_monomorphize = true,
+                Opt::Lower => show_lower = true,
+                Opt::Optimize => show_optimize = true,
+                Opt::Wir => show_wir = true,
+                Opt::All => {
+                    show_tokens = true;
+                    show_ast = true;
+                    show_desugar = true;
+                    show_symbols = true;
+                    show_modules = true;
+                    show_tir = true;
+                    show_monomorphize = true;
+                    show_lower = true;
+                    show_optimize = true;
+                    show_wir = true;
+                }
+                Opt::Unparse => unparse = true,
+                Opt::OptLevel => {
+                    let level = parser.value().unwrap_or_else(|_| {
+                        eprintln!("Error: -O requires a level (0, 1, 2, 3, or s)");
                         process::exit(1);
-                    }
-                };
+                    });
+                    let level_str = level.to_string_lossy();
+                    opt_level = match level_str.as_ref() {
+                        "0" => OptLevel::O0,
+                        "1" => OptLevel::O1,
+                        "2" => OptLevel::O2,
+                        "3" => OptLevel::O3,
+                        "s" => OptLevel::Os,
+                        _ => {
+                            eprintln!("Error: Unknown optimization level: -O{level_str}");
+                            eprintln!("Valid levels: -O0, -O1, -O2, -O3, -Os");
+                            process::exit(1);
+                        }
+                    };
+                }
+                Opt::Output => {
+                    let template = parser.value().unwrap_or_else(|_| {
+                        eprintln!("Error: -o requires an output template");
+                        process::exit(1);
+                    });
+                    output_template = Some(template.to_string_lossy().into_owned());
+                }
+                Opt::Help => {
+                    print_usage();
+                    process::exit(0);
+                }
             }
-            Short('o') | Long("output") => {
-                let template = parser.value().unwrap_or_else(|_| {
-                    eprintln!("Error: -o requires an output template");
-                    process::exit(1);
-                });
-                output_template = Some(template.to_string_lossy().into_owned());
-            }
-            Value(val) => {
-                inputs.push(val.to_string_lossy().into_owned());
-            }
-            _ => unexpected_arg(arg, print_usage),
+        } else if let Value(val) = arg {
+            inputs.push(val.to_string_lossy().into_owned());
+        } else {
+            unexpected_arg(arg, print_usage);
         }
     }
 
