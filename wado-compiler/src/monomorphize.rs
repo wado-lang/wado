@@ -906,14 +906,6 @@ impl Monomorphizer {
                     type_table.make_mut_ref(new_inner_id)
                 }
             }
-            ResolvedType::Option(inner_id) => {
-                let new_inner_id = self.rewrite_type_id(inner_id, type_table);
-                if new_inner_id == inner_id {
-                    type_id
-                } else {
-                    type_table.make_option(new_inner_id)
-                }
-            }
             ResolvedType::Tuple(elem_ids) => {
                 let new_elem_ids: Vec<TypeId> = elem_ids
                     .iter()
@@ -1113,10 +1105,6 @@ impl Monomorphizer {
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute_type(elem, substitution, type_table);
                 type_table.intern(ResolvedType::BuiltinArray(new_elem))
-            }
-            ResolvedType::Option(inner) => {
-                let new_inner = self.substitute_type(inner, substitution, type_table);
-                type_table.make_option(new_inner)
             }
             ResolvedType::Ref(inner) => {
                 let new_inner = self.substitute_type(inner, substitution, type_table);
@@ -2510,6 +2498,13 @@ impl Monomorphizer {
             }
             TirExprKind::OptionSome { value } => {
                 self.substitute_types_in_expr(value, substitution, type_table);
+                // After substitution, if expr.type_id is still a bare Variant (from
+                // generic library code), convert it to a GenericInstance using the
+                // payload type as the type arg (e.g., Option + i32 → Option<i32>).
+                // Use make_option to ensure the canonical module_source (core:prelude).
+                if matches!(type_table.get(expr.type_id), ResolvedType::Variant { .. }) {
+                    expr.type_id = type_table.make_option(value.type_id);
+                }
             }
             TirExprKind::VariantConstruct {
                 variant_type,
@@ -2520,6 +2515,34 @@ impl Monomorphizer {
                 if let Some(payload_expr) = payload {
                     self.substitute_types_in_expr(payload_expr, substitution, type_table);
                 }
+                // After substitution, if variant_type is still a bare Variant (from
+                // generic library code), convert it to a GenericInstance using the
+                // payload type as type arg (e.g., Option + &mut Node<String> → Option<&mut Node<String>>).
+                if let ResolvedType::Variant { ref name, .. } =
+                    type_table.get(*variant_type).clone()
+                    && let Some(payload_expr) = payload
+                {
+                    // Use make_option for Option to ensure canonical module_source
+                    let new_id = if name == "Option" {
+                        type_table.make_option(payload_expr.type_id)
+                    } else {
+                        let module_source = if let ResolvedType::Variant { module_source, .. } =
+                            type_table.get(*variant_type)
+                        {
+                            module_source.clone()
+                        } else {
+                            unreachable!()
+                        };
+                        type_table.make_generic_instance(
+                            name.clone(),
+                            module_source,
+                            vec![payload_expr.type_id],
+                        )
+                    };
+                    *variant_type = new_id;
+                    expr.type_id = new_id;
+                }
+                // Unit cases (None) will be handled by the translator's fallback
             }
             TirExprKind::Move { expr } => {
                 self.substitute_types_in_expr(expr, substitution, type_table);

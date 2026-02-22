@@ -1793,7 +1793,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             }
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Option(inner)
             | ResolvedType::BuiltinArray(inner)
             | ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
@@ -1955,7 +1954,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         struct_fields,
                         resource_types,
                     );
-                    type_table.intern(ResolvedType::Option(inner))
+                    type_table.make_option(inner)
                 }
                 _ => {
                     // Check if it's a generic struct type
@@ -2086,7 +2085,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         resource_types,
                         type_params,
                     );
-                    type_table.intern(ResolvedType::Option(inner))
+                    type_table.make_option(inner)
                 }
                 _ => {
                     // Check if it's a generic struct type
@@ -3266,11 +3265,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             // Allow null (Option<unknown>) to be assigned to Option<T>
             let is_null_to_option = {
                 let type_table = self.type_table.borrow();
-                matches!(
-                    (type_table.get(value.type_id), type_table.get(type_id)),
-                    (ResolvedType::Option(inner), ResolvedType::Option(_))
-                        if *inner == TypeTable::UNKNOWN
-                )
+                type_table
+                    .as_option(value.type_id)
+                    .is_some_and(|inner| inner == TypeTable::UNKNOWN)
+                    && type_table.as_option(type_id).is_some()
             };
             if !is_null_to_option {
                 let _ = self.logger.error(TypeError::TypeMismatch {
@@ -3661,14 +3659,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 // Each variant case has exactly one payload type.
                 // Determine the payload type for the variant case.
                 let payload_type: TypeId = match &resolved_type {
-                    // Option<T>: Some has inner type T, None has unit type
-                    ResolvedType::Option(inner) => {
-                        if variant_name == "Some" {
-                            *inner
-                        } else {
-                            TypeTable::UNIT
-                        }
-                    }
                     // Non-generic variant
                     ResolvedType::Variant { name, .. } => {
                         self.get_variant_case_payload_type(name, variant_name, &[], *span)
@@ -5609,9 +5599,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 }
                 "Option" if generic.args.len() == 1 => {
                     let inner_type = self.resolve_wasi_type(&generic.args[0]);
-                    self.type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Option(inner_type))
+                    self.type_table.borrow_mut().make_option(inner_type)
                 }
                 _ => TypeTable::UNIT,
             },
@@ -6081,10 +6069,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Null literal → Option<T>
         if let Expr::Literal(lit) = expr
             && matches!(&lit.value, Literal::Null)
-            && matches!(
-                self.type_table.borrow().get(target_type),
-                ResolvedType::Option(_)
-            )
+            && self.type_table.borrow().as_option(target_type).is_some()
         {
             return Some(TirExpr::new(TirExprKind::Null, target_type, lit.span));
         }
@@ -6621,9 +6606,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             .collect();
 
         // Special handling for Option::Some and Option::None
-        if let ResolvedType::Option(inner_type) =
-            self.type_table.borrow().get(target_type_id).clone()
-        {
+        if let Some(_inner_type) = self.type_table.borrow().as_option(target_type_id) {
             match static_call.method.as_str() {
                 "Some" => {
                     // Option::Some(value) - wrap in OptionSome
@@ -6655,8 +6638,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         });
                         return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
                     }
-                    // Inner type comes from the Option type annotation
-                    let _ = inner_type; // Used to verify type is known
                     return TirExpr::new(TirExprKind::Null, target_type_id, static_call.span);
                 }
                 _ => {
@@ -8900,7 +8881,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 },
             ),
             ResolvedType::BuiltinArray(elem) => ("Array".to_string(), Some(vec![*elem])),
-            ResolvedType::Option(_) => ("Option".to_string(), None),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 // For references, check if the inner type implements the trait
                 return self.type_implements_trait(*inner, trait_name);
@@ -9174,7 +9154,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     format!("{}<{}>", name, args.join(", "))
                 }
             }
-            ResolvedType::Option(inner) => format!("Option<{}>", self.type_id_to_string(inner)),
             ResolvedType::BuiltinArray(elem) => {
                 format!("builtin::array<{}>", self.type_id_to_string(elem))
             }
@@ -9788,10 +9767,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 self.type_table
                     .borrow_mut()
                     .intern(ResolvedType::BuiltinArray(new_elem))
-            }
-            ResolvedType::Option(inner) => {
-                let new_inner = self.substitute_type_params(inner, type_args);
-                self.type_table.borrow_mut().make_option(new_inner)
             }
             ResolvedType::Ref(inner) => {
                 let new_inner = self.substitute_type_params(inner, type_args);
@@ -11850,10 +11825,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             // Ref types
             (ResolvedType::Ref(expected_inner), ResolvedType::Ref(actual_inner))
             | (ResolvedType::MutRef(expected_inner), ResolvedType::MutRef(actual_inner)) => {
-                self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
-            }
-            // Option types
-            (ResolvedType::Option(expected_inner), ResolvedType::Option(actual_inner)) => {
                 self.unify_types_for_inference(*expected_inner, *actual_inner, type_param_map);
             }
             // Tuple types

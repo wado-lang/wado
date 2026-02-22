@@ -112,10 +112,6 @@ impl SubstitutionContext {
                 let new_elem = self.substitute(elem, type_table);
                 type_table.make_builtin_array(new_elem)
             }
-            ResolvedType::Option(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.make_option(new_inner)
-            }
             ResolvedType::Ref(inner) => {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.make_ref(new_inner)
@@ -262,7 +258,16 @@ pub enum ResolvedType {
         name: String,
         module_source: ModuleSource,
     },
-    Option(TypeId),
+    // NOTE: Option<T> is no longer a dedicated type variant.
+    // It is represented as GenericInstance { name: "Option", module_source: prelude, type_args: [T] }.
+    // Use TypeTable::as_option() to check if a type is Option<T>.
+    //
+    // TODO: Re-add NullableRef optimization for Option<T> where T is non-nullable.
+    // When T is a reference type (struct, array, string, etc.), Option<T> can be
+    // represented as (ref null T) — null means None, non-null means Some(T).
+    // This avoids the SubtypeHierarchy overhead (discriminant struct + case subtypes).
+    // Key requirement: Option<Option<T>> MUST NOT use NullableRef (ambiguous null).
+    // See wep-2026-02-09-variant-independent-types.md for the general optimization strategy.
     Stream(TypeId),
     Future(TypeId),
     FutureWritable(TypeId),
@@ -491,8 +496,22 @@ impl TypeTable {
         self.intern(ResolvedType::BuiltinArray(element))
     }
 
+    /// Create an `Option<T>` type, represented as a `GenericInstance` of the Option variant.
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {
-        self.intern(ResolvedType::Option(inner))
+        self.make_generic_instance("Option".to_string(), ModuleSource::prelude(), vec![inner])
+    }
+
+    /// Check if a type is `Option<T>`, returning the inner type if so.
+    pub fn as_option(&self, type_id: TypeId) -> Option<TypeId> {
+        if let ResolvedType::GenericInstance {
+            name, type_args, ..
+        } = self.get(type_id)
+            && name == "Option"
+            && type_args.len() == 1
+        {
+            return Some(type_args[0]);
+        }
+        None
     }
 
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
@@ -722,7 +741,6 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypeParam { .. } | ResolvedType::Unknown | ResolvedType::Error => true,
             ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Option(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::Stream(inner)
@@ -759,10 +777,9 @@ impl TypeTable {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 self.has_nested_generics(*inner)
             }
-            // For Option, Stream, Future, etc., the inner type is a type argument
+            // For Stream, Future, etc., the inner type is a type argument
             // Check if that type argument is itself generic (i.e., nested)
-            ResolvedType::Option(inner)
-            | ResolvedType::Stream(inner)
+            ResolvedType::Stream(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner)
@@ -793,7 +810,6 @@ impl TypeTable {
     fn is_generic_type(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::GenericInstance { .. }
-            | ResolvedType::Option(_)
             | ResolvedType::Stream(_)
             | ResolvedType::Future(_)
             | ResolvedType::FutureWritable(_)
@@ -826,7 +842,6 @@ impl TypeTable {
                 let elem_names: Vec<String> = elems.iter().map(|e| self.type_name(*e)).collect();
                 format!("[{}]", elem_names.join(", "))
             }
-            ResolvedType::Option(inner) => format!("Option<{}>", self.type_name(*inner)),
             ResolvedType::Struct { name, .. } => name.clone(),
             ResolvedType::Enum { name, .. } => name.clone(),
             ResolvedType::Resource { name, .. } => name.clone(),
@@ -924,7 +939,6 @@ impl TypeTable {
                     args,
                 }
             }
-            ResolvedType::Option(inner) => TypeNameInfo::Option(self.mangle_type_name(*inner)),
             ResolvedType::Tuple(elems) => {
                 let elem_names: Vec<String> =
                     elems.iter().map(|t| self.mangle_type_name(*t)).collect();
@@ -2175,7 +2189,8 @@ mod tests {
 
         assert!(matches!(
             table.get(option_i32),
-            ResolvedType::Option(id) if *id == TypeTable::I32
+            ResolvedType::GenericInstance { name, type_args, .. }
+                if name == "Option" && type_args.len() == 1 && type_args[0] == TypeTable::I32
         ));
     }
 }

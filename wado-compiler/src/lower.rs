@@ -1033,8 +1033,7 @@ impl<'a> PatternLowerer<'a> {
                 let scrutinee_type = type_table.get(scrutinee.type_id);
                 let can_lower = matches!(
                     scrutinee_type,
-                    ResolvedType::Option(_)
-                        | ResolvedType::Variant { .. }
+                    ResolvedType::Variant { .. }
                         | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Enum { .. }
                 );
@@ -1531,11 +1530,10 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
                 ..
             } => {
-                // Check if variant matches (using is_not_null for Option::Some, variant tag for others)
-                let is_option_some = variant_name == "Some";
-                let is_option_none = variant_name == "None";
+                // All variants (including Option) use VariantTest/VariantPayload
+                // TODO: Future optimization: NullableRef Option would use IsNotNull/UnwrapOption
 
-                // Get variant type name for custom variants
+                // Get variant type name
                 let scrutinee_type = type_table.get(scrutinee.type_id);
                 let variant_type_name = match scrutinee_type {
                     ResolvedType::Variant { name, .. }
@@ -1543,33 +1541,7 @@ impl<'a> PatternLowerer<'a> {
                     _ => None,
                 };
 
-                let condition = if is_option_some {
-                    // Option::Some - check if not null
-                    TirExpr::new(
-                        TirExprKind::IsNotNull {
-                            expr: Box::new(scrutinee.clone()),
-                        },
-                        TypeTable::BOOL,
-                        span,
-                    )
-                } else if is_option_none {
-                    // Option::None - check if null (negate is_not_null)
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Not,
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::IsNotNull {
-                                    expr: Box::new(scrutinee.clone()),
-                                },
-                                TypeTable::BOOL,
-                                span,
-                            )),
-                        },
-                        TypeTable::BOOL,
-                        span,
-                    )
-                } else if let Some(ref vt_name) = variant_type_name {
-                    // Custom variant - use VariantTest
+                let condition = if let Some(ref vt_name) = variant_type_name {
                     let case_index =
                         self.get_case_index(vt_name, variant_name)
                             .unwrap_or_else(|| {
@@ -1596,26 +1568,15 @@ impl<'a> PatternLowerer<'a> {
                         .and_then(|vt| self.get_case_index(vt, variant_name))
                         .unwrap_or(0);
 
-                    let payload_expr = if is_option_some {
-                        TirExpr::new(
-                            TirExprKind::UnwrapOption {
-                                expr: Box::new(scrutinee),
-                                inner_type: *payload_type,
-                            },
-                            *payload_type,
-                            span,
-                        )
-                    } else {
-                        TirExpr::new(
-                            TirExprKind::VariantPayload {
-                                expr: Box::new(scrutinee),
-                                case_index,
-                                payload_type: *payload_type,
-                            },
-                            *payload_type,
-                            span,
-                        )
-                    };
+                    let payload_expr = TirExpr::new(
+                        TirExprKind::VariantPayload {
+                            expr: Box::new(scrutinee),
+                            case_index,
+                            payload_type: *payload_type,
+                        },
+                        *payload_type,
+                        span,
+                    );
 
                     self.lower_pattern_to_lets(
                         binding,
@@ -2779,17 +2740,6 @@ impl BoxLowerer {
                         }
                     }
                 }
-                ResolvedType::Option(inner) => {
-                    let base = type_table.get_ultimate_base_type(inner);
-                    if matches!(type_table.get(base), ResolvedType::Primitive(p)
-                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128))
-                    {
-                        needs_box_base.insert(base);
-                        if inner != base {
-                            newtype_pairs.push((inner, base));
-                        }
-                    }
-                }
                 _ => {}
             }
         }
@@ -3329,94 +3279,9 @@ impl BoxLowerer {
                 }
             }
 
-            TirExprKind::OptionSome { value } => {
-                let value_type = value.type_id;
-                if let Some(&box_type_id) = self.box_struct_types.get(&value_type) {
-                    // Wrap the value in Box<T>
-                    let box_struct_name =
-                        if let ResolvedType::Struct { name, .. } = type_table.get(box_type_id) {
-                            name.clone()
-                        } else {
-                            panic!("Box type should be a struct");
-                        };
-
-                    let original_value = std::mem::replace(
-                        value.as_mut(),
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
-                    );
-                    **value = TirExpr::new(
-                        TirExprKind::StructLiteral {
-                            struct_type: box_type_id,
-                            struct_name: box_struct_name,
-                            fields: vec![TirStructField {
-                                name: "value".to_string(),
-                                value: original_value,
-                                field_index: 0,
-                            }],
-                        },
-                        box_type_id,
-                        span,
-                    );
-                }
-            }
-
-            TirExprKind::VariantConstruct {
-                payload: Some(payload),
-                case_name,
-                ..
-            } if case_name == "Some" => {
-                let payload_type = payload.type_id;
-                if let Some(&box_type_id) = self.box_struct_types.get(&payload_type) {
-                    let box_struct_name =
-                        if let ResolvedType::Struct { name, .. } = type_table.get(box_type_id) {
-                            name.clone()
-                        } else {
-                            panic!("Box type should be a struct");
-                        };
-
-                    let original_payload = std::mem::replace(
-                        payload.as_mut(),
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
-                    );
-                    **payload = TirExpr::new(
-                        TirExprKind::StructLiteral {
-                            struct_type: box_type_id,
-                            struct_name: box_struct_name,
-                            fields: vec![TirStructField {
-                                name: "value".to_string(),
-                                value: original_payload,
-                                field_index: 0,
-                            }],
-                        },
-                        box_type_id,
-                        span,
-                    );
-                }
-            }
-
-            TirExprKind::UnwrapOption { inner_type, .. } => {
-                // inner_type is the primitive TypeId (e.g., u8).
-                // Check if this primitive has a corresponding Box<T> struct type.
-                if let Some(&box_type_id) = self.box_struct_types.get(inner_type) {
-                    // The unwrap gives us a Box<T>. We need to extract .value.
-                    let unwrap_result_type = box_type_id;
-                    let value_type = *inner_type;
-
-                    // Replace: UnwrapOption → FieldAccess(UnwrapOption, .value)
-                    let unwrap_expr = TirExpr::new(
-                        std::mem::replace(&mut expr.kind, TirExprKind::Unit),
-                        unwrap_result_type,
-                        span,
-                    );
-                    expr.kind = TirExprKind::FieldAccess {
-                        expr: Box::new(unwrap_expr),
-                        field_index: 0,
-                        field_name: "value".to_string(),
-                    };
-                    expr.type_id = value_type;
-                }
-            }
-
+            // Option now uses SubtypeHierarchy — no Box wrapping needed for
+            // OptionSome, VariantConstruct("Some"), or UnwrapOption.
+            // TODO: Future NullableRef optimization would re-enable Box wrapping here.
             _ => {}
         }
     }

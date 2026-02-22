@@ -384,7 +384,6 @@ impl FunctionTranslator<'_, '_> {
             }
             ResolvedType::Variant { .. } => true,
             ResolvedType::Tuple(elements) => !elements.is_empty(),
-            ResolvedType::Option(inner) => self.needs_value_copy(*inner),
             _ => false,
         }
     }
@@ -426,8 +425,9 @@ impl FunctionTranslator<'_, '_> {
             type_id: wir_tid, ..
         } = wir_type
         {
-            // Only Option<T> values can be null at the source level
-            let nullable = matches!(self.type_table.get(type_id), ResolvedType::Option(_));
+            // With SubtypeHierarchy, Option values are non-null refs (None is a valid struct)
+            // TODO: Future optimization: NullableRef Option would need nullable=true here
+            let nullable = false;
 
             // Variants use pass-through copy (immutable structs in the rec group)
             if self.ctx.is_variant_type(&wir_tid) {
@@ -939,9 +939,33 @@ impl FunctionTranslator<'_, '_> {
                 // String literals are constructed from data segments
                 self.translate_string_literal(s)
             }
-            TirExprKind::Null => WirInstr::RefNull {
-                heap_type: WirAbstractHeapType::None,
-            },
+            TirExprKind::Null => {
+                // For Option types, construct a None variant struct (SubtypeHierarchy)
+                // For other types, use null ref as before
+                // TODO: Future NullableRef optimization would use RefNull for Option too
+                if let Some(inner) = self.type_table.as_option(expr.type_id) {
+                    // If the inner type is unresolved (UNKNOWN), fall back to ref.null
+                    // because we can't construct a concrete variant struct without
+                    // knowing the type. ref.null none is assignable to any nullable ref.
+                    if matches!(self.type_table.get(inner), ResolvedType::Unknown) {
+                        WirInstr::RefNull {
+                            heap_type: WirAbstractHeapType::None,
+                        }
+                    } else {
+                        self.translate_variant_construct(
+                            expr.type_id, // variant_type
+                            1,            // case_index: None is case 1
+                            "None",
+                            None, // no payload
+                            expr.type_id,
+                        )
+                    }
+                } else {
+                    WirInstr::RefNull {
+                        heap_type: WirAbstractHeapType::None,
+                    }
+                }
+            }
             TirExprKind::Unit => {
                 // Unit has no value; use nop
                 WirInstr::Nop
@@ -1369,7 +1393,17 @@ impl FunctionTranslator<'_, '_> {
                 expr.type_id,
             ),
             TirExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
-            TirExprKind::OptionSome { value } => self.translate_expr(value),
+            TirExprKind::OptionSome { value } => {
+                // SubtypeHierarchy: construct Some variant struct
+                // TODO: Future NullableRef optimization would pass-through the value
+                self.translate_variant_construct(
+                    expr.type_id, // variant_type (Option<T>)
+                    0,            // case_index: Some is case 0
+                    "Some",
+                    Some(value),  // payload
+                    expr.type_id, // result_type
+                )
+            }
 
             // === CM Raw Call ===
             TirExprKind::CmRawCall {
@@ -2724,7 +2758,6 @@ impl FunctionTranslator<'_, '_> {
                 | ResolvedType::Ref(_)
                 | ResolvedType::MutRef(_)
                 | ResolvedType::Variant { .. }
-                | ResolvedType::Option(_)
         );
 
         let get_instr = if matches!(
@@ -3204,16 +3237,8 @@ impl FunctionTranslator<'_, '_> {
                     name: scrut_local.to_string(),
                 };
 
-                // Special case: Option<T> — represented as nullable ref, not a variant struct
-                if let ResolvedType::Option(_) = self.type_table.get(scrut_type) {
-                    return if variant_name == "Some" {
-                        // Some(_) → not null
-                        WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(Box::new(scrut_get))))
-                    } else {
-                        // None → is null
-                        WirInstr::RefIsNull(Box::new(scrut_get))
-                    };
-                }
+                // Option is now handled as a regular variant (SubtypeHierarchy)
+                // TODO: Future optimization: NullableRef Option would use RefIsNull here
 
                 // Look up variant type info to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(scrut_type) {
@@ -3379,55 +3404,8 @@ impl FunctionTranslator<'_, '_> {
                     return;
                 }
 
-                // Special case: Option<T> — extract inner value from nullable ref
-                if let ResolvedType::Option(inner) = self.type_table.get(*enum_type) {
-                    if variant_name == "Some" {
-                        // For Some(x), the value is the scrutinee itself (already non-null in
-                        // the matched branch). For primitive types in Box<T>, extract .value.
-                        let inner_wir = self.ctx.type_id_to_wir_type(self.type_table, *inner);
-                        for binding in bindings {
-                            if let TirPattern::Binding { local_index, .. } = binding {
-                                let scrut_ref = WirInstr::LocalGet {
-                                    name: scrut_local.to_string(),
-                                };
-                                let extracted = match inner_wir {
-                                    WirType::I8
-                                    | WirType::I16
-                                    | WirType::I32
-                                    | WirType::I64
-                                    | WirType::U8
-                                    | WirType::U16
-                                    | WirType::U32
-                                    | WirType::U64
-                                    | WirType::F32
-                                    | WirType::F64
-                                    | WirType::Bool
-                                    | WirType::Char => {
-                                        // Primitive in Box<T>: extract .value field
-                                        let opt_wir = self
-                                            .ctx
-                                            .type_id_to_wir_type(self.type_table, *enum_type);
-                                        if let WirType::Ref { type_id, .. } = opt_wir {
-                                            WirInstr::StructGet {
-                                                type_id,
-                                                field_name: "value".to_string(),
-                                                expr: Box::new(scrut_ref),
-                                            }
-                                        } else {
-                                            scrut_ref
-                                        }
-                                    }
-                                    _ => scrut_ref,
-                                };
-                                instrs.push(WirInstr::LocalSet {
-                                    name: self.local_name(*local_index),
-                                    value: Box::new(extracted),
-                                });
-                            }
-                        }
-                    }
-                    return;
-                }
+                // Option is now handled as a regular variant (SubtypeHierarchy)
+                // TODO: Future optimization: NullableRef Option would extract from nullable ref
 
                 // Look up the variant type to find the case WirTypeId
                 let (var_name, var_module) = match self.type_table.get(*enum_type) {
@@ -3604,24 +3582,8 @@ impl FunctionTranslator<'_, '_> {
             _ => return WirInstr::Unreachable,
         };
 
-        // Special handling for Option
-        if variant_name == "Option" || variant_name.starts_with("Option<") {
-            if case_name == "Some"
-                && let Some(payload_expr) = payload
-            {
-                return self.translate_expr(payload_expr);
-            }
-            // Option::None — generate null ref
-            let inner_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
-            return match inner_wir {
-                WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
-                    heap_type: WirAbstractHeapType::None,
-                },
-                _ => WirInstr::RefNull {
-                    heap_type: WirAbstractHeapType::None,
-                },
-            };
-        }
+        // Option is now handled as a regular variant (SubtypeHierarchy)
+        // TODO: Future optimization: NullableRef Option would pass-through/null here
 
         // Look up case-specific struct type
         let fq = format!("{variant_module_source}//{variant_name}");

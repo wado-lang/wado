@@ -27,9 +27,9 @@ export fn run() with Stdout {
     __for_of_0: {
         let mut __iter_0: ArrayIter<i64> = move ArrayIter<i64> { repr: arr.repr, used: arr.used, index: 0 };
         loop {
-            let __pattern_temp_0: Option<i64> = __iter_0."ArrayIter<i64>^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let x: i64 = __unwrap_option(__pattern_temp_0).value;
+            let __pattern_temp_0: Option<i64> = move __iter_0."ArrayIter<i64>^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let x: i64 = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_2: {
@@ -61,7 +61,7 @@ fn "ArrayIter<i64>^Iterator::next"(self: &mut ArrayIter<i64>) -> Option<i64> {
     }
     let item: i64 = core::builtin::array_get::<i64>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<i64> { value: item });
+    return Option::Some(item);
 }
 
 pub fn "Array<i64>::append"(self: &mut Array<i64>, value: i64) {

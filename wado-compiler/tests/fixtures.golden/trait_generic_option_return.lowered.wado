@@ -18,9 +18,9 @@ struct "Box_<i32>" {
 }
 
 export fn run() with Stdout {
-    let result: Option<i32> = Option::Some(Box<i32> { value: 42 });
-    if __is_not_null(result) {
-        let v: i32 = __unwrap_option(result).value;
+    let result: Option<i32> = Option::Some(42);
+    if __variant_test(result, case=0, name=Some) {
+        let v: i32 = __variant_payload(result, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
             __r.String::append(move "Got: ");

@@ -25,9 +25,9 @@ export fn run() with Stdout {
     let mut count: i32 = 0;
     __for_0: {
         loop {
-            let __pattern_temp_0: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let x: i32 = __unwrap_option(__pattern_temp_0).value;
+            let __pattern_temp_0: Option<i32> = move iter."ArrayIter<i32>^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let x: i32 = __variant_payload(__pattern_temp_0, case=0);
                 __for_0_body: {
                     core::cli::println(__tmpl: {
                         let mut __r: String = move String { repr: "array_new<u8>"(39), used: 0 };
@@ -87,6 +87,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<i32> { value: item });
+    return Option::Some(item);
 }
 
