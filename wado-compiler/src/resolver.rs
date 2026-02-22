@@ -3830,10 +3830,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     }
                 } else {
                     // Can be integer (default to i32)
-                    match util::parse_int_literal(&num_lit.repr) {
+                    match util::parse_u128_literal(&num_lit.repr) {
                         Ok(value) => (
                             TirExprKind::IntLiteral {
-                                value,
+                                value: value as u64,
                                 repr: num_lit.repr.clone(),
                             },
                             TypeTable::I32,
@@ -5757,7 +5757,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     lit.span,
                 ));
             }
-            return Some(match util::parse_int_literal(&num_lit.repr) {
+            return Some(match util::parse_u128_literal(&num_lit.repr) {
                 Ok(value) => {
                     if let Some(err_msg) = util::check_int_range_positive(
                         value,
@@ -5772,7 +5772,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     }
                     TirExpr::new(
                         TirExprKind::IntLiteral {
-                            value,
+                            value: value as u64,
                             repr: num_lit.repr.clone(),
                         },
                         target_type,
@@ -5820,7 +5820,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     unary.span,
                 ));
             }
-            return Some(match util::parse_int_literal(&num_lit.repr) {
+            return Some(match util::parse_u128_literal(&num_lit.repr) {
                 Ok(value) => {
                     if let Some(err_msg) = util::check_int_range_negative(
                         value,
@@ -5833,7 +5833,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             span: unary.span,
                         });
                     }
-                    let neg_value = (value as i64).wrapping_neg().cast_unsigned();
+                    let neg_value = (value as u64 as i64).wrapping_neg().cast_unsigned();
                     TirExpr::new(
                         TirExprKind::IntLiteral {
                             value: neg_value,
@@ -5937,67 +5937,57 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             if let Some(name) = struct_name
                 && (name == "u128" || name == "i128")
             {
-                if let Ok(value) = util::parse_int_literal(&num_lit.repr) {
-                    let use_from_u64_or_i64 = if name == "u128" {
-                        true
-                    } else {
-                        i64::try_from(value).is_ok()
-                    };
+                let parse_result = if name == "u128" {
+                    util::parse_u128_literal(&num_lit.repr).map(|v| v as i128)
+                } else {
+                    util::parse_i128_literal(&num_lit.repr)
+                };
 
-                    if use_from_u64_or_i64 {
-                        let (inner_type, method_name) = if name == "u128" {
-                            (TypeTable::U64, "from_u64")
+                match parse_result {
+                    Ok(value) => {
+                        // If value fits in u64/i64, use the cheaper from_u64/from_i64
+                        let use_small = if name == "u128" {
+                            u64::try_from(value).is_ok()
                         } else {
-                            (TypeTable::I64, "from_i64")
+                            i64::try_from(value).is_ok()
                         };
 
-                        let inner_literal = TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value,
-                                repr: num_lit.repr.clone(),
-                            },
-                            inner_type,
-                            lit.span,
-                        );
+                        if use_small {
+                            let (inner_type, method_name, store_value) = if name == "u128" {
+                                (TypeTable::U64, "from_u64", value as u64)
+                            } else {
+                                (TypeTable::I64, "from_i64", value as u64)
+                            };
 
-                        let method_info =
-                            LocalMethodName::new(name.clone(), None, method_name.to_string());
-                        let mangled_func_name = method_info.to_mangled_name();
-
-                        return Some(TirExpr::new(
-                            TirExprKind::StaticCall {
-                                func: FunctionRef::External {
-                                    module_source: ModuleSource::int128(),
-                                    name: mangled_func_name,
-                                    monomorph_info: None,
-                                    method_info: Some(method_info),
+                            let inner_literal = TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value: store_value,
+                                    repr: num_lit.repr.clone(),
                                 },
-                                args: vec![inner_literal],
-                            },
-                            target_type,
-                            lit.span,
-                        ));
-                    }
-                }
+                                inner_type,
+                                lit.span,
+                            );
 
-                // Value doesn't fit in u64 (or i64 for i128), use from_pair
-                if name == "u128" {
-                    if let Ok(value) = util::parse_u128_literal(&num_lit.repr) {
-                        let (low, high) = util::unpack_u128(value);
-                        return Some(self.build_from_pair_call(
-                            &name,
-                            low,
-                            high as i64,
-                            target_type,
-                            lit.span,
-                        ));
-                    }
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!("invalid u128 literal: {}", num_lit.repr),
-                        span: lit.span,
-                    });
-                } else {
-                    if let Ok(value) = util::parse_i128_literal(&num_lit.repr) {
+                            let method_info =
+                                LocalMethodName::new(name.clone(), None, method_name.to_string());
+                            let mangled_func_name = method_info.to_mangled_name();
+
+                            return Some(TirExpr::new(
+                                TirExprKind::StaticCall {
+                                    func: FunctionRef::External {
+                                        module_source: ModuleSource::int128(),
+                                        name: mangled_func_name,
+                                        monomorph_info: None,
+                                        method_info: Some(method_info),
+                                    },
+                                    args: vec![inner_literal],
+                                },
+                                target_type,
+                                lit.span,
+                            ));
+                        }
+
+                        // Value doesn't fit in u64/i64, use from_pair
                         let (low, high) = util::unpack_i128(value);
                         return Some(self.build_from_pair_call(
                             &name,
@@ -6007,10 +5997,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             lit.span,
                         ));
                     }
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!("invalid i128 literal: {}", num_lit.repr),
-                        span: lit.span,
-                    });
+                    Err(_) => {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message: format!("invalid {} literal: {}", name, num_lit.repr),
+                            span: lit.span,
+                        });
+                    }
                 }
             }
         }
@@ -6030,7 +6022,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             if let Some(name) = struct_name
                 && name == "i128"
             {
-                let negated_repr = format!("-{}", util::clean_literal_repr(&num_lit.repr));
+                let negated_repr = format!("-{}", num_lit.repr);
                 if let Ok(value) = util::parse_i128_literal(&negated_repr) {
                     let (low, high) = util::unpack_i128(value);
                     return Some(self.build_from_pair_call(
@@ -11303,79 +11295,66 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 && let Literal::Number(num_lit) = &lit.value
                 && !util::is_float_only_literal(&num_lit.repr)
             {
-                // Try to parse as u64
-                if let Ok(value) = util::parse_int_literal(&num_lit.repr) {
-                    // For u128: value fits in u64, use from_u64
-                    // For i128: value must also fit in i64 (positive range), otherwise use from_string
-                    let use_from_u64_or_i64 = if name == "u128" {
-                        true // u64 always works for u128
-                    } else {
-                        // For i128, check if value fits in i64 positive range
-                        i64::try_from(value).is_ok()
-                    };
+                let parse_result = if name == "u128" {
+                    util::parse_u128_literal(&num_lit.repr).map(|v| v as i128)
+                } else {
+                    util::parse_i128_literal(&num_lit.repr)
+                };
 
-                    if use_from_u64_or_i64 {
-                        let (inner_type, method_name) = if name == "u128" {
-                            (TypeTable::U64, "from_u64")
+                match parse_result {
+                    Ok(value) => {
+                        // If value fits in u64/i64, use the cheaper from_u64/from_i64
+                        let use_small = if name == "u128" {
+                            u64::try_from(value).is_ok()
                         } else {
-                            (TypeTable::I64, "from_i64")
+                            i64::try_from(value).is_ok()
                         };
 
-                        let inner_literal = TirExpr::new(
-                            TirExprKind::IntLiteral {
-                                value,
-                                repr: num_lit.repr.clone(),
-                            },
-                            inner_type,
-                            lit.span,
-                        );
+                        if use_small {
+                            let (inner_type, method_name, store_value) = if name == "u128" {
+                                (TypeTable::U64, "from_u64", value as u64)
+                            } else {
+                                (TypeTable::I64, "from_i64", value as u64)
+                            };
 
-                        let method_info =
-                            LocalMethodName::new(name.clone(), None, method_name.to_string());
-                        let mangled_func_name = method_info.to_mangled_name();
-
-                        return TirExpr::new(
-                            TirExprKind::StaticCall {
-                                func: FunctionRef::External {
-                                    module_source: ModuleSource::int128(),
-                                    name: mangled_func_name,
-                                    monomorph_info: None,
-                                    method_info: Some(method_info),
+                            let inner_literal = TirExpr::new(
+                                TirExprKind::IntLiteral {
+                                    value: store_value,
+                                    repr: num_lit.repr.clone(),
                                 },
-                                args: vec![inner_literal],
-                            },
-                            target_type,
-                            cast.span,
-                        );
-                    }
-                }
+                                inner_type,
+                                lit.span,
+                            );
 
-                // Value doesn't fit in u64 (or i64 for i128), use from_pair
-                if name == "u128" {
-                    if let Ok(value) = util::parse_u128_literal(&num_lit.repr) {
-                        let (low, high) = util::unpack_u128(value);
-                        return self.build_from_pair_call(
-                            name,
-                            low,
-                            high as i64,
-                            target_type,
-                            cast.span,
-                        );
-                    }
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!("invalid u128 literal: {}", num_lit.repr),
-                        span: lit.span,
-                    });
-                } else {
-                    // i128
-                    if let Ok(value) = util::parse_i128_literal(&num_lit.repr) {
+                            let method_info =
+                                LocalMethodName::new(name.clone(), None, method_name.to_string());
+                            let mangled_func_name = method_info.to_mangled_name();
+
+                            return TirExpr::new(
+                                TirExprKind::StaticCall {
+                                    func: FunctionRef::External {
+                                        module_source: ModuleSource::int128(),
+                                        name: mangled_func_name,
+                                        monomorph_info: None,
+                                        method_info: Some(method_info),
+                                    },
+                                    args: vec![inner_literal],
+                                },
+                                target_type,
+                                cast.span,
+                            );
+                        }
+
+                        // Value doesn't fit in u64/i64, use from_pair
                         let (low, high) = util::unpack_i128(value);
                         return self.build_from_pair_call(name, low, high, target_type, cast.span);
                     }
-                    let _ = self.logger.error(TypeError::InvalidLiteral {
-                        message: format!("invalid i128 literal: {}", num_lit.repr),
-                        span: lit.span,
-                    });
+                    Err(_) => {
+                        let _ = self.logger.error(TypeError::InvalidLiteral {
+                            message: format!("invalid {} literal: {}", name, num_lit.repr),
+                            span: lit.span,
+                        });
+                    }
                 }
             }
 
@@ -11388,7 +11367,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 && name == "i128"
             {
                 // Parse the negated value directly using Rust's i128
-                let negated_repr = format!("-{}", util::clean_literal_repr(&num_lit.repr));
+                let negated_repr = format!("-{}", num_lit.repr);
                 if let Ok(value) = util::parse_i128_literal(&negated_repr) {
                     let (low, high) = util::unpack_i128(value);
                     return self.build_from_pair_call(name, low, high, target_type, unary.span);
