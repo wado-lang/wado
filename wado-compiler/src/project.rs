@@ -59,11 +59,11 @@ pub struct Project {
     pub has_http_handler_export: bool,
 
     /// Maps world export name → adapter function name.
-    /// Populated by `cm_adapter_gen` when export adapters are synthesized.
+    /// Populated by `synthesis::cm_adapter` when export adapters are synthesized.
     /// For example: `"run"` → `"__cm_export__run"`.
     pub export_adapter_names: IndexMap<String, String>,
     /// Flattened CM ABI parameter types for the `task-return` canonical intrinsic.
-    /// Populated by `cm_adapter_gen` when an export returns a Result type.
+    /// Populated by `synthesis::cm_adapter` when an export returns a Result type.
     /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
     pub task_return_flat_params: Option<Vec<TypeId>>,
 

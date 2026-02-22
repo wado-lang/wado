@@ -229,7 +229,7 @@ pub fn analyze_project(project: &mut Project) {
         .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
     if has_async_export {
         // TaskReturn is always needed for async exports.
-        // For Result-returning exports (e.g., HTTP handler), cm_adapter_gen computes
+        // For Result-returning exports (e.g., HTTP handler), synthesis::cm_adapter computes
         // the correct flattened CM ABI params. Override the builtin registry's default
         // single-i32 signature with the correct flat params.
         if let Some(flat_params) = project.task_return_flat_params.clone() {
@@ -496,7 +496,7 @@ fn analyze_block(
                 analyze_expr(value, current_module, type_table, analysis);
             }
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         }
     }
@@ -1428,7 +1428,7 @@ fn collect_types_from_block(
                 collect_types_from_expr(value, type_table, reachable);
             }
             TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+                unreachable!("TaskReturn should be eliminated by synthesis before this phase")
             }
         }
     }
@@ -1923,7 +1923,7 @@ fn prune_branches_in_stmt(stmt: &mut TirStmt) -> bool {
         TirStmtKind::Continue => false,
         TirStmtKind::LetPattern { value, .. } => prune_branches_in_expr(value),
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }

@@ -292,7 +292,7 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut IndexSet<u32>) {
             collect_modified_vars_in_expr(value, modified);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -613,7 +613,7 @@ fn collect_licm_ref_bindings_in_stmt(
             collect_licm_ref_bindings_in_expr(value, type_table, bindings);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -940,7 +940,7 @@ fn find_hoist_candidates_in_stmt(
             );
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -1436,7 +1436,7 @@ fn replace_hoisted_in_stmt(
             replace_hoisted_in_expr(value, candidates, ref_bindings);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }

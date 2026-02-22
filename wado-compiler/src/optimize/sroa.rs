@@ -226,7 +226,7 @@ fn collect_candidates_in_stmt(
             collect_candidates_in_expr(value, type_table, candidates);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -350,7 +350,7 @@ fn check_escape_in_stmt(stmt: &TirStmt, candidates: &IndexSet<u32>, escaped: &mu
             check_escape_in_expr(value, candidates, escaped);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }
@@ -713,7 +713,7 @@ fn rewrite_stmt(
             rewrite_expr(value, safe_set, field_map, info_map, candidate_mut);
         }
         TirStmtKind::TaskReturn { .. } => {
-            unreachable!("TaskReturn should be eliminated by cm_adapter_gen before this phase")
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
         }
     }
 }

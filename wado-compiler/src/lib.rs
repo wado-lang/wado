@@ -74,7 +74,6 @@ pub mod bind;
 pub mod builtin_registry;
 pub mod bundled;
 pub mod cm_abi;
-pub mod cm_adapter_gen;
 pub mod codegen;
 pub mod comment;
 pub mod compiler_host;
@@ -94,7 +93,7 @@ pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
 pub mod syntax;
-pub mod synthesize_inspect;
+pub mod synthesis;
 pub mod tir;
 pub mod token;
 pub mod unparse;
@@ -281,23 +280,17 @@ pub async fn compile_with_options<H: CompilerHost>(
         check_effects(&project.tir_modules, &logger)?;
     }
 
-    // === Phase 7a: Synthesize Inspect (Project -> Project) ===
-    let project = {
-        let _span = logger.span("synthesize-inspect");
-        synthesize_inspect::synthesize_inspect(project)
-    };
-
-    // Apply options to project (must be before CM adapter synthesis)
+    // Apply options to project (must be before synthesis)
     let mut project = project;
     if let Some(world) = options.target_world {
         project.target_world = world;
     }
     project.skip_validation = options.skip_validation;
 
-    // === Phase 7b: CM Adapter Synthesis (Project -> Project) ===
+    // === Phase 8: Synthesis (Project -> Project) ===
     let project = {
-        let _span = logger.span("cm-adapter-gen");
-        cm_adapter_gen::generate_adapters(project).map_err(|message| {
+        let _span = logger.span("synthesis");
+        synthesis::synthesize(project).map_err(|message| {
             let _ = logger.error(compiler_host::Diagnostic {
                 severity: compiler_host::Severity::Error,
                 code: compiler_host::Code::UnsupportedFeature,
@@ -485,22 +478,16 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             builtin_registry,
         );
 
-        // Synthesize Inspect (must run before CM adapter synthesis)
-        let project = {
-            let _span = logger.span("synthesize-inspect");
-            synthesize_inspect::synthesize_inspect(project)
-        };
-
-        // Apply target world override (must be before CM adapter synthesis)
+        // Apply target world override (must be before synthesis)
         let mut project = project;
         if let Some(world) = target_world {
             project.target_world = world.to_string();
         }
 
-        // CM Adapter Synthesis (must run before monomorphize)
+        // Synthesis (must run before monomorphize)
         let project = {
-            let _span = logger.span("cm-adapter-gen");
-            cm_adapter_gen::generate_adapters(project).map_err(|message| {
+            let _span = logger.span("synthesis");
+            synthesis::synthesize(project).map_err(|message| {
                 let _ = logger.error(compiler_host::Diagnostic {
                     severity: compiler_host::Severity::Error,
                     code: compiler_host::Code::UnsupportedFeature,
