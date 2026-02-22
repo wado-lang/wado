@@ -6422,34 +6422,21 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 ..
             } => (name.clone(), module_source.clone()),
             // Primitive types have impl blocks in core:prelude/primitives
-            ResolvedType::Primitive(_) => {
-                let prim_module = ModuleSource::Core {
-                    name: "prelude/primitives.wado".to_string(),
-                };
-                (
-                    self.type_table.borrow().mangle_type_name(base_type_id),
-                    prim_module,
-                )
-            }
+            ResolvedType::Primitive(_) => (
+                self.type_table.borrow().mangle_type_name(base_type_id),
+                ModuleSource::primitives(),
+            ),
             // BuiltinArray is Array - impl blocks are in core:prelude/array.wado
-            ResolvedType::BuiltinArray(_) => {
-                let array_module = ModuleSource::Core {
-                    name: "prelude/array.wado".to_string(),
-                };
-                ("Array".to_string(), array_module)
-            }
+            ResolvedType::BuiltinArray(_) => ("Array".to_string(), ModuleSource::array()),
             // Enum types - use enum name and its defining module
             ResolvedType::Enum {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
             // FutureWritable<T> - resource methods declared in core:prelude/types.wado
-            ResolvedType::FutureWritable(_) => (
-                "FutureWritable".to_string(),
-                ModuleSource::Core {
-                    name: "prelude/types.wado".to_string(),
-                },
-            ),
+            ResolvedType::FutureWritable(_) => {
+                ("FutureWritable".to_string(), ModuleSource::types())
+            }
             _ => (
                 self.type_table.borrow().mangle_type_name(base_type_id),
                 self.current_module_source.clone(),
@@ -7689,9 +7676,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 | "bool"
                 | "char"
         ) {
-            return ModuleSource::Core {
-                name: "prelude/primitives.wado".to_string(),
-            };
+            return ModuleSource::primitives();
         }
 
         // Check current module
@@ -7792,9 +7777,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             // FutureWritable<T> - resource methods declared in core:prelude/types.wado
             ResolvedType::FutureWritable(inner) => (
                 "FutureWritable".to_string(),
-                Some(ModuleSource::Core {
-                    name: "prelude/types.wado".to_string(),
-                }),
+                Some(ModuleSource::types()),
                 Some(vec![*inner]),
                 None,
             ),
@@ -11434,10 +11417,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             self.type_table.borrow().get(base_type_id),
             ResolvedType::Primitive(_)
         ) {
-            let prim_module = ModuleSource::Core {
-                name: "prelude/primitives.wado".to_string(),
-            };
-            return Some((type_name, prim_module));
+            return Some((type_name, ModuleSource::primitives()));
         }
 
         None

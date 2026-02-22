@@ -966,7 +966,7 @@ impl<'a> PatternLowerer<'a> {
         let is_builtin_call = match &inner_value.kind {
             TirExprKind::Call { func: func_ref, .. } => {
                 if let FunctionRef::External { module_source, .. } = func_ref {
-                    matches!(module_source, ModuleSource::Core { name } if name == "builtin")
+                    module_source.is_core_builtin()
                 } else {
                     false
                 }

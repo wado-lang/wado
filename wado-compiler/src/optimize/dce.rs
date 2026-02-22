@@ -132,7 +132,7 @@ pub fn analyze_project(project: &mut Project) {
     // 3. Any builtin call_indirect_* functions (ambient effect calls)
     let is_builtin_func = |f: &FreeFunctionName| {
         // Check if module_source is core/builtin
-        matches!(&f.module_source, ModuleSource::Core { name } if name == "builtin")
+        f.module_source.is_core_builtin()
             // Legacy format: name starts with "builtin::"
             || f.name.starts_with("builtin::")
     };
