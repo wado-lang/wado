@@ -1174,6 +1174,14 @@ fn collect_intermediates(
             intermediates.push((var_name, source, expr.clone()));
         }
         Expr::Unary(unary) => {
+            // Skip negated numeric literals — extracting them into intermediates
+            // would lose the literal status needed for bidirectional type coercion
+            // (e.g., `x_i64 == -50` should coerce -50 to i64, not default to i32)
+            if unary.op == UnaryOp::Neg
+                && matches!(&unary.expr, Expr::Literal(lit) if matches!(&lit.value, Literal::Number(_)))
+            {
+                return;
+            }
             // Recurse into operand
             collect_intermediates(&unary.expr, intermediates, counter, false);
             // Also collect the unary expression itself if not root

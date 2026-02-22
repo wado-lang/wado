@@ -1,0 +1,49 @@
+// Test integer literal coercion in bitwise operators for i128/u128
+// Uses check() instead of assert to avoid pre-existing u128 template interpolation bug
+use { println, Stdout } from "core:cli";
+
+fn check(cond: bool, label: String) {
+    if !cond {
+        panic(label);
+    }
+}
+
+export fn run() with Stdout {
+    let x_u128: u128 = 0xFF00;
+    let x_i128: i128 = 0xFF;
+
+    // & with literal on both sides
+    let a1 = x_u128 & 0xFF;
+    check(a1 == 0 as u128, "u128 & rhs");
+    let a2 = 0xFF & x_u128;
+    check(a2 == 0 as u128, "lhs & u128");
+    let a3 = x_i128 & 0x0F;
+    check(a3 == 0x0F as i128, "i128 & rhs");
+    let a4 = 0x0F & x_i128;
+    check(a4 == 0x0F as i128, "lhs & i128");
+
+    // | with literal on both sides
+    let b1 = x_u128 | 0xFF;
+    check(b1 == 0xFFFF as u128, "u128 | rhs");
+    let b2 = 0xFF | x_u128;
+    check(b2 == 0xFFFF as u128, "lhs | u128");
+    let b3 = x_i128 | 0x100;
+    check(b3 == 0x1FF as i128, "i128 | rhs");
+    let b4 = 0x100 | x_i128;
+    check(b4 == 0x1FF as i128, "lhs | i128");
+
+    // ^ with literal on both sides
+    let c1 = x_u128 ^ 0xFFFF;
+    check(c1 == 0x00FF as u128, "u128 ^ rhs");
+    let c2 = 0xFFFF ^ x_u128;
+    check(c2 == 0x00FF as u128, "lhs ^ u128");
+    let c3 = x_i128 ^ 0xFF;
+    check(c3 == 0 as i128, "i128 ^ rhs");
+    let c4 = 0xFF ^ x_i128;
+    check(c4 == 0 as i128, "lhs ^ i128");
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

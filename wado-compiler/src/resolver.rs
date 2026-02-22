@@ -4139,10 +4139,20 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         let left_is_numeric_literal = self.is_numeric_literal(&binary.left);
         let right_is_numeric_literal = self.is_numeric_literal(&binary.right);
 
+        // Shift operations have asymmetric types (lhs: value, rhs: shift amount),
+        // so don't coerce rhs to lhs type for i128/u128 structs
+        let is_shift = matches!(binary.op, BinaryOp::Shl | BinaryOp::Shr);
+
         let (left, right) = if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left to right's type
             let right = self.resolve_expr(&binary.right, ctx, expected_type);
-            let coerce_type = if self.type_table.borrow().is_numeric(right.type_id) {
+            let coerce_type = if if is_shift {
+                self.type_table.borrow().is_numeric(right.type_id)
+            } else {
+                self.type_table
+                    .borrow()
+                    .is_numeric_coercion_target(right.type_id)
+            } {
                 Some(right.type_id)
             } else {
                 None
@@ -4152,7 +4162,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         } else if right_is_numeric_literal && !left_is_numeric_literal {
             // Resolve left first, then coerce right to left's type
             let left = self.resolve_expr(&binary.left, ctx, expected_type);
-            let coerce_type = if self.type_table.borrow().is_numeric(left.type_id) {
+            let coerce_type = if if is_shift {
+                self.type_table.borrow().is_numeric(left.type_id)
+            } else {
+                self.type_table
+                    .borrow()
+                    .is_numeric_coercion_target(left.type_id)
+            } {
                 Some(left.type_id)
             } else {
                 None
