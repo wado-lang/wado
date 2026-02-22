@@ -8987,10 +8987,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return self.find_trait_impl_for_type(&type_name, trait_name);
         }
 
-        // All enums automatically implement Eq, Ord, and Display
+        // All enums automatically implement Eq and Ord
         if let ResolvedType::Enum { .. } = &resolved {
             match trait_name {
-                "Eq" | "Ord" | "Display" => return true,
+                "Eq" | "Ord" => return true,
                 _ => {}
             }
         }
@@ -10974,6 +10974,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
 
                     if is_inspect {
                         // Emit builtin::inspect marker — replaced by synthesize_inspect phase
+                        // Pass alternate flag (#) as 3rd arg for closure pretty-print
+                        let alternate = parsed.as_ref().is_some_and(|pf| pf.alternate);
+                        let alternate_expr = TirExpr::new(
+                            TirExprKind::BoolLiteral(alternate),
+                            TypeTable::BOOL,
+                            span,
+                        );
                         let inspect_call = TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
@@ -10982,7 +10989,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     monomorph_info: None,
                                     method_info: None,
                                 },
-                                args: vec![resolved, fmt_mut_ref],
+                                args: vec![resolved, fmt_mut_ref, alternate_expr],
                             },
                             TypeTable::UNIT,
                             span,

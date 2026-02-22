@@ -7475,12 +7475,11 @@ impl StringCollector {
     }
 }
 
-/// Generate auto-derived trait implementations (Eq, Ord, Display) for enum types.
+/// Generate auto-derived trait implementations (Eq, Ord) for enum types.
 ///
 /// For each enum declaration in the module, generates synthetic TIR functions:
 /// - `EnumName^Eq::eq(&self, &Self) -> bool` - discriminant equality
 /// - `EnumName^Ord::cmp(&self, &Self) -> Ordering` - discriminant ordering
-/// - `EnumName^Display::fmt(&self, &mut Formatter)` - case name stringification
 fn generate_enum_trait_impls(module: &mut TirModule) {
     if module.enums.is_empty() {
         return;
@@ -7492,11 +7491,7 @@ fn generate_enum_trait_impls(module: &mut TirModule) {
     let enum_infos: Vec<_> = module
         .enums
         .iter()
-        .map(|e| {
-            let cases: Vec<(String, u32)> =
-                e.cases.iter().map(|c| (c.name.clone(), c.index)).collect();
-            (e.name.clone(), e.span, cases)
-        })
+        .map(|e| (e.name.clone(), e.span))
         .collect();
 
     // Check which trait methods already have user-provided implementations.
@@ -7519,7 +7514,7 @@ fn generate_enum_trait_impls(module: &mut TirModule) {
 
     let mut generated_functions = Vec::new();
 
-    for (enum_name, span, cases) in &enum_infos {
+    for (enum_name, span) in &enum_infos {
         let mut type_table = module.type_table.borrow_mut();
         let enum_type = type_table.make_enum(enum_name.clone(), module_source.clone());
         let ref_enum_type = type_table.make_ref(enum_type);
@@ -7544,31 +7539,6 @@ fn generate_enum_trait_impls(module: &mut TirModule) {
                 enum_type,
                 ref_enum_type,
                 ordering_type,
-                &module_source,
-                *span,
-            );
-            generated_functions.push(Rc::new(RefCell::new(func)));
-        }
-
-        // Generate Display::fmt
-        let fmt_key = MethodName::format_local(enum_name, Some("Display"), "fmt");
-        if !existing_trait_methods.contains(&fmt_key) {
-            let formatter_type = type_table.make_struct(
-                "Formatter".to_string(),
-                ModuleSource::core("prelude/format.wado"),
-            );
-            let mut_ref_formatter = type_table.make_mut_ref(formatter_type);
-            let string_type = type_table.make_struct(
-                "String".to_string(),
-                ModuleSource::core("prelude/string.wado"),
-            );
-            let func = generate_enum_display_fn(
-                enum_name,
-                enum_type,
-                ref_enum_type,
-                cases,
-                mut_ref_formatter,
-                string_type,
                 &module_source,
                 *span,
             );
@@ -7898,199 +7868,6 @@ fn generate_enum_ord_fn(
         module_source,
         span,
         vec![ref_enum_type, ref_enum_type, enum_type, enum_type],
-    )
-}
-
-/// Generate `EnumName^Display::fmt(&self, &mut Formatter)`
-///
-/// Body: if-else chain that calls `f.write_str(case_name)` for each case
-#[allow(clippy::too_many_arguments)]
-fn generate_enum_display_fn(
-    enum_name: &str,
-    enum_type: TypeId,
-    ref_enum_type: TypeId,
-    cases: &[(String, u32)],
-    mut_ref_formatter: TypeId,
-    string_type: TypeId,
-    module_source: &ModuleSource,
-    span: Span,
-) -> TirFunction {
-    let method_info = LocalMethodName::new(
-        enum_name.to_string(),
-        Some("Display".to_string()),
-        "fmt".to_string(),
-    );
-    let qualified_name = method_info.to_mangled_name();
-
-    let params = vec![
-        TirParam {
-            name: "self".to_string(),
-            type_id: ref_enum_type,
-            local_index: 0,
-            span,
-        },
-        TirParam {
-            name: "f".to_string(),
-            type_id: mut_ref_formatter,
-            local_index: 1,
-            span,
-        },
-    ];
-
-    // Local 2: val = *self
-    let deref_self = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: Box::new(TirExpr::new(
-                TirExprKind::Local {
-                    index: 0,
-                    name: "self".to_string(),
-                },
-                ref_enum_type,
-                span,
-            )),
-        },
-        enum_type,
-        span,
-    );
-
-    let local_val = || {
-        TirExpr::new(
-            TirExprKind::Local {
-                index: 2,
-                name: "val".to_string(),
-            },
-            enum_type,
-            span,
-        )
-    };
-    let formatter_local = || {
-        TirExpr::new(
-            TirExprKind::Local {
-                index: 1,
-                name: "f".to_string(),
-            },
-            mut_ref_formatter,
-            span,
-        )
-    };
-
-    // Build write_str method call helper
-    let make_write_str_call = |case_name: &str| -> TirExpr {
-        let string_lit = TirExpr::new(
-            TirExprKind::StringLiteral(case_name.to_string()),
-            string_type,
-            span,
-        );
-        TirExpr::new(
-            TirExprKind::MethodCall {
-                receiver: Box::new(formatter_local()),
-                func: FunctionRef::External {
-                    module_source: ModuleSource::core("prelude/format.wado"),
-                    name: "Formatter::write_str".to_string(),
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        "Formatter".to_string(),
-                        None,
-                        "write_str".to_string(),
-                    )),
-                },
-                type_args: vec![],
-                args: vec![string_lit],
-            },
-            TypeTable::UNIT,
-            span,
-        )
-    };
-
-    // Build if-else chain: if val == Case0 { write_str("Case0") } else if ...
-    let mut stmts = vec![TirStmt::new(
-        TirStmtKind::Let {
-            name: "val".to_string(),
-            local_index: 2,
-            is_mut: false,
-            is_reactive: false,
-            type_id: enum_type,
-            value: deref_self,
-        },
-        span,
-    )];
-
-    if cases.is_empty() {
-        // No cases - unreachable, but generate valid empty body
-        stmts.push(TirStmt::new(TirStmtKind::Return { value: None }, span));
-    } else if cases.len() == 1 {
-        // Single case - just write the name
-        stmts.push(TirStmt::new(
-            TirStmtKind::Expr(make_write_str_call(&cases[0].0)),
-            span,
-        ));
-    } else {
-        // Build nested if-else chain from the last case backward
-        // Last case is the else branch (no condition needed)
-        let last_case = &cases[cases.len() - 1];
-        let mut else_block = Some(TirBlock::new(
-            vec![TirStmt::new(
-                TirStmtKind::Expr(make_write_str_call(&last_case.0)),
-                span,
-            )],
-            span,
-        ));
-
-        // Build from second-to-last to first
-        for case in cases[..cases.len() - 1].iter().rev() {
-            let condition = TirExpr::new(
-                TirExprKind::Binary {
-                    left: Box::new(local_val()),
-                    op: TirBinaryOp::Eq,
-                    right: Box::new(TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type,
-                            case_index: case.1,
-                            case_name: case.0.clone(),
-                        },
-                        enum_type,
-                        span,
-                    )),
-                },
-                TypeTable::BOOL,
-                span,
-            );
-            let then_block = TirBlock::new(
-                vec![TirStmt::new(
-                    TirStmtKind::Expr(make_write_str_call(&case.0)),
-                    span,
-                )],
-                span,
-            );
-            let if_stmt = TirStmt::new(
-                TirStmtKind::If {
-                    condition,
-                    then_block,
-                    else_block,
-                },
-                span,
-            );
-            else_block = Some(TirBlock::new(vec![if_stmt], span));
-        }
-
-        // Unwrap the outermost if-else block and add its single statement
-        if let Some(block) = else_block {
-            stmts.extend(block.stmts);
-        }
-    }
-
-    let body = TirBlock::new(stmts, span);
-
-    make_synthetic_method(
-        qualified_name,
-        method_info,
-        params,
-        TypeTable::UNIT,
-        body,
-        module_source,
-        span,
-        vec![ref_enum_type, mut_ref_formatter, enum_type],
     )
 }
 

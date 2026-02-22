@@ -14,50 +14,59 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
-    let __sroa_t_1: String = move "hello";
+    let t: [i32, String, bool] = move [1, "hello", true];
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_Formatter__write_char_2: {
-            __f.buf.String::append_char('[');
+        "__inspect$[i32, String, bool]"(t, &mut __f);
+        break __tmpl: __r;
+    });
+}
+
+fn "__inspect$[i32, String, bool]"(__val: [i32, String, bool], __fmt: &mut Formatter) {
+    __inline_Formatter__write_char_0: {
+        __fmt.buf.String::append_char('[');
+    };
+    __inline___inspect_i32_1: {
+        let __val: i32 = __val.0;
+        __inline_i32_Display__fmt_2: {
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
         };
-        __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: 1 };
-            let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-        };
-        __inline_Formatter__write_str_4: {
-            let s: String = move ", ";
-            __f.buf.String::append(s);
-        };
+    };
+    __inline_Formatter__write_str_3: {
+        let s: String = move ", ";
+        __fmt.buf.String::append(s);
+    };
+    __inline___inspect_String_4: {
+        let __val: String = __val.1;
         __inline_Formatter__write_char_5: {
-            __f.buf.String::append_char('"');
+            __fmt.buf.String::append_char('"');
         };
-        core::internal::write_escaped_string(__sroa_t_1, &mut __f);
+        core::internal::write_escaped_string(__val, __fmt);
         __inline_Formatter__write_char_6: {
-            __f.buf.String::append_char('"');
+            __fmt.buf.String::append_char('"');
         };
-        __inline_Formatter__write_str_7: {
-            let s: String = move ", ";
-            __f.buf.String::append(s);
-        };
-        __inline_bool_Display__fmt_8: {
-            let self: Box<bool> = move Box<bool> { value: true };
-            let f: &mut Formatter = &mut __f;
-            f.Formatter::pad(if self.value {
+    };
+    __inline_Formatter__write_str_7: {
+        let s: String = move ", ";
+        __fmt.buf.String::append(s);
+    };
+    __inline___inspect_bool_8: {
+        let __val: bool = __val.2;
+        __inline_bool_Display__fmt_9: {
+            __fmt.Formatter::pad(if __val {
                 "true";
             } else {
                 "false";
             });
         };
-        __inline_Formatter__write_char_9: {
-            __f.buf.String::append_char(']');
-        };
-        break __tmpl: __r;
-    });
+    };
+    __inline_Formatter__write_char_10: {
+        __fmt.buf.String::append_char(']');
+    };
 }
 
 export fn __cm_export__run() {

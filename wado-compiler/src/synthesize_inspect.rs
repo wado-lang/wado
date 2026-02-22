@@ -1,7 +1,8 @@
 //! Inspect synthesis phase.
 //!
-//! Replaces `builtin::inspect(expr, &mut f)` marker calls with synthesized
-//! TIR that writes the debug representation of `expr` to a `Formatter`.
+//! Replaces `builtin::inspect(expr, &mut f)` marker calls with calls to
+//! synthesized inspect functions. Each unique type gets a single inspect
+//! function, avoiding code duplication at every `:?` usage site.
 //!
 //! Pipeline position: after `effect_check`, before `cm_adapter_gen`.
 //! This ensures synthesized code goes through monomorphization, lowering,
@@ -12,55 +13,236 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::{
     FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFlags, TirModule, TirStmt, TirStmtKind, TirUnaryOp, TirVariantDecl, TypeId, TypeTable,
+    TirFlags, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TirVariantDecl,
+    TypeId, TypeTable,
 };
 use crate::token::Span;
 
+fn synth_span() -> Span {
+    Span::new(0, 0, 1, 1)
+}
+
 /// Run the inspect synthesis pass on the entire project.
 ///
-/// Walks all TIR modules and replaces `builtin::inspect` marker calls
-/// with synthesized inspect code appropriate for each type.
-pub fn synthesize_inspect(project: Project) -> Project {
+/// For each module:
+/// 1. Replace `builtin::inspect` markers with calls to generated inspect functions
+/// 2. Generate inspect function bodies (one per unique type)
+/// 3. Add generated functions to the module
+pub fn synthesize_inspect(mut project: Project) -> Project {
     let module_sources: Vec<ModuleSource> = project.tir_modules.keys().cloned().collect();
 
     for module_source in &module_sources {
-        let module = project.tir_modules.get(module_source).unwrap();
-        let type_table = module.type_table.clone();
-        let functions: Vec<Rc<RefCell<_>>> = module.functions.clone();
-        let all_modules: Vec<&TirModule> = project.tir_modules.values().collect();
+        // Phases 1-2: work with immutable module references.
+        // Function bodies are modified through Rc<RefCell<>> interior mutability.
+        let new_functions = {
+            let module = project.tir_modules.get(module_source).unwrap();
+            let tt = module.type_table.clone();
+            let functions: Vec<Rc<RefCell<_>>> = module.functions.clone();
+            let all_modules: Vec<&TirModule> = project.tir_modules.values().collect();
 
-        for func_rc in &functions {
-            let mut func = func_rc.borrow_mut();
-            let start_index = func.local_count;
-            if let Some(ref mut body) = func.body {
-                let closure_sources = collect_closure_sources(body);
-                let mut alloc = LocalAlloc {
-                    next_index: start_index,
-                    new_types: Vec::new(),
-                };
-                synthesize_in_block(
-                    body,
-                    &type_table,
-                    &all_modules,
-                    &mut alloc,
-                    &closure_sources,
-                );
-                func.local_count = alloc.next_index;
-                func.local_types.extend(alloc.new_types);
+            let formatter_struct = tt.borrow_mut().make_struct(
+                "Formatter".to_string(),
+                ModuleSource::core("prelude/format.wado"),
+            );
+            let fmt_type = tt.borrow_mut().make_mut_ref(formatter_struct);
+
+            let mut reg = InspectRegistry::new();
+
+            // Phase 1: Replace markers with calls to inspect functions
+            for func_rc in &functions {
+                let mut func = func_rc.borrow_mut();
+                if let Some(ref mut body) = func.body {
+                    let closure_sources = collect_closure_sources(body);
+                    replace_markers_in_block(
+                        body,
+                        &tt,
+                        &all_modules,
+                        &closure_sources,
+                        &mut reg,
+                        fmt_type,
+                        module_source,
+                    );
+                }
             }
+
+            // Phase 2: Generate function bodies for all registered types
+            while let Some(type_id) = reg.pending.pop() {
+                generate_inspect_fn_body(
+                    &mut reg,
+                    type_id,
+                    &tt,
+                    &all_modules,
+                    fmt_type,
+                    module_source,
+                );
+            }
+
+            reg.functions.into_values().collect::<Vec<_>>()
+        };
+
+        // Phase 3: Add generated functions (borrows dropped above)
+        let module = project.tir_modules.get_mut(module_source).unwrap();
+        for func_rc in new_functions {
+            module.functions.push(func_rc);
         }
     }
 
     project
 }
 
-/// Tracks local variable allocation during synthesis.
+/// Registry of generated inspect functions, keyed by `TypeId`.
+struct InspectRegistry {
+    functions: IndexMap<TypeId, Rc<RefCell<TirFunction>>>,
+    pending: Vec<TypeId>,
+}
+
+impl InspectRegistry {
+    fn new() -> Self {
+        Self {
+            functions: IndexMap::new(),
+            pending: Vec::new(),
+        }
+    }
+}
+
+/// Ensure an inspect function exists for the given type. Returns a reference
+/// to the (possibly placeholder) function.
+fn ensure_inspect_fn(
+    reg: &mut InspectRegistry,
+    type_id: TypeId,
+    tt: &Rc<RefCell<TypeTable>>,
+    fmt_type: TypeId,
+) -> Rc<RefCell<TirFunction>> {
+    if let Some(func) = reg.functions.get(&type_id) {
+        return Rc::clone(func);
+    }
+    let name = format!("__inspect${}", tt.borrow().type_name(type_id));
+    let span = synth_span();
+    let func = TirFunction {
+        name,
+        is_pub: false,
+        is_export: false,
+        is_async: false,
+        type_params: vec![],
+        impl_type_params: vec![],
+        monomorph_info: None,
+        method_info: None,
+        params: vec![
+            TirParam {
+                name: "__val".into(),
+                type_id,
+                local_index: 0,
+                span,
+            },
+            TirParam {
+                name: "__fmt".into(),
+                type_id: fmt_type,
+                local_index: 1,
+                span,
+            },
+        ],
+        return_type: TypeTable::UNIT,
+        effects: vec![],
+        body: None, // filled in Phase 2
+        span,
+        local_count: 2,
+        local_types: vec![type_id, fmt_type],
+        address_taken_locals: IndexSet::new(),
+        is_cm_adapter: false,
+    };
+    let rc = Rc::new(RefCell::new(func));
+    reg.functions.insert(type_id, Rc::clone(&rc));
+    reg.pending.push(type_id);
+    rc
+}
+
+/// Create a call statement to an inspect function for the given type.
+fn call_inspect_fn(
+    reg: &mut InspectRegistry,
+    type_id: TypeId,
+    val: TirExpr,
+    fmt: TirExpr,
+    tt: &Rc<RefCell<TypeTable>>,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
+    span: Span,
+) -> TirStmt {
+    let func_rc = ensure_inspect_fn(reg, type_id, tt, fmt_type);
+    let call = TirExpr::new(
+        TirExprKind::Call {
+            func: FunctionRef::Resolved {
+                func: func_rc,
+                module_source: module_source.clone(),
+            },
+            type_args: vec![],
+            args: vec![val, fmt],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    TirStmt::new(TirStmtKind::Expr(call), span)
+}
+
+/// Generate the body for an inspect function (Phase 2).
+fn generate_inspect_fn_body(
+    reg: &mut InspectRegistry,
+    type_id: TypeId,
+    tt: &Rc<RefCell<TypeTable>>,
+    mods: &[&TirModule],
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
+) {
+    let span = synth_span();
+    let val = TirExpr::new(
+        TirExprKind::Local {
+            index: 0,
+            name: "__val".into(),
+        },
+        type_id,
+        span,
+    );
+    let fmt = TirExpr::new(
+        TirExprKind::Local {
+            index: 1,
+            name: "__fmt".into(),
+        },
+        fmt_type,
+        span,
+    );
+    let mut alloc = LocalAlloc {
+        next_index: 2,
+        new_types: Vec::new(),
+    };
+
+    let stmts = synth_body(
+        reg,
+        type_id,
+        val,
+        fmt,
+        tt,
+        mods,
+        &mut alloc,
+        fmt_type,
+        module_source,
+        span,
+    );
+
+    let func_rc = reg.functions.get(&type_id).unwrap().clone();
+    let mut func = func_rc.borrow_mut();
+    func.body = Some(TirBlock::new(stmts, span));
+    func.local_count = alloc.next_index;
+    let mut types = vec![type_id, fmt_type];
+    types.extend(alloc.new_types);
+    func.local_types = types;
+}
+
+/// Tracks local variable allocation during function body generation.
 struct LocalAlloc {
     next_index: u32,
     new_types: Vec<TypeId>,
@@ -173,14 +355,16 @@ fn extract_closure_source(expr: &TirExpr) -> Option<String> {
     }
 }
 
-// ─── TIR tree walking ───
+// ─── Phase 1: Replace markers with calls ───
 
-fn synthesize_in_block(
+fn replace_markers_in_block(
     block: &mut TirBlock,
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
-    closure_sources: &IndexMap<u32, String>,
+    cs: &IndexMap<u32, String>,
+    reg: &mut InspectRegistry,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
 ) {
     let mut i = 0;
     while i < block.stmts.len() {
@@ -196,28 +380,65 @@ fn synthesize_in_block(
                 && let TirExprKind::StaticCall { args, .. } = expr.kind
             {
                 let mut args = args;
+                let alternate = if args.len() >= 3 {
+                    matches!(args.pop().unwrap().kind, TirExprKind::BoolLiteral(true))
+                } else {
+                    false
+                };
                 let fmt_ref = args.pop().unwrap();
                 let value_expr = args.pop().unwrap();
                 let type_id = value_expr.type_id;
                 let span = expr.span;
 
-                let new_stmts = synthesize_for_type(
-                    type_id,
-                    value_expr,
-                    fmt_ref,
-                    tt,
-                    mods,
-                    alloc,
-                    closure_sources,
-                    span,
-                );
-                for (j, s) in new_stmts.into_iter().enumerate() {
-                    block.stmts.insert(i + j, s);
-                }
-                continue;
+                // Special case: closure with alternate=true => inline source text
+                let resolved = tt.borrow().get(type_id).clone();
+                let new_stmt = if alternate && matches!(resolved, ResolvedType::Function { .. }) {
+                    let source = match &value_expr.kind {
+                        TirExprKind::Closure {
+                            source_text: Some(text),
+                            ..
+                        } => Some(text.clone()),
+                        TirExprKind::Local { index, .. } => cs.get(index).cloned(),
+                        _ => None,
+                    };
+                    if let Some(text) = source {
+                        ws(&text, fmt_ref, tt, span)
+                    } else {
+                        call_inspect_fn(
+                            reg,
+                            type_id,
+                            value_expr,
+                            fmt_ref,
+                            tt,
+                            fmt_type,
+                            module_source,
+                            span,
+                        )
+                    }
+                } else {
+                    call_inspect_fn(
+                        reg,
+                        type_id,
+                        value_expr,
+                        fmt_ref,
+                        tt,
+                        fmt_type,
+                        module_source,
+                        span,
+                    )
+                };
+                block.stmts.insert(i, new_stmt);
             }
         } else {
-            synthesize_in_stmt(&mut block.stmts[i], tt, mods, alloc, closure_sources);
+            walk_stmt(
+                &mut block.stmts[i],
+                tt,
+                mods,
+                cs,
+                reg,
+                fmt_type,
+                module_source,
+            );
         }
         i += 1;
     }
@@ -227,44 +448,50 @@ fn is_inspect_marker(expr: &TirExpr) -> bool {
     matches!(&expr.kind, TirExprKind::StaticCall { func, .. } if func.name() == "builtin::inspect")
 }
 
-fn synthesize_in_stmt(
+fn walk_stmt(
     stmt: &mut TirStmt,
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
     cs: &IndexMap<u32, String>,
+    reg: &mut InspectRegistry,
+    fmt_type: TypeId,
+    ms: &ModuleSource,
 ) {
     match &mut stmt.kind {
-        TirStmtKind::Expr(e) => walk_expr(e, tt, mods, alloc, cs),
-        TirStmtKind::Let { value, .. } => walk_expr(value, tt, mods, alloc, cs),
+        TirStmtKind::Expr(e) => walk_expr(e, tt, mods, cs, reg, fmt_type, ms),
+        TirStmtKind::Let { value, .. } => walk_expr(value, tt, mods, cs, reg, fmt_type, ms),
         TirStmtKind::Return { value: Some(e) } | TirStmtKind::Break { value: Some(e), .. } => {
-            walk_expr(e, tt, mods, alloc, cs);
+            walk_expr(e, tt, mods, cs, reg, fmt_type, ms);
         }
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            walk_expr(condition, tt, mods, alloc, cs);
-            synthesize_in_block(then_block, tt, mods, alloc, cs);
+            walk_expr(condition, tt, mods, cs, reg, fmt_type, ms);
+            replace_markers_in_block(then_block, tt, mods, cs, reg, fmt_type, ms);
             if let Some(eb) = else_block {
-                synthesize_in_block(eb, tt, mods, alloc, cs);
+                replace_markers_in_block(eb, tt, mods, cs, reg, fmt_type, ms);
             }
         }
-        TirStmtKind::Loop { body } => synthesize_in_block(body, tt, mods, alloc, cs),
+        TirStmtKind::Loop { body } => {
+            replace_markers_in_block(body, tt, mods, cs, reg, fmt_type, ms);
+        }
         TirStmtKind::IfPattern {
             scrutinee,
             then_block,
             else_block,
             ..
         } => {
-            walk_expr(scrutinee, tt, mods, alloc, cs);
-            synthesize_in_block(then_block, tt, mods, alloc, cs);
+            walk_expr(scrutinee, tt, mods, cs, reg, fmt_type, ms);
+            replace_markers_in_block(then_block, tt, mods, cs, reg, fmt_type, ms);
             if let Some(eb) = else_block {
-                synthesize_in_block(eb, tt, mods, alloc, cs);
+                replace_markers_in_block(eb, tt, mods, cs, reg, fmt_type, ms);
             }
         }
-        TirStmtKind::LetPattern { value, .. } => walk_expr(value, tt, mods, alloc, cs),
+        TirStmtKind::LetPattern { value, .. } => {
+            walk_expr(value, tt, mods, cs, reg, fmt_type, ms);
+        }
         _ => {}
     }
 }
@@ -273,44 +500,46 @@ fn walk_expr(
     expr: &mut TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
     cs: &IndexMap<u32, String>,
+    reg: &mut InspectRegistry,
+    fmt_type: TypeId,
+    ms: &ModuleSource,
 ) {
     match &mut expr.kind {
         TirExprKind::Block(b) | TirExprKind::LabeledBlock { block: b, .. } => {
-            synthesize_in_block(b, tt, mods, alloc, cs);
+            replace_markers_in_block(b, tt, mods, cs, reg, fmt_type, ms);
         }
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            walk_expr(condition, tt, mods, alloc, cs);
-            synthesize_in_block(then_branch, tt, mods, alloc, cs);
+            walk_expr(condition, tt, mods, cs, reg, fmt_type, ms);
+            replace_markers_in_block(then_branch, tt, mods, cs, reg, fmt_type, ms);
             if let Some(eb) = else_branch {
-                synthesize_in_block(eb, tt, mods, alloc, cs);
+                replace_markers_in_block(eb, tt, mods, cs, reg, fmt_type, ms);
             }
         }
         TirExprKind::Match { expr: s, arms } => {
-            walk_expr(s, tt, mods, alloc, cs);
+            walk_expr(s, tt, mods, cs, reg, fmt_type, ms);
             for arm in arms {
-                walk_expr(&mut arm.body, tt, mods, alloc, cs);
+                walk_expr(&mut arm.body, tt, mods, cs, reg, fmt_type, ms);
             }
         }
         TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
             for a in args {
-                walk_expr(a, tt, mods, alloc, cs);
+                walk_expr(a, tt, mods, cs, reg, fmt_type, ms);
             }
         }
         TirExprKind::MethodCall { receiver, args, .. } => {
-            walk_expr(receiver, tt, mods, alloc, cs);
+            walk_expr(receiver, tt, mods, cs, reg, fmt_type, ms);
             for a in args {
-                walk_expr(a, tt, mods, alloc, cs);
+                walk_expr(a, tt, mods, cs, reg, fmt_type, ms);
             }
         }
         TirExprKind::Binary { left, right, .. } => {
-            walk_expr(left, tt, mods, alloc, cs);
-            walk_expr(right, tt, mods, alloc, cs);
+            walk_expr(left, tt, mods, cs, reg, fmt_type, ms);
+            walk_expr(right, tt, mods, cs, reg, fmt_type, ms);
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
@@ -321,37 +550,176 @@ fn walk_expr(
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
-            walk_expr(inner, tt, mods, alloc, cs);
+            walk_expr(inner, tt, mods, cs, reg, fmt_type, ms);
         }
         TirExprKind::Assign { target, value } => {
-            walk_expr(target, tt, mods, alloc, cs);
-            walk_expr(value, tt, mods, alloc, cs);
+            walk_expr(target, tt, mods, cs, reg, fmt_type, ms);
+            walk_expr(value, tt, mods, cs, reg, fmt_type, ms);
         }
         TirExprKind::Index {
             expr: e,
             index: idx,
         } => {
-            walk_expr(e, tt, mods, alloc, cs);
-            walk_expr(idx, tt, mods, alloc, cs);
+            walk_expr(e, tt, mods, cs, reg, fmt_type, ms);
+            walk_expr(idx, tt, mods, cs, reg, fmt_type, ms);
         }
         TirExprKind::StructLiteral { fields, .. } => {
             for f in fields {
-                walk_expr(&mut f.value, tt, mods, alloc, cs);
+                walk_expr(&mut f.value, tt, mods, cs, reg, fmt_type, ms);
             }
         }
         TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
             for e in elements {
-                walk_expr(e, tt, mods, alloc, cs);
+                walk_expr(e, tt, mods, cs, reg, fmt_type, ms);
             }
         }
-        TirExprKind::Closure { body, .. } => walk_expr(body, tt, mods, alloc, cs),
+        TirExprKind::Closure { body, .. } => {
+            walk_expr(body, tt, mods, cs, reg, fmt_type, ms);
+        }
         TirExprKind::IndirectCall { callee, args } => {
-            walk_expr(callee, tt, mods, alloc, cs);
+            walk_expr(callee, tt, mods, cs, reg, fmt_type, ms);
             for a in args {
-                walk_expr(a, tt, mods, alloc, cs);
+                walk_expr(a, tt, mods, cs, reg, fmt_type, ms);
             }
         }
         _ => {}
+    }
+}
+
+// ─── Phase 2: Generate inspect function bodies ───
+
+/// Dispatch to the appropriate synth_* based on type.
+fn synth_body(
+    reg: &mut InspectRegistry,
+    type_id: TypeId,
+    val: TirExpr,
+    fmt: TirExpr,
+    tt: &Rc<RefCell<TypeTable>>,
+    mods: &[&TirModule],
+    alloc: &mut LocalAlloc,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
+    span: Span,
+) -> Vec<TirStmt> {
+    let resolved = tt.borrow().get(type_id).clone();
+
+    match resolved {
+        ResolvedType::Primitive(PrimitiveType::Char) => {
+            let mut s = Vec::new();
+            s.push(wc('\'', fmt.clone(), span));
+            s.extend(display_fmt(type_id, val, fmt.clone(), tt, span));
+            s.push(wc('\'', fmt, span));
+            s
+        }
+        ResolvedType::Primitive(_) => display_fmt(type_id, val, fmt, tt, span),
+        ResolvedType::Unit => {
+            vec![ws("()", fmt, tt, span)]
+        }
+        ResolvedType::Struct {
+            ref name,
+            module_source: ref ms,
+            ..
+        } => {
+            let n = name.clone();
+            let ms = ms.clone();
+            if n == "String" && ms == ModuleSource::core("prelude/string.wado") {
+                synth_string(val, fmt, tt, span)
+            } else {
+                synth_struct(reg, &n, val, fmt, tt, mods, fmt_type, module_source, span)
+            }
+        }
+        ResolvedType::Enum { ref name, .. } => {
+            let n = name.clone();
+            synth_enum(&n, type_id, val, fmt, tt, mods, span)
+        }
+        ResolvedType::Option(inner) => {
+            synth_option(reg, inner, val, fmt, tt, fmt_type, module_source, span)
+        }
+        ResolvedType::Tuple(ref elems) => {
+            let e = elems.clone();
+            synth_tuple(reg, &e, val, fmt, tt, fmt_type, module_source, span)
+        }
+        ResolvedType::GenericInstance {
+            ref name,
+            ref type_args,
+            ..
+        } if name == "Array" && type_args.len() == 1 => {
+            let elem = type_args[0];
+            synth_array(
+                reg,
+                elem,
+                val,
+                fmt,
+                tt,
+                alloc,
+                fmt_type,
+                module_source,
+                span,
+            )
+        }
+        ResolvedType::Ref(inner) => synth_ref(
+            reg,
+            false,
+            inner,
+            val,
+            fmt,
+            tt,
+            fmt_type,
+            module_source,
+            span,
+        ),
+        ResolvedType::MutRef(inner) => synth_ref(
+            reg,
+            true,
+            inner,
+            val,
+            fmt,
+            tt,
+            fmt_type,
+            module_source,
+            span,
+        ),
+        ResolvedType::Newtype {
+            ref name,
+            base_type,
+            ..
+        } => {
+            let n = name.clone();
+            synth_newtype(
+                reg,
+                &n,
+                base_type,
+                val,
+                fmt,
+                tt,
+                mods,
+                alloc,
+                fmt_type,
+                module_source,
+                span,
+            )
+        }
+        ResolvedType::Variant { ref name, .. } => {
+            let n = name.clone();
+            synth_variant(reg, &n, val, fmt, tt, mods, fmt_type, module_source, span)
+        }
+        ResolvedType::Resource { ref name, .. } => {
+            let n = name.clone();
+            synth_resource(&n, val, fmt, tt, span)
+        }
+        ResolvedType::Function {
+            ref params,
+            return_type,
+            ..
+        } => {
+            // Inside a generated function, always show signature only (no source text)
+            let p = params.clone();
+            synth_fn_type(&p, return_type, fmt, tt, span)
+        }
+        _ => {
+            let tn = tt.borrow().type_name(type_id);
+            vec![ws(&format!("<{tn}>"), fmt, tt, span)]
+        }
     }
 }
 
@@ -480,105 +848,7 @@ fn display_impl_module(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> ModuleSo
     }
 }
 
-// ─── Type-driven synthesis ───
-
-fn synthesize_for_type(
-    type_id: TypeId,
-    val: TirExpr,
-    fmt: TirExpr,
-    tt: &Rc<RefCell<TypeTable>>,
-    mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
-    cs: &IndexMap<u32, String>,
-    span: Span,
-) -> Vec<TirStmt> {
-    let resolved = tt.borrow().get(type_id).clone();
-
-    match resolved {
-        ResolvedType::Primitive(PrimitiveType::Char) => {
-            let mut s = Vec::new();
-            s.push(wc('\'', fmt.clone(), span));
-            s.extend(display_fmt(type_id, val, fmt.clone(), tt, span));
-            s.push(wc('\'', fmt, span));
-            s
-        }
-        ResolvedType::Primitive(_) => display_fmt(type_id, val, fmt, tt, span),
-        ResolvedType::Unit => {
-            vec![ws("()", fmt, tt, span)]
-        }
-        ResolvedType::Struct {
-            ref name,
-            ref module_source,
-            ..
-        } => {
-            let n = name.clone();
-            let ms = module_source.clone();
-            if n == "String" && ms == ModuleSource::core("prelude/string.wado") {
-                synth_string(val, fmt, tt, span)
-            } else {
-                synth_struct(&n, type_id, val, fmt, tt, mods, alloc, cs, span)
-            }
-        }
-        ResolvedType::Enum { ref name, .. } => {
-            let n = name.clone();
-            synth_enum(&n, type_id, val, fmt, tt, mods, span)
-        }
-        ResolvedType::Option(inner) => {
-            synth_option(type_id, inner, val, fmt, tt, mods, alloc, cs, span)
-        }
-        ResolvedType::Tuple(ref elems) => {
-            let e = elems.clone();
-            synth_tuple(&e, val, fmt, tt, mods, alloc, cs, span)
-        }
-        ResolvedType::GenericInstance {
-            ref name,
-            ref type_args,
-            ..
-        } if name == "Array" && type_args.len() == 1 => {
-            let elem = type_args[0];
-            synth_array(type_id, elem, val, fmt, tt, mods, alloc, cs, span)
-        }
-        ResolvedType::Ref(inner) => synth_ref(false, inner, val, fmt, tt, mods, alloc, cs, span),
-        ResolvedType::MutRef(inner) => synth_ref(true, inner, val, fmt, tt, mods, alloc, cs, span),
-        ResolvedType::Newtype {
-            ref name,
-            base_type,
-            ..
-        } => {
-            let n = name.clone();
-            synth_newtype(&n, base_type, val, fmt, tt, mods, alloc, cs, span)
-        }
-        ResolvedType::Variant { ref name, .. } => {
-            let n = name.clone();
-            synth_variant(&n, type_id, val, fmt, tt, mods, alloc, cs, span)
-        }
-        ResolvedType::Resource { ref name, .. } => {
-            let n = name.clone();
-            synth_resource(&n, val, fmt, tt, span)
-        }
-        ResolvedType::Function {
-            ref params,
-            return_type,
-            ..
-        } => {
-            // Try to find pre-desugar source text from the value expression
-            let source = match &val.kind {
-                TirExprKind::Closure {
-                    source_text: Some(text),
-                    ..
-                } => Some(text.clone()),
-                TirExprKind::Local { index, .. } => cs.get(index).cloned(),
-                _ => None,
-            };
-            let p = params.clone();
-            synth_fn_type(&p, return_type, source.as_deref(), fmt, tt, span)
-        }
-        _ => {
-            let tn = tt.borrow().type_name(type_id);
-            vec![ws(&format!("<{tn}>"), fmt, tt, span)]
-        }
-    }
-}
+// ─── Type-specific body generators ───
 
 fn synth_string(
     val: TirExpr,
@@ -608,14 +878,14 @@ fn synth_string(
 }
 
 fn synth_struct(
+    reg: &mut InspectRegistry,
     name: &str,
-    _type_id: TypeId,
     val: TirExpr,
     fmt: TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
-    cs: &IndexMap<u32, String>,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
     span: Span,
 ) -> Vec<TirStmt> {
     let fields = find_struct_fields(name, mods);
@@ -638,14 +908,14 @@ fn synth_struct(
                     *ft,
                     span,
                 );
-                s.extend(synthesize_for_type(
+                s.push(call_inspect_fn(
+                    reg,
                     *ft,
                     fa,
                     fmt.clone(),
                     tt,
-                    mods,
-                    alloc,
-                    cs,
+                    fmt_type,
+                    module_source,
                     span,
                 ));
             }
@@ -732,14 +1002,13 @@ fn find_enum_cases(name: &str, mods: &[&TirModule]) -> Option<Vec<(String, u32)>
 }
 
 fn synth_option(
-    _opt_type: TypeId,
+    reg: &mut InspectRegistry,
     inner: TypeId,
     val: TirExpr,
     fmt: TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
-    mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
-    cs: &IndexMap<u32, String>,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
     span: Span,
 ) -> Vec<TirStmt> {
     let is_some = TirExpr::new(
@@ -759,14 +1028,14 @@ fn synth_option(
     );
     let mut then_stmts = Vec::new();
     then_stmts.push(ws("Some(", fmt.clone(), tt, span));
-    then_stmts.extend(synthesize_for_type(
+    then_stmts.push(call_inspect_fn(
+        reg,
         inner,
         unwrapped,
         fmt.clone(),
         tt,
-        mods,
-        alloc,
-        cs,
+        fmt_type,
+        module_source,
         span,
     ));
     then_stmts.push(wc(')', fmt.clone(), span));
@@ -786,13 +1055,13 @@ fn synth_option(
 }
 
 fn synth_tuple(
+    reg: &mut InspectRegistry,
     elems: &[TypeId],
     val: TirExpr,
     fmt: TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
-    mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
-    cs: &IndexMap<u32, String>,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
     span: Span,
 ) -> Vec<TirStmt> {
     let mut s = vec![wc('[', fmt.clone(), span)];
@@ -809,14 +1078,14 @@ fn synth_tuple(
             *et,
             span,
         );
-        s.extend(synthesize_for_type(
+        s.push(call_inspect_fn(
+            reg,
             *et,
             ea,
             fmt.clone(),
             tt,
-            mods,
-            alloc,
-            cs,
+            fmt_type,
+            module_source,
             span,
         ));
     }
@@ -825,14 +1094,14 @@ fn synth_tuple(
 }
 
 fn synth_array(
-    _arr_type: TypeId,
+    reg: &mut InspectRegistry,
     elem: TypeId,
     val: TirExpr,
     fmt: TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
-    mods: &[&TirModule],
     alloc: &mut LocalAlloc,
-    cs: &IndexMap<u32, String>,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
     span: Span,
 ) -> Vec<TirStmt> {
     let mut s = vec![wc('[', fmt.clone(), span)];
@@ -957,14 +1226,14 @@ fn synth_array(
         elem,
         span,
     );
-    body.extend(synthesize_for_type(
+    body.push(call_inspect_fn(
+        reg,
         elem,
         idx_access,
         fmt.clone(),
         tt,
-        mods,
-        alloc,
-        cs,
+        fmt_type,
+        module_source,
         span,
     ));
 
@@ -1031,14 +1300,14 @@ fn synth_array(
 }
 
 fn synth_ref(
+    reg: &mut InspectRegistry,
     is_mut: bool,
     inner: TypeId,
     val: TirExpr,
     fmt: TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
-    mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
-    cs: &IndexMap<u32, String>,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
     span: Span,
 ) -> Vec<TirStmt> {
     let mut s = Vec::new();
@@ -1055,13 +1324,21 @@ fn synth_ref(
         inner,
         span,
     );
-    s.extend(synthesize_for_type(
-        inner, deref, fmt, tt, mods, alloc, cs, span,
+    s.push(call_inspect_fn(
+        reg,
+        inner,
+        deref,
+        fmt,
+        tt,
+        fmt_type,
+        module_source,
+        span,
     ));
     s
 }
 
 fn synth_newtype(
+    reg: &mut InspectRegistry,
     name: &str,
     base: TypeId,
     val: TirExpr,
@@ -1069,7 +1346,8 @@ fn synth_newtype(
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
     alloc: &mut LocalAlloc,
-    cs: &IndexMap<u32, String>,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
     span: Span,
 ) -> Vec<TirStmt> {
     if let Some(fd) = find_flags(name, mods) {
@@ -1084,7 +1362,17 @@ fn synth_newtype(
         base,
         span,
     );
-    let mut s = synthesize_for_type(base, cast, fmt.clone(), tt, mods, alloc, cs, span);
+    let mut s = Vec::new();
+    s.push(call_inspect_fn(
+        reg,
+        base,
+        cast,
+        fmt.clone(),
+        tt,
+        fmt_type,
+        module_source,
+        span,
+    ));
     s.push(ws(&format!(" as {name}"), fmt, tt, span));
     s
 }
@@ -1101,14 +1389,14 @@ fn find_flags(name: &str, mods: &[&TirModule]) -> Option<TirFlags> {
 }
 
 fn synth_variant(
+    reg: &mut InspectRegistry,
     name: &str,
-    _type_id: TypeId,
     val: TirExpr,
     fmt: TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
     mods: &[&TirModule],
-    alloc: &mut LocalAlloc,
-    cs: &IndexMap<u32, String>,
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
     span: Span,
 ) -> Vec<TirStmt> {
     let vd = find_variant(name, mods);
@@ -1139,14 +1427,14 @@ fn synth_variant(
                         case.payload,
                         span,
                     );
-                    then_stmts.extend(synthesize_for_type(
+                    then_stmts.push(call_inspect_fn(
+                        reg,
                         case.payload,
                         payload,
                         fmt.clone(),
                         tt,
-                        mods,
-                        alloc,
-                        cs,
+                        fmt_type,
+                        module_source,
                         span,
                     ));
                     then_stmts.push(wc(')', fmt.clone(), span));
@@ -1381,14 +1669,10 @@ fn synth_flags(
 fn synth_fn_type(
     params: &[TypeId],
     ret: TypeId,
-    source_text: Option<&str>,
     fmt: TirExpr,
     tt: &Rc<RefCell<TypeTable>>,
     span: Span,
 ) -> Vec<TirStmt> {
-    if let Some(text) = source_text {
-        return vec![ws(text, fmt, tt, span)];
-    }
     let t = tt.borrow();
     let mut sig = String::from("|");
     for (i, p) in params.iter().enumerate() {

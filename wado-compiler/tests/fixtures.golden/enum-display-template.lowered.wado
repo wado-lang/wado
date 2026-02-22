@@ -28,7 +28,7 @@ fn describe(f: Fruit) -> String {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            f."Fruit^Display::fmt"(&mut __f);
+            "__inspect$Fruit"(f, &mut __f);
             break __tmpl: __r;
         },
         Banana => __tmpl: {
@@ -37,7 +37,7 @@ fn describe(f: Fruit) -> String {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            f."Fruit^Display::fmt"(&mut __f);
+            "__inspect$Fruit"(f, &mut __f);
             __r.String::append(move " is yellow");
             break __tmpl: __r;
         },
@@ -47,7 +47,7 @@ fn describe(f: Fruit) -> String {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            f."Fruit^Display::fmt"(&mut __f);
+            "__inspect$Fruit"(f, &mut __f);
             __r.String::append(move " is small");
             break __tmpl: __r;
         },
@@ -63,7 +63,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        f."Fruit^Display::fmt"(&mut __f);
+        "__inspect$Fruit"(f, &mut __f);
         break __tmpl: __r;
     });
     core::cli::println(move describe(Fruit::Apple));
@@ -71,30 +71,31 @@ export fn run() with Stdout {
     core::cli::println(move describe(Fruit::Cherry));
 }
 
+fn "__inspect$Fruit"(__val: Fruit, __fmt: &mut Formatter) {
+    if (__val == 0) {
+        __inline_Formatter__write_str_0: {
+            let s: String = move "Fruit::Apple";
+            __fmt.buf.String::append(s);
+        };
+    } else {
+        if (__val == 1) {
+            __inline_Formatter__write_str_1: {
+                let s: String = move "Fruit::Banana";
+                __fmt.buf.String::append(s);
+            };
+        } else {
+            if (__val == 2) {
+                __inline_Formatter__write_str_2: {
+                    let s: String = move "Fruit::Cherry";
+                    __fmt.buf.String::append(s);
+                };
+            };
+        };
+    };
+}
+
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-pub fn "Fruit^Display::fmt"(self: &Fruit, f: &mut Formatter) {
-    let val: Fruit = *self;
-    if (val == Fruit::Apple) {
-        __inline_Formatter__write_str_0: {
-            let s: String = move "Apple";
-            f.buf.String::append(s);
-        };
-    } else {
-        if (val == Fruit::Banana) {
-            __inline_Formatter__write_str_1: {
-                let s: String = move "Banana";
-                f.buf.String::append(s);
-            };
-        } else {
-            __inline_Formatter__write_str_2: {
-                let s: String = move "Cherry";
-                f.buf.String::append(s);
-            };
-        }
-    }
 }
 

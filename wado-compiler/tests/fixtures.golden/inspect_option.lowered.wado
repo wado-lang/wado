@@ -21,55 +21,42 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        if __is_not_null(some_val) {
-            __inline_Formatter__write_str_2: {
-                let s: String = move "Some(";
-                __f.buf.String::append(s);
-            };
-            __inline_i32_Display__fmt_3: {
-                let self: Box<i32> = move Box<i32> { value: __unwrap_option(some_val).value };
-                let f: &mut Formatter = &mut __f;
-                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-            };
-            __inline_Formatter__write_char_4: {
-                __f.buf.String::append_char(')');
-            };
-        } else {
-            __inline_Formatter__write_str_5: {
-                let s: String = move "null";
-                __f.buf.String::append(s);
-            };
-        };
+        "__inspect$Option<i32>"(some_val, &mut __f);
         break __tmpl: __r;
     });
     let none_val: Option<i32> = null;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_7: {
+        let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        if __is_not_null(none_val) {
-            __inline_Formatter__write_str_8: {
-                let s: String = move "Some(";
-                __f.buf.String::append(s);
-            };
-            __inline_i32_Display__fmt_9: {
-                let self: Box<i32> = move Box<i32> { value: __unwrap_option(none_val).value };
-                let f: &mut Formatter = &mut __f;
-                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-            };
-            __inline_Formatter__write_char_10: {
-                __f.buf.String::append_char(')');
-            };
-        } else {
-            __inline_Formatter__write_str_11: {
-                let s: String = move "null";
-                __f.buf.String::append(s);
-            };
-        };
+        "__inspect$Option<i32>"(none_val, &mut __f);
         break __tmpl: __r;
     });
+}
+
+fn "__inspect$Option<i32>"(__val: Option<i32>, __fmt: &mut Formatter) {
+    if __is_not_null(__val) {
+        __inline_Formatter__write_str_0: {
+            let s: String = move "Some(";
+            __fmt.buf.String::append(s);
+        };
+        __inline___inspect_i32_1: {
+            let __val: i32 = __unwrap_option(__val).value;
+            __inline_i32_Display__fmt_2: {
+                "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
+            };
+        };
+        __inline_Formatter__write_char_3: {
+            __fmt.buf.String::append_char(')');
+        };
+    } else {
+        __inline_Formatter__write_str_4: {
+            let s: String = move "null";
+            __fmt.buf.String::append(s);
+        };
+    };
 }
 
 export fn __cm_export__run() {

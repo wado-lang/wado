@@ -19,82 +19,61 @@ struct Point {
 }
 
 export fn run() with Stdout {
+    let p: Point = move Point { x: 10, y: 20 };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_Formatter__write_str_2: {
-            let s: String = move "Point { ";
-            __f.buf.String::append(s);
-        };
-        __inline_Formatter__write_str_3: {
-            let s: String = move "x: ";
-            __f.buf.String::append(s);
-        };
-        __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: 10 };
-            let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-        };
-        __inline_Formatter__write_str_5: {
-            let s: String = move ", ";
-            __f.buf.String::append(s);
-        };
-        __inline_Formatter__write_str_6: {
-            let s: String = move "y: ";
-            __f.buf.String::append(s);
-        };
-        __inline_i32_Display__fmt_7: {
-            let self: Box<i32> = move Box<i32> { value: 20 };
-            let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-        };
-        __inline_Formatter__write_str_8: {
-            let s: String = move " }";
-            __f.buf.String::append(s);
-        };
+        "__inspect$Point"(p, &mut __f);
         break __tmpl: __r;
     });
+    let origin: Point = move Point { x: 0, y: 0 };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_10: {
+        let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_Formatter__write_str_11: {
-            let s: String = move "Point { ";
-            __f.buf.String::append(s);
-        };
-        __inline_Formatter__write_str_12: {
-            let s: String = move "x: ";
-            __f.buf.String::append(s);
-        };
-        __inline_i32_Display__fmt_13: {
-            let self: Box<i32> = move Box<i32> { value: 0 };
-            let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-        };
-        __inline_Formatter__write_str_14: {
-            let s: String = move ", ";
-            __f.buf.String::append(s);
-        };
-        __inline_Formatter__write_str_15: {
-            let s: String = move "y: ";
-            __f.buf.String::append(s);
-        };
-        __inline_i32_Display__fmt_16: {
-            let self: Box<i32> = move Box<i32> { value: 0 };
-            let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-        };
-        __inline_Formatter__write_str_17: {
-            let s: String = move " }";
-            __f.buf.String::append(s);
-        };
+        "__inspect$Point"(origin, &mut __f);
         break __tmpl: __r;
     });
+}
+
+fn "__inspect$Point"(__val: Point, __fmt: &mut Formatter) {
+    __inline_Formatter__write_str_0: {
+        let s: String = move "Point { ";
+        __fmt.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_1: {
+        let s: String = move "x: ";
+        __fmt.buf.String::append(s);
+    };
+    __inline___inspect_i32_2: {
+        let __val: i32 = __val.x;
+        __inline_i32_Display__fmt_3: {
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
+        };
+    };
+    __inline_Formatter__write_str_4: {
+        let s: String = move ", ";
+        __fmt.buf.String::append(s);
+    };
+    __inline_Formatter__write_str_5: {
+        let s: String = move "y: ";
+        __fmt.buf.String::append(s);
+    };
+    __inline___inspect_i32_6: {
+        let __val: i32 = __val.y;
+        __inline_i32_Display__fmt_7: {
+            "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
+        };
+    };
+    __inline_Formatter__write_str_8: {
+        let s: String = move " }";
+        __fmt.buf.String::append(s);
+    };
 }
 
 export fn __cm_export__run() {
