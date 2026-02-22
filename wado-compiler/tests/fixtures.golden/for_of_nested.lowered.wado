@@ -27,15 +27,15 @@ export fn run() with Stdout {
         let _licm_repr: builtin::array<i32> = inner.repr;
         let _licm_used: i32 = inner.used;
         loop {
-            let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let i: i32 = __unwrap_option(__pattern_temp_0).value;
+            let __pattern_temp_0: Option<i32> = move __iter_0."ArrayIter<i32>^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let i: i32 = __variant_payload(__pattern_temp_0, case=0);
                 __for_of_1: {
                     let mut __iter_1: ArrayIter<i32> = move ArrayIter<i32> { repr: _licm_repr, used: _licm_used, index: 0 };
                     loop {
-                        let __pattern_temp_1: Option<i32> = __iter_1."ArrayIter<i32>^Iterator::next"();
-                        if __is_not_null(__pattern_temp_1) {
-                            let j: i32 = __unwrap_option(__pattern_temp_1).value;
+                        let __pattern_temp_1: Option<i32> = move __iter_1."ArrayIter<i32>^Iterator::next"();
+                        if __variant_test(__pattern_temp_1, case=0, name=Some) {
+                            let j: i32 = __variant_payload(__pattern_temp_1, case=0);
                             core::cli::println(__tmpl: {
                                 let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
                                 let mut __f: Formatter = __inline_Formatter__new_3: {
@@ -82,6 +82,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<i32> { value: item });
+    return Option::Some(item);
 }
 

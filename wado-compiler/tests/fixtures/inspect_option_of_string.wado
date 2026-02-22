@@ -1,0 +1,16 @@
+// Test: inspect Option<Option<String>> (nested option with ref type)
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let some_some: Option<Option<String>> = Option::<Option<String>>::Some(Option::<String>::Some("hello"));
+    println(`{some_some:?}`);
+
+    let some_none: Option<Option<String>> = Option::<Option<String>>::Some(null);
+    println(`{some_none:?}`);
+
+    let none: Option<Option<String>> = null;
+    println(`{none:?}`);
+}
+
+__DATA__
+{"stdout": "Some(Some(\"hello\"))\nSome(null)\nnull\n"}

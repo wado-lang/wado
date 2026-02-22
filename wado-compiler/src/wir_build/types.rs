@@ -6,7 +6,7 @@
 //! Also contains type-ordering utilities (topological sort) used during registration.
 
 use crate::name::{ModuleSource, StructName};
-use crate::tir::{ResolvedType, TirStruct, TirVariantDecl, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirModule, TirStruct, TirVariantDecl, TypeId, TypeTable};
 use crate::wir::{
     WirArrayType, WirEnumCase, WirEnumType, WirField, WirGenericOrigin, WirMeta, WirName,
     WirStructType, WirTypeDef, WirVariantCase, WirVariantType,
@@ -36,7 +36,6 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             deps
         }
         ResolvedType::BuiltinArray(inner)
-        | ResolvedType::Option(inner)
         | ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
         | ResolvedType::Stream(inner)
@@ -169,6 +168,10 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     // Phase 3: Monomorphized library structs
     register_mono_library_types(ctx);
 
+    // Phase 3.1: Monomorphized variants (first pass — register variants with simple
+    // payloads so that array element types can reference them, e.g. Array<Option<i32>>)
+    register_mono_variants(ctx);
+
     // Phase 3.5: Pre-register arrays from mono struct fields
     register_mono_field_arrays(ctx);
 
@@ -182,7 +185,8 @@ pub fn register_types(ctx: &mut WirContext<'_>) {
     // Phase 4: Monomorphized entry module structs
     register_mono_entry_types(ctx);
 
-    // Phase 4.5b: Monomorphized variants
+    // Phase 4.5b: Monomorphized variants (second pass — picks up variants whose
+    // payloads depend on array or entry struct types registered above)
     register_mono_variants(ctx);
 
     // Register enums from all modules
@@ -241,12 +245,8 @@ fn register_struct(
         .iter()
         .map(|f| {
             let ty = ctx.type_id_to_wir_type(type_table, f.type_id);
-            // Struct fields use non-nullable refs (except Option<T> which is already nullable)
-            let ty = if matches!(type_table.get(f.type_id), ResolvedType::Option(_)) {
-                ty
-            } else {
-                ty.as_nonnull()
-            };
+            // Struct fields use non-nullable refs
+            let ty = ty.as_nonnull();
             WirField {
                 name: f.name.clone(),
                 ty,
@@ -535,12 +535,8 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                     .enumerate()
                     .map(|(i, &elem_type_id)| {
                         let ty = ctx.type_id_to_wir_type(type_table, elem_type_id);
-                        let ty = if matches!(type_table.get(elem_type_id), ResolvedType::Option(_))
-                        {
-                            ty
-                        } else {
-                            ty.as_nonnull()
-                        };
+                        // Tuple fields use non-nullable refs
+                        let ty = ty.as_nonnull();
                         WirField {
                             name: format!("{i}"),
                             ty,
@@ -663,160 +659,202 @@ fn register_mono_entry_types(ctx: &mut WirContext<'_>) {
 fn register_mono_variants(ctx: &mut WirContext<'_>) {
     // Find generic variant instances in all type tables (e.g., Result<i32, String>)
     // and register them as WIR variant types.
-    let mut to_register: Vec<(
-        String,                                  // mangled name (e.g., "Result<i32, String>")
-        ModuleSource,                            // module source of the base variant
-        Vec<(String, Vec<crate::wir::WirType>)>, // cases: (name, payload types)
-    )> = Vec::new();
+    //
+    // Multiple passes handle dependencies between variant types. For example,
+    // Option<Option<i32>> needs Option<i32> registered first so its payload
+    // resolves to a concrete type rather than abstract structref.
+    loop {
+        let mut to_register: Vec<(
+            String,                                  // mangled name
+            ModuleSource,                            // module source of the base variant
+            Vec<(String, Vec<crate::wir::WirType>)>, // cases: (name, payload types)
+        )> = Vec::new();
 
-    for tir_mod in ctx.project.tir_modules.values() {
-        let type_table = &*tir_mod.type_table.borrow();
-        for type_id in type_table.iter_type_ids() {
-            if let ResolvedType::GenericInstance {
-                name,
-                module_source,
-                type_args,
-            } = type_table.get(type_id)
-            {
-                // Skip Option (handled specially)
-                if name == "Option" {
-                    continue;
-                }
-                // Check if this generic instance is a variant by looking for the
-                // base variant declaration in the module
-                let type_arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|t| type_table.mangle_type_name(*t))
-                    .collect();
-                let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
-                let fq = format!("{module_source}//{mangled}");
-                if ctx.variant_type_map.contains_key(&fq) {
-                    continue;
-                }
-                // Find the base variant declaration in the source module
-                if let Some(source_mod) = ctx.project.tir_modules.get(module_source) {
-                    let source_type_table = &*source_mod.type_table.borrow();
-                    let base_variant = source_mod
-                        .variants
+        for tir_mod in ctx.project.tir_modules.values() {
+            let type_table = &*tir_mod.type_table.borrow();
+            for type_id in type_table.iter_type_ids() {
+                if let ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } = type_table.get(type_id)
+                {
+                    // Option is now handled as a regular variant (SubtypeHierarchy).
+                    // TODO: NullableRef optimization — when T is non-nullable (ref type,
+                    // not another Option), skip variant registration and represent
+                    // Option<T> as (ref null T) instead. This avoids the discriminant
+                    // struct overhead. See wep-2026-02-09-variant-independent-types.md.
+
+                    // Skip unresolved generic instances (e.g. Option<unknown>
+                    // from unresolved null literals)
+                    if type_args.iter().any(|t| {
+                        matches!(
+                            type_table.get(*t),
+                            ResolvedType::Unknown | ResolvedType::Error
+                        )
+                    }) {
+                        continue;
+                    }
+
+                    let type_arg_names: Vec<String> = type_args
                         .iter()
-                        .find(|v| v.name == *name && !v.type_params.is_empty());
-                    if let Some(base) = base_variant {
-                        // Build a type param substitution map:
-                        // base.type_params[i].name -> type_args[i]
+                        .map(|t| type_table.mangle_type_name(*t))
+                        .collect();
+                    let mangled = crate::name::mangle_generic_name(name, &type_arg_names);
+                    let fq = format!("{module_source}//{mangled}");
+                    if ctx.variant_type_map.contains_key(&fq) {
+                        continue;
+                    }
+                    // Find the module containing the base variant declaration.
+                    // First try the source module, then search all modules
+                    // (handles module_source mismatch, e.g. core:prelude vs
+                    // core:prelude/types.wado)
+                    let has_variant = |m: &TirModule| {
+                        m.variants
+                            .iter()
+                            .any(|v| v.name == *name && !v.type_params.is_empty())
+                    };
+                    let variant_mod = ctx
+                        .project
+                        .tir_modules
+                        .get(module_source)
+                        .filter(|m| has_variant(m))
+                        .or_else(|| ctx.project.tir_modules.values().find(|m| has_variant(m)));
+                    if let Some(variant_mod) = variant_mod {
+                        let variant_tt = &*variant_mod.type_table.borrow();
+                        let base = variant_mod
+                            .variants
+                            .iter()
+                            .find(|v| v.name == *name && !v.type_params.is_empty())
+                            .expect("variant module must contain the base variant");
                         let type_args = type_args.clone();
-                        let cases: Vec<(String, Vec<crate::wir::WirType>)> =
-                            base.cases
-                                .iter()
-                                .map(|case| {
-                                    // Resolve the payload through type param substitution
-                                    let payload_resolved = source_type_table.get(case.payload);
-                                    let payload = match payload_resolved {
-                                        ResolvedType::Unit => Vec::new(),
-                                        ResolvedType::TypeParam { index, .. } => {
-                                            // Substitute type param with concrete type arg
-                                            let idx = *index as usize;
-                                            if idx < type_args.len() {
-                                                // Check if the substituted type is unit
-                                                let sub_ty = type_table.get(type_args[idx]);
-                                                if matches!(sub_ty, ResolvedType::Unit) {
-                                                    Vec::new()
-                                                } else {
-                                                    vec![ctx.type_id_to_wir_type(
-                                                        type_table,
-                                                        type_args[idx],
-                                                    )]
-                                                }
-                                            } else {
+                        let cases: Vec<(String, Vec<crate::wir::WirType>)> = base
+                            .cases
+                            .iter()
+                            .map(|case| {
+                                let payload_resolved = variant_tt.get(case.payload);
+                                let payload = match payload_resolved {
+                                    ResolvedType::Unit => Vec::new(),
+                                    ResolvedType::TypeParam { index, .. } => {
+                                        let idx = *index as usize;
+                                        if idx < type_args.len() {
+                                            let sub_ty = type_table.get(type_args[idx]);
+                                            if matches!(sub_ty, ResolvedType::Unit) {
                                                 Vec::new()
+                                            } else {
+                                                vec![ctx.type_id_to_wir_type(
+                                                    type_table,
+                                                    type_args[idx],
+                                                )]
                                             }
+                                        } else {
+                                            Vec::new()
                                         }
-                                        _ => {
-                                            // Non-param payload (e.g., concrete type)
-                                            vec![ctx.type_id_to_wir_type(
-                                                source_type_table,
-                                                case.payload,
-                                            )]
-                                        }
-                                    };
-                                    (case.name.clone(), payload)
-                                })
-                                .collect();
-                        to_register.push((mangled, module_source.clone(), cases));
+                                    }
+                                    _ => {
+                                        vec![ctx.type_id_to_wir_type(variant_tt, case.payload)]
+                                    }
+                                };
+                                (case.name.clone(), payload)
+                            })
+                            .collect();
+
+                        // Skip variants with unresolved payload types (abstract
+                        // structref). They will be resolved in a subsequent pass
+                        // after their dependencies are registered.
+                        let has_unresolved = cases.iter().any(|(_, payloads)| {
+                            payloads.iter().any(|ty| {
+                                matches!(
+                                    ty,
+                                    crate::wir::WirType::AbstractRef {
+                                        heap_type: crate::wir::WirAbstractHeapType::Struct,
+                                        ..
+                                    }
+                                )
+                            })
+                        });
+                        if !has_unresolved {
+                            to_register.push((mangled, module_source.clone(), cases));
+                        }
                     }
                 }
             }
         }
-    }
 
-    for (mangled_name, module_source, cases) in to_register {
-        let fq = format!("{module_source}//{mangled_name}");
-        if ctx.variant_type_map.contains_key(&fq) {
-            continue;
+        if to_register.is_empty() {
+            break;
         }
-        let wir_cases: Vec<WirVariantCase> = cases
-            .iter()
-            .enumerate()
-            .map(|(i, (name, payload))| WirVariantCase {
-                name: name.clone(),
-                index: u32::try_from(i).expect("too many variant cases"),
-                payload: payload.clone(),
-            })
-            .collect();
 
-        let type_id = ctx.register_type(
-            fq.clone(),
-            WirTypeDef::Variant(WirVariantType {
-                name: WirName {
-                    display: mangled_name.clone(),
-                    fq: fq.clone(),
-                },
-                cases: wir_cases.clone(),
-                meta: WirMeta {
-                    module_source: Some(module_source),
-                    ..WirMeta::default()
-                },
-                generic_origin: None,
-                newtype_origin: None,
-            }),
-        );
-
-        ctx.variant_type_map.insert(fq.clone(), type_id.clone());
-
-        // Register case-specific struct types
-        for case in &wir_cases {
-            if case.payload.is_empty() {
+        for (mangled_name, module_source, cases) in to_register {
+            let fq = format!("{module_source}//{mangled_name}");
+            if ctx.variant_type_map.contains_key(&fq) {
                 continue;
             }
-            let case_fq = format!("{fq}::{}", case.name);
-            let mut fields = vec![WirField {
-                name: "discriminant".to_string(),
-                ty: crate::wir::WirType::I32,
-                mutable: false,
-            }];
-            for (j, payload_ty) in case.payload.iter().enumerate() {
-                fields.push(WirField {
-                    name: format!("payload_{j}"),
-                    ty: payload_ty.clone(),
-                    mutable: false,
-                });
-            }
-            let case_type_id = ctx.register_type(
-                case_fq,
-                WirTypeDef::Struct(WirStructType {
+            let wir_cases: Vec<WirVariantCase> = cases
+                .iter()
+                .enumerate()
+                .map(|(i, (name, payload))| WirVariantCase {
+                    name: name.clone(),
+                    index: u32::try_from(i).expect("too many variant cases"),
+                    payload: payload.clone(),
+                })
+                .collect();
+
+            let type_id = ctx.register_type(
+                fq.clone(),
+                WirTypeDef::Variant(WirVariantType {
                     name: WirName {
-                        display: format!("{}::{}", mangled_name, case.name),
-                        fq: format!("{fq}::{}", case.name),
+                        display: mangled_name.clone(),
+                        fq: fq.clone(),
                     },
-                    fields,
-                    meta: WirMeta::default(),
+                    cases: wir_cases.clone(),
+                    meta: WirMeta {
+                        module_source: Some(module_source),
+                        ..WirMeta::default()
+                    },
                     generic_origin: None,
                     newtype_origin: None,
                 }),
             );
-            ctx.variant_case_info
-                .insert(case_type_id.index(), (type_id.index(), case.index));
+
+            ctx.variant_type_map.insert(fq.clone(), type_id.clone());
+
+            // Register case-specific struct types
+            for case in &wir_cases {
+                if case.payload.is_empty() {
+                    continue;
+                }
+                let case_fq = format!("{fq}::{}", case.name);
+                let mut fields = vec![WirField {
+                    name: "discriminant".to_string(),
+                    ty: crate::wir::WirType::I32,
+                    mutable: false,
+                }];
+                for (j, payload_ty) in case.payload.iter().enumerate() {
+                    fields.push(WirField {
+                        name: format!("payload_{j}"),
+                        ty: payload_ty.clone(),
+                        mutable: false,
+                    });
+                }
+                let case_type_id = ctx.register_type(
+                    case_fq,
+                    WirTypeDef::Struct(WirStructType {
+                        name: WirName {
+                            display: format!("{}::{}", mangled_name, case.name),
+                            fq: format!("{fq}::{}", case.name),
+                        },
+                        fields,
+                        meta: WirMeta::default(),
+                        generic_origin: None,
+                        newtype_origin: None,
+                    }),
+                );
+                ctx.variant_case_info
+                    .insert(case_type_id.index(), (type_id.index(), case.index));
+            }
         }
-    }
+    } // end loop
 }
 
 fn register_remaining_arrays(ctx: &mut WirContext<'_>) {
@@ -1079,14 +1117,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         let field_type_id = tir_struct.fields[field_idx].type_id;
                         let wir_type = ctx.type_id_to_wir_type(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
-                            // Make non-Option struct fields non-nullable (same as register_struct)
-                            let wir_type =
-                                if matches!(type_table.get(field_type_id), ResolvedType::Option(_))
-                                {
-                                    wir_type
-                                } else {
-                                    wir_type.as_nonnull()
-                                };
+                            // Make struct fields non-nullable (same as register_struct)
+                            let wir_type = wir_type.as_nonnull();
                             resolved = Some(wir_type);
                             break;
                         }
@@ -1112,15 +1144,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                                 let elem_type_id = elements[field_idx];
                                 let wir_type = ctx.type_id_to_wir_type(type_table, elem_type_id);
                                 if !is_abstract_ref(&wir_type) {
-                                    // Make non-Option tuple fields non-nullable
-                                    let wir_type = if matches!(
-                                        type_table.get(elem_type_id),
-                                        ResolvedType::Option(_)
-                                    ) {
-                                        wir_type
-                                    } else {
-                                        wir_type.as_nonnull()
-                                    };
+                                    // Make tuple fields non-nullable
+                                    let wir_type = wir_type.as_nonnull();
                                     resolved = Some(wir_type);
                                     break;
                                 }

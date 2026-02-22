@@ -15,9 +15,9 @@
 
 export fn run() with Stdout {
     let arr: Array<i32> = move [10, 20, 30];
-    let __pattern_temp_0: Option<i32> = arr."Array<i32>::get"(0);
-    if __is_not_null(__pattern_temp_0) {
-        let v: i32 = __unwrap_option(__pattern_temp_0).value;
+    let __pattern_temp_0: Option<i32> = move arr."Array<i32>::get"(0);
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let v: i32 = __variant_payload(__pattern_temp_0, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
             __r.String::append(move "get(0) = ");
@@ -33,9 +33,9 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __pattern_temp_1: Option<i32> = arr."Array<i32>::get"(2);
-    if __is_not_null(__pattern_temp_1) {
-        let v: i32 = __unwrap_option(__pattern_temp_1).value;
+    let __pattern_temp_1: Option<i32> = move arr."Array<i32>::get"(2);
+    if __variant_test(__pattern_temp_1, case=0, name=Some) {
+        let v: i32 = __variant_payload(__pattern_temp_1, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
             __r.String::append(move "get(2) = ");
@@ -51,12 +51,12 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __pattern_temp_2: Option<i32> = arr."Array<i32>::get"(3);
-    if !__is_not_null(__pattern_temp_2) {
+    let __pattern_temp_2: Option<i32> = move arr."Array<i32>::get"(3);
+    if __variant_test(__pattern_temp_2, case=1, name=None) {
         core::cli::println(move "get(3) = None");
     }
-    let __pattern_temp_3: Option<i32> = arr."Array<i32>::get"(-1);
-    if !__is_not_null(__pattern_temp_3) {
+    let __pattern_temp_3: Option<i32> = move arr."Array<i32>::get"(-1);
+    if __variant_test(__pattern_temp_3, case=1, name=None) {
         core::cli::println(move "get(-1) = None");
     }
 }
@@ -70,6 +70,6 @@ pub fn "Array<i32>::get"(self: &Array<i32>, index: i32) -> Option<i32> {
     if ((index < 0) || (index >= self.used)) {
         return null;
     }
-    return Option::Some(Box<i32> { value: core::builtin::array_get::<i32>(self.repr, index) });
+    return Option::Some(core::builtin::array_get::<i32>(self.repr, index));
 }
 

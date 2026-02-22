@@ -14,7 +14,7 @@
 // wasi::waitable-set-wait
 
 export fn run() with Stdout {
-    let some_val: Option<i32> = Option::Some(Box<i32> { value: 42 });
+    let some_val: Option<i32> = Option::Some(42);
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_1: {
@@ -24,7 +24,7 @@ export fn run() with Stdout {
         "__inspect$Option<i32>"(some_val, &mut __f);
         break __tmpl: __r;
     });
-    let none_val: Option<i32> = null;
+    let none_val: Option<i32> = move null;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_3: {
@@ -37,13 +37,13 @@ export fn run() with Stdout {
 }
 
 fn "__inspect$Option<i32>"(__val: Option<i32>, __fmt: &mut Formatter) {
-    if __is_not_null(__val) {
+    if __variant_test(__val, case=0, name=Some) {
         __inline_Formatter__write_str_0: {
             let s: String = move "Some(";
             __fmt.buf.String::append(s);
         };
         __inline___inspect_i32_1: {
-            let __val: i32 = __unwrap_option(__val).value;
+            let __val: i32 = __variant_payload(__val, case=0);
             __inline_i32_Display__fmt_2: {
                 "core::prelude/primitives.wado::fmt_i32_decimal"(__val, __fmt);
             };

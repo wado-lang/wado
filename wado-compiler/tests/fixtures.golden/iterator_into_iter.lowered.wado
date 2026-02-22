@@ -24,9 +24,9 @@ export fn run() with Stdout {
     let mut iter: ArrayIter<i32> = move ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
     let mut sum: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
-        if __is_not_null(__pattern_temp_0) {
-            let x: i32 = __unwrap_option(__pattern_temp_0).value;
+        let __pattern_temp_0: Option<i32> = move iter."ArrayIter<i32>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let x: i32 = __variant_payload(__pattern_temp_0, case=0);
             sum = (sum + x);
         } else {
             break;
@@ -59,6 +59,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<i32> { value: item });
+    return Option::Some(item);
 }
 

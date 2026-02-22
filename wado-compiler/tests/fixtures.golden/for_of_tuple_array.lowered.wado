@@ -25,8 +25,8 @@ export fn run() with Stdout {
         let mut __iter_0: ArrayIter<Tuple<String,i32>> = move ArrayIter<Tuple<String,i32>> { repr: items.repr, used: items.used, index: 0 };
         loop {
             let __pattern_temp_0: Option<[String, i32]> = move __iter_0."ArrayIter<Tuple<String,i32>>^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let pair: [String, i32] = __unwrap_option(__pattern_temp_0);
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let pair: [String, i32] = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(pair.0);
             } else {
                 break;

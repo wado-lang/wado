@@ -24,8 +24,8 @@ export fn run() with Stdout {
     let mut iter: ArrayIter<String> = move ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
     loop {
         let __pattern_temp_0: Option<String> = move iter."ArrayIter<String>^Iterator::next"();
-        if __is_not_null(__pattern_temp_0) {
-            let s: String = __unwrap_option(__pattern_temp_0);
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let s: String = __variant_payload(__pattern_temp_0, case=0);
             core::cli::println(s);
         } else {
             break;

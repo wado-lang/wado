@@ -41,9 +41,9 @@ fn "Container<i32>::process"(self: &mut Container<i32>) {
             break __inline_Array_i32__IntoIterator__into_iter_0: ArrayIter<i32> { repr: self.repr, used: self.used, index: 0 };
         };
         loop {
-            let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let item: i32 = __unwrap_option(__pattern_temp_0).value;
+            let __pattern_temp_0: Option<i32> = move __iter_0."ArrayIter<i32>^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let item: i32 = __variant_payload(__pattern_temp_0, case=0);
             } else {
                 break;
             }
@@ -57,6 +57,6 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<i32> { value: item });
+    return Option::Some(item);
 }
 

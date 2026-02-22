@@ -1956,14 +1956,14 @@ fn flat_types_from_type_id_into(
                 out.push(cm_abi::CmValType::I32);
             }
         }
-        ResolvedType::Option(inner) => {
-            out.push(cm_abi::CmValType::I32); // discriminant
-            flat_types_from_type_id_into(*inner, out, tir_modules, type_table);
-        }
         ResolvedType::GenericInstance {
             name, type_args, ..
         } => {
             match name.as_str() {
+                "Option" if type_args.len() == 1 => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    flat_types_from_type_id_into(type_args[0], out, tir_modules, type_table);
+                }
                 "Result" if type_args.len() == 2 => {
                     out.push(cm_abi::CmValType::I32); // discriminant
                     let mut ok_flat = Vec::new();
@@ -1986,10 +1986,6 @@ fn flat_types_from_type_id_into(
                         let err_val = err_flat.get(i).copied();
                         out.push(cm_abi::CmValType::join(ok_val, err_val));
                     }
-                }
-                "Option" if type_args.len() == 1 => {
-                    out.push(cm_abi::CmValType::I32); // discriminant
-                    flat_types_from_type_id_into(type_args[0], out, tir_modules, type_table);
                 }
                 "Array" => {
                     out.push(cm_abi::CmValType::I32); // ptr
@@ -2077,29 +2073,6 @@ fn variant_payload(expr: TirExpr, case_index: u32, payload_type: TypeId) -> TirE
             payload_type,
         },
         payload_type,
-        synth_span(),
-    )
-}
-
-/// Create an `IsNotNull` TIR expression (tests if Option has a value).
-fn is_not_null(expr: TirExpr) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::IsNotNull {
-            expr: Box::new(expr),
-        },
-        TypeTable::BOOL,
-        synth_span(),
-    )
-}
-
-/// Create an `UnwrapOption` TIR expression (unwraps Option to inner value).
-fn unwrap_option(expr: TirExpr, inner_type: TypeId) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::UnwrapOption {
-            expr: Box::new(expr),
-            inner_type,
-        },
-        inner_type,
         synth_span(),
     )
 }
@@ -2244,19 +2217,25 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::Unit => vec![],
-        ResolvedType::Option(inner_type_id) => {
+        ResolvedType::GenericInstance {
+            name, type_args, ..
+        } if name == "Option" && type_args.len() == 1 => {
             // Option<T> → disc(i32) + flat(T)
-            let inner_type_id = *inner_type_id;
+            let inner_type_id = type_args[0];
             let mut result = Vec::new();
 
             // Save value to a local for reuse
             let opt_local = alloc_local(next_local, local_types, type_id);
             stmts.push(let_stmt("__opt_val", opt_local, type_id, value));
 
-            // Discriminant: is_not_null → 1 = Some, 0 = None
+            // Discriminant: VariantTest(Some) → 1 = Some, 0 = None
             let disc_expr = TirExpr::new(
                 TirExprKind::Cast {
-                    expr: Box::new(is_not_null(local_ref(opt_local, "__opt_val", type_id))),
+                    expr: Box::new(variant_test(
+                        local_ref(opt_local, "__opt_val", type_id),
+                        0,
+                        "Some",
+                    )),
                     target_type: TypeTable::I32,
                 },
                 TypeTable::I32,
@@ -2290,10 +2269,10 @@ fn lower_to_flat_inner(
                     })
                     .collect();
 
-                // if disc != 0 { lower(unwrap(value)) → inner_locals }
+                // if disc != 0 { lower(variant_payload(value)) → inner_locals }
                 let mut then_stmts: Vec<TirStmt> = Vec::new();
                 let unwrapped =
-                    unwrap_option(local_ref(opt_local, "__opt_val", type_id), inner_type_id);
+                    variant_payload(local_ref(opt_local, "__opt_val", type_id), 0, inner_type_id);
                 let inner_lowered = synthesize_lower_to_flat(
                     unwrapped,
                     inner_type_id,
@@ -2564,10 +2543,9 @@ fn synthesize_lift_from_flat_params(
                 let total_flat = 1 + inner_flat.len();
 
                 let disc = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-                let inner_type_id = match type_table.get(target_type_id) {
-                    crate::tir::ResolvedType::Option(inner) => *inner,
-                    _ => target_type_id,
-                };
+                let inner_type_id = type_table
+                    .as_option(target_type_id)
+                    .unwrap_or(target_type_id);
 
                 // if disc == 0 { None } else { Some(lift(inner_flat)) }
                 let result_local = alloc_local(next_local, local_types, target_type_id);

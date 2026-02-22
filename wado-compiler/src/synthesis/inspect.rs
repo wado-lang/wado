@@ -631,12 +631,28 @@ fn synth_body(
             let n = name.clone();
             synth_enum(&n, type_id, val, fmt, tt, mods, span)
         }
-        ResolvedType::Option(inner) => {
-            synth_option(reg, inner, val, fmt, tt, fmt_type, module_source, span)
-        }
         ResolvedType::Tuple(ref elems) => {
             let e = elems.clone();
             synth_tuple(reg, &e, val, fmt, tt, fmt_type, module_source, span)
+        }
+        // Option<T>: synthesize inspect using variant operations (SubtypeHierarchy)
+        ResolvedType::GenericInstance {
+            ref name,
+            ref type_args,
+            ..
+        } if name == "Option" && type_args.len() == 1 => {
+            let inner = type_args[0];
+            synth_option_variant(
+                reg,
+                inner,
+                val,
+                fmt,
+                tt,
+                mods,
+                fmt_type,
+                module_source,
+                span,
+            )
         }
         ResolvedType::GenericInstance {
             ref name,
@@ -1128,59 +1144,6 @@ fn find_enum_cases(name: &str, mods: &[&TirModule]) -> Option<Vec<(String, u32)>
     None
 }
 
-fn synth_option(
-    reg: &mut InspectRegistry,
-    inner: TypeId,
-    val: TirExpr,
-    fmt: TirExpr,
-    tt: &Rc<RefCell<TypeTable>>,
-    fmt_type: TypeId,
-    module_source: &ModuleSource,
-    span: Span,
-) -> Vec<TirStmt> {
-    let is_some = TirExpr::new(
-        TirExprKind::IsNotNull {
-            expr: Box::new(val.clone()),
-        },
-        TypeTable::BOOL,
-        span,
-    );
-    let unwrapped = TirExpr::new(
-        TirExprKind::UnwrapOption {
-            expr: Box::new(val),
-            inner_type: inner,
-        },
-        inner,
-        span,
-    );
-    let mut then_stmts = Vec::new();
-    then_stmts.push(ws("Some(", fmt.clone(), tt, span));
-    then_stmts.push(call_inspect_fn(
-        reg,
-        inner,
-        unwrapped,
-        fmt.clone(),
-        tt,
-        fmt_type,
-        module_source,
-        span,
-    ));
-    then_stmts.push(wc(')', fmt.clone(), span));
-
-    let else_stmts = vec![ws("null", fmt, tt, span)];
-
-    let if_expr = TirExpr::new(
-        TirExprKind::If {
-            condition: Box::new(is_some),
-            then_branch: TirBlock::new(then_stmts, span),
-            else_branch: Some(TirBlock::new(else_stmts, span)),
-        },
-        TypeTable::UNIT,
-        span,
-    );
-    vec![TirStmt::new(TirStmtKind::Expr(if_expr), span)]
-}
-
 fn synth_tuple(
     reg: &mut InspectRegistry,
     elems: &[TypeId],
@@ -1593,6 +1556,77 @@ fn synth_variant(
         }
         None => vec![ws(&format!("{name}::???"), fmt, tt, span)],
     }
+}
+
+/// Synthesize inspect for `Option<T>` using `SubtypeHierarchy` (variant operations).
+///
+/// Generates:
+///   if VariantTest(val, 0 /* Some */) {
+///       write "Some("
+///       inspect(VariantPayload(val, 0), ...)
+///       write ")"
+///   } else {
+///       write "null"
+///   }
+#[allow(clippy::too_many_arguments)]
+fn synth_option_variant(
+    reg: &mut InspectRegistry,
+    inner: TypeId,
+    val: TirExpr,
+    fmt: TirExpr,
+    tt: &Rc<RefCell<TypeTable>>,
+    _mods: &[&TirModule],
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
+    span: Span,
+) -> Vec<TirStmt> {
+    // "Some" case: VariantTest for case_index 0
+    let mut some_stmts = Vec::new();
+    some_stmts.push(ws("Some(", fmt.clone(), tt, span));
+
+    let payload = TirExpr::new(
+        TirExprKind::VariantPayload {
+            expr: Box::new(val.clone()),
+            case_index: 0,
+            payload_type: inner,
+        },
+        inner,
+        span,
+    );
+    some_stmts.push(call_inspect_fn(
+        reg,
+        inner,
+        payload,
+        fmt.clone(),
+        tt,
+        fmt_type,
+        module_source,
+        span,
+    ));
+    some_stmts.push(wc(')', fmt.clone(), span));
+
+    // "None" case: write "null"
+    let none_stmts = vec![ws("null", fmt.clone(), tt, span)];
+
+    let cond = TirExpr::new(
+        TirExprKind::VariantTest {
+            expr: Box::new(val),
+            case_index: 0,
+            case_name: "Some".to_string(),
+        },
+        TypeTable::BOOL,
+        span,
+    );
+    let if_expr = TirExpr::new(
+        TirExprKind::If {
+            condition: Box::new(cond),
+            then_branch: TirBlock::new(some_stmts, span),
+            else_branch: Some(TirBlock::new(none_stmts, span)),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    vec![TirStmt::new(TirStmtKind::Expr(if_expr), span)]
 }
 
 fn find_variant(name: &str, mods: &[&TirModule]) -> Option<TirVariantDecl> {

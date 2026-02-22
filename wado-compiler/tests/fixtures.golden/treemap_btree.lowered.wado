@@ -20,7 +20,7 @@ pub struct "ArrayIter<Tuple<String,i32>>" {
 }
 
 struct "TreeMap<String,i32>" {
-    root: Option<&mut BTreeNode<String,i32>>,
+    root: Option<&mut BTreeNode<String, i32>>,
     t: i32,
     size: i32,
     deleted_count: i32,
@@ -56,9 +56,9 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let __pattern_temp_0: Option<i32> = map."TreeMap<String,i32>::get"(&"banana");
-    if __is_not_null(__pattern_temp_0) {
-        let val: i32 = __unwrap_option(__pattern_temp_0).value;
+    let __pattern_temp_0: Option<i32> = move map."TreeMap<String,i32>::get"(&"banana");
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let val: i32 = __variant_payload(__pattern_temp_0, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
             __r.String::append(move "banana = ");
@@ -74,9 +74,9 @@ export fn run() with Stdout {
             break __tmpl: __r;
         });
     }
-    let __pattern_temp_1: Option<i32> = map."TreeMap<String,i32>::get"(&"date");
-    if __is_not_null(__pattern_temp_1) {
-        let val2: i32 = __unwrap_option(__pattern_temp_1).value;
+    let __pattern_temp_1: Option<i32> = move map."TreeMap<String,i32>::get"(&"date");
+    if __variant_test(__pattern_temp_1, case=0, name=Some) {
+        let val2: i32 = __variant_payload(__pattern_temp_1, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
             __r.String::append(move "date = ");
@@ -93,9 +93,9 @@ export fn run() with Stdout {
         });
     }
     map."TreeMap<String,i32>::insert"(move "banana", 20);
-    let __pattern_temp_2: Option<i32> = map."TreeMap<String,i32>::get"(&"banana");
-    if __is_not_null(__pattern_temp_2) {
-        let val3: i32 = __unwrap_option(__pattern_temp_2).value;
+    let __pattern_temp_2: Option<i32> = move map."TreeMap<String,i32>::get"(&"banana");
+    if __variant_test(__pattern_temp_2, case=0, name=Some) {
+        let val3: i32 = __variant_payload(__pattern_temp_2, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(35), used: 0 };
             __r.String::append(move "banana (updated) = ");
@@ -127,8 +127,8 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let __pattern_temp_3: Option<i32> = map."TreeMap<String,i32>::get"(&"cherry");
-    if !__is_not_null(__pattern_temp_3) {
+    let __pattern_temp_3: Option<i32> = move map."TreeMap<String,i32>::get"(&"cherry");
+    if __variant_test(__pattern_temp_3, case=1, name=None) {
         core::cli::println(move "cherry = (not found)");
     }
     core::cli::println(move "\n=== Iteration (sorted) ===");
@@ -137,8 +137,8 @@ export fn run() with Stdout {
         let mut __iter_7: ArrayIter<Tuple<String,i32>> = move ArrayIter<Tuple<String,i32>> { repr: entries.repr, used: entries.used, index: 0 };
         loop {
             let __pattern_temp_4: Option<[String, i32]> = move __iter_7."ArrayIter<Tuple<String,i32>>^Iterator::next"();
-            if __is_not_null(__pattern_temp_4) {
-                let entry: [String, i32] = __unwrap_option(__pattern_temp_4);
+            if __variant_test(__pattern_temp_4, case=0, name=Some) {
+                let entry: [String, i32] = __variant_payload(__pattern_temp_4, case=0);
                 let key: String = entry.0;
                 let value: i32 = entry.1;
                 core::cli::println(__tmpl: {
@@ -200,8 +200,8 @@ export fn run() with Stdout {
         let mut __iter_8: ArrayIter<Tuple<String,i32>> = move ArrayIter<Tuple<String,i32>> { repr: final_entries.repr, used: final_entries.used, index: 0 };
         loop {
             let __pattern_temp_5: Option<[String, i32]> = move __iter_8."ArrayIter<Tuple<String,i32>>^Iterator::next"();
-            if __is_not_null(__pattern_temp_5) {
-                let entry: [String, i32] = __unwrap_option(__pattern_temp_5);
+            if __variant_test(__pattern_temp_5, case=0, name=Some) {
+                let entry: [String, i32] = __variant_payload(__pattern_temp_5, case=0);
                 let key: String = entry.0;
                 let value: i32 = entry.1;
                 core::cli::println(__tmpl: {
@@ -249,8 +249,8 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 
 fn "TreeMap<String,i32>::compact"(self: &mut TreeMap<String,i32>) {
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
-    if __is_not_null(__pattern_temp_0) {
-        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_0);
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
         root."BTreeNode<String,i32>::compact"();
         self.deleted_count = 0;
     }
@@ -380,8 +380,8 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
 fn "TreeMap<String,i32>::iter"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
     let mut result: Array<[String, i32]> = move [];
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
-    if __is_not_null(__pattern_temp_0) {
-        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_0);
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
         self."TreeMap<String,i32>::collect_entries"(root, &mut result);
     }
     return result;
@@ -430,8 +430,8 @@ pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value
 
 fn "TreeMap<String,i32>::delete"(self: &mut TreeMap<String,i32>, key: &String) -> bool {
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
-    if __is_not_null(__pattern_temp_0) {
-        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_0);
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
         return self."TreeMap<String,i32>::delete_in_node"(root, key);
     }
     return false;
@@ -474,8 +474,8 @@ fn "Array<bool>^IndexAssign::index_assign"(self: &mut Array<bool>, index: i32, v
 
 fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: &String) -> Option<i32> {
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
-    if __is_not_null(__pattern_temp_0) {
-        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_0);
+    if __variant_test(__pattern_temp_0, case=0, name=Some) {
+        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
         return self."TreeMap<String,i32>::search_in_node"(root, key);
     }
     return null;
@@ -496,7 +496,7 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
         break __inline_Array_String___len_1: self.used;
     }) && *key."String^Eq::eq"(&node.keys."Array<String>^IndexValue::index_value"(i))) {
         if !node.deleted."Array<bool>^IndexValue::index_value"(i) {
-            return Option::Some(Box<i32> { value: node.values."Array<i32>^IndexValue::index_value"(i) });
+            return Option::Some(node.values."Array<i32>^IndexValue::index_value"(i));
         }
         return null;
     }
@@ -508,27 +508,27 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
 
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
-    if !__is_not_null(__pattern_temp_0) {
+    if __variant_test(__pattern_temp_0, case=1, name=None) {
         let mut new_root: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_leaf"();
         new_root.keys."Array<String>::append"(key);
         new_root.values."Array<i32>::append"(value);
         new_root.deleted."Array<bool>::append"(false);
-        self.root = move Option::Some(&mut new_root);
+        self.root = move Option<&mut BTreeNode<String,i32>>::Some(&mut new_root);
         self.size = 1;
         return;
     }
     let __pattern_temp_1: Option<&mut BTreeNode<String,i32>> = self.root;
-    if __is_not_null(__pattern_temp_1) {
-        let root: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_1);
+    if __variant_test(__pattern_temp_1, case=0, name=Some) {
+        let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_1, case=0);
         if root."BTreeNode<String,i32>::is_full"(((2 * self.t) - 1)) {
             let mut new_root: BTreeNode<String,i32> = move "BTreeNode<String,i32>::new_internal"();
             new_root.children."Array<BTreeNode<String,i32>>::append"(root);
             self."TreeMap<String,i32>::split_child"(&mut new_root, 0);
-            self.root = move Option::Some(&mut new_root);
+            self.root = move Option<&mut BTreeNode<String,i32>>::Some(&mut new_root);
         }
         let __pattern_temp_2: Option<&mut BTreeNode<String,i32>> = self.root;
-        if __is_not_null(__pattern_temp_2) {
-            let r: &mut BTreeNode<String,i32> = __unwrap_option(__pattern_temp_2);
+        if __variant_test(__pattern_temp_2, case=0, name=Some) {
+            let r: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_2, case=0);
             self."TreeMap<String,i32>::insert_non_full"(r, key, value);
         }
     }

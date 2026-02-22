@@ -63,9 +63,9 @@ export fn run() with Stdout {
     __for_of_0: {
         let mut __iter_0: ArrayIter<i32> = move ArrayIter<i32> { repr: result.repr, used: result.used, index: 0 };
         loop {
-            let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
-            if __is_not_null(__pattern_temp_0) {
-                let x: i32 = __unwrap_option(__pattern_temp_0).value;
+            let __pattern_temp_0: Option<i32> = move __iter_0."ArrayIter<i32>^Iterator::next"();
+            if __variant_test(__pattern_temp_0, case=0, name=Some) {
+                let x: i32 = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_4: {
@@ -112,9 +112,9 @@ export fn __cm_export__run() {
 pub fn "MapIter<i32,i32>::fold<i32>"(self: &mut MapIter<i32,i32>, init: i32, f: fn(i32, i32) -> i32) -> i32 {
     let mut acc: i32 = init;
     loop {
-        let __pattern_temp_0: Option<i32> = self."MapIter<i32,i32>^Iterator::next"();
-        if __is_not_null(__pattern_temp_0) {
-            let item: i32 = __unwrap_option(__pattern_temp_0).value;
+        let __pattern_temp_0: Option<i32> = move self."MapIter<i32,i32>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let item: i32 = __variant_payload(__pattern_temp_0, case=0);
             acc = f(acc, item);
         } else {
             break;
@@ -129,7 +129,7 @@ fn "MapIter<i32,i32>^Iterator::next"(self: &mut MapIter<i32,i32>) -> Option<i32>
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<i32> { value: self.f(item) });
+    return Option::Some(self.f(item));
 }
 
 fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
@@ -138,7 +138,7 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(Box<i32> { value: item });
+    return Option::Some(item);
 }
 
 pub fn "FilterIter<i32>::map<i32>"(self: &FilterIter<i32>, f: fn(i32) -> i32) -> FilterMapIter<i32,i32> {
@@ -148,9 +148,9 @@ pub fn "FilterIter<i32>::map<i32>"(self: &FilterIter<i32>, f: fn(i32) -> i32) ->
 pub fn "FilterMapIter<i32,i32>^Iterator::collect"(self: &mut FilterMapIter<i32,i32>) -> Array<i32> {
     let mut result: Array<i32> = move [];
     loop {
-        let __pattern_temp_0: Option<i32> = self."FilterMapIter<i32,i32>^Iterator::next"();
-        if __is_not_null(__pattern_temp_0) {
-            let item: i32 = __unwrap_option(__pattern_temp_0).value;
+        let __pattern_temp_0: Option<i32> = move self."FilterMapIter<i32,i32>^Iterator::next"();
+        if __variant_test(__pattern_temp_0, case=0, name=Some) {
+            let item: i32 = __variant_payload(__pattern_temp_0, case=0);
             result."Array<i32>::append"(item);
         } else {
             break;
@@ -183,7 +183,7 @@ fn "FilterMapIter<i32,i32>^Iterator::next"(self: &mut FilterMapIter<i32,i32>) ->
         let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
         self.index = (self.index + 1);
         if self.pred(item) {
-            return Option::Some(Box<i32> { value: self.f(item) });
+            return Option::Some(self.f(item));
         }
     }
 }

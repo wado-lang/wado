@@ -121,12 +121,12 @@ fn "__inspect$Array<Point>"(__val: Array<Point>, __fmt: &mut Formatter) {
 }
 
 fn "__inspect$Option<Point>"(__val: Option<Point>, __fmt: &mut Formatter) {
-    if __is_not_null(__val) {
+    if __variant_test(__val, case=0, name=Some) {
         __inline_Formatter__write_str_0: {
             let s: String = move "Some(";
             __fmt.buf.String::append(s);
         };
-        "__inspect$Point"(__unwrap_option(__val), __fmt);
+        "__inspect$Point"(__variant_payload(__val, case=0), __fmt);
         __inline_Formatter__write_char_1: {
             __fmt.buf.String::append_char(')');
         };
