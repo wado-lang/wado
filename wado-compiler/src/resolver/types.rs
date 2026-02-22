@@ -1,0 +1,723 @@
+//! Type definitions used across the resolver phase.
+
+use std::cell::RefCell;
+
+use indexmap::{IndexMap, IndexSet};
+
+use crate::ast::{self};
+use crate::name::ModuleSource;
+use crate::tir::TypeId;
+use crate::token::Span;
+
+/// Parsed format specification from a template string interpolation.
+/// Syntax: `[[fill]align][sign][#][0][width][.precision]type`
+#[allow(dead_code)]
+pub(super) struct ParsedFormatSpec {
+    pub(super) fill: Option<char>,
+    pub(super) align: Option<char>, // '<', '^', '>'
+    pub(super) sign_plus: bool,
+    pub(super) alternate: bool,
+    pub(super) zero_pad: bool,
+    pub(super) width: Option<i64>,
+    pub(super) precision: Option<i64>,
+    pub(super) type_char: Option<char>, // 'b','o','x','X','e','E','?'
+}
+
+/// Struct field info: module source and field definitions
+#[derive(Clone)]
+pub(super) struct StructFieldInfo {
+    pub(super) module_source: ModuleSource,
+    /// Field definitions: (name, `type_id`) pairs
+    pub(super) fields: Vec<(String, TypeId)>,
+    /// Type parameter bounds: (`param_name`, `trait_bounds`)
+    /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
+    pub(super) type_param_bounds: Vec<(String, Vec<String>)>,
+}
+
+/// Variant case info: case name and payload type
+#[derive(Clone)]
+pub(super) struct VariantCaseData {
+    pub(super) name: String,
+    /// Payload type for this case. Unit variants have `()` (unit type) payload.
+    pub(super) payload: TypeId,
+}
+
+/// Variant info: module source, type parameters, and cases
+#[derive(Clone)]
+pub(super) struct VariantInfo {
+    pub(super) module_source: ModuleSource,
+    pub(super) type_params: Vec<String>,
+    pub(super) cases: Vec<VariantCaseData>,
+}
+
+/// Enum case info: case name and discriminant index
+#[derive(Clone)]
+pub(super) struct EnumCaseData {
+    pub(super) name: String,
+    pub(super) index: u32,
+}
+
+/// Enum info: module source and cases (enums have no type parameters or payloads)
+#[derive(Clone)]
+pub(super) struct EnumInfo {
+    pub(super) module_source: ModuleSource,
+    pub(super) cases: Vec<EnumCaseData>,
+}
+
+/// Flags member data: name and bitmask value
+#[derive(Clone)]
+pub(super) struct FlagsMemberData {
+    pub(super) name: String,
+    pub(super) bitmask: u32,
+}
+
+/// Flags type info: newtype `TypeId` and members
+#[derive(Clone)]
+pub(super) struct FlagsInfo {
+    pub(super) type_id: TypeId,
+    pub(super) members: Vec<FlagsMemberData>,
+}
+
+/// Resource info: module source and method names
+/// Note: This infrastructure was added for resource static methods but isn't fully used yet.
+/// Keep it for when wasi:sockets registration is re-enabled.
+#[allow(dead_code)]
+#[derive(Clone)]
+pub(super) struct ResourceInfo {
+    pub(super) module_source: ModuleSource,
+    /// Method names defined on this resource (both static and instance)
+    pub(super) methods: Vec<String>,
+}
+
+/// Errors from the type resolution phase
+#[derive(Debug, Clone)]
+pub enum TypeError {
+    /// Type mismatch
+    TypeMismatch {
+        expected: String,
+        found: String,
+        span: Span,
+    },
+
+    /// Unknown type name
+    UnknownType { name: String, span: Span },
+
+    /// Unknown function
+    UnknownFunction { name: String, span: Span },
+
+    /// Unknown variable
+    UnknownIdentifier { name: String, span: Span },
+
+    /// Field not found on struct
+    FieldNotFound {
+        struct_name: String,
+        field_name: String,
+        span: Span,
+    },
+
+    /// Wrong number of arguments
+    ArgumentCountMismatch {
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
+
+    /// Invalid numeric literal
+    InvalidLiteral { message: String, span: Span },
+
+    /// Feature not yet implemented
+    NotYetImplemented { feature: String, span: Span },
+
+    /// Invalid assignment target (not a valid l-value)
+    CannotAssign { message: String, span: Span },
+
+    /// Trait bound not satisfied
+    TraitBoundNotSatisfied {
+        type_name: String,
+        trait_name: String,
+        param_name: String,
+        span: Span,
+    },
+
+    /// Invalid pattern in context
+    InvalidPattern { message: String, span: Span },
+
+    /// Invalid type cast
+    InvalidCast {
+        from: String,
+        to: String,
+        hint: String,
+        span: Span,
+    },
+}
+
+impl std::fmt::Display for TypeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeError::TypeMismatch {
+                expected,
+                found,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: type mismatch: expected '{}', found '{}'",
+                    span.line, span.column, expected, found
+                )
+            }
+            TypeError::UnknownType { name, span } => {
+                write!(f, "{}:{}: unknown type '{}'", span.line, span.column, name)
+            }
+            TypeError::UnknownFunction { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: unknown function '{}'",
+                    span.line, span.column, name
+                )
+            }
+            TypeError::UnknownIdentifier { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: unknown identifier '{}'",
+                    span.line, span.column, name
+                )
+            }
+            TypeError::FieldNotFound {
+                struct_name,
+                field_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: field '{}' not found on struct '{}'",
+                    span.line, span.column, field_name, struct_name
+                )
+            }
+            TypeError::ArgumentCountMismatch {
+                expected,
+                found,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: expected {} arguments, found {}",
+                    span.line, span.column, expected, found
+                )
+            }
+            TypeError::InvalidLiteral { message, span } => {
+                write!(f, "{}:{}: {}", span.line, span.column, message)
+            }
+            TypeError::NotYetImplemented { feature, span } => {
+                write!(
+                    f,
+                    "{}:{}: {} is not yet implemented",
+                    span.line, span.column, feature
+                )
+            }
+            TypeError::CannotAssign { message, span } => {
+                write!(
+                    f,
+                    "{}:{}: cannot assign: {}",
+                    span.line, span.column, message
+                )
+            }
+            TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name,
+                param_name,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: type '{}' does not implement trait '{}' required by bound on '{}'",
+                    span.line, span.column, type_name, trait_name, param_name
+                )
+            }
+            TypeError::InvalidPattern { message, span } => {
+                write!(
+                    f,
+                    "{}:{}: invalid pattern: {}",
+                    span.line, span.column, message
+                )
+            }
+            TypeError::InvalidCast {
+                from,
+                to,
+                hint,
+                span,
+            } => {
+                write!(
+                    f,
+                    "{}:{}: cannot cast '{}' to '{}': {}",
+                    span.line, span.column, from, to, hint
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for TypeError {}
+
+impl From<TypeError> for crate::compiler_host::Diagnostic {
+    fn from(e: TypeError) -> Self {
+        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        let (code, message, span) = match &e {
+            TypeError::TypeMismatch {
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("type mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
+            TypeError::UnknownType { name, span } => {
+                (Code::UnknownType, format!("unknown type '{name}'"), *span)
+            }
+            TypeError::UnknownFunction { name, span } => (
+                Code::UndefinedVariable,
+                format!("unknown function '{name}'"),
+                *span,
+            ),
+            TypeError::UnknownIdentifier { name, span } => (
+                Code::UndefinedVariable,
+                format!("unknown identifier '{name}'"),
+                *span,
+            ),
+            TypeError::FieldNotFound {
+                struct_name,
+                field_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("field '{field_name}' not found on struct '{struct_name}'"),
+                *span,
+            ),
+            TypeError::ArgumentCountMismatch {
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!("expected {expected} arguments, found {found}"),
+                *span,
+            ),
+            TypeError::InvalidLiteral { message, span } => {
+                (Code::InvalidSyntax, message.clone(), *span)
+            }
+            TypeError::NotYetImplemented { feature, span } => (
+                Code::UnsupportedFeature,
+                format!("{feature} is not yet implemented"),
+                *span,
+            ),
+            TypeError::CannotAssign { message, span } => (
+                Code::ImmutableAssignment,
+                format!("cannot assign: {message}"),
+                *span,
+            ),
+            TypeError::TraitBoundNotSatisfied {
+                type_name,
+                trait_name,
+                param_name,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
+                ),
+                *span,
+            ),
+            TypeError::InvalidPattern { message, span } => (
+                Code::InvalidSyntax,
+                format!("invalid pattern: {message}"),
+                *span,
+            ),
+            TypeError::InvalidCast {
+                from,
+                to,
+                hint,
+                span,
+            } => (
+                Code::InvalidCast,
+                format!("cannot cast '{from}' to '{to}': {hint}"),
+                *span,
+            ),
+        };
+        crate::compiler_host::Diagnostic {
+            severity: Severity::Error,
+            code,
+            message,
+            span: Some(DiagnosticSpan::from_span(&span, None)),
+        }
+    }
+}
+
+/// Local variable information during resolution
+#[derive(Debug, Clone)]
+pub(super) struct LocalVar {
+    #[allow(dead_code)] // For debugging
+    pub(super) name: String,
+    pub(super) type_id: TypeId,
+    pub(super) index: u32,
+    #[allow(dead_code)] // For future mutability checking
+    pub(super) is_mut: bool,
+}
+
+/// Method lookup result including return type, self parameter kind, and parameter types
+#[derive(Debug, Clone)]
+pub(super) struct MethodInfo {
+    pub(super) return_type: TypeId,
+    pub(super) self_kind: ast::SelfKind,
+    /// Parameter types (excluding self)
+    pub(super) param_types: Vec<TypeId>,
+    /// If this method was inherited from a newtype's base type, the base type ID
+    /// Used for method signature substitution
+    pub(super) inherited_from_base: Option<TypeId>,
+}
+
+/// Labeled block expression target for tracking break types
+#[derive(Debug, Clone)]
+pub(super) struct LabeledBlockTarget {
+    /// The label name
+    pub(super) label: String,
+    /// Types collected from `break label: expr;` statements
+    pub(super) break_types: Vec<TypeId>,
+}
+
+/// Function context during resolution with scope tracking
+pub(super) struct FunctionContext {
+    /// Stack of scopes (each scope maps name -> `LocalVar`)
+    pub(super) scopes: Vec<IndexMap<String, LocalVar>>,
+    /// Next local index (Wasm locals are function-wide)
+    pub(super) next_local: u32,
+    /// Return type of the function (unit for async fns, since they don't Wasm-return a value)
+    #[allow(dead_code)] // For future return type checking
+    pub(super) return_type: TypeId,
+    /// Whether this is an async function (`export async fn`).
+    /// In async fns, `return expr` is forbidden; use `task return expr` instead.
+    pub(super) is_async: bool,
+    /// The type that `task return` must accept (= the declared return type annotation).
+    /// `Some(type_id)` only for async functions.
+    pub(super) task_return_type: Option<TypeId>,
+    /// Local variable types in order (for Wasm local declarations)
+    pub(super) local_types: Vec<TypeId>,
+    /// Local indices that have their address taken (&x or &mut x)
+    pub(super) address_taken_locals: IndexSet<u32>,
+    /// Outer context locals for closure capture detection (name -> `LocalVar` snapshot)
+    /// Only set for closure contexts
+    pub(super) outer_locals: IndexMap<String, LocalVar>,
+    /// Captured variables detected during resolution (name -> capture index)
+    /// Only used for closure contexts
+    pub(super) captured_vars: IndexMap<String, u32>,
+    /// Stack of labeled block expression targets for tracking break types
+    pub(super) labeled_block_targets: Vec<LabeledBlockTarget>,
+    /// Stack of all active labels (from labeled blocks and labeled block expressions)
+    pub(super) active_labels: Vec<String>,
+    /// Current function name for `#function` compile-time literal
+    pub(super) function_name: String,
+    /// Deref overrides for mutable closures: maps original var name -> (ref var name, inner type)
+    /// When a variable is in this map, lookups return `*__ref_name` instead of the value.
+    pub(super) deref_overrides: IndexMap<String, (String, TypeId)>,
+    /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
+    /// When capturing such a variable, use `DerefCapture` to read through the box.
+    pub(super) outer_box_types: IndexMap<String, TypeId>,
+}
+
+impl FunctionContext {
+    pub(super) fn new(return_type: TypeId, function_name: String) -> Self {
+        Self {
+            scopes: vec![IndexMap::new()], // Start with one scope for function parameters
+            next_local: 0,
+            return_type,
+            is_async: false,
+            task_return_type: None,
+            local_types: Vec::new(),
+            address_taken_locals: IndexSet::new(),
+            outer_locals: IndexMap::new(),
+            captured_vars: IndexMap::new(),
+            labeled_block_targets: Vec::new(),
+            active_labels: Vec::new(),
+            function_name,
+            deref_overrides: IndexMap::new(),
+            outer_box_types: IndexMap::new(),
+        }
+    }
+
+    /// Create a closure context with outer scope access for capture detection.
+    ///
+    /// `type_table` is used to compute `&mut T` types for address-taken outer locals,
+    /// enabling correct `DerefCapture` behaviour when those locals are captured.
+    pub(super) fn new_closure(
+        return_type: TypeId,
+        outer_ctx: &FunctionContext,
+        type_table: &RefCell<crate::tir::TypeTable>,
+    ) -> Self {
+        // Snapshot all locals from outer context
+        let mut outer_locals = IndexMap::new();
+        for scope in &outer_ctx.scopes {
+            for (name, local) in scope {
+                outer_locals.insert(name.clone(), local.clone());
+            }
+        }
+
+        // Compute box types for address-taken outer locals
+        let mut outer_box_types = IndexMap::new();
+        for scope in &outer_ctx.scopes {
+            for (name, local) in scope {
+                if outer_ctx.address_taken_locals.contains(&local.index) {
+                    let ref_type = type_table.borrow_mut().make_mut_ref(local.type_id);
+                    outer_box_types.insert(name.clone(), ref_type);
+                }
+            }
+        }
+
+        // Closure function name is parent::{closure}
+        let function_name = format!("{}::{{closure}}", outer_ctx.function_name);
+
+        Self {
+            scopes: vec![IndexMap::new()],
+            next_local: 0,
+            return_type,
+            is_async: false, // Closures are never async
+            task_return_type: None,
+            local_types: Vec::new(),
+            address_taken_locals: IndexSet::new(),
+            outer_locals,
+            captured_vars: IndexMap::new(),
+            labeled_block_targets: Vec::new(),
+            active_labels: Vec::new(),
+            function_name,
+            deref_overrides: IndexMap::new(),
+            outer_box_types,
+        }
+    }
+
+    /// Enter a new scope (for blocks, if/while/for/loop bodies)
+    pub(super) fn enter_scope(&mut self) {
+        self.scopes.push(IndexMap::new());
+    }
+
+    /// Exit the current scope
+    pub(super) fn exit_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    /// Add a local variable to the current scope
+    pub(super) fn add_local(&mut self, name: String, type_id: TypeId, is_mut: bool) -> u32 {
+        let index = self.next_local;
+        self.next_local += 1;
+        self.local_types.push(type_id);
+
+        let scope = self.scopes.last_mut().unwrap();
+        scope.insert(
+            name.clone(),
+            LocalVar {
+                name,
+                type_id,
+                index,
+                is_mut,
+            },
+        );
+        index
+    }
+
+    /// Look up a variable by name (searches from innermost to outermost scope)
+    pub(super) fn lookup(&self, name: &str) -> Option<&LocalVar> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(local) = scope.get(name) {
+                return Some(local);
+            }
+        }
+        None
+    }
+
+    /// Look up a variable, checking outer context for captures if in a closure.
+    /// Returns either a local variable reference or a capture reference.
+    pub(super) fn lookup_or_capture(&mut self, name: &str) -> Option<VarRef> {
+        // First check local scopes
+        for scope in self.scopes.iter().rev() {
+            if let Some(local) = scope.get(name) {
+                return Some(VarRef::Local {
+                    index: local.index,
+                    type_id: local.type_id,
+                });
+            }
+        }
+
+        // Check deref overrides (for mutable closures: `count` -> `*__ref_count`)
+        if let Some((ref_name, inner_type_id)) = self.deref_overrides.get(name).cloned()
+            && let Some(ref_local) = self.outer_locals.get(&ref_name).cloned()
+        {
+            let capture_index = if let Some(&idx) = self.captured_vars.get(&ref_name) {
+                idx
+            } else {
+                let idx = self.captured_vars.len() as u32;
+                self.captured_vars.insert(ref_name.clone(), idx);
+                idx
+            };
+            return Some(VarRef::DerefCapture {
+                index: capture_index,
+                ref_type_id: ref_local.type_id,
+                inner_type_id,
+            });
+        }
+
+        // Check outer context (for closures)
+        if let Some(outer_local) = self.outer_locals.get(name) {
+            let inner_type_id = outer_local.type_id;
+
+            // If this outer local has been address-taken (boxed), capture via DerefCapture
+            if let Some(&ref_type_id) = self.outer_box_types.get(name) {
+                let capture_index = if let Some(&idx) = self.captured_vars.get(name) {
+                    idx
+                } else {
+                    let idx = self.captured_vars.len() as u32;
+                    self.captured_vars.insert(name.to_string(), idx);
+                    idx
+                };
+                return Some(VarRef::DerefCapture {
+                    index: capture_index,
+                    ref_type_id,
+                    inner_type_id,
+                });
+            }
+
+            // Check if we already captured this variable
+            if let Some(&capture_index) = self.captured_vars.get(name) {
+                return Some(VarRef::Capture {
+                    index: capture_index,
+                    type_id: inner_type_id,
+                });
+            }
+
+            // Record a new capture
+            let capture_index = self.captured_vars.len() as u32;
+            self.captured_vars.insert(name.to_string(), capture_index);
+
+            return Some(VarRef::Capture {
+                index: capture_index,
+                type_id: inner_type_id,
+            });
+        }
+
+        None
+    }
+
+    /// Get the list of captures for building `TirCapture` entries.
+    /// For address-taken outer locals, the `LocalVar.type_id` is the box type (`&mut T`).
+    pub(super) fn get_captures(&self) -> Vec<(String, u32, LocalVar)> {
+        let mut captures: Vec<_> = self
+            .captured_vars
+            .iter()
+            .filter_map(|(name, &index)| {
+                self.outer_locals.get(name).map(|local| {
+                    // Use box type if the outer variable has its address taken
+                    let effective_type_id = self
+                        .outer_box_types
+                        .get(name)
+                        .copied()
+                        .unwrap_or(local.type_id);
+                    let effective_local = LocalVar {
+                        name: local.name.clone(),
+                        type_id: effective_type_id,
+                        index: local.index,
+                        is_mut: local.is_mut,
+                    };
+                    (name.clone(), index, effective_local)
+                })
+            })
+            .collect();
+        // Sort by capture index for consistent ordering
+        captures.sort_by_key(|(_, index, _)| *index);
+        captures
+    }
+}
+
+/// Reference to a variable (either local or captured)
+pub(super) enum VarRef {
+    Local {
+        index: u32,
+        type_id: TypeId,
+    },
+    Capture {
+        index: u32,
+        type_id: TypeId,
+    },
+    /// Captured by mutable reference: `*self.__capture_N` (dereferenced)
+    DerefCapture {
+        index: u32,
+        ref_type_id: TypeId,
+        inner_type_id: TypeId,
+    },
+}
+
+/// Pre-built index: type name → list of (`ModuleSource`, item index) for trait impl blocks.
+/// Built once from all loaded modules to avoid O(all items) scans per method call.
+pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
+
+/// Pre-built index: trait name → (`ModuleSource`, item index) for trait declarations.
+pub(super) type TraitDeclIndex = IndexMap<String, (ModuleSource, usize)>;
+
+/// Cached per-module type maps for cross-module type resolution.
+/// These are the flat maps that `build_module_map` produces.
+pub(super) struct ModuleTypeMaps {
+    pub(super) struct_fields: IndexMap<String, StructFieldInfo>,
+    pub(super) variant_cases: IndexMap<String, VariantInfo>,
+    pub(super) enum_cases: IndexMap<String, EnumInfo>,
+    pub(super) flags_cases: IndexMap<String, FlagsInfo>,
+    pub(super) newtypes: IndexMap<String, TypeId>,
+    pub(super) resource_types: IndexMap<String, ResourceInfo>,
+}
+
+/// Info about an Index trait implementation
+pub(super) struct IndexTraitInfo {
+    /// The Output associated type
+    pub(super) output_type: TypeId,
+    /// Self kind for the index method (&self)
+    pub(super) self_kind: ast::SelfKind,
+    /// The trait name (e.g., "Index<i32>")
+    pub(super) trait_name: String,
+}
+
+/// Info about an `IndexAssign` trait implementation
+pub(super) struct IndexAssignTraitInfo {
+    /// The Input associated type
+    pub(super) input_type: TypeId,
+    /// Self kind for the `index_assign` method (&mut self)
+    pub(super) self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexAssign`<i32>")
+    pub(super) trait_name: String,
+}
+
+/// Info about an `IndexMut` trait implementation
+pub(super) struct IndexMutTraitInfo {
+    /// The Output associated type
+    pub(super) output_type: TypeId,
+    /// Self kind for the `index_mut` method (&mut self)
+    pub(super) self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexMut`")
+    pub(super) trait_name: String,
+}
+
+/// Info about an `IndexValue` trait implementation
+pub(super) struct IndexValueTraitInfo {
+    /// The Output associated type
+    pub(super) output_type: TypeId,
+    /// Self kind for the `index_value` method (&self)
+    pub(super) self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`IndexValue`<i32>")
+    pub(super) trait_name: String,
+}
+
+/// Info about a comparison trait implementation (`Eq` or `Ord`)
+/// Info about an operator trait implementation
+pub(super) struct ArithmeticTraitInfo {
+    /// The Output associated type
+    pub(super) output_type: TypeId,
+    /// Self kind for the method (&self)
+    pub(super) self_kind: ast::SelfKind,
+    /// The trait name (e.g., "Add", "Sub")
+    pub(super) trait_name: String,
+    /// The resolved type of the rhs parameter (first non-self parameter)
+    pub(super) rhs_type: Option<TypeId>,
+}
