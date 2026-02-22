@@ -278,7 +278,6 @@ fn run_profile_guest() {
     ));
 }
 
-
 #[test]
 fn run_profile_invalid() {
     let parser = Parser::from_args(&["--profile", "unknown", "input.wado"]);
