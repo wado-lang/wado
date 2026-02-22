@@ -2477,6 +2477,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 type_id,
                 index: index as u32,
                 span: field.span,
+                is_hidden: field.attrs.iter().any(|a| a.name == "hidden"),
             });
         }
 

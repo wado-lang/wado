@@ -4,7 +4,7 @@
 
 Wado's type stringification system (WEP: Type Stringification) specifies that `builtin::inspect()` converts any value to its debug string representation. Template strings use it for `{expr:?}` (always inspect) and as the fallback for `{expr}` when no `Display` trait is implemented.
 
-Currently, `builtin::inspect` is referenced in the WEPs and format resolution table but has no implementation. This WEP defines the output format, the user-facing name, and the compiler implementation strategy.
+This WEP defines the output format, the user-facing name, and the compiler implementation strategy.
 
 ### Design Goals
 
@@ -38,7 +38,7 @@ Inspect output follows Wado literal syntax where possible:
 | `()` (unit)                | `()`                                   | `()`                          |
 | Struct                     | `Name { field: value, ... }`           | `Point { x: 10, y: 20 }`      |
 | Struct (generic)           | `Name { field: value }` (no type args) | `Box { value: 42 }`           |
-| Struct (`#[hidden]` field) | Field omitted                          | `Foo { visible: 1 }`          |
+| Struct (`#[hidden]` field) | Field omitted, `..` appended           | `Foo { visible: 1, .. }`      |
 | Tuple                      | `[elem, ...]`                          | `[1, "a", true]`              |
 | `Array<T>`                 | `[elem, ...]`                          | `[1, 2, 3]`                   |
 | `Option::Some(v)`          | `Some(inspect(v))`                     | `Some(42)`                    |
@@ -57,7 +57,7 @@ Inspect output follows Wado literal syntax where possible:
 
 #### Detailed Format Rules
 
-**Struct fields**: Iterate fields in declaration order. Skip fields annotated with `#[hidden]`. Recursively inspect each field value.
+**Struct fields**: Iterate fields in declaration order. Skip fields annotated with `#[hidden]`, but append `..` to indicate their presence. If all fields are hidden, output `Name { .. }`. Recursively inspect each visible field value.
 
 **Enum/Variant/Flags type name**: Always include the type name prefix (`Color::Red`, not just `Red`). This is unambiguous and matches construction syntax.
 
@@ -138,7 +138,9 @@ fn synthesize_inspect_for_type(T, expr, f_ref) -> Vec<TirStmt>:
                 if i > 0: f.write_str(", ")
                 f.write_str("field_name: ")
                 synthesize_inspect_for_type(field.type, expr.field, f_ref)
+            if has_hidden_fields: f.write_str(", ..")
             f.write_str(" }")
+            // All fields hidden → "Name { .. }"
 
         Tuple(element_types) →
             f.write_char('[')
@@ -263,6 +265,47 @@ Both paths produce compile-time constants — no runtime overhead.
 1. **Pretty-print (`{:#?}`)**: Indented multi-line output with depth tracking via `Formatter` state
 2. **Depth limit**: Prevent infinite recursion on deeply nested or recursive types
 3. **Custom inspect**: Allow types to override inspect behavior via a trait (opt-in, not required)
+
+## Implementation Status
+
+The core `synthesize_inspect` phase and the full pipeline integration are implemented. The following table tracks coverage by type:
+
+| Type                       | Status | Notes                                                                    |
+| -------------------------- | ------ | ------------------------------------------------------------------------ |
+| `i32`, `i64`, etc.         | Done   | Delegates to `Display::fmt`                                              |
+| `u8`, `u16`, etc.          | Done   | Delegates to `Display::fmt`                                              |
+| `f32`, `f64`               | Done   | Includes special values (`inf`, `-inf`, `0.0`, `-0.0`)                   |
+| `bool`                     | Done   | Delegates to `Display::fmt`                                              |
+| `char`                     | Done   | Wrapped in single quotes                                                 |
+| `String`                   | Done   | Escaped, quoted                                                          |
+| `()` (unit)                | Done   | Outputs `()`                                                             |
+| Struct                     | Done   | Fields in declaration order                                              |
+| Struct (generic)           | Done   | Type args substituted for field types; type args omitted in name         |
+| Struct (`#[hidden]` field) | Done   | Hidden fields skipped with `..` hint; `is_hidden` propagated through TIR |
+| Tuple                      | Done   |                                                                          |
+| `Array<T>`                 | Done   | Loop-based with comma separation                                         |
+| `Option::Some(v)`          | Done   | Renders as `Some(inspect(v))`                                            |
+| `Option::None` / `null`    | Done   | Renders as `null`                                                        |
+| Enum                       | Done   | `TypeName::CaseName`                                                     |
+| Variant (no payload)       | Done   |                                                                          |
+| Variant (with payload)     | Done   |                                                                          |
+| Flags                      | Done   | Bitwise decomposition with `\|` join                                     |
+| Newtype                    | Done   | `value as TypeName`                                                      |
+| Resource (opaque handle)   | Done   | `TypeName#0xHH` using `LowerHex::fmt`                                    |
+| `&T`                       | Done   | `&inspect(inner)`                                                        |
+| `&mut T`                   | Done   | `&mut inspect(inner)`                                                    |
+| Closure (default)          | Done   | Signature only                                                           |
+| Closure (`#` alternate)    | Done   | TIR unparsed source                                                      |
+| Display fallback           | Done   | `{expr}` falls back to inspect when no `Display` impl exists             |
+| Nested structs/arrays      | Done   | Recursive inspect for composite fields                                   |
+| `Array<Array<T>>`          | TODO   | Nested array codegen bug (tracked as TODO test)                          |
+
+### Additional Fixes
+
+- **Resource hex format**: Changed from decimal (`TypeName#N`) to hex (`TypeName#0xHH`) using `LowerHex::fmt` instead of `Display::fmt`, matching the WEP specification.
+- **`#[hidden]` field support**: Added `is_hidden` flag to `TirField`, propagated through resolver, monomorphizer, and lowerer. `synthesize_inspect` and `find_struct_fields` filter hidden fields.
+- **Generic struct inspect**: Added `ResolvedType::GenericInstance` handling in `synth_body`, using `SubstitutionContext` to resolve type parameters to concrete types for field access.
+- **Unit type `()` codegen fix**: Fixed invalid Wasm generation when `()` appears as a function parameter or local variable. Unit-type params are now filtered out during WIR function registration, and unit-type locals/assignments/reads emit `Nop` instead of invalid `local.get`/`local.set`. Unit-type arguments are also filtered from call sites.
 
 ## References
 

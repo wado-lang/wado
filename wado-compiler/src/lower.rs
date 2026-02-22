@@ -2464,6 +2464,7 @@ impl BoxLowerer {
                 type_id: inner_type_id,
                 index: 0,
                 span: Span::new(0, 0, 0, 0),
+                is_hidden: false,
             }],
             span: Span::new(0, 0, 0, 0),
         };
@@ -4077,6 +4078,7 @@ impl ClosureLowerer {
                     type_id: cap.type_id,
                     index: i as u32,
                     span: collected.span,
+                    is_hidden: false,
                 })
                 .collect();
 

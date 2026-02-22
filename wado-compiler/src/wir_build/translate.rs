@@ -488,9 +488,13 @@ impl FunctionTranslator<'_, '_> {
                 if i < param_count {
                     continue;
                 }
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
+                // Skip unit-type locals (unit has no Wasm representation)
+                if matches!(wir_type, WirType::Unit) {
+                    continue;
+                }
                 let idx = u32::try_from(i).unwrap();
                 let local_name = self.local_name(idx);
-                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, local_type_id);
                 instrs.push(WirInstr::DeclareLocal {
                     name: local_name,
                     ty: wir_type,
@@ -517,12 +521,15 @@ impl FunctionTranslator<'_, '_> {
                     // Skip params (they are already declared via param_names)
                     let param_count = u32::try_from(self.tir_func.params.len()).unwrap();
                     if *local_index >= param_count {
-                        let local_name = self.local_name(*local_index);
                         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, *type_id);
-                        instrs.push(WirInstr::DeclareLocal {
-                            name: local_name,
-                            ty: wir_type,
-                        });
+                        // Skip unit-type locals (unit has no Wasm representation)
+                        if !matches!(wir_type, WirType::Unit) {
+                            let local_name = self.local_name(*local_index);
+                            instrs.push(WirInstr::DeclareLocal {
+                                name: local_name,
+                                ty: wir_type,
+                            });
+                        }
                     }
                 }
                 TirStmtKind::Loop { body } => {
@@ -729,7 +736,6 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
-                let local_name = self.local_name(*local_index);
                 let value_instr = self.translate_expr(value);
                 // If the initializer diverges (`never`), no value reaches the stack,
                 // so LocalSet would be invalid. `translate_expr` already appends
@@ -737,7 +743,12 @@ impl FunctionTranslator<'_, '_> {
                 // diverging instruction; the local is declared but never assigned.
                 if value.type_id == TypeTable::NEVER {
                     Some(value_instr)
+                } else if value.type_id == TypeTable::UNIT {
+                    // Unit-type locals have no Wasm representation; just emit
+                    // the init expression for its side effects (usually Nop).
+                    Some(value_instr)
                 } else {
+                    let local_name = self.local_name(*local_index);
                     let value_instr = self.maybe_value_copy(value, value_instr);
                     Some(WirInstr::LocalSet {
                         name: local_name,
@@ -937,9 +948,16 @@ impl FunctionTranslator<'_, '_> {
             }
 
             // === Variables ===
-            TirExprKind::Local { index, .. } => WirInstr::LocalGet {
-                name: self.local_name(*index),
-            },
+            TirExprKind::Local { index, .. } => {
+                // Unit-type locals have no Wasm representation
+                if expr.type_id == TypeTable::UNIT {
+                    WirInstr::Nop
+                } else {
+                    WirInstr::LocalGet {
+                        name: self.local_name(*index),
+                    }
+                }
+            }
             TirExprKind::Global {
                 module_source,
                 name,
@@ -1038,8 +1056,11 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                let translated_args: Vec<WirInstr> =
-                    args.iter().map(|a| self.translate_expr(a)).collect();
+                let translated_args: Vec<WirInstr> = args
+                    .iter()
+                    .filter(|a| a.type_id != TypeTable::UNIT)
+                    .map(|a| self.translate_expr(a))
+                    .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
                     WirInstr::Call {
@@ -1068,9 +1089,12 @@ impl FunctionTranslator<'_, '_> {
                 }
 
                 let mut translated_args: Vec<WirInstr> = Vec::new();
+                // Receiver is always included (self/&self/&mut self is never unit)
                 translated_args.push(self.translate_expr(receiver));
                 for arg in args {
-                    translated_args.push(self.translate_expr(arg));
+                    if arg.type_id != TypeTable::UNIT {
+                        translated_args.push(self.translate_expr(arg));
+                    }
                 }
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
@@ -1092,8 +1116,11 @@ impl FunctionTranslator<'_, '_> {
                 }
             }
             TirExprKind::StaticCall { func, args, .. } => {
-                let translated_args: Vec<WirInstr> =
-                    args.iter().map(|a| self.translate_expr(a)).collect();
+                let translated_args: Vec<WirInstr> = args
+                    .iter()
+                    .filter(|a| a.type_id != TypeTable::UNIT)
+                    .map(|a| self.translate_expr(a))
+                    .collect();
 
                 if let Some(func_id) = self.resolve_function_ref(func) {
                     WirInstr::Call {
@@ -1146,6 +1173,10 @@ impl FunctionTranslator<'_, '_> {
                 let val = self.translate_expr(value);
                 match &target.kind {
                     TirExprKind::Local { index, .. } => {
+                        // Unit-type locals have no Wasm representation
+                        if target.type_id == TypeTable::UNIT {
+                            return val;
+                        }
                         // If the value is a LocalSet from nested chained assignment
                         // (e.g., `h = i = 42`), convert it to LocalTee so it leaves
                         // the assigned value on the stack for the outer assignment.

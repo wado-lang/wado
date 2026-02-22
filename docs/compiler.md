@@ -21,6 +21,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Analyze      | All modules   | Symbol table    | Build symbol table, validate imports                      |
 | Resolve      | AST + Symbols | Project         | Type resolution, produce Project                          |
 | Effect Check | Project       | Project         | Validate function effect requirements                     |
+| Inspect Syn  | Project       | Project         | Synthesize `builtin::inspect` into concrete TIR           |
 | CM Adapter   | Project       | Project         | Synthesize TIR adapter functions for CM boundary crossing |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
@@ -49,6 +50,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Name              | `name.rs`                | Name mangling utilities for methods and symbols           |
 | Resolver          | `resolver.rs`            | Type resolution, AST to TIR, produces Project             |
 | TIR               | `tir.rs`                 | Typed Intermediate Representation                         |
+| SynthesizeInspect | `synthesize_inspect.rs`  | Inspect debug output synthesis (type→TIR)                 |
 | CmAdapterGen      | `cm_adapter_gen.rs`      | CM boundary adapter synthesis (TIR functions)             |
 | CmAbi             | `cm_abi.rs`              | Canonical ABI layout computation                          |
 | Monomorphize      | `monomorphize.rs`        | Generic type/function instantiation (Project→Project)     |
@@ -1071,6 +1073,18 @@ pub struct FormatSpec {
 - Integer interpolation (signed i8/i16/i32/i64 and unsigned u8/u16/u32/u64 converted to decimal string)
 - Float interpolation (f32/f64 via `wado-bundled` functions using the `ryu` algorithm)
 - String concatenation using GC array allocation and `array.copy`
+
+### Inspect Synthesis (`synthesize_inspect.rs`)
+
+The inspect synthesis phase replaces `builtin::inspect` marker calls with concrete TIR that writes debug output to a `Formatter`. This runs after effect checking and before CM adapter synthesis.
+
+**How it works:**
+
+1. The resolver emits `StaticCall { func: Builtin("inspect"), .. }` when it encounters `{expr:?}` or when `{expr}` has no `Display` implementation.
+2. `synthesize_inspect` scans TIR for these markers and replaces each with type-specific formatting code — field access for structs, match arms for variants/enums, loops for arrays, etc.
+3. The generated TIR is ordinary code that flows through the rest of the pipeline (monomorphize → lower → optimize → codegen).
+
+Each distinct type gets a dedicated `__inspect$TypeName` function generated once and called from all use sites. The `InspectRegistry` deduplicates these across the module.
 
 ### String Literal Data Segments
 

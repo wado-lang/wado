@@ -381,12 +381,17 @@ fn register_single_function(
         return;
     }
 
-    // Build param types
-    let params: Vec<WirType> = tir_func
-        .params
-        .iter()
-        .map(|p| ctx.type_id_to_wir_type(type_table, p.type_id))
-        .collect();
+    // Build param types, filtering out unit-type params (unit has no Wasm representation)
+    let mut params: Vec<WirType> = Vec::new();
+    let mut param_names: Vec<String> = Vec::new();
+    for p in &tir_func.params {
+        let wir_type = ctx.type_id_to_wir_type(type_table, p.type_id);
+        if matches!(wir_type, WirType::Unit) {
+            continue;
+        }
+        params.push(wir_type);
+        param_names.push(p.name.clone());
+    }
 
     // Build result types
     let results: Vec<WirType> =
@@ -395,8 +400,6 @@ fn register_single_function(
         } else {
             vec![ctx.type_id_to_wir_type(type_table, tir_func.return_type)]
         };
-
-    let param_names: Vec<String> = tir_func.params.iter().map(|p| p.name.clone()).collect();
     let effects: Vec<String> = tir_func.effects.clone();
 
     // Register function type

@@ -1,0 +1,33 @@
+// Test: #[hidden] fields are omitted from inspect output
+use { println, Stdout } from "core:cli";
+
+struct User {
+    name: String,
+
+    #[hidden]
+    password: String,
+    age: i32,
+}
+
+struct AllHidden {
+
+    #[hidden]
+    secret1: i32,
+
+    #[hidden]
+    secret2: i32,
+}
+
+export fn run() with Stdout {
+    let u = User { name: "Alice", password: "secret123", age: 30 };
+    println(`{u:?}`);
+
+    // All fields hidden
+    let h = AllHidden { secret1: 1, secret2: 2 };
+    println(`{h:?}`);
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "User { name: \"Alice\", age: 30, .. }\nAllHidden { .. }\nok\n"}

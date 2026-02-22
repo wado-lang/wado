@@ -18,9 +18,9 @@ use indexmap::{IndexMap, IndexSet};
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::project::Project;
 use crate::tir::{
-    FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFlags, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TirVariantDecl,
-    TypeId, TypeTable,
+    FunctionRef, PrimitiveType, ResolvedType, SubstitutionContext, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFlags, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind, TirUnaryOp,
+    TirVariantDecl, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -390,8 +390,9 @@ fn replace_markers_in_block(
                 let type_id = value_expr.type_id;
                 let span = expr.span;
 
-                // Special case: closure with alternate=true => inline source text
                 let resolved = tt.borrow().get(type_id).clone();
+
+                // Special case: closure with alternate=true => inline source text
                 let new_stmt = if alternate && matches!(resolved, ResolvedType::Function { .. }) {
                     let source = match &value_expr.kind {
                         TirExprKind::Closure {
@@ -657,6 +658,26 @@ fn synth_body(
                 span,
             )
         }
+        ResolvedType::GenericInstance {
+            ref name,
+            ref type_args,
+            ..
+        } => {
+            let n = name.clone();
+            let ta = type_args.clone();
+            synth_generic_struct(
+                reg,
+                &n,
+                &ta,
+                val,
+                fmt,
+                tt,
+                mods,
+                fmt_type,
+                module_source,
+                span,
+            )
+        }
         ResolvedType::Ref(inner) => synth_ref(
             reg,
             false,
@@ -835,6 +856,49 @@ fn display_fmt(
     vec![TirStmt::new(TirStmtKind::Expr(call), span)]
 }
 
+/// Call `LowerHex::fmt(&val, &mut f)` — used for resource handle hex output.
+fn lower_hex_fmt(
+    type_id: TypeId,
+    val: TirExpr,
+    fmt: TirExpr,
+    tt: &Rc<RefCell<TypeTable>>,
+    span: Span,
+) -> Vec<TirStmt> {
+    let type_name = tt.borrow().mangle_type_name(type_id);
+
+    let ref_type = tt.borrow_mut().make_ref(type_id);
+    let receiver = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: Box::new(val),
+        },
+        ref_type,
+        span,
+    );
+
+    let mangled = MethodName::format_local(&type_name, Some("LowerHex"), "fmt");
+    let call = TirExpr::new(
+        TirExprKind::MethodCall {
+            receiver: Box::new(receiver),
+            func: FunctionRef::External {
+                module_source: ModuleSource::core("prelude/primitives.wado"),
+                name: mangled,
+                monomorph_info: None,
+                method_info: Some(LocalMethodName::new(
+                    type_name,
+                    Some("LowerHex".into()),
+                    "fmt".into(),
+                )),
+            },
+            type_args: vec![],
+            args: vec![fmt],
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    vec![TirStmt::new(TirStmtKind::Expr(call), span)]
+}
+
 fn display_impl_module(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> ModuleSource {
     match tt.borrow().get(type_id).clone() {
         ResolvedType::Primitive(_) => ModuleSource::core("prelude/primitives.wado"),
@@ -892,7 +956,7 @@ fn synth_struct(
     let mut s = Vec::new();
 
     match fields {
-        Some(fields) if !fields.is_empty() => {
+        Some((fields, has_hidden)) if !fields.is_empty() => {
             s.push(ws(&format!("{name} {{ "), fmt.clone(), tt, span));
             for (i, (fn_, ft, fi)) in fields.iter().enumerate() {
                 if i > 0 {
@@ -919,26 +983,95 @@ fn synth_struct(
                     span,
                 ));
             }
+            if has_hidden {
+                s.push(ws(", ..", fmt.clone(), tt, span));
+            }
             s.push(ws(" }", fmt, tt, span));
         }
+        Some((_, true)) => s.push(ws(&format!("{name} {{ .. }}"), fmt, tt, span)),
         Some(_) => s.push(ws(&format!("{name} {{}}"), fmt, tt, span)),
         None => s.push(ws(&format!("{name} {{ ... }}"), fmt, tt, span)),
     }
     s
 }
 
-fn find_struct_fields(name: &str, mods: &[&TirModule]) -> Option<Vec<(String, TypeId, u32)>> {
+/// Returns `(visible_fields, has_hidden)` for the named struct.
+fn find_struct_fields(
+    name: &str,
+    mods: &[&TirModule],
+) -> Option<(Vec<(String, TypeId, u32)>, bool)> {
     for m in mods {
         if let Some(s) = m.find_struct(name) {
-            return Some(
-                s.fields
-                    .iter()
-                    .map(|f| (f.name.clone(), f.type_id, f.index))
-                    .collect(),
-            );
+            let mut visible = Vec::new();
+            let mut has_hidden = false;
+            for f in &s.fields {
+                if f.is_hidden {
+                    has_hidden = true;
+                } else {
+                    visible.push((f.name.clone(), f.type_id, f.index));
+                }
+            }
+            return Some((visible, has_hidden));
         }
     }
     None
+}
+
+fn synth_generic_struct(
+    reg: &mut InspectRegistry,
+    name: &str,
+    type_args: &[TypeId],
+    val: TirExpr,
+    fmt: TirExpr,
+    tt: &Rc<RefCell<TypeTable>>,
+    mods: &[&TirModule],
+    fmt_type: TypeId,
+    module_source: &ModuleSource,
+    span: Span,
+) -> Vec<TirStmt> {
+    let fields = find_struct_fields(name, mods);
+    let mut s = Vec::new();
+
+    match fields {
+        Some((fields, has_hidden)) if !fields.is_empty() => {
+            s.push(ws(&format!("{name} {{ "), fmt.clone(), tt, span));
+            let subst = SubstitutionContext::new().with_impl_args(type_args);
+            for (i, (fn_, ft, fi)) in fields.iter().enumerate() {
+                if i > 0 {
+                    s.push(ws(", ", fmt.clone(), tt, span));
+                }
+                s.push(ws(&format!("{fn_}: "), fmt.clone(), tt, span));
+                let concrete_type = subst.substitute(*ft, &mut tt.borrow_mut());
+                let fa = TirExpr::new(
+                    TirExprKind::FieldAccess {
+                        expr: Box::new(val.clone()),
+                        field_index: *fi,
+                        field_name: fn_.clone(),
+                    },
+                    concrete_type,
+                    span,
+                );
+                s.push(call_inspect_fn(
+                    reg,
+                    concrete_type,
+                    fa,
+                    fmt.clone(),
+                    tt,
+                    fmt_type,
+                    module_source,
+                    span,
+                ));
+            }
+            if has_hidden {
+                s.push(ws(", ..", fmt.clone(), tt, span));
+            }
+            s.push(ws(" }", fmt, tt, span));
+        }
+        Some((_, true)) => s.push(ws(&format!("{name} {{ .. }}"), fmt, tt, span)),
+        Some(_) => s.push(ws(&format!("{name} {{}}"), fmt, tt, span)),
+        None => s.push(ws(&format!("{name} {{ ... }}"), fmt, tt, span)),
+    }
+    s
 }
 
 fn synth_enum(
@@ -1487,7 +1620,7 @@ fn synth_resource(
     span: Span,
 ) -> Vec<TirStmt> {
     let mut s = Vec::new();
-    s.push(ws(&format!("{name}#"), fmt.clone(), tt, span));
+    s.push(ws(&format!("{name}#0x"), fmt.clone(), tt, span));
     let cast = TirExpr::new(
         TirExprKind::Cast {
             expr: Box::new(val),
@@ -1496,7 +1629,7 @@ fn synth_resource(
         TypeTable::I32,
         span,
     );
-    s.extend(display_fmt(TypeTable::I32, cast, fmt, tt, span));
+    s.extend(lower_hex_fmt(TypeTable::I32, cast, fmt, tt, span));
     s
 }
 
