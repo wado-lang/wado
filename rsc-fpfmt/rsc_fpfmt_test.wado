@@ -561,8 +561,7 @@ test "f64_to_string_exp round trip consistency" {
     while first_digit >= 10 {
         first_digit = first_digit / 10;
     }
-    // Workaround: u64 as u8 codegen bug — cast through i32 first
-    assert (str_result.get_byte(0) as i32) == ('0' as i32) + (first_digit as i32);
+    assert str_result.get_byte(0) == ('0' as u8) + (first_digit as u8);
 }
 
 

@@ -1859,10 +1859,28 @@ impl FunctionTranslator<'_, '_> {
             ) => WirInstr::I64ExtendI32U(Box::new(inner_instr)),
             (
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64),
-                ResolvedType::Primitive(PrimitiveType::I32 | PrimitiveType::U32),
+                ResolvedType::Primitive(
+                    PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8
+                    | PrimitiveType::Bool
+                    | PrimitiveType::Char,
+                ),
             ) => WirInstr::I32WrapI64(Box::new(inner_instr)),
             (
-                ResolvedType::Primitive(PrimitiveType::I32 | PrimitiveType::U32),
+                ResolvedType::Primitive(
+                    PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8
+                    | PrimitiveType::Bool
+                    | PrimitiveType::Char,
+                ),
                 ResolvedType::Primitive(PrimitiveType::F64),
             ) => WirInstr::F64ConvertI32S(Box::new(inner_instr)),
             (
@@ -1871,7 +1889,14 @@ impl FunctionTranslator<'_, '_> {
             ) => WirInstr::F64ConvertI64S(Box::new(inner_instr)),
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
-                ResolvedType::Primitive(PrimitiveType::I32),
+                ResolvedType::Primitive(
+                    PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8,
+                ),
             ) => WirInstr::I32TruncF64S(Box::new(inner_instr)),
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
