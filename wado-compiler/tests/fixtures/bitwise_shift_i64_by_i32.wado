@@ -1,0 +1,32 @@
+// Test shifting i64/u64 values by literal shift amounts (coerced to same type)
+
+export fn run() {
+    // u64 << literal (literal coerced to u64)
+    let x: u64 = 1;
+    let result = x << 11;
+    assert result == 2048;
+
+    // u64 >> literal
+    let y: u64 = 2048;
+    let result2 = y >> 11;
+    assert result2 == 1;
+
+    // i64 << literal
+    let z: i64 = 1 as i64;
+    let result3 = z << 11;
+    assert result3 == 2048 as i64;
+
+    // i64 >> literal
+    let w: i64 = 2048 as i64;
+    let result4 = w >> 11;
+    assert result4 == 1 as i64;
+
+    // u64 << u64 variable (same type)
+    let shift_amt: u64 = 5;
+    let v: u64 = 1;
+    let shifted = v << shift_amt;
+    assert shifted == 32;
+}
+
+__DATA__
+{}
