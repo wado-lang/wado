@@ -14,8 +14,8 @@ export fn run() with Stdout {
     let rwx = rw | x;
     assert rw as u32 == 3;
     assert rwx as u32 == 7;
-    assert (Perms::none() as u32) == 0;
-    assert (Perms::all() as u32) == 7;
+    assert Perms::none() as u32 == 0;
+    assert Perms::all() as u32 == 7;
     let masked = rwx & Perms::Read;
     assert masked as u32 == 1;
     let toggled = rw ^ Perms::Read;

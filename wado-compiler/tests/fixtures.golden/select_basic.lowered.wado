@@ -20,7 +20,7 @@ export fn run() with Stdout {
         let __cond: bool = (core::builtin::select::<f32>((fa32 > fb32), fa32, fb32) == 3.0 as f32);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(106), used: 0 };
+                let mut __r: String = move String { repr: "array_new<u8>"(139), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -35,7 +35,7 @@ export fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: <expr> == 3.0 as f32\n");
+                __r.String::append(move "\ncondition: if fa32 > fb32 { fa32; } else { fb32; } == 3.0 as f32\n");
                 break __tmpl: __r;
             });
         }
@@ -44,7 +44,7 @@ export fn run() with Stdout {
         let __cond: bool = (2.0 as f32 == 2.0 as f32);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(106), used: 0 };
+                let mut __r: String = move String { repr: "array_new<u8>"(145), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -59,7 +59,7 @@ export fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: <expr> == 2.0 as f32\n");
+                __r.String::append(move "\ncondition: if false { 1.0 as f32; } else { 2.0 as f32; } == 2.0 as f32\n");
                 break __tmpl: __r;
             });
         }
@@ -68,7 +68,7 @@ export fn run() with Stdout {
         let __cond: bool = ('a' == 'a');
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(99), used: 0 };
+                let mut __r: String = move String { repr: "array_new<u8>"(121), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -83,7 +83,7 @@ export fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: <expr> == 'a'\n");
+                __r.String::append(move "\ncondition: if true { ca; } else { cb; } == 'a'\n");
                 break __tmpl: __r;
             });
         }
@@ -92,7 +92,7 @@ export fn run() with Stdout {
         let __cond: bool = ('z' == 'z');
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(99), used: 0 };
+                let mut __r: String = move String { repr: "array_new<u8>"(122), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
@@ -107,7 +107,7 @@ export fn run() with Stdout {
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: <expr> == 'z'\n");
+                __r.String::append(move "\ncondition: if false { ca; } else { cb; } == 'z'\n");
                 break __tmpl: __r;
             });
         }

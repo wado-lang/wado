@@ -402,11 +402,15 @@ fn desugar_expr_impl(expr: &Expr, ctx: Option<&mut DesugarContext>) -> Expr {
                 .collect(),
             span: m.span,
         })),
-        Expr::Closure(c) => Expr::Closure(Box::new(ClosureExpr {
-            params: c.params.clone(),
-            body: desugar_expr(&c.body),
-            span: c.span,
-        })),
+        Expr::Closure(c) => {
+            let source_text = crate::unparse::unparse_expr_simple(&Expr::Closure(c.clone()));
+            Expr::Closure(Box::new(ClosureExpr {
+                params: c.params.clone(),
+                body: desugar_expr(&c.body),
+                source_text: Some(source_text),
+                span: c.span,
+            }))
+        }
         Expr::TemplateString(t) => Expr::TemplateString(Box::new(desugar_template_string(t))),
         Expr::Cast(c) => Expr::Cast(Box::new(CastExpr {
             expr: desugar_expr(&c.expr),

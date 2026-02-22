@@ -1,20 +1,24 @@
 // Tests for the #[expect_trap] attribute
 // Tests marked with #[expect_trap] pass when the test body traps (panics/unreachable).
 
+
 #[expect_trap]
 test "panics with message" {
     panic("intentional panic");
 }
+
 
 #[expect_trap]
 test "unreachable" {
     unreachable();
 }
 
+
 #[expect_trap]
 test "assert failure" {
     assert 1 == 2, "this assertion should fail";
 }
+
 
 #[expect_trap]
 test {

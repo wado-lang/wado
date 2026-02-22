@@ -2352,6 +2352,7 @@ impl Parser {
                 Ok(Expr::Closure(Box::new(ClosureExpr {
                     params: vec![],
                     body,
+                    source_text: None,
                     span: start_span,
                 })))
             }
@@ -2681,6 +2682,7 @@ impl Parser {
         Ok(Expr::Closure(Box::new(ClosureExpr {
             params,
             body,
+            source_text: None,
             span: start_span,
         })))
     }

@@ -8987,10 +8987,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             return self.find_trait_impl_for_type(&type_name, trait_name);
         }
 
-        // All enums automatically implement Eq, Ord, and Display
+        // All enums automatically implement Eq and Ord
         if let ResolvedType::Enum { .. } = &resolved {
             match trait_name {
-                "Eq" | "Ord" | "Display" => return true,
+                "Eq" | "Ord" => return true,
                 _ => {}
             }
         }
@@ -10601,6 +10601,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 body: Box::new(body),
                 captures,
                 functor_id: None,
+                source_text: closure.source_text.clone(),
             },
             func_type,
             closure.span,
@@ -10681,6 +10682,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 body: Box::new(body),
                 captures,
                 functor_id: None, // Assigned during lowering
+                source_text: closure.source_text.clone(),
             },
             func_type,
             closure.span,
@@ -10868,6 +10870,9 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     // Parse format spec (if any) to determine trait + Formatter fields
                     let parsed = format.as_ref().map(|f| self.parse_format_spec(&f.spec));
 
+                    // Check if this is an inspect format specifier (:?)
+                    let is_inspect = parsed.as_ref().is_some_and(|pf| pf.type_char == Some('?'));
+
                     // Determine which trait's fmt to call
                     let (trait_name, _trait_type_char) = match &parsed {
                         Some(pf) => match pf.type_char {
@@ -10877,6 +10882,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             Some('X') => ("UpperHex", Some('X')),
                             Some('e') => ("LowerExp", Some('e')),
                             Some('E') => ("UpperExp", Some('E')),
+                            Some('?') => ("Display", None), // placeholder, not used
                             _ => ("Display", None),
                         },
                         None => ("Display", None),
@@ -10966,7 +10972,30 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         span,
                     );
 
-                    if let Some(func_name) = float_fixed_func {
+                    if is_inspect {
+                        // Emit builtin::inspect marker — replaced by synthesize_inspect phase
+                        // Pass alternate flag (#) as 3rd arg for closure pretty-print
+                        let alternate = parsed.as_ref().is_some_and(|pf| pf.alternate);
+                        let alternate_expr = TirExpr::new(
+                            TirExprKind::BoolLiteral(alternate),
+                            TypeTable::BOOL,
+                            span,
+                        );
+                        let inspect_call = TirExpr::new(
+                            TirExprKind::StaticCall {
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::core("builtin"),
+                                    name: "builtin::inspect".to_string(),
+                                    monomorph_info: None,
+                                    method_info: None,
+                                },
+                                args: vec![resolved, fmt_mut_ref, alternate_expr],
+                            },
+                            TypeTable::UNIT,
+                            span,
+                        );
+                        stmts.push(TirStmt::new(TirStmtKind::Expr(inspect_call), span));
+                    } else if let Some(func_name) = float_fixed_func {
                         // Direct call: fmt_f64_fixed(value, precision, &mut __f)
                         let precision_value = parsed.as_ref().unwrap().precision.unwrap();
                         let precision_expr = TirExpr::new(
@@ -10993,55 +11022,81 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         stmts.push(TirStmt::new(TirStmtKind::Expr(fmt_call), span));
                     } else {
                         // Standard path: receiver.fmt(&mut __f)
+                        // Fall back to inspect if no Display impl is found
                         let base_type_id = self.get_ultimate_base_type(resolved.type_id);
-                        let (receiver_type_name, impl_module_source) = self
-                            .resolve_display_impl_source(
-                                base_type_id,
-                                resolved.type_id,
-                                trait_name,
-                            );
-
-                        let receiver_expr = {
-                            let resolved_type =
-                                self.type_table.borrow().get(resolved.type_id).clone();
-                            match resolved_type {
-                                ResolvedType::Ref(_) | ResolvedType::MutRef(_) => resolved,
-                                _ => {
-                                    let ref_type =
-                                        self.type_table.borrow_mut().make_ref(resolved.type_id);
-                                    TirExpr::new(
-                                        TirExprKind::Unary {
-                                            op: TirUnaryOp::Ref,
-                                            expr: Box::new(resolved),
-                                        },
-                                        ref_type,
-                                        span,
-                                    )
-                                }
-                            }
-                        };
-                        let mangled_name =
-                            MethodName::format_local(&receiver_type_name, Some(trait_name), "fmt");
-                        let fmt_call = TirExpr::new(
-                            TirExprKind::MethodCall {
-                                receiver: Box::new(receiver_expr),
-                                func: FunctionRef::External {
-                                    module_source: impl_module_source,
-                                    name: mangled_name,
-                                    monomorph_info: None,
-                                    method_info: Some(LocalMethodName::new(
-                                        receiver_type_name,
-                                        Some(trait_name.to_string()),
-                                        "fmt".to_string(),
-                                    )),
-                                },
-                                type_args: vec![],
-                                args: vec![fmt_mut_ref],
-                            },
-                            TypeTable::UNIT,
-                            span,
+                        let display_impl = self.resolve_display_impl_source(
+                            base_type_id,
+                            resolved.type_id,
+                            trait_name,
                         );
-                        stmts.push(TirStmt::new(TirStmtKind::Expr(fmt_call), span));
+
+                        if let Some((receiver_type_name, impl_module_source)) = display_impl {
+                            let receiver_expr = {
+                                let resolved_type =
+                                    self.type_table.borrow().get(resolved.type_id).clone();
+                                match resolved_type {
+                                    ResolvedType::Ref(_) | ResolvedType::MutRef(_) => resolved,
+                                    _ => {
+                                        let ref_type =
+                                            self.type_table.borrow_mut().make_ref(resolved.type_id);
+                                        TirExpr::new(
+                                            TirExprKind::Unary {
+                                                op: TirUnaryOp::Ref,
+                                                expr: Box::new(resolved),
+                                            },
+                                            ref_type,
+                                            span,
+                                        )
+                                    }
+                                }
+                            };
+                            let mangled_name = MethodName::format_local(
+                                &receiver_type_name,
+                                Some(trait_name),
+                                "fmt",
+                            );
+                            let fmt_call = TirExpr::new(
+                                TirExprKind::MethodCall {
+                                    receiver: Box::new(receiver_expr),
+                                    func: FunctionRef::External {
+                                        module_source: impl_module_source,
+                                        name: mangled_name,
+                                        monomorph_info: None,
+                                        method_info: Some(LocalMethodName::new(
+                                            receiver_type_name,
+                                            Some(trait_name.to_string()),
+                                            "fmt".to_string(),
+                                        )),
+                                    },
+                                    type_args: vec![],
+                                    args: vec![fmt_mut_ref],
+                                },
+                                TypeTable::UNIT,
+                                span,
+                            );
+                            stmts.push(TirStmt::new(TirStmtKind::Expr(fmt_call), span));
+                        } else {
+                            // No Display impl found — fall back to inspect
+                            let alternate_expr = TirExpr::new(
+                                TirExprKind::BoolLiteral(false),
+                                TypeTable::BOOL,
+                                span,
+                            );
+                            let inspect_call = TirExpr::new(
+                                TirExprKind::StaticCall {
+                                    func: FunctionRef::External {
+                                        module_source: ModuleSource::core("builtin"),
+                                        name: "builtin::inspect".to_string(),
+                                        monomorph_info: None,
+                                        method_info: None,
+                                    },
+                                    args: vec![resolved, fmt_mut_ref, alternate_expr],
+                                },
+                                TypeTable::UNIT,
+                                span,
+                            );
+                            stmts.push(TirStmt::new(TirStmtKind::Expr(inspect_call), span));
+                        }
                     }
                 }
             }
@@ -11334,31 +11389,13 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         base_type_id: TypeId,
         original_type_id: TypeId,
         trait_name: &str,
-    ) -> (String, ModuleSource) {
-        let (type_name, default_module) = match self.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source),
-            ResolvedType::GenericInstance {
-                name,
-                module_source,
-                ..
-            } => (name.clone(), module_source),
-            ResolvedType::Primitive(_) => {
-                let prim_module = ModuleSource::Core {
-                    name: "prelude/primitives.wado".to_string(),
-                };
-                (
-                    self.type_table.borrow().mangle_type_name(base_type_id),
-                    prim_module,
-                )
+    ) -> Option<(String, ModuleSource)> {
+        let type_name = match self.type_table.borrow().get(base_type_id).clone() {
+            ResolvedType::Struct { name, .. } | ResolvedType::GenericInstance { name, .. } => {
+                name.clone()
             }
-            _ => (
-                self.type_table.borrow().mangle_type_name(original_type_id),
-                self.current_module_source.clone(),
-            ),
+            ResolvedType::Primitive(_) => self.type_table.borrow().mangle_type_name(base_type_id),
+            _ => self.type_table.borrow().mangle_type_name(original_type_id),
         };
 
         // Search for the actual module where `impl TraitName for TypeName` is defined,
@@ -11372,7 +11409,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     let impl_type_name = self.get_type_name(&impl_block.ty);
                     let impl_trait_name = self.get_type_name(trait_type);
                     if impl_type_name == type_name && impl_trait_name == trait_name {
-                        return (type_name, module_src.clone());
+                        return Some((type_name, module_src.clone()));
                     }
                 }
             }
@@ -11386,12 +11423,23 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 let impl_type_name = self.get_type_name(&impl_block.ty);
                 let impl_trait_name = self.get_type_name(trait_type);
                 if impl_type_name == type_name && impl_trait_name == trait_name {
-                    return (type_name, self.current_module_source.clone());
+                    return Some((type_name, self.current_module_source.clone()));
                 }
             }
         }
 
-        (type_name, default_module)
+        // Primitives always have Display in prelude
+        if matches!(
+            self.type_table.borrow().get(base_type_id),
+            ResolvedType::Primitive(_)
+        ) {
+            let prim_module = ModuleSource::Core {
+                name: "prelude/primitives.wado".to_string(),
+            };
+            return Some((type_name, prim_module));
+        }
+
+        None
     }
 
     /// Resolve a cast expression

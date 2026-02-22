@@ -1,13 +1,7 @@
 // HTTP 500 Internal Server Error response test
 // This test verifies the HTTP server can return 500 Internal Server Error.
 
-use {
-    Request,
-    Response,
-    ErrorCode,
-    Fields,
-    Trailers,
-} from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

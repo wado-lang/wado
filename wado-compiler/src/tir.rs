@@ -1100,9 +1100,8 @@ impl FunctionRef {
 
         // Check if the generic name is a known builtin
         match generic_name.as_str() {
-            "array_get" | "array_set" | "array_new" | "array_len" | "select" => {
-                Some(format!("builtin::{generic_name}"))
-            }
+            "array_get" | "array_set" | "array_new" | "array_len" | "array_copy" | "array_fill"
+            | "select" => Some(format!("builtin::{generic_name}")),
             _ => None,
         }
     }
@@ -1298,6 +1297,8 @@ pub enum TirExprKind {
         /// Optional functor ID assigned during lowering.
         /// Used by monomorphize phase to look up the corresponding `ClosureFunctor`.
         functor_id: Option<u32>,
+        /// Pre-desugar source text for inspect output.
+        source_text: Option<String>,
     },
 
     /// Indirect call through a callable value (closure or funcref)

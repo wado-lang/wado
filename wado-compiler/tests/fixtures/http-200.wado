@@ -1,13 +1,7 @@
 // HTTP 200 response test
 // This test verifies the HTTP server returns 200 OK with empty body.
 
-use {
-    Request,
-    Response,
-    ErrorCode,
-    Fields,
-    Trailers,
-} from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

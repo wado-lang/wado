@@ -1,0 +1,65 @@
+// Test: {:?} works on types without Display trait implementation
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+variant Shape {
+    Circle(f64),
+    Point,
+}
+
+pub flags Mode {
+    Read,
+    Write,
+}
+
+export fn run() with Stdout {
+    // Struct without Display
+    let p = Point { x: 1, y: 2 };
+    println(`{p:?}`);
+
+    // Enum without Display (auto-derived)
+    let c = Color::Red;
+    println(`{c:?}`);
+
+    // Variant without Display
+    let s = Shape::Circle(3.14);
+    println(`{s:?}`);
+
+    // Flags without Display
+    let m = Mode::Read | Mode::Write;
+    println(`{m:?}`);
+
+    // Option without Display
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    println(`{opt:?}`);
+
+    let none: Option<i32> = null;
+    println(`{none:?}`);
+
+    // Nested: struct inside option
+    let opt_p: Option<Point> = Option::<Point>::Some(Point { x: 10, y: 20 });
+    println(`{opt_p:?}`);
+
+    // Array of structs
+    let arr: Array<Point> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    println(`{arr:?}`);
+
+    // Closure (no Display)
+    let f = |x: i32| x * 2;
+    println(`{f:?}`);
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "Point { x: 1, y: 2 }\nColor::Red\nShape::Circle(3.14)\nMode::Read | Mode::Write\nSome(42)\nnull\nSome(Point { x: 10, y: 20 })\n[Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]\n|i32| -> i32\nok\n"}

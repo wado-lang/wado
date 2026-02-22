@@ -94,6 +94,7 @@ pub mod resolver;
 pub mod stdlib;
 pub mod symbol;
 pub mod syntax;
+pub mod synthesize_inspect;
 pub mod tir;
 pub mod token;
 pub mod unparse;
@@ -279,6 +280,12 @@ pub async fn compile_with_options<H: CompilerHost>(
         let _span = logger.span("effect-check");
         check_effects(&project.tir_modules, &logger)?;
     }
+
+    // === Phase 7a: Synthesize Inspect (Project -> Project) ===
+    let project = {
+        let _span = logger.span("synthesize-inspect");
+        synthesize_inspect::synthesize_inspect(project)
+    };
 
     // Apply options to project (must be before CM adapter synthesis)
     let mut project = project;
@@ -467,7 +474,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         let builtin_registry =
             builtin_registry::BuiltinRegistry::build_from_stdlib(&temp_type_table);
 
-        let mut project = Project::new(
+        let project = Project::new(
             load_result.entry_module_source.clone(),
             resolved_modules,
             symbols.clone(),
@@ -478,7 +485,14 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             builtin_registry,
         );
 
+        // Synthesize Inspect (must run before CM adapter synthesis)
+        let project = {
+            let _span = logger.span("synthesize-inspect");
+            synthesize_inspect::synthesize_inspect(project)
+        };
+
         // Apply target world override (must be before CM adapter synthesis)
+        let mut project = project;
         if let Some(world) = target_world {
             project.target_world = world.to_string();
         }

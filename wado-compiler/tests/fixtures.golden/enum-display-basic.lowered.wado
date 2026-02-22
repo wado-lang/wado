@@ -29,7 +29,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        r."Color^Display::fmt"(&mut __f);
+        "__inspect$Color"(r, &mut __f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -38,7 +38,7 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        g."Color^Display::fmt"(&mut __f);
+        "__inspect$Color"(g, &mut __f);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
@@ -47,35 +47,36 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        b."Color^Display::fmt"(&mut __f);
+        "__inspect$Color"(b, &mut __f);
         break __tmpl: __r;
     });
+}
+
+fn "__inspect$Color"(__val: Color, __fmt: &mut Formatter) {
+    if (__val == 0) {
+        __inline_Formatter__write_str_0: {
+            let s: String = move "Color::Red";
+            __fmt.buf.String::append(s);
+        };
+    } else {
+        if (__val == 1) {
+            __inline_Formatter__write_str_1: {
+                let s: String = move "Color::Green";
+                __fmt.buf.String::append(s);
+            };
+        } else {
+            if (__val == 2) {
+                __inline_Formatter__write_str_2: {
+                    let s: String = move "Color::Blue";
+                    __fmt.buf.String::append(s);
+                };
+            };
+        };
+    };
 }
 
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
-}
-
-pub fn "Color^Display::fmt"(self: &Color, f: &mut Formatter) {
-    let val: Color = *self;
-    if (val == Color::Red) {
-        __inline_Formatter__write_str_0: {
-            let s: String = move "Red";
-            f.buf.String::append(s);
-        };
-    } else {
-        if (val == Color::Green) {
-            __inline_Formatter__write_str_1: {
-                let s: String = move "Green";
-                f.buf.String::append(s);
-            };
-        } else {
-            __inline_Formatter__write_str_2: {
-                let s: String = move "Blue";
-                f.buf.String::append(s);
-            };
-        }
-    }
 }
 
