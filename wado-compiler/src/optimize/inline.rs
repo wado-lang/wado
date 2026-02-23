@@ -2011,6 +2011,22 @@ fn remap_pattern(
             case_name: case_name.clone(),
             case_index: *case_index,
         },
+        TirPattern::Struct {
+            struct_type,
+            fields,
+            has_rest,
+        } => TirPattern::Struct {
+            struct_type: *struct_type,
+            fields: fields
+                .iter()
+                .map(|f| crate::tir::TirStructPatternField {
+                    field_name: f.field_name.clone(),
+                    field_index: f.field_index,
+                    pattern: remap_pattern(&f.pattern, param_to_local, local_offset, param_count),
+                })
+                .collect(),
+            has_rest: *has_rest,
+        },
     }
 }
 

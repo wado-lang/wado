@@ -1,0 +1,31 @@
+// Nested struct destructuring
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Line {
+    start: Point,
+    end: Point,
+}
+
+export fn run() with Stdout {
+    let line = Line {
+        start: Point { x: 1, y: 2 },
+        end: Point { x: 3, y: 4 },
+    };
+
+    // Nested destructuring with rename
+    let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
+    println(`{x1}, {y1}, {x2}, {y2}`);
+
+    // Mixed: one field nested, other with rest
+    let { start: { x, .. }, .. } = line;
+    println(`{x}`);
+}
+
+__DATA__
+{"stdout": "1, 2, 3, 4\n1\n"}

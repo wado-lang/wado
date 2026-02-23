@@ -1502,6 +1502,19 @@ pub enum TirPattern {
         case_name: String,
         case_index: u32,
     },
+    /// Struct destructuring pattern: `{ x, y }` or `Point { x, y }`
+    Struct {
+        struct_type: TypeId,
+        fields: Vec<TirStructPatternField>,
+        has_rest: bool,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct TirStructPatternField {
+    pub field_name: String,
+    pub field_index: u32,
+    pub pattern: TirPattern,
 }
 
 #[derive(Debug, Clone)]

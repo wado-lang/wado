@@ -1,0 +1,33 @@
+// Basic struct destructuring
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let p = Point { x: 10, y: 20 };
+
+    // Unnamed destructuring (type inferred from RHS)
+    let { x, y } = p;
+    println(`{x}, {y}`);
+
+    // Named destructuring (explicit type)
+    let Point { x: a, y: b } = p;
+    println(`{a}, {b}`);
+
+    // Shorthand with rest pattern
+    let { x: x2, .. } = p;
+    println(`{x2}`);
+
+    // Mutable destructuring
+    let mut { x: mx, y: my } = p;
+    mx += 1;
+    my += 2;
+    println(`{mx}, {my}`);
+}
+
+__DATA__
+{"stdout": "10, 20\n10, 20\n10\n11, 22\n"}

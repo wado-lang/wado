@@ -1652,6 +1652,16 @@ fn collect_types_from_pattern(
         TirPattern::Enum { enum_type, .. } => {
             collect_type_transitive(*enum_type, type_table, reachable);
         }
+        TirPattern::Struct {
+            struct_type,
+            fields,
+            ..
+        } => {
+            collect_type_transitive(*struct_type, type_table, reachable);
+            for field in fields {
+                collect_types_from_pattern(&field.pattern, type_table, reachable);
+            }
+        }
     }
 }
 

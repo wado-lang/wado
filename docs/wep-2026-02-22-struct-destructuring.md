@@ -207,7 +207,34 @@ let Point { x, y } = p;   // OK: p is Point
 
 The unnamed form `{ x, y }` infers the struct type from the expression and does not require a type match.
 
-### 8. Wildcard Fields
+### 8. Literal Patterns in Fields
+
+Field values can be matched against literals (integers, floats, booleans, characters, strings) in refutable pattern contexts (match, if let, matches):
+
+```wado
+struct Config { name: String, value: i32 }
+
+// Match with literal in field position
+match config {
+    Config { name, value: 0 } => `{name} is zero`,
+    Config { name, value: 42 } => `{name} is the answer`,
+    Config { name, value } => `{name} = {value}`,
+}
+
+// If let with literal field
+if let Config { name, value: 0 } = config {
+    println(`{name} is zero`);
+}
+
+// Matches with literal field
+if config matches { Config { value: 0, .. } } {
+    println("zero config");
+}
+```
+
+Literal patterns in fields are refutable — they can fail to match. They are only allowed in refutable contexts (match, if let, matches), not in irrefutable let bindings.
+
+### 9. Wildcard Fields
 
 Individual fields can be ignored with `_`:
 
@@ -217,127 +244,6 @@ let { x: _, y } = point;   // ignore x, bind y
 ```
 
 This is different from `..` which ignores all unmentioned fields. With `_`, the field must still be explicitly listed.
-
-## Parsing
-
-### Disambiguation
-
-Struct patterns use `{` which requires disambiguation from blocks and struct literals:
-
-| Context                      | Syntax                     | Interpretation                     |
-| ---------------------------- | -------------------------- | ---------------------------------- |
-| Pattern position after `let` | `let { x, y } = ...`       | Struct destructuring pattern       |
-| Pattern position after `let` | `let Point { x, y } = ...` | Named struct destructuring pattern |
-| Expression position          | `Point { x, y }`           | Struct construction                |
-| Expression position (typed)  | `let p: Point = { x, y }`  | Implicit struct literal            |
-
-In pattern position, `{` unambiguously starts a struct pattern because blocks are not valid patterns.
-
-For named patterns, the parser sees `UppercaseIdent {` in pattern position:
-
-- Current: `UppercaseIdent` alone → enum/variant pattern
-- Current: `UppercaseIdent(...)` → variant with payload
-- New: `UppercaseIdent { ... }` → struct destructuring pattern
-
-The `{` vs `(` after the identifier disambiguates struct destructuring from variant patterns.
-
-### Grammar
-
-```
-pattern ::= ...existing patterns...
-          | '{' struct_pattern_fields '}'           // unnamed struct pattern
-          | UPPER_IDENT '{' struct_pattern_fields '}'  // named struct pattern
-
-struct_pattern_fields ::= struct_pattern_field (',' struct_pattern_field)* (',' '..')?
-                        | struct_pattern_field (',' struct_pattern_field)* ','?
-                        | '..'
-
-struct_pattern_field ::= IDENT                     // shorthand: { x } binds field x to variable x
-                       | IDENT ':' pattern          // rename/nested: { x: px } or { x: { a, b } }
-```
-
-## Implementation Strategy
-
-### AST
-
-Add a new variant to the `Pattern` enum:
-
-```
-Pattern::Struct {
-    type_name: Option<String>,   // None for unnamed, Some("Point") for named
-    fields: Vec<StructPatternField>,
-    has_rest: bool,              // true when .. is present
-    span: Span,
-}
-
-StructPatternField {
-    field_name: String,
-    pattern: Pattern,            // Ident for shorthand, any pattern for nested
-    span: Span,
-}
-```
-
-### TIR
-
-Add a corresponding `TirPattern::Struct`:
-
-```
-TirPattern::Struct {
-    struct_type: TypeId,
-    fields: Vec<TirStructPatternField>,
-    has_rest: bool,
-}
-
-TirStructPatternField {
-    field_name: String,
-    field_index: usize,
-    pattern: TirPattern,
-}
-```
-
-### Lowering: Preserve `LetPattern` in TIR
-
-**Design principle**: Struct destructuring patterns are **not** lowered to `Let + FieldAccess` sequences. Instead, `LetPattern` with `TirPattern::Struct` is preserved through the TIR optimization pipeline and lowered at the WIR level.
-
-This is the same approach that should apply to tuple destructuring. The key insight is that SROA (Scalar Replacement of Aggregates) benefits from seeing the destructuring pattern directly:
-
-```wado
-// Source
-let { x, y } = point;
-
-// TIR: preserved as LetPattern
-LetPattern {
-    pattern: Struct { fields: [x, y] },
-    value: point,
-}
-
-// NOT lowered to:
-//   let __tmp = point;
-//   let x = __tmp.x;   ← SROA must re-discover this pattern
-//   let y = __tmp.y;
-```
-
-When the optimizer sees `LetPattern` + `StructLiteral` in sequence, SROA can directly eliminate the allocation:
-
-```wado
-// Before SROA
-let p = Point { x: a + 1, y: b + 2 };
-let { x, y } = p;
-
-// After SROA: aggregate eliminated, fields forwarded directly
-let x = a + 1;
-let y = b + 2;
-```
-
-The pattern is then translated at the WIR level to field access instructions (struct.get), or further optimized to Wasm multi-value returns when applicable.
-
-**Current status**: Tuple `LetPattern` is currently lowered to `Let + FieldAccess` in `lower.rs` Phase 1.5 (except for multi-value builtins). This is a known limitation; ideally both tuple and struct `LetPattern` should be preserved through TIR and lowered at WIR translation.
-
-### Exhaustiveness
-
-- Without `..`: all struct fields must appear in the pattern (compile error for missing fields)
-- With `..`: any subset of fields is valid
-- In `match` expressions: struct patterns on non-variant types are always irrefutable (they match any value of that struct type), so a single arm suffices
 
 ## Consequences
 

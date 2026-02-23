@@ -1,0 +1,19 @@
+// Named struct destructuring type mismatch error
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Vec2 {
+    x: i32,
+    y: i32,
+}
+
+export fn run() {
+    let p = Point { x: 1, y: 2 };
+    let Vec2 { x, y } = p;
+}
+
+__DATA__
+{"compile_error": "Vec2"}

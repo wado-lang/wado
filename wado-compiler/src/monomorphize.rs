@@ -688,6 +688,16 @@ impl Monomorphizer {
             TirPattern::Enum { enum_type, .. } => {
                 *enum_type = self.rewrite_type_id(*enum_type, type_table);
             }
+            TirPattern::Struct {
+                struct_type,
+                fields,
+                ..
+            } => {
+                *struct_type = self.rewrite_type_id(*struct_type, type_table);
+                for field in fields {
+                    self.rewrite_types_in_pattern(&mut field.pattern, type_table);
+                }
+            }
         }
     }
 
@@ -2180,6 +2190,16 @@ impl Monomorphizer {
             }
             TirPattern::Enum { enum_type, .. } => {
                 *enum_type = self.substitute_type(*enum_type, substitution, type_table);
+            }
+            TirPattern::Struct {
+                struct_type,
+                fields,
+                ..
+            } => {
+                *struct_type = self.substitute_type(*struct_type, substitution, type_table);
+                for field in fields {
+                    self.substitute_types_in_pattern(&mut field.pattern, substitution, type_table);
+                }
             }
         }
     }

@@ -858,6 +858,15 @@ fn lower_patterns(
         variant_case_map.insert(variant.name.clone(), cases);
     }
 
+    // Build struct fields map from module structs
+    let mut struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>> = IndexMap::new();
+    for s in &module.structs {
+        struct_fields_map.insert(
+            (s.name.clone(), module.module_source.clone()),
+            s.fields.clone(),
+        );
+    }
+
     let type_table = module.type_table.borrow();
     for func_rc in &module.functions {
         let mut func = func_rc.borrow_mut();
@@ -866,7 +875,12 @@ fn lower_patterns(
             let local_count = func.local_count;
             let local_types = std::mem::take(&mut func.local_types);
 
-            let mut lowerer = PatternLowerer::new(local_count, local_types, &variant_case_map);
+            let mut lowerer = PatternLowerer::new(
+                local_count,
+                local_types,
+                &variant_case_map,
+                &struct_fields_map,
+            );
             lowerer.lower_block(&mut body, &type_table);
 
             // Put the values back
@@ -885,6 +899,8 @@ struct PatternLowerer<'a> {
     temp_counter: u32,
     /// Map from variant name to list of (`case_name`, `case_index`) pairs
     variant_case_map: &'a IndexMap<String, Vec<(String, u32)>>,
+    /// Map from (`struct_name`, `module_source`) to field definitions
+    struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
 }
 
 impl<'a> PatternLowerer<'a> {
@@ -892,12 +908,14 @@ impl<'a> PatternLowerer<'a> {
         local_count: u32,
         local_types: Vec<TypeId>,
         variant_case_map: &'a IndexMap<String, Vec<(String, u32)>>,
+        struct_fields_map: &'a IndexMap<(String, ModuleSource), Vec<TirField>>,
     ) -> Self {
         Self {
             local_count,
             local_types,
             temp_counter: 0,
             variant_case_map,
+            struct_fields_map,
         }
     }
 
@@ -907,6 +925,21 @@ impl<'a> PatternLowerer<'a> {
             .get(variant_name)
             .and_then(|cases| cases.iter().find(|(name, _)| name == case_name))
             .map(|(_, index)| *index)
+    }
+
+    /// Look up struct field definitions by `type_id`
+    fn get_struct_fields(&self, type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TirField>> {
+        match type_table.get(type_id) {
+            ResolvedType::Struct {
+                name,
+                module_source,
+                ..
+            } => self
+                .struct_fields_map
+                .get(&(name.clone(), module_source.clone()))
+                .cloned(),
+            _ => None,
+        }
     }
 
     /// Consume the lowerer and return the final local count and types
@@ -1038,7 +1071,12 @@ impl<'a> PatternLowerer<'a> {
                         | ResolvedType::Enum { .. }
                 );
 
-                if can_lower {
+                if matches!(pattern, TirPattern::Struct { .. }) {
+                    // Struct patterns are always irrefutable — lower to let bindings + then block
+                    self.lower_if_pattern_struct(
+                        scrutinee, &pattern, then_block, stmt.span, out, type_table,
+                    );
+                } else if can_lower {
                     // Lower Option, Variant, and Enum patterns to Let + If
                     self.lower_if_pattern_option(
                         scrutinee, &pattern, then_block, else_block, stmt.span, out, type_table,
@@ -1281,6 +1319,67 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
             }
+            TirPattern::Struct { fields, .. } => {
+                // Allocate temp local for the struct
+                let struct_temp_index = self.alloc_local(value.type_id);
+                let struct_temp_name = self.next_temp_name();
+
+                let struct_let = TirStmt::new(
+                    TirStmtKind::Let {
+                        name: struct_temp_name.clone(),
+                        local_index: struct_temp_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: value.type_id,
+                        value,
+                    },
+                    span,
+                );
+                out.push(struct_let);
+
+                // Get field type info from struct definition
+                let struct_fields_info = self.get_struct_fields(
+                    type_table.get_local_type(struct_temp_index, &self.local_types),
+                    type_table,
+                );
+
+                for field in fields {
+                    let field_type = struct_fields_info
+                        .as_ref()
+                        .and_then(|info| {
+                            info.iter()
+                                .find(|f| f.name == field.field_name)
+                                .map(|f| f.type_id)
+                        })
+                        .unwrap_or(TypeTable::UNKNOWN);
+
+                    let field_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::Local {
+                                    index: struct_temp_index,
+                                    name: struct_temp_name.clone(),
+                                },
+                                type_table.get_local_type(struct_temp_index, &self.local_types),
+                                span,
+                            )),
+                            field_index: field.field_index,
+                            field_name: field.field_name.clone(),
+                        },
+                        field_type,
+                        span,
+                    );
+
+                    self.lower_pattern_to_lets(
+                        &field.pattern,
+                        is_mut,
+                        field_access,
+                        span,
+                        out,
+                        type_table,
+                    );
+                }
+            }
             TirPattern::Literal(_) | TirPattern::Enum { .. } => {
                 // Literal/Enum patterns don't bind anything, just evaluate for side effects
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
@@ -1427,9 +1526,146 @@ impl<'a> PatternLowerer<'a> {
                     );
                 }
             }
+            TirPattern::Struct { fields, .. } => {
+                // Nested struct - allocate temp and recurse
+                let struct_temp_index = self.alloc_local(value.type_id);
+                let struct_temp_name = self.next_temp_name();
+
+                let struct_let = TirStmt::new(
+                    TirStmtKind::Let {
+                        name: struct_temp_name.clone(),
+                        local_index: struct_temp_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: value.type_id,
+                        value,
+                    },
+                    span,
+                );
+                out.push(struct_let);
+
+                let struct_fields_info = self.get_struct_fields(
+                    type_table.get_local_type(struct_temp_index, &self.local_types),
+                    type_table,
+                );
+
+                for field in fields {
+                    let field_type = struct_fields_info
+                        .as_ref()
+                        .and_then(|info| {
+                            info.iter()
+                                .find(|f| f.name == field.field_name)
+                                .map(|f| f.type_id)
+                        })
+                        .unwrap_or(TypeTable::UNKNOWN);
+
+                    let field_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(TirExpr::new(
+                                TirExprKind::Local {
+                                    index: struct_temp_index,
+                                    name: struct_temp_name.clone(),
+                                },
+                                type_table.get_local_type(struct_temp_index, &self.local_types),
+                                span,
+                            )),
+                            field_index: field.field_index,
+                            field_name: field.field_name.clone(),
+                        },
+                        field_type,
+                        span,
+                    );
+
+                    self.lower_pattern_to_lets(
+                        &field.pattern,
+                        is_mut,
+                        field_access,
+                        span,
+                        out,
+                        type_table,
+                    );
+                }
+            }
             TirPattern::Literal(_) | TirPattern::Enum { .. } => {
                 // Just evaluate for side effects (no bindings)
                 out.push(TirStmt::new(TirStmtKind::Expr(value), span));
+            }
+        }
+    }
+
+    /// Lower a struct `IfPattern` to let bindings + then block (unconditional).
+    ///
+    /// Struct patterns are always irrefutable, so the else branch is discarded.
+    #[allow(clippy::too_many_arguments)]
+    fn lower_if_pattern_struct(
+        &mut self,
+        scrutinee: TirExpr,
+        pattern: &TirPattern,
+        mut then_block: TirBlock,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
+    ) {
+        if let TirPattern::Struct { fields, .. } = pattern {
+            // Lower the scrutinee into a temp
+            let struct_temp_index = self.alloc_local(scrutinee.type_id);
+            let struct_temp_name = self.next_temp_name();
+
+            out.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: struct_temp_name.clone(),
+                    local_index: struct_temp_index,
+                    is_mut: false,
+                    is_reactive: false,
+                    type_id: scrutinee.type_id,
+                    value: scrutinee.clone(),
+                },
+                span,
+            ));
+
+            let struct_fields_info = self.get_struct_fields(scrutinee.type_id, type_table);
+
+            for field in fields {
+                let field_type = struct_fields_info
+                    .as_ref()
+                    .and_then(|info| {
+                        info.iter()
+                            .find(|f| f.name == field.field_name)
+                            .map(|f| f.type_id)
+                    })
+                    .unwrap_or(TypeTable::UNKNOWN);
+
+                let field_access = TirExpr::new(
+                    TirExprKind::FieldAccess {
+                        expr: Box::new(TirExpr::new(
+                            TirExprKind::Local {
+                                index: struct_temp_index,
+                                name: struct_temp_name.clone(),
+                            },
+                            scrutinee.type_id,
+                            span,
+                        )),
+                        field_index: field.field_index,
+                        field_name: field.field_name.clone(),
+                    },
+                    field_type,
+                    span,
+                );
+
+                self.lower_pattern_to_lets(
+                    &field.pattern,
+                    false,
+                    field_access,
+                    span,
+                    out,
+                    type_table,
+                );
+            }
+
+            // Emit then block unconditionally (struct patterns are irrefutable)
+            self.lower_block(&mut then_block, type_table);
+            for s in then_block.stmts {
+                out.push(s);
             }
         }
     }
@@ -1643,6 +1879,46 @@ impl<'a> PatternLowerer<'a> {
                 );
                 // No bindings for enum patterns (no payload)
                 (condition, binding_stmts)
+            }
+            TirPattern::Struct { fields, .. } => {
+                // Struct patterns are always irrefutable — always match
+                // Extract fields into bindings
+                let struct_fields_info = self.get_struct_fields(scrutinee.type_id, type_table);
+
+                for field in fields {
+                    let field_type = struct_fields_info
+                        .as_ref()
+                        .and_then(|info| {
+                            info.iter()
+                                .find(|f| f.name == field.field_name)
+                                .map(|f| f.type_id)
+                        })
+                        .unwrap_or(TypeTable::UNKNOWN);
+
+                    let field_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(scrutinee.clone()),
+                            field_index: field.field_index,
+                            field_name: field.field_name.clone(),
+                        },
+                        field_type,
+                        span,
+                    );
+
+                    self.lower_pattern_to_lets(
+                        &field.pattern,
+                        false,
+                        field_access,
+                        span,
+                        &mut binding_stmts,
+                        type_table,
+                    );
+                }
+
+                (
+                    TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
+                    binding_stmts,
+                )
             }
             TirPattern::Tuple(_) | TirPattern::Literal(_) => {
                 // These shouldn't appear at the top level of IfPattern
@@ -4838,6 +5114,22 @@ impl ClosureLowerer {
                 enum_type: *enum_type,
                 case_name: case_name.clone(),
                 case_index: *case_index,
+            },
+            TirPattern::Struct {
+                struct_type,
+                fields,
+                has_rest,
+            } => TirPattern::Struct {
+                struct_type: *struct_type,
+                fields: fields
+                    .iter()
+                    .map(|f| crate::tir::TirStructPatternField {
+                        field_name: f.field_name.clone(),
+                        field_index: f.field_index,
+                        pattern: self.transform_closure_body_pattern(&f.pattern),
+                    })
+                    .collect(),
+                has_rest: *has_rest,
             },
         }
     }

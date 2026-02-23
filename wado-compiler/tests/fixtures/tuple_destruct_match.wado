@@ -1,0 +1,36 @@
+// Tuple destructuring in match expressions
+
+use { println, Stdout } from "core:cli";
+
+fn make_pair(n: i32) -> [i32, i32] {
+    return [n, n * 2];
+}
+
+export fn run() with Stdout {
+    let pair = make_pair(5);
+
+    // Match with tuple pattern and guards
+    let label = match pair {
+        [x, y] && x + y > 20 => "large",
+        [x, y] && x == y => "equal",
+        [x, y] => `{x}, {y}`,
+    };
+    println(label);
+
+    // Match with wildcard in tuple
+    let first = match pair {
+        [x, _] => x,
+    };
+    println(`{first}`);
+
+    // Match with variant containing tuple payload
+    let opt: Option<[i32, i32]> = Option::<[i32, i32]>::Some([3, 4]);
+    let sum = match opt {
+        Some([a, b]) => a + b,
+        None => 0,
+    };
+    println(`{sum}`);
+}
+
+__DATA__
+{"stdout": "5, 10\n5\n7\n"}

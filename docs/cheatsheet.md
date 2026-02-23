@@ -1613,7 +1613,6 @@ Wado intentionally does not support macros.
 - postfix `?` operator (error propagation)
 - JSX
 - Generic function/method type inference
-- Struct destructuring in patterns (`let { x, y } = point;`, designed in WEP)
 - Generic variant pattern matching (custom `Maybe<T>`)
 - `Result<T, E>` pattern matching
 
