@@ -26,6 +26,15 @@ fn compressed_data() -> Array<u8> {
     return data;
 }
 
+test "decompression" {
+    let compressed = compressed_data();
+    let decompressed = inflate_zlib(&compressed);
+    assert decompressed.len() == 1024;
+    assert decompressed[0] == 0;
+    assert decompressed[1] == 1;
+    assert decompressed[255] == 255;
+}
+
 export fn run() with Stdout {
     let compressed = compressed_data();
 
