@@ -1,0 +1,41 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "peter-jerry-ye/wasi/internal/coroutine"
+
+// Values
+pub fn current_coroutine() -> Coroutine
+
+pub fn has_immediately_ready_task() -> Bool
+
+pub fn is_being_cancelled() -> Bool
+
+pub fn no_more_work() -> Bool
+
+pub async fn pause() -> Unit
+
+pub async fn protect_from_cancel(async () -> Unit) -> Unit
+
+pub fn reschedule() -> Unit
+
+pub fn spawn(async () -> Unit) -> Coroutine
+
+pub async fn suspend() -> Unit
+
+// Errors
+pub(all) suberror Cancelled
+pub impl Show for Cancelled
+
+// Types and methods
+type Coroutine
+pub fn Coroutine::cancel(Self) -> Unit
+pub fn Coroutine::check_error(Self) -> Unit raise
+pub fn Coroutine::id(Self) -> Int
+pub fn Coroutine::unwrap(Self) -> Unit raise
+pub async fn Coroutine::wait(Self) -> Unit
+pub fn Coroutine::wake(Self) -> Unit
+pub impl Eq for Coroutine
+pub impl Hash for Coroutine
+
+// Type aliases
+
+// Traits
+

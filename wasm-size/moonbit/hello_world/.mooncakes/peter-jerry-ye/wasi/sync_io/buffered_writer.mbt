@@ -1,0 +1,92 @@
+// Copyright 2025 International Digital Economy Academy
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+///|
+/// A buffered writer with a fixed size buffer that wraps around a normal writer.
+/// Data will be buffered,
+/// instead of being comitted to the underlying writer immediately,
+/// unless the buffer is full or explicit flush is requested.
+/// Buffering can can improve performance for network connections etc.
+/// where small writes are expensive.
+///
+/// Always remember to call `flush` before writing directly to the underlying writer.
+/// Otherwise some data may remain uncommitted.
+struct BufferedWriter[W] {
+  writer : W
+  buf : FixedArray[Byte]
+  mut len : Int
+}
+
+///|
+/// Create a buffered writer with fixed buffer size `size`.
+pub fn[W] BufferedWriter::new(
+  writer : W,
+  size? : Int = 1024,
+) -> BufferedWriter[W] {
+  { writer, buf: FixedArray::make(size, 0), len: 0 }
+}
+
+///|
+/// Return the internal buffer size of a buffered writer.
+pub fn[W] BufferedWriter::capacity(self : BufferedWriter[W]) -> Int {
+  self.buf.length()
+}
+
+///|
+/// Flush all buffered data and commit them to the underlying writer.
+pub fn[W : Writer] BufferedWriter::flush(
+  self : BufferedWriter[W],
+) -> Unit raise {
+  if self.len > 0 {
+    self.writer.write_sync(self.buf.unsafe_reinterpret_as_bytes()[:self.len])
+    self.len = 0
+  }
+}
+
+///|
+/// Writer implementation that buffers writes.
+pub impl[W : Writer] Writer for BufferedWriter[W] with write_once_sync(
+  self,
+  buf,
+) {
+  if self.len >= self.buf.length() {
+    self.flush()
+  }
+  let len = @cmp.minimum(buf.length(), self.buf.length())
+  self.buf.blit_from_bytesview(self.len, buf[:len])
+  self.len += len
+  len
+}
+
+///|
+/// Writer implementation that consumes a reader into the buffer.
+pub impl[W : Writer] Writer for BufferedWriter[W] with write_reader_sync(
+  self,
+  reader,
+) {
+  for {
+    if self.len >= self.buf.length() {
+      self.flush()
+    }
+    let n = reader.read_sync(
+      self.buf,
+      offset=self.len,
+      max_len=self.buf.length() - self.len,
+    )
+    if n == 0 {
+      break
+    }
+    self.len += n
+  }
+}

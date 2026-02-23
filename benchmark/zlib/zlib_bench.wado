@@ -11,6 +11,18 @@ use {println, Stdout} from "core:cli";
 use {now, MonotonicClock} from "core:clocks";
 use {zlib_compress, inflate_zlib} from "core:zlib";
 
+test "compression round-trip" {
+    let mut data: Array<u8> = [];
+    for let mut i = 0; i < 100; i += 1 {
+        data.append((i % 256) as u8);
+    }
+    let compressed = zlib_compress(&data);
+    let decompressed = inflate_zlib(&compressed);
+    assert decompressed.len() == 100;
+    assert decompressed[0] == 0;
+    assert decompressed[99] == 99;
+}
+
 export fn run() with Stdout, MonotonicClock {
     let size = 100000;
     let iterations = 10;

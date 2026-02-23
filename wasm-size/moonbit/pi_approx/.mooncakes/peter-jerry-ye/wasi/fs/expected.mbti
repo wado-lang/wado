@@ -1,0 +1,108 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "moonbitlang/async/fs"
+
+import(
+  "moonbitlang/async/io"
+)
+
+// Values
+pub async fn atime(StringView, follow_symlink? : Bool) -> (Int64, Int)
+
+pub async fn can_execute(StringView) -> Bool
+
+pub async fn can_read(StringView) -> Bool
+
+pub async fn can_write(StringView) -> Bool
+
+pub async fn chmod(StringView, Int) -> Unit
+
+pub async fn create(StringView, permission~ : Int, sync? : SyncMode) -> File
+
+pub async fn ctime(StringView, follow_symlink? : Bool) -> (Int64, Int)
+
+pub async fn exists(StringView) -> Bool
+
+pub async fn kind(StringView, follow_symlink? : Bool) -> FileKind
+
+pub async fn mkdir(StringView, permission~ : Int) -> Unit
+
+pub async fn mtime(StringView, follow_symlink? : Bool) -> (Int64, Int)
+
+pub async fn open(StringView, mode~ : Mode, sync? : SyncMode, append? : Bool, create? : Int, truncate? : Bool) -> File
+
+pub async fn opendir(StringView) -> Directory
+
+pub async fn read_file(StringView, sync_timestamp? : Bool) -> &@io.Data
+
+#deprecated
+pub async fn read_text_file(StringView, encoding~ : @io.Encoding) -> String
+
+pub async fn readdir(StringView, include_hidden? : Bool, include_special? : Bool, sort? : Bool) -> Array[String]
+
+pub async fn realpath(StringView) -> String
+
+pub async fn remove(StringView) -> Unit
+
+pub async fn rmdir(StringView, recursive? : Bool) -> Unit
+
+pub async fn symlink(target~ : StringView, StringView) -> Unit
+
+pub async fn walk(StringView, async (String, Array[String]) -> Unit, max_concurrency? : Int, allow_failure? : Bool) -> Unit
+
+pub async fn write_file(StringView, &@io.Data, sync? : SyncMode, append? : Bool, create? : Int, truncate? : Bool) -> Unit
+
+#deprecated
+pub async fn write_text_file(StringView, String, encoding~ : @io.Encoding, sync? : SyncMode, append? : Bool, create? : Int, truncate? : Bool) -> Unit
+
+// Errors
+
+// Types and methods
+type Directory
+pub fn Directory::close(Self) -> Unit
+pub async fn Directory::read_all(Self, include_hidden? : Bool, include_special? : Bool) -> Array[String]
+
+type File
+pub fn File::as_dir(Self) -> Directory raise
+pub async fn File::atime(Self) -> (Int64, Int)
+pub fn File::close(Self) -> Unit
+pub async fn File::ctime(Self) -> (Int64, Int)
+pub fn File::fd(Self) -> Int
+pub fn File::kind(Self) -> FileKind
+pub async fn File::mtime(Self) -> (Int64, Int)
+pub async fn File::read_at(Self, FixedArray[Byte], position~ : Int64, offset? : Int, len? : Int) -> Int
+pub async fn File::read_exactly_at(Self, Int, position~ : Int64) -> Bytes
+pub async fn File::size(Self) -> Int64
+pub async fn File::sync(Self, only_data? : Bool) -> Unit
+pub async fn File::write_at(Self, BytesView, position~ : Int64) -> Unit
+pub impl @io.Reader for File
+pub impl @io.Writer for File
+
+pub(all) enum FileKind {
+  Unknown
+  Regular
+  Directory
+  SymLink
+  Socket
+  Pipe
+  BlockDevice
+  CharDevice
+}
+pub impl Eq for FileKind
+pub impl Show for FileKind
+
+pub(all) enum Mode {
+  ReadOnly
+  WriteOnly
+  ReadWrite
+}
+
+pub(all) enum SyncMode {
+  NoSync
+  Data
+  Full
+}
+
+// Type aliases
+
+// Traits
+
