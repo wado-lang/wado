@@ -28,7 +28,9 @@ Compares WebAssembly binary sizes across different languages.
 | c              |        2,275 |
 | zig            |        4,449 |
 | assemblyscript |        6,913 |
+| moonbit        |       21,103 |
 | rust           |       42,587 |
+| tinygo         |      162,341 |
 
 ### pi_approx
 
@@ -38,7 +40,9 @@ Compares WebAssembly binary sizes across different languages.
 | zig            |       10,608 |
 | assemblyscript |       11,372 |
 | c              |       14,275 |
+| moonbit        |       31,133 |
 | rust           |       62,952 |
+| tinygo         |      187,167 |
 
 ### zlib
 

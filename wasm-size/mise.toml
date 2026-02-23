@@ -11,7 +11,7 @@
 [tools]
 node = "latest"
 zig = "latest"
-go = "latest"
+go = "1.25"                              # TinyGo 0.40.x requires go <= 1.25
 wasmtime = "41"                        # matches project's Cargo.toml
 "github:tinygo-org/tinygo" = "latest"  # TinyGo (needs go)
 "github:WebAssembly/wasi-sdk" = "latest" # clang + wasm-ld + wasi-sysroot
@@ -134,12 +134,14 @@ run = """
 set -e
 mkdir -p "$OUT_DIR"
 
+export PATH="$HOME/.moon/bin:$PATH"
+
 if command -v moon >/dev/null 2>&1; then
     echo "Building Moonbit..."
     (cd hello_world && moon build --target wasm --release --strip)
     (cd pi_approx && moon build --target wasm --release --strip)
-    cp hello_world/_build/wasm/release/build/main.wasm "$OUT_DIR/hello_world_moonbit.wasm"
-    cp pi_approx/_build/wasm/release/build/main.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
+    cp hello_world/_build/wasm/release/build/hello_world.wasm "$OUT_DIR/hello_world_moonbit.wasm"
+    cp pi_approx/_build/wasm/release/build/pi_approx.wasm "$OUT_DIR/pi_approx_moonbit.wasm"
 else
     echo "SKIP: Moonbit (curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash)"
 fi
