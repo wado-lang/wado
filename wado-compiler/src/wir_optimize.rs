@@ -192,7 +192,11 @@ fn match_field_get(
     field_count: usize,
     already_bound: &[Option<String>],
 ) -> Option<(usize, String)> {
-    let WirInstr::LocalSet { name: target, value } = instr else {
+    let WirInstr::LocalSet {
+        name: target,
+        value,
+    } = instr
+    else {
         return None;
     };
     let WirInstr::StructGet {
