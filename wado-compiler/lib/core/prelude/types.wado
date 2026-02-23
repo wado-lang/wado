@@ -38,8 +38,28 @@ pub resource FutureWritable<T> {
 /// Stream type - readable end of an async sequence (WASI Component Model primitive).
 /// This is an opaque i32 handle managed by the runtime.
 ///
-/// Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, i32]`
-/// where the second element is the writable handle (tx).
+/// Use `Stream::<T>::new()` to create a new stream pair `[Stream<T>, StreamWritable<T>]`.
+/// The readable end (`Stream<T>`) is passed to consumers; the writable end (`StreamWritable<T>`)
+/// is used by the producer to write data into the stream.
 pub resource Stream<T> {
-    fn new() -> [Stream<T>, i32];
+    fn new() -> [Stream<T>, StreamWritable<T>];
+    /// Read up to `max` elements from the stream.
+    /// Blocks until data is available or the writer closes.
+    /// Returns an empty array on end-of-stream.
+    fn read(&self, max: i32) -> Array<T>;
+    /// Close the readable end of the stream.
+    fn close(&self);
+}
+
+/// StreamWritable type - writable end of an async sequence (WASI Component Model primitive).
+/// This is an opaque i32 handle managed by the runtime.
+///
+/// Obtained from `Stream::<T>::new()`. Call `write(data)` to send data,
+/// or `close()` to signal end-of-stream (maps to `stream.drop-writable`).
+pub resource StreamWritable<T> {
+    /// Write a chunk of data to the stream.
+    /// Can be called multiple times for successive chunks.
+    fn write(&self, data: Array<T>);
+    /// Close the writable end, signaling end-of-stream.
+    fn close(&self);
 }

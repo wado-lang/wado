@@ -1112,6 +1112,20 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
+                // Special case: Stream::read / Stream::close
+                if let Some(instr) =
+                    self.try_translate_stream_method(receiver, func, args, expr.type_id)
+                {
+                    return instr;
+                }
+
+                // Special case: StreamWritable::write / StreamWritable::close
+                if let Some(instr) =
+                    self.try_translate_stream_writable_method(receiver, func, args)
+                {
+                    return instr;
+                }
+
                 let mut translated_args: Vec<WirInstr> = Vec::new();
                 // Receiver is always included (self/&self/&mut self is never unit)
                 translated_args.push(self.translate_expr(receiver));
@@ -2689,6 +2703,627 @@ impl FunctionTranslator<'_, '_> {
             do_write,
             free_mem,
         ])
+    }
+
+    // =========================================================================
+    // Stream method interception
+    // =========================================================================
+
+    /// Check if a method call is on a `Stream<T>` receiver.
+    /// Handles: `read(max)` and `close()`.
+    fn try_translate_stream_method(
+        &mut self,
+        receiver: &TirExpr,
+        func: &FunctionRef,
+        args: &[TirExpr],
+        result_type_id: TypeId,
+    ) -> Option<WirInstr> {
+        let mut recv_type = self.type_table.get(receiver.type_id).clone();
+        loop {
+            match &recv_type {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    let inner = *inner;
+                    recv_type = self.type_table.get(inner).clone();
+                }
+                _ => break,
+            }
+        }
+        if !matches!(recv_type, ResolvedType::Stream(_)) {
+            return None;
+        }
+        let method_name = func.method_info()?.method_name.clone();
+        let handle = self.translate_expr(receiver);
+        match method_name.as_str() {
+            "close" => Some(self.emit_stream_drop_readable(handle)),
+            "read" => {
+                let max_arg = self.translate_expr(&args[0]);
+                Some(self.emit_stream_read(handle, max_arg, result_type_id))
+            }
+            _ => None,
+        }
+    }
+
+    /// Emit `stream_drop_readable(handle)`.
+    fn emit_stream_drop_readable(&self, handle: WirInstr) -> WirInstr {
+        let Some(func_id) = self
+            .ctx
+            .func_map
+            .get("builtin/stream_drop_readable")
+            .cloned()
+        else {
+            return WirInstr::Unreachable;
+        };
+        WirInstr::Call {
+            func_id,
+            args: vec![handle],
+        }
+    }
+
+    /// Emit WIR for `Stream<u8>::read(max) -> Array<u8>`.
+    ///
+    /// 1. Allocate `max` bytes in linear memory
+    /// 2. Call `stream_read(rx, ptr, max)` → raw_result
+    /// 3. If BLOCKED (0xFFFF_FFFF), wait via waitable-set, re-read result
+    /// 4. Extract count = raw_result >> 4
+    /// 5. Copy from linear memory to GC array
+    /// 6. Free linear memory
+    /// 7. Wrap in Array<u8> struct
+    fn emit_stream_read(
+        &mut self,
+        handle: WirInstr,
+        max_arg: WirInstr,
+        result_type_id: TypeId,
+    ) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(stream_read_id) = self.ctx.func_map.get("builtin/stream_read").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(ws_new_id) = self.ctx.func_map.get("builtin/waitable_set_new").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(w_join_id) = self.ctx.func_map.get("builtin/waitable_join").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(ws_wait_id) = self.ctx.func_map.get("builtin/waitable_set_wait").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let ptr_name = format!("__sr_ptr_{suffix}");
+        let max_name = format!("__sr_max_{suffix}");
+        let result_name = format!("__sr_result_{suffix}");
+        let handle_name = format!("__sr_handle_{suffix}");
+        let count_name = format!("__sr_count_{suffix}");
+        let evt_ptr_name = format!("__sr_evtptr_{suffix}");
+        let repr_name = format!("__sr_repr_{suffix}");
+        let idx_name = format!("__sr_idx_{suffix}");
+
+        let mut instrs = vec![];
+
+        // Declare locals
+        for (name, ty) in [
+            (&handle_name, WirType::I32),
+            (&max_name, WirType::I32),
+            (&ptr_name, WirType::I32),
+            (&result_name, WirType::I32),
+            (&count_name, WirType::I32),
+        ] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+
+        // Save handle and max
+        instrs.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(handle),
+        });
+        instrs.push(WirInstr::LocalSet {
+            name: max_name.clone(),
+            value: Box::new(max_arg),
+        });
+
+        // ptr = realloc(0, 0, 1, max)
+        instrs.push(WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: realloc_id.clone(),
+                args: vec![
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(0),
+                    WirInstr::I32Const(1),
+                    WirInstr::LocalGet {
+                        name: max_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // result = stream_read(handle, ptr, max)
+        instrs.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: stream_read_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: handle_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: ptr_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: max_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // If result == 0xFFFF_FFFF (BLOCKED), wait via waitable-set
+        instrs.push(WirInstr::If {
+            condition: Box::new(WirInstr::I32Eq(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.clone(),
+                }),
+                Box::new(WirInstr::I32Const(-1)), // 0xFFFF_FFFF as i32
+            )),
+            result: None,
+            then_body: {
+                let evt = evt_ptr_name.clone();
+                vec![
+                    WirInstr::DeclareLocal {
+                        name: evt.clone(),
+                        ty: WirType::I32,
+                    },
+                    // ws = waitable_set_new() — reuse result_name as temp
+                    WirInstr::LocalSet {
+                        name: result_name.clone(),
+                        value: Box::new(WirInstr::Call {
+                            func_id: ws_new_id,
+                            args: vec![],
+                        }),
+                    },
+                    // waitable_join(handle, ws)
+                    WirInstr::Call {
+                        func_id: w_join_id,
+                        args: vec![
+                            WirInstr::LocalGet {
+                                name: handle_name.clone(),
+                            },
+                            WirInstr::LocalGet {
+                                name: result_name.clone(),
+                            },
+                        ],
+                    },
+                    // evt_ptr = realloc(0, 0, 4, 8)
+                    WirInstr::LocalSet {
+                        name: evt.clone(),
+                        value: Box::new(WirInstr::Call {
+                            func_id: realloc_id.clone(),
+                            args: vec![
+                                WirInstr::I32Const(0),
+                                WirInstr::I32Const(0),
+                                WirInstr::I32Const(4),
+                                WirInstr::I32Const(8),
+                            ],
+                        }),
+                    },
+                    // waitable_set_wait(ws, evt_ptr)
+                    WirInstr::Drop(Box::new(WirInstr::Call {
+                        func_id: ws_wait_id,
+                        args: vec![
+                            WirInstr::LocalGet {
+                                name: result_name.clone(),
+                            },
+                            WirInstr::LocalGet { name: evt.clone() },
+                        ],
+                    })),
+                    // result = i32.load(evt_ptr + 4)
+                    WirInstr::LocalSet {
+                        name: result_name.clone(),
+                        value: Box::new(WirInstr::I32Load {
+                            offset: 4,
+                            align: 2,
+                            addr: Box::new(WirInstr::LocalGet { name: evt.clone() }),
+                        }),
+                    },
+                    // Free event buffer
+                    WirInstr::Drop(Box::new(WirInstr::Call {
+                        func_id: realloc_id.clone(),
+                        args: vec![
+                            WirInstr::LocalGet { name: evt },
+                            WirInstr::I32Const(8),
+                            WirInstr::I32Const(4),
+                            WirInstr::I32Const(0),
+                        ],
+                    })),
+                ]
+            },
+            else_body: None,
+        });
+
+        // count = result >> 4
+        instrs.push(WirInstr::LocalSet {
+            name: count_name.clone(),
+            value: Box::new(WirInstr::I32ShrU(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.clone(),
+                }),
+                Box::new(WirInstr::I32Const(4)),
+            )),
+        });
+
+        // Resolve the Array<u8> struct type and its repr field's array type
+        let array_wir_type = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, result_type_id);
+        let array_struct_type_id = match array_wir_type {
+            WirType::Ref { type_id, .. } => type_id,
+            _ => return WirInstr::Unreachable,
+        };
+        let repr_array_type_id =
+            match &self.ctx.types[array_struct_type_id.index() as usize] {
+                WirTypeDef::Struct(s) => match &s.fields[0].ty {
+                    WirType::Ref { type_id, .. } => type_id.clone(),
+                    _ => return WirInstr::Unreachable,
+                },
+                _ => return WirInstr::Unreachable,
+            };
+
+        // repr = array.new_default $i32_array count
+        instrs.push(WirInstr::DeclareLocal {
+            name: repr_name.clone(),
+            ty: WirType::Ref {
+                type_id: repr_array_type_id.clone(),
+                nullable: false,
+            },
+        });
+        instrs.push(WirInstr::LocalSet {
+            name: repr_name.clone(),
+            value: Box::new(WirInstr::ArrayNewDefault {
+                type_id: repr_array_type_id.clone(),
+                len: Box::new(WirInstr::LocalGet {
+                    name: count_name.clone(),
+                }),
+            }),
+        });
+
+        // Loop: repr[i] = i32.load8_u(ptr + i) for i in 0..count
+        instrs.push(WirInstr::DeclareLocal {
+            name: idx_name.clone(),
+            ty: WirType::I32,
+        });
+        instrs.push(WirInstr::LocalSet {
+            name: idx_name.clone(),
+            value: Box::new(WirInstr::I32Const(0)),
+        });
+        instrs.push(WirInstr::Block {
+            label: Some(format!("__sr_brk_{suffix}")),
+            result: None,
+            body: vec![WirInstr::Loop {
+                label: Some(format!("__sr_lp_{suffix}")),
+                body: vec![
+                    // br_if $break (i >= count)
+                    WirInstr::BrIf {
+                        depth: 1,
+                        condition: Box::new(WirInstr::I32GeU(
+                            Box::new(WirInstr::LocalGet {
+                                name: idx_name.clone(),
+                            }),
+                            Box::new(WirInstr::LocalGet {
+                                name: count_name.clone(),
+                            }),
+                        )),
+                    },
+                    // repr[i] = i32.load8_u(ptr + i)
+                    WirInstr::ArraySet {
+                        type_id: repr_array_type_id,
+                        array: Box::new(WirInstr::LocalGet {
+                            name: repr_name.clone(),
+                        }),
+                        index: Box::new(WirInstr::LocalGet {
+                            name: idx_name.clone(),
+                        }),
+                        value: Box::new(WirInstr::I32Load8U {
+                            offset: 0,
+                            align: 0,
+                            addr: Box::new(WirInstr::I32Add(
+                                Box::new(WirInstr::LocalGet {
+                                    name: ptr_name.clone(),
+                                }),
+                                Box::new(WirInstr::LocalGet {
+                                    name: idx_name.clone(),
+                                }),
+                            )),
+                        }),
+                    },
+                    // i += 1
+                    WirInstr::LocalSet {
+                        name: idx_name.clone(),
+                        value: Box::new(WirInstr::I32Add(
+                            Box::new(WirInstr::LocalGet {
+                                name: idx_name.clone(),
+                            }),
+                            Box::new(WirInstr::I32Const(1)),
+                        )),
+                    },
+                    // br $loop
+                    WirInstr::Br { depth: 0 },
+                ],
+            }],
+        });
+
+        // Free linear memory: realloc(ptr, max, 1, 0)
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet { name: ptr_name },
+                WirInstr::LocalGet { name: max_name },
+                WirInstr::I32Const(1),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        // Create Array<u8> struct: { repr, used: count }
+        instrs.push(self.struct_new(
+            array_struct_type_id,
+            vec![
+                WirInstr::LocalGet { name: repr_name },
+                WirInstr::LocalGet { name: count_name },
+            ],
+        ));
+
+        WirInstr::Seq(instrs)
+    }
+
+    // =========================================================================
+    // StreamWritable method interception
+    // =========================================================================
+
+    /// Check if a method call is on a `StreamWritable<T>` receiver.
+    /// Handles: `write(data)` and `close()`.
+    fn try_translate_stream_writable_method(
+        &mut self,
+        receiver: &TirExpr,
+        func: &FunctionRef,
+        args: &[TirExpr],
+    ) -> Option<WirInstr> {
+        let mut recv_type = self.type_table.get(receiver.type_id).clone();
+        loop {
+            match &recv_type {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                    let inner = *inner;
+                    recv_type = self.type_table.get(inner).clone();
+                }
+                _ => break,
+            }
+        }
+        if !matches!(recv_type, ResolvedType::StreamWritable(_)) {
+            return None;
+        }
+        let method_name = func.method_info()?.method_name.clone();
+        let handle = self.translate_expr(receiver);
+        match method_name.as_str() {
+            "close" => Some(self.emit_stream_drop_writable(handle)),
+            "write" => {
+                let data_arg = self.translate_expr(&args[0]);
+                Some(self.emit_stream_write(handle, data_arg))
+            }
+            _ => None,
+        }
+    }
+
+    /// Emit `stream_drop_writable(handle)`.
+    fn emit_stream_drop_writable(&self, handle: WirInstr) -> WirInstr {
+        let Some(func_id) = self
+            .ctx
+            .func_map
+            .get("builtin/stream_drop_writable")
+            .cloned()
+        else {
+            return WirInstr::Unreachable;
+        };
+        WirInstr::Call {
+            func_id,
+            args: vec![handle],
+        }
+    }
+
+    /// Emit WIR for `StreamWritable<u8>::write(data: Array<u8>)`.
+    ///
+    /// 1. Lower Array<u8> to linear memory via cm_lower_array_u8
+    /// 2. Call stream_write(tx, ptr, len)
+    /// 3. Handle BLOCKED via waitable-set
+    /// 4. Free linear memory
+    fn emit_stream_write(&mut self, handle: WirInstr, data_arg: WirInstr) -> WirInstr {
+        let Some(realloc_id) = self.ctx.func_map.get("builtin/realloc").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(stream_write_id) = self.ctx.func_map.get("builtin/stream_write").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(cm_lower_id) = self
+            .ctx
+            .func_map
+            .get("core:internal/cm_lower_array_u8")
+            .cloned()
+        else {
+            return WirInstr::Unreachable;
+        };
+        let Some(ws_new_id) = self.ctx.func_map.get("builtin/waitable_set_new").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(w_join_id) = self.ctx.func_map.get("builtin/waitable_join").cloned() else {
+            return WirInstr::Unreachable;
+        };
+        let Some(ws_wait_id) = self.ctx.func_map.get("builtin/waitable_set_wait").cloned() else {
+            return WirInstr::Unreachable;
+        };
+
+        self.local_counter += 1;
+        let suffix = self.local_counter;
+        let handle_name = format!("__sw_handle_{suffix}");
+        let packed_name = format!("__sw_packed_{suffix}");
+        let ptr_name = format!("__sw_ptr_{suffix}");
+        let len_name = format!("__sw_len_{suffix}");
+        let result_name = format!("__sw_result_{suffix}");
+        let evt_name = format!("__sw_evt_{suffix}");
+
+        let mut instrs = vec![];
+
+        // Declare locals
+        for (name, ty) in [
+            (&handle_name, WirType::I32),
+            (&ptr_name, WirType::I32),
+            (&len_name, WirType::I32),
+            (&result_name, WirType::I32),
+        ] {
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty,
+            });
+        }
+        instrs.push(WirInstr::DeclareLocal {
+            name: packed_name.clone(),
+            ty: WirType::I64,
+        });
+
+        // Save handle
+        instrs.push(WirInstr::LocalSet {
+            name: handle_name.clone(),
+            value: Box::new(handle),
+        });
+
+        // packed = cm_lower_array_u8(data) → i64 (ptr | (len << 32))
+        instrs.push(WirInstr::LocalSet {
+            name: packed_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: cm_lower_id,
+                args: vec![data_arg],
+            }),
+        });
+
+        // ptr = packed as i32
+        instrs.push(WirInstr::LocalSet {
+            name: ptr_name.clone(),
+            value: Box::new(WirInstr::I32WrapI64(Box::new(WirInstr::LocalGet {
+                name: packed_name.clone(),
+            }))),
+        });
+        // len = (packed >> 32) as i32
+        instrs.push(WirInstr::LocalSet {
+            name: len_name.clone(),
+            value: Box::new(WirInstr::I32WrapI64(Box::new(WirInstr::I64ShrU(
+                Box::new(WirInstr::LocalGet {
+                    name: packed_name.clone(),
+                }),
+                Box::new(WirInstr::I64Const(32)),
+            )))),
+        });
+
+        // result = stream_write(handle, ptr, len)
+        instrs.push(WirInstr::LocalSet {
+            name: result_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: stream_write_id,
+                args: vec![
+                    WirInstr::LocalGet {
+                        name: handle_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: ptr_name.clone(),
+                    },
+                    WirInstr::LocalGet {
+                        name: len_name.clone(),
+                    },
+                ],
+            }),
+        });
+
+        // If result == BLOCKED (-1), wait via waitable-set
+        instrs.push(WirInstr::If {
+            condition: Box::new(WirInstr::I32Eq(
+                Box::new(WirInstr::LocalGet {
+                    name: result_name.clone(),
+                }),
+                Box::new(WirInstr::I32Const(-1)),
+            )),
+            result: None,
+            then_body: vec![
+                WirInstr::DeclareLocal {
+                    name: evt_name.clone(),
+                    ty: WirType::I32,
+                },
+                WirInstr::LocalSet {
+                    name: result_name.clone(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: ws_new_id,
+                        args: vec![],
+                    }),
+                },
+                WirInstr::Call {
+                    func_id: w_join_id,
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: handle_name.clone(),
+                        },
+                        WirInstr::LocalGet {
+                            name: result_name.clone(),
+                        },
+                    ],
+                },
+                WirInstr::LocalSet {
+                    name: evt_name.clone(),
+                    value: Box::new(WirInstr::Call {
+                        func_id: realloc_id.clone(),
+                        args: vec![
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(0),
+                            WirInstr::I32Const(4),
+                            WirInstr::I32Const(8),
+                        ],
+                    }),
+                },
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: ws_wait_id,
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: result_name.clone(),
+                        },
+                        WirInstr::LocalGet {
+                            name: evt_name.clone(),
+                        },
+                    ],
+                })),
+                WirInstr::Drop(Box::new(WirInstr::Call {
+                    func_id: realloc_id.clone(),
+                    args: vec![
+                        WirInstr::LocalGet {
+                            name: evt_name.clone(),
+                        },
+                        WirInstr::I32Const(8),
+                        WirInstr::I32Const(4),
+                        WirInstr::I32Const(0),
+                    ],
+                })),
+            ],
+            else_body: None,
+        });
+
+        // Free linear memory: realloc(ptr, len, 1, 0)
+        instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+            func_id: realloc_id,
+            args: vec![
+                WirInstr::LocalGet { name: ptr_name },
+                WirInstr::LocalGet { name: len_name },
+                WirInstr::I32Const(1),
+                WirInstr::I32Const(0),
+            ],
+        })));
+
+        WirInstr::Seq(instrs)
     }
 
     /// Translate array index read: `arr[i]`

@@ -1147,6 +1147,8 @@ pub enum TypeNameInfo {
     Array(String),
     /// Stream<T> with inner type name
     Stream(String),
+    /// `StreamWritable`<T> with inner type name
+    StreamWritable(String),
     /// Future<T> with inner type name
     Future(String),
     /// `FutureWritable`<T> with inner type name
@@ -1178,6 +1180,7 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
         } => mangle_fn_type(param_count, &return_type),
         TypeNameInfo::Array(elem) => mangle_array_type(&elem),
         TypeNameInfo::Stream(inner) => mangle_generic_name("Stream", &[inner]),
+        TypeNameInfo::StreamWritable(inner) => mangle_generic_name("StreamWritable", &[inner]),
         TypeNameInfo::Future(inner) => mangle_generic_name("Future", &[inner]),
         TypeNameInfo::FutureWritable(inner) => mangle_generic_name("FutureWritable", &[inner]),
         TypeNameInfo::Reactive(inner) => mangle_generic_name("Reactive", &[inner]),

@@ -14,8 +14,14 @@
 #[canonical("wasi", "stream-new")]
 fn stream_new() -> i64;
 
+/// Read data from a stream into linear memory
+/// Returns BLOCKED (0xFFFF_FFFF) or copy_result | (count << 4)
+/// copy_result: 0=COMPLETED, 1=DROPPED (writer closed)
+#[canonical("wasi", "stream-read")]
+fn stream_read(rx: i32, ptr: i32, len: i32) -> i32;
+
 /// Write data from linear memory to a stream
-/// Returns the number of bytes written
+/// Returns BLOCKED (0xFFFF_FFFF) or copy_result | (count << 4)
 #[canonical("wasi", "stream-write")]
 fn stream_write(tx: i32, ptr: i32, len: i32) -> i32;
 

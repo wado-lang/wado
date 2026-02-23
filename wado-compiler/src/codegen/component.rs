@@ -723,6 +723,15 @@ fn emit_canonical_intrinsics(
                     ],
                 );
             }
+            "stream-read" => {
+                builder.stream_read(
+                    stream_u8_type,
+                    [
+                        CanonicalOption::Memory(ctx.memory_idx()),
+                        CanonicalOption::Realloc(ctx.core_func_idx("realloc")),
+                    ],
+                );
+            }
             "stream-drop-writable" => {
                 builder.stream_drop_writable(stream_u8_type);
             }

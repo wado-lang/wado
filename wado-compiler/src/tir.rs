@@ -155,6 +155,10 @@ impl SubstitutionContext {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.intern(ResolvedType::Stream(new_inner))
             }
+            ResolvedType::StreamWritable(inner) => {
+                let new_inner = self.substitute(inner, type_table);
+                type_table.intern(ResolvedType::StreamWritable(new_inner))
+            }
             ResolvedType::Future(inner) => {
                 let new_inner = self.substitute(inner, type_table);
                 type_table.intern(ResolvedType::Future(new_inner))
@@ -269,6 +273,7 @@ pub enum ResolvedType {
     // Key requirement: Option<Option<T>> MUST NOT use NullableRef (ambiguous null).
     // See wep-2026-02-09-variant-independent-types.md for the general optimization strategy.
     Stream(TypeId),
+    StreamWritable(TypeId),
     Future(TypeId),
     FutureWritable(TypeId),
     Ref(TypeId),
@@ -744,6 +749,7 @@ impl TypeTable {
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::Stream(inner)
+            | ResolvedType::StreamWritable(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner) => self.contains_type_param(*inner),
@@ -780,6 +786,7 @@ impl TypeTable {
             // For Stream, Future, etc., the inner type is a type argument
             // Check if that type argument is itself generic (i.e., nested)
             ResolvedType::Stream(inner)
+            | ResolvedType::StreamWritable(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner)
@@ -811,6 +818,7 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::GenericInstance { .. }
             | ResolvedType::Stream(_)
+            | ResolvedType::StreamWritable(_)
             | ResolvedType::Future(_)
             | ResolvedType::FutureWritable(_)
             | ResolvedType::BuiltinArray(_) => true,
@@ -861,6 +869,9 @@ impl TypeTable {
             ResolvedType::MutRef(inner) => format!("&mut {}", self.type_name(*inner)),
             ResolvedType::Variant { name, .. } => name.clone(),
             ResolvedType::Stream(inner) => format!("Stream<{}>", self.type_name(*inner)),
+            ResolvedType::StreamWritable(inner) => {
+                format!("StreamWritable<{}>", self.type_name(*inner))
+            }
             ResolvedType::Future(inner) => format!("Future<{}>", self.type_name(*inner)),
             ResolvedType::FutureWritable(inner) => {
                 format!("FutureWritable<{}>", self.type_name(*inner))
@@ -958,6 +969,9 @@ impl TypeTable {
                 TypeNameInfo::Ref(self.mangle_type_name(*inner))
             }
             ResolvedType::Stream(inner) => TypeNameInfo::Stream(self.mangle_type_name(*inner)),
+            ResolvedType::StreamWritable(inner) => {
+                TypeNameInfo::StreamWritable(self.mangle_type_name(*inner))
+            }
             ResolvedType::Future(inner) => TypeNameInfo::Future(self.mangle_type_name(*inner)),
             ResolvedType::FutureWritable(inner) => {
                 TypeNameInfo::FutureWritable(self.mangle_type_name(*inner))

@@ -220,6 +220,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), Some(module_source.clone()), None, None),
+            // Stream<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::Stream(inner) => (
+                "Stream".to_string(),
+                Some(ModuleSource::types()),
+                Some(vec![*inner]),
+                None,
+            ),
+            // StreamWritable<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::StreamWritable(inner) => (
+                "StreamWritable".to_string(),
+                Some(ModuleSource::types()),
+                Some(vec![*inner]),
+                None,
+            ),
             // FutureWritable<T> - resource methods declared in core:prelude/types.wado
             ResolvedType::FutureWritable(inner) => (
                 "FutureWritable".to_string(),
@@ -467,30 +481,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if let Item::Resource(resource) = item
                     && resource.name == struct_name
                 {
-                    for method in &resource.methods {
-                        if method.name == method_name {
-                            // Check if this is an instance method (has self parameter)
-                            let has_self = method.params.iter().any(|p| {
-                                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
-                                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
-                                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
-                            });
-                            if has_self {
-                                let return_type = method
-                                    .return_type
-                                    .as_ref()
-                                    .map(|t| self.resolve_type(t))
-                                    .unwrap_or(TypeTable::UNIT);
-                                let param_types = self.extract_param_types(&method.params);
-                                // Resource instance methods use &self (Ref) by default
-                                return Some(MethodInfo {
-                                    return_type,
-                                    self_kind: ast::SelfKind::Ref,
-                                    param_types,
-                                    inherited_from_base: None,
-                                });
-                            }
-                        }
+                    if let Some(info) = self.find_resource_method_info(
+                        resource,
+                        method_name,
+                        receiver_type_args.as_deref(),
+                    ) {
+                        return Some(info);
                     }
                 }
             }
@@ -503,30 +499,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     if let Item::Resource(resource) = item
                         && resource.name == struct_name
                     {
-                        for method in &resource.methods {
-                            if method.name == method_name {
-                                // Check if this is an instance method (has self parameter)
-                                let has_self = method.params.iter().any(|p| {
-                                    matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
-                                        if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name))
-                                        || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == struct_name)
-                                });
-                                if has_self {
-                                    let return_type = method
-                                        .return_type
-                                        .as_ref()
-                                        .map(|t| self.resolve_type(t))
-                                        .unwrap_or(TypeTable::UNIT);
-                                    let param_types = self.extract_param_types(&method.params);
-                                    // Resource instance methods use &self (Ref) by default
-                                    return Some(MethodInfo {
-                                        return_type,
-                                        self_kind: ast::SelfKind::Ref,
-                                        param_types,
-                                        inherited_from_base: None,
-                                    });
-                                }
-                            }
+                        if let Some(info) = self.find_resource_method_info(
+                            resource,
+                            method_name,
+                            receiver_type_args.as_deref(),
+                        ) {
+                            return Some(info);
                         }
                     }
                 }
@@ -550,6 +528,56 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return None;
         }
 
+        None
+    }
+
+    /// Find a method in a resource declaration, with proper type parameter setup.
+    fn find_resource_method_info(
+        &mut self,
+        resource: &ast::ResourceDecl,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<MethodInfo> {
+        for method in &resource.methods {
+            if method.name != method_name {
+                continue;
+            }
+            let has_self = method.params.iter().any(|p| {
+                matches!(&p.ty, ast::Type::Reference(r) | ast::Type::MutReference(r)
+                    if matches!(&**r, ast::Type::Named(n) if n.name == "Self" || n.name == resource.name))
+                    || matches!(&p.ty, ast::Type::Named(n) if n.name == "Self" || n.name == resource.name)
+            });
+            if !has_self {
+                continue;
+            }
+
+            // Set up type params for generic resources (e.g., resource Stream<T>)
+            let old_type_params = std::mem::take(&mut self.current_type_params);
+            if let Some(type_args) = receiver_type_args {
+                for (i, param) in resource.type_params.iter().enumerate() {
+                    if i < type_args.len() {
+                        self.current_type_params
+                            .insert(param.name.clone(), (i as u32, type_args[i]));
+                    }
+                }
+            }
+
+            let return_type = method
+                .return_type
+                .as_ref()
+                .map(|t| self.resolve_type(t))
+                .unwrap_or(TypeTable::UNIT);
+            let param_types = self.extract_param_types(&method.params);
+
+            self.current_type_params = old_type_params;
+
+            return Some(MethodInfo {
+                return_type,
+                self_kind: ast::SelfKind::Ref,
+                param_types,
+                inherited_from_base: None,
+            });
+        }
         None
     }
 
