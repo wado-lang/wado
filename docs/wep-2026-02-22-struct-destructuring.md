@@ -207,7 +207,34 @@ let Point { x, y } = p;   // OK: p is Point
 
 The unnamed form `{ x, y }` infers the struct type from the expression and does not require a type match.
 
-### 8. Wildcard Fields
+### 8. Literal Patterns in Fields
+
+Field values can be matched against literals (integers, floats, booleans, characters, strings) in refutable pattern contexts (match, if let, matches):
+
+```wado
+struct Config { name: String, value: i32 }
+
+// Match with literal in field position
+match config {
+    Config { name, value: 0 } => `{name} is zero`,
+    Config { name, value: 42 } => `{name} is the answer`,
+    Config { name, value } => `{name} = {value}`,
+}
+
+// If let with literal field
+if let Config { name, value: 0 } = config {
+    println(`{name} is zero`);
+}
+
+// Matches with literal field
+if config matches { Config { value: 0, .. } } {
+    println("zero config");
+}
+```
+
+Literal patterns in fields are refutable — they can fail to match. They are only allowed in refutable contexts (match, if let, matches), not in irrefutable let bindings.
+
+### 9. Wildcard Fields
 
 Individual fields can be ignored with `_`:
 
