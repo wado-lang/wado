@@ -100,6 +100,7 @@ pub mod unparse;
 pub mod wasm_plan;
 pub mod wir;
 pub mod wir_build;
+pub mod wir_optimize;
 pub mod wir_unparse;
 pub mod world_registry;
 
@@ -320,12 +321,18 @@ pub async fn compile_with_options<H: CompilerHost>(
     };
 
     // === Phase 11: Build WIR (planning + TIR → WirModule) ===
-    let (project, wir_module) = {
+    let (project, mut wir_module) = {
         let _span = logger.span("wir_build");
         let project = wir_build::plan_project(project);
         let wir_module = wir_build::build_wir_module(&project);
         (project, wir_module)
     };
+
+    // === Phase 11.5: Optimize WIR ===
+    {
+        let _span = logger.span("wir_optimize");
+        wir_optimize::optimize_wir(&mut wir_module);
+    }
 
     // === Phase 12: Emit Wasm (WirModule → Wasm component bytes) ===
     let wasm = {
@@ -520,7 +527,11 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         let project = wir_build::plan_project(project);
 
         // WIR: Translate optimized Project to WirModule for inspection.
-        let wir_module = Some(wir_build::build_wir_module(&project));
+        let wir_module = Some({
+            let mut wir = wir_build::build_wir_module(&project);
+            wir_optimize::optimize_wir(&mut wir);
+            wir
+        });
         let optimized = Some(project);
 
         (mono_snapshot, lower_snapshot, optimized, wir_module)
