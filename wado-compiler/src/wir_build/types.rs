@@ -982,13 +982,25 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
 /// In the TIR, `Array<T>` is `GenericInstance { name: "Array", type_args: [T] }`,
 /// not a struct definition. We create wrapper structs here to provide the
 /// underlying GC array types that the WIR emitter needs.
+///
+/// Types are processed in dependency order: if `T` is itself `Array<U>`,
+/// `Array<U>` is fully registered (raw array + wrapper struct) before
+/// `Array<Array<U>>` so that the backing array gets a concrete element type
+/// instead of abstract `structref`.
 fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
     use crate::tir::ResolvedType;
 
-    // Collect unique Array<T> element types across all modules
-    let mut array_elem_types: Vec<(crate::tir::TypeId, String, ModuleSource)> = Vec::new();
+    // Collect unique Array<T> element types across all modules.
+    // Each entry is (element TypeId, element mangled name, a type_table ref index).
+    let mut array_elem_types: Vec<(crate::tir::TypeId, String)> = Vec::new();
+    // We need to borrow type tables, but can't hold refs across ctx mutation.
+    // Collect TypeIds and elem names, keeping the first module's type table for lookups.
+    let mut first_type_table: Option<std::rc::Rc<std::cell::RefCell<TypeTable>>> = None;
     for tir_mod in ctx.project.tir_modules.values() {
         let type_table = &*tir_mod.type_table.borrow();
+        if first_type_table.is_none() {
+            first_type_table = Some(tir_mod.type_table.clone());
+        }
         for type_id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance {
                 name, type_args, ..
@@ -997,70 +1009,105 @@ fn register_array_wrapper_structs(ctx: &mut WirContext<'_>) {
                 && type_args.len() == 1
             {
                 let elem_name = type_table.mangle_type_name(type_args[0]);
-                if !array_elem_types.iter().any(|(_, n, _)| n == &elem_name) {
-                    // Ensure raw array type is registered
-                    register_raw_array_type(ctx, type_args[0], type_table);
-                    array_elem_types.push((type_args[0], elem_name, tir_mod.module_source.clone()));
+                if !array_elem_types.iter().any(|(_, n)| n == &elem_name) {
+                    array_elem_types.push((type_args[0], elem_name));
                 }
             }
         }
     }
 
-    for (_, elem_name, _module_source) in &array_elem_types {
-        let mangled = crate::name::mangle_generic_name("Array", std::slice::from_ref(elem_name));
+    let Some(tt_rc) = first_type_table else {
+        return;
+    };
 
-        // Skip if already registered (by name)
-        if ctx.lookup_struct_by_name(&mangled).is_some() {
-            continue;
+    // Topological sort: process leaf element types (non-Array) before nested ones.
+    // Partition into non-array elements (leaf) and array elements (nested).
+    let tt = tt_rc.borrow();
+    let mut leaf: Vec<(crate::tir::TypeId, String)> = Vec::new();
+    let mut nested: Vec<(crate::tir::TypeId, String)> = Vec::new();
+    for (elem_tid, elem_name) in &array_elem_types {
+        if matches!(tt.get(*elem_tid), ResolvedType::GenericInstance { name, .. } if name == "Array")
+        {
+            nested.push((*elem_tid, elem_name.clone()));
+        } else {
+            leaf.push((*elem_tid, elem_name.clone()));
         }
-
-        let raw_array_type_id = ctx.array_type_by_name.get(elem_name).cloned();
-        let Some(raw_type) = raw_array_type_id else {
-            continue;
-        };
-
-        let module_source = ModuleSource::prelude();
-        let struct_name = StructName::new(module_source.clone(), mangled.clone());
-        if ctx.struct_type_map.contains_key(&struct_name) {
-            continue;
-        }
-
-        let fq = format!("{module_source}//{mangled}");
-        let type_id = ctx.register_type(
-            fq.clone(),
-            WirTypeDef::Struct(WirStructType {
-                name: WirName {
-                    display: mangled.clone(),
-                    fq,
-                },
-                fields: vec![
-                    WirField {
-                        name: "repr".to_string(),
-                        ty: crate::wir::WirType::Ref {
-                            type_id: raw_type,
-                            nullable: false,
-                        },
-                        mutable: true,
-                    },
-                    WirField {
-                        name: "used".to_string(),
-                        ty: crate::wir::WirType::I32,
-                        mutable: true,
-                    },
-                ],
-                meta: WirMeta {
-                    module_source: Some(module_source.clone()),
-                    ..WirMeta::default()
-                },
-                generic_origin: Some(WirGenericOrigin {
-                    base_name: "Array".to_string(),
-                    type_args: vec![elem_name.clone()],
-                }),
-                newtype_origin: None,
-            }),
-        );
-        ctx.struct_type_map.insert(struct_name, type_id);
     }
+    drop(tt);
+
+    // Process in order: leaf types first, then nested types.
+    // Each type gets both its raw array and wrapper struct registered together.
+    let ordered = leaf.into_iter().chain(nested);
+
+    for (elem_tid, elem_name) in ordered {
+        // Register raw GC array type
+        {
+            let tt = tt_rc.borrow();
+            register_raw_array_type(ctx, elem_tid, &tt);
+        }
+
+        // Register wrapper struct
+        register_array_wrapper_struct(ctx, &elem_name);
+    }
+}
+
+/// Register a single `Array<T>` wrapper struct given the element's mangled name.
+fn register_array_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
+    let elem_name_string = elem_name.to_string();
+    let mangled =
+        crate::name::mangle_generic_name("Array", std::slice::from_ref(&elem_name_string));
+
+    // Skip if already registered (by name)
+    if ctx.lookup_struct_by_name(&mangled).is_some() {
+        return;
+    }
+
+    let raw_array_type_id = ctx.array_type_by_name.get(elem_name).cloned();
+    let Some(raw_type) = raw_array_type_id else {
+        return;
+    };
+
+    let module_source = ModuleSource::prelude();
+    let struct_name = StructName::new(module_source.clone(), mangled.clone());
+    if ctx.struct_type_map.contains_key(&struct_name) {
+        return;
+    }
+
+    let fq = format!("{module_source}//{mangled}");
+    let type_id = ctx.register_type(
+        fq.clone(),
+        WirTypeDef::Struct(WirStructType {
+            name: WirName {
+                display: mangled.clone(),
+                fq,
+            },
+            fields: vec![
+                WirField {
+                    name: "repr".to_string(),
+                    ty: crate::wir::WirType::Ref {
+                        type_id: raw_type,
+                        nullable: false,
+                    },
+                    mutable: true,
+                },
+                WirField {
+                    name: "used".to_string(),
+                    ty: crate::wir::WirType::I32,
+                    mutable: true,
+                },
+            ],
+            meta: WirMeta {
+                module_source: Some(module_source.clone()),
+                ..WirMeta::default()
+            },
+            generic_origin: Some(WirGenericOrigin {
+                base_name: "Array".to_string(),
+                type_args: vec![elem_name.to_string()],
+            }),
+            newtype_origin: None,
+        }),
+    );
+    ctx.struct_type_map.insert(struct_name, type_id);
 }
 
 /// Check if a `WirType` is an unresolved abstract struct/array reference.
