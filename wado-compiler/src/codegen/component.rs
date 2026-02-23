@@ -15,8 +15,8 @@ use super::postprocess;
 use crate::ast::Type;
 use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
-use crate::project::Project;
 use crate::name::shorten_import_module;
+use crate::project::Project;
 use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -154,9 +154,7 @@ pub fn build_component(
         if strip {
             import_name_map
                 .get(original)
-                .unwrap_or_else(|| {
-                    panic!("import name not found in short name map: {original}")
-                })
+                .unwrap_or_else(|| panic!("import name not found in short name map: {original}"))
                 .clone()
         } else {
             original.to_string()

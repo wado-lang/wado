@@ -1263,7 +1263,7 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
 /// Shorten an import module name when `strip` is enabled (`-Os`).
 ///
 /// Returns the original name when `strip` is false.
-pub fn shorten_import_module<'a>(module: &'a str, strip: bool) -> Cow<'a, str> {
+pub fn shorten_import_module(module: &str, strip: bool) -> Cow<'_, str> {
     if !strip {
         return Cow::Borrowed(module);
     }

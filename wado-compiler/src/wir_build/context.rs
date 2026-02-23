@@ -221,7 +221,10 @@ impl<'a> WirContext<'a> {
         let (short_module, short_field) = if strip {
             let short = format!("{}", self.import_name_map.len());
             self.import_name_map.insert(field.clone(), short.clone());
-            (crate::name::shorten_import_module(&module, strip).into_owned(), short)
+            (
+                crate::name::shorten_import_module(&module, strip).into_owned(),
+                short,
+            )
         } else {
             (module, field)
         };
