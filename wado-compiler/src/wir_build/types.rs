@@ -124,6 +124,15 @@ fn sort_types_topologically<'a>(
         }
     }
 
+    // Append types involved in cycles (in_degree > 0 after Kahn's algorithm).
+    // Wasm GC supports mutually recursive types via rec groups, and
+    // fixup_abstract_struct_fields resolves forward references afterward.
+    for (name, deg) in &in_degree {
+        if *deg > 0 {
+            sorted_names.push(name.clone());
+        }
+    }
+
     let name_to_struct: IndexMap<&str, &TirStruct> =
         structs.iter().map(|s| (s.name.as_str(), s)).collect();
     let name_to_variant: IndexMap<&str, &TirVariantDecl> =
@@ -750,6 +759,49 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                                             }
                                         } else {
                                             Vec::new()
+                                        }
+                                    }
+                                    ResolvedType::GenericInstance {
+                                        name: inner_name,
+                                        type_args: inner_type_args,
+                                        ..
+                                    } if inner_type_args.iter().any(|a| {
+                                        matches!(variant_tt.get(*a), ResolvedType::TypeParam { .. })
+                                    }) =>
+                                    {
+                                        // Payload is a GenericInstance containing TypeParams
+                                        // (e.g., Payload<T>). Substitute type params with
+                                        // concrete type args and resolve in the consumer's
+                                        // type table.
+                                        let sub_arg_names: Vec<String> = inner_type_args
+                                            .iter()
+                                            .map(|arg| {
+                                                if let ResolvedType::TypeParam { index, .. } =
+                                                    variant_tt.get(*arg)
+                                                {
+                                                    let idx = *index as usize;
+                                                    if idx < type_args.len() {
+                                                        type_table.mangle_type_name(type_args[idx])
+                                                    } else {
+                                                        variant_tt.mangle_type_name(*arg)
+                                                    }
+                                                } else {
+                                                    variant_tt.mangle_type_name(*arg)
+                                                }
+                                            })
+                                            .collect();
+                                        let mangled = crate::name::mangle_generic_name(
+                                            inner_name,
+                                            &sub_arg_names,
+                                        );
+                                        // Find the concrete TypeId in the consumer's type table
+                                        let concrete_id = type_table.iter_type_ids().find(|tid| {
+                                            type_table.mangle_type_name(*tid) == mangled
+                                        });
+                                        if let Some(cid) = concrete_id {
+                                            vec![ctx.type_id_to_wir_type(type_table, cid)]
+                                        } else {
+                                            vec![ctx.type_id_to_wir_type(variant_tt, case.payload)]
                                         }
                                     }
                                     _ => {
