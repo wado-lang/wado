@@ -31,6 +31,7 @@
 //! - For standalone scripts: relative to the entry point's directory
 
 use fluent_uri::UriRef;
+use std::borrow::Cow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -1257,6 +1258,21 @@ pub fn mangle_local_method(struct_name: &str, method_name: &str) -> String {
 /// - `mangle_local_trait_method("Point", "Display", "fmt")` → `"Point^Display::fmt"`
 pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_name: &str) -> String {
     format!("{struct_name}^{trait_name}::{method_name}")
+}
+
+/// Shorten an import module name when `strip` is enabled (`-Os`).
+///
+/// Returns the original name when `strip` is false.
+pub fn shorten_import_module<'a>(module: &'a str, strip: bool) -> Cow<'a, str> {
+    if !strip {
+        return Cow::Borrowed(module);
+    }
+    match module {
+        "wasi" => Cow::Borrowed("w"),
+        "mem" => Cow::Borrowed("m"),
+        "bundled" => Cow::Borrowed("b"),
+        _ => panic!("unknown import module to shorten: {module}"),
+    }
 }
 
 #[cfg(test)]

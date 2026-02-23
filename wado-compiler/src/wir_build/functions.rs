@@ -197,11 +197,12 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
 /// The core module imports memory and realloc from the "mem" instance,
 /// which is provided by the component model wrapper.
 fn register_memory_import(ctx: &mut WirContext<'_>) {
-    let (module, field) = if ctx.project.strip_names {
+    let strip = ctx.project.strip_names;
+    let (module, field) = if strip {
         let short = format!("{}", ctx.import_name_map.len());
         ctx.import_name_map
             .insert("memory".to_string(), short.clone());
-        (super::context::shorten_import_module("mem"), short)
+        (crate::name::shorten_import_module("mem", strip).into_owned(), short)
     } else {
         ("mem".to_string(), "memory".to_string())
     };

@@ -12,8 +12,6 @@ mod functions;
 mod translate;
 mod types;
 
-pub use context::shorten_import_module;
-
 /// Run the planning phase — previously the standalone `wasm_plan` pipeline step.
 ///
 /// Sets `project.has_http_handler_export` from world analysis and

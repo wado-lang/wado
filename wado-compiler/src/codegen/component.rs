@@ -16,7 +16,7 @@ use crate::ast::Type;
 use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
 use crate::project::Project;
-use crate::wir_build::shorten_import_module;
+use crate::name::shorten_import_module;
 use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -244,21 +244,9 @@ pub fn build_component(
     };
 
     // Instantiate core module — use shortened module names if -Os
-    let wasi_mod_name = if strip {
-        shorten_import_module("wasi")
-    } else {
-        "wasi".to_string()
-    };
-    let mem_mod_name = if strip {
-        shorten_import_module("mem")
-    } else {
-        "mem".to_string()
-    };
-    let bundled_mod_name = if strip {
-        shorten_import_module("bundled")
-    } else {
-        "bundled".to_string()
-    };
+    let wasi_mod_name = shorten_import_module("wasi", strip);
+    let mem_mod_name = shorten_import_module("mem", strip);
+    let bundled_mod_name = shorten_import_module("bundled", strip);
     ctx.register_core_instance("main");
     let mut main_args: Vec<(&str, ModuleArg)> = vec![
         (&wasi_mod_name, ModuleArg::Instance(wasi_instance)),

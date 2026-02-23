@@ -14,16 +14,6 @@ use crate::wir::{
     WirImportDesc, WirModule, WirName, WirNames, WirRecGroup, WirType, WirTypeDef, WirTypeId,
 };
 
-/// Shorten an import module name for `-Os`.
-pub fn shorten_import_module(module: &str) -> String {
-    match module {
-        "wasi" => "w".to_string(),
-        "mem" => "m".to_string(),
-        "bundled" => "b".to_string(),
-        other => other.to_string(),
-    }
-}
-
 /// Builder context for the `tir_to_wir` translation.
 ///
 /// Accumulates all WIR entities and provides lookup maps for resolving
@@ -227,11 +217,11 @@ impl<'a> WirContext<'a> {
         // When strip_names is enabled, shorten import module/field names to save binary size.
         // The shortened field name is a numeric index. Record the mapping so component.rs
         // can use the same shortened names when wiring the core module instance.
-        let (short_module, short_field) = if self.project.strip_names {
+        let strip = self.project.strip_names;
+        let (short_module, short_field) = if strip {
             let short = format!("{}", self.import_name_map.len());
             self.import_name_map.insert(field.clone(), short.clone());
-            let short_mod = shorten_import_module(&module);
-            (short_mod, short)
+            (crate::name::shorten_import_module(&module, strip).into_owned(), short)
         } else {
             (module, field)
         };
