@@ -549,7 +549,7 @@ Implementation: Detect `return func(...)` pattern in TIR, emit `return_call` ins
 
 ## Testing Strategy
 
-1. Golden Fixtures: `tests/fixtures.golden/*.lowered.wado` captures optimized TIR output. Regenerate with `make update-golden-fixtures`.
+1. Golden Fixtures: `tests/fixtures.golden/*.lowered.wado` captures optimized TIR output. Regenerate with `make update-golden-fixtures`. CI integrity check verifies golden files are up-to-date.
 2. Benchmark Suite: sieve, mandelbrot, count-prime benchmarks.
 3. Correctness Tests: E2E fixtures ensure optimizations preserve semantics.
 4. Performance Regression: Track benchmark performance over time.
