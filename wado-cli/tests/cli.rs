@@ -337,7 +337,7 @@ fn test_test_passing() {
 #[test]
 fn test_test_failing() {
     wado()
-        .args(["test", "wado-compiler/tests/fixtures/test_fail.wado"])
+        .args(["test", "wado-cli/tests/fixtures/test_fail.wado"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("1 passed, 1 failed"));

@@ -1,12 +1,13 @@
-// Test file with a failing test to verify exit code behavior
+// Test file with #[expect_trap] to verify expected-trap tests pass
 
 test "passing" {
     let x = 1;
 }
 
+#[expect_trap]
 test "failing" {
     assert 1 == 2, "this should fail";
 }
 
 __DATA__
-{"test": {}, "TODO": true}
+{"test": {}}
