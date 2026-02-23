@@ -1,0 +1,29 @@
+// Test: Stream::read() multiple times until end-of-stream
+// Write data, then read in chunks until we get empty array.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Write 5 bytes: "ABCDE"
+    let data: Array<u8> = [65, 66, 67, 68, 69];
+    tx.write(data);
+    tx.close();
+
+    // Read all data (may come in one or multiple reads)
+    let mut total = 0;
+    loop {
+        let chunk = rx.read(2); // small buffer to encourage multiple reads
+        if chunk.len() == 0 {
+            break; // end-of-stream
+        }
+        total = total + chunk.len();
+    }
+
+    assert total == 5;
+    rx.close();
+    println("multi-read ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "multi-read ok\n"}

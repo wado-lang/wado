@@ -1,0 +1,19 @@
+// Test: StreamWritable::write() writes data to the stream
+// Creates a stream, writes "Hello\n" to it via StreamWritable, and pipes
+// the readable end to stdout using Stdout::write_via_stream.
+use { Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Start the consumer first (WASI P3 async ordering)
+    Stdout::write_via_stream(rx);
+
+    // Write data via the typed StreamWritable API
+    let data: Array<u8> = [72, 101, 108, 108, 111, 10]; // "Hello\n"
+    tx.write(data);
+    tx.close();
+}
+
+__DATA__
+{"TODO": true, "stdout": "Hello\n"}

@@ -1,0 +1,18 @@
+// Test: Stdout::write_via_stream accepts Stream<u8> (readable end)
+// Verifies the existing write_via_stream pattern works with new Stream/StreamWritable types.
+use { Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Start consumer with the readable end
+    Stdout::write_via_stream(rx);
+
+    // Write "ok\n" through the writable end
+    let data: Array<u8> = [111, 107, 10]; // "ok\n"
+    tx.write(data);
+    tx.close();
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

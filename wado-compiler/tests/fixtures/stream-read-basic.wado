@@ -1,0 +1,26 @@
+// Test: Stream::read() reads data from a stream
+// Creates a stream pair, writes data on one end, and reads it on the other.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Write "Hi\n" to the writable end
+    let data: Array<u8> = [72, 105, 10]; // "Hi\n"
+    tx.write(data);
+    tx.close();
+
+    // Read from the readable end
+    let result = rx.read(64);
+    // result should be Array<u8> with [72, 105, 10]
+    assert result.len() == 3;
+    assert result[0] == 72; // 'H'
+    assert result[1] == 105; // 'i'
+    assert result[2] == 10; // '\n'
+
+    rx.close();
+    println("read ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "read ok\n"}
