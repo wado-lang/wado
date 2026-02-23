@@ -150,14 +150,6 @@ struct TestSpec {
     #[serde(rename = "TODO")]
     todo: bool,
 
-    /// Whether this is a maybeTODO test (behavior varies by optimization level).
-    /// maybeTODO tests pass regardless of whether the test passes or fails.
-    /// Use this for tests where behavior is non-deterministic or differs across
-    /// optimization levels (e.g., a trap that occurs at O0/O2 but not O1/O3).
-    #[serde(default)]
-    #[serde(rename = "maybeTODO")]
-    maybe_todo: bool,
-
     /// Preopened directories for WASI filesystem tests.
     /// Each entry is `[host_path, guest_path]`.
     /// Paths are relative to the workspace root (cargo test working directory).
@@ -555,29 +547,6 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         }
     }
 
-    // Handle maybeTODO tests - pass regardless of outcome
-    if spec.maybe_todo {
-        let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
-        }));
-
-        match test_result {
-            Ok(()) => {
-                eprintln!("[{test_id}] maybeTODO test passed");
-            }
-            Err(err) => {
-                let msg = err
-                    .downcast_ref::<String>()
-                    .map(String::as_str)
-                    .or_else(|| err.downcast_ref::<&str>().copied())
-                    .unwrap_or("(unknown panic)");
-
-                eprintln!("[{test_id}] maybeTODO test failed (acceptable): {msg}");
-            }
-        }
-        return;
-    }
-
     // Normal test - run without panic recovery
     run_normal_test(fixture_path, source, opt_level, &spec, &test_id);
 }
@@ -636,11 +605,22 @@ fn run_normal_test(
 
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
-        let result =
-            run_http_request(compile_result.wasm, &http_spec.request).unwrap_or_else(|e| {
-                panic!("[{test_id}] HTTP error: {e:?}");
-            });
-        verify_http_result(&result, http_spec, test_id);
+        match run_http_request(compile_result.wasm, &http_spec.request) {
+            Ok(result) => {
+                assert!(
+                    !spec.trapped,
+                    "[{test_id}] expected HTTP handler to trap, but request succeeded with status {}",
+                    result.status
+                );
+                verify_http_result(&result, http_spec, test_id);
+            }
+            Err(e) => {
+                assert!(
+                    spec.trapped,
+                    "[{test_id}] HTTP error (no trap expected): {e:?}"
+                );
+            }
+        }
     } else if spec.test_world.is_some() {
         let result = run_test_world(&compile_result.wasm, test_id).unwrap_or_else(|e| {
             panic!("[{test_id}] test world error: {e:?}");
