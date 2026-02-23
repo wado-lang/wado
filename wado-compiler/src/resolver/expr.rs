@@ -1177,8 +1177,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
         }
 
-        // Special case: struct literal cast to TreeMap<String, V>
-        // { a: 1, b: 2 } as TreeMap<String, i32> should become a MapLiteral
+        // Special case: struct literal cast to a type implementing FromLiteral
+        // { a: 1, b: 2 } as TreeMap<String, i32>
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
             return coerced;
         }

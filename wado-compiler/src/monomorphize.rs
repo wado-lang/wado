@@ -784,11 +784,6 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(elem, type_table);
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for (_, value) in entries {
-                    self.rewrite_types_in_expr(value, type_table);
-                }
-            }
             TirExprKind::Assign { target, value } => {
                 self.rewrite_types_in_expr(target, type_table);
                 self.rewrite_types_in_expr(value, type_table);
@@ -1639,7 +1634,7 @@ impl Monomorphizer {
                     if !type_args.is_empty() {
                         let generic_method_name = MethodName::format_local(
                             &info.base_struct_name,
-                            None,
+                            info.trait_name.as_deref(),
                             &info.method_name,
                         );
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
@@ -1716,15 +1711,6 @@ impl Monomorphizer {
                 for elem in elements {
                     self.collect_func_instantiation_sites_in_expr(
                         elem,
-                        generic_functions,
-                        type_table,
-                    );
-                }
-            }
-            TirExprKind::MapLiteral { entries } => {
-                for (_, value) in entries {
-                    self.collect_func_instantiation_sites_in_expr(
-                        value,
                         generic_functions,
                         type_table,
                     );
@@ -2421,11 +2407,6 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(elem, substitution, type_table);
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for (_, value) in entries {
-                    self.substitute_types_in_expr(value, substitution, type_table);
-                }
-            }
             TirExprKind::Assign { target, value } => {
                 self.substitute_types_in_expr(target, substitution, type_table);
                 self.substitute_types_in_expr(value, substitution, type_table);
@@ -2769,11 +2750,6 @@ impl Monomorphizer {
             TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     Self::update_local_expr_types_in_expr(elem, local_types);
-                }
-            }
-            TirExprKind::MapLiteral { entries } => {
-                for (_, value) in entries {
-                    Self::update_local_expr_types_in_expr(value, local_types);
                 }
             }
             TirExprKind::Index { expr, index } => {
@@ -3140,11 +3116,6 @@ impl Monomorphizer {
             TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.rewrite_function_calls_in_expr(elem, type_table);
-                }
-            }
-            TirExprKind::MapLiteral { entries } => {
-                for (_, value) in entries {
-                    self.rewrite_function_calls_in_expr(value, type_table);
                 }
             }
             TirExprKind::Assign { target, value } => {

@@ -1,0 +1,46 @@
+// FromLiteral: explicit cast to custom type
+use { println } from "core:cli";
+
+struct PairList<V> {
+    keys: Array<String>,
+    values: Array<V>,
+}
+
+impl PairList<V> {
+    fn new() -> PairList<V> {
+        return PairList { keys: [], values: [] };
+    }
+
+    fn len(&self) -> i32 {
+        return self.keys.len();
+    }
+}
+
+impl FromLiteral for PairList<V> {
+    type Value = V;
+
+    fn new_literal() -> PairList<V> {
+        return PairList::<V>::new();
+    }
+
+    fn insert_literal(&mut self, key: String, value: Self::Value) {
+        self.keys.append(key);
+        self.values.append(value);
+    }
+}
+
+export fn run() with Stdout {
+    // Explicit cast coercion
+    let m = { name: "Alice", city: "Tokyo" } as PairList<String>;
+
+    assert m.len() == 2;
+    assert m.keys[0] == "name";
+    assert m.keys[1] == "city";
+    assert m.values[0] == "Alice";
+    assert m.values[1] == "Tokyo";
+
+    println("cast FromLiteral: ok");
+}
+
+__DATA__
+{"stdout": "cast FromLiteral: ok\n"}

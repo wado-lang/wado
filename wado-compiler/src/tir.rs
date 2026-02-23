@@ -232,6 +232,27 @@ impl PrimitiveType {
             Self::Char => "char",
         }
     }
+
+    /// Check if a name is a primitive type name.
+    #[must_use]
+    pub fn is_primitive_name(name: &str) -> bool {
+        matches!(
+            name,
+            "i8" | "i16"
+                | "i32"
+                | "i64"
+                | "i128"
+                | "u8"
+                | "u16"
+                | "u32"
+                | "u64"
+                | "u128"
+                | "f32"
+                | "f64"
+                | "bool"
+                | "char"
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -737,18 +758,6 @@ impl TypeTable {
             } if name == "Array" && type_args.len() == 1 => Some(type_args[0]),
             // Unwrap references and check the inner type
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_array(*inner),
-            _ => None,
-        }
-    }
-
-    /// Check if a type is `TreeMap<K, V>` and return (`key_type`, `value_type`) if so.
-    /// Also unwraps Ref/MutRef types to check the inner type.
-    pub fn as_treemap(&self, id: TypeId) -> Option<(TypeId, TypeId)> {
-        match self.get(id) {
-            ResolvedType::GenericInstance {
-                name, type_args, ..
-            } if name == "TreeMap" && type_args.len() == 2 => Some((type_args[0], type_args[1])),
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_treemap(*inner),
             _ => None,
         }
     }
@@ -1313,11 +1322,6 @@ pub enum TirExprKind {
     },
     ArrayLiteral {
         elements: Vec<TirExpr>,
-    },
-    /// Map literal: `{ key1: value1, key2: value2 }` coerced to `TreeMap<String, V>`.
-    /// Keys are always String; each entry is (`key_name`, `value_expr`).
-    MapLiteral {
-        entries: Vec<(String, TirExpr)>,
     },
     TupleLiteral {
         elements: Vec<TirExpr>,

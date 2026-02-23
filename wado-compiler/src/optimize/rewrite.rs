@@ -181,11 +181,6 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
                 changed |= simplify_labeled_blocks_in_expr(elem);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                changed |= simplify_labeled_blocks_in_expr(value);
-            }
-        }
         TirExprKind::OptionSome { value } => {
             changed |= simplify_labeled_blocks_in_expr(value);
         }
@@ -342,7 +337,6 @@ fn is_fresh_value(expr: &TirExpr) -> bool {
         | TirExprKind::StructLiteral { .. }
         | TirExprKind::ArrayLiteral { .. }
         | TirExprKind::TupleLiteral { .. }
-        | TirExprKind::MapLiteral { .. }
         | TirExprKind::Null => true,
 
         // All call variants return fresh values (callee constructs/copies the return value)
@@ -565,11 +559,6 @@ fn insert_moves_in_expr(expr: &mut TirExpr, type_table: &TypeTable) {
         TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 insert_moves_in_expr(elem, type_table);
-            }
-        }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                insert_moves_in_expr(value, type_table);
             }
         }
         TirExprKind::OptionSome { value } => {

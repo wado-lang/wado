@@ -295,11 +295,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(elem)?;
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for (_, value) in entries {
-                    self.check_expr(value)?;
-                }
-            }
             TirExprKind::Closure { body, .. } => {
                 // Closures inherit effects from enclosing function, so we continue checking
                 self.check_expr(body)?;

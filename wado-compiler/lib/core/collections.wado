@@ -304,3 +304,14 @@ impl IndexValue<K> for TreeMap<K, V> {
         return self.get(key);
     }
 }
+
+// FromLiteral for { key: value, ... } -> TreeMap<String, V>
+impl FromLiteral for TreeMap<String, V> {
+    type Value = V;
+    fn new_literal() -> TreeMap<String, V> {
+        return TreeMap::<String, V>::new();
+    }
+    fn insert_literal(&mut self, key: String, value: Self::Value) {
+        self.insert(key, value);
+    }
+}

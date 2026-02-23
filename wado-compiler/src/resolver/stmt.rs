@@ -221,10 +221,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     {
                         (coerced, target_type)
                     } else {
-                        // Target type is not a struct or TreeMap - error
+                        // Target type does not implement FromLiteral
+                        let type_name = self.type_table.borrow().type_name(target_type);
                         let _ = self.logger.error(TypeError::TypeMismatch {
-                            expected: self.type_table.borrow().type_name(target_type),
-                            found: "implicit struct literal".into(),
+                            expected: type_name.clone(),
+                            found: format!(
+                                "anonymous struct literal ({type_name} does not implement FromLiteral)"
+                            ),
                             span: struct_lit.span,
                         });
                         let value = self.resolve_expr(&let_stmt.value, ctx, None);

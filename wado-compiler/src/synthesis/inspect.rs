@@ -572,11 +572,6 @@ fn walk_expr(
                 walk_expr(e, tt, mods, cs, reg, fmt_type, ms);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                walk_expr(value, tt, mods, cs, reg, fmt_type, ms);
-            }
-        }
         TirExprKind::Closure { body, .. } => {
             walk_expr(body, tt, mods, cs, reg, fmt_type, ms);
         }

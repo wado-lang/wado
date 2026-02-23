@@ -583,11 +583,6 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
                 lower_wide_int_in_expr(elem, type_table);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for entry in entries {
-                lower_wide_int_in_expr(&mut entry.1, type_table);
-            }
-        }
         TirExprKind::IndirectCall { callee, args } => {
             lower_wide_int_in_expr(callee, type_table);
             for arg in args {
@@ -2032,11 +2027,6 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(elem, type_table);
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.lower_expr(&mut entry.1, type_table);
-                }
-            }
             TirExprKind::IndirectCall { callee, args } => {
                 self.lower_expr(callee, type_table);
                 for arg in args {
@@ -2321,11 +2311,6 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 collect_global_refs(elem, refs);
-            }
-        }
-        TirExprKind::MapLiteral { entries } => {
-            for entry in entries {
-                collect_global_refs(&entry.1, refs);
             }
         }
         TirExprKind::If {
@@ -3312,11 +3297,6 @@ impl BoxLowerer {
                     self.transform_expr(elem, address_taken, type_table);
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.transform_expr(&mut entry.1, address_taken, type_table);
-                }
-            }
             TirExprKind::Closure { body, .. } => {
                 self.transform_expr(body, address_taken, type_table);
             }
@@ -3914,11 +3894,6 @@ impl ClosureLowerer {
                     self.collect_closures_in_expr(elem);
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.collect_closures_in_expr(&entry.1);
-                }
-            }
             TirExprKind::Assign { target, value } => {
                 self.collect_closures_in_expr(target);
                 self.collect_closures_in_expr(value);
@@ -4144,11 +4119,6 @@ impl ClosureLowerer {
             TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.analyze_closure_safety_expr(elem, false);
-                }
-            }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.analyze_closure_safety_expr(&entry.1, false);
                 }
             }
             TirExprKind::Assign { target, value } => {
@@ -4515,11 +4485,6 @@ impl ClosureLowerer {
             TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     Self::collect_locals_from_expr(elem, locals);
-                }
-            }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    Self::collect_locals_from_expr(&entry.1, locals);
                 }
             }
             TirExprKind::Match {
@@ -4933,30 +4898,6 @@ impl ClosureLowerer {
                 TirExpr::new(
                     TirExprKind::TupleLiteral {
                         elements: new_elements,
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::MapLiteral { entries } => {
-                let new_entries = entries
-                    .iter()
-                    .map(|(key, value)| {
-                        (
-                            key.clone(),
-                            self.transform_closure_body(
-                                value,
-                                captures,
-                                struct_type_id,
-                                self_ref_type,
-                                span,
-                            ),
-                        )
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::MapLiteral {
-                        entries: new_entries,
                     },
                     expr.type_id,
                     expr.span,
@@ -5406,9 +5347,6 @@ impl ClosureLowerer {
                     .iter()
                     .any(|e| self.fn_param_in_struct_field_expr(e, fn_param_indices))
             }
-            TirExprKind::MapLiteral { entries } => entries
-                .iter()
-                .any(|(_, v)| self.fn_param_in_struct_field_expr(v, fn_param_indices)),
             TirExprKind::Assign { target, value } => {
                 self.fn_param_in_struct_field_expr(target, fn_param_indices)
                     || self.fn_param_in_struct_field_expr(value, fn_param_indices)
@@ -5680,11 +5618,6 @@ impl ClosureLowerer {
                     self.collect_fn_param_specs_expr(elem, func_by_name, type_table, requests);
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.collect_fn_param_specs_expr(&entry.1, func_by_name, type_table, requests);
-                }
-            }
             TirExprKind::Assign { target, value } => {
                 self.collect_fn_param_specs_expr(target, func_by_name, type_table, requests);
                 self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
@@ -5865,11 +5798,6 @@ impl ClosureLowerer {
             TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.count_closures_in_expr(elem, counter);
-                }
-            }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.count_closures_in_expr(&entry.1, counter);
                 }
             }
             TirExprKind::Index { expr: array, index } => {
@@ -6546,21 +6474,6 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::MapLiteral { entries } => TirExpr::new(
-                TirExprKind::MapLiteral {
-                    entries: entries
-                        .iter()
-                        .map(|(k, v)| {
-                            (
-                                k.clone(),
-                                self.specialize_expr(v, param_to_functor, type_table),
-                            )
-                        })
-                        .collect(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
             TirExprKind::OptionSome { value } => TirExpr::new(
                 TirExprKind::OptionSome {
                     value: Box::new(self.specialize_expr(value, param_to_functor, type_table)),
@@ -7018,11 +6931,6 @@ impl ClosureLowerer {
                     self.transform_expr(elem, type_table);
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.transform_expr(&mut entry.1, type_table);
-                }
-            }
             TirExprKind::Assign { target, value } => {
                 self.transform_expr(target, type_table);
                 self.transform_expr(value, type_table);
@@ -7371,11 +7279,6 @@ impl ClosureLowerer {
                     self.transform_remaining_closures_expr(elem);
                 }
             }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.transform_remaining_closures_expr(&mut entry.1);
-                }
-            }
             TirExprKind::IndirectCall { callee, args } => {
                 self.transform_remaining_closures_expr(callee);
                 for arg in args {
@@ -7635,11 +7538,6 @@ impl StringCollector {
             TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.collect_expr(elem);
-                }
-            }
-            TirExprKind::MapLiteral { entries } => {
-                for entry in entries {
-                    self.collect_expr(&entry.1);
                 }
             }
             TirExprKind::Assign { target, value } => {

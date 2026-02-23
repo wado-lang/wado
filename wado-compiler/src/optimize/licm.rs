@@ -401,11 +401,6 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
                 collect_modified_vars_in_expr(elem, modified);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                collect_modified_vars_in_expr(value, modified);
-            }
-        }
         TirExprKind::IndirectCall { callee, args, .. } => {
             collect_modified_vars_in_expr(callee, modified);
             for arg in args {
@@ -706,11 +701,6 @@ fn collect_licm_ref_bindings_in_expr(
         TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_licm_ref_bindings_in_expr(elem, type_table, bindings);
-            }
-        }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                collect_licm_ref_bindings_in_expr(value, type_table, bindings);
             }
         }
         TirExprKind::Closure { body, .. } => {
@@ -1219,18 +1209,6 @@ fn find_hoist_candidates_in_expr(
                 );
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                find_hoist_candidates_in_expr(
-                    value,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
         TirExprKind::IndirectCall { callee, args, .. } => {
             find_hoist_candidates_in_expr(
                 callee,
@@ -1575,11 +1553,6 @@ fn replace_hoisted_in_expr(
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 replace_hoisted_in_expr(elem, candidates, ref_bindings);
-            }
-        }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                replace_hoisted_in_expr(value, candidates, ref_bindings);
             }
         }
         TirExprKind::IndirectCall { callee, args, .. } => {

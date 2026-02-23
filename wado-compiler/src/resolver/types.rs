@@ -721,3 +721,13 @@ pub(super) struct ArithmeticTraitInfo {
     /// The resolved type of the rhs parameter (first non-self parameter)
     pub(super) rhs_type: Option<TypeId>,
 }
+
+/// Info about a `FromLiteral` trait implementation
+pub(super) struct FromLiteralTraitInfo {
+    /// The Value associated type (element type for literal values)
+    pub(super) value_type: TypeId,
+    /// Self kind for the `insert_literal` method (&mut self)
+    pub(super) self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`FromLiteral`")
+    pub(super) trait_name: String,
+}

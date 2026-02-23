@@ -1,0 +1,49 @@
+// FromLiteral: custom type implementing FromLiteral trait
+// Verifies that struct literal coercion is not hardcoded to TreeMap
+use { println } from "core:cli";
+
+struct LinearMap<V> {
+    keys: Array<String>,
+    values: Array<V>,
+}
+
+impl LinearMap<V> {
+    fn new() -> LinearMap<V> {
+        return LinearMap { keys: [], values: [] };
+    }
+
+    fn len(&self) -> i32 {
+        return self.keys.len();
+    }
+}
+
+impl FromLiteral for LinearMap<V> {
+    type Value = V;
+
+    fn new_literal() -> LinearMap<V> {
+        return LinearMap::<V>::new();
+    }
+
+    fn insert_literal(&mut self, key: String, value: Self::Value) {
+        self.keys.append(key);
+        self.values.append(value);
+    }
+}
+
+export fn run() with Stdout {
+    // Type annotation coercion
+    let m: LinearMap<i32> = { x: 10, y: 20, z: 30 };
+
+    assert m.len() == 3;
+    assert m.keys[0] == "x";
+    assert m.keys[1] == "y";
+    assert m.keys[2] == "z";
+    assert m.values[0] == 10;
+    assert m.values[1] == 20;
+    assert m.values[2] == 30;
+
+    println("custom FromLiteral: ok");
+}
+
+__DATA__
+{"stdout": "custom FromLiteral: ok\n"}

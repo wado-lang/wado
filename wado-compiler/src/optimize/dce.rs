@@ -1019,11 +1019,6 @@ fn analyze_expr(
                 analyze_expr(elem, current_module, type_table, analysis);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                analyze_expr(value, current_module, type_table, analysis);
-            }
-        }
         TirExprKind::Closure { body, .. } => {
             analyze_expr(body, current_module, type_table, analysis);
         }
@@ -1613,11 +1608,6 @@ fn collect_types_from_expr(
                 collect_types_from_expr(elem, type_table, reachable);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                collect_types_from_expr(value, type_table, reachable);
-            }
-        }
         TirExprKind::Closure {
             params,
             body,
@@ -2113,11 +2103,6 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 changed |= prune_branches_in_expr(elem);
-            }
-        }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                changed |= prune_branches_in_expr(value);
             }
         }
         TirExprKind::OptionSome { value } => {

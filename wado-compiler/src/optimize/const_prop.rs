@@ -266,11 +266,6 @@ fn propagate_constants_in_expr(
                 changed |= propagate_constants_in_expr(elem, constants);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                changed |= propagate_constants_in_expr(value, constants);
-            }
-        }
         TirExprKind::OptionSome { value } => {
             changed |= propagate_constants_in_expr(value, constants);
         }

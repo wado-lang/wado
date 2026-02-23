@@ -275,3 +275,13 @@ pub trait FromIterator<T> {
     type Iter;
     fn from_iter(iter: Self::Iter) -> Self;
 }
+
+/// Trait for constructing a value from an anonymous struct literal `{ key: value, ... }`.
+/// Types implementing this trait can receive struct literal coercion when used as
+/// a type context (let binding, function argument, cast).
+/// Keys are always String (from field names); `Value` is the element type.
+pub trait FromLiteral {
+    type Value;
+    fn new_literal() -> Self;
+    fn insert_literal(&mut self, key: String, value: Self::Value);
+}

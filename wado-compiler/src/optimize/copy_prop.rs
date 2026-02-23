@@ -274,11 +274,6 @@ fn collect_usage_in_expr(
                 collect_usage_in_expr(elem, usage, in_loop, in_condition);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                collect_usage_in_expr(value, usage, in_loop, in_condition);
-            }
-        }
         TirExprKind::OptionSome { value } => {
             collect_usage_in_expr(value, usage, in_loop, in_condition);
         }
@@ -602,11 +597,6 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
                 substitute_in_expr(elem, substitutions);
             }
         }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                substitute_in_expr(value, substitutions);
-            }
-        }
         TirExprKind::OptionSome { value } => {
             substitute_in_expr(value, substitutions);
         }
@@ -801,11 +791,6 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
         TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 collect_copy_bindings_in_expr(elem, bindings);
-            }
-        }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                collect_copy_bindings_in_expr(value, bindings);
             }
         }
         TirExprKind::OptionSome { value } => {
@@ -1008,11 +993,6 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 remove_copy_bindings_in_expr(elem, dead_locals);
-            }
-        }
-        TirExprKind::MapLiteral { entries } => {
-            for (_, value) in entries {
-                remove_copy_bindings_in_expr(value, dead_locals);
             }
         }
         TirExprKind::OptionSome { value } => {
