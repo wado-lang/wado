@@ -1,0 +1,19 @@
+// Issue 8 helper module: mono variant with generic payload from different module
+
+pub struct Payload<T> {
+    data: T,
+    tag: i32,
+}
+
+pub variant Response<T> {
+    Success(Payload<T>),
+    Error(String),
+}
+
+pub fn make_response(value: i32) -> Response<i32> {
+    return Response::<i32>::Success(Payload { data: value, tag: 1 });
+}
+
+pub fn make_error() -> Response<i32> {
+    return Response::<i32>::Error("failed");
+}

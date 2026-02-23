@@ -1,0 +1,16 @@
+// Test: nested array literal in struct literal field should coerce to Array<Array<i32>>
+// Bug: [[1, 2], [3, 4]] is treated as Array<[i32, i32]> (tuple) instead of Array<Array<i32>>
+use { println, Stdout } from "core:cli";
+
+struct Matrix {
+    data: Array<Array<i32>>,
+    rows: i32,
+}
+
+export fn run() with Stdout {
+    let m = Matrix { data: [[1, 2], [3, 4]], rows: 2 };
+    println(`{m:?}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "Matrix { data: [[1, 2], [3, 4]], rows: 2 }\n"}

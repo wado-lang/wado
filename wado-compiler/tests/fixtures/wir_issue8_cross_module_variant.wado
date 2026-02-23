@@ -1,0 +1,25 @@
+// Issue 8: Mono variant with generic payload from different module
+use { println, Stdout } from "core:cli";
+use { Payload, Response, make_response, make_error } from "./sub/wir_issue8_module.wado";
+
+export fn run() with Stdout {
+    let r = make_response(42);
+    if let Success(p) = r {
+        assert p.data == 42;
+        assert p.tag == 1;
+    } else {
+        panic("expected Success");
+    }
+
+    let e = make_error();
+    if let Error(msg) = e {
+        assert msg == "failed";
+    } else {
+        panic("expected Error");
+    }
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

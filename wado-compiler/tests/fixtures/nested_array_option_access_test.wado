@@ -1,0 +1,31 @@
+// Test: access elements from Array<Option<i32>>
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a: Option<i32> = Option::<i32>::Some(42);
+    let b: Option<i32> = null;
+    let c: Option<i32> = Option::<i32>::Some(99);
+    let arr: Array<Option<i32>> = [a, b, c];
+
+    // Index and pattern match
+    if let Some(x) = arr[0] {
+        println(`first: {x}`);
+    }
+    if let None = arr[1] {
+        println("second: null");
+    }
+
+    // For-of and match
+    for let item of arr {
+        let s = match item {
+            Some(n) => `Some({n})`,
+            None => "None",
+        };
+        println(s);
+    }
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "first: 42\nsecond: null\nSome(42)\nNone\nSome(99)\nok\n"}
