@@ -3459,6 +3459,18 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push(']');
             }
+            TirExprKind::MapLiteral { entries } => {
+                self.output.push_str("{ ");
+                for (i, (key, value)) in entries.iter().enumerate() {
+                    if i > 0 {
+                        self.output.push_str(", ");
+                    }
+                    self.output.push_str(key);
+                    self.output.push_str(": ");
+                    self.unparse_expr(value);
+                }
+                self.output.push_str(" }");
+            }
             TirExprKind::Closure {
                 params,
                 body,

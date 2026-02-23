@@ -205,6 +205,11 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
                 changed |= fold_constants_in_expr(elem, type_table);
             }
         }
+        TirExprKind::MapLiteral { entries } => {
+            for (_, value) in entries {
+                changed |= fold_constants_in_expr(value, type_table);
+            }
+        }
         TirExprKind::OptionSome { value } => {
             changed |= fold_constants_in_expr(value, type_table);
         }

@@ -1,0 +1,26 @@
+// TreeMap literal: mutable map created from literal
+use { println } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let mut m: TreeMap<String, i32> = { x: 1, y: 2 };
+
+    assert m.len() == 2;
+
+    // Mutate after literal creation
+    m["z"] = 3;
+    assert m.len() == 3;
+
+    // Update existing key
+    m["x"] = 100;
+    if let Some(x) = m["x"] {
+        assert x == 100;
+    } else {
+        assert false, "x not found";
+    }
+
+    println("mutable: ok");
+}
+
+__DATA__
+{"stdout": "mutable: ok\n"}

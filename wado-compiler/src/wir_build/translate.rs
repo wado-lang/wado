@@ -396,6 +396,7 @@ impl FunctionTranslator<'_, '_> {
                 | TirExprKind::StructLiteral { .. }
                 | TirExprKind::TupleLiteral { .. }
                 | TirExprKind::ArrayLiteral { .. }
+                | TirExprKind::MapLiteral { .. }
                 | TirExprKind::VariantConstruct { .. }
                 | TirExprKind::EnumConstruct { .. }
                 | TirExprKind::OptionSome { .. }
@@ -1454,6 +1455,11 @@ impl FunctionTranslator<'_, '_> {
                 functor_id,
                 target_fn_type,
             } => self.translate_closure_to_canonical(functor, *functor_id, *target_fn_type),
+
+            // === Map Literal ===
+            TirExprKind::MapLiteral { entries } => {
+                self.translate_map_literal(entries, expr.type_id)
+            }
 
             // === Labeled Block Expression ===
             TirExprKind::LabeledBlock { label, block, .. } => {
@@ -3523,6 +3529,96 @@ impl FunctionTranslator<'_, '_> {
         } else {
             WirInstr::Unreachable
         }
+    }
+
+    /// Translate map literal: `{ a: 1, b: 2 }` coerced to `TreeMap<String, V>`.
+    ///
+    /// Generates WIR equivalent to:
+    ///   let mut __map = `TreeMap::`<String, `V>::new()`;
+    ///   __map["a"] = 1;
+    ///   __map["b"] = 2;
+    ///   __map
+    fn translate_map_literal(
+        &mut self,
+        entries: &[(String, TirExpr)],
+        result_type: TypeId,
+    ) -> WirInstr {
+        // Get the mangled TreeMap struct name (e.g., "TreeMap<String,i32>")
+        let struct_name = self.type_table.mangle_type_name(result_type);
+
+        // Look up TreeMap::new function
+        let new_suffix = format!("/{struct_name}::new");
+        let new_func_id = self.ctx.func_map.keys().find_map(|key| {
+            if key.ends_with(&new_suffix) {
+                self.ctx.func_map.get(key).cloned()
+            } else {
+                None
+            }
+        });
+
+        // Look up index_assign function (TreeMap^IndexAssign<String>::index_assign)
+        let assign_suffix = format!("/{struct_name}^IndexAssign<String>::index_assign");
+        let assign_func_id = self.ctx.func_map.keys().find_map(|key| {
+            if key.ends_with(&assign_suffix) {
+                self.ctx.func_map.get(key).cloned()
+            } else {
+                None
+            }
+        });
+
+        let (Some(new_id), Some(assign_id)) = (new_func_id, assign_func_id) else {
+            eprintln!(
+                "[WIR] MapLiteral: cannot find TreeMap functions for {struct_name} \
+                 (new suffix: {new_suffix}, assign suffix: {assign_suffix})"
+            );
+            return WirInstr::Unreachable;
+        };
+
+        // Get the WIR type for the TreeMap
+        let map_wir_type = self.ctx.type_id_to_wir_type(self.type_table, result_type);
+
+        // Allocate a temp local
+        self.local_counter += 1;
+        let local_name = format!("__map_lit_{}", self.local_counter);
+
+        let mut instrs = Vec::new();
+
+        // Declare temp local
+        instrs.push(WirInstr::DeclareLocal {
+            name: local_name.clone(),
+            ty: map_wir_type.clone(),
+        });
+
+        // __map = TreeMap::new()
+        instrs.push(WirInstr::LocalSet {
+            name: local_name.clone(),
+            value: Box::new(WirInstr::Call {
+                func_id: new_id,
+                args: vec![],
+            }),
+        });
+
+        // For each entry: __map.index_assign(key, value)
+        // index_assign takes (&mut self, key: String, value: V)
+        for (key, value_expr) in entries {
+            let key_instr = self.translate_string_literal(key);
+            let value_instr = self.translate_expr(value_expr);
+
+            // Receiver is &mut __map (just the local get for GC-based refs)
+            let receiver = WirInstr::LocalGet {
+                name: local_name.clone(),
+            };
+
+            instrs.push(WirInstr::Drop(Box::new(WirInstr::Call {
+                func_id: assign_id.clone(),
+                args: vec![receiver, key_instr, value_instr],
+            })));
+        }
+
+        // Result: load the map
+        instrs.push(WirInstr::LocalGet { name: local_name });
+
+        WirInstr::Seq(instrs)
     }
 
     /// Translate switch expression using `br_table`.

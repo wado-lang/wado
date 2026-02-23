@@ -784,6 +784,11 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(elem, type_table);
                 }
             }
+            TirExprKind::MapLiteral { entries } => {
+                for (_, value) in entries {
+                    self.rewrite_types_in_expr(value, type_table);
+                }
+            }
             TirExprKind::Assign { target, value } => {
                 self.rewrite_types_in_expr(target, type_table);
                 self.rewrite_types_in_expr(value, type_table);
@@ -1716,6 +1721,15 @@ impl Monomorphizer {
                     );
                 }
             }
+            TirExprKind::MapLiteral { entries } => {
+                for (_, value) in entries {
+                    self.collect_func_instantiation_sites_in_expr(
+                        value,
+                        generic_functions,
+                        type_table,
+                    );
+                }
+            }
             TirExprKind::Assign { target, value } => {
                 self.collect_func_instantiation_sites_in_expr(
                     target,
@@ -2407,6 +2421,11 @@ impl Monomorphizer {
                     self.substitute_types_in_expr(elem, substitution, type_table);
                 }
             }
+            TirExprKind::MapLiteral { entries } => {
+                for (_, value) in entries {
+                    self.substitute_types_in_expr(value, substitution, type_table);
+                }
+            }
             TirExprKind::Assign { target, value } => {
                 self.substitute_types_in_expr(target, substitution, type_table);
                 self.substitute_types_in_expr(value, substitution, type_table);
@@ -2750,6 +2769,11 @@ impl Monomorphizer {
             TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     Self::update_local_expr_types_in_expr(elem, local_types);
+                }
+            }
+            TirExprKind::MapLiteral { entries } => {
+                for (_, value) in entries {
+                    Self::update_local_expr_types_in_expr(value, local_types);
                 }
             }
             TirExprKind::Index { expr, index } => {
@@ -3116,6 +3140,11 @@ impl Monomorphizer {
             TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.rewrite_function_calls_in_expr(elem, type_table);
+                }
+            }
+            TirExprKind::MapLiteral { entries } => {
+                for (_, value) in entries {
+                    self.rewrite_function_calls_in_expr(value, type_table);
                 }
             }
             TirExprKind::Assign { target, value } => {

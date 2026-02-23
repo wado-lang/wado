@@ -34,6 +34,7 @@ fn count_expr(expr: &TirExpr) -> usize {
         TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
             elements.iter().map(count_expr).sum()
         }
+        TirExprKind::MapLiteral { entries } => entries.iter().map(|(_, v)| count_expr(v)).sum(),
         TirExprKind::StructLiteral { fields, .. } => {
             fields.iter().map(|f| count_expr(&f.value)).sum()
         }
@@ -340,6 +341,9 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => elements
             .iter()
             .any(|e| expr_has_complex_generic_types(e, type_table)),
+        TirExprKind::MapLiteral { entries } => entries
+            .iter()
+            .any(|(_, v)| expr_has_complex_generic_types(v, type_table)),
         TirExprKind::If {
             condition,
             then_branch,
@@ -566,6 +570,11 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_callees_from_expr(elem, callees);
+            }
+        }
+        TirExprKind::MapLiteral { entries } => {
+            for (_, value) in entries {
+                collect_callees_from_expr(value, callees);
             }
         }
         TirExprKind::Closure { body, .. } => {
@@ -2354,6 +2363,17 @@ fn remap_expr(
                 .map(|e| remap_expr(e, param_to_local, local_offset, param_count, source_module))
                 .collect(),
         },
+        TirExprKind::MapLiteral { entries } => TirExprKind::MapLiteral {
+            entries: entries
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        remap_expr(v, param_to_local, local_offset, param_count, source_module),
+                    )
+                })
+                .collect(),
+        },
         TirExprKind::Closure {
             params,
             body,
@@ -3030,6 +3050,21 @@ fn inline_calls_in_expr(
             for elem in elements {
                 inline_calls_in_expr(
                     elem,
+                    candidates,
+                    current_module,
+                    local_count,
+                    local_types,
+                    type_table,
+                    pre_stmts,
+                    inlined_funcs,
+                    inline_counter,
+                );
+            }
+        }
+        TirExprKind::MapLiteral { entries } => {
+            for (_, value) in entries {
+                inline_calls_in_expr(
+                    value,
                     candidates,
                     current_module,
                     local_count,

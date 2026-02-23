@@ -216,8 +216,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             struct_lit.span,
                         );
                         (value, target_type)
+                    } else if let Some(coerced) =
+                        self.try_coerce_struct_to_map(&let_stmt.value, ctx, target_type)
+                    {
+                        (coerced, target_type)
                     } else {
-                        // Target type is not a struct - error
+                        // Target type is not a struct or TreeMap - error
                         let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: self.type_table.borrow().type_name(target_type),
                             found: "implicit struct literal".into(),

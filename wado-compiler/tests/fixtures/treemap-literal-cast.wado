@@ -1,0 +1,26 @@
+// TreeMap literal: explicit cast syntax
+use { println } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let m = { a: 1, b: 2, c: 3 } as TreeMap<String, i32>;
+
+    assert m.len() == 3;
+
+    if let Some(a) = m["a"] {
+        assert a == 1;
+    } else {
+        assert false, "a not found";
+    }
+
+    if let Some(c) = m["c"] {
+        assert c == 3;
+    } else {
+        assert false, "c not found";
+    }
+
+    println("cast: ok");
+}
+
+__DATA__
+{"stdout": "cast: ok\n"}

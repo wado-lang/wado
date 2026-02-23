@@ -741,6 +741,18 @@ impl TypeTable {
         }
     }
 
+    /// Check if a type is `TreeMap<K, V>` and return (`key_type`, `value_type`) if so.
+    /// Also unwraps Ref/MutRef types to check the inner type.
+    pub fn as_treemap(&self, id: TypeId) -> Option<(TypeId, TypeId)> {
+        match self.get(id) {
+            ResolvedType::GenericInstance {
+                name, type_args, ..
+            } if name == "TreeMap" && type_args.len() == 2 => Some((type_args[0], type_args[1])),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_treemap(*inner),
+            _ => None,
+        }
+    }
+
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {
@@ -1301,6 +1313,11 @@ pub enum TirExprKind {
     },
     ArrayLiteral {
         elements: Vec<TirExpr>,
+    },
+    /// Map literal: `{ key1: value1, key2: value2 }` coerced to `TreeMap<String, V>`.
+    /// Keys are always String; each entry is (`key_name`, `value_expr`).
+    MapLiteral {
+        entries: Vec<(String, TirExpr)>,
     },
     TupleLiteral {
         elements: Vec<TirExpr>,
