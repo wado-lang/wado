@@ -1,0 +1,53 @@
+// Tests: Descriptor::write_via_stream + Descriptor::read_via_stream round-trip
+// Writes data to a file using write_via_stream, then reads it back using read_via_stream.
+//
+// This verifies that:
+// - Descriptor::write_via_stream() accepts Stream<u8> and writes to the file
+// - The written data can be read back and matches the original
+//
+// TODO: Multiple async CM operations (write_via_stream + read_via_stream + write_via_stream)
+// deadlock in synchronous context because the event loop cannot make progress.
+
+use { println, Stdout, Stderr } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+export fn run() with Stdout, Stderr, Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        println("no preopened dirs");
+        return;
+    }
+
+    let dir = dirs[0].0;
+
+    // Create and open a file for writing
+    let write_result = dir.open_at(
+        PathFlags::none(),
+        "test_output.txt",
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Write | DescriptorFlags::Read,
+    );
+
+    if let Ok(file) = write_result {
+        // Write data via stream
+        let [write_rx, write_tx] = Stream::<u8>::new();
+        // "Hello, Stream!\n" as bytes
+        let data: Array<u8> = [72, 101, 108, 108, 111, 44, 32, 83, 116, 114, 101, 97, 109, 33, 10];
+        write_tx.write(data);
+        write_tx.close();
+        file.write_via_stream(write_rx, 0 as Filesize);
+
+        // Read back via stream
+        let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+        Stdout::write_via_stream(read_stream);
+    } else {
+        println("failed to open file for writing");
+    }
+}
+
+__DATA__
+{
+    "TODO": true,
+    "preopened_dirs": [["tests/fixtures/testdata", "testdata"]],
+    "stdout": "Hello, Stream!\n"
+}

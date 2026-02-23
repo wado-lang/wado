@@ -156,6 +156,11 @@ struct TestSpec {
     #[serde(default)]
     preopened_dirs: Vec<[String; 2]>,
 
+    /// Stdin data to pipe into the program.
+    /// If set, the program's stdin will receive this UTF-8 string.
+    #[serde(default)]
+    stdin: Option<String>,
+
     /// HTTP world spec: request injection + response expectations.
     /// Presence of this key implies `world = "wasi:http/service"`.
     #[serde(rename = "wasi:http/service")]
@@ -612,20 +617,16 @@ fn run_normal_test(
         verify_result(&result, spec, test_id);
     } else {
         // Default: wasi:cli/command
-        let result = if spec.preopened_dirs.is_empty() {
-            common::run_wasm(compile_result.wasm).unwrap_or_else(|e| {
-                panic!("[{test_id}] runtime error: {e}");
-            })
-        } else {
-            let dirs: Vec<(String, String)> = spec
-                .preopened_dirs
-                .iter()
-                .map(|[h, g]| (h.clone(), g.clone()))
-                .collect();
-            common::run_wasm_with_dirs(compile_result.wasm, &dirs).unwrap_or_else(|e| {
-                panic!("[{test_id}] runtime error: {e}");
-            })
-        };
+        let dirs: Vec<(String, String)> = spec
+            .preopened_dirs
+            .iter()
+            .map(|[h, g]| (h.clone(), g.clone()))
+            .collect();
+        let result =
+            common::run_wasm_with_options(compile_result.wasm, &dirs, spec.stdin.as_deref())
+                .unwrap_or_else(|e| {
+                    panic!("[{test_id}] runtime error: {e}");
+                });
         verify_result(&result, spec, test_id);
     }
 }
