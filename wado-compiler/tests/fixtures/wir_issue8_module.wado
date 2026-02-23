@@ -1,0 +1,33 @@
+// Issue 8 helper module: mono variant with generic payload from different module
+use { println, Stdout } from "core:cli";
+
+pub struct Payload<T> {
+    data: T,
+    tag: i32,
+}
+
+pub variant Response<T> {
+    Success(Payload<T>),
+    Error(String),
+}
+
+pub fn make_response(value: i32) -> Response<i32> {
+    return Response::<i32>::Success(Payload { data: value, tag: 1 });
+}
+
+pub fn make_error() -> Response<i32> {
+    return Response::<i32>::Error("failed");
+}
+
+export fn run() with Stdout {
+    let r = make_response(42);
+    if let Success(p) = r {
+        assert p.data == 42;
+        println("ok");
+    } else {
+        panic("expected Success");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

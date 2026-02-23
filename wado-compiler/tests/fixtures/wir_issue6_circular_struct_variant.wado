@@ -1,0 +1,41 @@
+// Issue 6: register_mono_variants loop can deadlock on circular struct-variant deps
+// Variant A references struct B, struct B references variant A
+use { println, Stdout } from "core:cli";
+
+variant Tree {
+    Leaf(i32),
+    Branch(Node),
+}
+
+struct Node {
+    left: Tree,
+    right: Tree,
+}
+
+fn sum_tree(t: &Tree) -> i32 {
+    return match *t {
+        Leaf(v) => v,
+        Branch(n) => sum_tree(&n.left) + sum_tree(&n.right),
+    };
+}
+
+export fn run() with Stdout {
+    let leaf1 = Tree::Leaf(1);
+    let leaf2 = Tree::Leaf(2);
+    let leaf3 = Tree::Leaf(3);
+
+    let branch = Tree::Branch(Node {
+        left: leaf1,
+        right: Tree::Branch(Node {
+            left: leaf2,
+            right: leaf3,
+        }),
+    });
+
+    let total = sum_tree(&branch);
+    assert total == 6;
+    println(`{total}`);
+}
+
+__DATA__
+{"TODO": true, "stdout": "6\n"}
