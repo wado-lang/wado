@@ -1,6 +1,7 @@
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
 use { inflate_gzip } from "core:zlib";
+use { wait_for_subtask } from "core:internal";
 
 export fn run() with Stdout, Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
@@ -18,8 +19,18 @@ export fn run() with Stdout, Stdin {
     }
     stdin_stream.close();
 
-    // Decompress gzip
+    // Decompress gzip and write to stdout
     let decompressed = inflate_gzip(&data);
-
-    println(`gzip: {data.len()} -> {decompressed.len()}`);
+    let handles = builtin::stream_new();
+    let rx = handles as i32;
+    let tx = (handles >> 32) as i32;
+    let subtask = builtin::call_indirect_stdout_write_via_stream(rx);
+    let len = decompressed.len();
+    let ptr = builtin::realloc(0, 0, 1, len);
+    for (let mut i = 0; i < len; i = i + 1) {
+        builtin::i32_store8(ptr + i, decompressed[i] as i32);
+    }
+    builtin::stream_write(tx, ptr, len);
+    builtin::stream_drop_writable(tx);
+    wait_for_subtask(subtask);
 }

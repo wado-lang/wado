@@ -4,7 +4,7 @@
 
 int main(void) {
     /* Read all gzip data from stdin */
-    unsigned char input[4096];
+    unsigned char input[8192];
     size_t input_len = 0;
     size_t n;
     while ((n = fread(input + input_len, 1, sizeof(input) - input_len, stdin)) > 0) {
@@ -12,7 +12,7 @@ int main(void) {
     }
 
     /* Decompress gzip (16 + MAX_WBITS enables gzip format) */
-    unsigned char output[4096];
+    unsigned char output[8192];
     z_stream strm;
     memset(&strm, 0, sizeof(strm));
     strm.next_in = input;
@@ -22,8 +22,7 @@ int main(void) {
 
     inflateInit2(&strm, 16 + MAX_WBITS);
     inflate(&strm, Z_FINISH);
-    printf("zlib %s: %lu -> %lu\n",
-           zlibVersion(), (unsigned long)input_len, (unsigned long)strm.total_out);
+    fwrite(output, 1, strm.total_out, stdout);
     inflateEnd(&strm);
     return 0;
 }

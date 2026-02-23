@@ -165,18 +165,13 @@ fi
 """
 
 [tasks.gen-test-data]
-description = "Generate test data for zlib benchmarks"
+description = "Generate test data for zlib benchmarks (compress README.md)"
 run = """
 #!/usr/bin/env bash
 set -e
 mkdir -p "$OUT_DIR"
-python3 -c "
-import gzip
-data = bytes(range(256)) * 4  # 1024 bytes of pattern
-with open('$OUT_DIR/test.gz', 'wb') as f:
-    f.write(gzip.compress(data, compresslevel=6))
-"
-echo "Generated $OUT_DIR/test.gz ($(wc -c < "$OUT_DIR/test.gz" | tr -d ' ') bytes)"
+gzip -c README.md > "$OUT_DIR/test.gz"
+echo "Generated $OUT_DIR/test.gz from README.md ($(wc -c < README.md | tr -d ' ') -> $(wc -c < "$OUT_DIR/test.gz" | tr -d ' ') bytes)"
 """
 
 [tasks.build-all]
@@ -187,6 +182,9 @@ depends = ["gen-test-data", "build-rust", "build-zig", "build-tinygo", "build-as
 description = "Validate built Wasm files with wasmtime"
 run = """
 #!/usr/bin/env bash
+WADO_CLI="cargo run --quiet --manifest-path ../wado-cli/Cargo.toml --"
+FAIL=0
+
 echo ""
 echo "=== Validation (running with wasmtime) ==="
 # WASI Preview 1 programs (non-zlib)
@@ -196,27 +194,44 @@ for f in "$OUT_DIR"/hello_world_*.wasm "$OUT_DIR"/pi_approx_*.wasm; do
         $WASMTIME "$f" 2>&1 | head -1 || echo "(failed)"
     fi
 done
-# WASI Preview 1 zlib programs (need stdin)
+# Wado non-zlib programs (run from source via wado CLI)
+for src in hello_world/hello_world.wado pi_approx/pi_approx.wado; do
+    if [ -f "$src" ]; then
+        printf "%-40s " "$src:"
+        $WADO_CLI run "$src" 2>/dev/null | head -1 || echo "(failed)"
+    fi
+done
+
+# zlib: decompress README.md.gz and diff against original
+echo ""
+echo "=== zlib Verification (decompress README.md.gz, diff against original) ==="
 for f in "$OUT_DIR"/zlib_*.wasm; do
-    if [ -f "$f" ] && [[ "$f" != *_wado.wasm ]]; then
-        printf "%-40s " "$f:"
-        $WASMTIME "$f" < "$OUT_DIR/test.gz" 2>&1 | head -1 || echo "(failed)"
+    if [ ! -f "$f" ]; then continue; fi
+    lang=$(basename "$f" .wasm | sed 's/zlib_//')
+    printf "%-12s " "$lang:"
+
+    # Run decompressor
+    if [[ "$f" == *_wado.wasm ]]; then
+        $WADO_CLI run zlib/zlib.wado < "$OUT_DIR/test.gz" > "$OUT_DIR/zlib_${lang}_out.bin" 2>/dev/null
+    else
+        $WASMTIME "$f" < "$OUT_DIR/test.gz" > "$OUT_DIR/zlib_${lang}_out.bin" 2>/dev/null
+    fi
+
+    # Diff against original
+    if diff -q README.md "$OUT_DIR/zlib_${lang}_out.bin" >/dev/null 2>&1; then
+        echo "OK (matches README.md)"
+    else
+        echo "FAIL (output differs from README.md)"
+        diff README.md "$OUT_DIR/zlib_${lang}_out.bin" | head -5
+        FAIL=1
     fi
 done
-# Wado uses WASI P3 component model (requires wasmtime 41+)
-for f in "$OUT_DIR"/hello_world_wado.wasm "$OUT_DIR"/pi_approx_wado.wasm; do
-    if [ -f "$f" ]; then
-        printf "%-40s " "$f:"
-        $WASMTIME run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' "$f" 2>&1 | head -1 || echo "(failed)"
-    fi
-done
-# Wado zlib (needs stdin)
-for f in "$OUT_DIR"/zlib_wado.wasm; do
-    if [ -f "$f" ]; then
-        printf "%-40s " "$f:"
-        $WASMTIME run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' "$f" < "$OUT_DIR/test.gz" 2>&1 | head -1 || echo "(failed)"
-    fi
-done
+
+if [ "$FAIL" -ne 0 ]; then
+    echo ""
+    echo "ERROR: Some zlib programs produced incorrect output"
+    exit 1
+fi
 """
 
 [tasks.report-wasm-size]

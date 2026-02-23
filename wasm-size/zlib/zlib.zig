@@ -4,7 +4,7 @@ const Reader = std.Io.Reader;
 
 pub fn main() void {
     // Read all gzip data from stdin
-    var input_buf: [4096]u8 = undefined;
+    var input_buf: [8192]u8 = undefined;
     var input_len: usize = 0;
     while (input_len < input_buf.len) {
         const n = std.posix.read(0, input_buf[input_len..]) catch break;
@@ -12,8 +12,8 @@ pub fn main() void {
         input_len += n;
     }
 
-    // Decompress gzip
-    var decompressed: [4096]u8 = undefined;
+    // Decompress gzip and write to stdout
+    var decompressed: [8192]u8 = undefined;
     var input_reader = Reader.fixed(input_buf[0..input_len]);
     var window: [flate.max_window_len]u8 = undefined;
     var decompressor = flate.Decompress.init(&input_reader, .gzip, &window);
@@ -22,5 +22,10 @@ pub fn main() void {
         return;
     };
 
-    std.debug.print("zig std.compress.flate: {} -> {}\n", .{ input_len, decompressed_len });
+    var written: usize = 0;
+    while (written < decompressed_len) {
+        const n = std.posix.write(1, decompressed[written..decompressed_len]) catch break;
+        if (n == 0) break;
+        written += n;
+    }
 }
