@@ -3,6 +3,7 @@
 //! Runs after `wir_build` and before `codegen::emit`.
 //!
 //! Current passes:
+<<<<<<< HEAD
 //! - **Multi-value return SROA**: rewrites functions that return small scalar structs
 //!   to use Wasm multi-value returns, eliminating GC struct allocation.
 //! - **Multi-value tuple elision**: replaces `MultiValueStructNew` + `StructGet`
@@ -732,6 +733,22 @@ fn take_call_from_local_set(instr: &mut WirInstr) -> Box<WirInstr> {
         unreachable!()
     };
     value
+||||||| empty tree
+=======
+//! - **Multi-value tuple elision**: replaces `MultiValueStructNew` + `StructGet`
+//!   sequences with `MultiValueLocalBind` to skip intermediate struct allocation.
+
+use crate::wir::{WirInstr, WirModule, WirTypeDef};
+
+/// Run all WIR-level optimizations on the module (in-place).
+pub fn optimize_wir(module: &mut WirModule) {
+    let types = &module.types;
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            optimize_instrs(body, types);
+        }
+    }
+>>>>>>> 124f39a3c54c97b611d93ea0f4b5c5623c0b0a7d
 }
 
 /// Recursively optimize a list of instructions.

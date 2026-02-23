@@ -8,6 +8,7 @@ struct Pair {
 
 // #[inline(never)] - should NOT be inlined even though it's small
 
+<<<<<<< HEAD
 
 #[inline("never")]
 fn never_inline_add(x: i32, y: i32) -> i32 {
@@ -35,6 +36,33 @@ fn always_inline_compute(x: i32) -> i32 {
 
 // #[inline] - hint to inline with raised threshold
 
+||||||| empty tree
+=======
+#[inline("never")]
+fn never_inline_add(x: i32, y: i32) -> i32 {
+    return x + y;
+}
+
+// #[inline(always)] - should be inlined even if large
+
+#[inline("always")]
+fn always_inline_compute(x: i32) -> i32 {
+    let a = x + 1;
+    let b = a * 2;
+    let c = b - 3;
+    let d = c + 4;
+    let e = d * 5;
+    let f = e - 6;
+    let g = f + 7;
+    let h = g * 8;
+    let i = h - 9;
+    let j = i + 10;
+    let k = j * 11;
+    return k;
+}
+
+// #[inline] - hint to inline with raised threshold
+>>>>>>> 124f39a3c54c97b611d93ea0f4b5c5623c0b0a7d
 
 #[inline]
 fn hint_inline_sum(p: Pair) -> i32 {

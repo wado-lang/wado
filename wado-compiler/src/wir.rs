@@ -1319,6 +1319,7 @@ impl WirInstr {
             }
         }
     }
+<<<<<<< HEAD
 
     /// Visit all child instructions of this node mutably (non-recursive).
     /// Used by WIR optimization passes for in-place tree rewriting.
@@ -1644,6 +1645,9 @@ impl WirInstr {
             }
         }
     }
+||||||| empty tree
+=======
+>>>>>>> 124f39a3c54c97b611d93ea0f4b5c5623c0b0a7d
 }
 
 /// What kind of value copy to perform.
