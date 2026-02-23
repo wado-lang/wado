@@ -1222,6 +1222,103 @@ pub fn f32_to_string_auto(f: f32) -> String {
 }
 
 
+// pack64 takes (m, e) and returns f = m * 2^e.
+// It assumes the caller has provided a 53-bit mantissa m
+// and an exponent that is in range for the mantissa.
+fn pack64(m: u64, e: i32) -> f64 {
+    let bit52 = 1 as u64 << 52;
+    if (m & bit52) == 0 {
+        return builtin::f64_reinterpret_i64(m as i64);
+    }
+    let mantissa_bits = m & ~bit52;
+    let exp_bits = ((1075 + e) as u64) << 52;
+    return builtin::f64_reinterpret_i64((mantissa_bits | exp_bits) as i64);
+}
+
+// parse rounds d * 10^p to the nearest f64.
+// d must have at most 19 digits.
+pub fn parse(d: u64, p: i32) -> f64 {
+    let b = u64_bit_len(d);
+    let lp = log2_pow10(p);
+    let mut e = i32::min(1074, 53 - b - lp);
+    let x = d << (64 - b) as u64;
+    let pm = get_pow10(p);
+    let s_val = -((e - (64 - b)) + lp + 3);
+    let mut u = uscale(x, pm.hi, pm.lo, s_val);
+
+    // Branch-free: if round(u) >= 1<<53, shift right by 1
+    let unmin_val = ((1 as u64) << 55) - 2;
+    let shift = (u >= unmin_val) as u64;
+    u = (u >> shift) | (u & 1);
+    e = e - shift as i32;
+
+    return pack64(unrounded_round(u), -e);
+}
+
+// parse_text parses a decimal string and returns the nearest f64.
+// Returns null if the input is malformed.
+// Accepts: integer digits, optional fractional part, optional exponent.
+// Examples: "3.14", "1e2", "0.1", "123", "1.5e-3"
+pub fn parse_text(s: String) -> Option<f64> {
+    let len = s.len();
+    let MAX_DIGITS = 19;
+    let mut d: u64 = 0;
+    let mut frac = 0;
+    let mut i = 0;
+
+    // Read integer digits
+    while i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8 {
+        d = d * 10 + (s.get_byte(i) - '0' as u8) as u64;
+        i = i + 1;
+    }
+    if i > MAX_DIGITS {
+        return null;
+    }
+
+    // Read fractional digits
+    if i < len && s.get_byte(i) == '.' as u8 {
+        i = i + 1;
+        while i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8 {
+            d = d * 10 + (s.get_byte(i) - '0' as u8) as u64;
+            frac = frac + 1;
+            i = i + 1;
+        }
+        if i == 1 || i > MAX_DIGITS + 1 {
+            return null;
+        }
+    }
+    if i == 0 {
+        return null;
+    }
+
+    // Read exponent
+    let mut p = 0;
+    if i < len && (s.get_byte(i) == 'e' as u8 || s.get_byte(i) == 'E' as u8) {
+        i = i + 1;
+        let mut sign = 1;
+        if i < len {
+            if s.get_byte(i) == '-' as u8 {
+                sign = -1;
+                i = i + 1;
+            } else if s.get_byte(i) == '+' as u8 {
+                i = i + 1;
+            }
+        }
+        if i >= len || len - i > 3 {
+            return null;
+        }
+        while i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8 {
+            p = p * 10 + (s.get_byte(i) - '0' as u8) as i32;
+            i = i + 1;
+        }
+        p = p * sign;
+    }
+    if i != len {
+        return null;
+    }
+    return Option::<f64>::Some(parse(d, p - frac));
+}
+
 export fn run() {
     let f = 3.14;
     f64_to_string(f);

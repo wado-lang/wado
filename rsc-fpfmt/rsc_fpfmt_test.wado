@@ -12,14 +12,16 @@ use {
     log10_pow2, log2_pow10, u64_bit_len, pow10,
     unpack64, FormatResult, UnpackResult,
     trim_zeros, rotate_right,
-    // New format specifier types and functions
+    // Format specifier types and functions
     FormatSpec, Align, Sign, FormatType,
     format_f64,
     f64_to_string_prec, f64_to_string_exp_prec,
     f64_to_string_width_prec, f64_to_string_signed,
     f64_to_string_signed_prec, f64_to_string_zero_pad,
     f64_to_string_zero_pad_prec, f64_to_string_left,
-    f64_to_string_center, f64_to_string_fill
+    f64_to_string_center, f64_to_string_fill,
+    // Parsing functions
+    parse, parse_text
 } from "./rsc_fpfmt.wado";
 
 use {println, Stdout} from "core:cli";
@@ -1368,6 +1370,131 @@ test "negative zero formatting" {
     let mut spec = FormatSpec::exp(false);
     spec.precision = 2;
     assert format_f64(neg_zero, spec) == "-0.00e+00";  // precision 2 adds decimal places
+}
+
+
+test "parse roundtrip basic" {
+    // parse(d, p) should reconstruct the original f64 from short(f)
+    let f1 = 3.14;
+    let r1 = short(f1);
+    assert parse(r1.digits, r1.exponent) == f1;
+
+    let f2 = 1.0;
+    let r2 = short(f2);
+    assert parse(r2.digits, r2.exponent) == f2;
+
+    let f3 = 0.1;
+    let r3 = short(f3);
+    assert parse(r3.digits, r3.exponent) == f3;
+
+    let f4 = 100.0;
+    let r4 = short(f4);
+    assert parse(r4.digits, r4.exponent) == f4;
+}
+
+test "parse roundtrip powers of 2" {
+    assert parse(5, -1) == 0.5;
+    assert parse(25, -2) == 0.25;
+    assert parse(125, -3) == 0.125;
+    assert parse(1024, 0) == 1024.0;
+}
+
+test "parse roundtrip extreme values" {
+    // Smallest subnormal
+    let f_sub = f64_from_bits(0x0000000000000001 as i64);
+    let r_sub = short(f_sub);
+    assert parse(r_sub.digits, r_sub.exponent) == f_sub;
+
+    // Smallest normal
+    let f_norm = f64_from_bits(0x0010000000000000 as i64);
+    let r_norm = short(f_norm);
+    assert parse(r_norm.digits, r_norm.exponent) == f_norm;
+
+    // Largest finite
+    let f_max = f64_from_bits(0x7FEFFFFFFFFFFFFF as i64);
+    let r_max = short(f_max);
+    assert parse(r_max.digits, r_max.exponent) == f_max;
+}
+
+test "parse roundtrip many values" {
+    // Test round-trip for various common values
+    let values: Array<f64> = [
+        1.0, 0.1, 0.5, 2.0, 10.0, 100.0,
+        0.01, 0.001, 1.23456789, 1.0e10, 1.0e-10,
+        1.0e100, 1.0e-100,
+    ];
+    for let val of values {
+        let r = short(val);
+        let roundtripped = parse(r.digits, r.exponent);
+        assert roundtripped == val;
+    }
+}
+
+test "parse direct values" {
+    // Direct (d, p) inputs
+    assert parse(1, 0) == 1.0;
+    assert parse(1, 1) == 10.0;
+    assert parse(1, 2) == 100.0;
+    assert parse(1, -1) == 0.1;
+    assert parse(1, -2) == 0.01;
+    assert parse(314, -2) == 3.14;
+    assert parse(271828, -5) == 2.71828;
+}
+
+
+test "parse_text basic decimals" {
+    assert parse_text("3.14") matches { Some(v) && v == 3.14 };
+    assert parse_text("0.1") matches { Some(v) && v == 0.1 };
+    assert parse_text("100") matches { Some(v) && v == 100.0 };
+}
+
+test "parse_text integers" {
+    assert parse_text("0") matches { Some(v) && v == 0.0 };
+    assert parse_text("1") matches { Some(v) && v == 1.0 };
+    assert parse_text("42") matches { Some(v) && v == 42.0 };
+    assert parse_text("9999999") matches { Some(v) && v == 9999999.0 };
+}
+
+test "parse_text with exponent" {
+    assert parse_text("1e2") matches { Some(v) && v == 100.0 };
+    assert parse_text("1E2") matches { Some(v) && v == 100.0 };
+    assert parse_text("1e+2") matches { Some(v) && v == 100.0 };
+    assert parse_text("1e-2") matches { Some(v) && v == 0.01 };
+    assert parse_text("5e0") matches { Some(v) && v == 5.0 };
+    assert parse_text("1.5e3") matches { Some(v) && v == 1500.0 };
+    assert parse_text("2.5e-1") matches { Some(v) && v == 0.25 };
+}
+
+test "parse_text three digit exponent" {
+    assert parse_text("1e100") matches { Some(v) && v == 1.0e100 };
+    assert parse_text("1e-100") matches { Some(v) && v == 1.0e-100 };
+    assert parse_text("1e308") matches { Some(v) && v == 1.0e308 };
+}
+
+test "parse_text malformed input" {
+    assert parse_text("") matches { None };
+    assert parse_text("abc") matches { None };
+    assert parse_text("1.0xyz") matches { None };
+    assert parse_text(".") matches { None };
+    assert parse_text("1e") matches { None };
+    assert parse_text("1e1234") matches { None };
+}
+
+test "parse_text round trip" {
+    let values: Array<f64> = [
+        1.0, 0.1, 0.5, 2.0, 10.0, 100.0,
+        0.01, 0.001, 3.14, 2.71828, 1.23456789,
+    ];
+    for let val of values {
+        let r = short(val);
+        assert parse(r.digits, r.exponent) == val;
+    }
+}
+
+test "parse_text fractional only" {
+    assert parse_text(".5") matches { Some(v) && v == 0.5 };
+    assert parse_text(".25") matches { Some(v) && v == 0.25 };
+    assert parse_text(".001") matches { Some(v) && v == 0.001 };
 }
 
 
