@@ -3134,7 +3134,10 @@ impl FunctionTranslator<'_, '_> {
             // For irrefutable patterns (wildcard, binding, struct), just use the body
             let is_irrefutable = matches!(
                 arm.pattern,
-                TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Struct { .. }
+                TirPattern::Wildcard
+                    | TirPattern::Binding { .. }
+                    | TirPattern::Struct { .. }
+                    | TirPattern::Tuple(_)
             );
 
             if is_irrefutable && arm.guard.is_none() {
@@ -3522,8 +3525,56 @@ impl FunctionTranslator<'_, '_> {
                 // No bindings needed
             }
             TirPattern::Tuple(sub_patterns) => {
-                for sub in sub_patterns {
-                    self.emit_pattern_bindings(sub, scrut_local, scrut_type, instrs);
+                let wir_type = self.ctx.type_id_to_wir_type(self.type_table, scrut_type);
+                if let WirType::Ref { type_id, .. } = wir_type {
+                    let element_types =
+                        if let ResolvedType::Tuple(elements) = self.type_table.get(scrut_type) {
+                            elements.clone()
+                        } else {
+                            vec![]
+                        };
+                    for (i, sub_pattern) in sub_patterns.iter().enumerate() {
+                        let field_get = WirInstr::StructGet {
+                            type_id: type_id.clone(),
+                            field_name: format!("{i}"),
+                            expr: Box::new(WirInstr::LocalGet {
+                                name: scrut_local.to_string(),
+                            }),
+                        };
+                        match sub_pattern {
+                            TirPattern::Binding { local_index, .. } => {
+                                instrs.push(WirInstr::LocalSet {
+                                    name: self.local_name(*local_index),
+                                    value: Box::new(field_get),
+                                });
+                            }
+                            TirPattern::Wildcard => {}
+                            _ => {
+                                // Nested pattern: store in temp and recurse
+                                let temp_name = format!("__tuple_elem_{i}");
+                                let elem_type = element_types
+                                    .get(i)
+                                    .copied()
+                                    .unwrap_or(TypeTable::UNKNOWN);
+                                let elem_wir_type =
+                                    self.ctx.type_id_to_wir_type(self.type_table, elem_type);
+                                instrs.push(WirInstr::DeclareLocal {
+                                    name: temp_name.clone(),
+                                    ty: elem_wir_type,
+                                });
+                                instrs.push(WirInstr::LocalSet {
+                                    name: temp_name.clone(),
+                                    value: Box::new(field_get),
+                                });
+                                self.emit_pattern_bindings(
+                                    sub_pattern,
+                                    &temp_name,
+                                    elem_type,
+                                    instrs,
+                                );
+                            }
+                        }
+                    }
                 }
             }
             TirPattern::Struct { fields, .. } => {
