@@ -59,6 +59,7 @@ if [ -n "$WASM_CLANG" ]; then
     echo "Building C..."
     eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/hello_world_c.wasm" hello_world/hello_world.c
     eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/pi_approx_c.wasm" pi_approx/pi_approx.c
+    eval $WASM_CLANG -Oz -Wl,--strip-all -Izlib/zlib-1.3.1 -o "$OUT_DIR/zlib_c.wasm" zlib/zlib.c zlib/zlib-1.3.1/adler32.c zlib/zlib-1.3.1/crc32.c zlib/zlib-1.3.1/inffast.c zlib/zlib-1.3.1/inflate.c zlib/zlib-1.3.1/inftrees.c zlib/zlib-1.3.1/uncompr.c zlib/zlib-1.3.1/zutil.c
 else
     echo "SKIP: C (run 'mise install' for wasi-sdk)"
 fi
@@ -75,8 +76,10 @@ if rustup target list --installed 2>/dev/null | grep -q wasm32-wasip1; then
     echo "Building Rust..."
     (cd hello_world && cargo build --release --target wasm32-wasip1)
     (cd pi_approx && cargo build --release --target wasm32-wasip1)
+    (cd zlib && cargo build --release --target wasm32-wasip1)
     cp hello_world/target/wasm32-wasip1/release/hello_world.wasm "$OUT_DIR/hello_world_rust.wasm"
     cp pi_approx/target/wasm32-wasip1/release/pi_approx.wasm "$OUT_DIR/pi_approx_rust.wasm"
+    cp zlib/target/wasm32-wasip1/release/zlib_bench.wasm "$OUT_DIR/zlib_rust.wasm"
 else
     echo "SKIP: Rust (rustup target add wasm32-wasip1)"
 fi
@@ -92,6 +95,7 @@ mkdir -p "$OUT_DIR"
 echo "Building Zig..."
 zig build-exe -O ReleaseSmall -target wasm32-wasi hello_world/hello_world.zig -femit-bin="$OUT_DIR/hello_world_zig.wasm"
 zig build-exe -O ReleaseSmall -target wasm32-wasi pi_approx/pi_approx.zig -femit-bin="$OUT_DIR/pi_approx_zig.wasm"
+zig build-exe -O ReleaseSmall -target wasm32-wasi zlib/zlib.zig -femit-bin="$OUT_DIR/zlib_zig.wasm"
 """
 
 [tasks.build-tinygo]
@@ -152,6 +156,7 @@ echo "Building Wado..."
 if [ -f hello_world/hello_world.wado ]; then
     cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/hello_world_wado.wasm" hello_world/hello_world.wado
     cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/pi_approx_wado.wasm" pi_approx/pi_approx.wado
+    cargo run --manifest-path ../wado-cli/Cargo.toml -- compile -Os -o "$OUT_DIR/zlib_wado.wasm" zlib/zlib.wado
 else
     echo "SKIP: Wado (source files not found)"
 fi
@@ -187,7 +192,7 @@ description = "Build all and report Wasm sizes"
 depends = ["build-all", "validate"]
 run = """
 #!/usr/bin/env bash
-PROGRAMS="hello_world pi_approx"
+PROGRAMS="hello_world pi_approx zlib"
 
 echo ""
 echo "=== Wasm Size Report ==="
@@ -213,7 +218,7 @@ description = "Clean build artifacts"
 run = """
 #!/usr/bin/env bash
 rm -rf "$OUT_DIR"
-rm -rf hello_world/target pi_approx/target
+rm -rf hello_world/target pi_approx/target zlib/target
 rm -rf hello_world/_build pi_approx/_build
 rm -rf assemblyscript/node_modules
 """

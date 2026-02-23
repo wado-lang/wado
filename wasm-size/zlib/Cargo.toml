@@ -1,0 +1,20 @@
+[package]
+name = "zlib_bench"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[[bin]]
+name = "zlib_bench"
+path = "zlib.rs"
+
+[dependencies]
+zlib-rs = "0.6"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

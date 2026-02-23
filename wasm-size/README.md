@@ -16,6 +16,7 @@ Compares WebAssembly binary sizes across different languages.
 
 - `hello_world` - Minimal "Hello, World!" program
 - `pi_approx` - Pi approximation using Leibniz formula (1M iterations)
+- `zlib` - zlib decompress (inflate 286B -> 1KB patterned data)
 
 ## Results
 
@@ -23,25 +24,30 @@ Compares WebAssembly binary sizes across different languages.
 
 | Language       | Size (bytes) |
 | -------------- | -----------: |
-| wado           |        1,098 |
-| c              |        2,122 |
+| wado           |        1,352 |
+| c              |        2,275 |
 | zig            |        4,449 |
 | assemblyscript |        6,913 |
-| moonbit        |       21,103 |
 | rust           |       42,587 |
-| tinygo         |      161,350 |
 
 ### pi_approx
 
 | Language       | Size (bytes) |
 | -------------- | -----------: |
-| wado           |        6,425 |
+| wado           |        6,695 |
 | zig            |       10,608 |
 | assemblyscript |       11,372 |
-| c              |       14,151 |
-| moonbit        |       31,133 |
+| c              |       14,275 |
 | rust           |       62,952 |
-| tinygo         |      186,022 |
+
+### zlib
+
+| Language | Size (bytes) | Notes                          |
+| -------- | -----------: | ------------------------------ |
+| wado     |       17,080 | decompress only (core:zlib)    |
+| zig      |       20,513 | decompress only (std.compress) |
+| c        |       42,963 | decompress only (zlib 1.3.1)   |
+| rust     |       81,876 | decompress only (zlib-rs 0.6)  |
 
 ## Usage
 
