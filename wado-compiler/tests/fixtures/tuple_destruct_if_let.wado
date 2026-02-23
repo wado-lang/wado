@@ -1,0 +1,28 @@
+// Tuple destructuring in if-let expressions
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let opt: Option<[i32, i32]> = Option::<[i32, i32]>::Some([10, 20]);
+
+    // if-let with tuple destructuring inside variant
+    if let Some([x, y]) = opt {
+        println(`{x}, {y}`);
+    }
+
+    // if-let with None
+    let none: Option<[i32, i32]> = null;
+    if let Some([x, y]) = none {
+        println(`{x}, {y}`);
+    } else {
+        println("none");
+    }
+
+    // if-let with wildcard in tuple
+    if let Some([_, y]) = opt {
+        println(`{y}`);
+    }
+}
+
+__DATA__
+{"stdout": "10, 20\nnone\n20\n"}

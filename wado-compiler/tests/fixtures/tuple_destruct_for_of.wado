@@ -1,0 +1,20 @@
+// Tuple destructuring in for-of loops
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let pairs: Array<[i32, String]> = [[1, "one"], [2, "two"], [3, "three"]];
+
+    // for-of with tuple destructuring
+    for let [num, name] of pairs {
+        println(`{num}: {name}`);
+    }
+
+    // for-of with wildcard
+    for let [_, name] of pairs {
+        println(name);
+    }
+}
+
+__DATA__
+{"stdout": "1: one\n2: two\n3: three\none\ntwo\nthree\n"}

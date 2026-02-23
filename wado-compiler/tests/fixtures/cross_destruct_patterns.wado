@@ -1,0 +1,51 @@
+// Cross-pattern destructuring: struct inside tuple and tuple inside struct
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Tagged {
+    label: String,
+    coords: [i32, i32],
+}
+
+export fn run() with Stdout {
+    // Tuple inside struct (let): extract tuple fields from struct field
+    let tagged = Tagged { label: "A", coords: [10, 20] };
+    let { label, coords: [cx, cy] } = tagged;
+    println(`{label}: {cx}, {cy}`);
+
+    // Struct inside tuple (let): extract struct fields from tuple element
+    let pair = [Point { x: 1, y: 2 }, "origin"];
+    let [{ x, y }, name] = pair;
+    println(`{name}: {x}, {y}`);
+
+    // for-of: tuple inside struct
+    let items: Array<Tagged> = [
+        Tagged { label: "P", coords: [3, 4] },
+        Tagged { label: "Q", coords: [5, 6] },
+    ];
+    for let { label: l, coords: [a, b] } of items {
+        println(`{l}: {a + b}`);
+    }
+
+    // match: tuple inside struct with guard
+    let t = Tagged { label: "X", coords: [100, 200] };
+    let desc = match t {
+        { coords: [x, y], .. } && x + y > 250 => "large",
+        { coords: [x, y], .. } => `{x}, {y}`,
+    };
+    println(desc);
+
+    // if-let: struct inside variant
+    let opt: Option<Point> = Option::<Point>::Some(Point { x: 7, y: 8 });
+    if let Some({ x, y }) = opt {
+        println(`{x + y}`);
+    }
+}
+
+__DATA__
+{"stdout": "A: 10, 20\norigin: 1, 2\nP: 7\nQ: 11\nlarge\n15\n"}

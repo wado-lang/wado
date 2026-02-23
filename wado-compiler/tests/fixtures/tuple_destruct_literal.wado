@@ -1,0 +1,60 @@
+// Tuple destructuring with literal patterns in match/if-let/matches
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Integer literal in match
+    let pair = [42, 10];
+    let result = match pair {
+        [a, 10] => `matched int: {a}`,
+        _ => "no match",
+    };
+    println(result);
+
+    // Float literal in match
+    let fpair = [1.0, 3.14];
+    let result2 = match fpair {
+        [x, 3.14] => `matched float: {x}`,
+        _ => "no match",
+    };
+    println(result2);
+
+    // Bool literal in match
+    let bpair = ["yes", true];
+    let result3 = match bpair {
+        [s, true] => `matched bool: {s}`,
+        [s, false] => `not matched: {s}`,
+    };
+    println(result3);
+
+    // Char literal in match
+    let cpair = [99, 'X'];
+    let result4 = match cpair {
+        [n, 'X'] => `matched char: {n}`,
+        _ => "no match",
+    };
+    println(result4);
+
+    // String literal in match
+    let spair = [7, "hello"];
+    let result5 = match spair {
+        [n, "hello"] => `matched string: {n}`,
+        _ => "no match",
+    };
+    println(result5);
+
+    // Integer literal in if-let
+    let ipair = [100, 0];
+    if let [x, 0] = ipair {
+        println(`if-let int: {x}`);
+    }
+
+    // Bool literal in matches
+    let bpair2 = [42, false];
+    if bpair2 matches { [_, false] } {
+        println("matches bool");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "matched int: 42\nmatched float: 1\nmatched bool: yes\nmatched char: 99\nmatched string: 7\nif-let int: 100\nmatches bool\n"}
