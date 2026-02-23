@@ -44,12 +44,7 @@ test:
 
 .PHONY: test-wado
 test-wado:
-<<<<<<< HEAD
-	cargo run -p wado-cli --quiet -- test example/*.wado wado-compiler/lib/core/*_test.wado wado-compiler/lib/core/prelude/*_test.wado
-||||||| empty tree
-=======
 	cargo run -p wado-cli --quiet -- test example/*.wado wado-compiler/lib/core/*_test.wado wado-compiler/lib/core/prelude/*_test.wado benchmark/*/*.wado wasm-size/*/*.wado
->>>>>>> 124f39a3c54c97b611d93ea0f4b5c5623c0b0a7d
 
 .PHONY: test-cov
 test-cov:
