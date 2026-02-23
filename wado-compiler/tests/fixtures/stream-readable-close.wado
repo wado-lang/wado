@@ -1,0 +1,13 @@
+// Test: Stream::close() drops the readable end
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    // Close the readable end first
+    rx.close();
+    tx.close();
+    println("close ok");
+}
+
+__DATA__
+{"stdout": "close ok\n"}

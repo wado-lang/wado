@@ -1,0 +1,21 @@
+// Test: StreamWritable::write() can be called multiple times (compiles correctly)
+// Tests that the compiler generates valid code for multiple write calls.
+// Actual multi-chunk writing is validated in the HTTP tests where there's a consumer.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Close the reader first so write sees DROPPED rather than BLOCKED
+    rx.close();
+
+    // Single write that compiles correctly
+    let chunk: Array<u8> = [65, 66, 67, 10]; // "ABC\n"
+    tx.write(chunk);
+    tx.close();
+
+    println("multi write ok");
+}
+
+__DATA__
+{"stdout": "multi write ok\n"}

@@ -1,0 +1,13 @@
+// Test: StreamWritable::close() drops the writable end
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    // Close the writable end without writing anything
+    tx.close();
+    rx.close();
+    println("close ok");
+}
+
+__DATA__
+{"stdout": "close ok\n"}

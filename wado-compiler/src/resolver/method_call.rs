@@ -4,8 +4,8 @@ use crate::ast::{self, Item};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, PrimitiveType, ResolvedType, SubstitutionContext, TirExpr,
-    TirExprKind, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -67,6 +67,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 name,
                 module_source,
             } => (name.clone(), module_source.clone()),
+            // Stream<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::Stream(_) => ("Stream".to_string(), ModuleSource::types()),
+            // StreamWritable<T> - resource methods declared in core:prelude/types.wado
+            ResolvedType::StreamWritable(_) => {
+                ("StreamWritable".to_string(), ModuleSource::types())
+            }
             // FutureWritable<T> - resource methods declared in core:prelude/types.wado
             ResolvedType::FutureWritable(_) => {
                 ("FutureWritable".to_string(), ModuleSource::types())
@@ -234,6 +240,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     impl_offset = 1;
                     subst_ctx = subst_ctx.with_impl_args(&[elem]);
                 }
+                // Stream<T> has one type param T
+                ResolvedType::Stream(inner) => {
+                    impl_offset = 1;
+                    subst_ctx = subst_ctx.with_impl_args(&[inner]);
+                }
+                // StreamWritable<T> has one type param T
+                ResolvedType::StreamWritable(inner) => {
+                    impl_offset = 1;
+                    subst_ctx = subst_ctx.with_impl_args(&[inner]);
+                }
                 // FutureWritable<T> has one type param T
                 ResolvedType::FutureWritable(inner) => {
                     impl_offset = 1;
@@ -247,7 +263,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                     impl_offset = type_args.len() as u32;
                 }
-                ResolvedType::BuiltinArray(_) | ResolvedType::FutureWritable(_) => {
+                ResolvedType::BuiltinArray(_)
+                | ResolvedType::Stream(_)
+                | ResolvedType::StreamWritable(_)
+                | ResolvedType::FutureWritable(_) => {
                     impl_offset = 1;
                 }
                 _ => {}
@@ -298,6 +317,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         "Array".to_string(),
                         vec![elem_name],
                         Some(vec![elem]),
+                    )
+                }
+                // Stream<T>: base name is "Stream", one type arg
+                ResolvedType::Stream(inner) => {
+                    let inner_name = self.type_table.borrow().mangle_type_name(inner);
+                    let mangled = format!("Stream<{inner_name}>");
+                    (
+                        mangled,
+                        "Stream".to_string(),
+                        vec![inner_name],
+                        Some(vec![inner]),
+                    )
+                }
+                // StreamWritable<T>: base name is "StreamWritable", one type arg
+                ResolvedType::StreamWritable(inner) => {
+                    let inner_name = self.type_table.borrow().mangle_type_name(inner);
+                    let mangled = format!("StreamWritable<{inner_name}>");
+                    (
+                        mangled,
+                        "StreamWritable".to_string(),
+                        vec![inner_name],
+                        Some(vec![inner]),
                     )
                 }
                 // FutureWritable<T>: base name is "FutureWritable", one type arg
@@ -524,28 +565,30 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Handle Future::<T>::new() and Stream::<T>::new()
-        // Creates a handle pair [Future<T>/Stream<T>, FutureWritable<T>/i32] (rx, tx)
+        // Creates a handle pair:
+        //   Future<T>::new() -> [Future<T>, FutureWritable<T>]
+        //   Stream<T>::new() -> [Stream<T>, StreamWritable<T>]
         {
             let target_resolved = self.type_table.borrow().get(target_type_id).clone();
             let pair_info = match &target_resolved {
                 ResolvedType::Future(inner) if static_call.method == "new" && args.is_empty() => {
-                    Some(("future_create_pair", target_type_id, Some(*inner)))
+                    Some(("future_create_pair", target_type_id, *inner, true))
                 }
-                ResolvedType::Stream(_) if static_call.method == "new" && args.is_empty() => {
-                    Some(("stream_create_pair", target_type_id, None))
+                ResolvedType::Stream(inner) if static_call.method == "new" && args.is_empty() => {
+                    Some(("stream_create_pair", target_type_id, *inner, false))
                 }
                 _ => None,
             };
 
-            if let Some((builtin_name, handle_type, future_inner)) = pair_info {
-                let tx_type = if let Some(inner) = future_inner {
+            if let Some((builtin_name, handle_type, inner, is_future)) = pair_info {
+                let tx_type = if is_future {
                     self.type_table
                         .borrow_mut()
                         .intern(ResolvedType::FutureWritable(inner))
                 } else {
                     self.type_table
                         .borrow_mut()
-                        .intern(ResolvedType::Primitive(PrimitiveType::I32))
+                        .intern(ResolvedType::StreamWritable(inner))
                 };
                 let tuple_type = self
                     .type_table

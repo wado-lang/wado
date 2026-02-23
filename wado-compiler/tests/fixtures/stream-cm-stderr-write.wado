@@ -1,0 +1,20 @@
+// Test: Stderr::write_via_stream() directly with Stream<u8>
+// Verifies the CM adapter correctly accepts Stream<u8> parameter for stderr.
+// TODO: calling Stderr::write_via_stream() followed by println() deadlocks because
+// both are async CM operations that need the event loop in a synchronous context.
+use { println, Stdout, Stderr } from "core:cli";
+
+export fn run() with Stdout, Stderr {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Write "err msg\n" as bytes
+    let data: Array<u8> = [101, 114, 114, 32, 109, 115, 103, 10];
+    tx.write(data);
+    tx.close();
+
+    Stderr::write_via_stream(rx);
+    println("done");
+}
+
+__DATA__
+{"TODO": true, "stdout": "done\n", "stderr": "err msg\n"}

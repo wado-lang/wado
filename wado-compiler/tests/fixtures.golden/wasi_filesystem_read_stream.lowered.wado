@@ -88,7 +88,7 @@ fn __cm_adapter__Descriptor_read_via_stream(self: &Descriptor, offset: Filesize)
     return [core::builtin::i32_load((__outptr + 0)), core::builtin::i32_load((__outptr + 4))];
 }
 
-fn __cm_adapter__Stdout_write_via_stream(data: Stream<u8>) {
+fn __cm_adapter__Stdout_write_via_stream(data: Stream<u8>) -> Result<(), ErrorCode> {
     let __subtask: i32 = cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
     core::internal::wait_for_subtask(__subtask);
     let __disc: i32 = core::builtin::i32_load(2048);

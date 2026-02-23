@@ -1,0 +1,20 @@
+// Test: Stream::read() returns empty array on end-of-stream
+// When the writable end is closed without writing, read should return empty.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Close writer immediately (no data written)
+    tx.close();
+
+    // Read should return empty array (end-of-stream)
+    let result = rx.read(64);
+    assert result.len() == 0;
+
+    rx.close();
+    println("eof ok");
+}
+
+__DATA__
+{"stdout": "eof ok\n"}

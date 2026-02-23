@@ -635,6 +635,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             | ResolvedType::MutRef(inner)
             | ResolvedType::BuiltinArray(inner)
             | ResolvedType::Stream(inner)
+            | ResolvedType::StreamWritable(inner)
             | ResolvedType::Future(inner)
             | ResolvedType::FutureWritable(inner)
             | ResolvedType::Reactive(inner) => {

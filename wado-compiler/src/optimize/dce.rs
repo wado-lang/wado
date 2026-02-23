@@ -34,6 +34,9 @@ struct FunctionAnalysis {
     callees: IndexSet<FunctionId>,
     /// Effect calls: (`effect_name`, `op_name`)
     effect_calls: IndexSet<(String, String)>,
+    /// Stream/StreamWritable method calls: (`type_name`, `method_name`)
+    /// e.g., ("Stream", "close"), ("`StreamWritable`", "write")
+    stream_methods: IndexSet<(String, String)>,
 }
 
 /// Analyze the project and populate its usage fields with DCE analysis results.
@@ -43,7 +46,8 @@ struct FunctionAnalysis {
 /// fields, and the entry module's `imports` list.
 pub fn analyze_project(project: &mut Project) {
     // Build call graph and effect usage from all modules
-    let (call_graph, effect_usage) = build_analysis_graph(&project.tir_modules);
+    let (call_graph, effect_usage, stream_method_usage) =
+        build_analysis_graph(&project.tir_modules);
 
     // Determine entry functions from world exports.
     // For the test world, test functions are the sole entry points; world exports
@@ -97,6 +101,14 @@ pub fn analyze_project(project: &mut Project) {
             for (effect_name, op_name) in effects {
                 used_wasi_functions.insert(format!("{effect_name}::{op_name}"));
             }
+        }
+    }
+
+    // Collect stream/stream-writable method usage from reachable functions
+    let mut used_stream_methods: IndexSet<(String, String)> = IndexSet::new();
+    for func_id in &reachable {
+        if let Some(methods) = stream_method_usage.get(func_id) {
+            used_stream_methods.extend(methods.iter().cloned());
         }
     }
 
@@ -198,6 +210,12 @@ pub fn analyze_project(project: &mut Project) {
                 add_import_by_name(&mut imports, "stream_new");
                 add_import_by_name(&mut imports, "stream_write");
                 add_import_by_name(&mut imports, "stream_drop_writable");
+            } else if name == "stream_create_pair" {
+                // Synthetic name from method_call.rs for Stream::new() → stream_new canonical
+                add_import_by_name(&mut imports, "stream_new");
+            } else if name == "future_create_pair" {
+                // Synthetic name from method_call.rs for Future::new() → future_new canonical
+                add_import_by_name(&mut imports, "future_new");
             } else {
                 // Look up the builtin in the registry
                 add_import_by_name(&mut imports, name);
@@ -214,6 +232,36 @@ pub fn analyze_project(project: &mut Project) {
     }
     if needs_f32_to_buffer {
         add_import_by_name(&mut imports, "f32_to_buffer");
+    }
+
+    // Stream/StreamWritable method calls need canonical builtins
+    for (type_name, method_name) in &used_stream_methods {
+        match (type_name.as_str(), method_name.as_str()) {
+            ("Stream", "close") => {
+                add_import_by_name(&mut imports, "stream_drop_readable");
+            }
+            ("Stream", "read") => {
+                add_import_by_name(&mut imports, "stream_read");
+                add_import_by_name(&mut imports, "waitable_set_new");
+                add_import_by_name(&mut imports, "waitable_join");
+                add_import_by_name(&mut imports, "waitable_set_wait");
+            }
+            ("StreamWritable", "close") => {
+                add_import_by_name(&mut imports, "stream_drop_writable");
+            }
+            ("StreamWritable", "write") => {
+                add_import_by_name(&mut imports, "stream_write");
+                add_import_by_name(&mut imports, "waitable_set_new");
+                add_import_by_name(&mut imports, "waitable_join");
+                add_import_by_name(&mut imports, "waitable_set_wait");
+                // cm_lower_array_u8 is an internal function that must be reachable
+                reachable.extend(compute_reachable(
+                    &call_graph,
+                    &core_internal("cm_lower_array_u8"),
+                ));
+            }
+            _ => {}
+        }
     }
 
     // Async exports require task-return and potentially other canonical intrinsics.
@@ -338,12 +386,13 @@ pub fn analyze_project(project: &mut Project) {
 }
 
 /// Build call graph and effect usage from all TIR modules
-/// Returns (`call_graph`, `effect_usage`)
+/// Returns (`call_graph`, `effect_usage`, `stream_method_usage`)
 fn build_analysis_graph(
     modules: &IndexMap<ModuleSource, TirModule>,
-) -> (CallGraph, EffectUsageMap) {
+) -> (CallGraph, EffectUsageMap, EffectUsageMap) {
     let mut call_graph: CallGraph = IndexMap::new();
     let mut effect_usage: EffectUsageMap = IndexMap::new();
+    let mut stream_method_usage: EffectUsageMap = IndexMap::new();
 
     for (module_source, module) in modules {
         let type_table = &*module.type_table.borrow();
@@ -393,7 +442,10 @@ fn build_analysis_graph(
             let analysis = analyze_function(&func, module_source, type_table);
             call_graph.insert(func_id.clone(), analysis.callees);
             if !analysis.effect_calls.is_empty() {
-                effect_usage.insert(func_id, analysis.effect_calls);
+                effect_usage.insert(func_id.clone(), analysis.effect_calls);
+            }
+            if !analysis.stream_methods.is_empty() {
+                stream_method_usage.insert(func_id, analysis.stream_methods);
             }
         }
 
@@ -415,13 +467,16 @@ fn build_analysis_graph(
                 let analysis = analyze_function(method, module_source, type_table);
                 call_graph.insert(method_id.clone(), analysis.callees);
                 if !analysis.effect_calls.is_empty() {
-                    effect_usage.insert(method_id, analysis.effect_calls);
+                    effect_usage.insert(method_id.clone(), analysis.effect_calls);
+                }
+                if !analysis.stream_methods.is_empty() {
+                    stream_method_usage.insert(method_id, analysis.stream_methods);
                 }
             }
         }
     }
 
-    (call_graph, effect_usage)
+    (call_graph, effect_usage, stream_method_usage)
 }
 
 /// Analyze a TIR function for callees and effect usage
@@ -568,6 +623,33 @@ fn analyze_expr(
             args,
             ..
         } => {
+            // Detect Stream/StreamWritable method calls for canonical builtin injection.
+            // These methods are intercepted in WIR translation and need specific builtins.
+            if let Some(info) = func.method_info() {
+                let mut recv_type = type_table.get(receiver.type_id);
+                loop {
+                    match recv_type {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                            recv_type = type_table.get(*inner);
+                        }
+                        _ => break,
+                    }
+                }
+                match recv_type {
+                    ResolvedType::Stream(_) => {
+                        analysis
+                            .stream_methods
+                            .insert(("Stream".to_string(), info.method_name.clone()));
+                    }
+                    ResolvedType::StreamWritable(_) => {
+                        analysis
+                            .stream_methods
+                            .insert(("StreamWritable".to_string(), info.method_name.clone()));
+                    }
+                    _ => {}
+                }
+            }
+
             // Use the func reference directly - it already has the correct mangled name
             // and monomorph_info from lowering phase
             let func_name = func.name();
@@ -1689,6 +1771,7 @@ fn collect_type_dependencies(
         | ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner)
         | ResolvedType::Stream(inner)
+        | ResolvedType::StreamWritable(inner)
         | ResolvedType::Future(inner)
         | ResolvedType::FutureWritable(inner)
         | ResolvedType::Reactive(inner) => {

@@ -1,0 +1,13 @@
+// Test: StreamWritable<T> type exists as the writable end of Stream::new()
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Stream::new() should return [Stream<T>, StreamWritable<T>]
+    let [_rx, tx]: [Stream<u8>, StreamWritable<u8>] = Stream::<u8>::new();
+    tx.close();
+    _rx.close();
+    println("StreamWritable type exists");
+}
+
+__DATA__
+{"stdout": "StreamWritable type exists\n"}

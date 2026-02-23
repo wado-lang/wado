@@ -198,6 +198,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     .borrow_mut()
                     .intern(ResolvedType::Stream(elem))
             }
+            "StreamWritable" => {
+                let elem = args
+                    .first()
+                    .map(|t| self.resolve_type(t))
+                    .unwrap_or(TypeTable::UNKNOWN);
+                self.type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::StreamWritable(elem))
+            }
             "Future" => {
                 let elem = args
                     .first()

@@ -1,23 +1,28 @@
 #!/usr/bin/env wado
 // A simple cat(1) implementation in Wado
 //
-// Usage: wado run example/cat.wado <file>...
+// Usage: wado run example/cat.wado [file]...
 //
+// When no files are given, reads from stdin.
 // By default, wado run preopens the current directory as '.'.
 // Files are opened relative to that preopened directory.
 //
 // Example:
+//   echo "hello" | wado run example/cat.wado
 //   wado run example/cat.wado README.md
 //   wado run example/cat.wado example/cat.wado example/hello.wado
 
 use { args, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Stdin } from "wasi:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
-export fn run() with Stdout, Stderr, Environment, Preopens {
+export fn run() with Stdout, Stderr, Environment, Preopens, Stdin {
     let arguments = args();
 
     if arguments.len() == 0 {
-        eprintln("cat: usage: cat <file>...");
+        // No arguments: read from stdin and write to stdout
+        let [stdin_stream, _done] = Stdin::read_via_stream();
+        Stdout::write_via_stream(stdin_stream);
         return;
     }
 

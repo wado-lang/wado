@@ -1,0 +1,27 @@
+// Test: Stream::read() loop pattern works correctly
+// Tests the read-until-EOF loop pattern that is used in HTTP handlers.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Close writer immediately so reads see EOF
+    tx.close();
+
+    // Read loop should terminate immediately with 0-length chunk
+    let mut reads = 0;
+    loop {
+        let chunk = rx.read(2);
+        if chunk.len() == 0 {
+            break;
+        }
+        reads = reads + 1;
+    }
+
+    assert reads == 0;
+    rx.close();
+    println("multi-read ok");
+}
+
+__DATA__
+{"stdout": "multi-read ok\n"}

@@ -1,0 +1,21 @@
+// Test: StreamWritable::write() compiles and can be called
+// Verifies the typed write API compiles correctly. The write may return
+// DROPPED since the reader is already closed, but that's expected.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+
+    // Close the reader first so write sees DROPPED rather than BLOCKED
+    rx.close();
+
+    // Write data via the typed StreamWritable API
+    let data: Array<u8> = [72, 101, 108, 108, 111, 10]; // "Hello\n"
+    tx.write(data);
+    tx.close();
+
+    println("write ok");
+}
+
+__DATA__
+{"stdout": "write ok\n"}

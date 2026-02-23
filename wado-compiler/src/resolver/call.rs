@@ -509,6 +509,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 "f32" => TypeTable::F32,
                 "f64" => TypeTable::F64,
                 "bool" => TypeTable::BOOL,
+                "()" => TypeTable::UNIT,
                 // Type aliases from WASI (e.g., Mark, Instant, Duration)
                 _ => {
                     // First check if it's a registered newtype in newtypes
@@ -546,6 +547,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.type_table
                             .borrow_mut()
                             .make_resource(named.name.clone(), module_source)
+                    } else if self.wasi_registry.is_enum(&named.name) {
+                        // WASI enum type - look up the module source from all_enum_cases
+                        let module_source = self
+                            .all_enum_cases
+                            .iter()
+                            .find_map(|(ms, map)| {
+                                if map.contains_key(&named.name) {
+                                    Some(ms.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_else(|| ModuleSource::wasi("cli"));
+                        self.type_table
+                            .borrow_mut()
+                            .make_enum(named.name.clone(), module_source)
                     } else {
                         // Unknown type - represent as i32 handle
                         TypeTable::I32
@@ -561,9 +578,45 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let inner_type = self.resolve_wasi_type(&generic.args[0]);
                     self.type_table.borrow_mut().make_option(inner_type)
                 }
+                "Stream" if generic.args.len() == 1 => {
+                    let inner_type = self.resolve_wasi_type(&generic.args[0]);
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Stream(inner_type))
+                }
+                "Future" if generic.args.len() == 1 => {
+                    let inner_type = self.resolve_wasi_type(&generic.args[0]);
+                    self.type_table
+                        .borrow_mut()
+                        .intern(ResolvedType::Future(inner_type))
+                }
+                "Result" if generic.args.len() == 2 => {
+                    let ok_type = self.resolve_wasi_type(&generic.args[0]);
+                    let err_type = self.resolve_wasi_type(&generic.args[1]);
+                    // Look up the module source where Result variant is defined
+                    let module_source = self
+                        .all_variant_cases
+                        .iter()
+                        .find_map(|(ms, map)| {
+                            if map.contains_key("Result") {
+                                Some(ms.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(ModuleSource::prelude);
+                    self.type_table.borrow_mut().make_generic_instance(
+                        "Result".to_string(),
+                        module_source,
+                        vec![ok_type, err_type],
+                    )
+                }
                 _ => TypeTable::UNIT,
             },
             Type::Tuple(types) => {
+                if types.is_empty() {
+                    return TypeTable::UNIT;
+                }
                 let resolved: Vec<TypeId> =
                     types.iter().map(|t| self.resolve_wasi_type(t)).collect();
                 self.type_table

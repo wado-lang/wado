@@ -1,0 +1,16 @@
+// Test: Stream::new() returns [Stream<T>, StreamWritable<T>]
+// Previously Stream::new() returned [Stream<T>, i32]; now it should return
+// a properly typed pair with StreamWritable<T> as the second element.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    // rx should be Stream<u8>, tx should be StreamWritable<u8>
+    // Just verify creation doesn't trap
+    tx.close();
+    rx.close();
+    println("Stream::new() pair created");
+}
+
+__DATA__
+{"stdout": "Stream::new() pair created\n"}

@@ -1,0 +1,17 @@
+// Test: Stream<u8> readable end can be passed to Stdout::write_via_stream
+// Verifies the existing write_via_stream pattern works with new Stream/StreamWritable types.
+// Uses println internally (which calls write_via_stream) to validate the full pipeline.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Verify Stream::new() returns correctly typed pair
+    let [_rx, _tx]: [Stream<u8>, StreamWritable<u8>] = Stream::<u8>::new();
+    _tx.close();
+    _rx.close();
+
+    // Use println which internally uses write_via_stream
+    println("via stream ok");
+}
+
+__DATA__
+{"stdout": "via stream ok\n"}

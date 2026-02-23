@@ -471,8 +471,17 @@ pub fn run_wasm_with_dirs(
     wasm: Vec<u8>,
     dirs: &[(String, String)],
 ) -> anyhow::Result<WasmRunResult> {
+    run_wasm_with_options(wasm, dirs, None)
+}
+
+/// Run a compiled Wasm component with full options (dirs, stdin) and capture its output.
+pub fn run_wasm_with_options(
+    wasm: Vec<u8>,
+    dirs: &[(String, String)],
+    stdin_data: Option<&str>,
+) -> anyhow::Result<WasmRunResult> {
     use wasmtime::component::Component;
-    use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
+    use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
 
     let rt = runtime();
     let engine = cli_engine();
@@ -488,7 +497,12 @@ pub fn run_wasm_with_dirs(
 
         let mut builder = WasiCtxBuilder::new();
         builder.stdout(stdout_pipe).stderr(stderr_pipe);
-        builder.allow_blocking_current_thread(true);
+        if let Some(data) = stdin_data {
+            builder.stdin(MemoryInputPipe::new(data.to_owned()));
+        }
+        if !dirs.is_empty() {
+            builder.allow_blocking_current_thread(true);
+        }
         for (host_path, guest_path) in dirs {
             builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
         }
