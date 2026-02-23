@@ -39,7 +39,7 @@ impl Cmd {
     const fn args(self) -> &'static str {
         match self {
             Self::Compile | Self::Run | Self::Serve => "[options] <file.wado>",
-            Self::Test => "[options] [files...]",
+            Self::Test => "[options] [files or dirs...]",
             Self::Format | Self::Dump => "[options] <file.wado>...",
             Self::Syntax => "[options]",
         }

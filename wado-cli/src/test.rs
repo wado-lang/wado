@@ -1,6 +1,8 @@
 use std::fmt::Write as _;
+use std::path::Path;
 use std::process;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use glob::glob;
@@ -50,11 +52,16 @@ impl Opt {
 
 fn format_usage() -> String {
     let mut buf = String::new();
-    writeln!(buf, "Usage: wado test [options] [files...]").unwrap();
+    writeln!(buf, "Usage: wado test [options] [files or directories...]").unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
         "If no files are specified, searches for **/*_test.wado recursively."
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "If a directory is given, searches for *_test.wado files within it."
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -67,12 +74,12 @@ pub fn print_usage() {
     eprint!("{}", format_usage());
 }
 
-/// Find all *_test.wado files recursively in the current directory
-fn find_test_files() -> Result<Vec<String>, CliExit> {
-    let pattern = "**/*_test.wado";
+/// Find all *_test.wado files recursively in the given directory.
+fn find_test_files_in(dir: &str) -> Result<Vec<String>, CliExit> {
+    let pattern = format!("{dir}/**/*_test.wado");
     let mut files: Vec<String> = Vec::new();
 
-    match glob(pattern) {
+    match glob(&pattern) {
         Ok(paths) => {
             for entry in paths.flatten() {
                 files.push(entry.display().to_string());
@@ -85,6 +92,30 @@ fn find_test_files() -> Result<Vec<String>, CliExit> {
 
     files.sort();
     Ok(files)
+}
+
+/// Find all *_test.wado files recursively in the current directory.
+fn find_test_files() -> Result<Vec<String>, CliExit> {
+    find_test_files_in(".")
+}
+
+/// Resolve paths: expand directories to their contained *_test.wado files.
+fn resolve_paths(paths: Vec<String>) -> Result<Vec<String>, CliExit> {
+    let mut resolved = Vec::new();
+    for path in paths {
+        if Path::new(&path).is_dir() {
+            let mut found = find_test_files_in(&path)?;
+            if found.is_empty() {
+                return Err(CliExit::error(format!(
+                    "no *_test.wado files found in directory '{path}'"
+                )));
+            }
+            resolved.append(&mut found);
+        } else {
+            resolved.push(path);
+        }
+    }
+    Ok(resolved)
 }
 
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
@@ -116,7 +147,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         }
     }
 
-    // If no files specified, search for *_test.wado files
+    // Resolve paths: expand directories to *_test.wado files
     if paths.is_empty() {
         paths = find_test_files()?;
         if paths.is_empty() {
@@ -125,6 +156,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
                 exit_code: 0,
             });
         }
+    } else {
+        paths = resolve_paths(paths)?;
     }
 
     // Default to half of available CPUs (minimum 2)
@@ -164,6 +197,7 @@ struct TestResult {
     display_name: String,
     passed: bool,
     error: Option<String>,
+    duration: Duration,
 }
 
 /// Extract display name from test export name.
@@ -253,6 +287,8 @@ async fn collect_test_jobs(
 
 /// Run a single test in its own Store
 async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResult {
+    let start = Instant::now();
+
     // Create fresh Store and Linker for this test
     let mut store = match runtime::create_store(&module.engine, &[], &[]) {
         Ok(s) => s,
@@ -263,6 +299,7 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
                 display_name: job.display_name.clone(),
                 passed: false,
                 error: Some(format!("failed to set up store: {e}")),
+                duration: start.elapsed(),
             };
         }
     };
@@ -275,6 +312,7 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
                 display_name: job.display_name.clone(),
                 passed: false,
                 error: Some(format!("failed to set up linker: {e}")),
+                duration: start.elapsed(),
             };
         }
     };
@@ -292,6 +330,7 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
                 display_name: job.display_name.clone(),
                 passed: false,
                 error: Some(format!("failed to instantiate: {e}")),
+                duration: start.elapsed(),
             };
         }
     };
@@ -338,6 +377,7 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
         display_name: job.display_name.clone(),
         passed,
         error,
+        duration: start.elapsed(),
     }
 }
 
@@ -397,7 +437,20 @@ async fn execute_tests_parallel(
     results
 }
 
+/// Format a duration in human-readable form with appropriate units.
+fn format_duration(d: Duration) -> String {
+    let secs = d.as_secs_f64();
+    if secs >= 1.0 {
+        format!("{secs:.2}s")
+    } else {
+        let ms = secs * 1000.0;
+        format!("{ms:.0}ms")
+    }
+}
+
 pub async fn run(opts: TestOptions) {
+    let overall_start = Instant::now();
+
     // Phase 1: Compile all files and collect test jobs
     let (modules, jobs) = match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
         Ok(result) => result,
@@ -439,11 +492,12 @@ pub async fn run(opts: TestOptions) {
             sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
 
             for result in sorted_results {
+                let dur = format_duration(result.duration);
                 if result.passed {
-                    println!("  \x1b[32m✓\x1b[0m {}", result.display_name);
+                    println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
                     total_passed += 1;
                 } else {
-                    println!("  \x1b[31m✗\x1b[0m {}", result.display_name);
+                    println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
                     if let Some(ref error) = result.error {
                         println!("    {error}");
                     }
@@ -453,8 +507,9 @@ pub async fn run(opts: TestOptions) {
         }
     }
 
+    let total_dur = format_duration(overall_start.elapsed());
     println!();
-    println!("{total_passed} passed, {total_failed} failed");
+    println!("{total_passed} passed, {total_failed} failed ({total_dur})");
 
     if total_failed > 0 {
         process::exit(1);
