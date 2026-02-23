@@ -201,10 +201,7 @@ fn register_memory_import(ctx: &mut WirContext<'_>) {
         let short = format!("{}", ctx.import_name_map.len());
         ctx.import_name_map
             .insert("memory".to_string(), short.clone());
-        (
-            super::context::shorten_import_module("mem"),
-            short,
-        )
+        (super::context::shorten_import_module("mem"), short)
     } else {
         ("mem".to_string(), "memory".to_string())
     };
