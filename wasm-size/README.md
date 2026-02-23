@@ -53,6 +53,10 @@ Compares WebAssembly binary sizes across different languages.
 | c        |       42,963 | decompress only (zlib 1.3.1)   |
 | rust     |       81,876 | decompress only (zlib-rs 0.6)  |
 
+## Testing
+
+Each `.wado` program includes `test` blocks for correctness verification. Tests run via `make test-wado` alongside other Wado tests.
+
 ## Usage
 
 ```sh
