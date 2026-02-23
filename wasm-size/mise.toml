@@ -59,7 +59,7 @@ if [ -n "$WASM_CLANG" ]; then
     echo "Building C..."
     eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/hello_world_c.wasm" hello_world/hello_world.c
     eval $WASM_CLANG -Oz -Wl,--strip-all -o "$OUT_DIR/pi_approx_c.wasm" pi_approx/pi_approx.c
-    eval $WASM_CLANG -Oz -Wl,--strip-all -Izlib/zlib-1.3.1 -o "$OUT_DIR/zlib_c.wasm" zlib/zlib.c zlib/zlib-1.3.1/adler32.c zlib/zlib-1.3.1/crc32.c zlib/zlib-1.3.1/inffast.c zlib/zlib-1.3.1/inflate.c zlib/zlib-1.3.1/inftrees.c zlib/zlib-1.3.1/uncompr.c zlib/zlib-1.3.1/zutil.c
+    eval $WASM_CLANG -Oz -Wl,--strip-all -Izlib/zlib-1.3.1 -o "$OUT_DIR/zlib_c.wasm" zlib/zlib.c zlib/zlib-1.3.1/adler32.c zlib/zlib-1.3.1/crc32.c zlib/zlib-1.3.1/inffast.c zlib/zlib-1.3.1/inflate.c zlib/zlib-1.3.1/inftrees.c zlib/zlib-1.3.1/zutil.c
 else
     echo "SKIP: C (run 'mise install' for wasi-sdk)"
 fi
@@ -164,9 +164,24 @@ else
 fi
 """
 
+[tasks.gen-test-data]
+description = "Generate test data for zlib benchmarks"
+run = """
+#!/usr/bin/env bash
+set -e
+mkdir -p "$OUT_DIR"
+python3 -c "
+import gzip
+data = bytes(range(256)) * 4  # 1024 bytes of pattern
+with open('$OUT_DIR/test.gz', 'wb') as f:
+    f.write(gzip.compress(data, compresslevel=6))
+"
+echo "Generated $OUT_DIR/test.gz ($(wc -c < "$OUT_DIR/test.gz" | tr -d ' ') bytes)"
+"""
+
 [tasks.build-all]
 description = "Build all language targets"
-depends = ["build-rust", "build-zig", "build-tinygo", "build-assemblyscript", "build-moonbit", "build-c", "build-wado"]
+depends = ["gen-test-data", "build-rust", "build-zig", "build-tinygo", "build-assemblyscript", "build-moonbit", "build-c", "build-wado"]
 
 [tasks.validate]
 description = "Validate built Wasm files with wasmtime"
@@ -174,17 +189,32 @@ run = """
 #!/usr/bin/env bash
 echo ""
 echo "=== Validation (running with wasmtime) ==="
-for f in "$OUT_DIR"/*_rust.wasm "$OUT_DIR"/*_zig.wasm "$OUT_DIR"/*_tinygo.wasm "$OUT_DIR"/*_c.wasm "$OUT_DIR"/*_assemblyscript.wasm "$OUT_DIR"/*_moonbit.wasm; do
-    if [ -f "$f" ]; then
+# WASI Preview 1 programs (non-zlib)
+for f in "$OUT_DIR"/hello_world_*.wasm "$OUT_DIR"/pi_approx_*.wasm; do
+    if [ -f "$f" ] && [[ "$f" != *_wado.wasm ]]; then
         printf "%-40s " "$f:"
         $WASMTIME "$f" 2>&1 | head -1 || echo "(failed)"
     fi
 done
+# WASI Preview 1 zlib programs (need stdin)
+for f in "$OUT_DIR"/zlib_*.wasm; do
+    if [ -f "$f" ] && [[ "$f" != *_wado.wasm ]]; then
+        printf "%-40s " "$f:"
+        $WASMTIME "$f" < "$OUT_DIR/test.gz" 2>&1 | head -1 || echo "(failed)"
+    fi
+done
 # Wado uses WASI P3 component model (requires wasmtime 41+)
-for f in "$OUT_DIR"/*_wado.wasm; do
+for f in "$OUT_DIR"/hello_world_wado.wasm "$OUT_DIR"/pi_approx_wado.wasm; do
     if [ -f "$f" ]; then
         printf "%-40s " "$f:"
         $WASMTIME run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' "$f" 2>&1 | head -1 || echo "(failed)"
+    fi
+done
+# Wado zlib (needs stdin)
+for f in "$OUT_DIR"/zlib_wado.wasm; do
+    if [ -f "$f" ]; then
+        printf "%-40s " "$f:"
+        $WASMTIME run -S p3=y -W gc=y -W function-references=y -W component-model-async=y -W component-model-async-stackful=y --invoke 'run()' "$f" < "$OUT_DIR/test.gz" 2>&1 | head -1 || echo "(failed)"
     fi
 done
 """

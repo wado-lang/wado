@@ -16,7 +16,7 @@ Compares WebAssembly binary sizes across different languages.
 
 - `hello_world` - Minimal "Hello, World!" program
 - `pi_approx` - Pi approximation using Leibniz formula (1M iterations)
-- `zlib` - zlib decompress (inflate 286B -> 1KB patterned data)
+- `zlib` - gzip decompress from stdin (read gzip data from stdin, decompress, print size)
 
 ## Results
 
@@ -46,12 +46,14 @@ Compares WebAssembly binary sizes across different languages.
 
 ### zlib
 
-| Language | Size (bytes) | Notes                          |
-| -------- | -----------: | ------------------------------ |
-| wado     |       17,080 | decompress only (core:zlib)    |
-| zig      |       20,513 | decompress only (std.compress) |
-| c        |       42,963 | decompress only (zlib 1.3.1)   |
-| rust     |       81,876 | decompress only (zlib-rs 0.6)  |
+Reads gzip data from stdin and decompresses it.
+
+| Language | Size (bytes) | Notes                                  |
+| -------- | -----------: | -------------------------------------- |
+| wado     |       15,867 | stdin + gzip decompress (core:zlib)    |
+| zig      |              | stdin + gzip decompress (std.compress) |
+| c        |              | stdin + gzip decompress (zlib 1.3.1)   |
+| rust     |       93,653 | stdin + gzip decompress (zlib-rs 0.6)  |
 
 ## Usage
 
