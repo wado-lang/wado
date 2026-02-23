@@ -18,7 +18,7 @@ export fn run() with Stderr {
     // 2. Write "err msg\n" as raw bytes to the stream
     let data: Array<u8> = [101, 114, 114, 32, 109, 115, 103, 10];
     let ptr = builtin::realloc(0, 0, 1, 8);
-    for (let mut i = 0; i < 8; i = i + 1) {
+    for let mut i = 0; i < 8; i = i + 1 {
         builtin::i32_store8(ptr + i, data[i] as i32);
     }
     builtin::stream_write(tx, ptr, 8);
