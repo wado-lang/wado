@@ -49,6 +49,7 @@ The target world is indicated by the top-level key in the JSON object:
 | `trapped`             | `bool`               | Whether the program should trap                            |
 | `compile_error`       | `string`             | Expected compile error (substring match)                   |
 | `TODO`                | `bool`               | Mark as TODO test - must fail until feature is implemented |
+| `maybeTODO`           | `bool`               | Test passes regardless of outcome (for opt-level-dependent behavior) |
 | `preopened_dirs`      | `[string, string][]` | Preopened directories `[host_path, guest_path]`            |
 
 HTTP sub-fields (inside `"wasi:http/service": {...}`):
