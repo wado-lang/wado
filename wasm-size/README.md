@@ -51,8 +51,8 @@ Reads gzip data from stdin and decompresses it.
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
 | wado     |       15,867 | stdin + gzip decompress (core:zlib)    |
-| zig      |              | stdin + gzip decompress (std.compress) |
-| c        |              | stdin + gzip decompress (zlib 1.3.1)   |
+| zig      |       20,396 | stdin + gzip decompress (std.compress) |
+| c        |       42,647 | stdin + gzip decompress (zlib 1.3.1)   |
 | rust     |       93,653 | stdin + gzip decompress (zlib-rs 0.6)  |
 
 ## Usage
