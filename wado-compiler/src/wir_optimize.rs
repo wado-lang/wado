@@ -299,16 +299,19 @@ fn validate_call_sites_in_body(
     invalid: &mut IndexSet<u32>,
 ) {
     for instr in instrs {
-        // Recurse into nested blocks
+        // Recurse into nested statement-level blocks
         match instr {
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                 validate_call_sites_in_body(body, candidate_ids, invalid);
             }
             WirInstr::If {
+                condition,
                 then_body,
                 else_body,
                 ..
             } => {
+                // Check condition expression for invalid calls (not in nested block scope)
+                find_nested_candidate_calls(condition, candidate_ids, invalid);
                 validate_call_sites_in_body(then_body, candidate_ids, invalid);
                 if let Some(eb) = else_body {
                     validate_call_sites_in_body(eb, candidate_ids, invalid);
@@ -317,24 +320,63 @@ fn validate_call_sites_in_body(
             WirInstr::Seq(body) => {
                 validate_call_sites_in_body(body, candidate_ids, invalid);
             }
-            _ => {}
+            // For non-block instructions, check for invalid call uses at this level
+            _ => {
+                check_invalid_call_uses(instr, candidate_ids, invalid);
+            }
         }
-
-        // Check for calls to candidates in non-LocalSet contexts (invalid)
-        check_invalid_call_uses(instr, candidate_ids, invalid);
     }
 
-    // Check that LocalSet(Call(candidate)) temps are only used via StructGet
+    // Check that LocalSet(Call(candidate)) temps are only used via StructGet.
+    // Also handles calls wrapped in ValueCopy or trivial inlined blocks.
     for instr in instrs {
         if let WirInstr::LocalSet { name, value } = instr
-            && let WirInstr::Call { func_id, .. } = value.as_ref()
-            && candidate_ids.contains(&func_id.index())
+            && let Some(func_id_idx) = unwrap_to_candidate_call(value, candidate_ids)
         {
             // Verify all uses of `name` in this body are StructGet patterns
             if !all_uses_are_struct_get(instrs, name) {
-                invalid.insert(func_id.index());
+                invalid.insert(func_id_idx);
             }
         }
+    }
+}
+
+/// Look through `ValueCopy`, trivial `Block` wrappers, and other transparent
+/// expressions to find a `Call` to a candidate function. Returns the func_id
+/// index if found.
+fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> Option<u32> {
+    match instr {
+        WirInstr::Call { func_id, .. } if candidate_ids.contains(&func_id.index()) => {
+            Some(func_id.index())
+        }
+        // ValueCopy wraps a struct reference — look through it
+        WirInstr::ValueCopy { expr, .. } => unwrap_to_candidate_call(expr, candidate_ids),
+        // Trivial block from inlining: the block's result value is either:
+        // 1. The last instruction in body (implicit value)
+        // 2. A Seq([..., value, Br]) pattern (break-with-value)
+        WirInstr::Block { body, .. } => {
+            extract_block_result_call(body, candidate_ids)
+        }
+        _ => None,
+    }
+}
+
+/// Extract a candidate call from the result position of a block body.
+/// Handles both implicit block results and explicit `Seq([value, Br])` patterns.
+fn extract_block_result_call(body: &[WirInstr], candidate_ids: &IndexSet<u32>) -> Option<u32> {
+    let last = body.last()?;
+    match last {
+        // Block ends with Seq([..., value, Br { depth }]) — break-with-value
+        WirInstr::Seq(seq) => {
+            if let Some((WirInstr::Br { .. }, rest)) = seq.split_last() {
+                if let Some((val, _)) = rest.split_last() {
+                    return unwrap_to_candidate_call(val, candidate_ids);
+                }
+            }
+            None
+        }
+        // Block ends with the value directly (no explicit br)
+        other => unwrap_to_candidate_call(other, candidate_ids),
     }
 }
 
@@ -346,12 +388,16 @@ fn check_invalid_call_uses(
     invalid: &mut IndexSet<u32>,
 ) {
     match instr {
-        // LocalSet { value: Call { func, args } } is the valid pattern for the
-        // *outer* call — but we must still check the args for nested candidate calls.
-        WirInstr::LocalSet { value, .. } if matches!(value.as_ref(), WirInstr::Call { .. }) => {
-            if let WirInstr::Call { args, .. } = value.as_ref() {
-                for arg in args {
-                    find_nested_candidate_calls(arg, candidate_ids, invalid);
+        // LocalSet { value: <wrapper>(Call) } is valid — handled separately
+        WirInstr::LocalSet { value, .. }
+            if unwrap_to_candidate_call(value, candidate_ids).is_some() =>
+        {
+            // Still check args of the underlying call for nested candidate calls
+            if let Some(call) = unwrap_to_inner_call(value) {
+                if let WirInstr::Call { args, .. } = call {
+                    for arg in args {
+                        find_nested_candidate_calls(arg, candidate_ids, invalid);
+                    }
                 }
             }
         }
@@ -359,6 +405,29 @@ fn check_invalid_call_uses(
         _ => {
             find_nested_candidate_calls(instr, candidate_ids, invalid);
         }
+    }
+}
+
+/// Unwrap through ValueCopy/Block to find the inner Call instruction (for arg checking).
+fn unwrap_to_inner_call(instr: &WirInstr) -> Option<&WirInstr> {
+    match instr {
+        WirInstr::Call { .. } => Some(instr),
+        WirInstr::ValueCopy { expr, .. } => unwrap_to_inner_call(expr),
+        WirInstr::Block { body, .. } => {
+            let last = body.last()?;
+            match last {
+                WirInstr::Seq(seq) => {
+                    if let Some((WirInstr::Br { .. }, rest)) = seq.split_last() {
+                        if let Some((val, _)) = rest.split_last() {
+                            return unwrap_to_inner_call(val);
+                        }
+                    }
+                    None
+                }
+                other => unwrap_to_inner_call(other),
+            }
+        }
+        _ => None,
     }
 }
 
@@ -603,8 +672,10 @@ fn rewrite_call_sites(
         }
         replacements.insert(temp_name, field_map);
 
-        // Extract the Call instruction and emit MultiValueLocalBind
-        let call_instr = take_call_from_local_set(&mut instrs[set_idx]);
+        // Extract the Call instruction (and any prefix statements from block wrappers)
+        let (prefix_instrs, call_instr) = take_call_from_local_set(&mut instrs[set_idx]);
+        // Emit prefix instructions (e.g. local initialization from inlined blocks)
+        result.extend(prefix_instrs);
         result.push(WirInstr::MultiValueLocalBind {
             instr: call_instr,
             locals,
@@ -688,7 +759,7 @@ fn replace_struct_gets(
     instr.for_each_boxed_child_mut(&mut |child| replace_struct_gets(child, replacements));
 }
 
-/// Check if instruction is `LocalSet { name, value: Call { func_id in candidates } }`.
+/// Check if instruction is `LocalSet { name, value: <wrapper>(Call { func_id in candidates }) }`.
 fn is_candidate_call_set(
     instr: &WirInstr,
     expected_name: &str,
@@ -700,13 +771,12 @@ fn is_candidate_call_set(
     if name != expected_name {
         return false;
     }
-    let WirInstr::Call { func_id, .. } = value.as_ref() else {
-        return false;
-    };
-    candidate_map.contains_key(&func_id.index())
+    let candidate_ids: IndexSet<u32> = candidate_map.keys().copied().collect();
+    unwrap_to_candidate_call(value, &candidate_ids).is_some()
 }
 
 /// Extract (`func_id_index`, `temp_name`) from a candidate call `LocalSet`.
+/// Handles calls wrapped in `ValueCopy` or trivial inlined `Block`.
 fn extract_candidate_call_info(
     instr: &WirInstr,
     candidate_map: &indexmap::IndexMap<u32, &SroaCandidate>,
@@ -714,24 +784,93 @@ fn extract_candidate_call_info(
     let WirInstr::LocalSet { name, value } = instr else {
         return None;
     };
-    let WirInstr::Call { func_id, .. } = value.as_ref() else {
-        return None;
-    };
-    let idx = func_id.index();
-    if candidate_map.contains_key(&idx) {
-        Some((idx, name.clone()))
-    } else {
-        None
-    }
+    let candidate_ids: IndexSet<u32> = candidate_map.keys().copied().collect();
+    unwrap_to_candidate_call(value, &candidate_ids).map(|idx| (idx, name.clone()))
 }
 
-/// Take the Call instruction out of a `LocalSet`, replacing with Nop.
-#[allow(clippy::unnecessary_box_returns)]
-fn take_call_from_local_set(instr: &mut WirInstr) -> Box<WirInstr> {
+/// Take the Call instruction out of a `LocalSet`, unwrapping through
+/// `ValueCopy` and trivial `Block` wrappers. Replaces the instruction with Nop.
+/// Returns `(prefix_instrs, call_instr)` where prefix instructions are statements
+/// from inside Block wrappers that must be emitted before the call (e.g. initialization
+/// of locals used as call arguments).
+fn take_call_from_local_set(instr: &mut WirInstr) -> (Vec<WirInstr>, Box<WirInstr>) {
     let WirInstr::LocalSet { value, .. } = std::mem::replace(instr, WirInstr::Nop) else {
         unreachable!()
     };
-    value
+    let mut prefix = Vec::new();
+    let call = unwrap_and_take_call(value, &mut prefix);
+    (prefix, call)
+}
+
+/// Recursively unwrap `ValueCopy` and `Block` wrappers to extract the `Call` instruction.
+/// Collects any non-result instructions from blocks into `prefix` so they can be
+/// emitted before the call.
+fn unwrap_and_take_call(mut instr: Box<WirInstr>, prefix: &mut Vec<WirInstr>) -> Box<WirInstr> {
+    loop {
+        match *instr {
+            WirInstr::Call { .. } => return instr,
+            WirInstr::ValueCopy { expr, .. } => {
+                instr = expr;
+            }
+            WirInstr::Block { ref mut body, .. } => {
+                // Extract the call from the block's result position,
+                // and collect all preceding statements as prefix.
+                if let Some(call) = take_block_result_call(body, prefix) {
+                    instr = call;
+                } else {
+                    unreachable!("expected call in SROA block unwrap");
+                }
+            }
+            _ => unreachable!("unexpected instruction in SROA call unwrap"),
+        }
+    }
+}
+
+/// Take the call instruction from the result position of a block body.
+/// Preceding statements in the block are moved into `prefix`.
+fn take_block_result_call(
+    body: &mut [WirInstr],
+    prefix: &mut Vec<WirInstr>,
+) -> Option<Box<WirInstr>> {
+    if body.is_empty() {
+        return None;
+    }
+
+    let last_idx = body.len() - 1;
+
+    // Move all statements before the last (result-producing) instruction to prefix
+    for item in &mut body[..last_idx] {
+        let taken = std::mem::replace(item, WirInstr::Nop);
+        if !matches!(taken, WirInstr::Nop) {
+            prefix.push(taken);
+        }
+    }
+
+    let last = &mut body[last_idx];
+    match last {
+        // Seq([..., value, Br]) — take the value before Br, move others to prefix
+        WirInstr::Seq(seq) => {
+            if seq.len() >= 2 && matches!(seq.last(), Some(WirInstr::Br { .. })) {
+                let val_idx = seq.len() - 2;
+                // Move any statements before the value expression to prefix
+                for item in &mut seq[..val_idx] {
+                    let taken = std::mem::replace(item, WirInstr::Nop);
+                    if !matches!(taken, WirInstr::Nop) {
+                        prefix.push(taken);
+                    }
+                }
+                let taken = std::mem::replace(&mut seq[val_idx], WirInstr::Nop);
+                Some(Box::new(taken))
+            } else {
+                None
+            }
+        }
+        // Last instruction is the value directly
+        other => {
+            let taken = std::mem::replace(other, WirInstr::Nop);
+            Some(Box::new(taken))
+        }
+    }
 }
 
 /// Recursively optimize a list of instructions.
