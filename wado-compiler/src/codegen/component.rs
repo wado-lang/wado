@@ -16,6 +16,7 @@ use crate::ast::Type;
 use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
 use crate::project::Project;
+use crate::wir_build::shorten_import_module;
 use indexmap::{IndexMap, IndexSet};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
@@ -144,14 +145,23 @@ pub fn build_component(
     ctx.register_core_module("main-mod");
     builder.core_module_raw(Some("main-mod"), core_module);
 
-    // Helper: map an original import field name to its shortened form (for -Os).
-    let short_name = |original: &str| -> String {
-        import_name_map
-            .get(original)
-            .cloned()
-            .unwrap_or_else(|| original.to_string())
-    };
     let strip = !import_name_map.is_empty();
+
+    // Helper: map an original import field name to its shortened form (for -Os).
+    // When strip is false, returns the original name as-is.
+    // When strip is true, the name MUST exist in the map — missing entries indicate a bug.
+    let short_name = |original: &str| -> String {
+        if strip {
+            import_name_map
+                .get(original)
+                .unwrap_or_else(|| {
+                    panic!("import name not found in short name map: {original}")
+                })
+                .clone()
+        } else {
+            original.to_string()
+        }
+    };
 
     // Build wasi instance
     let mut wasi_exports: Vec<(String, ExportKind, u32)> = Vec::new();
@@ -234,16 +244,28 @@ pub fn build_component(
     };
 
     // Instantiate core module — use shortened module names if -Os
-    let wasi_mod_name = if strip { "w" } else { "wasi" };
-    let mem_mod_name = if strip { "m" } else { "mem" };
-    let bundled_mod_name = if strip { "b" } else { "bundled" };
+    let wasi_mod_name = if strip {
+        shorten_import_module("wasi")
+    } else {
+        "wasi".to_string()
+    };
+    let mem_mod_name = if strip {
+        shorten_import_module("mem")
+    } else {
+        "mem".to_string()
+    };
+    let bundled_mod_name = if strip {
+        shorten_import_module("bundled")
+    } else {
+        "bundled".to_string()
+    };
     ctx.register_core_instance("main");
     let mut main_args: Vec<(&str, ModuleArg)> = vec![
-        (wasi_mod_name, ModuleArg::Instance(wasi_instance)),
-        (mem_mod_name, ModuleArg::Instance(mem_instance)),
+        (&wasi_mod_name, ModuleArg::Instance(wasi_instance)),
+        (&mem_mod_name, ModuleArg::Instance(mem_instance)),
     ];
     if let Some(bundled_inst) = bundled_instance {
-        main_args.push((bundled_mod_name, ModuleArg::Instance(bundled_inst)));
+        main_args.push((&bundled_mod_name, ModuleArg::Instance(bundled_inst)));
     }
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
 
