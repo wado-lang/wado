@@ -234,15 +234,6 @@ Available phases (in compilation order):
 
 Optimization levels for `--optimize` phase: `-O0` (none), `-O1` (development), `-O2` (production, default), `-O3` (aggressive), `-Os` (`-O2` + strip names).
 
-### Golden Fixtures (Lowered TIR Tests)
-
-Golden fixtures in `tests/fixtures.golden/*.lowered.wado` capture expected optimized TIR output. The `lowered` test suite (`tests/lowered.rs`) compares current compiler output against these golden files to detect unintended optimizer changes.
-
-```sh
-make update-golden-fixtures  # regenerate golden files after optimizer changes
-cargo test -p wado-compiler --test lowered  # run golden file comparison tests
-```
-
 ## The Formatter
 
 There's `wado format` command to format Wado source code.
@@ -469,4 +460,4 @@ When you have completed a task, make sure everything is up-to-date and tested:
   - docs/spec.md if the language specification is updated.
   - docs/compiler.md if the new features are implemented.
   - docs/cheatsheet.md if the syntax/stdlib is updated.
-- Run `make on-task-done` to format, clippy-fix, update-bundled, update-golden-fixtures, and test.
+- Run `make on-task-done` to format, clippy-fix, update golden fixtures, and test.
