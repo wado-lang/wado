@@ -9,11 +9,11 @@ Resolve GitHub PR conflicts by merging origin/main into the current branch.
 
 ## Procedure
 
-### 1. Fetch and merge with zdiff3
+### 1. Fetch and merge with diff3
 
 ```sh
 git fetch origin main
-git merge --conflict=zdiff3 origin/main
+git merge --conflict=diff3 origin/main
 ```
 
 ### 2. If conflicts exist, commit them as-is
@@ -38,8 +38,10 @@ git add -A
 git commit -m "resolve merge conflicts"
 ```
 
+If conflicts happen on golden fixtures, just update golden fixtures.
+
 ## Important
 
-- Always use `--conflict=zdiff3` so the merge base is visible in conflict markers
+- Always use `--conflict=diff3` so the merge base is visible in conflict markers
 - Always commit the unresolved conflicts first, then resolve in a separate commit — this preserves a clear record of what the conflicts looked like vs how they were resolved
 - Do NOT squash the two commits together
