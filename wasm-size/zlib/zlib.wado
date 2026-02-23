@@ -1,0 +1,21 @@
+use { println, Stdout } from "core:cli";
+use { zlib_compress, inflate_zlib, zlib_version } from "core:zlib";
+
+export fn run() with Stdout {
+    // Test data: 1KB of patterned bytes
+    let mut src: Array<u8> = Array::<u8>::with_capacity(1024);
+    for let mut i = 0; i < 1024; i += 1 {
+        src.append((i % 256) as u8);
+    }
+
+    // Compress
+    let compressed = zlib_compress(&src);
+
+    // Decompress
+    let decompressed = inflate_zlib(&compressed);
+
+    // Verify
+    assert decompressed.len() == src.len();
+
+    println(`wado core:zlib {zlib_version()}: {src.len()} -> {compressed.len()} -> {decompressed.len()}`);
+}
