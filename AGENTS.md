@@ -30,6 +30,8 @@ E2E tests are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__`
 
 Each test fixture group has the same prefix in their filenames.
 
+By default, only O0 and O2 run locally; O1/O3/Os require `CI=1` or `WADO_FULL_TEST=1`.
+
 #### Data Section Schema
 
 The target world is indicated by the top-level key in the JSON object:

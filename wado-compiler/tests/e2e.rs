@@ -605,11 +605,22 @@ fn run_normal_test(
 
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
-        let result =
-            run_http_request(compile_result.wasm, &http_spec.request).unwrap_or_else(|e| {
-                panic!("[{test_id}] HTTP error: {e:?}");
-            });
-        verify_http_result(&result, http_spec, test_id);
+        match run_http_request(compile_result.wasm, &http_spec.request) {
+            Ok(result) => {
+                assert!(
+                    !spec.trapped,
+                    "[{test_id}] expected HTTP handler to trap, but request succeeded with status {}",
+                    result.status
+                );
+                verify_http_result(&result, http_spec, test_id);
+            }
+            Err(e) => {
+                assert!(
+                    spec.trapped,
+                    "[{test_id}] HTTP error (no trap expected): {e:?}"
+                );
+            }
+        }
     } else if spec.test_world.is_some() {
         let result = run_test_world(&compile_result.wasm, test_id).unwrap_or_else(|e| {
             panic!("[{test_id}] test world error: {e:?}");

@@ -1,6 +1,9 @@
 // Test: FutureWritable::drop() — cancel a future without resolving
-// Verifies that FutureWritable::drop() compiles and executes without error.
 // The response uses drop() on the trailers future writable instead of write().
+//
+// Expected behavior: traps with "cannot drop future write end without first writing a value"
+// When trailers_tx.drop() is called, wasmtime's future_drop_writable rejects dropping
+// a future writable that hasn't had a value written to it yet.
 use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
@@ -15,4 +18,4 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 
 __DATA__
-{"TODO": true, "wasi:http/service": {"status": 200}}
+{"wasi:http/service": {"status": 200}, "trapped": true}

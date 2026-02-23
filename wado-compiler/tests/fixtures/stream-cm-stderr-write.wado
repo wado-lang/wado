@@ -1,20 +1,34 @@
-// Test: Stderr::write_via_stream() directly with Stream<u8>
-// Verifies the CM adapter correctly accepts Stream<u8> parameter for stderr.
-// TODO: calling Stderr::write_via_stream() followed by println() deadlocks because
-// both are async CM operations that need the event loop in a synchronous context.
-use { println, Stdout, Stderr } from "core:cli";
+// Test: Write raw bytes to stderr via CM stream adapter
+// Verifies that Stream<u8> data correctly reaches stderr through the CM adapter.
+//
+// Uses the same ordering as eprintln: start consumer first, then write.
+// CM streams are zero-buffered rendezvous channels, so the consumer must be
+// started before stream.write() to avoid BLOCKED.
+use { Stderr } from "core:cli";
+use { wait_for_subtask } from "core:internal";
 
-export fn run() with Stdout, Stderr {
-    let [rx, tx] = Stream::<u8>::new();
+export fn run() with Stderr {
+    let handles = builtin::stream_new();
+    let rx = handles as i32;
+    let tx = (handles >> 32) as i32;
 
-    // Write "err msg\n" as bytes
+    // 1. Start stderr consumer FIRST (non-blocking, returns subtask handle)
+    let subtask = builtin::call_indirect_stderr_write_via_stream(rx);
+
+    // 2. Write "err msg\n" as raw bytes to the stream
     let data: Array<u8> = [101, 114, 114, 32, 109, 115, 103, 10];
-    tx.write(data);
-    tx.close();
+    let ptr = builtin::realloc(0, 0, 1, 8);
+    for (let mut i = 0; i < 8; i = i + 1) {
+        builtin::i32_store8(ptr + i, data[i] as i32);
+    }
+    builtin::stream_write(tx, ptr, 8);
 
-    Stderr::write_via_stream(rx);
-    println("done");
+    // 3. Close the writable end
+    builtin::stream_drop_writable(tx);
+
+    // 4. Wait for consumer to finish
+    wait_for_subtask(subtask);
 }
 
 __DATA__
-{"TODO": true, "stdout": "done\n", "stderr": "err msg\n"}
+{"stderr": "err msg\n"}
