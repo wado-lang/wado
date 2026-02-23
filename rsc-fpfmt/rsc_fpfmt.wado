@@ -1267,9 +1267,8 @@ pub fn parse_text(s: String) -> Option<f64> {
     let mut i = 0;
 
     // Read integer digits
-    while i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8 {
+    for ; i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8; i += 1 {
         d = d * 10 + (s.get_byte(i) - '0' as u8) as u64;
-        i = i + 1;
     }
     if i > MAX_DIGITS {
         return null;
@@ -1277,11 +1276,10 @@ pub fn parse_text(s: String) -> Option<f64> {
 
     // Read fractional digits
     if i < len && s.get_byte(i) == '.' as u8 {
-        i = i + 1;
-        while i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8 {
+        i += 1;
+        for ; i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8; i += 1 {
             d = d * 10 + (s.get_byte(i) - '0' as u8) as u64;
-            frac = frac + 1;
-            i = i + 1;
+            frac += 1;
         }
         if i == 1 || i > MAX_DIGITS + 1 {
             return null;
@@ -1294,22 +1292,21 @@ pub fn parse_text(s: String) -> Option<f64> {
     // Read exponent
     let mut p = 0;
     if i < len && (s.get_byte(i) == 'e' as u8 || s.get_byte(i) == 'E' as u8) {
-        i = i + 1;
+        i += 1;
         let mut sign = 1;
         if i < len {
             if s.get_byte(i) == '-' as u8 {
                 sign = -1;
-                i = i + 1;
+                i += 1;
             } else if s.get_byte(i) == '+' as u8 {
-                i = i + 1;
+                i += 1;
             }
         }
         if i >= len || len - i > 3 {
             return null;
         }
-        while i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8 {
+        for ; i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8; i += 1 {
             p = p * 10 + (s.get_byte(i) - '0' as u8) as i32;
-            i = i + 1;
         }
         p = p * sign;
     }
