@@ -1,15 +1,15 @@
 use { Stdout } from "core:cli";
 use { Stdin } from "wasi:cli";
-use { inflate_gzip, inflate_zlib, zlib_compress } from "core:zlib";
+use { inflate_gzip, gzip_compress } from "core:zlib";
 use { wait_for_subtask } from "core:internal";
 
-test "compress and decompress" {
+test "gzip round-trip" {
     let mut original: Array<u8> = [];
     for (let mut i = 0; i < 1024; i = i + 1) {
         original.append((i % 256) as u8);
     }
-    let compressed = zlib_compress(&original);
-    let decompressed = inflate_zlib(&compressed);
+    let compressed = gzip_compress(&original);
+    let decompressed = inflate_gzip(&compressed);
     assert decompressed.len() == 1024;
     assert decompressed[0] == 0;
     assert decompressed[1] == 1;
