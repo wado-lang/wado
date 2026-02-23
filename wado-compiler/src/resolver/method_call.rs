@@ -4,8 +4,8 @@ use crate::ast::{self, Item};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr,
-    TirExprKind, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TirExpr, TirExprKind, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 

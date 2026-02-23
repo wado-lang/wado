@@ -35,7 +35,7 @@ struct FunctionAnalysis {
     /// Effect calls: (`effect_name`, `op_name`)
     effect_calls: IndexSet<(String, String)>,
     /// Stream/StreamWritable method calls: (`type_name`, `method_name`)
-    /// e.g., ("Stream", "close"), ("StreamWritable", "write")
+    /// e.g., ("Stream", "close"), ("`StreamWritable`", "write")
     stream_methods: IndexSet<(String, String)>,
 }
 

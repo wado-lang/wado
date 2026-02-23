@@ -480,14 +480,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             for item in &module.items {
                 if let Item::Resource(resource) = item
                     && resource.name == struct_name
-                {
-                    if let Some(info) = self.find_resource_method_info(
+                    && let Some(info) = self.find_resource_method_info(
                         resource,
                         method_name,
                         receiver_type_args.as_deref(),
-                    ) {
-                        return Some(info);
-                    }
+                    )
+                {
+                    return Some(info);
                 }
             }
         }
@@ -498,14 +497,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 for item in &module.items {
                     if let Item::Resource(resource) = item
                         && resource.name == struct_name
-                    {
-                        if let Some(info) = self.find_resource_method_info(
+                        && let Some(info) = self.find_resource_method_info(
                             resource,
                             method_name,
                             receiver_type_args.as_deref(),
-                        ) {
-                            return Some(info);
-                        }
+                        )
+                    {
+                        return Some(info);
                     }
                 }
             }

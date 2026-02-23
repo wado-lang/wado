@@ -1120,8 +1120,7 @@ impl FunctionTranslator<'_, '_> {
                 }
 
                 // Special case: StreamWritable::write / StreamWritable::close
-                if let Some(instr) =
-                    self.try_translate_stream_writable_method(receiver, func, args)
+                if let Some(instr) = self.try_translate_stream_writable_method(receiver, func, args)
                 {
                     return instr;
                 }
@@ -2762,9 +2761,9 @@ impl FunctionTranslator<'_, '_> {
     /// Emit WIR for `Stream<u8>::read(max) -> Array<u8>`.
     ///
     /// 1. Allocate `max` bytes in linear memory
-    /// 2. Call `stream_read(rx, ptr, max)` → raw_result
-    /// 3. If BLOCKED (0xFFFF_FFFF), wait via waitable-set, re-read result
-    /// 4. Extract count = raw_result >> 4
+    /// 2. Call `stream_read(rx, ptr, max)` → `raw_result`
+    /// 3. If BLOCKED (`0xFFFF_FFFF`), wait via waitable-set, re-read result
+    /// 4. Extract count = `raw_result` >> 4
     /// 5. Copy from linear memory to GC array
     /// 6. Free linear memory
     /// 7. Wrap in Array<u8> struct
@@ -2963,14 +2962,13 @@ impl FunctionTranslator<'_, '_> {
             WirType::Ref { type_id, .. } => type_id,
             _ => return WirInstr::Unreachable,
         };
-        let repr_array_type_id =
-            match &self.ctx.types[array_struct_type_id.index() as usize] {
-                WirTypeDef::Struct(s) => match &s.fields[0].ty {
-                    WirType::Ref { type_id, .. } => type_id.clone(),
-                    _ => return WirInstr::Unreachable,
-                },
+        let repr_array_type_id = match &self.ctx.types[array_struct_type_id.index() as usize] {
+            WirTypeDef::Struct(s) => match &s.fields[0].ty {
+                WirType::Ref { type_id, .. } => type_id.clone(),
                 _ => return WirInstr::Unreachable,
-            };
+            },
+            _ => return WirInstr::Unreachable,
+        };
 
         // repr = array.new_default $i32_array count
         instrs.push(WirInstr::DeclareLocal {
@@ -3133,8 +3131,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// Emit WIR for `StreamWritable<u8>::write(data: Array<u8>)`.
     ///
-    /// 1. Lower Array<u8> to linear memory via cm_lower_array_u8
-    /// 2. Call stream_write(tx, ptr, len)
+    /// 1. Lower Array<u8> to linear memory via `cm_lower_array_u8`
+    /// 2. Call `stream_write(tx`, ptr, len)
     /// 3. Handle BLOCKED via waitable-set
     /// 4. Free linear memory
     fn emit_stream_write(&mut self, handle: WirInstr, data_arg: WirInstr) -> WirInstr {
