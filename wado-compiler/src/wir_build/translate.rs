@@ -3552,10 +3552,8 @@ impl FunctionTranslator<'_, '_> {
                             _ => {
                                 // Nested pattern: store in temp and recurse
                                 let temp_name = format!("__tuple_elem_{i}");
-                                let elem_type = element_types
-                                    .get(i)
-                                    .copied()
-                                    .unwrap_or(TypeTable::UNKNOWN);
+                                let elem_type =
+                                    element_types.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
                                 let elem_wir_type =
                                     self.ctx.type_id_to_wir_type(self.type_table, elem_type);
                                 instrs.push(WirInstr::DeclareLocal {
