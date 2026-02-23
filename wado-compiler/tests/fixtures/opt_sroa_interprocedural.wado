@@ -16,6 +16,7 @@ struct Vec3 {
 // Pattern 1: Function returns a struct, caller only uses fields
 // Ideally the struct allocation could be eliminated by passing fields as multi-value
 
+
 #[inline("never")]
 fn make_point(x: i32, y: i32) -> Point {
     return Point { x, y };
@@ -30,6 +31,7 @@ fn use_returned_point() -> i32 {
 
 // Pattern 2: Struct passed as argument, callee only reads fields
 // Ideally struct could be decomposed into scalar arguments
+
 
 #[inline("never")]
 fn sum_point(p: Point) -> i32 {
@@ -46,6 +48,7 @@ fn pass_struct_arg() -> i32 {
 // Pattern 3: Struct returned then immediately passed to another function
 // Chain of struct creation → field extraction
 
+
 #[inline("never")]
 fn double_point(p: Point) -> Point {
     return Point { x: p.x * 2, y: p.y * 2 };
@@ -60,6 +63,7 @@ fn chain_struct_ops() -> i32 {
 }
 
 // Pattern 4: Struct with floating-point fields (different register types)
+
 
 #[inline("never")]
 fn make_vec3(x: f64, y: f64, z: f64) -> Vec3 {

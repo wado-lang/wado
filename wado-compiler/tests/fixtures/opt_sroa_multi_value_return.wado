@@ -1,0 +1,190 @@
+// Test: Multi-value return SROA optimization
+// Verifies that functions returning small scalar structs are rewritten to use
+// Wasm multi-value returns, eliminating intermediate GC struct allocations.
+//
+// NOTE: We avoid `assert` on struct field accesses because power-assert
+// captures all intermediate expressions, which could prevent SROA if the
+// whole struct is captured as an intermediate value.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+struct Triple {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+struct Quad {
+    w: i32,
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+struct MixedScalar {
+    i: i32,
+    f: f64,
+}
+
+// Two-field struct return
+
+#[inline("never")]
+fn make_pair(a: i32, b: i32) -> Pair {
+    return Pair { a, b };
+}
+
+// Three-field struct return (f64)
+
+#[inline("never")]
+fn make_triple(x: f64, y: f64, z: f64) -> Triple {
+    return Triple { x, y, z };
+}
+
+// Four-field struct return (maximum for SROA)
+
+#[inline("never")]
+fn make_quad(w: i32, x: i32, y: i32, z: i32) -> Quad {
+    return Quad { w, x, y, z };
+}
+
+// Mixed scalar types (i32 + f64)
+
+#[inline("never")]
+fn make_mixed(i: i32, f: f64) -> MixedScalar {
+    return MixedScalar { i, f };
+}
+
+// Conditional return (multiple return paths)
+
+#[inline("never")]
+fn conditional_pair(flag: bool) -> Pair {
+    if flag {
+        return Pair { a: 1, b: 2 };
+    } else {
+        return Pair { a: 3, b: 4 };
+    }
+}
+
+// Multiple callers of the same function
+
+#[inline("never")]
+fn caller_a() -> i32 {
+    let p = make_pair(10, 20);
+    return p.a + p.b;
+}
+
+
+#[inline("never")]
+fn caller_b() -> i32 {
+    let p = make_pair(100, 200);
+    return p.a * p.b;
+}
+
+// Chain: return struct then pass to another function
+
+#[inline("never")]
+fn sum_pair(p: Pair) -> i32 {
+    return p.a + p.b;
+}
+
+
+#[inline("never")]
+fn chained() -> i32 {
+    let p = make_pair(5, 7);
+    return sum_pair(p);
+}
+
+export fn run() with Stdout {
+    // Two-field struct (make_pair can't be SROA'd because chained() passes it as whole struct)
+    let p = make_pair(3, 4);
+    let pa = p.a;
+    let pb = p.b;
+    if pa != 3 {
+        panic("pair.a failed");
+    }
+    if pb != 4 {
+        panic("pair.b failed");
+    }
+
+    // Three-field struct
+    let t = make_triple(1.0, 2.0, 3.0);
+    let tx = t.x;
+    let ty = t.y;
+    let tz = t.z;
+    if tx != 1.0 {
+        panic("triple.x failed");
+    }
+    if ty != 2.0 {
+        panic("triple.y failed");
+    }
+    if tz != 3.0 {
+        panic("triple.z failed");
+    }
+
+    // Four-field struct
+    let q = make_quad(1, 2, 3, 4);
+    let qw = q.w;
+    let qx = q.x;
+    let qy = q.y;
+    let qz = q.z;
+    if qw != 1 {
+        panic("quad.w failed");
+    }
+    if qx != 2 {
+        panic("quad.x failed");
+    }
+    if qy != 3 {
+        panic("quad.y failed");
+    }
+    if qz != 4 {
+        panic("quad.z failed");
+    }
+
+    // Mixed scalar types
+    let m = make_mixed(42, 3.14);
+    let mi = m.i;
+    let mf = m.f;
+    if mi != 42 {
+        panic("mixed.i failed");
+    }
+    if mf != 3.14 {
+        panic("mixed.f failed");
+    }
+
+    // Conditional return
+    let c1 = conditional_pair(true);
+    let c1a = c1.a;
+    let c1b = c1.b;
+    if c1a != 1 {
+        panic("cond1.a failed");
+    }
+    if c1b != 2 {
+        panic("cond1.b failed");
+    }
+    let c2 = conditional_pair(false);
+    let c2a = c2.a;
+    let c2b = c2.b;
+    if c2a != 3 {
+        panic("cond2.a failed");
+    }
+    if c2b != 4 {
+        panic("cond2.b failed");
+    }
+
+    // Multiple callers (scalar returns, assert is fine here)
+    assert caller_a() == 30;
+    assert caller_b() == 20000;
+
+    // Chained calls
+    assert chained() == 12;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

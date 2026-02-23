@@ -15,6 +15,7 @@ struct Rect {
 
 // Pattern 1: Basic struct literal with field access (baseline - already works)
 
+
 #[inline("never")]
 fn basic_sroa() -> i32 {
     let p = Point { x: 10, y: 20 };
@@ -22,6 +23,7 @@ fn basic_sroa() -> i32 {
 }
 
 // Pattern 2: Mutable struct with field write then read
+
 
 #[inline("never")]
 fn mutable_field_write() -> i32 {
@@ -34,6 +36,7 @@ fn mutable_field_write() -> i32 {
 // Pattern 3: Struct where only some fields escape (currently all-or-nothing)
 // Ideally, field y should still be SROA'd even though x is used in a call
 
+
 #[inline("never")]
 fn partial_escape(x: i32) -> i32 {
     let p = Point { x, y: 100 };
@@ -43,6 +46,7 @@ fn partial_escape(x: i32) -> i32 {
 
 // Pattern 4: Nested struct literal with field access
 
+
 #[inline("never")]
 fn nested_struct() -> i32 {
     let r = Rect { origin: Point { x: 1, y: 2 }, width: 10, height: 20 };
@@ -50,6 +54,7 @@ fn nested_struct() -> i32 {
 }
 
 // Pattern 5: Multiple structs in same function, independent lifetimes
+
 
 #[inline("never")]
 fn multiple_structs() -> i32 {
@@ -60,6 +65,7 @@ fn multiple_structs() -> i32 {
 
 // Pattern 6: Struct constructed, fields accessed, then passed to call (soft escape)
 // SROA should decompose the struct and reconstruct it at the call site
+
 
 #[inline("never")]
 fn sum_point(p: Point) -> i32 {
@@ -76,6 +82,7 @@ fn use_then_pass() -> i32 {
 }
 
 // Pattern 7: Struct constructed and returned (soft escape via return)
+
 
 #[inline("never")]
 fn build_and_return(x: i32, y: i32) -> Point {

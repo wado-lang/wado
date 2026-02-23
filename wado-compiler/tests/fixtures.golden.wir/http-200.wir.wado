@@ -291,6 +291,8 @@ type "functype/core:internal/gc_array_to_memory" = fn(ref null array<u8>, i32, i
 
 type "functype/core:internal/cm_lower_string" = fn(ref null String) -> i64;
 
+type "functype/__cm_adapter__Response_new" = fn(i32, i32, i32, i32) -> [i32, i32];
+
 import fn future-drop-writable from "wasi/future-drop-writable";
 import fn future-new from "wasi/future-new";
 import fn future-write from "wasi/future-write";
@@ -465,9 +467,11 @@ fn handle(request) {
     __local_1 = __let_pattern_0.0;
     __local_2 = __let_pattern_0.1;
     headers = __cm_adapter__Fields_new();
-    __pattern_temp_0 = __cm_adapter__Response_new(headers, 0, 0, __local_1);
-    response = __pattern_temp_0.0;
-    _tx_future = __pattern_temp_0.1;
+    let __sroa___pattern_temp_0_0: i32;
+    let __sroa___pattern_temp_0_1: i32;
+    multivalue_bind [__sroa___pattern_temp_0_0, __sroa___pattern_temp_0_1] = __cm_adapter__Response_new(headers, 0, 0, __local_1);
+    response = __sroa___pattern_temp_0_0;
+    _tx_future = __sroa___pattern_temp_0_1;
     __task_ret = Result<Response,ErrorCode>::Ok { discriminant: 0, payload_0: response };
     __tv_0 = 0;
     __tv_1 = 0;
@@ -790,7 +794,7 @@ fn __cm_adapter__Response_new(headers, contents_flat0, contents_flat1, trailers)
     __outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Response::new"(headers, contents_flat0, contents_flat1, trailers, __outptr);
     drop("mem/realloc"(__outptr, 8, 4, 0));
-    return "tuple/[Response, Future<Result<unit,ErrorCode>>]" { 0: builtin::load_i32(__outptr + 0), 1: builtin::load_i32(__outptr + 4) };
+    return builtin::load_i32(__outptr + 0); builtin::load_i32(__outptr + 4);
 }
 
 fn __cm_export__handle(request) {
