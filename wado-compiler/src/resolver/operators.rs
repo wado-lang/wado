@@ -88,65 +88,84 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             if let Some(struct_name) = struct_name {
                 // Handle Eq trait (== and !=)
-                if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq)
-                    && let Some(trait_info) = self.find_eq_trait_impl(&struct_name, left.type_id)
-                {
-                    let receiver = self.adjust_receiver_for_self_kind(
-                        left.clone(),
-                        trait_info.self_kind,
-                        binary.span,
-                    );
+                if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
+                    let Some(trait_info) = self.find_eq_trait_impl(&struct_name, left.type_id)
+                    else {
+                        let type_name = self.type_table.borrow().type_name(left.type_id);
+                        let op_str = if binary.op == BinaryOp::Eq {
+                            "=="
+                        } else {
+                            "!="
+                        };
+                        let _ = self.logger.error(TypeError::InvalidPattern {
+                            message: format!(
+                                "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Eq trait)"
+                            ),
+                            span: binary.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                    };
+                    {
+                        let receiver = self.adjust_receiver_for_self_kind(
+                            left.clone(),
+                            trait_info.self_kind,
+                            binary.span,
+                        );
 
-                    let arg_ref_type = self
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Ref(right.type_id));
+                        let arg_ref_type = self
+                            .type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::Ref(right.type_id));
 
-                    let arg_ref = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(right.clone()),
-                        },
-                        arg_ref_type,
-                        binary.span,
-                    );
-
-                    let mangled_method_name =
-                        MethodName::format_local(&struct_name, Some(&trait_info.trait_name), "eq");
-
-                    let call_expr = TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(receiver),
-                            func: FunctionRef::External {
-                                module_source: ModuleSource::prelude(),
-                                name: mangled_method_name,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    struct_name.clone(),
-                                    Some(trait_info.trait_name.clone()),
-                                    "eq".to_string(),
-                                )),
-                            },
-                            type_args: vec![],
-                            args: vec![arg_ref],
-                        },
-                        TypeTable::BOOL,
-                        binary.span,
-                    );
-
-                    // Apply negation for !=
-                    if binary.op == BinaryOp::NotEq {
-                        return TirExpr::new(
+                        let arg_ref = TirExpr::new(
                             TirExprKind::Unary {
-                                op: TirUnaryOp::Not,
-                                expr: Box::new(call_expr),
+                                op: TirUnaryOp::Ref,
+                                expr: Box::new(right.clone()),
+                            },
+                            arg_ref_type,
+                            binary.span,
+                        );
+
+                        let mangled_method_name = MethodName::format_local(
+                            &struct_name,
+                            Some(&trait_info.trait_name),
+                            "eq",
+                        );
+
+                        let call_expr = TirExpr::new(
+                            TirExprKind::MethodCall {
+                                receiver: Box::new(receiver),
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::prelude(),
+                                    name: mangled_method_name,
+                                    monomorph_info: None,
+                                    method_info: Some(LocalMethodName::new(
+                                        struct_name.clone(),
+                                        Some(trait_info.trait_name.clone()),
+                                        "eq".to_string(),
+                                    )),
+                                },
+                                type_args: vec![],
+                                args: vec![arg_ref],
                             },
                             TypeTable::BOOL,
                             binary.span,
                         );
-                    }
 
-                    return call_expr;
+                        // Apply negation for !=
+                        if binary.op == BinaryOp::NotEq {
+                            return TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: TirUnaryOp::Not,
+                                    expr: Box::new(call_expr),
+                                },
+                                TypeTable::BOOL,
+                                binary.span,
+                            );
+                        }
+
+                        return call_expr;
+                    }
                 }
 
                 // Handle Ord trait (<, >, <=, >=)
@@ -154,92 +173,114 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if matches!(
                     binary.op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
-                ) && let Some(trait_info) = self.find_ord_trait_impl(&struct_name, left.type_id)
-                {
-                    let receiver = self.adjust_receiver_for_self_kind(
-                        left.clone(),
-                        trait_info.self_kind,
-                        binary.span,
-                    );
-
-                    let arg_ref_type = self
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::Ref(right.type_id));
-
-                    let arg_ref = TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(right.clone()),
-                        },
-                        arg_ref_type,
-                        binary.span,
-                    );
-
-                    // Get Ordering type for cmp return value
-                    let ordering_type_id =
-                        self.type_table.borrow_mut().intern(ResolvedType::Enum {
-                            name: "Ordering".to_string(),
-                            module_source: ModuleSource::prelude(),
-                        });
-
-                    let mangled_method_name =
-                        MethodName::format_local(&struct_name, Some(&trait_info.trait_name), "cmp");
-
-                    let cmp_call = TirExpr::new(
-                        TirExprKind::MethodCall {
-                            receiver: Box::new(receiver),
-                            func: FunctionRef::External {
-                                module_source: ModuleSource::prelude(),
-                                name: mangled_method_name,
-                                monomorph_info: None,
-                                method_info: Some(LocalMethodName::new(
-                                    struct_name.clone(),
-                                    Some(trait_info.trait_name.clone()),
-                                    "cmp".to_string(),
-                                )),
-                            },
-                            type_args: vec![],
-                            args: vec![arg_ref],
-                        },
-                        ordering_type_id,
-                        binary.span,
-                    );
-
-                    // Determine comparison operator and Ordering variant:
-                    // < : cmp(a, b) == Ordering::Less
-                    // > : cmp(a, b) == Ordering::Greater
-                    // <= : cmp(a, b) != Ordering::Greater
-                    // >= : cmp(a, b) != Ordering::Less
-                    let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) =
-                        match binary.op {
-                            BinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
-                            BinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
-                            BinaryOp::LtEq => (TirBinaryOp::NotEq, "Greater", 2),
-                            BinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
+                ) {
+                    let Some(trait_info) = self.find_ord_trait_impl(&struct_name, left.type_id)
+                    else {
+                        let type_name = self.type_table.borrow().type_name(left.type_id);
+                        let op_str = match binary.op {
+                            BinaryOp::Lt => "<",
+                            BinaryOp::Gt => ">",
+                            BinaryOp::LtEq => "<=",
+                            BinaryOp::GtEq => ">=",
                             _ => unreachable!(),
                         };
+                        let _ = self.logger.error(TypeError::InvalidPattern {
+                            message: format!(
+                                "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Ord trait)"
+                            ),
+                            span: binary.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                    };
+                    {
+                        let receiver = self.adjust_receiver_for_self_kind(
+                            left.clone(),
+                            trait_info.self_kind,
+                            binary.span,
+                        );
 
-                    // Create Ordering enum value for comparison
-                    let ordering_variant = TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type: ordering_type_id,
-                            case_name: case_name.to_string(),
-                            case_index,
-                        },
-                        ordering_type_id,
-                        binary.span,
-                    );
+                        let arg_ref_type = self
+                            .type_table
+                            .borrow_mut()
+                            .intern(ResolvedType::Ref(right.type_id));
 
-                    return TirExpr::new(
-                        TirExprKind::Binary {
-                            op: compare_op,
-                            left: Box::new(cmp_call),
-                            right: Box::new(ordering_variant),
-                        },
-                        TypeTable::BOOL,
-                        binary.span,
-                    );
+                        let arg_ref = TirExpr::new(
+                            TirExprKind::Unary {
+                                op: TirUnaryOp::Ref,
+                                expr: Box::new(right.clone()),
+                            },
+                            arg_ref_type,
+                            binary.span,
+                        );
+
+                        // Get Ordering type for cmp return value
+                        let ordering_type_id =
+                            self.type_table.borrow_mut().intern(ResolvedType::Enum {
+                                name: "Ordering".to_string(),
+                                module_source: ModuleSource::prelude(),
+                            });
+
+                        let mangled_method_name = MethodName::format_local(
+                            &struct_name,
+                            Some(&trait_info.trait_name),
+                            "cmp",
+                        );
+
+                        let cmp_call = TirExpr::new(
+                            TirExprKind::MethodCall {
+                                receiver: Box::new(receiver),
+                                func: FunctionRef::External {
+                                    module_source: ModuleSource::prelude(),
+                                    name: mangled_method_name,
+                                    monomorph_info: None,
+                                    method_info: Some(LocalMethodName::new(
+                                        struct_name.clone(),
+                                        Some(trait_info.trait_name.clone()),
+                                        "cmp".to_string(),
+                                    )),
+                                },
+                                type_args: vec![],
+                                args: vec![arg_ref],
+                            },
+                            ordering_type_id,
+                            binary.span,
+                        );
+
+                        // Determine comparison operator and Ordering variant:
+                        // < : cmp(a, b) == Ordering::Less
+                        // > : cmp(a, b) == Ordering::Greater
+                        // <= : cmp(a, b) != Ordering::Greater
+                        // >= : cmp(a, b) != Ordering::Less
+                        let (compare_op, case_name, case_index): (TirBinaryOp, &str, u32) =
+                            match binary.op {
+                                BinaryOp::Lt => (TirBinaryOp::Eq, "Less", 0),
+                                BinaryOp::Gt => (TirBinaryOp::Eq, "Greater", 2),
+                                BinaryOp::LtEq => (TirBinaryOp::NotEq, "Greater", 2),
+                                BinaryOp::GtEq => (TirBinaryOp::NotEq, "Less", 0),
+                                _ => unreachable!(),
+                            };
+
+                        // Create Ordering enum value for comparison
+                        let ordering_variant = TirExpr::new(
+                            TirExprKind::EnumConstruct {
+                                enum_type: ordering_type_id,
+                                case_name: case_name.to_string(),
+                                case_index,
+                            },
+                            ordering_type_id,
+                            binary.span,
+                        );
+
+                        return TirExpr::new(
+                            TirExprKind::Binary {
+                                op: compare_op,
+                                left: Box::new(cmp_call),
+                                right: Box::new(ordering_variant),
+                            },
+                            TypeTable::BOOL,
+                            binary.span,
+                        );
+                    }
                 }
             }
         }
