@@ -391,7 +391,8 @@ pub fn run(opts: TestOptions) {
     // Spawn worker threads that compile and run tests per file.
     // Each worker gets its own single-threaded tokio runtime because the
     // compiler future is not Send (contains RefCell).
-    let (tx, rx) = std::sync::mpsc::channel::<Result<FileResult>>();
+    // Each worker sends (file_index, result) so we can print in input order.
+    let (tx, rx) = std::sync::mpsc::channel::<(usize, Result<FileResult>)>();
     let paths = Arc::new(opts.paths);
     let path_iter = Arc::new(std::sync::Mutex::new(0usize));
     let filter = opts.filter.clone();
@@ -419,7 +420,7 @@ pub fn run(opts: TestOptions) {
                     };
                     let result =
                         rt.block_on(process_one_file(&paths[idx], filter.as_deref()));
-                    let _ = tx.send(result);
+                    let _ = tx.send((idx, result));
                 }
             })
         })
@@ -427,43 +428,58 @@ pub fn run(opts: TestOptions) {
 
     drop(tx);
 
-    // Stream results as files complete
+    // Stream results in input order: buffer out-of-order completions and
+    // flush consecutive results as they become available.
     let mut total_passed = 0;
     let mut total_failed = 0;
     let mut total_tests = 0;
+    let num_files = paths.len();
 
-    // block_in_place allows blocking recv without starving the tokio runtime
+    let print_file_result =
+        |fr: &FileResult, total_tests: &mut usize, total_passed: &mut usize, total_failed: &mut usize| {
+            if fr.test_results.is_empty() {
+                return;
+            }
+            let compile_dur = format_duration(fr.compile_duration);
+            println!(
+                "Running tests in {}... (compiled in {compile_dur})",
+                fr.path
+            );
+            for result in &fr.test_results {
+                *total_tests += 1;
+                let dur = format_duration(result.duration);
+                if result.passed {
+                    println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
+                    *total_passed += 1;
+                } else {
+                    println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
+                    if let Some(ref error) = result.error {
+                        println!("    {error}");
+                    }
+                    *total_failed += 1;
+                }
+            }
+        };
+
     tokio::task::block_in_place(|| {
-        for file_result in &rx {
-            match file_result {
-                Ok(fr) => {
-                    if fr.test_results.is_empty() {
-                        continue;
+        let mut next_to_print = 0usize;
+        let mut buffer: Vec<Option<Result<FileResult>>> = (0..num_files).map(|_| None).collect();
+
+        for (idx, file_result) in &rx {
+            buffer[idx] = Some(file_result);
+
+            // Flush all consecutive ready results
+            while next_to_print < num_files && buffer[next_to_print].is_some() {
+                match buffer[next_to_print].take().unwrap() {
+                    Ok(fr) => {
+                        print_file_result(&fr, &mut total_tests, &mut total_passed, &mut total_failed);
                     }
-                    let compile_dur = format_duration(fr.compile_duration);
-                    println!(
-                        "Running tests in {}... (compiled in {compile_dur})",
-                        fr.path
-                    );
-                    for result in &fr.test_results {
-                        total_tests += 1;
-                        let dur = format_duration(result.duration);
-                        if result.passed {
-                            println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
-                            total_passed += 1;
-                        } else {
-                            println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
-                            if let Some(ref error) = result.error {
-                                println!("    {error}");
-                            }
-                            total_failed += 1;
-                        }
+                    Err(e) => {
+                        eprintln!("Error: {e}");
+                        total_failed += 1;
                     }
                 }
-                Err(e) => {
-                    eprintln!("Error: {e}");
-                    total_failed += 1;
-                }
+                next_to_print += 1;
             }
         }
     });
