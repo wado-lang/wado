@@ -1,24 +1,68 @@
 // Template strings should work inside generic impl blocks.
-// The :? format should produce inspect output for generic type params.
+// Both display ({value}) and inspect ({value:?}) formats should work
+// with generic type parameters.
 
 struct Box<T> {
     value: T,
 }
 
 impl Box<T> {
+    fn display_value(&self) -> String {
+        return `{self.value}`;
+    }
+
     fn inspect_value(&self) -> String {
         return `{self.value:?}`;
     }
+
+    fn both(&self) -> String {
+        return `display={self.value} inspect={self.value:?}`;
+    }
 }
 
-test "template string with generic type param" {
+// Display: integers render the same way for display and inspect
+test "display integer" {
+    let b = Box { value: 42 };
+    assert b.display_value() == "42";
+}
+
+test "inspect integer" {
     let b = Box { value: 42 };
     assert b.inspect_value() == "42";
 }
 
-test "template string with generic string param" {
+// For generic type params without Display bound, display falls back to inspect.
+// Strings: inspect adds quotes, so both formats produce quoted output.
+test "display string" {
+    let b = Box { value: "hello" };
+    assert b.display_value() == `"hello"`;
+}
+
+test "inspect string" {
     let b = Box { value: "hello" };
     assert b.inspect_value() == `"hello"`;
+}
+
+// Both in the same template string
+test "both display and inspect for integer" {
+    let b = Box { value: 99 };
+    assert b.both() == "display=99 inspect=99";
+}
+
+test "both display and inspect for string" {
+    let b = Box { value: "world" };
+    assert b.both() == `display="world" inspect="world"`;
+}
+
+// Bool type
+test "display bool" {
+    let b = Box { value: true };
+    assert b.display_value() == "true";
+}
+
+test "inspect bool" {
+    let b = Box { value: true };
+    assert b.inspect_value() == "true";
 }
 
 __DATA__
