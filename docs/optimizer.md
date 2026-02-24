@@ -40,7 +40,7 @@ All levels run DCE (Dead Code Elimination) to remove unreachable functions and t
 
 ## Optimization Pipeline
 
-The optimizer runs after lowering and before Wasm plan/codegen:
+The optimizer runs after lowering and before Wasm emission:
 
 1. Fixed-point iteration loop (skipped for `-O0`):
    1. Function Inlining
@@ -54,6 +54,7 @@ The optimizer runs after lowering and before Wasm plan/codegen:
    9. Loop-Invariant Code Motion (LICM)
 2. DCE Analysis and removal of unreachable functions/types (all levels)
 3. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
+4. WIR-level optimizations (multi-value SROA, large array splitting; see [WIR Optimizations](#wir-optimizations))
 
 ## Implemented Optimizations
 
@@ -546,6 +547,24 @@ Implementation: Detect `return func(...)` pattern in TIR, emit `return_call` ins
 | Count bits           | Loop with shifts  | Use `popcnt`                                                      |
 | Find first bit       | Loop with shifts  | Use `clz` / `ctz`                                                 |
 | Loop unrolling       | Replicate code 4x | Don't — increases code size, Wasm runtimes already optimize loops |
+
+## WIR Optimizations
+
+**Module:** `wir_optimize.rs`
+
+WIR-level optimizations run after WIR build and before Wasm emission, operating on the `WirModule` in-place.
+
+### Multi-Value Return SROA
+
+Rewrites internal functions that return small scalar structs (2–4 fields) to use Wasm multi-value returns, eliminating GC struct allocation at function boundaries. A companion tuple elision pass replaces `MultiValueStructNew` + `StructGet` sequences with `MultiValueLocalBind` at call sites.
+
+### Split Large Array Literals
+
+Rewrites `array.new_fixed` with more than 256 elements into `array.new_default` + per-element `array.set`. This prevents pathological JIT compilation time in Cranelift's register allocator, which degrades severely when thousands of values are simultaneously on the operand stack. The rewrite preserves each element expression as-is, so dynamic expressions (variable references, function calls, arithmetic) work correctly.
+
+### Future: Constant Array Data Segments (`array.new_data`)
+
+For arrays where all elements are compile-time constants, values could be packed into a Wasm data segment and initialized via `array.new_data`. This is orthogonal to the split pass — it reduces Wasm binary size and initialization overhead, but only applies to all-constant arrays (no dynamic expressions).
 
 ## Testing Strategy
 
