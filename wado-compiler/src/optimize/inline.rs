@@ -745,22 +745,36 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
                 }
 
                 // Update function_strings: add strings from inlined functions to the caller
+                let mut all_inlined_strings: IndexSet<String> = IndexSet::new();
                 for inlined_key in inlined_funcs {
                     if let Some(inlined_strings) = candidate_strings.get(&inlined_key) {
+                        all_inlined_strings.extend(inlined_strings.iter().cloned());
+                    }
+                }
+                if !all_inlined_strings.is_empty() {
+                    {
                         let caller_strings = module
                             .function_strings
                             .entry(func_name.clone())
                             .or_default();
-                        for s in inlined_strings {
-                            if !caller_strings.contains(s) {
-                                caller_strings.push(s.clone());
-                            }
-                            // Also ensure the string is in the module's string_literals
-                            if !module.string_literals.contains(s) {
-                                module.string_literals.push(s.clone());
-                            }
-                        }
+                        let existing: IndexSet<&str> =
+                            caller_strings.iter().map(String::as_str).collect();
+                        let to_add: Vec<String> = all_inlined_strings
+                            .iter()
+                            .filter(|s| !existing.contains(s.as_str()))
+                            .cloned()
+                            .collect();
+                        caller_strings.extend(to_add);
                     }
+                    let to_add: Vec<String> = {
+                        let existing_literals: IndexSet<&str> =
+                            module.string_literals.iter().map(String::as_str).collect();
+                        all_inlined_strings
+                            .into_iter()
+                            .filter(|s| !existing_literals.contains(s.as_str()))
+                            .collect()
+                    };
+                    module.string_literals.extend(to_add);
                 }
             }
         }

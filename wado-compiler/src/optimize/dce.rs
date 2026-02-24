@@ -324,7 +324,7 @@ pub fn analyze_project(project: &mut Project) {
     // Filter string literals in each module to only include strings from reachable functions
     for module in project.tir_modules.values_mut() {
         let module_source = &module.module_source;
-        let mut reachable_strings: Vec<String> = Vec::new();
+        let mut reachable_strings: IndexSet<String> = IndexSet::new();
 
         for (func_name, strings) in &module.function_strings {
             // Build function ID(s) to check if it's reachable
@@ -373,15 +373,11 @@ pub fn analyze_project(project: &mut Project) {
             };
 
             if is_reachable {
-                for s in strings {
-                    if !reachable_strings.contains(s) {
-                        reachable_strings.push(s.clone());
-                    }
-                }
+                reachable_strings.extend(strings.iter().cloned());
             }
         }
 
-        module.string_literals = reachable_strings;
+        module.string_literals = reachable_strings.into_iter().collect();
     }
 }
 

@@ -7362,9 +7362,9 @@ impl ClosureLowerer {
 /// Collects all string literals from a TIR module for the data section,
 /// tracking which function each string comes from for DCE
 struct StringCollector {
-    strings: Vec<String>,
+    strings: IndexSet<String>,
     /// Map of function name → strings in that function (for DCE filtering)
-    function_strings: IndexMap<String, Vec<String>>,
+    function_strings: IndexMap<String, IndexSet<String>>,
     /// Map of function name → method info (for DCE to avoid parsing)
     function_method_info: IndexMap<String, Option<LocalMethodName>>,
     /// Current function being collected (for tracking)
@@ -7374,7 +7374,7 @@ struct StringCollector {
 impl StringCollector {
     fn new() -> Self {
         Self {
-            strings: Vec::new(),
+            strings: IndexSet::new(),
             function_strings: IndexMap::new(),
             function_method_info: IndexMap::new(),
             current_function: None,
@@ -7388,23 +7388,23 @@ impl StringCollector {
         IndexMap<String, Vec<String>>,
         IndexMap<String, Option<LocalMethodName>>,
     ) {
-        (
-            self.strings,
-            self.function_strings,
-            self.function_method_info,
-        )
+        let strings = self.strings.into_iter().collect();
+        let function_strings = self
+            .function_strings
+            .into_iter()
+            .map(|(k, v)| (k, v.into_iter().collect()))
+            .collect();
+        (strings, function_strings, self.function_method_info)
     }
 
     fn add_string(&mut self, s: String) {
-        if !self.strings.contains(&s) {
-            self.strings.push(s.clone());
-        }
+        self.strings.insert(s.clone());
         // Also track which function this string belongs to
         if let Some(func_name) = &self.current_function {
-            let func_strings = self.function_strings.entry(func_name.clone()).or_default();
-            if !func_strings.contains(&s) {
-                func_strings.push(s);
-            }
+            self.function_strings
+                .entry(func_name.clone())
+                .or_default()
+                .insert(s);
         }
     }
 

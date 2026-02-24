@@ -107,10 +107,11 @@ impl<'a> WirContext<'a> {
     /// Create a new `WirContext` from a Project.
     pub fn new(project: &'a Project) -> Self {
         // Collect string literals from all TIR modules (deduped)
+        let mut seen: IndexSet<&str> = IndexSet::new();
         let mut string_literals = Vec::new();
         for tir_module in project.tir_modules.values() {
             for s in &tir_module.string_literals {
-                if !string_literals.contains(s) {
+                if seen.insert(s.as_str()) {
                     string_literals.push(s.clone());
                 }
             }
