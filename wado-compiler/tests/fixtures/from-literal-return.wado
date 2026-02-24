@@ -1,0 +1,17 @@
+// KeyValueLiteral: coercion in function return position
+use { TreeMap } from "core:collections";
+use { println } from "core:cli";
+
+fn make_map() -> TreeMap<String, i32> {
+    return { x: 10, y: 20 };
+}
+
+export fn run() with Stdout {
+    let m = make_map();
+    let keys = m.keys();
+    assert keys.len() == 2;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

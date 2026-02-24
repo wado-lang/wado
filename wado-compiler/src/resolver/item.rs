@@ -42,7 +42,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
-                bounds: p.bounds.clone(),
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
             })
@@ -141,7 +141,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
-                bounds: p.bounds.clone(),
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
             })
@@ -186,8 +186,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             self.current_type_params
                 .insert(param.name.clone(), (index as u32, type_id));
             if !param.bounds.is_empty() {
-                self.current_type_param_bounds
-                    .insert(param.name.clone(), param.bounds.clone());
+                self.current_type_param_bounds.insert(
+                    param.name.clone(),
+                    param.bounds.iter().map(|b| b.name.clone()).collect(),
+                );
             }
             type_param_list.push((param.name.clone(), type_id));
         }
@@ -251,7 +253,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
-                bounds: p.bounds.clone(),
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
             })
@@ -416,8 +418,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .insert(param.name.clone(), (idx, type_id));
             type_param_list.push((param.name.clone(), type_id));
             if !param.bounds.is_empty() {
-                self.current_type_param_bounds
-                    .insert(param.name.clone(), param.bounds.clone());
+                self.current_type_param_bounds.insert(
+                    param.name.clone(),
+                    param.bounds.iter().map(|b| b.name.clone()).collect(),
+                );
             }
         }
 
@@ -488,7 +492,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .enumerate()
             .map(|(i, p)| crate::tir::TirTypeParam {
                 name: p.name.clone(),
-                bounds: p.bounds.clone(),
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
                 default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
                 index: i as u32,
             })

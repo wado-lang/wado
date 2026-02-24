@@ -7,6 +7,7 @@ use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TypeId, TypeTable,
 };
+use indexmap::IndexSet;
 
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
@@ -385,13 +386,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ));
         }
 
-        // Anonymous struct literal → type implementing FromLiteral
+        // Anonymous struct literal → type implementing KeyValueLiteral
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
             return Some(coerced);
         }
 
         // If an anonymous struct literal targets a generic instance that doesn't
-        // implement FromLiteral, report a compile error.
+        // implement KeyValueLiteral, report a compile error.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(
@@ -402,7 +403,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let type_name = self.type_table.borrow().type_name(target_type);
             let _ = self.logger.error(TypeError::TypeMismatch {
                 expected: type_name,
-                found: "anonymous struct literal (target type does not implement FromLiteral)"
+                found: "anonymous struct literal (target type does not implement KeyValueLiteral)"
                     .into(),
                 span: expr.span(),
             });
@@ -411,7 +412,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         None
     }
 
-    /// Try to coerce an anonymous struct literal to a type implementing `FromLiteral`.
+    /// Try to coerce an anonymous struct literal to a type implementing `KeyValueLiteral`.
     /// Desugars to a `LabeledBlock` that calls `T::new_literal()` then
     /// `insert_literal(key, value)` for each field, so the monomorphize phase naturally
     /// discovers the required function instantiations.
@@ -431,8 +432,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Get base struct name from target type
         let base_name = self.struct_name_for_type(target_type)?;
 
-        // Check if target type implements FromLiteral trait
-        let from_literal_info = self.find_from_literal_trait_impl(&base_name, target_type)?;
+        // Check if target type implements KeyValueLiteral trait
+        let from_literal_info = self.find_key_value_literal_trait_impl(&base_name, target_type)?;
         let value_type = from_literal_info.value_type;
         let insert_self_kind = from_literal_info.self_kind;
         let trait_name = from_literal_info.trait_name;
@@ -523,6 +524,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Some(trait_name.clone()),
             "insert_literal".to_string(),
         );
+
+        // Check for duplicate field names
+        let mut seen_fields: IndexSet<&str> = IndexSet::new();
+        for field in &struct_lit.fields {
+            if !seen_fields.insert(field.name.as_str()) {
+                let _ = self.logger.error(TypeError::DuplicateField {
+                    name: field.name.clone(),
+                    span: field.span,
+                });
+            }
+        }
 
         for field in &struct_lit.fields {
             let value = self.resolve_expr(&field.value, ctx, Some(value_type));

@@ -221,12 +221,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     {
                         (coerced, target_type)
                     } else {
-                        // Target type does not implement FromLiteral
+                        // Target type does not implement KeyValueLiteral
                         let type_name = self.type_table.borrow().type_name(target_type);
                         let _ = self.logger.error(TypeError::TypeMismatch {
                             expected: type_name.clone(),
                             found: format!(
-                                "anonymous struct literal ({type_name} does not implement FromLiteral)"
+                                "anonymous struct literal ({type_name} does not implement KeyValueLiteral)"
                             ),
                             span: struct_lit.span,
                         });

@@ -1060,12 +1060,29 @@ pub struct EffectMethod {
     pub span: Span,
 }
 
-/// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`
+/// An associated type binding inside a trait bound, e.g., `Output = T` in `Builder<Output = T>`.
+#[derive(Debug, Clone)]
+pub struct AssocTypeBound {
+    pub name: String,
+    pub ty: Type,
+    pub span: Span,
+}
+
+/// A single trait bound on a generic parameter.
+/// Simple: `Ord`; with associated type bindings: `Builder<Output = T>`.
+#[derive(Debug, Clone)]
+pub struct TraitBound {
+    pub name: String,
+    pub assoc_types: Vec<AssocTypeBound>,
+    pub span: Span,
+}
+
+/// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`
 #[derive(Debug, Clone)]
 pub struct GenericParam {
     pub name: String,
-    /// Trait bounds (e.g., `Ord`, `Clone`) - for future constraint checking
-    pub bounds: Vec<String>,
+    /// Trait bounds (e.g., `Ord`, `Builder<Output = T>`)
+    pub bounds: Vec<TraitBound>,
     /// Default type (e.g., `T = []` or `Effects = []`)
     pub default: Option<Type>,
     pub span: Span,

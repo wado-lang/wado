@@ -294,8 +294,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     // First, collect explicit type params from impl<T: Bound>
                     for param in &impl_block.type_params {
                         if !param.bounds.is_empty() {
-                            self.current_type_param_bounds
-                                .insert(param.name.clone(), param.bounds.clone());
+                            self.current_type_param_bounds.insert(
+                                param.name.clone(),
+                                param.bounds.iter().map(|b| b.name.clone()).collect(),
+                            );
                         }
                     }
 
@@ -319,8 +321,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                             if !param.bounds.is_empty()
                                 && !self.current_type_param_bounds.contains_key(&param.name)
                             {
-                                self.current_type_param_bounds
-                                    .insert(param.name.clone(), param.bounds.clone());
+                                self.current_type_param_bounds.insert(
+                                    param.name.clone(),
+                                    param.bounds.iter().map(|b| b.name.clone()).collect(),
+                                );
                             }
                         }
                     }

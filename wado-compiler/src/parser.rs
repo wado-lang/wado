@@ -3077,17 +3077,17 @@ impl Parser {
 
         let mut params = Vec::new();
 
-        while !self.check(&TokenKind::Gt) && !self.is_at_end() {
+        while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
             let start_span = self.peek().span;
             let name = self.consume_ident()?;
 
-            // Parse optional trait bounds: `T: Ord` or `T: Ord + Clone`
+            // Parse optional trait bounds: `T: Ord`, `T: Ord + Clone`, `T: Builder<Output = T>`
             let bounds = if self.check(&TokenKind::Colon) {
                 self.advance();
-                let mut bounds = vec![self.consume_ident()?];
+                let mut bounds = vec![self.parse_trait_bound()?];
                 while self.check(&TokenKind::Plus) {
                     self.advance();
-                    bounds.push(self.consume_ident()?);
+                    bounds.push(self.parse_trait_bound()?);
                 }
                 bounds
             } else {
@@ -3116,8 +3116,46 @@ impl Parser {
             }
         }
 
-        self.expect(&TokenKind::Gt)?;
+        self.expect_gt()?;
         Ok(params)
+    }
+
+    /// Parse a single trait bound: `Ord` or `Builder<Output = T, Error = E>`.
+    fn parse_trait_bound(&mut self) -> ParseResult<crate::ast::TraitBound> {
+        let span = self.peek().span;
+        let name = self.consume_ident()?;
+        let assoc_types = if self.check(&TokenKind::Lt) {
+            self.advance();
+            let mut assoc = Vec::new();
+            loop {
+                if self.check(&TokenKind::Gt) {
+                    break;
+                }
+                let assoc_span = self.peek().span;
+                let assoc_name = self.consume_ident()?;
+                self.expect(&TokenKind::Eq)?;
+                let ty = self.parse_type()?;
+                assoc.push(crate::ast::AssocTypeBound {
+                    name: assoc_name,
+                    ty,
+                    span: assoc_span,
+                });
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            self.expect_gt()?;
+            assoc
+        } else {
+            Vec::new()
+        };
+        Ok(crate::ast::TraitBound {
+            name,
+            assoc_types,
+            span,
+        })
     }
 
     /// Parse type arguments for turbofish syntax: `<T1, T2, ...>`

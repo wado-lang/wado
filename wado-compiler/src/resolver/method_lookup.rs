@@ -10,8 +10,8 @@ use crate::token::Span;
 
 use super::Resolver;
 use super::types::{
-    ArithmeticTraitInfo, FromLiteralTraitInfo, FunctionContext, IndexAssignTraitInfo,
-    IndexMutTraitInfo, IndexTraitInfo, IndexValueTraitInfo, MethodInfo, TypeError,
+    ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
+    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, TypeError,
 };
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -43,7 +43,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
     }
 
-    /// Check if a name refers to a known type (struct or primitive).
+    /// Check if a name refers to a known type (struct, variant, enum, flags, newtype, or primitive).
     /// Used to distinguish concrete types from type parameters in impl blocks,
     /// since the parser treats all args in `<String, V>` as type params.
     fn is_known_type_name(&self, name: &str) -> bool {
@@ -52,6 +52,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .all_struct_fields
                 .values()
                 .any(|m| m.contains_key(name))
+            || self.variant_cases.contains_key(name)
+            || self
+                .all_variant_cases
+                .values()
+                .any(|m| m.contains_key(name))
+            || self.enum_cases.contains_key(name)
+            || self.all_enum_cases.values().any(|m| m.contains_key(name))
+            || self.flags_cases.contains_key(name)
+            || self.all_flags_cases.values().any(|m| m.contains_key(name))
+            || self.newtypes.contains_key(name)
+            || self.all_newtypes.values().any(|m| m.contains_key(name))
             || crate::tir::PrimitiveType::is_primitive_name(name)
     }
 
@@ -1250,25 +1261,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
     }
 
-    /// Find `FromLiteral` trait implementation for a type.
+    /// Find `KeyValueLiteral` trait implementation for a type.
     /// Returns the Value associated type and `insert_literal` self kind.
-    pub(super) fn find_from_literal_trait_impl(
+    pub(super) fn find_key_value_literal_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-    ) -> Option<FromLiteralTraitInfo> {
+    ) -> Option<KeyValueLiteralTraitInfo> {
         self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
-            "FromLiteral",
+            "KeyValueLiteral",
             "insert_literal",
             "Value",
         )
-        .map(|(value_type, self_kind, trait_name)| FromLiteralTraitInfo {
-            value_type,
-            self_kind,
-            trait_name,
-        })
+        .map(
+            |(value_type, self_kind, trait_name)| KeyValueLiteralTraitInfo {
+                value_type,
+                self_kind,
+                trait_name,
+            },
+        )
     }
 
     /// Find `IndexAssign` trait implementation for a type
@@ -1668,12 +1681,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return true;
         };
 
-        // Build name → bounds map from impl block type params
-        let bounds_map: IndexMap<&str, &[String]> = impl_block
+        // Build name → bounds map from impl block type params (trait names only)
+        let bounds_map: IndexMap<&str, Vec<String>> = impl_block
             .type_params
             .iter()
             .filter(|p| !p.bounds.is_empty())
-            .map(|p| (p.name.as_str(), p.bounds.as_slice()))
+            .map(|p| {
+                (
+                    p.name.as_str(),
+                    p.bounds.iter().map(|b| b.name.clone()).collect(),
+                )
+            })
             .collect();
 
         // Match type params to receiver type args via generic type arg positions
@@ -1692,7 +1710,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ) {
                         continue;
                     }
-                    for bound in *bounds {
+                    for bound in bounds {
                         if !self.type_implements_trait(type_arg, bound) {
                             return false;
                         }
@@ -1718,11 +1736,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for (i, param) in type_params.iter().enumerate() {
             if let Some(&type_arg) = type_args.get(i) {
                 for bound in &param.bounds {
-                    if !self.type_implements_trait(type_arg, bound) {
+                    if !self.type_implements_trait(type_arg, &bound.name) {
                         let type_name = self.type_id_to_string(type_arg);
                         let _ = self.logger.error(TypeError::TraitBoundNotSatisfied {
                             type_name,
-                            trait_name: bound.clone(),
+                            trait_name: bound.name.clone(),
                             param_name: param.name.clone(),
                             span,
                         });
@@ -1971,8 +1989,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Extract type parameter names from impl_ty, tracking positions
         // Position tracking is needed to map type params to the correct concrete arg
         if let Type::Generic(g) = impl_ty {
-            let mut concrete_idx = 0;
-            for arg in &g.args {
+            for (concrete_idx, arg) in g.args.iter().enumerate() {
                 if let Type::Named(n) = arg {
                     let is_type_param = if declared_type_params.is_empty() {
                         true // legacy: treat all Named as type params
@@ -1983,7 +2000,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         mapping.insert(n.name.clone(), type_id);
                     }
                 }
-                concrete_idx += 1;
             }
         }
 
@@ -1991,7 +2007,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     }
 
     /// Check that concrete type args at non-type-parameter positions match the impl type.
-    /// e.g., `impl FromLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
+    /// e.g., `impl KeyValueLiteral for TreeMap<String, V>` with `TreeMap<i32, String>` should fail
     /// because position 0 expects String but got i32.
     fn verify_impl_type_compatibility(
         impl_ty: &Type,
@@ -2007,19 +2023,64 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
         let tt = type_table.borrow();
         for (i, arg) in g.args.iter().enumerate() {
-            if let Type::Named(n) = arg
-                && !declared_type_params.contains(&n.name)
-            {
-                // This is a concrete type in the impl, verify it matches
-                if let Some(&concrete_id) = concrete_type_args.get(i) {
-                    let concrete_name = tt.type_name(concrete_id);
-                    if concrete_name != n.name {
-                        return false;
-                    }
-                }
+            let Some(&concrete_id) = concrete_type_args.get(i) else {
+                continue;
+            };
+            if !Self::impl_type_matches_concrete(arg, concrete_id, declared_type_params, &tt) {
+                return false;
             }
         }
         true
+    }
+
+    /// Recursively check whether an impl type argument matches a concrete type ID.
+    /// - `Type::Named` that is a declared type param → always matches (free type param)
+    /// - `Type::Named` not in type params → concrete name must equal `type_table.type_name()`
+    /// - `Type::Generic` → concrete must be a `GenericInstance` with same outer name; inner args checked recursively
+    /// - Other types → not validated (return true)
+    fn impl_type_matches_concrete(
+        impl_ty: &Type,
+        concrete_id: TypeId,
+        declared_type_params: &IndexSet<String>,
+        type_table: &TypeTable,
+    ) -> bool {
+        match impl_ty {
+            Type::Named(n) => {
+                if declared_type_params.contains(&n.name) {
+                    true // free type param — matches anything
+                } else {
+                    type_table.type_name(concrete_id) == n.name
+                }
+            }
+            Type::Generic(g) => {
+                let resolved = type_table.get(concrete_id).clone();
+                match resolved {
+                    ResolvedType::GenericInstance {
+                        name, type_args, ..
+                    } => {
+                        if name != g.name {
+                            return false;
+                        }
+                        for (i, inner) in g.args.iter().enumerate() {
+                            let Some(&inner_id) = type_args.get(i) else {
+                                return false;
+                            };
+                            if !Self::impl_type_matches_concrete(
+                                inner,
+                                inner_id,
+                                declared_type_params,
+                                type_table,
+                            ) {
+                                return false;
+                            }
+                        }
+                        true
+                    }
+                    _ => false,
+                }
+            }
+            _ => true,
+        }
     }
 
     /// Resolve a type, substituting type parameters using the provided mapping.

@@ -81,7 +81,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
                         .type_params
                         .iter()
-                        .map(|p| (p.name.clone(), p.bounds.clone()))
+                        .map(|p| {
+                            (
+                                p.name.clone(),
+                                p.bounds.iter().map(|b| b.name.clone()).collect(),
+                            )
+                        })
                         .collect();
                     self.struct_fields.insert(
                         struct_decl.name.clone(),
@@ -231,8 +236,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.current_type_params
                             .insert(param.name.clone(), (index as u32, type_id));
                         if !param.bounds.is_empty() {
-                            self.current_type_param_bounds
-                                .insert(param.name.clone(), param.bounds.clone());
+                            self.current_type_param_bounds.insert(
+                                param.name.clone(),
+                                param.bounds.iter().map(|b| b.name.clone()).collect(),
+                            );
                         }
                     }
 

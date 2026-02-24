@@ -1,4 +1,4 @@
-// FromLiteral: custom type implementing FromLiteral trait
+// KeyValueLiteral: custom type implementing KeyValueLiteral trait
 // Verifies that struct literal coercion is not hardcoded to TreeMap
 use { println } from "core:cli";
 
@@ -17,7 +17,7 @@ impl LinearMap<V> {
     }
 }
 
-impl FromLiteral for LinearMap<V> {
+impl KeyValueLiteral for LinearMap<V> {
     type Value = V;
 
     fn new_literal() -> LinearMap<V> {
@@ -42,8 +42,8 @@ export fn run() with Stdout {
     assert m.values[1] == 20;
     assert m.values[2] == 30;
 
-    println("custom FromLiteral: ok");
+    println("custom KeyValueLiteral: ok");
 }
 
 __DATA__
-{"stdout": "custom FromLiteral: ok\n"}
+{"stdout": "custom KeyValueLiteral: ok\n"}

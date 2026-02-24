@@ -1,0 +1,36 @@
+// TODO: Pre-existing O0/O2 codegen ICE with phantom type args in generic structs.
+// (type mismatch: expected (ref $type), found (ref (exact $type)))
+// When the underlying codegen bug is fixed, this test should produce "ok".
+// The is_known_type_name fix correctly recognizes Perms (a flags type) as a concrete
+// type, preventing it from being treated as a free type parameter in the impl lookup.
+use { println } from "core:cli";
+
+flags Perms { Read, Write }
+
+struct PermsMap<P, V> {
+    keys: Array<String>,
+    values: Array<V>,
+}
+
+impl KeyValueLiteral for PermsMap<Perms, V> {
+    type Value = V;
+
+    fn new_literal() -> PermsMap<Perms, V> {
+        return PermsMap { keys: [], values: [] };
+    }
+
+    fn insert_literal(&mut self, key: String, value: Self::Value) {
+        self.keys.append(key);
+        self.values.append(value);
+    }
+}
+
+export fn run() with Stdout {
+    let m: PermsMap<Perms, i32> = { read: 1, write: 2 };
+    assert m.keys.len() == 2;
+    assert m.values[0] == 1;
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

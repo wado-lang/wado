@@ -21,9 +21,9 @@ struct "LinearMap<i32>" {
 export fn run() with Stdout {
     let m: LinearMap<i32> = __map_lit: {
         let mut __m: LinearMap<i32> = move LinearMap<i32> { keys: [], values: [] };
-        __m."LinearMap<i32>^FromLiteral::insert_literal"(move "x", 10);
-        __m."LinearMap<i32>^FromLiteral::insert_literal"(move "y", 20);
-        __m."LinearMap<i32>^FromLiteral::insert_literal"(move "z", 30);
+        __m."LinearMap<i32>^KeyValueLiteral::insert_literal"(move "x", 10);
+        __m."LinearMap<i32>^KeyValueLiteral::insert_literal"(move "y", 20);
+        __m."LinearMap<i32>^KeyValueLiteral::insert_literal"(move "z", 30);
         break __map_lit: __m;
     };
     __assert_0: {
@@ -257,7 +257,7 @@ export fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "custom FromLiteral: ok");
+    core::cli::println(move "custom KeyValueLiteral: ok");
 }
 
 export fn __cm_export__run() {
@@ -295,7 +295,7 @@ fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> 
     return core::builtin::array_get::<String>(self.repr, index);
 }
 
-fn "LinearMap<i32>^FromLiteral::insert_literal"(self: &mut LinearMap<i32>, key: String, value: i32) {
+fn "LinearMap<i32>^KeyValueLiteral::insert_literal"(self: &mut LinearMap<i32>, key: String, value: i32) {
     self.keys."Array<String>::append"(key);
     self.values."Array<i32>::append"(value);
 }

@@ -1,4 +1,4 @@
-// FromLiteral: explicit cast to custom type
+// KeyValueLiteral: explicit cast to custom type
 use { println } from "core:cli";
 
 struct PairList<V> {
@@ -16,7 +16,7 @@ impl PairList<V> {
     }
 }
 
-impl FromLiteral for PairList<V> {
+impl KeyValueLiteral for PairList<V> {
     type Value = V;
 
     fn new_literal() -> PairList<V> {
@@ -39,8 +39,8 @@ export fn run() with Stdout {
     assert m.values[0] == "Alice";
     assert m.values[1] == "Tokyo";
 
-    println("cast FromLiteral: ok");
+    println("cast KeyValueLiteral: ok");
 }
 
 __DATA__
-{"stdout": "cast FromLiteral: ok\n"}
+{"stdout": "cast KeyValueLiteral: ok\n"}

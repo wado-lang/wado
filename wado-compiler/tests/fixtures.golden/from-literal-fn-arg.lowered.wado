@@ -48,9 +48,9 @@ export fn run() with Stdout {
     let n: i32 = __inline_count_entries_0: {
         let m: SimpleMap<i32> = __map_lit: {
             let mut __m: SimpleMap<i32> = move SimpleMap<i32> { keys: [], values: [] };
-            __m."SimpleMap<i32>^FromLiteral::insert_literal"(move "a", 1);
-            __m."SimpleMap<i32>^FromLiteral::insert_literal"(move "b", 2);
-            __m."SimpleMap<i32>^FromLiteral::insert_literal"(move "c", 3);
+            __m."SimpleMap<i32>^KeyValueLiteral::insert_literal"(move "a", 1);
+            __m."SimpleMap<i32>^KeyValueLiteral::insert_literal"(move "b", 2);
+            __m."SimpleMap<i32>^KeyValueLiteral::insert_literal"(move "c", 3);
             break __map_lit: __m;
         };
         break __inline_count_entries_0: __inline_Array_String___len_1: {
@@ -95,8 +95,8 @@ export fn run() with Stdout {
     }
     let s: i32 = sum_values(__map_lit: {
         let mut __m: SimpleMap<i32> = move SimpleMap<i32> { keys: [], values: [] };
-        __m."SimpleMap<i32>^FromLiteral::insert_literal"(move "x", 10);
-        __m."SimpleMap<i32>^FromLiteral::insert_literal"(move "y", 20);
+        __m."SimpleMap<i32>^KeyValueLiteral::insert_literal"(move "x", 10);
+        __m."SimpleMap<i32>^KeyValueLiteral::insert_literal"(move "y", 20);
         break __map_lit: __m;
     });
     __assert_1: {
@@ -134,7 +134,7 @@ export fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "fn arg FromLiteral: ok");
+    core::cli::println(move "fn arg KeyValueLiteral: ok");
 }
 
 export fn __cm_export__run() {
@@ -158,7 +158,7 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     self.used = (used + 1);
 }
 
-fn "SimpleMap<i32>^FromLiteral::insert_literal"(self: &mut SimpleMap<i32>, key: String, value: i32) {
+fn "SimpleMap<i32>^KeyValueLiteral::insert_literal"(self: &mut SimpleMap<i32>, key: String, value: i32) {
     self.keys."Array<String>::append"(key);
     self.values."Array<i32>::append"(value);
 }

@@ -21,8 +21,8 @@ struct "PairList<String>" {
 export fn run() with Stdout {
     let m: PairList<String> = __map_lit: {
         let mut __m: PairList<String> = move PairList<String> { keys: [], values: [] };
-        __m."PairList<String>^FromLiteral::insert_literal"(move "name", move "Alice");
-        __m."PairList<String>^FromLiteral::insert_literal"(move "city", move "Tokyo");
+        __m."PairList<String>^KeyValueLiteral::insert_literal"(move "name", move "Alice");
+        __m."PairList<String>^KeyValueLiteral::insert_literal"(move "city", move "Tokyo");
         break __map_lit: __m;
     };
     __assert_0: {
@@ -176,7 +176,7 @@ export fn run() with Stdout {
             });
         }
     }
-    core::cli::println(move "cast FromLiteral: ok");
+    core::cli::println(move "cast KeyValueLiteral: ok");
 }
 
 export fn __cm_export__run() {
@@ -207,7 +207,7 @@ fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> 
     return core::builtin::array_get::<String>(self.repr, index);
 }
 
-fn "PairList<String>^FromLiteral::insert_literal"(self: &mut PairList<String>, key: String, value: String) {
+fn "PairList<String>^KeyValueLiteral::insert_literal"(self: &mut PairList<String>, key: String, value: String) {
     self.keys."Array<String>::append"(key);
     self.values."Array<String>::append"(value);
 }
