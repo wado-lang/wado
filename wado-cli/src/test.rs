@@ -503,8 +503,12 @@ pub async fn run(opts: TestOptions) {
                 .get(path.as_str())
                 .map(|m| {
                     let compile = format_duration(m.compile_duration);
-                    let load = format_duration(m.load_duration);
-                    format!(" (compiled in {compile}, loaded in {load})")
+                    if m.load_duration.as_secs() >= 1 {
+                        let load = format_duration(m.load_duration);
+                        format!(" (compiled in {compile}, loaded in {load})")
+                    } else {
+                        format!(" (compiled in {compile})")
+                    }
                 })
                 .unwrap_or_default();
             println!("Running tests in {path}...{timing}");
