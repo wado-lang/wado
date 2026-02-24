@@ -418,8 +418,7 @@ pub fn run(opts: TestOptions) {
                         *guard += 1;
                         i
                     };
-                    let result =
-                        rt.block_on(process_one_file(&paths[idx], filter.as_deref()));
+                    let result = rt.block_on(process_one_file(&paths[idx], filter.as_deref()));
                     let _ = tx.send((idx, result));
                 }
             })
@@ -435,31 +434,33 @@ pub fn run(opts: TestOptions) {
     let mut total_tests = 0;
     let num_files = paths.len();
 
-    let print_file_result =
-        |fr: &FileResult, total_tests: &mut usize, total_passed: &mut usize, total_failed: &mut usize| {
-            if fr.test_results.is_empty() {
-                return;
-            }
-            let compile_dur = format_duration(fr.compile_duration);
-            println!(
-                "Running tests in {}... (compiled in {compile_dur})",
-                fr.path
-            );
-            for result in &fr.test_results {
-                *total_tests += 1;
-                let dur = format_duration(result.duration);
-                if result.passed {
-                    println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
-                    *total_passed += 1;
-                } else {
-                    println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
-                    if let Some(ref error) = result.error {
-                        println!("    {error}");
-                    }
-                    *total_failed += 1;
+    let print_file_result = |fr: &FileResult,
+                             total_tests: &mut usize,
+                             total_passed: &mut usize,
+                             total_failed: &mut usize| {
+        if fr.test_results.is_empty() {
+            return;
+        }
+        let compile_dur = format_duration(fr.compile_duration);
+        println!(
+            "Running tests in {}... (compiled in {compile_dur})",
+            fr.path
+        );
+        for result in &fr.test_results {
+            *total_tests += 1;
+            let dur = format_duration(result.duration);
+            if result.passed {
+                println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
+                *total_passed += 1;
+            } else {
+                println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
+                if let Some(ref error) = result.error {
+                    println!("    {error}");
                 }
+                *total_failed += 1;
             }
-        };
+        }
+    };
 
     tokio::task::block_in_place(|| {
         let mut next_to_print = 0usize;
@@ -472,7 +473,12 @@ pub fn run(opts: TestOptions) {
             while next_to_print < num_files && buffer[next_to_print].is_some() {
                 match buffer[next_to_print].take().unwrap() {
                     Ok(fr) => {
-                        print_file_result(&fr, &mut total_tests, &mut total_passed, &mut total_failed);
+                        print_file_result(
+                            &fr,
+                            &mut total_tests,
+                            &mut total_passed,
+                            &mut total_failed,
+                        );
                     }
                     Err(e) => {
                         eprintln!("Error: {e}");
