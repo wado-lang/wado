@@ -342,7 +342,7 @@ fn validate_call_sites_in_body(
 }
 
 /// Look through `ValueCopy`, trivial `Block` wrappers, and other transparent
-/// expressions to find a `Call` to a candidate function. Returns the func_id
+/// expressions to find a `Call` to a candidate function. Returns the `func_id`
 /// index if found.
 fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> Option<u32> {
     match instr {
@@ -354,9 +354,7 @@ fn unwrap_to_candidate_call(instr: &WirInstr, candidate_ids: &IndexSet<u32>) -> 
         // Trivial block from inlining: the block's result value is either:
         // 1. The last instruction in body (implicit value)
         // 2. A Seq([..., value, Br]) pattern (break-with-value)
-        WirInstr::Block { body, .. } => {
-            extract_block_result_call(body, candidate_ids)
-        }
+        WirInstr::Block { body, .. } => extract_block_result_call(body, candidate_ids),
         _ => None,
     }
 }
@@ -368,10 +366,10 @@ fn extract_block_result_call(body: &[WirInstr], candidate_ids: &IndexSet<u32>) -
     match last {
         // Block ends with Seq([..., value, Br { depth }]) — break-with-value
         WirInstr::Seq(seq) => {
-            if let Some((WirInstr::Br { .. }, rest)) = seq.split_last() {
-                if let Some((val, _)) = rest.split_last() {
-                    return unwrap_to_candidate_call(val, candidate_ids);
-                }
+            if let Some((WirInstr::Br { .. }, rest)) = seq.split_last()
+                && let Some((val, _)) = rest.split_last()
+            {
+                return unwrap_to_candidate_call(val, candidate_ids);
             }
             None
         }
@@ -393,11 +391,11 @@ fn check_invalid_call_uses(
             if unwrap_to_candidate_call(value, candidate_ids).is_some() =>
         {
             // Still check args of the underlying call for nested candidate calls
-            if let Some(call) = unwrap_to_inner_call(value) {
-                if let WirInstr::Call { args, .. } = call {
-                    for arg in args {
-                        find_nested_candidate_calls(arg, candidate_ids, invalid);
-                    }
+            if let Some(call) = unwrap_to_inner_call(value)
+                && let WirInstr::Call { args, .. } = call
+            {
+                for arg in args {
+                    find_nested_candidate_calls(arg, candidate_ids, invalid);
                 }
             }
         }
@@ -417,10 +415,10 @@ fn unwrap_to_inner_call(instr: &WirInstr) -> Option<&WirInstr> {
             let last = body.last()?;
             match last {
                 WirInstr::Seq(seq) => {
-                    if let Some((WirInstr::Br { .. }, rest)) = seq.split_last() {
-                        if let Some((val, _)) = rest.split_last() {
-                            return unwrap_to_inner_call(val);
-                        }
+                    if let Some((WirInstr::Br { .. }, rest)) = seq.split_last()
+                        && let Some((val, _)) = rest.split_last()
+                    {
+                        return unwrap_to_inner_call(val);
                     }
                     None
                 }
