@@ -308,7 +308,8 @@ pub async fn compile_with_options<H: CompilerHost>(
         monomorphize_project(project)
     };
 
-    // Post-monomorphize inspect synthesis: resolve deferred TypeParam inspect markers
+    // Post-monomorphize inspect synthesis: resolve deferred markers from generic
+    // type params (now concrete) and dispatch Display vs Inspect correctly.
     let project = synthesis::inspect::synthesize_inspect(project);
 
     // === Phase 9: Lower (Project -> Project) ===
@@ -514,8 +515,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             monomorphize_project(project)
         };
 
-        // Post-monomorphize inspect synthesis: resolve any builtin::inspect markers
-        // that were deferred because they referenced TypeParam types (now concrete).
+        // Post-monomorphize inspect synthesis: resolve deferred markers from generic
+        // type params (now concrete) and dispatch Display vs Inspect correctly.
         let project = synthesis::inspect::synthesize_inspect(project);
 
         let mono_snapshot = Some(project.tir_modules.clone());
