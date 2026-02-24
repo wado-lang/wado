@@ -1634,7 +1634,7 @@ impl Monomorphizer {
                     if !type_args.is_empty() {
                         let generic_method_name = MethodName::format_local(
                             &info.base_struct_name,
-                            None,
+                            info.trait_name.as_deref(),
                             &info.method_name,
                         );
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {

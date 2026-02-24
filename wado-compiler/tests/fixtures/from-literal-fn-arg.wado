@@ -1,0 +1,64 @@
+// KeyValueLiteral: coercion in function argument position with custom type
+use { println } from "core:cli";
+
+struct SimpleMap<V> {
+    keys: Array<String>,
+    values: Array<V>,
+}
+
+impl SimpleMap<V> {
+    fn new() -> SimpleMap<V> {
+        return SimpleMap { keys: [], values: [] };
+    }
+
+    fn len(&self) -> i32 {
+        return self.keys.len();
+    }
+
+    fn get(&self, key: String) -> Option<V> {
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if self.keys[i] == key {
+                return Option::<V>::Some(self.values[i]);
+            }
+        }
+        return null;
+    }
+}
+
+impl KeyValueLiteral for SimpleMap<V> {
+    type Value = V;
+
+    fn new_literal() -> SimpleMap<V> {
+        return SimpleMap::<V>::new();
+    }
+
+    fn insert_literal(&mut self, key: String, value: Self::Value) {
+        self.keys.append(key);
+        self.values.append(value);
+    }
+}
+
+fn count_entries(m: SimpleMap<i32>) -> i32 {
+    return m.len();
+}
+
+fn sum_values(m: SimpleMap<i32>) -> i32 {
+    let mut total = 0;
+    for let v of m.values {
+        total = total + v;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let n = count_entries({ a: 1, b: 2, c: 3 });
+    assert n == 3;
+
+    let s = sum_values({ x: 10, y: 20 });
+    assert s == 30;
+
+    println("fn arg KeyValueLiteral: ok");
+}
+
+__DATA__
+{"stdout": "fn arg KeyValueLiteral: ok\n"}

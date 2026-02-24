@@ -1,0 +1,21 @@
+// TreeMap literal: coercion in function argument position
+use { println } from "core:cli";
+use { TreeMap } from "core:collections";
+
+fn sum_values(m: TreeMap<String, i32>) -> i32 {
+    let mut total = 0;
+    for let entry of m.entries() {
+        total = total + entry.1;
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let total = sum_values({ x: 10, y: 20, z: 30 });
+    assert total == 60;
+
+    println("fn arg: ok");
+}
+
+__DATA__
+{"stdout": "fn arg: ok\n"}

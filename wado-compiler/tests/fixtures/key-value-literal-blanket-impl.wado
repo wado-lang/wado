@@ -1,0 +1,63 @@
+// TODO: The blanket impl below requires `T::AssocType` (associated type projection on
+// a type parameter) to be resolved by the resolver, which is not yet implemented.
+// The parser now supports `T: Trait<Assoc = Val>` bounds; the remaining blocker is
+// resolver support for `T::Value` when T has a bound that declares `Value`.
+// Once resolved, this blanket impl will auto-satisfy KeyValueLiteral for any type
+// that implements KeyValueLiteralBuilder with Output = Self.
+use { println } from "core:cli";
+
+trait KeyValueLiteralBuilder {
+    type Value;
+    type Output;
+    fn new_literal(capacity: i32) -> Self;
+    fn insert_literal(&mut self, key: String, value: Self::Value);
+    fn build(self) -> Self::Output;
+}
+
+trait KeyValueLiteral {
+    type Value;
+    type Builder;
+}
+
+// Blanket: self-as-builder types get KeyValueLiteral for free.
+// Requires `T: Trait<Assoc = Val>` bound syntax — not yet parsed.
+impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
+    type Value = T::Value;
+    type Builder = T;
+}
+
+struct Bag<V> {
+    keys: Array<String>,
+    values: Array<V>,
+}
+
+impl KeyValueLiteralBuilder for Bag<V> {
+    type Value = V;
+    type Output = Bag<V>;
+
+    fn new_literal(capacity: i32) -> Bag<V> {
+        return Bag { keys: [], values: [] };
+    }
+    fn insert_literal(&mut self, key: String, value: V) {
+        self.keys.append(key);
+        self.values.append(value);
+    }
+    fn build(self) -> Bag<V> {
+        return self;
+    }
+}
+
+// With the blanket impl, no explicit `impl KeyValueLiteral for Bag<V>` needed.
+
+export fn run() with Stdout {
+    let mut b = Bag::<i32>::new_literal(2);
+    b.insert_literal("x", 1);
+    b.insert_literal("y", 2);
+    let bag = b.build();
+    assert bag.keys.len() == 2;
+    assert bag.values[0] == 1;
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

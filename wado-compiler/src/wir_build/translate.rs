@@ -3525,6 +3525,13 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// Translate map literal: `{ a: 1, b: 2 }` coerced to `TreeMap<String, V>`.
+    ///
+    /// Generates WIR equivalent to:
+    ///   let mut __map = `TreeMap::`<String, `V>::new()`;
+    ///   __map["a"] = 1;
+    ///   __map["b"] = 2;
+    ///   __map
     /// Translate switch expression using `br_table`.
     fn translate_switch(
         &mut self,

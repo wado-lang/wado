@@ -149,6 +149,9 @@ pub enum TypeError {
         hint: String,
         span: Span,
     },
+
+    /// Duplicate field name in struct literal
+    DuplicateField { name: String, span: Span },
 }
 
 impl std::fmt::Display for TypeError {
@@ -252,6 +255,13 @@ impl std::fmt::Display for TypeError {
                     span.line, span.column, from, to, hint
                 )
             }
+            TypeError::DuplicateField { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: duplicate field '{}'",
+                    span.line, span.column, name
+                )
+            }
         }
     }
 }
@@ -340,6 +350,11 @@ impl From<TypeError> for crate::compiler_host::Diagnostic {
             } => (
                 Code::InvalidCast,
                 format!("cannot cast '{from}' to '{to}': {hint}"),
+                *span,
+            ),
+            TypeError::DuplicateField { name, span } => (
+                Code::DuplicateDefinition,
+                format!("duplicate field '{name}' in struct literal"),
                 *span,
             ),
         };
@@ -720,4 +735,14 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) trait_name: String,
     /// The resolved type of the rhs parameter (first non-self parameter)
     pub(super) rhs_type: Option<TypeId>,
+}
+
+/// Info about a `KeyValueLiteral` trait implementation
+pub(super) struct KeyValueLiteralTraitInfo {
+    /// The Value associated type (element type for literal values)
+    pub(super) value_type: TypeId,
+    /// Self kind for the `insert_literal` method (&mut self)
+    pub(super) self_kind: ast::SelfKind,
+    /// The trait name (e.g., "`KeyValueLiteral`")
+    pub(super) trait_name: String,
 }

@@ -2,13 +2,16 @@
 
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
-use crate::name::ModuleSource;
-use crate::tir::{FunctionRef, ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::name::{LocalMethodName, MethodName, ModuleSource};
+use crate::tir::{
+    FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
+    TypeId, TypeTable,
+};
+use indexmap::IndexSet;
 
 use super::Resolver;
 use super::types::{FunctionContext, TypeError};
 use super::util;
-use crate::name::LocalMethodName;
 
 impl<H: CompilerHost> Resolver<'_, H> {
     pub(super) fn try_coerce_numeric_literal(
@@ -383,6 +386,232 @@ impl<H: CompilerHost> Resolver<'_, H> {
             ));
         }
 
+        // Anonymous struct literal → type implementing KeyValueLiteral
+        if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
+            return Some(coerced);
+        }
+
+        // If an anonymous struct literal targets a generic instance that doesn't
+        // implement KeyValueLiteral, report a compile error.
+        if let Expr::StructLiteral(struct_lit) = expr
+            && struct_lit.name.is_none()
+            && matches!(
+                self.type_table.borrow().get(target_type),
+                ResolvedType::GenericInstance { .. }
+            )
+        {
+            let type_name = self.type_table.borrow().type_name(target_type);
+            let _ = self.logger.error(TypeError::TypeMismatch {
+                expected: type_name,
+                found: "anonymous struct literal (target type does not implement KeyValueLiteral)"
+                    .into(),
+                span: expr.span(),
+            });
+        }
+
         None
+    }
+
+    /// Try to coerce an anonymous struct literal to a type implementing `KeyValueLiteral`.
+    /// Desugars to a `LabeledBlock` that calls `T::new_literal()` then
+    /// `insert_literal(key, value)` for each field, so the monomorphize phase naturally
+    /// discovers the required function instantiations.
+    pub(super) fn try_coerce_struct_to_map(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> Option<TirExpr> {
+        let Expr::StructLiteral(struct_lit) = expr else {
+            return None;
+        };
+        if struct_lit.name.is_some() {
+            return None;
+        }
+
+        // Get base struct name from target type
+        let base_name = self.struct_name_for_type(target_type)?;
+
+        // Check if target type implements KeyValueLiteral trait
+        let from_literal_info = self.find_key_value_literal_trait_impl(&base_name, target_type)?;
+        let value_type = from_literal_info.value_type;
+        let insert_self_kind = from_literal_info.self_kind;
+        let trait_name = from_literal_info.trait_name;
+
+        let span = expr.span();
+        let string_type = self
+            .type_table
+            .borrow_mut()
+            .make_struct("String".to_string(), ModuleSource::string());
+
+        // Get type args for monomorphization (e.g., [String, i32] for TreeMap<String, i32>)
+        let (type_arg_names, type_arg_ids): (Vec<String>, Vec<TypeId>) = {
+            let tt = self.type_table.borrow();
+            match tt.get(target_type) {
+                ResolvedType::GenericInstance { type_args, .. } => {
+                    let names: Vec<String> = type_args
+                        .iter()
+                        .map(|&id| tt.mangle_type_name(id))
+                        .collect();
+                    (names, type_args.clone())
+                }
+                _ => (Vec::new(), Vec::new()),
+            }
+        };
+
+        let mangled_struct_name = if type_arg_names.is_empty() {
+            base_name.clone()
+        } else {
+            crate::name::mangle_generic_name(&base_name, &type_arg_names)
+        };
+
+        // Build LabeledBlock: __map_lit: { let mut __m = T::new_literal(); ...; break __map_lit: __m; }
+        let label = "__map_lit".to_string();
+        ctx.enter_scope();
+
+        // --- T::new_literal() StaticCall ---
+        let new_method_info = LocalMethodName::new(
+            base_name.clone(),
+            Some(trait_name.clone()),
+            "new_literal".to_string(),
+        )
+        .with_struct_type_args(&type_arg_names);
+
+        let new_mangled_name =
+            MethodName::format_local(&mangled_struct_name, Some(&trait_name), "new_literal");
+
+        let new_call = TirExpr::new(
+            TirExprKind::StaticCall {
+                func: FunctionRef::External {
+                    module_source: self.current_module_source.clone(),
+                    name: new_mangled_name,
+                    monomorph_info: if type_arg_ids.is_empty() {
+                        None
+                    } else {
+                        Some(MonomorphInfo {
+                            generic_name: format!("{base_name}::new_literal"),
+                            type_args: type_arg_ids,
+                        })
+                    },
+                    method_info: Some(new_method_info),
+                },
+                args: vec![],
+            },
+            target_type,
+            span,
+        );
+
+        // let mut __m = T::new_literal();
+        let map_index = ctx.add_local("__m".to_string(), target_type, true);
+        let mut stmts = vec![TirStmt::new(
+            TirStmtKind::Let {
+                name: "__m".to_string(),
+                local_index: map_index,
+                is_mut: true,
+                is_reactive: false,
+                type_id: target_type,
+                value: new_call,
+            },
+            span,
+        )];
+
+        // --- For each field: __m.insert_literal(key, value) ---
+        let insert_mangled_name =
+            MethodName::format_local(&base_name, Some(&trait_name), "insert_literal");
+
+        let insert_method_info = LocalMethodName::new(
+            base_name.clone(),
+            Some(trait_name.clone()),
+            "insert_literal".to_string(),
+        );
+
+        // Check for duplicate field names
+        let mut seen_fields: IndexSet<&str> = IndexSet::new();
+        for field in &struct_lit.fields {
+            if !seen_fields.insert(field.name.as_str()) {
+                let _ = self.logger.error(TypeError::DuplicateField {
+                    name: field.name.clone(),
+                    span: field.span,
+                });
+            }
+        }
+
+        for field in &struct_lit.fields {
+            let value = self.resolve_expr(&field.value, ctx, Some(value_type));
+            if value.type_id != value_type
+                && value.type_id != TypeTable::UNKNOWN
+                && value.type_id != TypeTable::NEVER
+            {
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: self.type_table.borrow().type_name(value_type),
+                    found: self.type_table.borrow().type_name(value.type_id),
+                    span: field.value.span(),
+                });
+            }
+
+            // Build receiver
+            let map_local = TirExpr::new(
+                TirExprKind::Local {
+                    index: map_index,
+                    name: "__m".to_string(),
+                },
+                target_type,
+                span,
+            );
+            let receiver = self.adjust_receiver_for_self_kind(map_local, insert_self_kind, span);
+
+            // Key: string literal from field name
+            let key_expr = TirExpr::new(
+                TirExprKind::StringLiteral(field.name.clone()),
+                string_type,
+                span,
+            );
+
+            let insert_call = TirExpr::new(
+                TirExprKind::MethodCall {
+                    receiver: Box::new(receiver),
+                    func: FunctionRef::External {
+                        module_source: self.current_module_source.clone(),
+                        name: insert_mangled_name.clone(),
+                        monomorph_info: None,
+                        method_info: Some(insert_method_info.clone()),
+                    },
+                    type_args: vec![],
+                    args: vec![key_expr, value],
+                },
+                TypeTable::UNIT,
+                span,
+            );
+            stmts.push(TirStmt::new(TirStmtKind::Expr(insert_call), span));
+        }
+
+        // break __map_lit: __m;
+        let map_final = TirExpr::new(
+            TirExprKind::Local {
+                index: map_index,
+                name: "__m".to_string(),
+            },
+            target_type,
+            span,
+        );
+        stmts.push(TirStmt::new(
+            TirStmtKind::Break {
+                label: Some(label.clone()),
+                value: Some(map_final),
+            },
+            span,
+        ));
+
+        ctx.exit_scope();
+
+        Some(TirExpr::new(
+            TirExprKind::LabeledBlock {
+                label,
+                block: TirBlock::new(stmts, span),
+                result_type: target_type,
+            },
+            target_type,
+            span,
+        ))
     }
 }

@@ -1,0 +1,28 @@
+// TreeMap literal: basic coercion from anonymous struct literal
+use { println } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let m: TreeMap<String, i32> = { width: 1920, height: 1080 };
+
+    assert m.len() == 2;
+    assert m.contains_key("width");
+    assert m.contains_key("height");
+
+    if let Some(w) = m["width"] {
+        assert w == 1920;
+    } else {
+        assert false, "width not found";
+    }
+
+    if let Some(h) = m["height"] {
+        assert h == 1080;
+    } else {
+        assert false, "height not found";
+    }
+
+    println("basic literal: ok");
+}
+
+__DATA__
+{"stdout": "basic literal: ok\n"}

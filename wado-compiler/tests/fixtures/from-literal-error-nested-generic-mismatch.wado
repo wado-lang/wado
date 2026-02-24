@@ -1,0 +1,33 @@
+// TODO: Parser doesn't support nested generics (e.g. Array<String>) in impl type positions.
+// When fixed, impl_type_matches_concrete should reject Array<i32> != Array<String>.
+struct NestedMap<K, V> {
+    keys: Array<String>,
+    values: Array<V>,
+}
+
+impl NestedMap<K, V> {
+    fn new() -> NestedMap<K, V> {
+        return NestedMap { keys: [], values: [] };
+    }
+}
+
+impl KeyValueLiteral for NestedMap<Array<String>, V> {
+    type Value = V;
+
+    fn new_literal() -> NestedMap<Array<String>, V> {
+        return NestedMap::<Array<String>, V>::new();
+    }
+
+    fn insert_literal(&mut self, key: String, value: Self::Value) {
+        self.keys.append(key);
+        self.values.append(value);
+    }
+}
+
+export fn run() {
+    // Array<i32> != Array<String> — should fail to find impl
+    let m: NestedMap<Array<i32>, i32> = { a: 1 };
+}
+
+__DATA__
+{"TODO": true, "compile_error": "does not implement KeyValueLiteral"}

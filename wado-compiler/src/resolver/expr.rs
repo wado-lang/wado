@@ -1177,6 +1177,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
         }
 
+        // Special case: struct literal cast to a type implementing KeyValueLiteral
+        // { a: 1, b: 2 } as TreeMap<String, i32>
+        if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
+            return coerced;
+        }
+
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_string("170...")
         let struct_name = match self.type_table.borrow().get(target_type).clone() {
@@ -1488,14 +1494,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ast::Expr::Literal(lit) if matches!(&lit.value, ast::Literal::Null)
                 );
 
-                let expected_field_type = if is_numeric_literal || is_null_literal {
-                    struct_field_types
-                        .iter()
-                        .find(|(name, _)| name == &field.name)
-                        .map(|(_, type_id)| *type_id)
-                } else {
-                    None
-                };
+                let is_anonymous_struct_literal = matches!(
+                    &field.value,
+                    ast::Expr::StructLiteral(s) if s.name.is_none()
+                );
+
+                let expected_field_type =
+                    if is_numeric_literal || is_null_literal || is_anonymous_struct_literal {
+                        struct_field_types
+                            .iter()
+                            .find(|(name, _)| name == &field.name)
+                            .map(|(_, type_id)| *type_id)
+                    } else {
+                        None
+                    };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
                 let mut value = self.resolve_expr(&field.value, ctx, expected_field_type);

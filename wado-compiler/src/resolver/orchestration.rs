@@ -58,7 +58,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
                             .type_params
                             .iter()
-                            .map(|p| (p.name.clone(), p.bounds.clone()))
+                            .map(|p| {
+                                (
+                                    p.name.clone(),
+                                    p.bounds.iter().map(|b| b.name.clone()).collect(),
+                                )
+                            })
                             .collect();
                         all_struct_fields
                             .entry(module_source.clone())
@@ -188,7 +193,12 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                         let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl
                             .type_params
                             .iter()
-                            .map(|p| (p.name.clone(), p.bounds.clone()))
+                            .map(|p| {
+                                (
+                                    p.name.clone(),
+                                    p.bounds.iter().map(|b| b.name.clone()).collect(),
+                                )
+                            })
                             .collect();
                         // Update the nested map entry with actual fields
                         let info = StructFieldInfo {

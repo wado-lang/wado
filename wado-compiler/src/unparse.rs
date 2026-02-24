@@ -367,7 +367,19 @@ impl<'a> Unparser<'a> {
                     if j > 0 {
                         self.output.push_str(" + ");
                     }
-                    self.output.push_str(bound);
+                    self.output.push_str(&bound.name);
+                    if !bound.assoc_types.is_empty() {
+                        self.output.push('<');
+                        for (k, assoc) in bound.assoc_types.iter().enumerate() {
+                            if k > 0 {
+                                self.output.push_str(", ");
+                            }
+                            self.output.push_str(&assoc.name);
+                            self.output.push_str(" = ");
+                            self.unparse_type(&assoc.ty);
+                        }
+                        self.output.push('>');
+                    }
                 }
             }
             if let Some(default_type) = &param.default {
