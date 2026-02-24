@@ -179,6 +179,7 @@ struct CompiledTestModule {
     path: String,
     engine: Arc<Engine>,
     component: Arc<Component>,
+    compile_duration: Duration,
 }
 
 /// A single test job to execute
@@ -233,6 +234,7 @@ async fn collect_test_jobs(
     for (module_idx, path) in paths.iter().enumerate() {
         // Compile with --world test so test functions become component exports
         // and non-test code is subject to DCE.
+        let compile_start = Instant::now();
         let wasm = compile::compile_with_full_opts(
             path,
             crate::compile::OptLevel::default(),
@@ -241,6 +243,7 @@ async fn collect_test_jobs(
             false,
         )
         .await;
+        let compile_duration = compile_start.elapsed();
         let engine = Arc::new(runtime::create_engine(
             wasmtime::OptLevel::None,
             &runtime::ProfileMode::None,
@@ -279,6 +282,7 @@ async fn collect_test_jobs(
             path: path.clone(),
             engine,
             component,
+            compile_duration,
         }));
     }
 
@@ -483,9 +487,19 @@ pub async fn run(opts: TestOptions) {
     let mut total_passed = 0;
     let mut total_failed = 0;
 
+    // Build a lookup from path to compiled module for compile duration
+    let module_by_path: indexmap::IndexMap<&str, &CompiledTestModule> = modules
+        .iter()
+        .map(|m| (m.path.as_str(), m.as_ref()))
+        .collect();
+
     for path in &opts.paths {
         if let Some(file_results) = results_by_file.get(path) {
-            println!("Running tests in {path}...");
+            let compile_dur = module_by_path
+                .get(path.as_str())
+                .map(|m| format!(" (compiled in {})", format_duration(m.compile_duration)))
+                .unwrap_or_default();
+            println!("Running tests in {path}...{compile_dur}");
 
             // Sort by test name for consistent output
             let mut sorted_results: Vec<_> = file_results.clone();
