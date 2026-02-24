@@ -19,18 +19,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - uses: Swatinem/rust-cache@v2
 
       - uses: jdx/mise-action@v3
         with:
@@ -91,19 +80,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
+      - uses: Swatinem/rust-cache@v2
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked --all -- --skip fixture_test_
@@ -115,19 +92,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
+      - uses: Swatinem/rust-cache@v2
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o0
@@ -139,19 +104,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
+      - uses: Swatinem/rust-cache@v2
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o1
@@ -163,19 +116,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
+      - uses: Swatinem/rust-cache@v2
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o3
@@ -187,19 +128,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
+      - uses: Swatinem/rust-cache@v2
       - uses: rui314/setup-mold@v1
 
       - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_os
@@ -211,19 +140,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
+      - uses: Swatinem/rust-cache@v2
       - uses: rui314/setup-mold@v1
 
       - run: make test-wado
@@ -235,6 +152,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
 
   test:
