@@ -1,0 +1,15 @@
+// Test that Array<T> == Array<T> requires T: Eq
+
+struct Foo {
+    x: i32,
+}
+
+export fn run() {
+    let a: Array<Foo> = [Foo { x: 1 }];
+    let b: Array<Foo> = [Foo { x: 1 }];
+    // Foo does not implement Eq, so == on Array<Foo> should fail
+    assert a == b;
+}
+
+__DATA__
+{"compile_error": "=="}

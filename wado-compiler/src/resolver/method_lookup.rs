@@ -1386,6 +1386,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             Type,
             Vec<Function>,
             Vec<crate::ast::AssociatedTypeBinding>,
+            Vec<crate::ast::GenericParam>,
         )> = Vec::new();
 
         if let Some(entries) = self.trait_impl_index.get(struct_name) {
@@ -1399,6 +1400,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         trait_type.clone(),
                         impl_block.methods.clone(),
                         impl_block.associated_types.clone(),
+                        impl_block.type_params.clone(),
                     ));
                 }
             }
@@ -1415,12 +1417,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     trait_type.clone(),
                     impl_block.methods.clone(),
                     impl_block.associated_types.clone(),
+                    impl_block.type_params.clone(),
                 ));
             }
         }
 
         // Process collected impl blocks
-        for (impl_ty, trait_type, methods, associated_types) in impl_blocks_to_check {
+        for (impl_ty, trait_type, methods, associated_types, type_params) in impl_blocks_to_check {
             let impl_struct_name = self.get_type_name(&impl_ty);
             if impl_struct_name != struct_name {
                 continue;
@@ -1430,6 +1433,49 @@ impl<H: CompilerHost> Resolver<'_, H> {
             let found_trait_name = self.get_type_name(&trait_type);
             if found_trait_name != trait_name {
                 continue;
+            }
+
+            // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for Array<T>)
+            if !type_params.iter().all(|p| p.bounds.is_empty()) && !concrete_type_args.is_empty() {
+                let bounds_map: IndexMap<&str, Vec<String>> = type_params
+                    .iter()
+                    .filter(|p| !p.bounds.is_empty())
+                    .map(|p| {
+                        (
+                            p.name.as_str(),
+                            p.bounds.iter().map(|b| b.name.clone()).collect(),
+                        )
+                    })
+                    .collect();
+
+                let mut bounds_satisfied = true;
+                if let ast::Type::Generic(generic) = &impl_ty {
+                    for (i, arg) in generic.args.iter().enumerate() {
+                        if let ast::Type::Named(named) = arg
+                            && let Some(bounds) = bounds_map.get(named.name.as_str())
+                            && let Some(&type_arg) = concrete_type_args.get(i)
+                        {
+                            if matches!(
+                                self.type_table.borrow().get(type_arg),
+                                ResolvedType::TypeParam { .. }
+                            ) {
+                                continue;
+                            }
+                            for bound in bounds {
+                                if !self.type_implements_trait(type_arg, bound) {
+                                    bounds_satisfied = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if !bounds_satisfied {
+                            break;
+                        }
+                    }
+                }
+                if !bounds_satisfied {
+                    continue;
+                }
             }
 
             // Build type parameter mapping from impl_ty to concrete types

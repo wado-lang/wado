@@ -84,7 +84,7 @@ impl IndexAssign<i32> for Array<T> {
     }
 }
 
-impl Eq for Array<T> {
+impl<T: Eq> Eq for Array<T> {
     pub fn eq(&self, other: &Self) -> bool {
         if self.used != other.used {
             return false;
@@ -98,7 +98,7 @@ impl Eq for Array<T> {
     }
 }
 
-impl Ord for Array<T> {
+impl<T: Ord> Ord for Array<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let min_len = i32_min(self.used, other.used);
         for let mut i = 0; i < min_len; i += 1 {

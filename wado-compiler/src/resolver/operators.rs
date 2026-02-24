@@ -88,9 +88,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
             if let Some(struct_name) = struct_name {
                 // Handle Eq trait (== and !=)
-                if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq)
-                    && let Some(trait_info) = self.find_eq_trait_impl(&struct_name, left.type_id)
-                {
+                if matches!(binary.op, BinaryOp::Eq | BinaryOp::NotEq) {
+                    let Some(trait_info) = self.find_eq_trait_impl(&struct_name, left.type_id)
+                    else {
+                        let type_name = self.type_table.borrow().type_name(left.type_id);
+                        let op_str = if binary.op == BinaryOp::Eq {
+                            "=="
+                        } else {
+                            "!="
+                        };
+                        let _ = self.logger.error(TypeError::InvalidPattern {
+                            message: format!(
+                                "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Eq trait)"
+                            ),
+                            span: binary.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                    };
+                    {
                     let receiver = self.adjust_receiver_for_self_kind(
                         left.clone(),
                         trait_info.self_kind,
@@ -147,6 +162,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
 
                     return call_expr;
+                    }
                 }
 
                 // Handle Ord trait (<, >, <=, >=)
@@ -154,8 +170,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if matches!(
                     binary.op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
-                ) && let Some(trait_info) = self.find_ord_trait_impl(&struct_name, left.type_id)
-                {
+                ) {
+                    let Some(trait_info) =
+                        self.find_ord_trait_impl(&struct_name, left.type_id)
+                    else {
+                        let type_name = self.type_table.borrow().type_name(left.type_id);
+                        let op_str = match binary.op {
+                            BinaryOp::Lt => "<",
+                            BinaryOp::Gt => ">",
+                            BinaryOp::LtEq => "<=",
+                            BinaryOp::GtEq => ">=",
+                            _ => unreachable!(),
+                        };
+                        let _ = self.logger.error(TypeError::InvalidPattern {
+                            message: format!(
+                                "operator `{op_str}` cannot be applied to type `{type_name}` (does not implement Ord trait)"
+                            ),
+                            span: binary.span,
+                        });
+                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, binary.span);
+                    };
+                    {
                     let receiver = self.adjust_receiver_for_self_kind(
                         left.clone(),
                         trait_info.self_kind,
@@ -240,6 +275,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         TypeTable::BOOL,
                         binary.span,
                     );
+                    }
                 }
             }
         }
