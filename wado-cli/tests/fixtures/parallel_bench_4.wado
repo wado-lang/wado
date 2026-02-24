@@ -1,0 +1,27 @@
+fn count_primes(n: i32) -> i32 {
+    let mut count = 0;
+    let mut num = 2;
+    loop {
+        if num > n { break; }
+        let mut is_prime = true;
+        let mut divisor = 2;
+        loop {
+            if divisor * divisor > num { break; }
+            if num % divisor == 0 { is_prime = false; break; }
+            divisor = divisor + 1;
+        }
+        if is_prime { count = count + 1; }
+        num = num + 1;
+    }
+    return count;
+}
+
+test "primes_4a" {
+    let count = count_primes(1000000);
+    assert count == 78498;
+}
+
+test "primes_4b" {
+    let count = count_primes(1000000);
+    assert count == 78498;
+}

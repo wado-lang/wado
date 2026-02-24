@@ -434,21 +434,30 @@ fn test_test_help_shows_parallel_option() {
 fn test_parallel_speedup() {
     use std::time::Instant;
 
-    let bench_file = "wado-cli/tests/fixtures/parallel_bench.wado";
+    let bench_files = [
+        "wado-cli/tests/fixtures/parallel_bench_1.wado",
+        "wado-cli/tests/fixtures/parallel_bench_2.wado",
+        "wado-cli/tests/fixtures/parallel_bench_3.wado",
+        "wado-cli/tests/fixtures/parallel_bench_4.wado",
+    ];
 
-    // Sequential run
+    // Sequential run (1 worker across 4 files)
     let start = Instant::now();
     wado()
-        .args(["test", "-p", "1", bench_file])
+        .arg("test")
+        .args(["-p", "1"])
+        .args(bench_files)
         .assert()
         .success()
         .stdout(predicate::str::contains("8 passed, 0 failed"));
     let sequential = start.elapsed();
 
-    // Parallel run (4 workers)
+    // Parallel run (4 workers across 4 files)
     let start = Instant::now();
     wado()
-        .args(["test", "-p", "4", bench_file])
+        .arg("test")
+        .args(["-p", "4"])
+        .args(bench_files)
         .assert()
         .success()
         .stdout(predicate::str::contains("8 passed, 0 failed"));
