@@ -52,17 +52,8 @@ export fn run() with Stdout {
     assert keys2[4] == "new";
 
     // Lookups should still work after compact
-    if let Some(v) = map["d"] {
-        assert v == 4;
-    } else {
-        panic("d should exist");
-    }
-
-    if let Some(v) = map["new"] {
-        assert v == 100;
-    } else {
-        panic("new should exist");
-    }
+    assert map["d"] == 4;
+    assert map["new"] == 100;
 
     println("compact preserves order: ok");
 }

@@ -51,16 +51,6 @@ struct TreeMapNode<String> {  // from core:collections  // TreeMapNode<T> with T
     mut right: ref Option<TreeMapNode<String>>,
 }
 
-variant Option<i32> {
-    Some(i32),
-    None,
-}
-
-struct Option<i32>::Some {
-    discriminant: i32,
-    payload_0: i32,
-}
-
 variant Option<TreeMapNode<String>> {
     Some(ref null "core:collections/TreeMapNode<String>"),
     None,
@@ -138,7 +128,7 @@ type "functype/String^Ord::cmp" = fn(ref null String, ref null String) -> enum:O
 
 type "functype/String::append_char" = fn(ref null String, char);
 
-type "functype/TreeMap<String,i32>::get" = fn(ref null "core:collections/TreeMap<String,i32>", ref null String) -> ref null Option<i32>;
+type "functype/TreeMap<String,i32>^IndexValue::index_value" = fn(ref null "core:collections/TreeMap<String,i32>", ref null String) -> i32;
 
 type "functype/Array<TreeMapEntry<String,i32>>^IndexValue::index_value" = fn(ref null Array<TreeMapEntry<String,i32>>, i32) -> ref null "core:collections/TreeMapEntry<String,i32>";
 
@@ -199,114 +189,106 @@ fn run() with Stdout {
     let __local_18: bool;
     let __local_19: ref null String;
     let __local_20: ref null Formatter;
-    let v1: i32;
-    let __local_22: i32;
-    let __cond_23: bool;
-    let __local_24: ref null String;
-    let __local_25: ref null Formatter;
-    let __v0_26: i32;
-    let __cond_27: bool;
-    let __local_28: ref null String;
-    let __local_29: ref null Formatter;
-    let v2: i32;
-    let __local_31: i32;
-    let __cond_32: bool;
-    let __local_33: ref null String;
-    let __local_34: ref null Formatter;
-    let __v0_35: i32;
-    let __cond_36: bool;
-    let __local_37: ref null String;
-    let __local_38: ref null Formatter;
-    let __pattern_temp_0: ref null Option<i32>;
-    let __pattern_temp_1: ref null Option<i32>;
-    let __local_41: ref null "core:collections/TreeMap<String,i32>";
-    let __local_42: i32;
-    let __local_43: ref null String;
-    let __local_44: ref null "core:internal/Box<i32>";
-    let __local_45: ref null Formatter;
-    let __local_46: ref null String;
-    let __local_47: ref null "core:internal/Box<bool>";
-    let __local_48: ref null Formatter;
-    let __local_49: ref null "core:collections/TreeMap<String,i32>";
-    let __local_50: i32;
-    let __local_51: ref null String;
-    let __local_52: ref null "core:internal/Box<i32>";
-    let __local_53: ref null Formatter;
+    let __v0_21: i32;
+    let __cond_22: bool;
+    let __local_23: ref null String;
+    let __local_24: ref null Formatter;
+    let __v0_25: i32;
+    let __cond_26: bool;
+    let __local_27: ref null String;
+    let __local_28: ref null Formatter;
+    let __v0_29: i32;
+    let __cond_30: bool;
+    let __local_31: ref null String;
+    let __local_32: ref null Formatter;
+    let __v0_33: i32;
+    let __cond_34: bool;
+    let __local_35: ref null String;
+    let __local_36: ref null Formatter;
+    let __local_37: ref null "core:collections/TreeMap<String,i32>";
+    let __local_38: i32;
+    let __local_39: ref null String;
+    let __local_40: ref null "core:internal/Box<i32>";
+    let __local_41: ref null Formatter;
+    let __local_42: ref null String;
+    let __local_43: ref null "core:internal/Box<bool>";
+    let __local_44: ref null Formatter;
+    let __local_45: ref null "core:collections/TreeMap<String,i32>";
+    let __local_46: i32;
+    let __local_47: ref null String;
+    let __local_48: ref null "core:internal/Box<i32>";
+    let __local_49: ref null Formatter;
+    let __local_50: ref null String;
+    let __local_51: ref null "core:internal/Box<i32>";
+    let __local_52: ref null Formatter;
+    let __local_53: ref null "core:collections/TreeMap<String,i32>";
     let __local_54: ref null String;
-    let __local_55: ref null "core:internal/Box<i32>";
-    let __local_56: ref null Formatter;
-    let __local_57: ref null "core:collections/TreeMap<String,i32>";
-    let __local_58: ref null String;
-    let __local_59: i32;
-    let __local_60: ref null String;
-    let __local_61: ref null "core:internal/Box<i32>";
-    let __local_62: ref null Formatter;
+    let __local_55: i32;
+    let __local_56: ref null String;
+    let __local_57: ref null "core:internal/Box<i32>";
+    let __local_58: ref null Formatter;
+    let __local_59: ref null String;
+    let __local_60: ref null "core:internal/Box<bool>";
+    let __local_61: ref null Formatter;
+    let __local_62: ref null "core:collections/TreeMap<String,i32>";
     let __local_63: ref null String;
-    let __local_64: ref null "core:internal/Box<bool>";
-    let __local_65: ref null Formatter;
-    let __local_66: ref null "core:collections/TreeMap<String,i32>";
+    let __local_64: i32;
+    let __local_65: ref null "core:collections/TreeMap<String,i32>";
+    let __local_66: i32;
     let __local_67: ref null String;
-    let __local_68: i32;
-    let __local_69: ref null "core:collections/TreeMap<String,i32>";
-    let __local_70: i32;
-    let __local_71: ref null String;
-    let __local_72: ref null "core:internal/Box<i32>";
-    let __local_73: ref null Formatter;
+    let __local_68: ref null "core:internal/Box<i32>";
+    let __local_69: ref null Formatter;
+    let __local_70: ref null String;
+    let __local_71: ref null "core:internal/Box<i32>";
+    let __local_72: ref null Formatter;
+    let __local_73: ref null "core:collections/TreeMap<String,i32>";
     let __local_74: ref null String;
-    let __local_75: ref null "core:internal/Box<i32>";
-    let __local_76: ref null Formatter;
-    let __local_77: ref null "core:collections/TreeMap<String,i32>";
-    let __local_78: ref null String;
-    let __local_79: i32;
-    let __local_80: ref null String;
-    let __local_81: ref null "core:internal/Box<i32>";
-    let __local_82: ref null Formatter;
+    let __local_75: i32;
+    let __local_76: ref null String;
+    let __local_77: ref null "core:internal/Box<i32>";
+    let __local_78: ref null Formatter;
+    let __local_79: ref null String;
+    let __local_80: ref null "core:internal/Box<bool>";
+    let __local_81: ref null Formatter;
+    let __local_82: i32;
     let __local_83: ref null String;
-    let __local_84: ref null "core:internal/Box<bool>";
+    let __local_84: ref null "core:internal/Box<i32>";
     let __local_85: ref null Formatter;
-    let __local_86: ref null "core:collections/TreeMap<String,i32>";
-    let __local_87: ref null String;
-    let __local_88: i32;
-    let __local_89: ref null String;
-    let __local_90: ref null "core:internal/Box<i32>";
-    let __local_91: ref null Formatter;
-    let __local_92: ref null String;
-    let __local_93: ref null "core:internal/Box<i32>";
-    let __local_94: ref null Formatter;
-    let __local_95: ref null "core:collections/TreeMap<String,i32>";
-    let __local_96: ref null String;
-    let __local_97: i32;
-    let __local_98: ref null "core:collections/TreeMap<String,i32>";
-    let __local_99: i32;
-    let __local_100: ref null String;
-    let __local_101: ref null "core:internal/Box<i32>";
-    let __local_102: ref null Formatter;
-    let __local_103: ref null String;
-    let __local_104: ref null "core:internal/Box<i32>";
-    let __local_105: ref null Formatter;
-    let __local_106: ref null "core:collections/TreeMap<String,i32>";
-    let __local_107: ref null String;
-    let __local_108: i32;
-    let __local_109: ref null String;
-    let __local_110: ref null "core:internal/Box<i32>";
-    let __local_111: ref null Formatter;
-    let __local_112: ref null String;
-    let __local_113: ref null "core:internal/Box<i32>";
-    let __local_114: ref null Formatter;
-    let __local_115: ref null "core:collections/TreeMap<String,i32>";
-    let __local_116: ref null String;
-    let __local_117: i32;
-    let __local_118: ref null "core:collections/TreeMap<String,i32>";
-    let __local_119: ref null String;
-    let __local_120: i32;
-    let __local_121: ref null "core:collections/TreeMap<String,i32>";
-    let __local_122: i32;
-    let __local_123: ref null String;
-    let __local_124: ref null "core:internal/Box<i32>";
-    let __local_125: ref null Formatter;
-    let __local_126: ref null String;
-    let __local_127: ref null "core:internal/Box<i32>";
-    let __local_128: ref null Formatter;
+    let __local_86: ref null String;
+    let __local_87: ref null "core:internal/Box<i32>";
+    let __local_88: ref null Formatter;
+    let __local_89: ref null "core:collections/TreeMap<String,i32>";
+    let __local_90: ref null String;
+    let __local_91: i32;
+    let __local_92: ref null "core:collections/TreeMap<String,i32>";
+    let __local_93: i32;
+    let __local_94: ref null String;
+    let __local_95: ref null "core:internal/Box<i32>";
+    let __local_96: ref null Formatter;
+    let __local_97: ref null String;
+    let __local_98: ref null "core:internal/Box<i32>";
+    let __local_99: ref null Formatter;
+    let __local_100: i32;
+    let __local_101: ref null String;
+    let __local_102: ref null "core:internal/Box<i32>";
+    let __local_103: ref null Formatter;
+    let __local_104: ref null String;
+    let __local_105: ref null "core:internal/Box<i32>";
+    let __local_106: ref null Formatter;
+    let __local_107: ref null "core:collections/TreeMap<String,i32>";
+    let __local_108: ref null String;
+    let __local_109: i32;
+    let __local_110: ref null "core:collections/TreeMap<String,i32>";
+    let __local_111: ref null String;
+    let __local_112: i32;
+    let __local_113: ref null "core:collections/TreeMap<String,i32>";
+    let __local_114: i32;
+    let __local_115: ref null String;
+    let __local_116: ref null "core:internal/Box<i32>";
+    let __local_117: ref null Formatter;
+    let __local_118: ref null String;
+    let __local_119: ref null "core:internal/Box<i32>";
+    let __local_120: ref null Formatter;
     map = TreeMap<String,i32>::new();
     block {
         __v0_1 = map.size == 0;
@@ -319,27 +301,27 @@ fn run() with Stdout {
                 String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
                 String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
                 __local_4 = value_copy Formatter(__inline_Formatter__new_2: block -> ref null Formatter {
-                    __local_43 = __local_3;
-                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_43) };
+                    __local_39 = __local_3;
+                    break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_39) };
                 });
                 block {
-                    __local_44 = "core:internal/Box<i32>" { value: 9 };
-                    __local_45 = __local_4;
-                    fmt_i32_decimal(__local_44.value, __local_45);
+                    __local_40 = "core:internal/Box<i32>" { value: 9 };
+                    __local_41 = __local_4;
+                    fmt_i32_decimal(__local_40.value, __local_41);
                 };
                 String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[6](0, 27)), used: 27 });
                 String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[7](0, 16)), used: 16 });
                 __local_4 = value_copy Formatter(__inline_Formatter__new_4: block -> ref null Formatter {
-                    __local_46 = __local_3;
-                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_46) };
+                    __local_42 = __local_3;
+                    break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_42) };
                 });
                 block {
-                    __local_47 = "core:internal/Box<bool>" { value: __v0_1 };
-                    __local_48 = __local_4;
-                    Formatter::pad(__local_48, if __local_47.value -> ref null String {
-                        String { repr: ref.as_non_null(array.new_data<u8>[26](0, 4)), used: 4 };
+                    __local_43 = "core:internal/Box<bool>" { value: __v0_1 };
+                    __local_44 = __local_4;
+                    Formatter::pad(__local_44, if __local_43.value -> ref null String {
+                        String { repr: ref.as_non_null(array.new_data<u8>[25](0, 4)), used: 4 };
                     } else {
-                        String { repr: ref.as_non_null(array.new_data<u8>[27](0, 5)), used: 5 };
+                        String { repr: ref.as_non_null(array.new_data<u8>[26](0, 5)), used: 5 };
                     });
                 };
                 String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
@@ -360,24 +342,24 @@ fn run() with Stdout {
                 String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
                 String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
                 __local_8 = value_copy Formatter(__inline_Formatter__new_8: block -> ref null Formatter {
-                    __local_51 = __local_7;
-                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_51) };
+                    __local_47 = __local_7;
+                    break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_47) };
                 });
                 block {
-                    __local_52 = "core:internal/Box<i32>" { value: 10 };
-                    __local_53 = __local_8;
-                    fmt_i32_decimal(__local_52.value, __local_53);
+                    __local_48 = "core:internal/Box<i32>" { value: 10 };
+                    __local_49 = __local_8;
+                    fmt_i32_decimal(__local_48.value, __local_49);
                 };
                 String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[9](0, 27)), used: 27 });
                 String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[10](0, 11)), used: 11 });
                 __local_8 = value_copy Formatter(__inline_Formatter__new_10: block -> ref null Formatter {
-                    __local_54 = __local_7;
-                    break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_54) };
+                    __local_50 = __local_7;
+                    break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_50) };
                 });
                 block {
-                    __local_55 = "core:internal/Box<i32>" { value: __v0_5 };
-                    __local_56 = __local_8;
-                    fmt_i32_decimal(__local_55.value, __local_56);
+                    __local_51 = "core:internal/Box<i32>" { value: __v0_5 };
+                    __local_52 = __local_8;
+                    fmt_i32_decimal(__local_51.value, __local_52);
                 };
                 String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
                 break __tmpl: __local_7;
@@ -387,9 +369,9 @@ fn run() with Stdout {
     };
     block {
         __v0_9 = __inline_TreeMap_String_i32___contains_key_12: block -> bool {
-            __local_57 = map;
-            __local_58 = String { repr: ref.as_non_null(array.new_data<u8>[11](0, 3)), used: 3 };
-            break __inline_TreeMap_String_i32___contains_key_12: TreeMap<String,i32>::find_index(__local_57, __local_58) >= 0;
+            __local_53 = map;
+            __local_54 = String { repr: ref.as_non_null(array.new_data<u8>[11](0, 3)), used: 3 };
+            break __inline_TreeMap_String_i32___contains_key_12: TreeMap<String,i32>::find_index(__local_53, __local_54) >= 0;
         };
         __cond_10 = __v0_9 == 0;
         if __cond_10 == 0 {
@@ -401,27 +383,27 @@ fn run() with Stdout {
                 String::append(__local_11, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
                 String::append(__local_11, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
                 __local_12 = value_copy Formatter(__inline_Formatter__new_14: block -> ref null Formatter {
-                    __local_60 = __local_11;
-                    break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_60) };
+                    __local_56 = __local_11;
+                    break __inline_Formatter__new_14: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_56) };
                 });
                 block {
-                    __local_61 = "core:internal/Box<i32>" { value: 11 };
-                    __local_62 = __local_12;
-                    fmt_i32_decimal(__local_61.value, __local_62);
+                    __local_57 = "core:internal/Box<i32>" { value: 11 };
+                    __local_58 = __local_12;
+                    fmt_i32_decimal(__local_57.value, __local_58);
                 };
                 String::append(__local_11, String { repr: ref.as_non_null(array.new_data<u8>[12](0, 37)), used: 37 });
                 String::append(__local_11, String { repr: ref.as_non_null(array.new_data<u8>[13](0, 25)), used: 25 });
                 __local_12 = value_copy Formatter(__inline_Formatter__new_16: block -> ref null Formatter {
-                    __local_63 = __local_11;
-                    break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_63) };
+                    __local_59 = __local_11;
+                    break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_59) };
                 });
                 block {
-                    __local_64 = "core:internal/Box<bool>" { value: __v0_9 };
-                    __local_65 = __local_12;
-                    Formatter::pad(__local_65, if __local_64.value -> ref null String {
-                        String { repr: ref.as_non_null(array.new_data<u8>[26](0, 4)), used: 4 };
+                    __local_60 = "core:internal/Box<bool>" { value: __v0_9 };
+                    __local_61 = __local_12;
+                    Formatter::pad(__local_61, if __local_60.value -> ref null String {
+                        String { repr: ref.as_non_null(array.new_data<u8>[25](0, 4)), used: 4 };
                     } else {
-                        String { repr: ref.as_non_null(array.new_data<u8>[27](0, 5)), used: 5 };
+                        String { repr: ref.as_non_null(array.new_data<u8>[26](0, 5)), used: 5 };
                     });
                 };
                 String::append(__local_11, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
@@ -431,9 +413,9 @@ fn run() with Stdout {
         };
     };
     block {
-        __local_66 = map;
-        __local_67 = String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 };
-        TreeMap<String,i32>::insert(__local_66, __local_67, 1);
+        __local_62 = map;
+        __local_63 = String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 };
+        TreeMap<String,i32>::insert(__local_62, __local_63, 1);
     };
     block {
         __v0_13 = map.size;
@@ -447,24 +429,24 @@ fn run() with Stdout {
                 String::append(__local_15, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
                 String::append(__local_15, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
                 __local_16 = value_copy Formatter(__inline_Formatter__new_21: block -> ref null Formatter {
-                    __local_71 = __local_15;
-                    break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_71) };
+                    __local_67 = __local_15;
+                    break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_67) };
                 });
                 block {
-                    __local_72 = "core:internal/Box<i32>" { value: 15 };
-                    __local_73 = __local_16;
-                    fmt_i32_decimal(__local_72.value, __local_73);
+                    __local_68 = "core:internal/Box<i32>" { value: 15 };
+                    __local_69 = __local_16;
+                    fmt_i32_decimal(__local_68.value, __local_69);
                 };
                 String::append(__local_15, String { repr: ref.as_non_null(array.new_data<u8>[15](0, 27)), used: 27 });
                 String::append(__local_15, String { repr: ref.as_non_null(array.new_data<u8>[10](0, 11)), used: 11 });
                 __local_16 = value_copy Formatter(__inline_Formatter__new_23: block -> ref null Formatter {
-                    __local_74 = __local_15;
-                    break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_74) };
+                    __local_70 = __local_15;
+                    break __inline_Formatter__new_23: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_70) };
                 });
                 block {
-                    __local_75 = "core:internal/Box<i32>" { value: __v0_13 };
-                    __local_76 = __local_16;
-                    fmt_i32_decimal(__local_75.value, __local_76);
+                    __local_71 = "core:internal/Box<i32>" { value: __v0_13 };
+                    __local_72 = __local_16;
+                    fmt_i32_decimal(__local_71.value, __local_72);
                 };
                 String::append(__local_15, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
                 break __tmpl: __local_15;
@@ -474,9 +456,9 @@ fn run() with Stdout {
     };
     block {
         __v0_17 = __inline_TreeMap_String_i32___contains_key_25: block -> bool {
-            __local_77 = map;
-            __local_78 = String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 };
-            break __inline_TreeMap_String_i32___contains_key_25: TreeMap<String,i32>::find_index(__local_77, __local_78) >= 0;
+            __local_73 = map;
+            __local_74 = String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 };
+            break __inline_TreeMap_String_i32___contains_key_25: TreeMap<String,i32>::find_index(__local_73, __local_74) >= 0;
         };
         if __v0_17 == 0 {
             "core:internal/panic"(__tmpl: block -> ref null String {
@@ -487,27 +469,27 @@ fn run() with Stdout {
                 String::append(__local_19, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
                 String::append(__local_19, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
                 __local_20 = value_copy Formatter(__inline_Formatter__new_27: block -> ref null Formatter {
-                    __local_80 = __local_19;
-                    break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_80) };
+                    __local_76 = __local_19;
+                    break __inline_Formatter__new_27: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_76) };
                 });
                 block {
-                    __local_81 = "core:internal/Box<i32>" { value: 16 };
-                    __local_82 = __local_20;
-                    fmt_i32_decimal(__local_81.value, __local_82);
+                    __local_77 = "core:internal/Box<i32>" { value: 16 };
+                    __local_78 = __local_20;
+                    fmt_i32_decimal(__local_77.value, __local_78);
                 };
                 String::append(__local_19, String { repr: ref.as_non_null(array.new_data<u8>[16](0, 36)), used: 36 });
                 String::append(__local_19, String { repr: ref.as_non_null(array.new_data<u8>[17](0, 25)), used: 25 });
                 __local_20 = value_copy Formatter(__inline_Formatter__new_29: block -> ref null Formatter {
-                    __local_83 = __local_19;
-                    break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_83) };
+                    __local_79 = __local_19;
+                    break __inline_Formatter__new_29: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_79) };
                 });
                 block {
-                    __local_84 = "core:internal/Box<bool>" { value: __v0_17 };
-                    __local_85 = __local_20;
-                    Formatter::pad(__local_85, if __local_84.value -> ref null String {
-                        String { repr: ref.as_non_null(array.new_data<u8>[26](0, 4)), used: 4 };
+                    __local_80 = "core:internal/Box<bool>" { value: __v0_17 };
+                    __local_81 = __local_20;
+                    Formatter::pad(__local_81, if __local_80.value -> ref null String {
+                        String { repr: ref.as_non_null(array.new_data<u8>[25](0, 4)), used: 4 };
                     } else {
-                        String { repr: ref.as_non_null(array.new_data<u8>[27](0, 5)), used: 5 };
+                        String { repr: ref.as_non_null(array.new_data<u8>[26](0, 5)), used: 5 };
                     });
                 };
                 String::append(__local_19, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
@@ -516,184 +498,170 @@ fn run() with Stdout {
             unreachable;
         };
     };
-    __pattern_temp_0 = value_copy Option<i32>(__inline_TreeMap_String_i32__IndexValue__index_value_31: block -> ref null Option<i32> {
-        __local_86 = map;
-        __local_87 = String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 };
-        break __inline_TreeMap_String_i32__IndexValue__index_value_31: TreeMap<String,i32>::get(__local_86, __local_87);
-    });
-    if ref.test Option<i32>::Some(__pattern_temp_0) {
-        v1 = ref.cast Option<i32>::Some(__pattern_temp_0).payload_0;
-        block {
-            __cond_23 = v1 == 1;
-            if __cond_23 == 0 {
-                "core:internal/panic"(__tmpl: block -> ref null String {
-                    __local_24 = String { repr: ref.as_non_null(builtin::array_new<u8>(114)), used: 0 };
-                    String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 20)), used: 20 });
-                    String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 3)), used: 3 });
-                    String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 4)), used: 4 });
-                    String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
-                    String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
-                    __local_25 = value_copy Formatter(__inline_Formatter__new_33: block -> ref null Formatter {
-                        __local_89 = __local_24;
-                        break __inline_Formatter__new_33: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_89) };
-                    });
-                    block {
-                        __local_90 = "core:internal/Box<i32>" { value: 18 };
-                        __local_91 = __local_25;
-                        fmt_i32_decimal(__local_90.value, __local_91);
-                    };
-                    String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[18](0, 20)), used: 20 });
-                    String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[19](0, 4)), used: 4 });
-                    __local_25 = value_copy Formatter(__inline_Formatter__new_35: block -> ref null Formatter {
-                        __local_92 = __local_24;
-                        break __inline_Formatter__new_35: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_92) };
-                    });
-                    block {
-                        __local_93 = "core:internal/Box<i32>" { value: v1 };
-                        __local_94 = __local_25;
-                        fmt_i32_decimal(__local_93.value, __local_94);
-                    };
-                    String::append(__local_24, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
-                    break __tmpl: __local_24;
-                });
-                unreachable;
-            };
-        };
-    };
     block {
-        __local_95 = map;
-        __local_96 = String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 };
-        TreeMap<String,i32>::insert(__local_95, __local_96, 100);
-    };
-    block {
-        __v0_26 = map.size;
-        __cond_27 = __v0_26 == 1;
-        if __cond_27 == 0 {
+        __v0_21 = TreeMap<String,i32>^IndexValue::index_value(map, String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 });
+        __cond_22 = __v0_21 == 1;
+        if __cond_22 == 0 {
             "core:internal/panic"(__tmpl: block -> ref null String {
-                __local_28 = String { repr: ref.as_non_null(builtin::array_new<u8>(128)), used: 0 };
-                String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 20)), used: 20 });
-                String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 3)), used: 3 });
-                String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 4)), used: 4 });
-                String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
-                String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
-                __local_29 = value_copy Formatter(__inline_Formatter__new_40: block -> ref null Formatter {
-                    __local_100 = __local_28;
-                    break __inline_Formatter__new_40: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_100) };
+                __local_23 = String { repr: ref.as_non_null(builtin::array_new<u8>(130)), used: 0 };
+                String::append(__local_23, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 20)), used: 20 });
+                String::append(__local_23, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 3)), used: 3 });
+                String::append(__local_23, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 4)), used: 4 });
+                String::append(__local_23, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
+                String::append(__local_23, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
+                __local_24 = value_copy Formatter(__inline_Formatter__new_32: block -> ref null Formatter {
+                    __local_83 = __local_23;
+                    break __inline_Formatter__new_32: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_83) };
                 });
                 block {
-                    __local_101 = "core:internal/Box<i32>" { value: 23 };
-                    __local_102 = __local_29;
-                    fmt_i32_decimal(__local_101.value, __local_102);
+                    __local_84 = "core:internal/Box<i32>" { value: 17 };
+                    __local_85 = __local_24;
+                    fmt_i32_decimal(__local_84.value, __local_85);
                 };
-                String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[15](0, 27)), used: 27 });
-                String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[10](0, 11)), used: 11 });
-                __local_29 = value_copy Formatter(__inline_Formatter__new_42: block -> ref null Formatter {
-                    __local_103 = __local_28;
-                    break __inline_Formatter__new_42: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_103) };
+                String::append(__local_23, String { repr: ref.as_non_null(array.new_data<u8>[18](0, 28)), used: 28 });
+                String::append(__local_23, String { repr: ref.as_non_null(array.new_data<u8>[19](0, 12)), used: 12 });
+                __local_24 = value_copy Formatter(__inline_Formatter__new_34: block -> ref null Formatter {
+                    __local_86 = __local_23;
+                    break __inline_Formatter__new_34: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_86) };
                 });
                 block {
-                    __local_104 = "core:internal/Box<i32>" { value: __v0_26 };
-                    __local_105 = __local_29;
-                    fmt_i32_decimal(__local_104.value, __local_105);
+                    __local_87 = "core:internal/Box<i32>" { value: __v0_21 };
+                    __local_88 = __local_24;
+                    fmt_i32_decimal(__local_87.value, __local_88);
                 };
-                String::append(__local_28, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
-                break __tmpl: __local_28;
+                String::append(__local_23, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
+                break __tmpl: __local_23;
             });
             unreachable;
         };
     };
-    __pattern_temp_1 = value_copy Option<i32>(__inline_TreeMap_String_i32__IndexValue__index_value_44: block -> ref null Option<i32> {
-        __local_106 = map;
-        __local_107 = String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 };
-        break __inline_TreeMap_String_i32__IndexValue__index_value_44: TreeMap<String,i32>::get(__local_106, __local_107);
-    });
-    if ref.test Option<i32>::Some(__pattern_temp_1) {
-        v2 = ref.cast Option<i32>::Some(__pattern_temp_1).payload_0;
-        block {
-            __cond_32 = v2 == 100;
-            if __cond_32 == 0 {
-                "core:internal/panic"(__tmpl: block -> ref null String {
-                    __local_33 = String { repr: ref.as_non_null(builtin::array_new<u8>(116)), used: 0 };
-                    String::append(__local_33, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 20)), used: 20 });
-                    String::append(__local_33, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 3)), used: 3 });
-                    String::append(__local_33, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 4)), used: 4 });
-                    String::append(__local_33, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
-                    String::append(__local_33, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
-                    __local_34 = value_copy Formatter(__inline_Formatter__new_46: block -> ref null Formatter {
-                        __local_109 = __local_33;
-                        break __inline_Formatter__new_46: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_109) };
-                    });
-                    block {
-                        __local_110 = "core:internal/Box<i32>" { value: 25 };
-                        __local_111 = __local_34;
-                        fmt_i32_decimal(__local_110.value, __local_111);
-                    };
-                    String::append(__local_33, String { repr: ref.as_non_null(array.new_data<u8>[20](0, 22)), used: 22 });
-                    String::append(__local_33, String { repr: ref.as_non_null(array.new_data<u8>[21](0, 4)), used: 4 });
-                    __local_34 = value_copy Formatter(__inline_Formatter__new_48: block -> ref null Formatter {
-                        __local_112 = __local_33;
-                        break __inline_Formatter__new_48: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_112) };
-                    });
-                    block {
-                        __local_113 = "core:internal/Box<i32>" { value: v2 };
-                        __local_114 = __local_34;
-                        fmt_i32_decimal(__local_113.value, __local_114);
-                    };
-                    String::append(__local_33, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
-                    break __tmpl: __local_33;
-                });
-                unreachable;
-            };
-        };
+    block {
+        __local_89 = map;
+        __local_90 = String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 };
+        TreeMap<String,i32>::insert(__local_89, __local_90, 100);
     };
     block {
-        __local_115 = map;
-        __local_116 = String { repr: ref.as_non_null(array.new_data<u8>[22](0, 3)), used: 3 };
-        TreeMap<String,i32>::insert(__local_115, __local_116, 2);
-    };
-    block {
-        __local_118 = map;
-        __local_119 = String { repr: ref.as_non_null(array.new_data<u8>[23](0, 5)), used: 5 };
-        TreeMap<String,i32>::insert(__local_118, __local_119, 3);
-    };
-    block {
-        __v0_35 = map.size;
-        __cond_36 = __v0_35 == 3;
-        if __cond_36 == 0 {
+        __v0_25 = map.size;
+        __cond_26 = __v0_25 == 1;
+        if __cond_26 == 0 {
             "core:internal/panic"(__tmpl: block -> ref null String {
-                __local_37 = String { repr: ref.as_non_null(builtin::array_new<u8>(128)), used: 0 };
-                String::append(__local_37, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 20)), used: 20 });
-                String::append(__local_37, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 3)), used: 3 });
-                String::append(__local_37, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 4)), used: 4 });
-                String::append(__local_37, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
-                String::append(__local_37, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
-                __local_38 = value_copy Formatter(__inline_Formatter__new_54: block -> ref null Formatter {
-                    __local_123 = __local_37;
-                    break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_123) };
+                __local_27 = String { repr: ref.as_non_null(builtin::array_new<u8>(128)), used: 0 };
+                String::append(__local_27, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 20)), used: 20 });
+                String::append(__local_27, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 3)), used: 3 });
+                String::append(__local_27, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 4)), used: 4 });
+                String::append(__local_27, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
+                String::append(__local_27, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
+                __local_28 = value_copy Formatter(__inline_Formatter__new_39: block -> ref null Formatter {
+                    __local_94 = __local_27;
+                    break __inline_Formatter__new_39: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_94) };
                 });
                 block {
-                    __local_124 = "core:internal/Box<i32>" { value: 31 };
-                    __local_125 = __local_38;
-                    fmt_i32_decimal(__local_124.value, __local_125);
+                    __local_95 = "core:internal/Box<i32>" { value: 21 };
+                    __local_96 = __local_28;
+                    fmt_i32_decimal(__local_95.value, __local_96);
                 };
-                String::append(__local_37, String { repr: ref.as_non_null(array.new_data<u8>[24](0, 27)), used: 27 });
-                String::append(__local_37, String { repr: ref.as_non_null(array.new_data<u8>[10](0, 11)), used: 11 });
-                __local_38 = value_copy Formatter(__inline_Formatter__new_56: block -> ref null Formatter {
-                    __local_126 = __local_37;
-                    break __inline_Formatter__new_56: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_126) };
+                String::append(__local_27, String { repr: ref.as_non_null(array.new_data<u8>[15](0, 27)), used: 27 });
+                String::append(__local_27, String { repr: ref.as_non_null(array.new_data<u8>[10](0, 11)), used: 11 });
+                __local_28 = value_copy Formatter(__inline_Formatter__new_41: block -> ref null Formatter {
+                    __local_97 = __local_27;
+                    break __inline_Formatter__new_41: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_97) };
                 });
                 block {
-                    __local_127 = "core:internal/Box<i32>" { value: __v0_35 };
-                    __local_128 = __local_38;
-                    fmt_i32_decimal(__local_127.value, __local_128);
+                    __local_98 = "core:internal/Box<i32>" { value: __v0_25 };
+                    __local_99 = __local_28;
+                    fmt_i32_decimal(__local_98.value, __local_99);
                 };
-                String::append(__local_37, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
-                break __tmpl: __local_37;
+                String::append(__local_27, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
+                break __tmpl: __local_27;
             });
             unreachable;
         };
     };
-    "core:cli/println"(String { repr: ref.as_non_null(array.new_data<u8>[25](0, 20)), used: 20 });
+    block {
+        __v0_29 = TreeMap<String,i32>^IndexValue::index_value(map, String { repr: ref.as_non_null(array.new_data<u8>[14](0, 3)), used: 3 });
+        __cond_30 = __v0_29 == 100;
+        if __cond_30 == 0 {
+            "core:internal/panic"(__tmpl: block -> ref null String {
+                __local_31 = String { repr: ref.as_non_null(builtin::array_new<u8>(132)), used: 0 };
+                String::append(__local_31, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 20)), used: 20 });
+                String::append(__local_31, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 3)), used: 3 });
+                String::append(__local_31, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 4)), used: 4 });
+                String::append(__local_31, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
+                String::append(__local_31, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
+                __local_32 = value_copy Formatter(__inline_Formatter__new_44: block -> ref null Formatter {
+                    __local_101 = __local_31;
+                    break __inline_Formatter__new_44: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_101) };
+                });
+                block {
+                    __local_102 = "core:internal/Box<i32>" { value: 22 };
+                    __local_103 = __local_32;
+                    fmt_i32_decimal(__local_102.value, __local_103);
+                };
+                String::append(__local_31, String { repr: ref.as_non_null(array.new_data<u8>[20](0, 30)), used: 30 });
+                String::append(__local_31, String { repr: ref.as_non_null(array.new_data<u8>[19](0, 12)), used: 12 });
+                __local_32 = value_copy Formatter(__inline_Formatter__new_46: block -> ref null Formatter {
+                    __local_104 = __local_31;
+                    break __inline_Formatter__new_46: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_104) };
+                });
+                block {
+                    __local_105 = "core:internal/Box<i32>" { value: __v0_29 };
+                    __local_106 = __local_32;
+                    fmt_i32_decimal(__local_105.value, __local_106);
+                };
+                String::append(__local_31, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
+                break __tmpl: __local_31;
+            });
+            unreachable;
+        };
+    };
+    block {
+        __local_107 = map;
+        __local_108 = String { repr: ref.as_non_null(array.new_data<u8>[21](0, 3)), used: 3 };
+        TreeMap<String,i32>::insert(__local_107, __local_108, 2);
+    };
+    block {
+        __local_110 = map;
+        __local_111 = String { repr: ref.as_non_null(array.new_data<u8>[22](0, 5)), used: 5 };
+        TreeMap<String,i32>::insert(__local_110, __local_111, 3);
+    };
+    block {
+        __v0_33 = map.size;
+        __cond_34 = __v0_33 == 3;
+        if __cond_34 == 0 {
+            "core:internal/panic"(__tmpl: block -> ref null String {
+                __local_35 = String { repr: ref.as_non_null(builtin::array_new<u8>(128)), used: 0 };
+                String::append(__local_35, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 20)), used: 20 });
+                String::append(__local_35, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 3)), used: 3 });
+                String::append(__local_35, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 4)), used: 4 });
+                String::append(__local_35, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 47)), used: 47 });
+                String::append(__local_35, String { repr: ref.as_non_null(array.new_data<u8>[5](0, 1)), used: 1 });
+                __local_36 = value_copy Formatter(__inline_Formatter__new_52: block -> ref null Formatter {
+                    __local_115 = __local_35;
+                    break __inline_Formatter__new_52: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_115) };
+                });
+                block {
+                    __local_116 = "core:internal/Box<i32>" { value: 27 };
+                    __local_117 = __local_36;
+                    fmt_i32_decimal(__local_116.value, __local_117);
+                };
+                String::append(__local_35, String { repr: ref.as_non_null(array.new_data<u8>[23](0, 27)), used: 27 });
+                String::append(__local_35, String { repr: ref.as_non_null(array.new_data<u8>[10](0, 11)), used: 11 });
+                __local_36 = value_copy Formatter(__inline_Formatter__new_54: block -> ref null Formatter {
+                    __local_118 = __local_35;
+                    break __inline_Formatter__new_54: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_118) };
+                });
+                block {
+                    __local_119 = "core:internal/Box<i32>" { value: __v0_33 };
+                    __local_120 = __local_36;
+                    fmt_i32_decimal(__local_119.value, __local_120);
+                };
+                String::append(__local_35, String { repr: ref.as_non_null(array.new_data<u8>[8](0, 1)), used: 1 });
+                break __tmpl: __local_35;
+            });
+            unreachable;
+        };
+    };
+    "core:cli/println"(String { repr: ref.as_non_null(array.new_data<u8>[24](0, 20)), used: 20 });
 }
 
 fn __cm_export__run() {
@@ -721,7 +689,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     __for_0: block {
         i = 0;
         block {
-            l16: loop {
+            l14: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
@@ -730,7 +698,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                     builtin::store_u8(ptr + i, byte);
                 };
                 i = i + 1;
-                continue l16;
+                continue l14;
             };
         };
     };
@@ -759,7 +727,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l20: loop {
+            l18: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
@@ -767,7 +735,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
                     builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 };
                 i = i + 1;
-                continue l20;
+                continue l18;
             };
         };
     };
@@ -843,7 +811,7 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l27: loop {
+            l25: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
@@ -851,7 +819,7 @@ fn count_digits_i64(val) {
                     n = n + 1;
                 };
                 t = t / 10_i64;
-                continue l27;
+                continue l25;
             };
         };
     };
@@ -870,7 +838,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l31: loop {
+                l29: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
@@ -879,7 +847,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                         builtin::array_set_u8(arr, pos, 48 + builtin::i32_wrap_i64(temp % 10_i64));
                     };
                     temp = temp / 10_i64;
-                    continue l31;
+                    continue l29;
                 };
             };
         };
@@ -935,7 +903,7 @@ fn String::grow(self, min_capacity) {
         _licm_used = self.used;
         _licm_repr = self.repr;
         block {
-            l36: loop {
+            l34: loop {
                 if (i < _licm_used) == 0 {
                     break __for_0;
                 };
@@ -944,7 +912,7 @@ fn String::grow(self, min_capacity) {
                     builtin::array_set_u8(new_repr, i, byte);
                 };
                 i = i + 1;
-                continue l36;
+                continue l34;
             };
         };
     };
@@ -987,7 +955,7 @@ fn String::append(self, other) {
         _licm_repr = self.repr;
         _licm_used = self.used;
         block {
-            l42: loop {
+            l40: loop {
                 if (i < other_len) == 0 {
                     break __for_2;
                 };
@@ -996,7 +964,7 @@ fn String::append(self, other) {
                     builtin::array_set_u8(_licm_repr, _licm_used + i, byte);
                 };
                 i = i + 1;
-                continue l42;
+                continue l40;
             };
         };
     };
@@ -1023,7 +991,7 @@ fn String^Eq::eq(self, other) {
     __for_5: block {
         i = 0;
         block {
-            l46: loop {
+            l44: loop {
                 if (i < len_a) == 0 {
                     break __for_5;
                 };
@@ -1033,7 +1001,7 @@ fn String^Eq::eq(self, other) {
                     };
                 };
                 i = i + 1;
-                continue l46;
+                continue l44;
             };
         };
     };
@@ -1063,7 +1031,7 @@ fn String^Ord::cmp(self, other) {
     __for_6: block {
         i = 0;
         block {
-            l50: loop {
+            l48: loop {
                 if (i < min_len) == 0 {
                     break __for_6;
                 };
@@ -1078,7 +1046,7 @@ fn String^Ord::cmp(self, other) {
                     };
                 };
                 i = i + 1;
-                continue l50;
+                continue l48;
             };
         };
     };
@@ -1118,13 +1086,14 @@ fn String::append_char(self, c) {
     };
 }
 
-fn TreeMap<String,i32>::get(self, key) {
+fn TreeMap<String,i32>^IndexValue::index_value(self, key) {
     let index: i32;
     index = TreeMap<String,i32>::find_index(self, key);
-    if index >= 0 {
-        return Option<i32>::Some { discriminant: 0, payload_0: Array<TreeMapEntry<String,i32>>^IndexValue::index_value(self.entries, index).value };
+    if index < 0 {
+        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[27](0, 13)), used: 13 });
+        unreachable;
     };
-    return Option<i32> { 1 };
+    return Array<TreeMapEntry<String,i32>>^IndexValue::index_value(self.entries, index).value;
 }
 
 fn Array<TreeMapEntry<String,i32>>^IndexValue::index_value(self, index) {
@@ -1143,8 +1112,8 @@ fn TreeMap<String,i32>::find_index(self, key) {
     let _licm_entries: ref null Array<TreeMapEntry<String,i32>>;
     current = value_copy Option<TreeMapNode<String>>(self.root);
     _licm_entries = value_copy Array<TreeMapEntry<String,i32>>(self.entries);
-    b62: block {
-        l63: loop {
+    b60: block {
+        l61: loop {
             __pattern_temp_0 = value_copy Option<TreeMapNode<String>>(current);
             if ref.test Option<TreeMapNode<String>>::Some(__pattern_temp_0) {
                 n = ref.cast Option<TreeMapNode<String>>::Some(__pattern_temp_0).payload_0;
@@ -1161,9 +1130,9 @@ fn TreeMap<String,i32>::find_index(self, key) {
                     current = value_copy Option<TreeMapNode<String>>(n.right);
                 };
             } else {
-                break b62;
+                break b60;
             };
-            continue l63;
+            continue l61;
         };
     };
     return -1;
@@ -1294,7 +1263,7 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf = self.buf;
         block {
-            l81: loop {
+            l79: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
@@ -1302,7 +1271,7 @@ fn Formatter::write_char_n(self, c, n) {
                     String::append_char(_licm_buf, c);
                 };
                 i = i + 1;
-                continue l81;
+                continue l79;
             };
         };
     };

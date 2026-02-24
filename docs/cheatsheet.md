@@ -705,7 +705,7 @@ trait Ord {
     fn cmp(&self, other: &Self) -> Ordering;
 }
 
-// IndexValue - value-based index access (arr[i] returns a copy)
+// IndexValue - value-based index access (panics if index/key not found)
 trait IndexValue<IndexType> {
     type Output;
     fn index_value(&self, index: IndexType) -> Self::Output;
@@ -771,7 +771,7 @@ if origin < far {
 }
 ```
 
-Note: `IndexValue` returns elements by value (copy) because Wasm GC cannot return references to array elements. `Index` is for containers of reference-type elements.
+Note: `IndexValue` returns elements by value (copy) and panics if the index/key is not found. Use `.get()` for fallible access that returns `Option<T>`. `Index` is for containers of reference-type elements.
 
 ### Trait Bounds
 
@@ -1276,7 +1276,8 @@ use { TreeMap } from "core:collections";
 let mut map = TreeMap::<String, i32>::new();
 map["key"] = 42;          // index assignment
 map["key2"] = 100;
-if let Some(v) = map["key"] { ... }  // index access returns Option<V>
+let v = map["key"];       // index access (panics if key not found)
+let opt = map.get("key"); // fallible access returns Option<V>
 let keys = map.keys();    // keys in insertion order
 map.remove("key");
 ```
