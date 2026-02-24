@@ -180,6 +180,7 @@ struct CompiledTestModule {
     engine: Arc<Engine>,
     component: Arc<Component>,
     compile_duration: Duration,
+    load_duration: Duration,
 }
 
 /// A single test job to execute
@@ -244,11 +245,13 @@ async fn collect_test_jobs(
         )
         .await;
         let compile_duration = compile_start.elapsed();
+        let load_start = Instant::now();
         let engine = Arc::new(runtime::create_engine(
             wasmtime::OptLevel::None,
             &runtime::ProfileMode::None,
         )?);
         let component = Arc::new(Component::new(&engine, &wasm)?);
+        let load_duration = load_start.elapsed();
 
         // Find test functions from exports
         let component_ty = component.component_type();
@@ -283,6 +286,7 @@ async fn collect_test_jobs(
             engine,
             component,
             compile_duration,
+            load_duration,
         }));
     }
 
@@ -495,11 +499,19 @@ pub async fn run(opts: TestOptions) {
 
     for path in &opts.paths {
         if let Some(file_results) = results_by_file.get(path) {
-            let compile_dur = module_by_path
+            let timing = module_by_path
                 .get(path.as_str())
-                .map(|m| format!(" (compiled in {})", format_duration(m.compile_duration)))
+                .map(|m| {
+                    let compile = format_duration(m.compile_duration);
+                    if m.load_duration.as_secs() >= 1 {
+                        let load = format_duration(m.load_duration);
+                        format!(" (compiled in {compile}, loaded in {load})")
+                    } else {
+                        format!(" (compiled in {compile})")
+                    }
+                })
                 .unwrap_or_default();
-            println!("Running tests in {path}...{compile_dur}");
+            println!("Running tests in {path}...{timing}");
 
             // Sort by test name for consistent output
             let mut sorted_results: Vec<_> = file_results.clone();

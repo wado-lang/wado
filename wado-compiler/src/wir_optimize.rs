@@ -19,6 +19,9 @@ pub fn optimize_wir(module: &mut WirModule) {
     // Whole-module pass: rewrite struct-returning functions to multi-value.
     sroa_multi_value_returns(module);
 
+    // Whole-module pass: split large array.new_fixed into array.new_default + array.set.
+    split_large_array_literals(module);
+
     let types = &module.types;
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
@@ -1069,4 +1072,113 @@ fn match_field_get(
         return None;
     }
     Some((idx, target.clone()))
+}
+
+/// Maximum element count for `array.new_fixed`. Arrays larger than this are
+/// rewritten to `array.new_default` + individual `array.set` instructions.
+///
+/// `array.new_fixed N` requires all N element values on the Wasm operand stack
+/// simultaneously, which causes pathological JIT compilation times in Cranelift's
+/// register allocator for large N (e.g. 8 000+ elements → minutes of JIT time).
+/// The `array.set` form consumes each value immediately, keeping stack depth low.
+const ARRAY_NEW_FIXED_LIMIT: usize = 256;
+
+/// Split large `ArrayNewFixed` instructions into `ArrayNewDefault` + `ArraySet` sequences.
+///
+/// Walks all function bodies and rewrites any `ArrayNewFixed` with more than
+/// [`ARRAY_NEW_FIXED_LIMIT`] elements. Uses a module-level counter for unique local names.
+fn split_large_array_literals(module: &mut WirModule) {
+    let mut counter: u32 = 0;
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            for instr in body.iter_mut() {
+                split_large_arrays_in_instr(instr, &mut counter);
+            }
+        }
+    }
+}
+
+/// Recursively walk an instruction tree and replace large `ArrayNewFixed` nodes.
+fn split_large_arrays_in_instr(instr: &mut WirInstr, counter: &mut u32) {
+    // First, recurse into children so inner ArrayNewFixed nodes are handled first.
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            for child in body.iter_mut() {
+                split_large_arrays_in_instr(child, counter);
+            }
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            split_large_arrays_in_instr(condition, counter);
+            for child in then_body.iter_mut() {
+                split_large_arrays_in_instr(child, counter);
+            }
+            if let Some(eb) = else_body {
+                for child in eb.iter_mut() {
+                    split_large_arrays_in_instr(child, counter);
+                }
+            }
+        }
+        _ => {
+            instr.for_each_boxed_child_mut(&mut |child| {
+                split_large_arrays_in_instr(child, counter);
+            });
+        }
+    }
+
+    // Now check if THIS instruction is a large ArrayNewFixed that should be split.
+    if let WirInstr::ArrayNewFixed { elements, .. } = instr
+        && elements.len() > ARRAY_NEW_FIXED_LIMIT
+    {
+        rewrite_large_array_new_fixed(instr, counter);
+    }
+}
+
+/// Rewrite a single `ArrayNewFixed` into `Seq([DeclareLocal, LocalSet(ArrayNewDefault), ArraySet*, LocalGet])`.
+///
+/// The resulting `Seq` is a value-producing sequence: the last instruction (`LocalGet`)
+/// leaves the array reference on the stack, making this a drop-in replacement.
+fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
+    let WirInstr::ArrayNewFixed { type_id, elements } = std::mem::replace(instr, WirInstr::Nop)
+    else {
+        return;
+    };
+
+    *counter += 1;
+    let arr_local = format!("__wir_arr_init_{counter}");
+    let len = i32::try_from(elements.len()).unwrap_or(0);
+    let raw_ref_type = WirType::Ref {
+        type_id: type_id.clone(),
+        nullable: true,
+    };
+
+    let mut seq = Vec::with_capacity(elements.len() + 3);
+    seq.push(WirInstr::DeclareLocal {
+        name: arr_local.clone(),
+        ty: raw_ref_type,
+    });
+    seq.push(WirInstr::LocalSet {
+        name: arr_local.clone(),
+        value: Box::new(WirInstr::ArrayNewDefault {
+            type_id: type_id.clone(),
+            len: Box::new(WirInstr::I32Const(len)),
+        }),
+    });
+    for (i, elem) in elements.into_iter().enumerate() {
+        seq.push(WirInstr::ArraySet {
+            type_id: type_id.clone(),
+            array: Box::new(WirInstr::LocalGet {
+                name: arr_local.clone(),
+            }),
+            index: Box::new(WirInstr::I32Const(i32::try_from(i).unwrap_or(0))),
+            value: Box::new(elem),
+        });
+    }
+    seq.push(WirInstr::LocalGet { name: arr_local });
+
+    *instr = WirInstr::Seq(seq);
 }
