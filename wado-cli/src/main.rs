@@ -126,7 +126,7 @@ async fn main() {
                     }
                     Cmd::Test => {
                         let opts = wado_cli::test::parse_args(parser).unwrap_or_else(|e| e.exit());
-                        wado_cli::test::run(opts).await;
+                        wado_cli::test::run(opts);
                     }
                     Cmd::Format => {
                         let opts =

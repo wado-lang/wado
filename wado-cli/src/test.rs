@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use glob::glob;
 use lexopt::Arg::Value;
-use tokio::sync::mpsc;
 use wasmtime::Engine;
 use wasmtime::component::Component;
 
@@ -43,7 +42,7 @@ impl Opt {
                 long: Some("parallel"),
                 short: Some('p'),
                 value: Some("<N>"),
-                desc: "Number of parallel workers (default: num CPUs)",
+                desc: "Number of parallel workers (default: num CPUs / 2)",
             },
             Self::Help => args::HELP_SPEC,
         }
@@ -160,8 +159,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         paths = resolve_paths(paths)?;
     }
 
-    // Default to half of available CPUs (minimum 2)
-    // This accounts for hyperthreading and leaves headroom for the system
     let jobs = jobs.unwrap_or_else(|| {
         let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
         (cpus / 2).max(2)
@@ -174,9 +171,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     })
 }
 
-/// A compiled test module ready for parallel execution
+/// A compiled test module
 struct CompiledTestModule {
-    path: String,
     engine: Arc<Engine>,
     component: Arc<Component>,
     compile_duration: Duration,
@@ -184,7 +180,6 @@ struct CompiledTestModule {
 
 /// A single test job to execute
 struct TestJob {
-    module_idx: usize,
     test_name: String,
     display_name: String,
     expect_trap: bool,
@@ -193,12 +188,17 @@ struct TestJob {
 
 /// Result from a test execution
 struct TestResult {
-    file_path: String,
-    test_name: String,
     display_name: String,
     passed: bool,
     error: Option<String>,
     duration: Duration,
+}
+
+/// Result from processing an entire test file
+struct FileResult {
+    path: String,
+    compile_duration: Duration,
+    test_results: Vec<TestResult>,
 }
 
 /// Extract display name from test export name.
@@ -223,70 +223,28 @@ fn extract_display_name(test_name: &str) -> String {
     }
 }
 
-/// Phase 1: Compile all test files and collect test jobs
-async fn collect_test_jobs(
-    paths: &[String],
-    filter: Option<&str>,
-) -> Result<(Vec<Arc<CompiledTestModule>>, Vec<TestJob>)> {
-    let mut modules = Vec::new();
-    let mut jobs = Vec::new();
-
-    for (module_idx, path) in paths.iter().enumerate() {
-        // Compile with --world test so test functions become component exports
-        // and non-test code is subject to DCE.
-        let compile_start = Instant::now();
-        let wasm = compile::compile_with_full_opts(
-            path,
-            crate::compile::OptLevel::default(),
-            wado_compiler::LogLevel::default(),
-            Some("test".to_string()),
-            false,
-        )
-        .await;
-        let compile_duration = compile_start.elapsed();
-        let engine = Arc::new(runtime::create_engine(
-            wasmtime::OptLevel::None,
-            &runtime::ProfileMode::None,
-        )?);
-        let component = Arc::new(Component::new(&engine, &wasm)?);
-
-        // Find test functions from exports
-        let component_ty = component.component_type();
-        let mut test_names: Vec<String> = Vec::new();
-
-        for (name, _) in component_ty.exports(&engine) {
-            if name.starts_with("test-") {
-                // Apply filter if specified
-                if let Some(pattern) = filter
-                    && !name.contains(pattern)
-                {
-                    continue;
-                }
-                test_names.push(name.to_string());
-            }
-        }
-
-        for test_name in &test_names {
-            let expect_trap = test_name.starts_with("test-trap-");
-            let is_todo = test_name.starts_with("test-todo-");
-            jobs.push(TestJob {
-                module_idx,
-                test_name: test_name.clone(),
-                display_name: extract_display_name(test_name),
-                expect_trap,
-                is_todo,
-            });
-        }
-
-        modules.push(Arc::new(CompiledTestModule {
-            path: path.clone(),
-            engine,
-            component,
-            compile_duration,
-        }));
-    }
-
-    Ok((modules, jobs))
+/// Compile a single test file and return the compiled module.
+async fn compile_one(path: &str) -> Result<CompiledTestModule> {
+    let compile_start = Instant::now();
+    let wasm = compile::compile_with_full_opts(
+        path,
+        crate::compile::OptLevel::default(),
+        wado_compiler::LogLevel::default(),
+        Some("test".to_string()),
+        false,
+    )
+    .await?;
+    let compile_duration = compile_start.elapsed();
+    let engine = Arc::new(runtime::create_engine(
+        wasmtime::OptLevel::None,
+        &runtime::ProfileMode::None,
+    )?);
+    let component = Arc::new(Component::new(&engine, &wasm)?);
+    Ok(CompiledTestModule {
+        engine,
+        component,
+        compile_duration,
+    })
 }
 
 /// Run a single test in its own Store
@@ -298,8 +256,6 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
         Ok(s) => s,
         Err(e) => {
             return TestResult {
-                file_path: module.path.clone(),
-                test_name: job.test_name.clone(),
                 display_name: job.display_name.clone(),
                 passed: false,
                 error: Some(format!("failed to set up store: {e}")),
@@ -311,8 +267,6 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
         Ok(l) => l,
         Err(e) => {
             return TestResult {
-                file_path: module.path.clone(),
-                test_name: job.test_name.clone(),
                 display_name: job.display_name.clone(),
                 passed: false,
                 error: Some(format!("failed to set up linker: {e}")),
@@ -329,8 +283,6 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
         Ok(inst) => inst,
         Err(e) => {
             return TestResult {
-                file_path: module.path.clone(),
-                test_name: job.test_name.clone(),
                 display_name: job.display_name.clone(),
                 passed: false,
                 error: Some(format!("failed to instantiate: {e}")),
@@ -376,8 +328,6 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
     };
 
     TestResult {
-        file_path: module.path.clone(),
-        test_name: job.test_name.clone(),
         display_name: job.display_name.clone(),
         passed,
         error,
@@ -385,60 +335,43 @@ async fn run_single_test(module: &CompiledTestModule, job: &TestJob) -> TestResu
     }
 }
 
-/// Phase 2: Execute tests in parallel
-async fn execute_tests_parallel(
-    modules: &[Arc<CompiledTestModule>],
-    jobs: Vec<TestJob>,
-    num_workers: usize,
-) -> Vec<TestResult> {
-    if jobs.is_empty() {
-        return Vec::new();
+/// Process a single test file: compile, discover tests, run them.
+async fn process_one_file(path: &str, filter: Option<&str>) -> Result<FileResult> {
+    let compiled = compile_one(path).await?;
+
+    // Discover test exports
+    let component_ty = compiled.component.component_type();
+    let mut jobs = Vec::new();
+    for (name, _) in component_ty.exports(&compiled.engine) {
+        if name.starts_with("test-") {
+            if let Some(pattern) = filter
+                && !name.contains(pattern)
+            {
+                continue;
+            }
+            let expect_trap = name.starts_with("test-trap-");
+            let is_todo = name.starts_with("test-todo-");
+            jobs.push(TestJob {
+                test_name: name.to_string(),
+                display_name: extract_display_name(name),
+                expect_trap,
+                is_todo,
+            });
+        }
+    }
+    jobs.sort_by(|a, b| a.test_name.cmp(&b.test_name));
+
+    // Run tests sequentially within this file
+    let mut test_results = Vec::with_capacity(jobs.len());
+    for job in &jobs {
+        test_results.push(run_single_test(&compiled, job).await);
     }
 
-    let (tx, mut rx) = mpsc::channel(jobs.len());
-    let jobs = Arc::new(std::sync::Mutex::new(jobs.into_iter()));
-
-    let handles: Vec<_> = (0..num_workers)
-        .map(|_| {
-            let modules = modules.to_vec();
-            let jobs = jobs.clone();
-            let tx = tx.clone();
-
-            tokio::spawn(async move {
-                loop {
-                    // Get next job from queue
-                    let job = {
-                        let mut guard = jobs.lock().unwrap();
-                        guard.next()
-                    };
-
-                    let Some(job) = job else { break };
-
-                    // Execute test
-                    let module = &modules[job.module_idx];
-                    let result = run_single_test(module, &job).await;
-
-                    // Send result (ignore error if receiver dropped)
-                    let _ = tx.send(result).await;
-                }
-            })
-        })
-        .collect();
-
-    drop(tx); // Close sender to signal completion
-
-    // Collect results
-    let mut results = Vec::new();
-    while let Some(result) = rx.recv().await {
-        results.push(result);
-    }
-
-    // Wait for all workers
-    for handle in handles {
-        let _ = handle.await;
-    }
-
-    results
+    Ok(FileResult {
+        path: path.to_owned(),
+        compile_duration: compiled.compile_duration,
+        test_results,
+    })
 }
 
 /// Format a duration in human-readable form with appropriate units.
@@ -452,73 +385,96 @@ fn format_duration(d: Duration) -> String {
     }
 }
 
-pub async fn run(opts: TestOptions) {
+pub fn run(opts: TestOptions) {
     let overall_start = Instant::now();
 
-    // Phase 1: Compile all files and collect test jobs
-    let (modules, jobs) = match collect_test_jobs(&opts.paths, opts.filter.as_deref()).await {
-        Ok(result) => result,
-        Err(e) => {
-            eprintln!("Error collecting tests: {e}");
-            process::exit(1);
-        }
-    };
+    // Spawn worker threads that compile and run tests per file.
+    // Each worker gets its own single-threaded tokio runtime because the
+    // compiler future is not Send (contains RefCell).
+    let (tx, rx) = std::sync::mpsc::channel::<Result<FileResult>>();
+    let paths = Arc::new(opts.paths);
+    let path_iter = Arc::new(std::sync::Mutex::new(0usize));
+    let filter = opts.filter.clone();
 
-    let total_tests = jobs.len();
-    if total_tests == 0 {
-        println!("No tests found");
-        return;
-    }
-
-    // Phase 2: Execute tests in parallel
-    let results = execute_tests_parallel(&modules, jobs, opts.jobs).await;
-
-    // Group results by file for display
-    let mut results_by_file: indexmap::IndexMap<String, Vec<&TestResult>> =
-        indexmap::IndexMap::new();
-    for result in &results {
-        results_by_file
-            .entry(result.file_path.clone())
-            .or_default()
-            .push(result);
-    }
-
-    // Display results in file order (matching input order)
-    let mut total_passed = 0;
-    let mut total_failed = 0;
-
-    // Build a lookup from path to compiled module for compile duration
-    let module_by_path: indexmap::IndexMap<&str, &CompiledTestModule> = modules
-        .iter()
-        .map(|m| (m.path.as_str(), m.as_ref()))
+    let handles: Vec<_> = (0..opts.jobs)
+        .map(|_| {
+            let paths = paths.clone();
+            let path_iter = path_iter.clone();
+            let tx = tx.clone();
+            let filter = filter.clone();
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                loop {
+                    let idx = {
+                        let mut guard = path_iter.lock().unwrap();
+                        let i = *guard;
+                        if i >= paths.len() {
+                            break;
+                        }
+                        *guard += 1;
+                        i
+                    };
+                    let result =
+                        rt.block_on(process_one_file(&paths[idx], filter.as_deref()));
+                    let _ = tx.send(result);
+                }
+            })
+        })
         .collect();
 
-    for path in &opts.paths {
-        if let Some(file_results) = results_by_file.get(path) {
-            let compile_dur = module_by_path
-                .get(path.as_str())
-                .map(|m| format!(" (compiled in {})", format_duration(m.compile_duration)))
-                .unwrap_or_default();
-            println!("Running tests in {path}...{compile_dur}");
+    drop(tx);
 
-            // Sort by test name for consistent output
-            let mut sorted_results: Vec<_> = file_results.clone();
-            sorted_results.sort_by(|a, b| a.test_name.cmp(&b.test_name));
+    // Stream results as files complete
+    let mut total_passed = 0;
+    let mut total_failed = 0;
+    let mut total_tests = 0;
 
-            for result in sorted_results {
-                let dur = format_duration(result.duration);
-                if result.passed {
-                    println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
-                    total_passed += 1;
-                } else {
-                    println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
-                    if let Some(ref error) = result.error {
-                        println!("    {error}");
+    // block_in_place allows blocking recv without starving the tokio runtime
+    tokio::task::block_in_place(|| {
+        for file_result in &rx {
+            match file_result {
+                Ok(fr) => {
+                    if fr.test_results.is_empty() {
+                        continue;
                     }
+                    let compile_dur = format_duration(fr.compile_duration);
+                    println!(
+                        "Running tests in {}... (compiled in {compile_dur})",
+                        fr.path
+                    );
+                    for result in &fr.test_results {
+                        total_tests += 1;
+                        let dur = format_duration(result.duration);
+                        if result.passed {
+                            println!("  \x1b[32m✓\x1b[0m {} ({dur})", result.display_name);
+                            total_passed += 1;
+                        } else {
+                            println!("  \x1b[31m✗\x1b[0m {} ({dur})", result.display_name);
+                            if let Some(ref error) = result.error {
+                                println!("    {error}");
+                            }
+                            total_failed += 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error: {e}");
                     total_failed += 1;
                 }
             }
         }
+    });
+
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    if total_tests == 0 {
+        println!("No tests found");
+        return;
     }
 
     let total_dur = format_duration(overall_start.elapsed());

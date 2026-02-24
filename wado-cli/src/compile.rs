@@ -221,33 +221,36 @@ fn to_compiler_opt_level(level: OptLevel) -> wado_compiler::OptLevel {
     }
 }
 
-/// Compile a Wado source file with optimization options
+/// Compile a Wado source file with optimization options.
+/// On error, prints diagnostics to stderr and exits the process.
 pub async fn compile_with_opts(
     filename: &str,
     opt_level: OptLevel,
     log_level: LogLevel,
 ) -> Vec<u8> {
-    compile_with_full_opts(filename, opt_level, log_level, None, false).await
+    compile_with_full_opts(filename, opt_level, log_level, None, false)
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("{e}");
+            process::exit(1);
+        })
 }
 
-/// Compile a Wado source file with full options including target world
+/// Compile a Wado source file with full options including target world.
+/// Returns `Err` with a user-facing message on failure (diagnostics are
+/// already emitted to stderr by the compiler host).
 pub async fn compile_with_full_opts(
     filename: &str,
     opt_level: OptLevel,
     log_level: LogLevel,
     target_world: Option<String>,
     skip_validation: bool,
-) -> Vec<u8> {
+) -> anyhow::Result<Vec<u8>> {
     let path = Path::new(filename);
 
     // Read source file
-    let source = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error reading '{}': {e}", path.display());
-            process::exit(1);
-        }
-    };
+    let source = fs::read_to_string(path)
+        .map_err(|e| anyhow::anyhow!("Error reading '{}': {e}", path.display()))?;
 
     // Get base path for relative imports
     let base_path = path
@@ -267,10 +270,10 @@ pub async fn compile_with_full_opts(
     let result = wado_compiler::compile_with_options(&source, &host, Some(filename), options).await;
 
     match result {
-        Ok(result) => result.wasm,
+        Ok(result) => Ok(result.wasm),
         Err(_bail) => {
             // Errors already printed by host via emit_diagnostic
-            process::exit(1);
+            Err(anyhow::anyhow!("compilation failed: {}", path.display()))
         }
     }
 }
@@ -297,7 +300,11 @@ pub async fn run(opts: CompileOptions) {
         opts.target_world,
         opts.skip_validation,
     )
-    .await;
+    .await
+    .unwrap_or_else(|e| {
+        eprintln!("{e}");
+        process::exit(1);
+    });
 
     // Handle --wat-to-stdout: output WAT to stdout and return
     if opts.wat_to_stdout {

@@ -284,7 +284,11 @@ pub async fn run(opts: ServeOptions) {
         Some("wasi:http/service".to_string()),
         false,
     )
-    .await;
+    .await
+    .unwrap_or_else(|e| {
+        eprintln!("{e}");
+        process::exit(1);
+    });
 
     if let Err(e) = run_http_server(wasm, &opts.addr).await {
         eprintln!("Server error: {e}");
