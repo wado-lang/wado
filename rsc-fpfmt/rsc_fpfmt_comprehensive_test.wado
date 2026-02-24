@@ -17,7 +17,7 @@ fn f64_from_bits(bits: i64) -> f64 {
 }
 
 
-fn run_test_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: String) -> i32 with Stdout {
+fn run_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: String) -> i32 with Stdout {
     let mut failures = 0;
     let n = bits.len();
 
@@ -32,6 +32,14 @@ fn run_test_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: Strin
                 println(`FAIL [{batch_name}][{i}]: expected="{exp}", got="{actual}"`);
             }
         }
+
+        let parsed = parse_text(actual);
+        if !parsed matches { Some(v) && v == f } {
+            failures = failures + 1;
+            if failures <= 10 {
+                println(`FAIL [{batch_name}][{i}]: parse_text("{actual}") did not round-trip`);
+            }
+        }
     }
 
     return failures;
@@ -41,46 +49,15 @@ fn run_test_batch(bits: &Array<i64>, expected: &Array<String>, batch_name: Strin
 test "comprehensive testFloats" {
     let bits = test_floats_bits();
     let expected = test_floats_expected();
-    let failures = run_test_batch(&bits, &expected, "testFloats");
+    let failures = run_batch(&bits, &expected, "testFloats");
     assert failures == 0, `testFloats: {failures} failures`;
 }
 
 test "comprehensive hardFloats" {
     let bits = hard_floats_bits();
     let expected = hard_floats_expected();
-    let failures = run_test_batch(&bits, &expected, "hardFloats");
+    let failures = run_batch(&bits, &expected, "hardFloats");
     assert failures == 0, `hardFloats: {failures} failures`;
-}
-
-fn run_roundtrip_batch(bits: &Array<i64>, batch_name: String) -> i32 with Stdout {
-    let mut failures = 0;
-    let n = bits.len();
-
-    for let mut i = 0; i < n; i += 1 {
-        let f = f64_from_bits(bits[i]);
-        let s = f64_to_string_exp(f, false);
-        let parsed = parse_text(s);
-        if !parsed matches { Some(v) && v == f } {
-            failures = failures + 1;
-            if failures <= 10 {
-                println(`FAIL [{batch_name}][{i}]: parse_text("{s}") did not round-trip`);
-            }
-        }
-    }
-
-    return failures;
-}
-
-test "comprehensive round trip testFloats" {
-    let bits = test_floats_bits();
-    let failures = run_roundtrip_batch(&bits, "roundtrip testFloats");
-    assert failures == 0, `roundtrip testFloats: {failures} failures`;
-}
-
-test "comprehensive round trip hardFloats" {
-    let bits = hard_floats_bits();
-    let failures = run_roundtrip_batch(&bits, "roundtrip hardFloats");
-    assert failures == 0, `roundtrip hardFloats: {failures} failures`;
 }
 
 
