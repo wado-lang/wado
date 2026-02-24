@@ -373,6 +373,24 @@ fn replace_markers_in_block(
         };
 
         if needs_expansion {
+            // Check if the value type is a TypeParam — if so, skip this marker.
+            // It will be resolved after monomorphization substitutes the concrete type.
+            let is_type_param = if let TirStmtKind::Expr(ref expr) = block.stmts[i].kind
+                && let TirExprKind::StaticCall { ref args, .. } = expr.kind
+                && !args.is_empty()
+            {
+                matches!(
+                    tt.borrow().get(args[0].type_id),
+                    ResolvedType::TypeParam { .. }
+                )
+            } else {
+                false
+            };
+            if is_type_param {
+                i += 1;
+                continue;
+            }
+
             let stmt = block.stmts.remove(i);
             if let TirStmtKind::Expr(expr) = stmt.kind
                 && let TirExprKind::StaticCall { args, .. } = expr.kind

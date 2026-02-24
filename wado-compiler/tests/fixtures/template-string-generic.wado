@@ -1,0 +1,25 @@
+// Template strings should work inside generic impl blocks.
+// The :? format should produce inspect output for generic type params.
+
+struct Box<T> {
+    value: T,
+}
+
+impl Box<T> {
+    fn inspect_value(&self) -> String {
+        return `{self.value:?}`;
+    }
+}
+
+test "template string with generic type param" {
+    let b = Box { value: 42 };
+    assert b.inspect_value() == "42";
+}
+
+test "template string with generic string param" {
+    let b = Box { value: "hello" };
+    assert b.inspect_value() == `"hello"`;
+}
+
+__DATA__
+{"test": {}}

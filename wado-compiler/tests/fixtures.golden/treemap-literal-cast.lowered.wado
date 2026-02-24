@@ -173,7 +173,26 @@ export fn __cm_export__run() {
 fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key: String) -> i32 {
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (index < 0) {
-        core::internal::panic(move "key not found");
+        core::internal::panic(__tmpl: {
+            let mut __r: String = move String { repr: "array_new<u8>"(31), used: 0 };
+            __r.String::append(move "key not found: ");
+            let mut __f: Formatter = __inline_Formatter__new_1: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            __inline___inspect_String_2: {
+                let __val: String = key;
+                let __fmt: &mut Formatter = &mut __f;
+                __inline_Formatter__write_char_3: {
+                    __fmt.buf.String::append_char('"');
+                };
+                core::internal::write_escaped_string(__val, __fmt);
+                __inline_Formatter__write_char_4: {
+                    __fmt.buf.String::append_char('"');
+                };
+            };
+            break __tmpl: __r;
+        });
     }
     return self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value;
 }
