@@ -13,7 +13,16 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stderr {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let handles: i64 = core::builtin::stream_new();
     let rx: i32 = handles as i32;
     let tx: i32 = (handles >> 32) as i32;

@@ -13,12 +13,21 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct ParseResult {
     ok: bool,
     value: JsonValue,
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let __sroa_result_value: JsonValue = move JsonValue::Number(42);
     core::cli::println(move "variant in struct field works");
 }

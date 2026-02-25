@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 fn greet(name: Name) -> String {
     return __tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
@@ -32,6 +34,13 @@ fn greet(name: Name) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let label: Label = "hello";
     let greeting: String = move greet("Alice");
     let x: String = move "world";

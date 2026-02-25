@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct Accumulator {
     sum: i32,
 }
@@ -22,6 +24,13 @@ struct Wrapper {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut __sroa___sroa_w_acc_sum: i32 = 0;
     __for_0: {
         let mut i: i32 = 1;
@@ -30,7 +39,7 @@ export fn run() with Stdout {
                 break __for_0;
             }
             __for_0_body: {
-                __inline_Accumulator__add_0: {
+                __inline_Accumulator__add_1: {
                     let n: i32 = i;
                     __sroa___sroa_w_acc_sum = (__sroa___sroa_w_acc_sum + n);
                 };
@@ -41,11 +50,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
         __r.String::append(move "Sum 1-5: ");
-        let mut __f: Formatter = __inline_Formatter__new_3: {
+        let mut __f: Formatter = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_4: {
+        __inline_i32_Display__fmt_5: {
             let self: Box<i32> = move Box<i32> { value: __sroa___sroa_w_acc_sum };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

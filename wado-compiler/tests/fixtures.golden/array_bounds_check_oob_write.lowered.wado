@@ -13,16 +13,22 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut arr: Array<i32> = move [10, 20, 30];
     arr."Array<i32>^IndexAssign::index_assign"(3, 99);
 }
 
 export fn __cm_export__run() {
-    __inline_run_0: {
-        let mut arr: Array<i32> = move [10, 20, 30];
-        arr."Array<i32>^IndexAssign::index_assign"(3, 99);
-    };
+    run();
     cm_raw_call task-return(0);
 }
 

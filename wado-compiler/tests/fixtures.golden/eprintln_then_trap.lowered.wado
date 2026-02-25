@@ -13,13 +13,29 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     core::internal::log_stderr(move "error message");
     core::builtin::unreachable();
 }
 
 export fn __cm_export__run() {
     __inline_run_0: {
+        __inline___initialize_modules_1: {
+            if __modules_initialized {
+                break __inline___initialize_modules_1;
+            }
+            "core::prelude/fpfmt.wado::__initialize_module"();
+            __modules_initialized = true;
+        };
         core::internal::log_stderr(move "error message");
         core::builtin::unreachable();
     };

@@ -13,11 +13,20 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct "MiniDict<String,String>" {
     entries: Array<[String, String]>,
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut dict: MiniDict<String,String> = move MiniDict<String,String> { entries: [] };
     dict."MiniDict<String,String>::set"(move "name", move "Wado");
     dict."MiniDict<String,String>::set"(move "type", move "language");
@@ -56,11 +65,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
         __r.String::append(move "has 'target': ");
-        let mut __f: Formatter = __inline_Formatter__new_5: {
+        let mut __f: Formatter = __inline_Formatter__new_6: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_bool_Display__fmt_6: {
+        __inline_bool_Display__fmt_7: {
             let self: Box<bool> = move Box<bool> { value: dict."MiniDict<String,String>::has"(move "target") };
             let f: &mut Formatter = &mut __f;
             f.Formatter::pad(if self.value {
@@ -74,11 +83,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(31), used: 0 };
         __r.String::append(move "has 'version': ");
-        let mut __f: Formatter = __inline_Formatter__new_8: {
+        let mut __f: Formatter = __inline_Formatter__new_9: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_bool_Display__fmt_9: {
+        __inline_bool_Display__fmt_10: {
             let self: Box<bool> = move Box<bool> { value: dict."MiniDict<String,String>::has"(move "version") };
             let f: &mut Formatter = &mut __f;
             f.Formatter::pad(if self.value {
@@ -92,11 +101,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(22), used: 0 };
         __r.String::append(move "size: ");
-        let mut __f: Formatter = __inline_Formatter__new_11: {
+        let mut __f: Formatter = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_12: {
+        __inline_i32_Display__fmt_13: {
             let self: Box<i32> = move Box<i32> { value: __inline_Array_Tuple_String_String____len_0: {
                 let self: &Array<[String, String]> = &dict.entries;
                 break __inline_Array_Tuple_String_String____len_0: self.used;

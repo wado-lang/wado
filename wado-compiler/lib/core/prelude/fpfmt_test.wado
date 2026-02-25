@@ -1,0 +1,394 @@
+// Float-to-String core algorithm tests
+// Tests for the fpfmt module functions in the standard library.
+//
+// Based on rsc.io/fpfmt (https://research.swtch.com/fp)
+// Copyright 2025 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+use {
+    short, short32, fixed_width, digits, format_exp, format_decimal,
+    log10_pow2, log2_pow10, u64_bit_len, pow10,
+    unpack64, unpack32, FormatResult, UnpackResult,
+    trim_zeros, rotate_right,
+    format_decimal_prec, format_exp_prec,
+    check_special, SpecialKind,
+    parse, parse_text,
+} from "core:prelude/fpfmt";
+
+test "log10_pow2 approximation" {
+    assert log10_pow2(0) == 0;
+    assert log10_pow2(1) == 0;
+    assert log10_pow2(3) == 0;
+    assert log10_pow2(4) == 1;
+    assert log10_pow2(10) == 3;
+    assert log10_pow2(20) == 6;
+    assert log10_pow2(100) == 30;
+    assert log10_pow2(1000) == 301;
+}
+
+test "log2_pow10 approximation" {
+    assert log2_pow10(0) == 0;
+    assert log2_pow10(1) == 3;
+    assert log2_pow10(2) == 6;
+    assert log2_pow10(3) == 9;
+    assert log2_pow10(10) == 33;
+    assert log2_pow10(100) == 332;
+}
+
+test "u64_bit_len" {
+    assert u64_bit_len(0) == 0;
+    assert u64_bit_len(1) == 1;
+    assert u64_bit_len(2) == 2;
+    assert u64_bit_len(3) == 2;
+    assert u64_bit_len(4) == 3;
+    assert u64_bit_len(255) == 8;
+    assert u64_bit_len(256) == 9;
+    assert u64_bit_len(0x8000000000000000) == 64;
+}
+
+test "pow10 lookup" {
+    assert pow10(0) == 1;
+    assert pow10(1) == 10;
+    assert pow10(2) == 100;
+    assert pow10(9) == 1000000000;
+    assert pow10(18) == 1000000000000000000;
+}
+
+test "digits count" {
+    assert digits(0) == 0;
+    assert digits(1) == 1;
+    assert digits(9) == 1;
+    assert digits(10) == 2;
+    assert digits(99) == 2;
+    assert digits(100) == 3;
+    assert digits(1000) == 4;
+}
+
+test "rotate_right" {
+    let r1 = rotate_right(1, 1);
+    assert r1 == 0x8000000000000000;
+
+    let r2 = rotate_right(0x8000000000000000, 1);
+    assert r2 == 0x4000000000000000;
+
+    let r64 = rotate_right(1, 64);
+    assert r64 == 1;
+}
+
+test "trim_zeros basic" {
+    let t1 = trim_zeros(1000, 0);
+    assert t1.0 == 1;
+    assert t1.1 == 3;
+
+    let t2 = trim_zeros(1200, 0);
+    assert t2.0 == 12;
+    assert t2.1 == 2;
+
+    let t3 = trim_zeros(123, 0);
+    assert t3.0 == 123;
+    assert t3.1 == 0;
+
+    let t5 = trim_zeros(100000000, 0);
+    assert t5.0 == 1;
+    assert t5.1 == 8;
+}
+
+test "unpack64 zero" {
+    let r0 = unpack64(0.0);
+    assert r0.mantissa == 0;
+    assert r0.exponent == 0;
+}
+
+test "unpack64 powers of 2" {
+    let r_1 = unpack64(1.0);
+    let r_2 = unpack64(2.0);
+    let r_4 = unpack64(4.0);
+    assert (r_1.mantissa & 0x8000000000000000) != 0;
+    assert (r_2.mantissa & 0x8000000000000000) != 0;
+    assert (r_4.mantissa & 0x8000000000000000) != 0;
+}
+
+test "short integers" {
+    let r1 = short(1.0);
+    assert r1.digits == 1;
+    assert r1.exponent == 0;
+
+    let r2 = short(2.0);
+    assert r2.digits == 2;
+    assert r2.exponent == 0;
+
+    let r9 = short(9.0);
+    assert r9.digits == 9;
+    assert r9.exponent == 0;
+
+    let r42 = short(42.0);
+    assert r42.digits == 42;
+    assert r42.exponent == 0;
+}
+
+test "short powers of 10" {
+    let r10 = short(10.0);
+    assert r10.digits == 1;
+    assert r10.exponent == 1;
+
+    let r100 = short(100.0);
+    assert r100.digits == 1;
+    assert r100.exponent == 2;
+
+    let r1000 = short(1000.0);
+    assert r1000.digits == 1;
+    assert r1000.exponent == 3;
+}
+
+test "short dyadic fractions" {
+    let r15 = short(1.5);
+    assert r15.digits == 15;
+    assert r15.exponent == -1;
+
+    let r125 = short(1.25);
+    assert r125.digits == 125;
+    assert r125.exponent == -2;
+
+    let r05 = short(0.5);
+    assert r05.digits == 5;
+    assert r05.exponent == -1;
+
+    let r025 = short(0.25);
+    assert r025.digits == 25;
+    assert r025.exponent == -2;
+}
+
+test "short pi" {
+    let pi = 3.141592653589793;
+    let r = short(pi);
+    assert r.digits > 0;
+    assert digits(r.digits) >= 15;
+    assert digits(r.digits) <= 17;
+}
+
+test "fixed_width 1 digit" {
+    let r1 = fixed_width(1.0, 1);
+    assert r1.digits == 1;
+
+    let r9 = fixed_width(9.0, 1);
+    assert r9.digits == 9;
+
+    let rpi = fixed_width(3.14159, 1);
+    assert rpi.digits == 3;
+}
+
+test "fixed_width various digits" {
+    let pi = 3.141592653589793;
+
+    let r2 = fixed_width(pi, 2);
+    assert r2.digits == 31;
+
+    let r3 = fixed_width(pi, 3);
+    assert r3.digits == 314;
+
+    let r4 = fixed_width(pi, 4);
+    assert r4.digits == 3142;
+}
+
+test "format_decimal basic" {
+    assert format_decimal(314, -2, 3) == "3.14";
+    assert format_decimal(1, 0, 1) == "1";
+    assert format_decimal(42, 0, 2) == "42";
+    assert format_decimal(5, -1, 1) == "0.5";
+    assert format_decimal(1, 2, 1) == "100";
+}
+
+test "format_decimal leading zeros" {
+    assert format_decimal(1, -3, 1) == "0.001";
+    assert format_decimal(5, -2, 1) == "0.05";
+    assert format_decimal(123, -5, 3) == "0.00123";
+}
+
+test "format_exp basic" {
+    // No '+' sign, no leading zero for single-digit exponents
+    assert format_exp(314, -2, 3, false) == "3.14e0";
+    assert format_exp(1, 0, 1, false) == "1e0";
+    assert format_exp(15, -1, 2, false) == "1.5e0";
+    assert format_exp(1, 2, 1, false) == "1e2";
+    assert format_exp(1, -5, 1, false) == "1e-5";
+}
+
+test "format_exp upper case" {
+    assert format_exp(314, -2, 3, true) == "3.14E0";
+    assert format_exp(1, 2, 1, true) == "1E2";
+}
+
+test "format_exp large exponent" {
+    assert format_exp(123, 13, 3, false) == "1.23e15";
+    assert format_exp(15, -11, 2, false) == "1.5e-10";
+}
+
+test "format_decimal_prec with precision" {
+    assert format_decimal_prec(314, -2, 3, 2) == "3.14";
+    assert format_decimal_prec(314, -2, 3, 4) == "3.1400";
+    assert format_decimal_prec(314, -2, 3, 1) == "3.1";
+    assert format_decimal_prec(1, 0, 1, 2) == "1.00";
+}
+
+test "format_exp_prec with precision" {
+    assert format_exp_prec(314, -2, 3, 2, false) == "3.14e0";
+    assert format_exp_prec(314, -2, 3, 4, false) == "3.1400e0";
+    assert format_exp_prec(314, -2, 3, 1, false) == "3.1e0";
+    assert format_exp_prec(1, 0, 1, 0, false) == "1e0";
+}
+
+test "check_special zero" {
+    let [is_special, is_neg, kind] = check_special(0.0);
+    assert is_special;
+    assert !is_neg;
+    assert kind matches { Zero };
+}
+
+test "check_special negative zero" {
+    let [is_special, is_neg, kind] = check_special(-0.0);
+    assert is_special;
+    assert is_neg;
+    assert kind matches { Zero };
+}
+
+test "check_special infinity" {
+    let inf: f64 = 1.0 / 0.0;
+    let [is_special, is_neg, kind] = check_special(inf);
+    assert is_special;
+    assert !is_neg;
+    assert kind matches { Inf };
+
+    let neg_inf: f64 = -1.0 / 0.0;
+    let [is_special2, is_neg2, kind2] = check_special(neg_inf);
+    assert is_special2;
+    assert is_neg2;
+    assert kind2 matches { Inf };
+}
+
+test "check_special NaN" {
+    let nan: f64 = 0.0 / 0.0;
+    let [is_special, _, kind] = check_special(nan);
+    assert is_special;
+    assert kind matches { NaN };
+}
+
+test "check_special normal" {
+    let [is_special, is_neg, kind] = check_special(3.14);
+    assert !is_special;
+    assert !is_neg;
+    assert kind matches { NotSpecial };
+
+    let [is_special2, is_neg2, _] = check_special(-2.5);
+    assert !is_special2;
+    assert is_neg2;
+}
+
+test "parse roundtrip basic" {
+    assert parse(1, 0) == 1.0;
+    assert parse(2, 0) == 2.0;
+    assert parse(314, -2) == 3.14;
+    assert parse(5, -1) == 0.5;
+    assert parse(25, -2) == 0.25;
+    assert parse(125, -3) == 0.125;
+    assert parse(1, 3) == 1000.0;
+    assert parse(1, 6) == 1000000.0;
+}
+
+test "parse_text basic" {
+    if let Some(v) = parse_text("3.14") {
+        assert v == 3.14;
+    } else {
+        panic("parse_text failed for 3.14");
+    }
+
+    if let Some(v) = parse_text("1") {
+        assert v == 1.0;
+    } else {
+        panic("parse_text failed for 1");
+    }
+
+    if let Some(v) = parse_text("0.5") {
+        assert v == 0.5;
+    } else {
+        panic("parse_text failed for 0.5");
+    }
+}
+
+test "parse_text with exponent" {
+    if let Some(v) = parse_text("1e2") {
+        assert v == 100.0;
+    } else {
+        panic("parse_text failed for 1e2");
+    }
+
+    if let Some(v) = parse_text("1.5e-3") {
+        assert v == 0.0015;
+    } else {
+        panic("parse_text failed for 1.5e-3");
+    }
+}
+
+test "parse_text malformed input" {
+    assert parse_text("") matches { None };
+    assert parse_text("abc") matches { None };
+    assert parse_text("1.2.3") matches { None };
+}
+
+test "parse roundtrip via short" {
+    // Verify that parse(short(f).digits, short(f).exponent) == f
+    let values: Array<f64> = [1.0, 2.5, 3.14, 0.1, 100.0, 0.001, 1234567.89];
+    for let v of values {
+        let r = short(v);
+        let reconstructed = parse(r.digits, r.exponent);
+        assert reconstructed == v;
+    }
+}
+
+test "unpack32 zero" {
+    let r = unpack32(0.0 as f32);
+    assert r.mantissa == 0;
+    assert r.exponent == 0;
+}
+
+test "unpack32 one" {
+    let r = unpack32(1.0 as f32);
+    assert (r.mantissa & 0x8000000000000000) != 0;
+}
+
+test "short32 integers" {
+    let r1 = short32(1.0 as f32);
+    assert r1.digits == 1;
+    assert r1.exponent == 0;
+
+    let r42 = short32(42.0 as f32);
+    assert r42.digits == 42;
+    assert r42.exponent == 0;
+}
+
+test "short32 fractions" {
+    let r = short32(3.14 as f32);
+    assert r.digits == 314;
+    assert r.exponent == -2;
+
+    let r5 = short32(0.5 as f32);
+    assert r5.digits == 5;
+    assert r5.exponent == -1;
+}
+
+test "short32 pi" {
+    let pi: f32 = 3.14159265 as f32;
+    let r = short32(pi);
+    assert r.digits > 0;
+    // f32 has at most 9 significant digits
+    assert digits(r.digits) <= 9;
+}
+
+test "short32 roundtrip" {
+    // Verify parse(short32(f).digits, short32(f).exponent) as f32 == f
+    let values: Array<f32> = [1.0 as f32, 2.5 as f32, 3.14 as f32, 0.1 as f32, 100.0 as f32];
+    for let v of values {
+        let r = short32(v);
+        let reconstructed = parse(r.digits, r.exponent) as f32;
+        assert reconstructed == v;
+    }
+}

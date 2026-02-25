@@ -13,11 +13,20 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 pub struct Opts {
     align: Align,
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let __sroa_opts_align: Align = move Align::Right;
     let name: String = match __sroa_opts_align {
         Left => "left",

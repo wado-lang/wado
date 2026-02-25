@@ -117,11 +117,6 @@ pub fn analyze_project(project: &mut Project) {
         FunctionId::Free(FreeFunctionName::from_strs(&["core", "internal"], name))
     };
 
-    // Derive builtin usage from reachable internal functions
-    // f64_to_string/f32_to_string call the bundled f64_to_buffer/f32_to_buffer
-    let needs_f64_to_buffer = reachable.contains(&core_internal("f64_to_string"));
-    let needs_f32_to_buffer = reachable.contains(&core_internal("f32_to_string"));
-
     // CM helper functions (cm_lower_string, memory_to_gc_string, etc.)
     // are called from synthesized CM adapter functions, which are part of the TIR
     // and discovered through normal call graph analysis.
@@ -225,14 +220,6 @@ pub fn analyze_project(project: &mut Project) {
 
     // realloc is always needed for memory management
     add_import_by_name(&mut imports, "realloc");
-
-    // Float-to-string builtins if their internal wrappers are used
-    if needs_f64_to_buffer {
-        add_import_by_name(&mut imports, "f64_to_buffer");
-    }
-    if needs_f32_to_buffer {
-        add_import_by_name(&mut imports, "f32_to_buffer");
-    }
 
     // Stream/StreamWritable method calls need canonical builtins
     for (type_name, method_name) in &used_stream_methods {

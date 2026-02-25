@@ -33,6 +33,7 @@ pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wad
 pub const CORE_PRELUDE_PRIMITIVES: &str = include_str!("../lib/core/prelude/primitives.wado");
 pub const CORE_PRELUDE_FORMAT: &str = include_str!("../lib/core/prelude/format.wado");
 pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
+pub const CORE_PRELUDE_FPFMT: &str = include_str!("../lib/core/prelude/fpfmt.wado");
 pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
 pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
@@ -60,6 +61,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
         "core:prelude/string.wado" => Some(CORE_PRELUDE_STRING),
         "core:prelude/format.wado" => Some(CORE_PRELUDE_FORMAT),
         "core:prelude/array.wado" => Some(CORE_PRELUDE_ARRAY),
+        "core:prelude/fpfmt.wado" => Some(CORE_PRELUDE_FPFMT),
         "core:collections" => Some(CORE_COLLECTIONS),
         "core:cli" => Some(CORE_CLI),
         "core:stream" => Some(CORE_STREAM),

@@ -13,7 +13,16 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout, Random, Insecure, InsecureSeed {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let r1: u64 = __cm_adapter__Random_get_random_u64();
     let r2: u64 = __cm_adapter__Random_get_random_u64();
     core::cli::println(move "test: random u64 works");

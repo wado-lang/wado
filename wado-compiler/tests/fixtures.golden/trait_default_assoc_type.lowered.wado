@@ -13,18 +13,27 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct IntBox {
     value: i32,
 }
 
 export fn run() with Stdout {
-    if __inline_IntBox_Container__has_items_0: {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
+    if __inline_IntBox_Container__has_items_1: {
         let __pattern_temp_0: Option<i32> = Option::Some(42);
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             __variant_payload(__pattern_temp_0, case=0);
-            break __inline_IntBox_Container__has_items_0: true;
+            break __inline_IntBox_Container__has_items_1: true;
         }
-        break __inline_IntBox_Container__has_items_0: false;
+        break __inline_IntBox_Container__has_items_1: false;
     } {
         core::cli::println(move "has items");
     }

@@ -6,6 +6,13 @@
 // This module intentionally does NOT depend on core:internal to keep the
 // dependency structure simple.
 
+use {
+    check_special, SpecialKind,
+    short, short32, fixed_width, digits,
+    format_decimal, format_exp,
+    format_decimal_prec, format_exp_prec,
+} from "core:prelude/fpfmt.wado";
+
 /// Copy bytes from linear memory to a new GC array (internal helper)
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr = builtin::array_new::<u8>(len);
@@ -280,54 +287,178 @@ fn fmt_u64_decimal(value: u64, f: &mut Formatter) {
     }
 }
 
-/// Write f32 shortest representation to formatter.
-fn fmt_f32(value: f32, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 24);
-    let len = builtin::f32_to_buffer(value, ptr);
-    f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 24, 1, 0);
-}
-
-/// Write f32 with fixed-point precision to formatter.
-fn fmt_f32_fixed(value: f32, precision: i32, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 64);
-    let len = builtin::f32_to_buffer_fixed(value, precision, ptr);
-    f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 64, 1, 0);
-}
-
-/// Write f64 shortest representation to formatter.
+/// Write f64 shortest representation to formatter (auto decimal/exponential).
 fn fmt_f64(value: f64, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 32);
-    let len = builtin::f64_to_buffer(value, ptr);
-    f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 32, 1, 0);
+    let [is_special, is_neg, kind] = check_special(value);
+    if is_special {
+        if kind matches { NaN } {
+            f.pad("NaN");
+        } else if kind matches { Inf } {
+            f.pad(if is_neg { "-inf" } else { "inf" });
+        } else {
+            f.pad(if is_neg { "-0.0" } else { "0.0" });
+        }
+        return;
+    }
+    let abs_f = if is_neg { -value } else { value };
+    let result = short(abs_f);
+    let d = result.digits;
+    let p = result.exponent;
+    let nd = digits(d);
+    let exp = p + nd - 1;
+    let formatted = if exp < -4 || exp >= 16 {
+        format_exp(d, p, nd, false)
+    } else if p >= 0 {
+        String::concat(format_decimal(d, p, nd), ".0")
+    } else {
+        format_decimal(d, p, nd)
+    };
+    if is_neg {
+        f.pad(String::concat("-", formatted));
+    } else {
+        f.pad(formatted);
+    }
+}
+
+/// Write f32 shortest representation to formatter.
+/// Uses short32 which finds the shortest decimal that round-trips through f32.
+fn fmt_f32(value: f32, f: &mut Formatter) {
+    let f64_val = value as f64;
+    let [is_special, is_neg, kind] = check_special(f64_val);
+    if is_special {
+        if kind matches { NaN } {
+            f.pad("NaN");
+        } else if kind matches { Inf } {
+            f.pad(if is_neg { "-inf" } else { "inf" });
+        } else {
+            f.pad(if is_neg { "-0.0" } else { "0.0" });
+        }
+        return;
+    }
+    let abs_f = if is_neg { -value } else { value };
+    let result = short32(abs_f);
+    let d = result.digits;
+    let p = result.exponent;
+    let nd = digits(d);
+    let exp = p + nd - 1;
+    let formatted = if exp < -4 || exp >= 16 {
+        format_exp(d, p, nd, false)
+    } else if p >= 0 {
+        String::concat(format_decimal(d, p, nd), ".0")
+    } else {
+        format_decimal(d, p, nd)
+    };
+    if is_neg {
+        f.pad(String::concat("-", formatted));
+    } else {
+        f.pad(formatted);
+    }
 }
 
 /// Write f64 with fixed-point precision to formatter.
 fn fmt_f64_fixed(value: f64, precision: i32, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 400);
-    let len = builtin::f64_to_buffer_fixed(value, precision, ptr);
-    f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 400, 1, 0);
+    let [is_special, is_neg, kind] = check_special(value);
+    if is_special {
+        if kind matches { NaN } {
+            f.pad("NaN");
+        } else if kind matches { Inf } {
+            f.pad(if is_neg { "-inf" } else { "inf" });
+        } else {
+            // Zero with precision
+            let mut s = String::with_capacity(4 + precision);
+            if is_neg { s.append("-"); }
+            s.append("0");
+            if precision > 0 {
+                s.append(".");
+                for let mut i = 0; i < precision; i += 1 {
+                    s.append_char('0');
+                }
+            }
+            f.pad(s);
+        }
+        return;
+    }
+    let abs_f = if is_neg { -value } else { value };
+    let short_result = short(abs_f);
+    let short_nd = digits(short_result.digits);
+    let decimal_pos = short_nd + short_result.exponent;
+    let int_digits = if decimal_pos > 0 { decimal_pos } else { 1 };
+    let total_digits = int_digits + precision;
+    let clamped = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
+    let result = fixed_width(abs_f, clamped);
+    let d = result.digits;
+    let p = result.exponent;
+    let nd = digits(d);
+    let formatted = format_decimal_prec(d as i64, p, nd, precision);
+    if is_neg {
+        f.pad(String::concat("-", formatted));
+    } else {
+        f.pad(formatted);
+    }
 }
 
-/// Write f32 in exponential notation.
-/// If `upper` is true, uses 'E' instead of 'e'.
-fn fmt_f32_exp(value: f32, precision: i32, upper: i32, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 32);
-    let len = builtin::f32_to_buffer_exp(value, precision, upper, ptr);
-    f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 32, 1, 0);
+/// Write f32 with fixed-point precision to formatter.
+fn fmt_f32_fixed(value: f32, precision: i32, f: &mut Formatter) {
+    fmt_f64_fixed(value as f64, precision, f);
 }
 
 /// Write f64 in exponential notation.
-/// If `upper` is true, uses 'E' instead of 'e'.
 fn fmt_f64_exp(value: f64, precision: i32, upper: i32, f: &mut Formatter) {
-    let ptr = builtin::realloc(0, 0, 1, 32);
-    let len = builtin::f64_to_buffer_exp(value, precision, upper, ptr);
-    f.write_from_memory(ptr, len);
-    builtin::realloc(ptr, 32, 1, 0);
+    let upper_bool = upper != 0;
+    let [is_special, is_neg, kind] = check_special(value);
+    if is_special {
+        if kind matches { NaN } {
+            f.pad("NaN");
+        } else if kind matches { Inf } {
+            f.pad(if is_neg { "-inf" } else { "inf" });
+        } else {
+            // Zero in exponential
+            let mut s = String::with_capacity(10 + precision);
+            if is_neg { s.append("-"); }
+            s.append("0");
+            if precision > 0 {
+                s.append(".");
+                for let mut i = 0; i < precision; i += 1 {
+                    s.append_char('0');
+                }
+            }
+            s.append_char(if upper_bool { 'E' } else { 'e' });
+            s.append_char('0');
+            f.pad(s);
+        }
+        return;
+    }
+    let abs_f = if is_neg { -value } else { value };
+    if precision >= 0 {
+        let total_digits = precision + 1;
+        let clamped = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
+        let result = fixed_width(abs_f, clamped);
+        let d = result.digits;
+        let p = result.exponent;
+        let nd = digits(d);
+        let formatted = format_exp_prec(d as i64, p, nd, precision, upper_bool);
+        if is_neg {
+            f.pad(String::concat("-", formatted));
+        } else {
+            f.pad(formatted);
+        }
+    } else {
+        let result = short(abs_f);
+        let d = result.digits;
+        let p = result.exponent;
+        let nd = digits(d);
+        let formatted = format_exp(d, p, nd, upper_bool);
+        if is_neg {
+            f.pad(String::concat("-", formatted));
+        } else {
+            f.pad(formatted);
+        }
+    }
+}
+
+/// Write f32 in exponential notation.
+fn fmt_f32_exp(value: f32, precision: i32, upper: i32, f: &mut Formatter) {
+    fmt_f64_exp(value as f64, precision, upper, f);
 }
 
 /// Write an integer (as i64 absolute value) in the given base (2, 8, or 16)

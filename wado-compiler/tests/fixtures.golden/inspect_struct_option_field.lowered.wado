@@ -13,17 +13,26 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct Wrapper {
     value: Option<i32>,
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let w1: Wrapper = move Wrapper { value: Option::Some(42) };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_1: {
+        let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         "__inspect$Wrapper"(w1, &mut __f);
         break __tmpl: __r;
@@ -31,9 +40,9 @@ export fn run() with Stdout {
     let w2: Wrapper = move Wrapper { value: null };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_3: {
+        let mut __f: Formatter = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         "__inspect$Wrapper"(w2, &mut __f);
         break __tmpl: __r;

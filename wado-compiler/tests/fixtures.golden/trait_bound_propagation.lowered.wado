@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct "EqContainer<Pair<i32>>" {
     item: Pair<i32>,
 }
@@ -23,6 +25,13 @@ struct "Pair<i32>" {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let __sroa_c_item: Pair<i32> = move Pair<i32> { first: 1, second: 2 };
     let other: Pair<i32> = move Pair<i32> { first: 1, second: 2 };
     if __sroa_c_item."Pair<i32>^Eq::eq"(&other) {

@@ -13,15 +13,24 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append(move "i64 + 42: ");
-        let mut __f: Formatter = __inline_Formatter__new_21: {
+        let mut __f: Formatter = __inline_Formatter__new_22: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i64_Display__fmt_22: {
+        __inline_i64_Display__fmt_23: {
             let self: Box<i64> = move Box<i64> { value: 1000000000042 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i64_decimal"(self.value, f);
@@ -31,11 +40,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
         __r.String::append(move "u64 * 2: ");
-        let mut __f: Formatter = __inline_Formatter__new_24: {
+        let mut __f: Formatter = __inline_Formatter__new_25: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_u64_Display__fmt_25: {
+        __inline_u64_Display__fmt_26: {
             let self: Box<u64> = move Box<u64> { value: 1553255926290448384 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_u64_decimal"(self.value, f);
@@ -45,11 +54,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
         __r.String::append(move "100 + i64: ");
-        let mut __f: Formatter = __inline_Formatter__new_27: {
+        let mut __f: Formatter = __inline_Formatter__new_28: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i64_Display__fmt_28: {
+        __inline_i64_Display__fmt_29: {
             let self: Box<i64> = move Box<i64> { value: 1000000000100 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i64_decimal"(self.value, f);
@@ -59,11 +68,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
         __r.String::append(move "3 * u64: ");
-        let mut __f: Formatter = __inline_Formatter__new_30: {
+        let mut __f: Formatter = __inline_Formatter__new_31: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_30: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_31: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_u64_Display__fmt_31: {
+        __inline_u64_Display__fmt_32: {
             let self: Box<u64> = move Box<u64> { value: 11553255926290448384 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_u64_decimal"(self.value, f);

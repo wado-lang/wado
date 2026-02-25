@@ -16,6 +16,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn handle(request: Request) {
     let fields: Fields = __cm_adapter__Fields_new();
     let has_before: bool = __cm_adapter__Fields_has(&fields, "x-test" as FieldName);

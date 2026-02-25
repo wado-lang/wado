@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct Value {
     n: i32,
     tag: String,
@@ -114,20 +116,27 @@ fn "Container^IndexAssign::index_assign"(self: &mut Container, idx: i32, value: 
 }
 
 export fn run() with Stdout {
-    let mut c: Container = __inline_Container__from_values_3: {
-        let a: Value = __inline_Value__new_0: {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
+    let mut c: Container = __inline_Container__from_values_4: {
+        let a: Value = __inline_Value__new_1: {
             let tag: String = move "a";
-            break __inline_Value__new_0: Value { n: 10, tag: tag };
+            break __inline_Value__new_1: Value { n: 10, tag: tag };
         };
-        let b: Value = __inline_Value__new_1: {
+        let b: Value = __inline_Value__new_2: {
             let tag: String = move "b";
-            break __inline_Value__new_1: Value { n: 20, tag: tag };
+            break __inline_Value__new_2: Value { n: 20, tag: tag };
         };
-        let c: Value = __inline_Value__new_2: {
+        let c: Value = __inline_Value__new_3: {
             let tag: String = move "c";
-            break __inline_Value__new_2: Value { n: 30, tag: tag };
+            break __inline_Value__new_3: Value { n: 30, tag: tag };
         };
-        break __inline_Container__from_values_3: Container { v0: a, v1: b, v2: c, read_count: 0, write_count: 0 };
+        break __inline_Container__from_values_4: Container { v0: a, v1: b, v2: c, read_count: 0, write_count: 0 };
     };
     let v0: Value = *c."Container^Index::index"(0);
     core::cli::println(__tmpl: {
@@ -143,15 +152,15 @@ export fn run() with Stdout {
         __r.String::append(move v1.Value::describe());
         break __tmpl: __r;
     });
-    __inline_Value__increment_6: {
+    __inline_Value__increment_7: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(0);
         self.n = (self.n + 1);
     };
-    __inline_Value__add_7: {
+    __inline_Value__add_8: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(1);
         self.n = (self.n + 100);
     };
-    __inline_Value__add_8: {
+    __inline_Value__add_9: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(2);
         self.n = (self.n + 200);
     };
@@ -174,9 +183,9 @@ export fn run() with Stdout {
         __r.String::append(move c.v2.Value::describe());
         break __tmpl: __r;
     });
-    c."Container^IndexAssign::index_assign"(2, __inline_Value__new_12: {
+    c."Container^IndexAssign::index_assign"(2, __inline_Value__new_13: {
         let tag: String = move "replaced";
-        break __inline_Value__new_12: Value { n: 999, tag: tag };
+        break __inline_Value__new_13: Value { n: 999, tag: tag };
     });
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(31), used: 0 };
@@ -187,11 +196,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "Total: ");
-        let mut __f: Formatter = __inline_Formatter__new_15: {
+        let mut __f: Formatter = __inline_Formatter__new_16: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_16: {
+        __inline_i32_Display__fmt_17: {
             let self: Box<i32> = move Box<i32> { value: c.Container::total() };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -204,7 +213,7 @@ export fn run() with Stdout {
         __r.String::append(move c.Container::stats());
         break __tmpl: __r;
     });
-    __inline_Container__reset_stats_18: {
+    __inline_Container__reset_stats_19: {
         c.read_count = 0;
         c.write_count = 0;
     };
@@ -214,11 +223,11 @@ export fn run() with Stdout {
         __r.String::append(move c.Container::stats());
         break __tmpl: __r;
     });
-    __inline_Value__increment_20: {
+    __inline_Value__increment_21: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(0);
         self.n = (self.n + 1);
     };
-    __inline_Value__increment_21: {
+    __inline_Value__increment_22: {
         let self: &mut Value = c."Container^IndexMut::index_mut"(1);
         self.n = (self.n + 1);
     };

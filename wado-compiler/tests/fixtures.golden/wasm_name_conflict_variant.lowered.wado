@@ -13,16 +13,25 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let a: Status = move Status::Active;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(19), used: 0 };
         __r.String::append(move "a: ");
-        let mut __f: Formatter = __inline_Formatter__new_2: {
+        let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_3: {
+        __inline_i32_Display__fmt_4: {
             let self: Box<i32> = move Box<i32> { value: match a {
                 Active => 1,
                 Inactive => 0,
@@ -36,11 +45,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(19), used: 0 };
         __r.String::append(move "b: ");
-        let mut __f: Formatter = __inline_Formatter__new_7: {
+        let mut __f: Formatter = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_8: {
+        __inline_i32_Display__fmt_9: {
             let self: Box<i32> = move Box<i32> { value: match b {
                 Ok(v) => v,
                 Error => -1,

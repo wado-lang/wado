@@ -13,20 +13,29 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_1: {
+        let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect__i32_2: {
+        __inline___inspect__i32_3: {
             let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_3: {
+            __inline_Formatter__write_char_4: {
                 __fmt.buf.String::append_char('&');
             };
-            __inline___inspect_i32_4: {
-                __inline_i32_Display__fmt_5: {
+            __inline___inspect_i32_5: {
+                __inline_i32_Display__fmt_6: {
                     let self: Box<i32> = move Box<i32> { value: 42 };
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, __fmt);
                 };
@@ -36,18 +45,18 @@ export fn run() with Stdout {
     });
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_7: {
+        let mut __f: Formatter = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect__mut_i32_8: {
+        __inline___inspect__mut_i32_9: {
             let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_str_9: {
+            __inline_Formatter__write_str_10: {
                 let s: String = move "&mut ";
                 __fmt.buf.String::append(s);
             };
-            __inline___inspect_i32_10: {
-                __inline_i32_Display__fmt_11: {
+            __inline___inspect_i32_11: {
+                __inline_i32_Display__fmt_12: {
                     let self: Box<i32> = move Box<i32> { value: 100 };
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, __fmt);
                 };
@@ -59,22 +68,22 @@ export fn run() with Stdout {
     let rs: &String = &s;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_13: {
+        let mut __f: Formatter = __inline_Formatter__new_14: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect__String_14: {
+        __inline___inspect__String_15: {
             let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_15: {
+            __inline_Formatter__write_char_16: {
                 __fmt.buf.String::append_char('&');
             };
-            __inline___inspect_String_16: {
+            __inline___inspect_String_17: {
                 let __val: String = *rs;
-                __inline_Formatter__write_char_17: {
+                __inline_Formatter__write_char_18: {
                     __fmt.buf.String::append_char('"');
                 };
                 core::internal::write_escaped_string(__val, __fmt);
-                __inline_Formatter__write_char_18: {
+                __inline_Formatter__write_char_19: {
                     __fmt.buf.String::append_char('"');
                 };
             };
@@ -83,17 +92,17 @@ export fn run() with Stdout {
     });
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_20: {
+        let mut __f: Formatter = __inline_Formatter__new_21: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect__bool_21: {
+        __inline___inspect__bool_22: {
             let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_22: {
+            __inline_Formatter__write_char_23: {
                 __fmt.buf.String::append_char('&');
             };
-            __inline___inspect_bool_23: {
-                __inline_bool_Display__fmt_24: {
+            __inline___inspect_bool_24: {
+                __inline_bool_Display__fmt_25: {
                     let self: Box<bool> = move Box<bool> { value: true };
                     __fmt.Formatter::pad(if self.value {
                         "true";
