@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 enum Priority {
     Low,
     Medium,
@@ -21,6 +23,13 @@ enum Priority {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let a: Priority = Priority::Low;
     let b: Priority = Priority::Medium;
     let c: Priority = Priority::Low;

@@ -13,21 +13,30 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let s: String = move "hello";
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_1: {
+        let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_String_2: {
+        __inline___inspect_String_3: {
             let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_3: {
+            __inline_Formatter__write_char_4: {
                 __fmt.buf.String::append_char('"');
             };
             core::internal::write_escaped_string(s, __fmt);
-            __inline_Formatter__write_char_4: {
+            __inline_Formatter__write_char_5: {
                 __fmt.buf.String::append_char('"');
             };
         };
@@ -36,17 +45,17 @@ export fn run() with Stdout {
     let with_quote: String = move "say \"hi\"";
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_6: {
+        let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_String_7: {
+        __inline___inspect_String_8: {
             let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_8: {
+            __inline_Formatter__write_char_9: {
                 __fmt.buf.String::append_char('"');
             };
             core::internal::write_escaped_string(with_quote, __fmt);
-            __inline_Formatter__write_char_9: {
+            __inline_Formatter__write_char_10: {
                 __fmt.buf.String::append_char('"');
             };
         };
@@ -55,17 +64,17 @@ export fn run() with Stdout {
     let with_newline: String = move "line1\nline2";
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_11: {
+        let mut __f: Formatter = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_String_12: {
+        __inline___inspect_String_13: {
             let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_13: {
+            __inline_Formatter__write_char_14: {
                 __fmt.buf.String::append_char('"');
             };
             core::internal::write_escaped_string(with_newline, __fmt);
-            __inline_Formatter__write_char_14: {
+            __inline_Formatter__write_char_15: {
                 __fmt.buf.String::append_char('"');
             };
         };
@@ -74,17 +83,17 @@ export fn run() with Stdout {
     let empty: String = move "";
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_16: {
+        let mut __f: Formatter = __inline_Formatter__new_17: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_String_17: {
+        __inline___inspect_String_18: {
             let __fmt: &mut Formatter = &mut __f;
-            __inline_Formatter__write_char_18: {
+            __inline_Formatter__write_char_19: {
                 __fmt.buf.String::append_char('"');
             };
             core::internal::write_escaped_string(empty, __fmt);
-            __inline_Formatter__write_char_19: {
+            __inline_Formatter__write_char_20: {
                 __fmt.buf.String::append_char('"');
             };
         };

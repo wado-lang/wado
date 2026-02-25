@@ -13,22 +13,31 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct IntBox {
     value: i32,
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let result: Option<i32> = Option::Some(42);
     if __variant_test(result, case=0, name=Some) {
         let v: i32 = __variant_payload(result, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
             __r.String::append(move "Got: ");
-            let mut __f: Formatter = __inline_Formatter__new_2: {
+            let mut __f: Formatter = __inline_Formatter__new_3: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            __inline_i32_Display__fmt_3: {
+            __inline_i32_Display__fmt_4: {
                 let self: Box<i32> = move Box<i32> { value: v };
                 let f: &mut Formatter = &mut __f;
                 "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

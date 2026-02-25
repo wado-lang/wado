@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 fn read_and_format(r: Box<i32>) -> String {
     return __tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(22), used: 0 };
@@ -36,27 +38,34 @@ fn print_via(r: Box<i32>) with Stdout {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut n: Box<i32> = move Box<i32> { value: 0 };
-    __inline_add_four_0: {
+    __inline_add_four_1: {
         let r: Box<i32> = n;
-        __inline_add_two_1: {
+        __inline_add_two_2: {
             let r: Box<i32> = r;
-            __inline_add_one_2: {
-                let r: Box<i32> = r;
-                r.value = (r.value + 1);
-            };
             __inline_add_one_3: {
                 let r: Box<i32> = r;
                 r.value = (r.value + 1);
             };
-        };
-        __inline_add_two_4: {
-            let r: Box<i32> = r;
-            __inline_add_one_5: {
+            __inline_add_one_4: {
                 let r: Box<i32> = r;
                 r.value = (r.value + 1);
             };
+        };
+        __inline_add_two_5: {
+            let r: Box<i32> = r;
             __inline_add_one_6: {
+                let r: Box<i32> = r;
+                r.value = (r.value + 1);
+            };
+            __inline_add_one_7: {
                 let r: Box<i32> = r;
                 r.value = (r.value + 1);
             };

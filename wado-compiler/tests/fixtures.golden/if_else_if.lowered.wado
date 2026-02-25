@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 fn classify(n: i32) -> String {
     if (n < 0) {
         return "negative";
@@ -34,6 +36,13 @@ fn classify(n: i32) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     core::cli::println(move classify(-5));
     core::cli::println(move classify(0));
     core::cli::println(move classify(5));

@@ -9,6 +9,8 @@
 // mem::realloc
 // wasi::task-return
 
+global mut __modules_initialized: bool = false;
+
 export fn handle(request: Request) {
     let [trailers_future, trailers_tx] = move core::builtin::future_create_pair();
     let headers: Fields = __cm_adapter__Fields_new();

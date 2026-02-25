@@ -13,18 +13,27 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let a: u128 = move u128 { low: 100, high: 0 };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(39), used: 0 };
         __r.String::append(move "u128 literal coercion: ");
-        let mut __f: Formatter = __inline_Formatter__new_2: {
+        let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_u128_Display__fmt_3: {
+        __inline_u128_Display__fmt_4: {
             let self: &u128 = &a;
-            __inline_Formatter__write_str_4: {
+            __inline_Formatter__write_str_5: {
                 let s: String = move self.u128::to_string();
                 __f.buf.String::append(s);
             };
@@ -35,13 +44,13 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(39), used: 0 };
         __r.String::append(move "i128 literal coercion: ");
-        let mut __f: Formatter = __inline_Formatter__new_6: {
+        let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i128_Display__fmt_7: {
+        __inline_i128_Display__fmt_8: {
             let self: &i128 = &b;
-            __inline_Formatter__write_str_8: {
+            __inline_Formatter__write_str_9: {
                 let s: String = move self.i128::to_string();
                 __f.buf.String::append(s);
             };
@@ -52,13 +61,13 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(48), used: 0 };
         __r.String::append(move "i128 negative literal coercion: ");
-        let mut __f: Formatter = __inline_Formatter__new_11: {
+        let mut __f: Formatter = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i128_Display__fmt_12: {
+        __inline_i128_Display__fmt_13: {
             let self: &i128 = &c;
-            __inline_Formatter__write_str_13: {
+            __inline_Formatter__write_str_14: {
                 let s: String = move self.i128::to_string();
                 __f.buf.String::append(s);
             };
@@ -69,13 +78,13 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
         __r.String::append(move "u128 cast: ");
-        let mut __f: Formatter = __inline_Formatter__new_16: {
+        let mut __f: Formatter = __inline_Formatter__new_17: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_u128_Display__fmt_17: {
+        __inline_u128_Display__fmt_18: {
             let self: &u128 = &d;
-            __inline_Formatter__write_str_18: {
+            __inline_Formatter__write_str_19: {
                 let s: String = move self.u128::to_string();
                 __f.buf.String::append(s);
             };
@@ -86,13 +95,13 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
         __r.String::append(move "i128 cast: ");
-        let mut __f: Formatter = __inline_Formatter__new_20: {
+        let mut __f: Formatter = __inline_Formatter__new_21: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i128_Display__fmt_21: {
+        __inline_i128_Display__fmt_22: {
             let self: &i128 = &e;
-            __inline_Formatter__write_str_22: {
+            __inline_Formatter__write_str_23: {
                 let s: String = move self.i128::to_string();
                 __f.buf.String::append(s);
             };
@@ -103,13 +112,13 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(40), used: 0 };
         __r.String::append(move "u128 from i64 variable: ");
-        let mut __f: Formatter = __inline_Formatter__new_25: {
+        let mut __f: Formatter = __inline_Formatter__new_26: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_26: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_u128_Display__fmt_26: {
+        __inline_u128_Display__fmt_27: {
             let self: &u128 = &g;
-            __inline_Formatter__write_str_27: {
+            __inline_Formatter__write_str_28: {
                 let s: String = move self.u128::to_string();
                 __f.buf.String::append(s);
             };
@@ -120,13 +129,13 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(40), used: 0 };
         __r.String::append(move "i128 from i64 variable: ");
-        let mut __f: Formatter = __inline_Formatter__new_29: {
+        let mut __f: Formatter = __inline_Formatter__new_30: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_29: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_30: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i128_Display__fmt_30: {
+        __inline_i128_Display__fmt_31: {
             let self: &i128 = &h;
-            __inline_Formatter__write_str_31: {
+            __inline_Formatter__write_str_32: {
                 let s: String = move self.i128::to_string();
                 __f.buf.String::append(s);
             };
@@ -138,13 +147,13 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
         __r.String::append(move "u128 arithmetic: ");
-        let mut __f: Formatter = __inline_Formatter__new_35: {
+        let mut __f: Formatter = __inline_Formatter__new_36: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_35: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_36: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_u128_Display__fmt_36: {
+        __inline_u128_Display__fmt_37: {
             let self: &u128 = &sum2;
-            __inline_Formatter__write_str_37: {
+            __inline_Formatter__write_str_38: {
                 let s: String = move self.u128::to_string();
                 __f.buf.String::append(s);
             };

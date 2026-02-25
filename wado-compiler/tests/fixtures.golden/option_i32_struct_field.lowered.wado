@@ -13,22 +13,31 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct Config {
     width: Option<i32>,
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let __sroa_c_width: Option<i32> = Option::Some(42);
     if __variant_test(__sroa_c_width, case=0, name=Some) {
         let w: i32 = __variant_payload(__sroa_c_width, case=0);
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
             __r.String::append(move "width: ");
-            let mut __f: Formatter = __inline_Formatter__new_1: {
+            let mut __f: Formatter = __inline_Formatter__new_2: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            __inline_i32_Display__fmt_2: {
+            __inline_i32_Display__fmt_3: {
                 let self: Box<i32> = move Box<i32> { value: w };
                 let f: &mut Formatter = &mut __f;
                 "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

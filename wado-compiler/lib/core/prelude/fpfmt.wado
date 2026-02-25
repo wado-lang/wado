@@ -5,6 +5,7 @@
 // Use of this source code is governed by a BSD-style license.
 // See https://github.com/rsc/fpfmt/blob/main/LICENSE
 
+#![no_prelude]
 
 // Powers of 10 from 10^0 to 10^19
 global POW10: Array<u64> = [
@@ -49,6 +50,35 @@ pub fn unpack64(f: f64) -> UnpackResult {
 
     let raw_mantissa = bits & mantissa_mask;
     let raw_exp = ((bits >> 52) & exp_mask) as i32;
+
+    if raw_exp == 0 {
+        if raw_mantissa == 0 {
+            return UnpackResult { mantissa: 0, exponent: 0 };
+        }
+        let m = raw_mantissa << shift_u64;
+        let e = min_exp;
+        let s = (64 - u64_bit_len(m)) as u64;
+        return UnpackResult { mantissa: m << s, exponent: e - s as i32 };
+    }
+
+    let m = (0x8000000000000000 as u64) | (raw_mantissa << shift_u64);
+    let e = (raw_exp - 1) + min_exp;
+    return UnpackResult { mantissa: m, exponent: e };
+}
+
+// unpack32 returns (mantissa, exponent) such that f = mantissa * 2^exponent
+// The mantissa is left-aligned in 64 bits (top 24 bits significant).
+pub fn unpack32(f: f32) -> UnpackResult {
+    let bits = builtin::i32_reinterpret_f32(f) as u32;
+
+    let mantissa_mask = 0x007FFFFF as u32;
+    let exp_mask = 0xFF as u32;
+    let shift = 64 - 24;
+    let shift_u64 = shift as u64;
+    let min_exp = -(149 + shift);
+
+    let raw_mantissa = (bits & mantissa_mask) as u64;
+    let raw_exp = ((bits >> 23) & exp_mask) as i32;
 
     if raw_exp == 0 {
         if raw_mantissa == 0 {
@@ -329,6 +359,56 @@ pub fn short(f: f64) -> FormatResult {
     return FormatResult { digits: d, exponent: -p };
 }
 
+// short32 computes the shortest formatting of f32 that round-trips through f32.
+// Uses f32's 24-bit mantissa (z=40) instead of f64's 53-bit mantissa (z=11).
+pub fn short32(f: f32) -> FormatResult {
+    let min_exp = -189;
+
+    let unpack = unpack32(f);
+    let m = unpack.mantissa;
+    let e = unpack.exponent;
+
+    let mut min_m: u64 = 0;
+    let mut z = 40;
+    let mut p: i32 = 0;
+
+    let m_is_power_of_2 = m == (0x8000000000000000 as u64);
+    if m_is_power_of_2 && e > min_exp {
+        p = -skewed(e + z);
+        min_m = m - (1 as u64 << (z - 2) as u64);
+    } else {
+        if e < min_exp {
+            z = 40 + (min_exp - e);
+        }
+        p = -log10_pow2(e + z);
+        min_m = m - (1 as u64 << (z - 1) as u64);
+    }
+
+    let max_m = m + (1 as u64 << (z - 1) as u64);
+    let odd = ((m >> z as u64) & 1) as i32;
+
+    let lp = log2_pow10(p);
+    let pm = get_pow10(p);
+    let s = -(e + lp + 3);
+
+    let dmin = unrounded_ceil(unrounded_nudge(uscale(min_m, pm.hi, pm.lo, s), odd));
+    let dmax = unrounded_floor(unrounded_nudge(uscale(max_m, pm.hi, pm.lo, s), -odd));
+
+    let d_div_10 = dmax / 10;
+    let can_trim = d_div_10 * 10 >= dmin;
+
+    if can_trim {
+        let [digits, exponent] = trim_zeros(d_div_10, -(p - 1));
+        return FormatResult { digits, exponent };
+    }
+
+    let mut d = dmin;
+    if dmin < dmax {
+        d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
+    }
+    return FormatResult { digits: d, exponent: -p };
+}
+
 pub fn skewed(e: i32) -> i32 {
     return (e * 631305 - 261663) >> 21;
 }
@@ -489,17 +569,14 @@ pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
         write_digits_at(&mut buf, 0, d, 1);
     }
 
-    // Exponent
+    // Exponent (no '+' sign, no leading zero for single-digit)
     buf.append_char(if upper { 'E' } else { 'e' });
     if exp < 0 {
         buf.append_char('-');
-    } else {
-        buf.append_char('+');
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
-        buf.append_char('0');
         buf.append_char(char::from_u32_unchecked(('0' as u32) + abs_exp as u32));
     } else if abs_exp < 100 {
         buf.append_char(i2a_first(abs_exp));
@@ -511,107 +588,6 @@ pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
     }
 
     return buf;
-}
-
-
-/// Alignment mode for formatted output
-pub enum Align {
-    Left,    // '<' - left-aligned
-    Center,  // '^' - center-aligned
-    Right,   // '>' - right-aligned (default for numbers)
-}
-
-/// Sign display mode
-pub enum Sign {
-    Minus,   // (default) only show minus sign for negative
-    Plus,    // '+' always show sign
-    Space,   // ' ' space for positive, minus for negative
-}
-
-/// Format type for floating-point numbers
-pub enum FormatType {
-    Default,   // default decimal notation
-    LowerExp,  // 'e' - lowercase exponential (1.23e+04)
-    UpperExp,  // 'E' - uppercase exponential (1.23E+04)
-}
-
-/// Format specification for floating-point formatting
-/// Matches Rust's format syntax: [[fill]align][sign][#][0][width][.precision]type
-pub struct FormatSpec {
-    fill: char,          // fill character (default ' ')
-    align: Align,        // alignment mode
-    sign: Sign,          // sign display mode
-    zero_pad: bool,      // '0' flag - zero padding
-    width: i32,          // minimum width (-1 for none)
-    precision: i32,      // precision (-1 for default/shortest)
-    format_type: FormatType, // format type
-}
-
-impl FormatSpec {
-    /// Create default format spec (no special formatting)
-    pub fn default() -> FormatSpec {
-        return FormatSpec {
-            fill: ' ',
-            align: Align::Right,
-            sign: Sign::Minus,
-            zero_pad: false,
-            width: -1,
-            precision: -1,
-            format_type: FormatType::Default,
-        };
-    }
-
-    /// Create format spec for exponential notation
-    pub fn exp(upper: bool) -> FormatSpec {
-        return FormatSpec {
-            fill: ' ',
-            align: Align::Right,
-            sign: Sign::Minus,
-            zero_pad: false,
-            width: -1,
-            precision: -1,
-            format_type: if upper { FormatType::UpperExp } else { FormatType::LowerExp },
-        };
-    }
-
-    /// Create format spec with precision
-    pub fn with_precision(prec: i32) -> FormatSpec {
-        return FormatSpec {
-            fill: ' ',
-            align: Align::Right,
-            sign: Sign::Minus,
-            zero_pad: false,
-            width: -1,
-            precision: prec,
-            format_type: FormatType::Default,
-        };
-    }
-
-    /// Create format spec with width
-    pub fn with_width(w: i32) -> FormatSpec {
-        return FormatSpec {
-            fill: ' ',
-            align: Align::Right,
-            sign: Sign::Minus,
-            zero_pad: false,
-            width: w,
-            precision: -1,
-            format_type: FormatType::Default,
-        };
-    }
-
-    /// Create format spec with width and precision
-    pub fn with_width_precision(w: i32, prec: i32) -> FormatSpec {
-        return FormatSpec {
-            fill: ' ',
-            align: Align::Right,
-            sign: Sign::Minus,
-            zero_pad: false,
-            width: w,
-            precision: prec,
-            format_type: FormatType::Default,
-        };
-    }
 }
 
 
@@ -765,18 +741,15 @@ pub fn format_exp_prec(d: i64, p: i32, nd: i32, precision: i32, upper: bool) -> 
         }
     }
 
-    // Exponent
+    // Exponent (no '+' sign, no leading zero for single-digit)
     let exp = p + nd - 1;
     buf.append_char(if upper { 'E' } else { 'e' });
     if exp < 0 {
         buf.append_char('-');
-    } else {
-        buf.append_char('+');
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
     if abs_exp < 10 {
-        buf.append_char('0');
         buf.append_char(char::from_u32_unchecked(('0' as u32) + abs_exp as u32));
     } else if abs_exp < 100 {
         buf.append_char(i2a_first(abs_exp));
@@ -789,305 +762,6 @@ pub fn format_exp_prec(d: i64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 
     return buf;
 }
-
-
-/// Apply padding and alignment to a string
-pub fn apply_padding(s: String, spec: FormatSpec, is_neg: bool) -> String {
-    let width = spec.width;
-    if width <= 0 || s.len() >= width {
-        return s;
-    }
-
-    let fill = spec.fill;
-    let pad_len = width - s.len();
-
-    // Handle sign prefix for zero-padding
-    if spec.zero_pad {
-        // Zero-padding: sign goes before zeros
-        let mut result = String::with_capacity(width);
-
-        // Add sign prefix if present in original string
-        let mut start_idx = 0;
-        if s.len() > 0 && (s.get_byte(0) == '-' as u8 || s.get_byte(0) == '+' as u8) {
-            result.append_char(char::from_u32_unchecked(s.get_byte(0) as u32));
-            start_idx = 1;
-        }
-
-        // Add zeros
-        for let mut i = 0; i < pad_len; i += 1 {
-            result.append_char('0');
-        }
-
-        // Add rest of string
-        for let mut i = start_idx; i < s.len(); i += 1 {
-            result.append_char(char::from_u32_unchecked(s.get_byte(i) as u32));
-        }
-
-        return result;
-    }
-
-    // Normal padding based on alignment
-    let mut result = String::with_capacity(width);
-
-    return match spec.align {
-        Left => {
-            // String first, then padding
-            result.append(s);
-            for let mut i = 0; i < pad_len; i += 1 {
-                result.append_char(fill);
-            }
-            result
-        },
-        Center => {
-            // Padding split around string
-            let left_pad = pad_len / 2;
-            let right_pad = pad_len - left_pad;
-            for let mut i = 0; i < left_pad; i += 1 {
-                result.append_char(fill);
-            }
-            result.append(s);
-            for let mut i = 0; i < right_pad; i += 1 {
-                result.append_char(fill);
-            }
-            result
-        },
-        Right => {
-            // Padding first, then string
-            for let mut i = 0; i < pad_len; i += 1 {
-                result.append_char(fill);
-            }
-            result.append(s);
-            result
-        },
-    };
-}
-
-/// Add sign prefix to a string
-pub fn add_sign_prefix(s: String, is_neg: bool, sign: Sign) -> String {
-    if is_neg {
-        return String::concat("-", s);
-    }
-
-    return match sign {
-        Minus => s,
-        Plus => String::concat("+", s),
-        Space => String::concat(" ", s),
-    };
-}
-
-
-/// Format f64 with full format specification
-pub fn format_f64(f: f64, spec: FormatSpec) -> String {
-    let [is_special, is_neg, kind] = check_special(f);
-    if is_special {
-        // Special value (zero, inf, NaN)
-        let base_str = if kind matches { Zero } && is_neg {
-            // Negative zero
-            let is_exp = match spec.format_type {
-                LowerExp => true,
-                UpperExp => true,
-                Default => false,
-            };
-            if is_exp {
-                let upper = match spec.format_type {
-                    UpperExp => true,
-                    _ => false,
-                };
-                if spec.precision > 0 {
-                    // Build -0.00...e+00 with correct precision
-                    let mut result = String::with_capacity(10 + spec.precision);
-                    result.append("-0.");
-                    for let mut i = 0; i < spec.precision; i += 1 {
-                        result.append_char('0');
-                    }
-                    if upper { result.append("E+00"); } else { result.append("e+00"); }
-                    result
-                } else {
-                    if upper { "-0E+00" } else { "-0e+00" }
-                }
-            } else {
-                // Decimal format for negative zero
-                if spec.precision > 0 {
-                    let mut result = String::with_capacity(4 + spec.precision);
-                    result.append("-0.");
-                    for let mut i = 0; i < spec.precision; i += 1 {
-                        result.append_char('0');
-                    }
-                    result
-                } else {
-                    "-0"
-                }
-            }
-        } else if kind matches { Zero } {
-            // Positive zero
-            let is_exp = match spec.format_type {
-                LowerExp => true,
-                UpperExp => true,
-                Default => false,
-            };
-            if is_exp {
-                let upper = match spec.format_type {
-                    UpperExp => true,
-                    _ => false,
-                };
-                if spec.precision > 0 {
-                    // Build 0.00...e+00 with correct precision
-                    let mut result = String::with_capacity(8 + spec.precision);
-                    result.append("0.");
-                    for let mut i = 0; i < spec.precision; i += 1 {
-                        result.append_char('0');
-                    }
-                    if upper { result.append("E+00"); } else { result.append("e+00"); }
-                    result
-                } else {
-                    if upper { "0E+00" } else { "0e+00" }
-                }
-            } else {
-                // Decimal format for positive zero
-                if spec.precision > 0 {
-                    let mut result = String::with_capacity(3 + spec.precision);
-                    result.append("0.");
-                    for let mut i = 0; i < spec.precision; i += 1 {
-                        result.append_char('0');
-                    }
-                    result
-                } else {
-                    "0"
-                }
-            }
-        } else {
-            // Inf or NaN — convert to string
-            if kind matches { Inf } && is_neg {
-                "-Inf"
-            } else {
-                special_kind_to_string(kind)
-            }
-        };
-        return apply_padding(base_str, spec, is_neg);
-    }
-    let abs_f = if is_neg { -f } else { f };
-
-    // Get the raw digits and exponent
-    let result = if spec.precision >= 0 {
-        // Fixed precision - first get shortest to know exponent, then compute needed digits
-        let short_result = short(abs_f);
-        let short_nd = digits(short_result.digits);
-        let decimal_pos = short_nd + short_result.exponent;
-
-        // For decimal format, we need integer_part_digits + precision
-        // For exponential format, we need 1 (integer) + precision
-        let is_exp = match spec.format_type {
-            LowerExp => true,
-            UpperExp => true,
-            Default => false,
-        };
-
-        let total_digits = if is_exp {
-            // Exponential: 1 digit before decimal + precision after
-            spec.precision + 1
-        } else {
-            // Decimal: all integer digits + precision decimal digits
-            let int_digits = if decimal_pos > 0 { decimal_pos } else { 1 };
-            int_digits + spec.precision
-        };
-
-        let clamped = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
-        fixed_width(abs_f, clamped)
-    } else {
-        // Shortest representation
-        short(abs_f)
-    };
-
-    let d = result.digits;
-    let p = result.exponent;
-    let nd = digits(d);
-
-    // Format based on type
-    let formatted = match spec.format_type {
-        Default => format_decimal_prec(d, p, nd, spec.precision),
-        LowerExp => format_exp_prec(d, p, nd, spec.precision, false),
-        UpperExp => format_exp_prec(d, p, nd, spec.precision, true),
-    };
-
-    // Add sign
-    let with_sign = add_sign_prefix(formatted, is_neg, spec.sign);
-
-    // Apply padding
-    return apply_padding(with_sign, spec, is_neg);
-}
-
-
-/// Format f64 with precision only
-pub fn f64_to_string_prec(f: f64, precision: i32) -> String {
-    let mut spec = FormatSpec::default();
-    spec.precision = precision;
-    return format_f64(f, spec);
-}
-
-/// Format f64 exponential with precision
-pub fn f64_to_string_exp_prec(f: f64, precision: i32, upper: bool) -> String {
-    let mut spec = FormatSpec::exp(upper);
-    spec.precision = precision;
-    return format_f64(f, spec);
-}
-
-/// Format f64 with width and precision
-pub fn f64_to_string_width_prec(f: f64, width: i32, precision: i32) -> String {
-    let mut spec = FormatSpec::with_width_precision(width, precision);
-    return format_f64(f, spec);
-}
-
-/// Format f64 with sign always shown
-pub fn f64_to_string_signed(f: f64) -> String {
-    let mut spec = FormatSpec::default();
-    spec.sign = Sign::Plus;
-    return format_f64(f, spec);
-}
-
-/// Format f64 with sign and precision
-pub fn f64_to_string_signed_prec(f: f64, precision: i32) -> String {
-    let mut spec = FormatSpec::default();
-    spec.sign = Sign::Plus;
-    spec.precision = precision;
-    return format_f64(f, spec);
-}
-
-/// Format f64 with zero padding
-pub fn f64_to_string_zero_pad(f: f64, width: i32) -> String {
-    let mut spec = FormatSpec::with_width(width);
-    spec.zero_pad = true;
-    return format_f64(f, spec);
-}
-
-/// Format f64 with zero padding and precision
-pub fn f64_to_string_zero_pad_prec(f: f64, width: i32, precision: i32) -> String {
-    let mut spec = FormatSpec::with_width_precision(width, precision);
-    spec.zero_pad = true;
-    return format_f64(f, spec);
-}
-
-/// Format f64 left-aligned with width
-pub fn f64_to_string_left(f: f64, width: i32) -> String {
-    let mut spec = FormatSpec::with_width(width);
-    spec.align = Align::Left;
-    return format_f64(f, spec);
-}
-
-/// Format f64 center-aligned with width
-pub fn f64_to_string_center(f: f64, width: i32) -> String {
-    let mut spec = FormatSpec::with_width(width);
-    spec.align = Align::Center;
-    return format_f64(f, spec);
-}
-
-/// Format f64 with custom fill character
-pub fn f64_to_string_fill(f: f64, width: i32, fill: char, align: Align) -> String {
-    let mut spec = FormatSpec::with_width(width);
-    spec.fill = fill;
-    spec.align = align;
-    return format_f64(f, spec);
-}
-
 
 // Encodes the kind of special floating-point value detected by check_special.
 pub enum SpecialKind {
@@ -1133,128 +807,6 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 // For Inf: returns "Inf" (caller should prepend "-" if is_neg).
 // For NaN: returns "NaN".
 // For Zero: returns "0".
-fn special_kind_to_string(kind: SpecialKind) -> String {
-    match kind {
-        Zero => "0",
-        Inf => "Inf",
-        NaN => "NaN",
-        NotSpecial => panic("not a special value"),
-    }
-}
-
-// Convert f64 to decimal string (no exponent, e.g., "3.14", "0.001", "12345")
-pub fn f64_to_string(f: f64) -> String {
-    let [is_special, is_neg, kind] = check_special(f);
-    if is_special {
-        let special_str = special_kind_to_string(kind);
-        if is_neg {
-            return String::concat("-", special_str);
-        }
-        return special_str;
-    }
-    let abs_f = if is_neg { -f } else { f };
-
-    let result = short(abs_f);
-    let d = result.digits;
-    let p = result.exponent;
-    let nd = digits(d);
-
-    let formatted = format_decimal(d, p, nd);
-
-    if is_neg {
-        return String::concat("-", formatted);
-    }
-    return formatted;
-}
-
-// Convert f64 to exponential string (e.g., "3.14e+00" or "3.14E+00")
-// upper: true for 'E', false for 'e'
-pub fn f64_to_string_exp(f: f64, upper: bool) -> String {
-    let [is_special, is_neg, kind] = check_special(f);
-    if is_special {
-        // For exponential format, zero is "0e+00" or "0E+00"
-        if kind matches { Zero } {
-            if is_neg {
-                return if upper { "-0E+00" } else { "-0e+00" };
-            }
-            return if upper { "0E+00" } else { "0e+00" };
-        }
-        let special_str = special_kind_to_string(kind);
-        if is_neg {
-            return String::concat("-", special_str);
-        }
-        return special_str;
-    }
-    let abs_f = if is_neg { -f } else { f };
-
-    let result = short(abs_f);
-    let d = result.digits;
-    let p = result.exponent;
-    let nd = digits(d);
-
-    let formatted = format_exp(d, p, nd, upper);
-
-    if is_neg {
-        return String::concat("-", formatted);
-    }
-    return formatted;
-}
-
-// Convert f64 to string, choosing decimal or exponential based on magnitude
-// Similar to Rust's Debug: uses exponential if exponent < -4 or >= 16
-pub fn f64_to_string_auto(f: f64) -> String {
-    let [is_special, is_neg, kind] = check_special(f);
-    if is_special {
-        let special_str = special_kind_to_string(kind);
-        if is_neg {
-            return String::concat("-", special_str);
-        }
-        return special_str;
-    }
-    let abs_f = if is_neg { -f } else { f };
-
-    let result = short(abs_f);
-    let d = result.digits;
-    let p = result.exponent;
-    let nd = digits(d);
-
-    // Actual exponent in scientific notation: p + nd - 1
-    // e.g., digits=314, p=-2, nd=3 → exp = -2 + 3 - 1 = 0 (3.14e+00)
-    let exp = p + nd - 1;
-
-    // Use exponential format for cleaner representation in edge cases:
-    // - exp < -4: very small numbers with many leading zeros (e.g., 0.00001 -> 1e-05)
-    // - exp >= 16: very large numbers where decimal would be unwieldy
-    // This provides user-friendly output similar to Rust's Debug format
-    let formatted = if exp < -4 || exp >= 16 {
-        format_exp(d, p, nd, false)
-    } else {
-        format_decimal(d, p, nd)
-    };
-
-    if is_neg {
-        return String::concat("-", formatted);
-    }
-    return formatted;
-}
-
-
-// Convert f32 to decimal string
-pub fn f32_to_string(f: f32) -> String {
-    return f64_to_string(f as f64);
-}
-
-// Convert f32 to exponential string
-pub fn f32_to_string_exp(f: f32, upper: bool) -> String {
-    return f64_to_string_exp(f as f64, upper);
-}
-
-// Convert f32 to string with auto mode
-pub fn f32_to_string_auto(f: f32) -> String {
-    return f64_to_string_auto(f as f64);
-}
-
-
 // pack64 takes (m, e) and returns f = m * 2^e.
 // It assumes the caller has provided a 53-bit mantissa m
 // and an exponent that is in range for the mantissa.
@@ -1347,9 +899,4 @@ pub fn parse_text(s: String) -> Option<f64> {
         return null;
     }
     return Option::<f64>::Some(parse(d, p - frac));
-}
-
-export fn run() {
-    let f = 3.14;
-    f64_to_string(f);
 }

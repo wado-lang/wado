@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 pub struct "ArrayIter<bool>" {
     repr: builtin::array<bool>,
     used: i32,
@@ -20,6 +22,13 @@ pub struct "ArrayIter<bool>" {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut arr: Array<bool> = move [];
     arr."Array<bool>::append"(true);
     arr."Array<bool>::append"(false);
@@ -32,11 +41,11 @@ export fn run() with Stdout {
                 let x: bool = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_2: {
+                    let mut __f: Formatter = __inline_Formatter__new_3: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_bool_Display__fmt_3: {
+                    __inline_bool_Display__fmt_4: {
                         let self: Box<bool> = move Box<bool> { value: x };
                         let f: &mut Formatter = &mut __f;
                         f.Formatter::pad(if self.value {

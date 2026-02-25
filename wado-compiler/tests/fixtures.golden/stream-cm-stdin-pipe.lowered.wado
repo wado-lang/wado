@@ -10,7 +10,16 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout, Stdin {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let __pattern_temp_0: [Stream<u8>, Future<Result<(), ErrorCode>>] = move __cm_adapter__Stdin_read_via_stream();
     let stdin_stream: Stream<u8> = __pattern_temp_0.0;
     let _done: Future<Result<(), ErrorCode>> = __pattern_temp_0.1;

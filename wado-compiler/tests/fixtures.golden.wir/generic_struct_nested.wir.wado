@@ -6,7 +6,7 @@ struct Box<i32> {  // from core:internal  // Box<T> with T=i32
     mut value: i32,
 }
 
-struct Box<Box<i32>> {  // Box<T> with T=?100
+struct Box<Box<i32>> {  // Box<T> with T=?112
     mut value: ref "core:internal/Box<i32>",
 }
 
@@ -26,6 +26,13 @@ struct Formatter {
     mut width: i32,
     mut precision: i32,
     mut buf: ref String,
+}
+
+array array<u64> (mut u64);
+
+struct Array<u64> {  // Array<T> with T=u64
+    mut repr: ref array<u64>,
+    mut used: i32,
 }
 
 enum Alignment { Left = 0, Center = 1, Right = 2 };
@@ -60,6 +67,8 @@ type "functype/core:cli/println" = fn(ref null String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
+type "functype/__initialize_module" = fn();
+
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
@@ -90,6 +99,9 @@ import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 
+global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
+
 fn run() with Stdout {
     let __local_0: ref null "core:internal/Box<i32>";
     let __local_1: ref null Box<Box<i32>>;
@@ -101,12 +113,19 @@ fn run() with Stdout {
     let __local_7: ref null Formatter;
     let __local_8: ref null "core:internal/Box<i32>";
     let __local_9: i32;
+    __inline___initialize_modules_0: block {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        };
+        __initialize_module();
+        __modules_initialized = 1;
+    };
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_2 = String { repr: ref.as_non_null(builtin::array_new<u8>(30)), used: 0 };
         String::append(__local_2, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 14)), used: 14 });
-        __local_3 = value_copy Formatter(__inline_Formatter__new_1: block -> ref null Formatter {
+        __local_3 = value_copy Formatter(__inline_Formatter__new_2: block -> ref null Formatter {
             __local_5 = __local_2;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_5) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_5) };
         });
         block {
             __local_6 = "core:internal/Box<i32>" { value: 42 };
@@ -142,7 +161,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     __for_0: block {
         i = 0;
         block {
-            l2: loop {
+            l3: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
@@ -151,7 +170,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                     builtin::store_u8(ptr + i, byte);
                 };
                 i = i + 1;
-                continue l2;
+                continue l3;
             };
         };
     };
@@ -190,6 +209,10 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
     };
 }
 
+fn __initialize_module() {
+    POW10 = Array<u64> { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
+}
+
 fn count_digits_i64(val) {
     let __local_1: i64;
     let __local_2: i64;
@@ -202,7 +225,7 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l8: loop {
+            l9: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
@@ -210,7 +233,7 @@ fn count_digits_i64(val) {
                     n = n + 1;
                 };
                 t = t / 10_i64;
-                continue l8;
+                continue l9;
             };
         };
     };
@@ -229,7 +252,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l12: loop {
+                l13: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
@@ -238,7 +261,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                         builtin::array_set_u8(arr, pos, 48 + builtin::i32_wrap_i64(temp % 10_i64));
                     };
                     temp = temp / 10_i64;
-                    continue l12;
+                    continue l13;
                 };
             };
         };
@@ -294,7 +317,7 @@ fn String::grow(self, min_capacity) {
         _licm_used = self.used;
         _licm_repr = self.repr;
         block {
-            l17: loop {
+            l18: loop {
                 if (i < _licm_used) == 0 {
                     break __for_0;
                 };
@@ -303,7 +326,7 @@ fn String::grow(self, min_capacity) {
                     builtin::array_set_u8(new_repr, i, byte);
                 };
                 i = i + 1;
-                continue l17;
+                continue l18;
             };
         };
     };
@@ -346,7 +369,7 @@ fn String::append(self, other) {
         _licm_repr = self.repr;
         _licm_used = self.used;
         block {
-            l23: loop {
+            l24: loop {
                 if (i < other_len) == 0 {
                     break __for_2;
                 };
@@ -355,7 +378,7 @@ fn String::append(self, other) {
                     builtin::array_set_u8(_licm_repr, _licm_used + i, byte);
                 };
                 i = i + 1;
-                continue l23;
+                continue l24;
             };
         };
     };
@@ -396,7 +419,7 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf = self.buf;
         block {
-            l30: loop {
+            l31: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
@@ -404,7 +427,7 @@ fn Formatter::write_char_n(self, c, n) {
                     String::append_char(_licm_buf, c);
                 };
                 i = i + 1;
-                continue l30;
+                continue l31;
             };
         };
     };

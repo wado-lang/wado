@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct __Closure_0 {
 }
 
@@ -33,21 +35,28 @@ struct __Closure_5 {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let add_one: fn(i32) -> i32 = &__Closure_0 {  };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_1: {
+        let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_2: {
+            __inline_Formatter__write_str_3: {
                 let s: String = move "|x: i32| x + 1";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_i32_____i32_3: {
-                __inline_Formatter__write_str_4: {
+            __inline___inspect_fn_i32_____i32_4: {
+                __inline_Formatter__write_str_5: {
                     let s: String = move "|i32| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -58,18 +67,18 @@ export fn run() with Stdout {
     let add: fn(i32, i32) -> i32 = &__Closure_1 {  };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_6: {
+        let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_7: {
+            __inline_Formatter__write_str_8: {
                 let s: String = move "|a: i32, b: i32| a + b";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_i32__i32_____i32_8: {
-                __inline_Formatter__write_str_9: {
+            __inline___inspect_fn_i32__i32_____i32_9: {
+                __inline_Formatter__write_str_10: {
                     let s: String = move "|i32, i32| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -80,18 +89,18 @@ export fn run() with Stdout {
     let compute: fn(i32) -> i32 = &__Closure_2 {  };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_11: {
+        let mut __f: Formatter = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_12: {
+            __inline_Formatter__write_str_13: {
                 let s: String = move "|x: i32| { let doubled = x * 2; return doubled; }";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_i32_____i32_13: {
-                __inline_Formatter__write_str_14: {
+            __inline___inspect_fn_i32_____i32_14: {
+                __inline_Formatter__write_str_15: {
                     let s: String = move "|i32| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -102,18 +111,18 @@ export fn run() with Stdout {
     let greet: fn(String) -> String = &__Closure_3 {  };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_16: {
+        let mut __f: Formatter = __inline_Formatter__new_17: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_17: {
+            __inline_Formatter__write_str_18: {
                 let s: String = move "|name: String| `Hello, {name}!`";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_String_____String_18: {
-                __inline_Formatter__write_str_19: {
+            __inline___inspect_fn_String_____String_19: {
+                __inline_Formatter__write_str_20: {
                     let s: String = move "|String| -> String";
                     __f.buf.String::append(s);
                 };
@@ -124,18 +133,18 @@ export fn run() with Stdout {
     let always42: fn() -> i32 = &__Closure_4 {  };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_21: {
+        let mut __f: Formatter = __inline_Formatter__new_22: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_22: {
+            __inline_Formatter__write_str_23: {
                 let s: String = move "|| 42";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn______i32_23: {
-                __inline_Formatter__write_str_24: {
+            __inline___inspect_fn______i32_24: {
+                __inline_Formatter__write_str_25: {
                     let s: String = move "|| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -147,13 +156,13 @@ export fn run() with Stdout {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = move Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: true, zero_pad: false, width: -1, precision: -1, buf: &mut __r };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_26: {
+            __inline_Formatter__write_str_27: {
                 let s: String = move "|x: i32| x + 1";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_i32_____i32_27: {
-                __inline_Formatter__write_str_28: {
+            __inline___inspect_fn_i32_____i32_28: {
+                __inline_Formatter__write_str_29: {
                     let s: String = move "|i32| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -165,13 +174,13 @@ export fn run() with Stdout {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = move Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: true, zero_pad: false, width: -1, precision: -1, buf: &mut __r };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_30: {
+            __inline_Formatter__write_str_31: {
                 let s: String = move "|a: i32, b: i32| a + b";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_i32__i32_____i32_31: {
-                __inline_Formatter__write_str_32: {
+            __inline___inspect_fn_i32__i32_____i32_32: {
+                __inline_Formatter__write_str_33: {
                     let s: String = move "|i32, i32| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -183,13 +192,13 @@ export fn run() with Stdout {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = move Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: true, zero_pad: false, width: -1, precision: -1, buf: &mut __r };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_34: {
+            __inline_Formatter__write_str_35: {
                 let s: String = move "|x: i32| { let doubled = x * 2; return doubled; }";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_i32_____i32_35: {
-                __inline_Formatter__write_str_36: {
+            __inline___inspect_fn_i32_____i32_36: {
+                __inline_Formatter__write_str_37: {
                     let s: String = move "|i32| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -201,13 +210,13 @@ export fn run() with Stdout {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = move Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: true, zero_pad: false, width: -1, precision: -1, buf: &mut __r };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_38: {
+            __inline_Formatter__write_str_39: {
                 let s: String = move "|name: String| `Hello, {name}!`";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_String_____String_39: {
-                __inline_Formatter__write_str_40: {
+            __inline___inspect_fn_String_____String_40: {
+                __inline_Formatter__write_str_41: {
                     let s: String = move "|String| -> String";
                     __f.buf.String::append(s);
                 };
@@ -219,13 +228,13 @@ export fn run() with Stdout {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = move Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: true, zero_pad: false, width: -1, precision: -1, buf: &mut __r };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_42: {
+            __inline_Formatter__write_str_43: {
                 let s: String = move "|| 42";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn______i32_43: {
-                __inline_Formatter__write_str_44: {
+            __inline___inspect_fn______i32_44: {
+                __inline_Formatter__write_str_45: {
                     let s: String = move "|| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -237,18 +246,18 @@ export fn run() with Stdout {
     let inc: fn() -> () = &__Closure_5 { __capture_0: count };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_46: {
+        let mut __f: Formatter = __inline_Formatter__new_47: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_46: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_47: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_47: {
+            __inline_Formatter__write_str_48: {
                 let s: String = move "|| { count += 1; }";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_________48: {
-                __inline_Formatter__write_str_49: {
+            __inline___inspect_fn_________49: {
+                __inline_Formatter__write_str_50: {
                     let s: String = move "||";
                     __f.buf.String::append(s);
                 };
@@ -260,13 +269,13 @@ export fn run() with Stdout {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = move Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: true, zero_pad: false, width: -1, precision: -1, buf: &mut __r };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_51: {
+            __inline_Formatter__write_str_52: {
                 let s: String = move "|| { count += 1; }";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_________52: {
-                __inline_Formatter__write_str_53: {
+            __inline___inspect_fn_________53: {
+                __inline_Formatter__write_str_54: {
                     let s: String = move "||";
                     __f.buf.String::append(s);
                 };

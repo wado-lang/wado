@@ -44,7 +44,7 @@ test:
 
 .PHONY: test-wado
 test-wado:
-	cargo run -p wado-cli --quiet -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado rsc-fpfmt
+	cargo run -p wado-cli --quiet -- test example/*.wado wado-compiler/lib/core benchmark/*/*.wado wasm-size/*/*.wado
 
 .PHONY: test-cov
 test-cov:

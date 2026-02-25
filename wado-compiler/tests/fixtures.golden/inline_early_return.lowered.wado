@@ -13,26 +13,35 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
-    core::cli::println(__inline_classify_0: {
-        break __inline_classify_0: "negative";
-        break __inline_classify_0: "positive";
-    });
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     core::cli::println(__inline_classify_1: {
-        break __inline_classify_1: "zero";
+        break __inline_classify_1: "negative";
         break __inline_classify_1: "positive";
+    });
+    core::cli::println(__inline_classify_2: {
+        break __inline_classify_2: "zero";
+        break __inline_classify_2: "positive";
     });
     core::cli::println(move "positive");
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_4: {
+        let mut __f: Formatter = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_5: {
-            let self: Box<i32> = move Box<i32> { value: __inline_abs_6: {
-                break __inline_abs_6: 3;
-                break __inline_abs_6: -3;
+        __inline_i32_Display__fmt_6: {
+            let self: Box<i32> = move Box<i32> { value: __inline_abs_7: {
+                break __inline_abs_7: 3;
+                break __inline_abs_7: -3;
             } };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -41,11 +50,11 @@ export fn run() with Stdout {
     });
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_8: {
+        let mut __f: Formatter = __inline_Formatter__new_9: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_9: {
+        __inline_i32_Display__fmt_10: {
             let self: Box<i32> = move Box<i32> { value: 4 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

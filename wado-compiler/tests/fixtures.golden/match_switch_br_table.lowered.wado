@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 fn describe(n: i32) -> String {
     return switch n (base=0) {
         0 => {
@@ -52,6 +54,13 @@ fn describe(n: i32) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     __for_0: {
         let mut i: i32 = 0;
         loop {

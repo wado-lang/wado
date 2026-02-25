@@ -13,11 +13,20 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let x_u128: u128 = move u128 { low: 1000, high: 0 };
     let x_i128: i128 = move i128 { low: 18446744073709551116, high: -1 };
     let a1: u128 = move x_u128."u128^Add::add"(&u128 { low: 42, high: 0 });
-    __inline_check_3: {
+    __inline_check_4: {
         let cond: bool = a1."u128^Eq::eq"(&u128 { low: 1042, high: 0 });
         let label: String = move "+ u128 rhs";
         if !cond {
@@ -25,7 +34,7 @@ export fn run() with Stdout {
         }
     };
     let a2: u128 = move u128 { low: 42, high: 0 }."u128^Add::add"(&x_u128);
-    __inline_check_6: {
+    __inline_check_7: {
         let cond: bool = a2."u128^Eq::eq"(&u128 { low: 1042, high: 0 });
         let label: String = move "+ lhs u128";
         if !cond {
@@ -33,7 +42,7 @@ export fn run() with Stdout {
         }
     };
     let a3: i128 = move x_i128."i128^Add::add"(&i128::from_i64(100));
-    __inline_check_8: {
+    __inline_check_9: {
         let cond: bool = a3."i128^Eq::eq"(&i128::from_i64(400)."i128^Neg::neg"());
         let label: String = move "+ i128 rhs";
         if !cond {
@@ -41,7 +50,7 @@ export fn run() with Stdout {
         }
     };
     let a4: i128 = move i128::from_i64(100)."i128^Add::add"(&x_i128);
-    __inline_check_9: {
+    __inline_check_10: {
         let cond: bool = a4."i128^Eq::eq"(&i128::from_i64(400)."i128^Neg::neg"());
         let label: String = move "+ lhs i128";
         if !cond {
@@ -49,7 +58,7 @@ export fn run() with Stdout {
         }
     };
     let b1: u128 = move x_u128."u128^Sub::sub"(&u128 { low: 100, high: 0 });
-    __inline_check_11: {
+    __inline_check_12: {
         let cond: bool = b1."u128^Eq::eq"(&u128 { low: 900, high: 0 });
         let label: String = move "- u128 rhs";
         if !cond {
@@ -57,7 +66,7 @@ export fn run() with Stdout {
         }
     };
     let b2: u128 = move u128 { low: 2000, high: 0 }."u128^Sub::sub"(&x_u128);
-    __inline_check_14: {
+    __inline_check_15: {
         let cond: bool = b2."u128^Eq::eq"(&u128 { low: 1000, high: 0 });
         let label: String = move "- lhs u128";
         if !cond {
@@ -65,7 +74,7 @@ export fn run() with Stdout {
         }
     };
     let b3: i128 = move x_i128."i128^Sub::sub"(&i128::from_i64(100));
-    __inline_check_16: {
+    __inline_check_17: {
         let cond: bool = b3."i128^Eq::eq"(&i128::from_i64(600)."i128^Neg::neg"());
         let label: String = move "- i128 rhs";
         if !cond {
@@ -73,7 +82,7 @@ export fn run() with Stdout {
         }
     };
     let b4: i128 = move i128::from_i64(100)."i128^Sub::sub"(&x_i128);
-    __inline_check_17: {
+    __inline_check_18: {
         let cond: bool = b4."i128^Eq::eq"(&i128::from_i64(600));
         let label: String = move "- lhs i128";
         if !cond {
@@ -81,7 +90,7 @@ export fn run() with Stdout {
         }
     };
     let c1: u128 = move x_u128."u128^Mul::mul"(&u128 { low: 3, high: 0 });
-    __inline_check_19: {
+    __inline_check_20: {
         let cond: bool = c1."u128^Eq::eq"(&u128 { low: 3000, high: 0 });
         let label: String = move "* u128 rhs";
         if !cond {
@@ -89,7 +98,7 @@ export fn run() with Stdout {
         }
     };
     let c2: u128 = move u128 { low: 3, high: 0 }."u128^Mul::mul"(&x_u128);
-    __inline_check_22: {
+    __inline_check_23: {
         let cond: bool = c2."u128^Eq::eq"(&u128 { low: 3000, high: 0 });
         let label: String = move "* lhs u128";
         if !cond {
@@ -97,7 +106,7 @@ export fn run() with Stdout {
         }
     };
     let c3: i128 = move x_i128."i128^Mul::mul"(&i128::from_i64(2));
-    __inline_check_24: {
+    __inline_check_25: {
         let cond: bool = c3."i128^Eq::eq"(&i128::from_i64(1000)."i128^Neg::neg"());
         let label: String = move "* i128 rhs";
         if !cond {
@@ -105,7 +114,7 @@ export fn run() with Stdout {
         }
     };
     let c4: i128 = move i128::from_i64(2)."i128^Mul::mul"(&x_i128);
-    __inline_check_25: {
+    __inline_check_26: {
         let cond: bool = c4."i128^Eq::eq"(&i128::from_i64(1000)."i128^Neg::neg"());
         let label: String = move "* lhs i128";
         if !cond {

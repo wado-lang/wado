@@ -218,11 +218,11 @@ fn get_section_range(payload: &Payload) -> Option<std::ops::Range<usize>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bundled::wado_bundled_fts_wasm;
+    use crate::bundled::wado_bundled_libm_wasm;
 
     #[test]
     fn test_convert_memory_to_import() {
-        let result = convert_memory_to_import(wado_bundled_fts_wasm(), "env", "memory");
+        let result = convert_memory_to_import(wado_bundled_libm_wasm(), "env", "memory");
         assert!(result.is_ok(), "Failed to convert: {:?}", result);
 
         let converted = result.unwrap();

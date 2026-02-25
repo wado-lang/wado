@@ -13,7 +13,16 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let opts: Opts = move Opts { align: Align::Right, width: 0 };
     let s: String = move "./variant_struct_concat_module.wado::format_str"(move "hi", opts);
     core::cli::println(__tmpl: {

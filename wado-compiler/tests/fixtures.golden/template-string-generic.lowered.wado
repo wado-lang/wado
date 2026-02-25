@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct "Box<bool>" {
     value: bool,
 }
@@ -26,6 +28,13 @@ struct "Box<i32>" {
 }
 
 fn __test_0_display_integer() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let b: Box<i32> = move Box<i32> { value: 42 };
     __assert_0: {
         let __v0: String = move b."Box<i32>::display_value"();
@@ -38,11 +47,11 @@ fn __test_0_display_integer() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 29 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -58,6 +67,13 @@ fn __test_0_display_integer() {
 }
 
 fn __test_1_inspect_integer() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let b: Box<i32> = move Box<i32> { value: 42 };
     __assert_1: {
         let __v0: String = move b."Box<i32>::inspect_value"();
@@ -70,11 +86,11 @@ fn __test_1_inspect_integer() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 34 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -90,6 +106,13 @@ fn __test_1_inspect_integer() {
 }
 
 fn __test_2_display_string() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let b: Box<String> = move Box<String> { value: "hello" };
     __assert_2: {
         let __v0: String = move b."Box<String>::display_value"();
@@ -102,11 +125,11 @@ fn __test_2_display_string() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 40 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -122,6 +145,13 @@ fn __test_2_display_string() {
 }
 
 fn __test_3_inspect_string() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let b: Box<String> = move Box<String> { value: "hello" };
     __assert_3: {
         let __v0: String = move b."Box<String>::inspect_value"();
@@ -134,11 +164,11 @@ fn __test_3_inspect_string() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 45 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -154,6 +184,13 @@ fn __test_3_inspect_string() {
 }
 
 fn __test_4_both_display_and_inspect_for_integer() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let b: Box<i32> = move Box<i32> { value: 99 };
     __assert_4: {
         let __v0: String = move b."Box<i32>::both"();
@@ -166,11 +203,11 @@ fn __test_4_both_display_and_inspect_for_integer() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 51 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -186,6 +223,13 @@ fn __test_4_both_display_and_inspect_for_integer() {
 }
 
 fn __test_5_both_display_and_inspect_for_string() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let b: Box<String> = move Box<String> { value: "world" };
     __assert_5: {
         let __v0: String = move b."Box<String>::both"();
@@ -198,11 +242,11 @@ fn __test_5_both_display_and_inspect_for_string() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 56 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -218,6 +262,13 @@ fn __test_5_both_display_and_inspect_for_string() {
 }
 
 fn __test_6_display_bool() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let b: Box<bool> = move Box<bool> { value: true };
     __assert_6: {
         let __v0: String = move b."Box<bool>::display_value"();
@@ -230,11 +281,11 @@ fn __test_6_display_bool() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 62 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -250,6 +301,13 @@ fn __test_6_display_bool() {
 }
 
 fn __test_7_inspect_bool() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let b: Box<bool> = move Box<bool> { value: true };
     __assert_7: {
         let __v0: String = move b."Box<bool>::inspect_value"();
@@ -262,11 +320,11 @@ fn __test_7_inspect_bool() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/template-string-generic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 67 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

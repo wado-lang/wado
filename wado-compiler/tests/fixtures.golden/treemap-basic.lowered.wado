@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct "TreeMapEntry<String,i32>" {
     key: String,
     value: i32,
@@ -35,6 +37,13 @@ pub struct "TreeMap<String,i32>" {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
     __assert_0: {
         let __v0: bool = (map.size == 0);
@@ -46,22 +55,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_2: {
+                let mut __f: Formatter = __inline_Formatter__new_3: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_3: {
+                __inline_i32_Display__fmt_4: {
                     let self: Box<i32> = move Box<i32> { value: 9 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: map.is_empty()\n");
                 __r.String::append(move "map.is_empty(): ");
-                __f = __inline_Formatter__new_4: {
+                __f = __inline_Formatter__new_5: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_bool_Display__fmt_5: {
+                __inline_bool_Display__fmt_6: {
                     let self: Box<bool> = move Box<bool> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     f.Formatter::pad(if self.value {
@@ -86,22 +95,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_8: {
+                let mut __f: Formatter = __inline_Formatter__new_9: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_9: {
+                __inline_i32_Display__fmt_10: {
                     let self: Box<i32> = move Box<i32> { value: 10 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: map.len() == 0\n");
                 __r.String::append(move "map.len(): ");
-                __f = __inline_Formatter__new_10: {
+                __f = __inline_Formatter__new_11: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_11: {
+                __inline_i32_Display__fmt_12: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -112,10 +121,10 @@ export fn run() with Stdout {
         }
     }
     __assert_2: {
-        let __v0: bool = __inline_TreeMap_String_i32___contains_key_12: {
+        let __v0: bool = __inline_TreeMap_String_i32___contains_key_13: {
             let self: &TreeMap<String,i32> = &map;
             let key: String = move "key";
-            break __inline_TreeMap_String_i32___contains_key_12: (self."TreeMap<String,i32>::find_index"(key) >= 0);
+            break __inline_TreeMap_String_i32___contains_key_13: (self."TreeMap<String,i32>::find_index"(key) >= 0);
         };
         let __cond: bool = !__v0;
         if !__cond {
@@ -126,22 +135,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_14: {
+                let mut __f: Formatter = __inline_Formatter__new_15: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_15: {
+                __inline_i32_Display__fmt_16: {
                     let self: Box<i32> = move Box<i32> { value: 11 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: !map.contains_key(\"key\")\n");
                 __r.String::append(move "map.contains_key(\"key\"): ");
-                __f = __inline_Formatter__new_16: {
+                __f = __inline_Formatter__new_17: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_bool_Display__fmt_17: {
+                __inline_bool_Display__fmt_18: {
                     let self: Box<bool> = move Box<bool> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     f.Formatter::pad(if self.value {
@@ -155,7 +164,7 @@ export fn run() with Stdout {
             });
         }
     }
-    __inline_TreeMap_String_i32__IndexAssign__index_assign_18: {
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_19: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "one";
         self."TreeMap<String,i32>::insert"(key, 1);
@@ -171,22 +180,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_21: {
+                let mut __f: Formatter = __inline_Formatter__new_22: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_22: {
+                __inline_i32_Display__fmt_23: {
                     let self: Box<i32> = move Box<i32> { value: 15 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: map.len() == 1\n");
                 __r.String::append(move "map.len(): ");
-                __f = __inline_Formatter__new_23: {
+                __f = __inline_Formatter__new_24: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_24: {
+                __inline_i32_Display__fmt_25: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -197,10 +206,10 @@ export fn run() with Stdout {
         }
     }
     __assert_4: {
-        let __v0: bool = __inline_TreeMap_String_i32___contains_key_25: {
+        let __v0: bool = __inline_TreeMap_String_i32___contains_key_26: {
             let self: &TreeMap<String,i32> = &map;
             let key: String = move "one";
-            break __inline_TreeMap_String_i32___contains_key_25: (self."TreeMap<String,i32>::find_index"(key) >= 0);
+            break __inline_TreeMap_String_i32___contains_key_26: (self."TreeMap<String,i32>::find_index"(key) >= 0);
         };
         if !__v0 {
             core::internal::panic(__tmpl: {
@@ -210,22 +219,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_27: {
+                let mut __f: Formatter = __inline_Formatter__new_28: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_27: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_28: {
+                __inline_i32_Display__fmt_29: {
                     let self: Box<i32> = move Box<i32> { value: 16 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: map.contains_key(\"one\")\n");
                 __r.String::append(move "map.contains_key(\"one\"): ");
-                __f = __inline_Formatter__new_29: {
+                __f = __inline_Formatter__new_30: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_29: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_30: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_bool_Display__fmt_30: {
+                __inline_bool_Display__fmt_31: {
                     let self: Box<bool> = move Box<bool> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     f.Formatter::pad(if self.value {
@@ -250,22 +259,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_32: {
+                let mut __f: Formatter = __inline_Formatter__new_33: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_32: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_33: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_33: {
+                __inline_i32_Display__fmt_34: {
                     let self: Box<i32> = move Box<i32> { value: 17 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: map[\"one\"] == 1\n");
                 __r.String::append(move "map[\"one\"]: ");
-                __f = __inline_Formatter__new_34: {
+                __f = __inline_Formatter__new_35: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_34: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_35: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_35: {
+                __inline_i32_Display__fmt_36: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -275,7 +284,7 @@ export fn run() with Stdout {
             });
         }
     }
-    __inline_TreeMap_String_i32__IndexAssign__index_assign_36: {
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_37: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "one";
         self."TreeMap<String,i32>::insert"(key, 100);
@@ -291,22 +300,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_39: {
+                let mut __f: Formatter = __inline_Formatter__new_40: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_39: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_40: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_40: {
+                __inline_i32_Display__fmt_41: {
                     let self: Box<i32> = move Box<i32> { value: 21 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: map.len() == 1\n");
                 __r.String::append(move "map.len(): ");
-                __f = __inline_Formatter__new_41: {
+                __f = __inline_Formatter__new_42: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_41: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_42: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_42: {
+                __inline_i32_Display__fmt_43: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -327,22 +336,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_44: {
+                let mut __f: Formatter = __inline_Formatter__new_45: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_44: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_45: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_45: {
+                __inline_i32_Display__fmt_46: {
                     let self: Box<i32> = move Box<i32> { value: 22 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: map[\"one\"] == 100\n");
                 __r.String::append(move "map[\"one\"]: ");
-                __f = __inline_Formatter__new_46: {
+                __f = __inline_Formatter__new_47: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_46: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_47: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_47: {
+                __inline_i32_Display__fmt_48: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -352,12 +361,12 @@ export fn run() with Stdout {
             });
         }
     }
-    __inline_TreeMap_String_i32__IndexAssign__index_assign_48: {
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_49: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "two";
         self."TreeMap<String,i32>::insert"(key, 2);
     };
-    __inline_TreeMap_String_i32__IndexAssign__index_assign_49: {
+    __inline_TreeMap_String_i32__IndexAssign__index_assign_50: {
         let self: &mut TreeMap<String,i32> = &mut map;
         let key: String = move "three";
         self."TreeMap<String,i32>::insert"(key, 3);
@@ -373,22 +382,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-basic.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_52: {
+                let mut __f: Formatter = __inline_Formatter__new_53: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_52: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_53: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_53: {
+                __inline_i32_Display__fmt_54: {
                     let self: Box<i32> = move Box<i32> { value: 27 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: map.len() == 3\n");
                 __r.String::append(move "map.len(): ");
-                __f = __inline_Formatter__new_54: {
+                __f = __inline_Formatter__new_55: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_54: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_55: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_55: {
+                __inline_i32_Display__fmt_56: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

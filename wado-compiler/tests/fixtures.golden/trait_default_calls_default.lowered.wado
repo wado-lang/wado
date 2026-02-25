@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct Item {
     name: String,
 }
@@ -37,6 +39,13 @@ pub fn "Item^Describable::full_desc"(self: &Item) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let item: Item = move Item { name: "Widget" };
     core::cli::println(item.name);
     core::cli::println(move item."Item^Describable::short_desc"());

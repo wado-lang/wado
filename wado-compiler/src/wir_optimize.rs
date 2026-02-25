@@ -408,7 +408,7 @@ fn check_invalid_call_uses(
         WirInstr::LocalSet { value, .. }
             if unwrap_to_candidate_call(value, candidate_ids).is_some() =>
         {
-            // Still check args of the underlying call for nested candidate calls
+            // Check args of the underlying call for nested candidate calls
             if let Some(call) = unwrap_to_inner_call(value)
                 && let WirInstr::Call { args, .. } = call
             {
@@ -416,11 +416,41 @@ fn check_invalid_call_uses(
                     find_nested_candidate_calls(arg, candidate_ids, invalid);
                 }
             }
+            // Also check prefix instructions in any block wrapper.
+            // When the call is wrapped in Block { body: [prefix..., result_call] },
+            // the prefix instructions may contain calls to other candidates that
+            // would go unrewritten.
+            find_candidate_calls_in_block_prefix(value, candidate_ids, invalid);
         }
         // Any other instruction that contains a Call to a candidate is invalid
         _ => {
             find_nested_candidate_calls(instr, candidate_ids, invalid);
         }
+    }
+}
+
+/// Scan prefix instructions in Block/ValueCopy wrappers for nested candidate calls.
+/// When a `LocalSet { value: ValueCopy { Block { body } } }` wraps a candidate call
+/// as its result, the prefix instructions in the block body may also contain calls
+/// to candidates that the rewrite pass cannot reach.
+fn find_candidate_calls_in_block_prefix(
+    instr: &WirInstr,
+    candidate_ids: &IndexSet<u32>,
+    invalid: &mut IndexSet<u32>,
+) {
+    match instr {
+        WirInstr::ValueCopy { expr, .. } => {
+            find_candidate_calls_in_block_prefix(expr, candidate_ids, invalid);
+        }
+        WirInstr::Block { body, .. } => {
+            // All instructions except the last (which is the result value) are prefix
+            if let Some((_, prefix)) = body.split_last() {
+                for prefix_instr in prefix {
+                    find_nested_candidate_calls(prefix_instr, candidate_ids, invalid);
+                }
+            }
+        }
+        _ => {}
     }
 }
 

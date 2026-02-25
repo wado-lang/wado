@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct Message {
     text: String,
 }
@@ -27,6 +29,13 @@ fn "Message^Printable::print"(self: &Message) with Stdout {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let m: Message = move Message { text: "Hello, World!" };
     m."Message^Printable::print"();
 }

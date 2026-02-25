@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 pub struct "FilterIter<i32>" {
     repr: builtin::array<i32>,
     used: i32,
@@ -34,11 +36,18 @@ struct __Closure_1 {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let nums: Array<i32> = move [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let evens: Array<i32> = move __inline_ArrayIter_i32___filter_1: {
+    let evens: Array<i32> = move __inline_ArrayIter_i32___filter_2: {
         let self: &ArrayIter<i32> = &ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         let pred: fn(i32) -> bool = &__Closure_0 {  };
-        break __inline_ArrayIter_i32___filter_1: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
+        break __inline_ArrayIter_i32___filter_2: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
     }."FilterIter<i32>^Iterator::collect"();
     __for_of_0: {
         let mut __iter_0: ArrayIter<i32> = move ArrayIter<i32> { repr: evens.repr, used: evens.used, index: 0 };
@@ -48,11 +57,11 @@ export fn run() with Stdout {
                 let x: i32 = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_4: {
+                    let mut __f: Formatter = __inline_Formatter__new_5: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_i32_Display__fmt_5: {
+                    __inline_i32_Display__fmt_6: {
                         let self: Box<i32> = move Box<i32> { value: x };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -64,10 +73,10 @@ export fn run() with Stdout {
             }
         }
     }
-    let large: Array<i32> = move __inline_ArrayIter_i32___filter_7: {
+    let large: Array<i32> = move __inline_ArrayIter_i32___filter_8: {
         let self: &ArrayIter<i32> = &ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         let pred: fn(i32) -> bool = &__Closure_1 { __capture_0: 5 };
-        break __inline_ArrayIter_i32___filter_7: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
+        break __inline_ArrayIter_i32___filter_8: FilterIter<i32> { repr: self.repr, used: self.used, index: self.index, pred: pred };
     }."FilterIter<i32>^Iterator::collect"();
     __for_of_1: {
         let mut __iter_1: ArrayIter<i32> = move ArrayIter<i32> { repr: large.repr, used: large.used, index: 0 };
@@ -77,11 +86,11 @@ export fn run() with Stdout {
                 let x: i32 = __variant_payload(__pattern_temp_1, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_10: {
+                    let mut __f: Formatter = __inline_Formatter__new_11: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_i32_Display__fmt_11: {
+                    __inline_i32_Display__fmt_12: {
                         let self: Box<i32> = move Box<i32> { value: x };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

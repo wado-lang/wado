@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct __Closure_0 {
 }
 
@@ -86,6 +88,13 @@ fn print_array(arr: &Array<i32>) with Stdout {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut arr: Array<i32> = move [5, 3, 8, 1, 9, 2, 7, 4, 6];
     "quicksort$__Closure_0"(&mut arr, 0, (arr.used - 1), &__Closure_0 {  });
     print_array(&arr);
