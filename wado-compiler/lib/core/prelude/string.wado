@@ -114,9 +114,9 @@ impl String {
         return start;
     }
 
-    /// Append `n` ASCII zero bytes ('0') to this string using array.fill
+    /// Append `n` copies of `byte` to this string using array.fill.
     /// Much faster than a loop for large n (e.g., trailing zeros in large integers).
-    pub fn append_zeros(&mut self, n: i32) {
+    pub fn append_byte_filled(&mut self, byte: u8, n: i32) {
         if n <= 0 {
             return;
         }
@@ -124,7 +124,7 @@ impl String {
         if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
             self.grow(new_used);
         }
-        builtin::array_fill::<u8>(self.repr, self.used, '0' as u8, n);
+        builtin::array_fill::<u8>(self.repr, self.used, byte, n);
         self.used = new_used;
     }
 
