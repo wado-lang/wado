@@ -1434,9 +1434,9 @@ let len = arr.len(); // Get length
 Sequence literals `[e0, e1, ...]` and key-value literals `{ k: v, ... }` can be
 coerced to any collection type by implementing the corresponding builder trait:
 
-| Literal         | Trait                    | Example target      |
-| --------------- | ------------------------ | ------------------- |
-| `[e0, e1, ...]` | `SequenceLiteralBuilder` | `Array<T>`          |
+| Literal         | Trait                    | Example target       |
+| --------------- | ------------------------ | -------------------- |
+| `[e0, e1, ...]` | `SequenceLiteralBuilder` | `Array<T>`           |
 | `{ k: v, ... }` | `KeyValueLiteralBuilder` | `TreeMap<String, V>` |
 
 ```wado
