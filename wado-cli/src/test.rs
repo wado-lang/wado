@@ -179,6 +179,8 @@ struct CompiledTestModule {
     path: String,
     engine: Arc<Engine>,
     component: Arc<Component>,
+    compile_duration: Duration,
+    load_duration: Duration,
 }
 
 /// A single test job to execute
@@ -233,6 +235,7 @@ async fn collect_test_jobs(
     for (module_idx, path) in paths.iter().enumerate() {
         // Compile with --world test so test functions become component exports
         // and non-test code is subject to DCE.
+        let compile_start = Instant::now();
         let wasm = compile::compile_with_full_opts(
             path,
             crate::compile::OptLevel::default(),
@@ -241,11 +244,14 @@ async fn collect_test_jobs(
             false,
         )
         .await;
+        let compile_duration = compile_start.elapsed();
+        let load_start = Instant::now();
         let engine = Arc::new(runtime::create_engine(
             wasmtime::OptLevel::None,
             &runtime::ProfileMode::None,
         )?);
         let component = Arc::new(Component::new(&engine, &wasm)?);
+        let load_duration = load_start.elapsed();
 
         // Find test functions from exports
         let component_ty = component.component_type();
@@ -279,6 +285,8 @@ async fn collect_test_jobs(
             path: path.clone(),
             engine,
             component,
+            compile_duration,
+            load_duration,
         }));
     }
 
@@ -483,9 +491,27 @@ pub async fn run(opts: TestOptions) {
     let mut total_passed = 0;
     let mut total_failed = 0;
 
+    // Build a lookup from path to compiled module for compile duration
+    let module_by_path: indexmap::IndexMap<&str, &CompiledTestModule> = modules
+        .iter()
+        .map(|m| (m.path.as_str(), m.as_ref()))
+        .collect();
+
     for path in &opts.paths {
         if let Some(file_results) = results_by_file.get(path) {
-            println!("Running tests in {path}...");
+            let timing = module_by_path
+                .get(path.as_str())
+                .map(|m| {
+                    let compile = format_duration(m.compile_duration);
+                    if m.load_duration.as_secs() >= 1 {
+                        let load = format_duration(m.load_duration);
+                        format!(" (compiled in {compile}, loaded in {load})")
+                    } else {
+                        format!(" (compiled in {compile})")
+                    }
+                })
+                .unwrap_or_default();
+            println!("Running tests in {path}...{timing}");
 
             // Sort by test name for consistent output
             let mut sorted_results: Vec<_> = file_results.clone();

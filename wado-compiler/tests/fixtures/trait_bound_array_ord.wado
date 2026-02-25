@@ -1,0 +1,15 @@
+// Test that Array<T> comparison requires T: Ord
+
+struct Foo {
+    x: i32,
+}
+
+export fn run() {
+    let a: Array<Foo> = [Foo { x: 1 }];
+    let b: Array<Foo> = [Foo { x: 2 }];
+    // Foo does not implement Ord, so < on Array<Foo> should fail
+    assert a < b;
+}
+
+__DATA__
+{"compile_error": "<"}
