@@ -899,12 +899,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///
     /// Does NOT perform general type equality — only rejects `&T → non-ref`.
     /// Allows `&mut T → &T` coercion.
-    pub(super) fn check_ref_type_mismatch(
-        &mut self,
-        actual: TypeId,
-        expected: TypeId,
-        span: Span,
-    ) {
+    pub(super) fn check_ref_type_mismatch(&mut self, actual: TypeId, expected: TypeId, span: Span) {
         if actual == expected
             || actual == TypeTable::UNKNOWN
             || expected == TypeTable::UNKNOWN

@@ -348,10 +348,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // Check each argument: reject &T/&mut T passed where non-ref is expected.
         // For generic functions with explicit type args, rebuild param types with
         // type params substituted so UNKNOWN params become concrete types.
-        let check_param_types = if !type_args.is_empty() {
-            self.lookup_function_param_types_with_type_args(&call.callee, &type_args)
-        } else {
+        let check_param_types = if type_args.is_empty() {
             param_types
+        } else {
+            self.lookup_function_param_types_with_type_args(&call.callee, &type_args)
         };
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
@@ -805,34 +805,32 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return Vec::new();
         };
 
-        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>)> = if self
-            .function_return_types
-            .contains_key(&ident.name)
-        {
-            self.current_module_items.iter().find_map(|item| {
-                if let Item::Function(func) = item
-                    && func.name == ident.name
-                {
-                    Some((func.type_params.clone(), func.params.clone()))
-                } else {
-                    None
-                }
-            })
-        } else if let Some(symbol) = self.symbols.lookup(&ident.name)
-            && let Some(module) = self.loaded_modules.get(&symbol.module_source)
-        {
-            module.items.iter().find_map(|item| {
-                if let Item::Function(func) = item
-                    && func.name == symbol.name
-                {
-                    Some((func.type_params.clone(), func.params.clone()))
-                } else {
-                    None
-                }
-            })
-        } else {
-            None
-        };
+        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>)> =
+            if self.function_return_types.contains_key(&ident.name) {
+                self.current_module_items.iter().find_map(|item| {
+                    if let Item::Function(func) = item
+                        && func.name == ident.name
+                    {
+                        Some((func.type_params.clone(), func.params.clone()))
+                    } else {
+                        None
+                    }
+                })
+            } else if let Some(symbol) = self.symbols.lookup(&ident.name)
+                && let Some(module) = self.loaded_modules.get(&symbol.module_source)
+            {
+                module.items.iter().find_map(|item| {
+                    if let Item::Function(func) = item
+                        && func.name == symbol.name
+                    {
+                        Some((func.type_params.clone(), func.params.clone()))
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            };
 
         let Some((fn_type_params, fn_params)) = func_info else {
             return Vec::new();
@@ -850,10 +848,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 .insert(tp.name.clone(), (idx, type_id));
         }
 
-        let param_types: Vec<TypeId> = fn_params
-            .iter()
-            .map(|p| self.resolve_type(&p.ty))
-            .collect();
+        let param_types: Vec<TypeId> = fn_params.iter().map(|p| self.resolve_type(&p.ty)).collect();
 
         self.current_type_params = saved;
 
