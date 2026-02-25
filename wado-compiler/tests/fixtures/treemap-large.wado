@@ -12,12 +12,8 @@ export fn run() with Stdout {
     assert map.len() == 50;
 
     // Verify some values
-    if let Some(v0) = map["item0"] {
-        assert v0 == 0;
-    }
-    if let Some(v49) = map["item49"] {
-        assert v49 == 49;
-    }
+    assert map["item0"] == 0;
+    assert map["item49"] == 49;
 
     // Remove every other item (triggers auto-compaction)
     for let mut i = 0; i < 50; i += 2 {

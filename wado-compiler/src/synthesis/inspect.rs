@@ -1,12 +1,14 @@
-//! Inspect synthesis phase.
+//! Inspect and display synthesis phase.
 //!
-//! Replaces `builtin::inspect(expr, &mut f)` marker calls with calls to
-//! synthesized inspect functions. Each unique type gets a single inspect
-//! function, avoiding code duplication at every `:?` usage site.
+//! Replaces `builtin::inspect(expr, &mut f)` and `builtin::display(expr, &mut f)`
+//! marker calls with concrete formatting code.
 //!
-//! Pipeline position: after `effect_check`, before CM adapter synthesis.
-//! This ensures synthesized code goes through monomorphization, lowering,
-//! and optimization.
+//! - `builtin::inspect` → always generates inspect (debug) output
+//! - `builtin::display` → tries Display impl first, falls back to inspect
+//!
+//! Pipeline position: after `monomorphize`, before `lower`.
+//! Running after monomorphization ensures that generic type parameters have been
+//! substituted with concrete types, enabling correct Display vs Inspect dispatch.
 //!
 //! See `docs/wep-2026-02-21-inspect-debug-output.md` for design details.
 
@@ -366,23 +368,36 @@ fn replace_markers_in_block(
 ) {
     let mut i = 0;
     while i < block.stmts.len() {
-        let needs_expansion = if let TirStmtKind::Expr(ref expr) = block.stmts[i].kind {
-            is_inspect_marker(expr)
+        let marker_kind = if let TirStmtKind::Expr(ref expr) = block.stmts[i].kind {
+            marker_kind(expr)
         } else {
-            false
+            MarkerKind::None
         };
 
-        if needs_expansion {
+        if matches!(marker_kind, MarkerKind::Inspect | MarkerKind::Display) {
+            // Skip markers whose value type is still TypeParam (pre-monomorphize).
+            // These will be resolved in the post-monomorphize pass.
+            let is_type_param = if let TirStmtKind::Expr(ref expr) = block.stmts[i].kind
+                && let TirExprKind::StaticCall { ref args, .. } = expr.kind
+                && !args.is_empty()
+            {
+                matches!(
+                    tt.borrow().get(args[0].type_id),
+                    ResolvedType::TypeParam { .. }
+                )
+            } else {
+                false
+            };
+            if is_type_param {
+                i += 1;
+                continue;
+            }
+
             let stmt = block.stmts.remove(i);
             if let TirStmtKind::Expr(expr) = stmt.kind
                 && let TirExprKind::StaticCall { args, .. } = expr.kind
             {
                 let mut args = args;
-                let alternate = if args.len() >= 3 {
-                    matches!(args.pop().unwrap().kind, TirExprKind::BoolLiteral(true))
-                } else {
-                    false
-                };
                 let fmt_ref = args.pop().unwrap();
                 let value_expr = args.pop().unwrap();
                 let type_id = value_expr.type_id;
@@ -390,8 +405,20 @@ fn replace_markers_in_block(
 
                 let resolved = tt.borrow().get(type_id).clone();
 
-                // Special case: closure with alternate=true => inline source text
-                let new_stmt = if alternate && matches!(resolved, ResolvedType::Function { .. }) {
+                let new_stmt = if matches!(marker_kind, MarkerKind::Display)
+                    && has_display_impl(type_id, tt, mods)
+                {
+                    // builtin::display with a concrete Display impl — call it directly
+                    let mut stmts = display_fmt(type_id, value_expr, fmt_ref, tt, span);
+                    let first = stmts.remove(0);
+                    // Insert any extra stmts (display_fmt typically returns exactly 1)
+                    for (j, s) in stmts.into_iter().enumerate() {
+                        block.stmts.insert(i + j, s);
+                    }
+                    first
+                } else if matches!(resolved, ResolvedType::Function { .. }) {
+                    // Closure: check Formatter.alternate at runtime to decide
+                    // between source text (if available) and signature display.
                     let source = match &value_expr.kind {
                         TirExprKind::Closure {
                             source_text: Some(text),
@@ -401,7 +428,35 @@ fn replace_markers_in_block(
                         _ => None,
                     };
                     if let Some(text) = source {
-                        ws(&text, fmt_ref, tt, span)
+                        // Generate: if fmt.alternate { write source } else { inspect }
+                        let alternate_cond = TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(fmt_ref.clone()),
+                                field_index: 3, // alternate field
+                                field_name: "alternate".to_string(),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        );
+                        let then_stmt = ws(&text, fmt_ref.clone(), tt, span);
+                        let else_stmt = call_inspect_fn(
+                            reg,
+                            type_id,
+                            value_expr,
+                            fmt_ref,
+                            tt,
+                            fmt_type,
+                            module_source,
+                            span,
+                        );
+                        TirStmt::new(
+                            TirStmtKind::If {
+                                condition: alternate_cond,
+                                then_block: TirBlock::new(vec![then_stmt], span),
+                                else_block: Some(TirBlock::new(vec![else_stmt], span)),
+                            },
+                            span,
+                        )
                     } else {
                         call_inspect_fn(
                             reg,
@@ -443,8 +498,47 @@ fn replace_markers_in_block(
     }
 }
 
-fn is_inspect_marker(expr: &TirExpr) -> bool {
-    matches!(&expr.kind, TirExprKind::StaticCall { func, .. } if func.name() == "builtin::inspect")
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MarkerKind {
+    None,
+    Inspect,
+    Display,
+}
+
+fn marker_kind(expr: &TirExpr) -> MarkerKind {
+    if let TirExprKind::StaticCall { func, .. } = &expr.kind {
+        let name = func.name();
+        if name == "builtin::inspect" {
+            MarkerKind::Inspect
+        } else if name == "builtin::display" {
+            MarkerKind::Display
+        } else {
+            MarkerKind::None
+        }
+    } else {
+        MarkerKind::None
+    }
+}
+
+/// Check if a concrete type has a `Display::fmt` implementation available
+/// in any of the loaded TIR modules.
+///
+/// Uses `try_borrow()` to avoid panicking when a function is already mutably
+/// borrowed (the current function being processed in the outer loop).
+fn has_display_impl(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>, mods: &[&TirModule]) -> bool {
+    let base = tt.borrow().get_ultimate_base_type(type_id);
+    let type_name = tt.borrow().mangle_type_name(base);
+    let expected_name = MethodName::format_local(&type_name, Some("Display"), "fmt");
+    for m in mods {
+        for f in &m.functions {
+            if let Ok(func) = f.try_borrow()
+                && func.name == expected_name
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn walk_stmt(

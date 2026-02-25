@@ -131,69 +131,38 @@ export fn run() with Stdout {
         let key: String = move "x";
         self."TreeMap<String,i32>::insert"(key, 100);
     };
-    let __pattern_temp_0: Option<i32> = __inline_TreeMap_String_i32__IndexValue__index_value_17: {
-        let self: &TreeMap<String,i32> = &m;
-        let key: String = move "x";
-        break __inline_TreeMap_String_i32__IndexValue__index_value_17: self."TreeMap<String,i32>::get"(key);
-    };
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let x: i32 = __variant_payload(__pattern_temp_0, case=0);
-        __assert_2: {
-            let __cond: bool = (x == 100);
-            if !__cond {
-                core::internal::panic(__tmpl: {
-                    let mut __r: String = move String { repr: "array_new<u8>"(114), used: 0 };
-                    __r.String::append(move "Assertion failed in ");
-                    __r.String::append(move "run");
-                    __r.String::append(move " at ");
-                    __r.String::append(move "wado-compiler/tests/fixtures/treemap-literal-mutable.wado");
-                    __r.String::append(move ":");
-                    let mut __f: Formatter = __inline_Formatter__new_19: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_20: {
-                        let self: Box<i32> = move Box<i32> { value: 17 };
-                        let f: &mut Formatter = &mut __f;
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-                    };
-                    __r.String::append(move "\ncondition: x == 100\n");
-                    __r.String::append(move "x: ");
-                    __f = __inline_Formatter__new_21: {
-                        let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-                    };
-                    __inline_i32_Display__fmt_22: {
-                        let self: Box<i32> = move Box<i32> { value: x };
-                        let f: &mut Formatter = &mut __f;
-                        "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-                    };
-                    __r.String::append(move "\n");
-                    break __tmpl: __r;
-                });
-            }
-        }
-    } else {
-        __assert_3: {
+    __assert_2: {
+        let __v0: i32 = m."TreeMap<String,i32>^IndexValue::index_value"(move "x");
+        let __cond: bool = (__v0 == 100);
+        if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(109), used: 0 };
+                let mut __r: String = move String { repr: "array_new<u8>"(124), used: 0 };
                 __r.String::append(move "Assertion failed in ");
                 __r.String::append(move "run");
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/treemap-literal-mutable.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_24: {
+                let mut __f: Formatter = __inline_Formatter__new_18: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_25: {
-                    let self: Box<i32> = move Box<i32> { value: 19 };
+                __inline_i32_Display__fmt_19: {
+                    let self: Box<i32> = move Box<i32> { value: 16 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move ": ");
-                __r.String::append(move "x not found");
-                __r.String::append(move "\ncondition: false\n");
+                __r.String::append(move "\ncondition: m[\"x\"] == 100\n");
+                __r.String::append(move "m[\"x\"]: ");
+                __f = __inline_Formatter__new_20: {
+                    let buf: &mut String = &mut __r;
+                    break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                };
+                __inline_i32_Display__fmt_21: {
+                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let f: &mut Formatter = &mut __f;
+                    "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+                };
+                __r.String::append(move "\n");
                 break __tmpl: __r;
             });
         }
@@ -206,12 +175,31 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
+fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key: String) -> i32 {
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
-    if (index >= 0) {
-        return Option<i32>::Some(self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value);
+    if (index < 0) {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = move String { repr: "array_new<u8>"(31), used: 0 };
+            __r.String::append(move "key not found: ");
+            let mut __f: Formatter = __inline_Formatter__new_1: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            __inline___inspect_String_2: {
+                let __val: String = key;
+                let __fmt: &mut Formatter = &mut __f;
+                __inline_Formatter__write_char_3: {
+                    __fmt.buf.String::append_char('"');
+                };
+                core::internal::write_escaped_string(__val, __fmt);
+                __inline_Formatter__write_char_4: {
+                    __fmt.buf.String::append_char('"');
+                };
+            };
+            break __tmpl: __r;
+        });
     }
-    return null;
+    return self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value;
 }
 
 fn "Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,i32>>, index: i32) -> TreeMapEntry<String,i32> {

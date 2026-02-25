@@ -296,13 +296,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
                     if is_inspect {
                         // Emit builtin::inspect marker — replaced by synthesis::inspect phase
-                        // Pass alternate flag (#) as 3rd arg for closure pretty-print
-                        let alternate = parsed.as_ref().is_some_and(|pf| pf.alternate);
-                        let alternate_expr = TirExpr::new(
-                            TirExprKind::BoolLiteral(alternate),
-                            TypeTable::BOOL,
-                            span,
-                        );
                         let inspect_call = TirExpr::new(
                             TirExprKind::StaticCall {
                                 func: FunctionRef::External {
@@ -311,7 +304,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     monomorph_info: None,
                                     method_info: None,
                                 },
-                                args: vec![resolved, fmt_mut_ref, alternate_expr],
+                                args: vec![resolved, fmt_mut_ref],
                             },
                             TypeTable::UNIT,
                             span,
@@ -398,26 +391,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             );
                             stmts.push(TirStmt::new(TirStmtKind::Expr(fmt_call), span));
                         } else {
-                            // No Display impl found — fall back to inspect
-                            let alternate_expr = TirExpr::new(
-                                TirExprKind::BoolLiteral(false),
-                                TypeTable::BOOL,
-                                span,
+                            // No Display impl found — emit a marker for synthesis.
+                            // For TypeParam types, emit `builtin::display` so that
+                            // post-monomorphize synthesis can resolve the concrete
+                            // Display impl. For other types, fall back to inspect.
+                            let is_type_param = matches!(
+                                self.type_table.borrow().get(resolved.type_id),
+                                ResolvedType::TypeParam { .. }
                             );
-                            let inspect_call = TirExpr::new(
+                            let marker_name = if is_type_param {
+                                "builtin::display"
+                            } else {
+                                "builtin::inspect"
+                            };
+                            let marker_call = TirExpr::new(
                                 TirExprKind::StaticCall {
                                     func: FunctionRef::External {
                                         module_source: ModuleSource::builtin(),
-                                        name: "builtin::inspect".to_string(),
+                                        name: marker_name.to_string(),
                                         monomorph_info: None,
                                         method_info: None,
                                     },
-                                    args: vec![resolved, fmt_mut_ref, alternate_expr],
+                                    args: vec![resolved, fmt_mut_ref],
                                 },
                                 TypeTable::UNIT,
                                 span,
                             );
-                            stmts.push(TirStmt::new(TirStmtKind::Expr(inspect_call), span));
+                            stmts.push(TirStmt::new(TirStmtKind::Expr(marker_call), span));
                         }
                     }
                 }

@@ -16,24 +16,15 @@ export fn run() with Stdout {
     assert map.contains_key("three");
 
     // Index value access
-    if let Some(v1) = map["one"] {
-        assert v1 == 1;
-    }
-
-    if let Some(v2) = map["two"] {
-        assert v2 == 2;
-    }
+    assert map["one"] == 1;
+    assert map["two"] == 2;
 
     // Update via index
     map["one"] = 100;
-    if let Some(v3) = map["one"] {
-        assert v3 == 100;
-    }
+    assert map["one"] == 100;
 
-    // Nonexistent key returns null
-    if let Some(_) = map["nonexistent"] {
-        assert false, "should not reach here";
-    }
+    // Nonexistent key
+    assert !map.contains_key("nonexistent");
 
     println("index operations: ok");
 }

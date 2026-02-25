@@ -2245,6 +2245,37 @@ impl Monomorphizer {
                 if !substitution.is_empty()
                     && let Some(info) = method_func.method_info()
                 {
+                    // Check if the struct actually needs type arg substitution.
+                    // Skip for non-generic structs (e.g., String::append from template strings)
+                    // that happen to appear inside a generic impl block.
+                    let has_explicit_type_params = info.struct_name != info.base_struct_name;
+                    let receiver_is_generic = {
+                        let mut base = receiver.type_id;
+                        loop {
+                            match type_table.get(base).clone() {
+                                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                                    base = inner;
+                                }
+                                _ => break,
+                            }
+                        }
+                        matches!(
+                            type_table.get(base),
+                            ResolvedType::GenericInstance { .. }
+                                | ResolvedType::BuiltinArray(_)
+                                | ResolvedType::Stream(_)
+                                | ResolvedType::StreamWritable(_)
+                                | ResolvedType::FutureWritable(_)
+                                | ResolvedType::Struct {
+                                    is_monomorphized: true,
+                                    ..
+                                }
+                        )
+                    };
+                    let needs_struct_type_args = has_explicit_type_params
+                        || info.is_type_param_receiver
+                        || receiver_is_generic;
+
                     // Use structured method_info instead of parsing strings
                     let old_func_name = method_func.name();
                     let module_source = method_func.module_source();
@@ -2262,10 +2293,13 @@ impl Monomorphizer {
                     // Apply type args to get monomorphized method info
                     // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
                     // name directly instead of adding type args.
+                    // Skip for non-generic structs that don't use the enclosing type params.
                     let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
                         info.with_substituted_struct_name(&type_names[0])
-                    } else {
+                    } else if needs_struct_type_args {
                         info.with_struct_type_args(&type_names)
+                    } else {
+                        info.clone()
                     };
                     let new_func_name = new_info.to_mangled_name();
 
@@ -2322,6 +2356,23 @@ impl Monomorphizer {
                 if !substitution.is_empty()
                     && let Some(info) = static_func.method_info()
                 {
+                    // Check if the struct actually needs type arg substitution.
+                    // For StaticCall (no receiver), use the return type to infer whether
+                    // the struct is generic. Non-generic structs (String, Formatter) that
+                    // appear inside generic impl blocks should not get type args applied.
+                    let has_explicit_type_params = info.struct_name != info.base_struct_name;
+                    let return_type_is_generic = matches!(
+                        type_table.get(expr.type_id),
+                        ResolvedType::Struct {
+                            is_monomorphized: true,
+                            ..
+                        } | ResolvedType::GenericInstance { .. }
+                            | ResolvedType::BuiltinArray(_)
+                    );
+                    let needs_struct_type_args = has_explicit_type_params
+                        || info.is_type_param_receiver
+                        || return_type_is_generic;
+
                     // Use structured method_info instead of parsing strings
                     let old_func_name = static_func.name();
                     let module_source = static_func.module_source();
@@ -2337,10 +2388,13 @@ impl Monomorphizer {
                         sorted_entries.iter().map(|(_, tid)| **tid).collect();
 
                     // Apply type args to get monomorphized method info
+                    // Skip for non-generic structs that don't use the enclosing type params.
                     let new_info = if info.is_type_param_receiver && !type_names.is_empty() {
                         info.with_substituted_struct_name(&type_names[0])
-                    } else {
+                    } else if needs_struct_type_args {
                         info.with_struct_type_args(&type_names)
+                    } else {
+                        info.clone()
                     };
                     let new_func_name = new_info.to_mangled_name();
 

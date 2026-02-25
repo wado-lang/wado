@@ -41,28 +41,20 @@ export fn run() with Stdout {
         let key: String = move "hello";
         self."TreeMap<String,i32>::insert"(key, 42);
     };
-    let __pattern_temp_0: Option<i32> = __inline_TreeMap_String_i32__IndexValue__index_value_1: {
-        let self: &TreeMap<String,i32> = &map;
-        let key: String = move "hello";
-        break __inline_TreeMap_String_i32__IndexValue__index_value_1: self."TreeMap<String,i32>::get"(key);
-    };
-    if __variant_test(__pattern_temp_0, case=0, name=Some) {
-        let val: i32 = __variant_payload(__pattern_temp_0, case=0);
-        core::cli::println(__tmpl: {
-            let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
-            __r.String::append(move "value: ");
-            let mut __f: Formatter = __inline_Formatter__new_3: {
-                let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-            };
-            __inline_i32_Display__fmt_4: {
-                let self: Box<i32> = move Box<i32> { value: val };
-                let f: &mut Formatter = &mut __f;
-                "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-            };
-            break __tmpl: __r;
-        });
-    }
+    core::cli::println(__tmpl: {
+        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
+        __r.String::append(move "value: ");
+        let mut __f: Formatter = __inline_Formatter__new_2: {
+            let buf: &mut String = &mut __r;
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+        };
+        __inline_i32_Display__fmt_3: {
+            let self: Box<i32> = move Box<i32> { value: map."TreeMap<String,i32>^IndexValue::index_value"(move "hello") };
+            let f: &mut Formatter = &mut __f;
+            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+        };
+        break __tmpl: __r;
+    });
 }
 
 export fn __cm_export__run() {
@@ -70,12 +62,31 @@ export fn __cm_export__run() {
     cm_raw_call task-return(0);
 }
 
-fn "TreeMap<String,i32>::get"(self: &TreeMap<String,i32>, key: String) -> Option<i32> {
+fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key: String) -> i32 {
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
-    if (index >= 0) {
-        return Option<i32>::Some(self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value);
+    if (index < 0) {
+        core::internal::panic(__tmpl: {
+            let mut __r: String = move String { repr: "array_new<u8>"(31), used: 0 };
+            __r.String::append(move "key not found: ");
+            let mut __f: Formatter = __inline_Formatter__new_1: {
+                let buf: &mut String = &mut __r;
+                break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            };
+            __inline___inspect_String_2: {
+                let __val: String = key;
+                let __fmt: &mut Formatter = &mut __f;
+                __inline_Formatter__write_char_3: {
+                    __fmt.buf.String::append_char('"');
+                };
+                core::internal::write_escaped_string(__val, __fmt);
+                __inline_Formatter__write_char_4: {
+                    __fmt.buf.String::append_char('"');
+                };
+            };
+            break __tmpl: __r;
+        });
     }
-    return null;
+    return self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(index).value;
 }
 
 fn "Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,i32>>, index: i32) -> TreeMapEntry<String,i32> {
