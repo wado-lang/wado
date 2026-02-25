@@ -1,21 +1,36 @@
-// Tests that constant u8 arrays with >= 16 elements are promoted to array.new_data.
+// Tests that constant u8 arrays with >= 128 elements are promoted to array.new_data.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let a: Array<u8> = [
         0 as u8, 1 as u8, 2 as u8, 3 as u8, 4 as u8, 5 as u8, 6 as u8, 7 as u8,
         8 as u8, 9 as u8, 10 as u8, 11 as u8, 12 as u8, 13 as u8, 14 as u8, 15 as u8,
+        16 as u8, 17 as u8, 18 as u8, 19 as u8, 20 as u8, 21 as u8, 22 as u8, 23 as u8,
+        24 as u8, 25 as u8, 26 as u8, 27 as u8, 28 as u8, 29 as u8, 30 as u8, 31 as u8,
+        32 as u8, 33 as u8, 34 as u8, 35 as u8, 36 as u8, 37 as u8, 38 as u8, 39 as u8,
+        40 as u8, 41 as u8, 42 as u8, 43 as u8, 44 as u8, 45 as u8, 46 as u8, 47 as u8,
+        48 as u8, 49 as u8, 50 as u8, 51 as u8, 52 as u8, 53 as u8, 54 as u8, 55 as u8,
+        56 as u8, 57 as u8, 58 as u8, 59 as u8, 60 as u8, 61 as u8, 62 as u8, 63 as u8,
+        64 as u8, 65 as u8, 66 as u8, 67 as u8, 68 as u8, 69 as u8, 70 as u8, 71 as u8,
+        72 as u8, 73 as u8, 74 as u8, 75 as u8, 76 as u8, 77 as u8, 78 as u8, 79 as u8,
+        80 as u8, 81 as u8, 82 as u8, 83 as u8, 84 as u8, 85 as u8, 86 as u8, 87 as u8,
+        88 as u8, 89 as u8, 90 as u8, 91 as u8, 92 as u8, 93 as u8, 94 as u8, 95 as u8,
+        96 as u8, 97 as u8, 98 as u8, 99 as u8, 100 as u8, 101 as u8, 102 as u8, 103 as u8,
+        104 as u8, 105 as u8, 106 as u8, 107 as u8, 108 as u8, 109 as u8, 110 as u8, 111 as u8,
+        112 as u8, 113 as u8, 114 as u8, 115 as u8, 116 as u8, 117 as u8, 118 as u8, 119 as u8,
+        120 as u8, 121 as u8, 122 as u8, 123 as u8, 124 as u8, 125 as u8, 126 as u8, 127 as u8,
         255 as u8, 128 as u8, 64 as u8, 32 as u8,
     ];
-    assert a.len() == 20;
+    assert a.len() == 132;
     assert a[0] as i32 == 0;
     assert a[15] as i32 == 15;
-    assert a[16] as i32 == 255;
-    assert a[17] as i32 == 128;
-    assert a[18] as i32 == 64;
-    assert a[19] as i32 == 32;
-    println(`len={a.len()} [0]={a[0] as i32} [16]={a[16] as i32} [19]={a[19] as i32}`);
+    assert a[127] as i32 == 127;
+    assert a[128] as i32 == 255;
+    assert a[129] as i32 == 128;
+    assert a[130] as i32 == 64;
+    assert a[131] as i32 == 32;
+    println(`len={a.len()} [0]={a[0] as i32} [128]={a[128] as i32} [131]={a[131] as i32}`);
 }
 
 __DATA__
-{"stdout": "len=20 [0]=0 [16]=255 [19]=32\n"}
+{"stdout": "len=132 [0]=0 [128]=255 [131]=32\n"}

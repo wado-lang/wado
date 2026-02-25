@@ -1,24 +1,30 @@
-// Tests that constant i32 arrays with >= 16 elements are promoted to array.new_data.
+// Tests that constant i32 arrays with >= 128 elements are promoted to array.new_data.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     let a: Array<i32> = [
-        10, 20, 30, 40, 50, 60, 70, 80,
-        90, 100, 110, 120, 130, 140, 150, 160,
+        10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+        170, 180, 190, 200, 210, 220, 230, 240, 250, 260, 270, 280, 290, 300, 310, 320,
+        330, 340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460, 470, 480,
+        490, 500, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600, 610, 620, 630, 640,
+        650, 660, 670, 680, 690, 700, 710, 720, 730, 740, 750, 760, 770, 780, 790, 800,
+        810, 820, 830, 840, 850, 860, 870, 880, 890, 900, 910, 920, 930, 940, 950, 960,
+        970, 980, 990, 1000, 1010, 1020, 1030, 1040, 1050, 1060, 1070, 1080, 1090, 1100, 1110, 1120,
+        1130, 1140, 1150, 1160, 1170, 1180, 1190, 1200, 1210, 1220, 1230, 1240, 1250, 1260, 1270, 1280,
     ];
-    assert a.len() == 16;
+    assert a.len() == 128;
     assert a[0] == 10;
     assert a[7] == 80;
-    assert a[15] == 160;
+    assert a[127] == 1280;
 
-    // Compute sum to verify all values
+    // Compute sum to verify all values: 10+20+...+1280 = 10*(1+2+...+128) = 10*128*129/2 = 82560
     let mut sum = 0;
     for let item of a {
         sum += item;
     }
-    assert sum == 1360;
-    println(`len={a.len()} sum={sum} first={a[0]} last={a[15]}`);
+    assert sum == 82560;
+    println(`len={a.len()} sum={sum} first={a[0]} last={a[127]}`);
 }
 
 __DATA__
-{"stdout": "len=16 sum=1360 first=10 last=160\n"}
+{"stdout": "len=128 sum=82560 first=10 last=1280\n"}

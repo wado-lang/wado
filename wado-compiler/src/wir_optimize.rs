@@ -1083,7 +1083,7 @@ fn match_field_get(
 
 /// Minimum element count to trigger `array.new_data` promotion. Arrays with
 /// fewer constant elements keep using `array.new_fixed`.
-const ARRAY_NEW_DATA_THRESHOLD: usize = 16;
+const ARRAY_NEW_DATA_THRESHOLD: usize = 128;
 
 /// Promote constant primitive `ArrayNewFixed` to `ArrayNewData`.
 ///
