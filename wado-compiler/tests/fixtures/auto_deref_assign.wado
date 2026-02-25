@@ -1,0 +1,36 @@
+// Auto-dereference: assignment from &T to T variable
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Assign &i32 to mutable i32 variable
+    let mut x = 0;
+    let val = 42;
+    let rv = &val;
+    x = rv;
+    assert x == 42;
+
+    // Assign &mut i32 to mutable i32 variable
+    let mut y = 0;
+    let mut mval = 99;
+    let mrv = &mut mval;
+    y = mrv;
+    assert y == 99;
+
+    // Compound assignment with &i32
+    let mut z = 10;
+    let delta = 5;
+    let rd = &delta;
+    z += rd;
+    assert z == 15;
+
+    z -= rd;
+    assert z == 10;
+
+    z *= rd;
+    assert z == 50;
+
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

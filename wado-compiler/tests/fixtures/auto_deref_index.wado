@@ -1,0 +1,26 @@
+// Auto-dereference: indexing operations with &T index values
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Index array with &i32
+    let arr: Array<i32> = [10, 20, 30];
+    let idx = 1;
+    let ri = &idx;
+    assert arr[ri] == 20;
+
+    // Index assign with &i32 index
+    let mut marr: Array<i32> = [1, 2, 3];
+    marr[ri] = 99;
+    assert marr[1] == 99;
+
+    // Index with &i32 value assignment
+    let val = 42;
+    let rv = &val;
+    marr[0] = rv;
+    assert marr[0] == 42;
+
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

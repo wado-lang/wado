@@ -1,0 +1,72 @@
+// Auto-dereference: using &T in comparison operators and conditions
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Eq for Point {
+    fn eq(&self, other: &Self) -> bool {
+        return self.x == other.x && self.y == other.y;
+    }
+}
+
+export fn run() with Stdout {
+    // if condition with &bool
+    let flag = true;
+    let rf = &flag;
+    if rf {
+        println("flag is true");
+    }
+
+    // while condition with &bool
+    let mut done = false;
+    let rd = &done;
+    // Can't easily test while with &bool since it would be captured once
+    // Just test the conditional usage
+
+    // Comparing &T with T using ==
+    let x = 42;
+    let rx = &x;
+    if rx == 42 {
+        println("ref equals value");
+    }
+
+    // Comparing &T with &T using ==
+    let y = 42;
+    let ry = &y;
+    if rx == ry {
+        println("ref equals ref");
+    }
+
+    // Comparing &String with String
+    let s = "hello";
+    let rs = &s;
+    if rs == "hello" {
+        println("string ref equals value");
+    }
+
+    // Comparison chain with refs: a < b < c
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    let ra = &a;
+    let rb = &b;
+    let rc = &c;
+    if ra < rb {
+        println("ref chain works");
+    }
+
+    // Struct equality with &Point
+    let p1 = Point { x: 1, y: 2 };
+    let p2 = Point { x: 1, y: 2 };
+    let rp1 = &p1;
+    let rp2 = &p2;
+    if rp1 == rp2 {
+        println("struct ref eq works");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "flag is true\nref equals value\nref equals ref\nstring ref equals value\nref chain works\nstruct ref eq works\n"}

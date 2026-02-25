@@ -1,0 +1,44 @@
+// Auto-dereference: using &T in match expressions
+use { println, Stdout } from "core:cli";
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+export fn run() with Stdout {
+    // Match on &enum
+    let c = Color::Red;
+    let rc = &c;
+    let name = match rc {
+        Red => "red",
+        Green => "green",
+        Blue => "blue",
+    };
+    assert name == "red";
+
+    // Match on &Option<T>
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let ro = &opt;
+    let val = match ro {
+        Some(x) => x,
+        None => 0,
+    };
+    assert val == 42;
+
+    // Match on &i32 with guards
+    let x = 50;
+    let rx = &x;
+    let label = match rx {
+        _ && rx > 100 => "large",
+        _ && rx > 10 => "medium",
+        _ => "small",
+    };
+    assert label == "medium";
+
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

@@ -1,0 +1,44 @@
+// Auto-dereference: returning &T from a function that returns T
+use { println, Stdout } from "core:cli";
+
+fn get_value(r: &i32) -> i32 {
+    // Explicitly deref - this already works
+    return *r;
+}
+
+fn get_value_auto(r: &i32) -> i32 {
+    // Auto-deref: returning &i32 where i32 is expected
+    return r;
+}
+
+fn get_string_auto(r: &String) -> String {
+    return r;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn get_field_auto(p: &Point) -> i32 {
+    // Auto-deref field access already works, but returning the field ref
+    let rx = &p.x;
+    return rx;
+}
+
+export fn run() with Stdout {
+    let x = 42;
+    assert get_value(&x) == 42;
+    assert get_value_auto(&x) == 42;
+
+    let s = "hello";
+    assert get_string_auto(&s) == "hello";
+
+    let p = Point { x: 10, y: 20 };
+    assert get_field_auto(&p) == 10;
+
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

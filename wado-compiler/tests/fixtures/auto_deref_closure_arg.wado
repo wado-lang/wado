@@ -1,0 +1,35 @@
+// Auto-dereference: passing &T to closure parameters expecting T
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Closure taking i32, called with &i32
+    let add_one = |x: i32| x + 1;
+    let val = 10;
+    let rv = &val;
+    assert add_one(rv) == 11;
+
+    // Closure taking String, called with &String
+    let get_len = |s: String| s.len();
+    let name = "hello";
+    let rn = &name;
+    assert get_len(rn) == 5;
+
+    // Higher-order: passing &T through iterator map
+    let arr: Array<i32> = [1, 2, 3];
+    let doubled = arr.iter().map(|x: i32| x * 2).collect();
+    assert doubled[0] == 2;
+    assert doubled[1] == 4;
+    assert doubled[2] == 6;
+
+    // Closure with multiple params, mixed ref/value
+    let multiply = |a: i32, b: i32| a * b;
+    let x = 5;
+    let rx = &x;
+    assert multiply(rx, 3) == 15;
+    assert multiply(4, rv) == 40;
+
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

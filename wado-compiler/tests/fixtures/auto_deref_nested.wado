@@ -1,0 +1,55 @@
+// Auto-dereference: nested cases - ref to struct with ref fields, chains, etc.
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+fn take_i32(x: i32) -> i32 {
+    return x;
+}
+
+fn double(x: i32) -> i32 {
+    return x * 2;
+}
+
+export fn run() with Stdout {
+    // Chain: function(method_on_ref)
+    let p = Point { x: 10, y: 20 };
+    let rp = &p;
+    // rp.sum() auto-derefs for method, then result passes to double()
+    assert double(rp.sum()) == 60;
+
+    // Field access on ref, then pass to function
+    assert take_i32(rp.x) == 10;
+
+    // &(field access) -> function expecting value
+    let x_ref = &rp.x;
+    assert take_i32(x_ref) == 10;
+
+    // Triple ref
+    let rrp = &rp;
+    let rrrp = &rrp;
+    assert rrrp.sum() == 30;  // method auto-deref already works
+    // Field through triple ref
+    assert rrrp.x == 10;
+
+    // Auto-deref through function return and re-reference
+    let val = 42;
+    let r1 = &val;
+    let r2 = &r1;
+    let r3 = &r2;
+    assert take_i32(r3) == 42;  // triple deref for fn arg
+
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

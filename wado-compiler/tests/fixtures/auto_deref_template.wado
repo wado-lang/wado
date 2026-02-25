@@ -1,0 +1,37 @@
+// Auto-dereference: using &T in template strings
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    // &i32 in template string
+    let x = 42;
+    let rx = &x;
+    let s1 = `value: {rx}`;
+    assert s1 == "value: 42";
+
+    // &&i32 in template string
+    let rrx = &rx;
+    let s2 = `double: {rrx}`;
+    assert s2 == "double: 42";
+
+    // &String in template string
+    let name = "Alice";
+    let rn = &name;
+    let s3 = `hello {rn}`;
+    assert s3 == "hello Alice";
+
+    // &bool in template string
+    let b = true;
+    let rb = &b;
+    let s4 = `flag: {rb}`;
+    assert s4 == "flag: true";
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
