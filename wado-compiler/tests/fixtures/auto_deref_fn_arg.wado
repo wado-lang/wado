@@ -1,0 +1,74 @@
+// Auto-dereference: passing &T where T is expected in function arguments
+use { println, Stdout } from "core:cli";
+
+fn take_i32(x: i32) -> i32 {
+    return x;
+}
+
+fn take_string(s: String) -> String {
+    return s;
+}
+
+fn take_bool(b: bool) -> bool {
+    return b;
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn take_point(p: Point) -> i32 {
+    return p.x + p.y;
+}
+
+export fn run() with Stdout {
+    // Basic: &i32 -> i32
+    let x = 42;
+    let r = &x;
+    assert take_i32(r) == 42;
+
+    // &mut i32 -> i32
+    let mut y = 10;
+    let mr = &mut y;
+    assert take_i32(mr) == 10;
+
+    // &&i32 -> i32 (double deref)
+    let rr = &r;
+    assert take_i32(rr) == 42;
+
+    // &String -> String
+    let s = "hello";
+    let sr = &s;
+    assert take_string(sr) == "hello";
+
+    // &bool -> bool
+    let flag = true;
+    let br = &flag;
+    assert take_bool(br) == true;
+
+    // Multiple &T args
+    let a = 3;
+    let b = 4;
+    let ra = &a;
+    let rb = &b;
+    assert add(ra, rb) == 7;
+
+    // Mixed: one ref, one value
+    assert add(ra, 5) == 8;
+    assert add(10, rb) == 14;
+
+    // &Point -> Point (struct by value)
+    let p = Point { x: 10, y: 20 };
+    let pr = &p;
+    assert take_point(pr) == 30;
+
+    println("ok");
+}
+
+__DATA__
+{"compile_error": "expected 'i32', found '&i32'"}

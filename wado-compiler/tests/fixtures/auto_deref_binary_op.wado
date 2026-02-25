@@ -1,0 +1,56 @@
+// Auto-dereference: using &T in binary operations where T is expected
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Arithmetic: &i32 + i32
+    let a = 10;
+    let ra = &a;
+    assert ra + 5 == 15;
+    assert 5 + ra == 15;
+
+    // Arithmetic: &i32 + &i32
+    let b = 20;
+    let rb = &b;
+    assert ra + rb == 30;
+
+    // Comparison: &i32 == i32
+    assert ra == 10;
+    assert 10 == ra;
+
+    // Comparison: &i32 < i32
+    assert ra < 20;
+    assert 5 < ra;
+
+    // Comparison: &i32 == &i32
+    let c = 10;
+    let rc = &c;
+    assert ra == rc;
+
+    // Arithmetic: &i32 * &i32
+    assert ra * rb == 200;
+
+    // String comparison: &String == String
+    let s = "hello";
+    let rs = &s;
+    assert rs == "hello";
+    assert "hello" == rs;
+
+    // String comparison: &String == &String
+    let s2 = "hello";
+    let rs2 = &s2;
+    assert rs == rs2;
+
+    // Boolean operations: &bool && bool
+    let t = true;
+    let rt = &t;
+    let f = false;
+    let rf = &f;
+    // Note: these may not auto-deref since && is short-circuit
+    // but logical not should work
+    assert !rf == true;
+
+    println("ok");
+}
+
+__DATA__
+{"TODO": true, "stdout": "ok\n"}

@@ -7,6 +7,7 @@ use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TypeId, TypeTable,
 };
+use crate::token::Span;
 use indexmap::IndexSet;
 
 use super::Resolver;
@@ -890,5 +891,54 @@ impl<H: CompilerHost> Resolver<'_, H> {
             output_type,
             span,
         ))
+    }
+
+    /// Emit a type error when `actual` is a reference type (`&T` or `&mut T`)
+    /// but `expected` is not a reference type. This catches the specific pattern
+    /// that causes ICEs in codegen (Wasm type mismatch: expected i32, found ref).
+    ///
+    /// Does NOT perform general type equality — only rejects `&T → non-ref`.
+    /// Allows `&mut T → &T` coercion.
+    pub(super) fn check_ref_type_mismatch(&mut self, actual: TypeId, expected: TypeId, span: Span) {
+        if actual == expected
+            || actual == TypeTable::UNKNOWN
+            || expected == TypeTable::UNKNOWN
+            || actual == TypeTable::NEVER
+        {
+            return;
+        }
+
+        let type_table = self.type_table.borrow();
+
+        // Only check if actual is a reference type
+        if !matches!(
+            type_table.get(actual),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            return;
+        }
+
+        // Allow &T → &T or &mut T → &T (ref-to-ref is fine)
+        if matches!(
+            type_table.get(expected),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) {
+            return;
+        }
+
+        // Skip if expected is a type parameter (generic placeholder)
+        if matches!(type_table.get(expected), ResolvedType::TypeParam { .. }) {
+            return;
+        }
+
+        let expected_name = type_table.type_name(expected);
+        let found_name = type_table.type_name(actual);
+        drop(type_table);
+
+        let _ = self.logger.error(TypeError::TypeMismatch {
+            expected: expected_name,
+            found: found_name,
+            span,
+        });
     }
 }

@@ -1,0 +1,51 @@
+// Auto-dereference: passing &T to generic function expecting T
+use { println, Stdout } from "core:cli";
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+struct Box<T> {
+    value: T,
+}
+
+fn wrap<T>(x: T) -> Box<T> {
+    return Box { value: x };
+}
+
+fn first<T>(a: T, b: T) -> T {
+    return a;
+}
+
+export fn run() with Stdout {
+    // Generic function with &i32 -> i32
+    let x = 42;
+    let rx = &x;
+    let result = identity::<i32>(rx);
+    assert result == 42;
+
+    // Generic function with &String -> String
+    let s = "hello";
+    let rs = &s;
+    let result_s = identity::<String>(rs);
+    assert result_s == "hello";
+
+    // Wrapping &T
+    let val = 99;
+    let rv = &val;
+    let boxed = wrap::<i32>(rv);
+    assert boxed.value == 99;
+
+    // Two &T args
+    let a = 1;
+    let b = 2;
+    let ra = &a;
+    let rb = &b;
+    let f = first::<i32>(ra, rb);
+    assert f == 1;
+
+    println("ok");
+}
+
+__DATA__
+{"compile_error": "expected 'i32', found '&i32'"}

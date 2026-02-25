@@ -49,6 +49,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         })
                         .collect();
 
+                    // Check each argument type against expected parameter type
+                    for (i, arg) in args.iter().enumerate() {
+                        if let Some(&expected) = fn_params.get(i) {
+                            self.check_ref_type_mismatch(
+                                arg.type_id,
+                                expected,
+                                call.args.get(i).map_or(call.span, ast::Expr::span),
+                            );
+                        }
+                    }
+
                     // Create closure expression (Local reference)
                     let closure_expr = TirExpr::new(
                         TirExprKind::Local {
@@ -98,6 +109,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         self.resolve_expr(arg, ctx, expected_type)
                     })
                     .collect();
+
+                // Check each argument type against expected parameter type
+                for (i, arg) in args.iter().enumerate() {
+                    if let Some(&expected) = fn_params.get(i) {
+                        self.check_ref_type_mismatch(
+                            arg.type_id,
+                            expected,
+                            call.args.get(i).map_or(call.span, ast::Expr::span),
+                        );
+                    }
+                }
 
                 return TirExpr::new(
                     TirExprKind::IndirectCall {
@@ -321,6 +343,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
             return_type = self.substitute_type_params(return_type, &type_args);
+        }
+
+        // Check each argument: reject &T/&mut T passed where non-ref is expected.
+        // For generic functions with explicit type args, rebuild param types with
+        // type params substituted so UNKNOWN params become concrete types.
+        let check_param_types = if type_args.is_empty() {
+            param_types
+        } else {
+            self.lookup_function_param_types_with_type_args(&call.callee, &type_args)
+        };
+        for (i, arg) in args.iter().enumerate() {
+            if let Some(&expected) = check_param_types.get(i) {
+                self.check_ref_type_mismatch(
+                    arg.type_id,
+                    expected,
+                    call.args.get(i).map_or(call.span, ast::Expr::span),
+                );
+            }
         }
 
         TirExpr::new(
@@ -750,5 +790,72 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
             _ => Vec::new(),
         }
+    }
+
+    /// Look up function parameter types with type args substituted.
+    /// For generic functions like `fn identity<T>(x: T)` called as `identity::<i32>(...)`,
+    /// this temporarily registers `T` as a `TypeParam`, resolves param types, then
+    /// substitutes `T` → `i32` to get `[i32]`.
+    fn lookup_function_param_types_with_type_args(
+        &mut self,
+        callee: &Expr,
+        type_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        let Expr::Ident(ident) = callee else {
+            return Vec::new();
+        };
+
+        let func_info: Option<(Vec<ast::GenericParam>, Vec<ast::Param>)> =
+            if self.function_return_types.contains_key(&ident.name) {
+                self.current_module_items.iter().find_map(|item| {
+                    if let Item::Function(func) = item
+                        && func.name == ident.name
+                    {
+                        Some((func.type_params.clone(), func.params.clone()))
+                    } else {
+                        None
+                    }
+                })
+            } else if let Some(symbol) = self.symbols.lookup(&ident.name)
+                && let Some(module) = self.loaded_modules.get(&symbol.module_source)
+            {
+                module.items.iter().find_map(|item| {
+                    if let Item::Function(func) = item
+                        && func.name == symbol.name
+                    {
+                        Some((func.type_params.clone(), func.params.clone()))
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            };
+
+        let Some((fn_type_params, fn_params)) = func_info else {
+            return Vec::new();
+        };
+
+        // Temporarily register type params so resolve_type can find them
+        let saved = std::mem::take(&mut self.current_type_params);
+        for (i, tp) in fn_type_params.iter().enumerate() {
+            let idx = i as u32;
+            let type_id = self
+                .type_table
+                .borrow_mut()
+                .make_type_param(tp.name.clone(), idx);
+            self.current_type_params
+                .insert(tp.name.clone(), (idx, type_id));
+        }
+
+        let param_types: Vec<TypeId> = fn_params.iter().map(|p| self.resolve_type(&p.ty)).collect();
+
+        self.current_type_params = saved;
+
+        // Substitute type params with explicit type args
+        param_types
+            .iter()
+            .map(|&pt| self.substitute_type_params(pt, type_args))
+            .collect()
     }
 }

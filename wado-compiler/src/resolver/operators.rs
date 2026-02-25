@@ -806,12 +806,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let index_resolved = self.resolve_expr(&index_expr.index, ctx, None);
                     let index_type = index_resolved.type_id;
 
+                    // Reject &T/&mut T used as index expression (would ICE in codegen)
+                    let derefed_index_type = match self.type_table.borrow().get(index_type) {
+                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
+                        _ => None,
+                    };
+                    if let Some(expected) = derefed_index_type {
+                        self.check_ref_type_mismatch(index_type, expected, index_expr.index.span());
+                    }
+
                     if let Some(trait_info) =
                         self.find_index_assign_trait_impl(&struct_name, base_type_id, index_type)
                     {
                         // Generate: expr.index_assign(index, value)
                         let value =
                             self.resolve_expr(&assign.value, ctx, Some(trait_info.input_type));
+
+                        // Check: reject &T/&mut T assigned where non-ref expected
+                        self.check_ref_type_mismatch(
+                            value.type_id,
+                            trait_info.input_type,
+                            assign.value.span(),
+                        );
 
                         let receiver = self.adjust_receiver_for_self_kind(
                             indexed_expr,

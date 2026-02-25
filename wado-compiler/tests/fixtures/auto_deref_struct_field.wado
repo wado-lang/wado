@@ -1,0 +1,60 @@
+// Auto-dereference: using &T in struct literal fields where T is expected
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Named {
+    name: String,
+    value: i32,
+}
+
+struct Nested {
+    point: Point,
+    label: String,
+}
+
+export fn run() with Stdout {
+    // &i32 in struct field
+    let x = 10;
+    let y = 20;
+    let rx = &x;
+    let ry = &y;
+    let p = Point { x: rx, y: ry };
+    assert p.x == 10;
+    assert p.y == 20;
+
+    // Mixed: one ref, one value
+    let p2 = Point { x: rx, y: 30 };
+    assert p2.x == 10;
+    assert p2.y == 30;
+
+    // &String in struct field
+    let name = "test";
+    let rn = &name;
+    let val = 42;
+    let rv = &val;
+    let n = Named { name: rn, value: rv };
+    assert n.name == "test";
+    assert n.value == 42;
+
+    // Shorthand syntax with ref
+    let label = "hello";
+    let rl = &label;
+    // Note: shorthand syntax `{ label }` uses the variable name as field name
+    // This tests whether &String -> String deref works with shorthand
+
+    // &Point in nested struct field
+    let inner = Point { x: 1, y: 2 };
+    let ri = &inner;
+    let outer = Nested { point: ri, label: "nested" };
+    assert outer.point.x == 1;
+    assert outer.label == "nested";
+
+    println("ok");
+}
+
+__DATA__
+{"compile_error": "expected 'i32', found '&i32'"}
