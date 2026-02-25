@@ -90,12 +90,16 @@ struct SroaCandidate {
     field_names: Vec<String>,
 }
 
-/// Returns true if a `WirType` is scalar (representable as a single Wasm value).
-fn is_scalar_type(ty: &WirType) -> bool {
-    !matches!(
-        ty,
-        WirType::Ref { .. } | WirType::AbstractRef { .. } | WirType::Unit
-    )
+/// Returns true if a `WirType` is a valid Wasm value type for multi-value returns.
+///
+/// Primitive scalars (i32, i64, f32, f64) are always eligible.
+/// Concrete GC refs (`ref $T`, `ref null $T`) are also eligible: Wasm multi-value
+/// returns support any value type, including GC refs. This allows SROA of structs
+/// with GC ref fields, such as tuples containing String values.
+/// Abstract heap refs (`ref null struct`, etc.) are excluded as they lack
+/// the precise type information needed for `StructGet` replacement.
+fn is_eligible_field_type(ty: &WirType) -> bool {
+    !matches!(ty, WirType::AbstractRef { .. } | WirType::Unit)
 }
 
 /// Collect all `func_ids` that must NOT be SROA'd (exports, element tables, `RefFunc`).
@@ -191,12 +195,16 @@ fn find_sroa_candidates(
             continue;
         };
 
-        // 2–4 scalar fields
+        // 2–4 fields, all valid Wasm value types (scalars or concrete GC refs)
         let field_count = struct_type.fields.len();
         if !(2..=4).contains(&field_count) {
             continue;
         }
-        if !struct_type.fields.iter().all(|f| is_scalar_type(&f.ty)) {
+        if !struct_type
+            .fields
+            .iter()
+            .all(|f| is_eligible_field_type(&f.ty))
+        {
             continue;
         }
 
@@ -745,10 +753,36 @@ fn recurse_rewrite_call_sites(
 
 /// Replace `StructGet { field_name, expr: LocalGet(temp) }` with `LocalGet(fresh_local)`
 /// for all known replacements. Uses `WirInstr::for_each_boxed_child_mut` for generic traversal.
+///
+/// Also handles `ValueCopy { expr: StructGet { field_name, expr: LocalGet(temp) } }` →
+/// `LocalGet(fresh_local)`, eliminating the unnecessary copy. After SROA, the fresh local
+/// already holds a reference to the value that was in the struct field; the `ValueCopy` was
+/// emitted to preserve value semantics when extracting from a shared struct, but since SROA
+/// has eliminated the struct, the copy is redundant.
 fn replace_struct_gets(
     instr: &mut WirInstr,
     replacements: &indexmap::IndexMap<String, indexmap::IndexMap<String, String>>,
 ) {
+    // Handle ValueCopy(StructGet(LocalGet(temp))) → LocalGet(sroa_fresh).
+    // This eliminates the unnecessary shallow copy that was emitted to preserve value
+    // semantics when extracting a field from a shared struct. After SROA the struct no
+    // longer exists, so the copy serves no purpose.
+    if let WirInstr::ValueCopy { expr, .. } = instr
+        && let WirInstr::StructGet {
+            field_name,
+            expr: inner_expr,
+            ..
+        } = expr.as_ref()
+        && let WirInstr::LocalGet { name: temp_name } = inner_expr.as_ref()
+        && let Some(field_map) = replacements.get(temp_name.as_str())
+        && let Some(fresh_local) = field_map.get(field_name.as_str())
+    {
+        *instr = WirInstr::LocalGet {
+            name: fresh_local.clone(),
+        };
+        return;
+    }
+
     // Check if THIS instruction is a StructGet that should be replaced
     if let WirInstr::StructGet {
         field_name, expr, ..

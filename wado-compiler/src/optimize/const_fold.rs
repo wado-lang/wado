@@ -280,11 +280,14 @@ fn try_fold_expr(expr: &TirExpr, type_table: &TypeTable) -> Option<FoldedExpr> {
         }
         TirExprKind::Cast { expr: inner, .. } => {
             let prim = get_int_primitive(expr.type_id, type_table)?;
-            let TirExprKind::IntLiteral { value, .. } = &inner.kind else {
-                return None;
+            let value = match &inner.kind {
+                TirExprKind::IntLiteral { value, .. } => *value,
+                // char-to-integer: the code point is an integer literal
+                TirExprKind::CharLiteral(c) => *c as u64,
+                _ => return None,
             };
             Some(FoldedExpr::Int {
-                value: truncate_int(*value, prim),
+                value: truncate_int(value, prim),
                 prim,
             })
         }

@@ -142,7 +142,7 @@ fn count_block_exprs(block: &TirBlock) -> usize {
         .sum()
 }
 
-/// Check if a function is eligible for inlining
+/// Check if a function is eligible for inlining.
 fn is_inline_eligible(
     func: &TirFunction,
     recursive_functions: &IndexSet<String>,
@@ -208,7 +208,10 @@ fn is_inline_eligible(
         return false;
     }
 
-    // #[inline] raises the threshold (2x the configured threshold)
+    // Single-callsite functions get a 3x larger threshold: inlining them eliminates
+    // the call overhead and exposes cross-boundary dead-code that no other pass can
+    // see.  A multiplier of 3 is intentionally conservative — enough to capture small
+    // helper functions but not large ones that would bloat the caller.
     let effective_threshold = if func.inline_hint == InlineHint::Hint {
         inline_threshold * 2
     } else {
@@ -689,6 +692,7 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
         let module_path = module_source.to_path();
         for func_rc in &module.functions {
             let func = func_rc.borrow();
+            let key = (module_path.clone(), func.name.clone());
             if is_inline_eligible(
                 &func,
                 &recursive_functions,
@@ -696,11 +700,10 @@ pub fn inline_functions(project: &mut Project, inline_threshold: usize) -> bool 
                 &module.type_table.borrow(),
                 inline_threshold,
             ) {
-                inline_candidates.insert((module_path.clone(), func.name.clone()), func.clone());
+                inline_candidates.insert(key.clone(), func.clone());
                 // Get the strings used by this function
                 if let Some(strings) = module.function_strings.get(&func.name) {
-                    candidate_strings
-                        .insert((module_path.clone(), func.name.clone()), strings.clone());
+                    candidate_strings.insert(key, strings.clone());
                 }
             }
         }

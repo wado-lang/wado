@@ -420,11 +420,9 @@ fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
     }
 }
 
-// Pre-fill n characters of '0' into buf
+// Pre-fill n characters of '0' into buf using array.fill (fast bulk operation)
 fn fill_zeros(buf: &mut String, n: i32) {
-    for let mut i = 0; i < n; i += 1 {
-        buf.append_char('0');
-    }
+    buf.append_zeros(n);
 }
 
 // Format result to decimal string (no exponent)
@@ -435,7 +433,8 @@ pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
         // Need leading zeros: 0.00...digits
         let total = 2 + (-decimal_pos) + nd;
         let mut buf = String::with_capacity(total);
-        buf.append("0.");
+        buf.append_char('0');
+        buf.append_char('.');
         fill_zeros(&mut buf, -decimal_pos);
         let digit_offset = buf.len();
         fill_zeros(&mut buf, nd);
@@ -655,7 +654,8 @@ pub fn format_decimal_prec(d: i64, p: i32, nd: i32, precision: i32) -> String {
 
     if decimal_pos <= 0 {
         // Need leading zeros: 0.00...digits
-        buf.append("0.");
+        buf.append_char('0');
+        buf.append_char('.');
         // Leading zeros before digits
         let leading_zeros = -decimal_pos;
         if precision <= leading_zeros {
@@ -878,10 +878,10 @@ pub fn add_sign_prefix(s: String, is_neg: bool, sign: Sign) -> String {
 
 /// Format f64 with full format specification
 pub fn format_f64(f: f64, spec: FormatSpec) -> String {
-    let [is_special, is_neg, special_str] = check_special(f);
+    let [is_special, is_neg, kind] = check_special(f);
     if is_special {
         // Special value (zero, inf, NaN)
-        let base_str = if is_neg && special_str != "NaN" && special_str != "Inf" && special_str != "-Inf" {
+        let base_str = if kind matches { Zero } && is_neg {
             // Negative zero
             let is_exp = match spec.format_type {
                 LowerExp => true,
@@ -918,7 +918,7 @@ pub fn format_f64(f: f64, spec: FormatSpec) -> String {
                     "-0"
                 }
             }
-        } else if special_str == "0" {
+        } else if kind matches { Zero } {
             // Positive zero
             let is_exp = match spec.format_type {
                 LowerExp => true,
@@ -956,7 +956,12 @@ pub fn format_f64(f: f64, spec: FormatSpec) -> String {
                 }
             }
         } else {
-            special_str
+            // Inf or NaN — convert to string
+            if kind matches { Inf } && is_neg {
+                "-Inf"
+            } else {
+                special_kind_to_string(kind)
+            }
         };
         return apply_padding(base_str, spec, is_neg);
     }
@@ -1084,41 +1089,64 @@ pub fn f64_to_string_fill(f: f64, width: i32, fill: char, align: Align) -> Strin
 }
 
 
-// Helper: check for special values (zero, infinity, NaN)
-// Returns: [is_special, is_neg, special_string_or_empty]
-pub fn check_special(f: f64) -> [bool, bool, String] {
+// Encodes the kind of special floating-point value detected by check_special.
+pub enum SpecialKind {
+    NotSpecial,
+    Zero,
+    Inf,
+    NaN,
+}
+
+// Check for special floating-point values (zero, infinity, NaN).
+// Returns [is_special, is_neg, kind]:
+//   is_special: true if f is a special value
+//   is_neg:     true if f is negative (for use on either the special or non-special path)
+//   kind:       SpecialKind enum (NotSpecial, Zero, Inf, or NaN)
+// On the non-special path (is_special=false), kind is SpecialKind::NotSpecial.
+pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     let bits = builtin::i64_reinterpret_f64(f);
 
     // Check for zero
     if bits == 0 as i64 {
-        return [true, false, "0"];
+        return [true, false, SpecialKind::Zero];
     }
     if bits == 0x8000000000000000 as i64 {
-        return [true, true, "0"];
+        return [true, true, SpecialKind::Zero];
     }
 
     let is_neg = bits < 0 as i64;
 
     // Check for infinity/NaN
     let exp_mask = 0x7FF0000000000000 as i64;
-    let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
     if (bits & exp_mask) == exp_mask {
+        let mantissa_mask = 0x000FFFFFFFFFFFFF as i64;
         if (bits & mantissa_mask) != 0 as i64 {
-            return [true, false, "NaN"];
+            return [true, false, SpecialKind::NaN];
         }
-        if is_neg {
-            return [true, false, "-Inf"];
-        }
-        return [true, false, "Inf"];
+        return [true, is_neg, SpecialKind::Inf];
     }
 
-    return [false, is_neg, ""];
+    return [false, is_neg, SpecialKind::NotSpecial];
+}
+
+// Convert a SpecialKind to its display string.
+// For Inf: returns "Inf" (caller should prepend "-" if is_neg).
+// For NaN: returns "NaN".
+// For Zero: returns "0".
+fn special_kind_to_string(kind: SpecialKind) -> String {
+    match kind {
+        Zero => "0",
+        Inf => "Inf",
+        NaN => "NaN",
+        NotSpecial => panic("not a special value"),
+    }
 }
 
 // Convert f64 to decimal string (no exponent, e.g., "3.14", "0.001", "12345")
 pub fn f64_to_string(f: f64) -> String {
-    let [is_special, is_neg, special_str] = check_special(f);
+    let [is_special, is_neg, kind] = check_special(f);
     if is_special {
+        let special_str = special_kind_to_string(kind);
         if is_neg {
             return String::concat("-", special_str);
         }
@@ -1142,14 +1170,18 @@ pub fn f64_to_string(f: f64) -> String {
 // Convert f64 to exponential string (e.g., "3.14e+00" or "3.14E+00")
 // upper: true for 'E', false for 'e'
 pub fn f64_to_string_exp(f: f64, upper: bool) -> String {
-    let [is_special, is_neg, special_str] = check_special(f);
+    let [is_special, is_neg, kind] = check_special(f);
     if is_special {
         // For exponential format, zero is "0e+00" or "0E+00"
-        if special_str == "0" {
+        if kind matches { Zero } {
             if is_neg {
                 return if upper { "-0E+00" } else { "-0e+00" };
             }
             return if upper { "0E+00" } else { "0e+00" };
+        }
+        let special_str = special_kind_to_string(kind);
+        if is_neg {
+            return String::concat("-", special_str);
         }
         return special_str;
     }
@@ -1171,8 +1203,9 @@ pub fn f64_to_string_exp(f: f64, upper: bool) -> String {
 // Convert f64 to string, choosing decimal or exponential based on magnitude
 // Similar to Rust's Debug: uses exponential if exponent < -4 or >= 16
 pub fn f64_to_string_auto(f: f64) -> String {
-    let [is_special, is_neg, special_str] = check_special(f);
+    let [is_special, is_neg, kind] = check_special(f);
     if is_special {
+        let special_str = special_kind_to_string(kind);
         if is_neg {
             return String::concat("-", special_str);
         }
