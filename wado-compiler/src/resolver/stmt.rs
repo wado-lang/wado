@@ -538,6 +538,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Use expected type for coercion (numeric literals, tuple to array, etc.)
             self.resolve_expr(expr, ctx, Some(return_type))
         });
+
+        // Check return value type matches function return type
+        if let Some(value) = &value {
+            self.check_ref_type_mismatch(value.type_id, return_type, ret_stmt.span);
+        }
+
         TirStmt::new(TirStmtKind::Return { value }, ret_stmt.span)
     }
 
