@@ -13,7 +13,16 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout, MonotonicClock {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let t1: Mark = __cm_adapter__MonotonicClock_now();
     let ts: Timestamp = t1 as Timestamp;
     let evt: EventTime = t1 as EventTime;

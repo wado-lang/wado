@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct SimpleArray {
     a: i32,
     b: i32,
@@ -20,18 +22,25 @@ struct SimpleArray {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut __sroa_arr_a: i32 = 0;
-    __inline_SimpleArray_IndexAssign__index_assign_1: {
+    __inline_SimpleArray_IndexAssign__index_assign_2: {
         __sroa_arr_a = 42;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
         __r.String::append(move "arr[0] = ");
-        let mut __f: Formatter = __inline_Formatter__new_3: {
+        let mut __f: Formatter = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_4: {
+        __inline_i32_Display__fmt_5: {
             let self: Box<i32> = move Box<i32> { value: Box<i32> { value: __sroa_arr_a }.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 enum Season {
     Spring,
     Summer,
@@ -21,10 +23,17 @@ enum Season {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let s: Season = Season::Spring;
-    if __inline_Season__is_warm_0: {
+    if __inline_Season__is_warm_1: {
         let self: &Season = &s;
-        break __inline_Season__is_warm_0: match *self {
+        break __inline_Season__is_warm_1: match *self {
             Spring => true,
             Summer => true,
             _ => false,
@@ -32,9 +41,9 @@ export fn run() with Stdout {
     } {
         core::cli::println(move "spring is warm");
     }
-    let n: Season = __inline_Season__next_1: {
+    let n: Season = __inline_Season__next_2: {
         let self: &Season = &s;
-        break __inline_Season__next_1: match *self {
+        break __inline_Season__next_2: match *self {
             Spring => Season::Summer,
             Summer => Season::Autumn,
             Autumn => Season::Winter,
@@ -45,9 +54,9 @@ export fn run() with Stdout {
         core::cli::println(move "next is summer");
     }
     let w: Season = Season::Winter;
-    if __inline_Season__is_warm_2: {
+    if __inline_Season__is_warm_3: {
         let self: &Season = &w;
-        break __inline_Season__is_warm_2: match *self {
+        break __inline_Season__is_warm_3: match *self {
             Spring => true,
             Summer => true,
             _ => false,

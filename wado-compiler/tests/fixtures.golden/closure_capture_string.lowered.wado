@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct __Closure_0 {
     __capture_0: String,
 }
@@ -27,6 +29,13 @@ struct __Closure_2 {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let greeting: String = move "Hello";
     let __sroa_get_greeting___capture_0: String = greeting;
     core::cli::println(__sroa_get_greeting___capture_0);
@@ -37,11 +46,11 @@ export fn run() with Stdout {
     let __sroa_is_ok___capture_0: String = status;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_2: {
+        let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_bool_Display__fmt_3: {
+        __inline_bool_Display__fmt_4: {
             let self: Box<bool> = move Box<bool> { value: __sroa_is_ok___capture_0."String^Eq::eq"(&"ok") };
             let f: &mut Formatter = &mut __f;
             f.Formatter::pad(if self.value {

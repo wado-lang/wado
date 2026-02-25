@@ -13,11 +13,20 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let x_u128: u128 = move u128 { low: 0xFF00, high: 0 };
     let x_i128: i128 = move i128::from_i64(0xFF);
     let a1: u128 = move x_u128."u128^BitAnd::bitand"(&u128 { low: 0xFF, high: 0 });
-    __inline_check_2: {
+    __inline_check_3: {
         let cond: bool = a1."u128^Eq::eq"(&u128 { low: 0, high: 0 });
         let label: String = move "u128 & rhs";
         if !cond {
@@ -25,7 +34,7 @@ export fn run() with Stdout {
         }
     };
     let a2: u128 = move u128 { low: 0xFF, high: 0 }."u128^BitAnd::bitand"(&x_u128);
-    __inline_check_5: {
+    __inline_check_6: {
         let cond: bool = a2."u128^Eq::eq"(&u128 { low: 0, high: 0 });
         let label: String = move "lhs & u128";
         if !cond {
@@ -33,7 +42,7 @@ export fn run() with Stdout {
         }
     };
     let a3: i128 = move x_i128."i128^BitAnd::bitand"(&i128::from_i64(0x0F));
-    __inline_check_7: {
+    __inline_check_8: {
         let cond: bool = a3."i128^Eq::eq"(&i128::from_i64(0x0F));
         let label: String = move "i128 & rhs";
         if !cond {
@@ -41,7 +50,7 @@ export fn run() with Stdout {
         }
     };
     let a4: i128 = move i128::from_i64(0x0F)."i128^BitAnd::bitand"(&x_i128);
-    __inline_check_8: {
+    __inline_check_9: {
         let cond: bool = a4."i128^Eq::eq"(&i128::from_i64(0x0F));
         let label: String = move "lhs & i128";
         if !cond {
@@ -49,7 +58,7 @@ export fn run() with Stdout {
         }
     };
     let b1: u128 = move x_u128."u128^BitOr::bitor"(&u128 { low: 0xFF, high: 0 });
-    __inline_check_10: {
+    __inline_check_11: {
         let cond: bool = b1."u128^Eq::eq"(&u128 { low: 0xFFFF, high: 0 });
         let label: String = move "u128 | rhs";
         if !cond {
@@ -57,7 +66,7 @@ export fn run() with Stdout {
         }
     };
     let b2: u128 = move u128 { low: 0xFF, high: 0 }."u128^BitOr::bitor"(&x_u128);
-    __inline_check_13: {
+    __inline_check_14: {
         let cond: bool = b2."u128^Eq::eq"(&u128 { low: 0xFFFF, high: 0 });
         let label: String = move "lhs | u128";
         if !cond {
@@ -65,7 +74,7 @@ export fn run() with Stdout {
         }
     };
     let b3: i128 = move x_i128."i128^BitOr::bitor"(&i128::from_i64(0x100));
-    __inline_check_15: {
+    __inline_check_16: {
         let cond: bool = b3."i128^Eq::eq"(&i128::from_i64(0x1FF));
         let label: String = move "i128 | rhs";
         if !cond {
@@ -73,7 +82,7 @@ export fn run() with Stdout {
         }
     };
     let b4: i128 = move i128::from_i64(0x100)."i128^BitOr::bitor"(&x_i128);
-    __inline_check_16: {
+    __inline_check_17: {
         let cond: bool = b4."i128^Eq::eq"(&i128::from_i64(0x1FF));
         let label: String = move "lhs | i128";
         if !cond {
@@ -81,7 +90,7 @@ export fn run() with Stdout {
         }
     };
     let c1: u128 = move x_u128."u128^BitXor::bitxor"(&u128 { low: 0xFFFF, high: 0 });
-    __inline_check_18: {
+    __inline_check_19: {
         let cond: bool = c1."u128^Eq::eq"(&u128 { low: 0x00FF, high: 0 });
         let label: String = move "u128 ^ rhs";
         if !cond {
@@ -89,7 +98,7 @@ export fn run() with Stdout {
         }
     };
     let c2: u128 = move u128 { low: 0xFFFF, high: 0 }."u128^BitXor::bitxor"(&x_u128);
-    __inline_check_21: {
+    __inline_check_22: {
         let cond: bool = c2."u128^Eq::eq"(&u128 { low: 0x00FF, high: 0 });
         let label: String = move "lhs ^ u128";
         if !cond {
@@ -97,7 +106,7 @@ export fn run() with Stdout {
         }
     };
     let c3: i128 = move x_i128."i128^BitXor::bitxor"(&i128::from_i64(0xFF));
-    __inline_check_23: {
+    __inline_check_24: {
         let cond: bool = c3."i128^Eq::eq"(&i128::from_i64(0));
         let label: String = move "i128 ^ rhs";
         if !cond {
@@ -105,7 +114,7 @@ export fn run() with Stdout {
         }
     };
     let c4: i128 = move i128::from_i64(0xFF)."i128^BitXor::bitxor"(&x_i128);
-    __inline_check_24: {
+    __inline_check_25: {
         let cond: bool = c4."i128^Eq::eq"(&i128::from_i64(0));
         let label: String = move "lhs ^ i128";
         if !cond {

@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 pub struct "ArrayIter<Tuple<String,i32>>" {
     repr: builtin::array<[String, i32]>,
     used: i32,
@@ -20,6 +22,13 @@ pub struct "ArrayIter<Tuple<String,i32>>" {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let items: Array<[String, i32]> = move [["a", 1], ["b", 2]];
     __for_of_0: {
         let mut __iter_0: ArrayIter<Tuple<String,i32>> = move ArrayIter<Tuple<String,i32>> { repr: items.repr, used: items.used, index: 0 };

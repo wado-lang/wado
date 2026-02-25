@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct FormatSpec {
     align: Align,
     width: i32,
@@ -94,6 +96,13 @@ fn apply_padding(s: String, spec: FormatSpec) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let left: FormatSpec = move FormatSpec { align: Align::Left, width: 10, fill: '*' };
     let center: FormatSpec = move FormatSpec { align: Align::Center, width: 10, fill: '*' };
     let right: FormatSpec = move FormatSpec { align: Align::Right, width: 10, fill: '*' };

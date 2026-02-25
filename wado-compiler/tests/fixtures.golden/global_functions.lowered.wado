@@ -17,69 +17,78 @@ global mut shared: i32 = 100;
 
 global MULTIPLIER: i32 = 2;
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
         __r.String::append(move "initial=");
-        let mut __f: Formatter = __inline_Formatter__new_1: {
+        let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_2: {
+        __inline_i32_Display__fmt_3: {
             let self: Box<i32> = move Box<i32> { value: shared };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    __inline_increment_4: {
+    __inline_increment_5: {
         shared = (shared + 1);
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(32), used: 0 };
         __r.String::append(move "after increment=");
-        let mut __f: Formatter = __inline_Formatter__new_6: {
+        let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_7: {
+        __inline_i32_Display__fmt_8: {
             let self: Box<i32> = move Box<i32> { value: shared };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    __inline_double_9: {
+    __inline_double_10: {
         shared = (shared * 2);
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
         __r.String::append(move "after double=");
-        let mut __f: Formatter = __inline_Formatter__new_11: {
+        let mut __f: Formatter = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_12: {
+        __inline_i32_Display__fmt_13: {
             let self: Box<i32> = move Box<i32> { value: shared };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    __inline_increment_14: {
+    __inline_increment_15: {
         shared = (shared + 1);
     };
-    __inline_increment_15: {
+    __inline_increment_16: {
         shared = (shared + 1);
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(37), used: 0 };
         __r.String::append(move "after two increments=");
-        let mut __f: Formatter = __inline_Formatter__new_17: {
+        let mut __f: Formatter = __inline_Formatter__new_18: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_18: {
+        __inline_i32_Display__fmt_19: {
             let self: Box<i32> = move Box<i32> { value: shared };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

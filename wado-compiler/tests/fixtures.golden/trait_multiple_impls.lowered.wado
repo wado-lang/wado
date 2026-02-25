@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct Cat {
     name: String,
 }
@@ -40,6 +42,13 @@ fn "Dog^Describe::describe"(self: &Dog) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let cat: Cat = move Cat { name: "Whiskers" };
     let dog: Dog = move Dog { name: "Buddy" };
     core::cli::println(move cat."Cat^Describe::describe"());

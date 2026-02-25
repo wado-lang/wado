@@ -8,12 +8,92 @@
 // Copyright 2025 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-use {f64_to_string_exp, parse_text} from "./rsc_fpfmt.wado";
-use {println, Stdout} from "core:cli";
+use {
+    short, digits, check_special, SpecialKind, parse_text,
+} from "./fpfmt.wado";
+use { println, Stdout } from "core:cli";
 
 // Helper to construct f64 from bits
 fn f64_from_bits(bits: i64) -> f64 {
     return builtin::f64_reinterpret_i64(bits);
+}
+
+// format_exp with '+' sign and zero-padded exponent (matching Go %e style)
+fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
+    let mut buf = String::with_capacity(30);
+    let exp = p + nd - 1;
+
+    // Write digits
+    let mut val = d;
+    let mut digit_chars: Array<u8> = [];
+    for let mut i = 0; i < nd; i += 1 {
+        digit_chars.append(0 as u8);
+    }
+    let mut idx = nd - 1;
+    while idx >= 0 {
+        digit_chars[idx] = ('0' as u8) + ((val % 10) as u8);
+        val = val / 10;
+        idx -= 1;
+    }
+
+    buf.append_char(digit_chars[0] as char);
+    if nd > 1 {
+        buf.append_char('.');
+        for let mut i = 1; i < nd; i += 1 {
+            buf.append_char(digit_chars[i] as char);
+        }
+    }
+
+    buf.append_char('e');
+    if exp < 0 {
+        buf.append_char('-');
+    } else {
+        buf.append_char('+');
+    }
+
+    let abs_exp = if exp < 0 { -exp } else { exp };
+    if abs_exp < 10 {
+        buf.append_char('0');
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + abs_exp as u32));
+    } else if abs_exp < 100 {
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + (abs_exp / 10) as u32));
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + (abs_exp % 10) as u32));
+    } else {
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + (abs_exp / 100) as u32));
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + ((abs_exp / 10) % 10) as u32));
+        buf.append_char(char::from_u32_unchecked(('0' as u32) + (abs_exp % 10) as u32));
+    }
+
+    return buf;
+}
+
+fn f64_to_string_exp(f: f64, upper: bool) -> String {
+    let [is_special, is_neg, kind] = check_special(f);
+    if is_special {
+        if kind matches { Zero } {
+            if is_neg {
+                return "-0e+00";
+            }
+            return "0e+00";
+        }
+        if kind matches { Inf } {
+            if is_neg {
+                return "-Inf";
+            }
+            return "Inf";
+        }
+        return "NaN";
+    }
+    let abs_f = if is_neg { -f } else { f };
+    let result = short(abs_f);
+    let d = result.digits;
+    let p = result.exponent;
+    let nd = digits(d);
+    let formatted = format_exp_padded(d, p, nd);
+    if is_neg {
+        return String::concat("-", formatted);
+    }
+    return formatted;
 }
 
 

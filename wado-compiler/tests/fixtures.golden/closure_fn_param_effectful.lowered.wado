@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 pub struct "ArrayIter<i32>" {
     repr: builtin::array<i32>,
     used: i32,
@@ -23,6 +25,13 @@ struct __Closure_0 {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let items: Array<i32> = move [1, 2, 3];
     "for_each$__Closure_0"(items, &__Closure_0 {  });
 }

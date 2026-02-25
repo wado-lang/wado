@@ -13,19 +13,28 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut opts: Opts = move Opts { align: Align::Right };
-    core::cli::println(__inline_get_align_name_1: {
+    core::cli::println(__inline_get_align_name_2: {
         let opts: Opts = opts;
-        break __inline_get_align_name_1: match opts.align {
+        break __inline_get_align_name_2: match opts.align {
             Left => "left",
             Right => "right",
         };
     });
     opts.align = move Align::Left;
-    core::cli::println(__inline_get_align_name_2: {
+    core::cli::println(__inline_get_align_name_3: {
         let opts: Opts = opts;
-        break __inline_get_align_name_2: match opts.align {
+        break __inline_get_align_name_3: match opts.align {
             Left => "left",
             Right => "right",
         };

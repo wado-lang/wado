@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
     let mut i: i32 = 0;
     let _licm_used: i32 = keys.used;
@@ -26,16 +28,23 @@ fn find_key_index(keys: &Array<String>, key: &String) -> i32 {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let keys: Array<String> = move ["apple", "banana", "cherry", "date"];
     let result: i32 = find_key_index(&keys, &"cherry");
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
         __r.String::append(move "index: ");
-        let mut __f: Formatter = __inline_Formatter__new_1: {
+        let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_2: {
+        __inline_i32_Display__fmt_3: {
             let self: Box<i32> = move Box<i32> { value: result };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

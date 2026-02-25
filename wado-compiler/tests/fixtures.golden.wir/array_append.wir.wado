@@ -26,6 +26,13 @@ struct Formatter {
 
 array array<i32> (mut i32);
 
+array array<u64> (mut u64);
+
+struct Array<u64> {  // Array<T> with T=u64
+    mut repr: ref array<u64>,
+    mut used: i32,
+}
+
 struct Array<i32> {  // Array<T> with T=i32
     mut repr: ref array<i32>,
     mut used: i32,
@@ -73,11 +80,17 @@ type "functype/core:internal/log_stderr" = fn(ref null String);
 
 type "functype/core:internal/panic" = fn(ref null String);
 
+type "functype/__initialize_module" = fn();
+
 type "functype/count_digits_i64" = fn(i64) -> i32;
 
 type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
 
 type "functype/fmt_i32_decimal" = fn(i32, ref null Formatter);
+
+type "functype/Array<i32>^IndexValue::index_value" = fn(ref null Array<i32>, i32) -> i32;
+
+type "functype/Array<i32>::append" = fn(ref null Array<i32>, i32);
 
 type "functype/String::grow" = fn(ref null String, i32);
 
@@ -107,6 +120,9 @@ import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
+
+global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let arr: ref null Array<i32>;
@@ -148,16 +164,23 @@ fn run() with Stdout {
     let __local_36: ref null String;
     let __local_37: ref null "core:internal/Box<i32>";
     let __local_38: ref null Formatter;
+    __inline___initialize_modules_0: block {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        };
+        __initialize_module();
+        __modules_initialized = 1;
+    };
     arr = Array<i32> { repr: ref.as_non_null(array.new_fixed<i32>()), used: 0 };
     Array<i32>::append(arr, 10);
     Array<i32>::append(arr, 20);
     Array<i32>::append(arr, 30);
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_1 = String { repr: ref.as_non_null(builtin::array_new<u8>(20)), used: 0 };
-        String::append(__local_1, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 4)), used: 4 });
-        __local_2 = value_copy Formatter(__inline_Formatter__new_1: block -> ref null Formatter {
+        String::append(__local_1, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 4)), used: 4 });
+        __local_2 = value_copy Formatter(__inline_Formatter__new_2: block -> ref null Formatter {
             __local_10 = __local_1;
-            break __inline_Formatter__new_1: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
+            break __inline_Formatter__new_2: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
         });
         block {
             __local_11 = "core:internal/Box<i32>" { value: arr.used };
@@ -168,29 +191,29 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_3 = String { repr: ref.as_non_null(builtin::array_new<u8>(50)), used: 0 };
-        __local_4 = value_copy Formatter(__inline_Formatter__new_5: block -> ref null Formatter {
+        __local_4 = value_copy Formatter(__inline_Formatter__new_6: block -> ref null Formatter {
             __local_15 = __local_3;
-            break __inline_Formatter__new_5: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
+            break __inline_Formatter__new_6: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_15) };
         });
         block {
             __local_16 = "core:internal/Box<i32>" { value: Array<i32>^IndexValue::index_value(arr, 0) };
             __local_17 = __local_4;
             fmt_i32_decimal(__local_16.value, __local_17);
         };
-        String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 1)), used: 1 });
-        __local_4 = value_copy Formatter(__inline_Formatter__new_7: block -> ref null Formatter {
+        String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 1)), used: 1 });
+        __local_4 = value_copy Formatter(__inline_Formatter__new_8: block -> ref null Formatter {
             __local_18 = __local_3;
-            break __inline_Formatter__new_7: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_18) };
+            break __inline_Formatter__new_8: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_18) };
         });
         block {
             __local_19 = "core:internal/Box<i32>" { value: Array<i32>^IndexValue::index_value(arr, 1) };
             __local_20 = __local_4;
             fmt_i32_decimal(__local_19.value, __local_20);
         };
-        String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 1)), used: 1 });
-        __local_4 = value_copy Formatter(__inline_Formatter__new_9: block -> ref null Formatter {
+        String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 1)), used: 1 });
+        __local_4 = value_copy Formatter(__inline_Formatter__new_10: block -> ref null Formatter {
             __local_21 = __local_3;
-            break __inline_Formatter__new_9: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
+            break __inline_Formatter__new_10: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_21) };
         });
         block {
             __local_22 = "core:internal/Box<i32>" { value: Array<i32>^IndexValue::index_value(arr, 2) };
@@ -204,10 +227,10 @@ fn run() with Stdout {
     Array<i32>::append(arr, 60);
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_5 = String { repr: ref.as_non_null(builtin::array_new<u8>(33)), used: 0 };
-        String::append(__local_5, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 17)), used: 17 });
-        __local_6 = value_copy Formatter(__inline_Formatter__new_12: block -> ref null Formatter {
+        String::append(__local_5, String { repr: ref.as_non_null(array.new_data<u8>[4](0, 17)), used: 17 });
+        __local_6 = value_copy Formatter(__inline_Formatter__new_13: block -> ref null Formatter {
             __local_25 = __local_5;
-            break __inline_Formatter__new_12: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_25) };
+            break __inline_Formatter__new_13: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_25) };
         });
         block {
             __local_26 = "core:internal/Box<i32>" { value: arr.used };
@@ -218,29 +241,29 @@ fn run() with Stdout {
     });
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_7 = String { repr: ref.as_non_null(builtin::array_new<u8>(50)), used: 0 };
-        __local_8 = value_copy Formatter(__inline_Formatter__new_16: block -> ref null Formatter {
+        __local_8 = value_copy Formatter(__inline_Formatter__new_17: block -> ref null Formatter {
             __local_30 = __local_7;
-            break __inline_Formatter__new_16: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_30) };
+            break __inline_Formatter__new_17: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_30) };
         });
         block {
             __local_31 = "core:internal/Box<i32>" { value: Array<i32>^IndexValue::index_value(arr, 3) };
             __local_32 = __local_8;
             fmt_i32_decimal(__local_31.value, __local_32);
         };
-        String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 1)), used: 1 });
-        __local_8 = value_copy Formatter(__inline_Formatter__new_18: block -> ref null Formatter {
+        String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 1)), used: 1 });
+        __local_8 = value_copy Formatter(__inline_Formatter__new_19: block -> ref null Formatter {
             __local_33 = __local_7;
-            break __inline_Formatter__new_18: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
+            break __inline_Formatter__new_19: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_33) };
         });
         block {
             __local_34 = "core:internal/Box<i32>" { value: Array<i32>^IndexValue::index_value(arr, 4) };
             __local_35 = __local_8;
             fmt_i32_decimal(__local_34.value, __local_35);
         };
-        String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[2](0, 1)), used: 1 });
-        __local_8 = value_copy Formatter(__inline_Formatter__new_20: block -> ref null Formatter {
+        String::append(__local_7, String { repr: ref.as_non_null(array.new_data<u8>[3](0, 1)), used: 1 });
+        __local_8 = value_copy Formatter(__inline_Formatter__new_21: block -> ref null Formatter {
             __local_36 = __local_7;
-            break __inline_Formatter__new_20: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_36) };
+            break __inline_Formatter__new_21: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_36) };
         });
         block {
             __local_37 = "core:internal/Box<i32>" { value: Array<i32>^IndexValue::index_value(arr, 5) };
@@ -276,7 +299,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     __for_0: block {
         i = 0;
         block {
-            l2: loop {
+            l3: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
@@ -285,7 +308,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                     builtin::store_u8(ptr + i, byte);
                 };
                 i = i + 1;
-                continue l2;
+                continue l3;
             };
         };
     };
@@ -314,7 +337,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
     __for_1: block {
         i = 0;
         block {
-            l6: loop {
+            l7: loop {
                 if (i < len) == 0 {
                     break __for_1;
                 };
@@ -322,7 +345,7 @@ fn "core:internal/gc_array_to_memory"(arr, ptr, len) {  // from core:internal
                     builtin::store_u8(ptr + i, builtin::array_get_u8(arr, i));
                 };
                 i = i + 1;
-                continue l6;
+                continue l7;
             };
         };
     };
@@ -386,6 +409,10 @@ fn "core:internal/panic"(message) {  // from core:internal
     unreachable;
 }
 
+fn __initialize_module() {
+    POW10 = Array<u64> { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
+}
+
 fn count_digits_i64(val) {
     let __local_1: i64;
     let __local_2: i64;
@@ -398,7 +425,7 @@ fn count_digits_i64(val) {
     __for_1: block {
         t = val;
         block {
-            l13: loop {
+            l14: loop {
                 if (t > 0_i64) == 0 {
                     break __for_1;
                 };
@@ -406,7 +433,7 @@ fn count_digits_i64(val) {
                     n = n + 1;
                 };
                 t = t / 10_i64;
-                continue l13;
+                continue l14;
             };
         };
     };
@@ -425,7 +452,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
         __for_2: block {
             temp = abs_val;
             block {
-                l17: loop {
+                l18: loop {
                     if (temp > 0_i64) == 0 {
                         break __for_2;
                     };
@@ -434,7 +461,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                         builtin::array_set_u8(arr, pos, 48 + builtin::i32_wrap_i64(temp % 10_i64));
                     };
                     temp = temp / 10_i64;
-                    continue l17;
+                    continue l18;
                 };
             };
         };
@@ -459,6 +486,36 @@ fn fmt_i32_decimal(value, f) {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
+}
+
+fn Array<i32>^IndexValue::index_value(self, index) {
+    if index >= self.used {
+        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[0](0, 19)), used: 19 });
+        unreachable;
+    };
+    return builtin::array_get<i32>(self.repr, index);
+}
+
+fn Array<i32>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref null array<i32>;
+    let __local_6: i32;
+    let __local_7: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<i32>(new_capacity);
+        builtin::array_copy<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<i32>(self.repr, used, value);
+    self.used = used + 1;
 }
 
 fn String::grow(self, min_capacity) {
@@ -490,7 +547,7 @@ fn String::grow(self, min_capacity) {
         _licm_used = self.used;
         _licm_repr = self.repr;
         block {
-            l22: loop {
+            l25: loop {
                 if (i < _licm_used) == 0 {
                     break __for_0;
                 };
@@ -499,7 +556,7 @@ fn String::grow(self, min_capacity) {
                     builtin::array_set_u8(new_repr, i, byte);
                 };
                 i = i + 1;
-                continue l22;
+                continue l25;
             };
         };
     };
@@ -542,7 +599,7 @@ fn String::append(self, other) {
         _licm_repr = self.repr;
         _licm_used = self.used;
         block {
-            l28: loop {
+            l31: loop {
                 if (i < other_len) == 0 {
                     break __for_2;
                 };
@@ -551,7 +608,7 @@ fn String::append(self, other) {
                     builtin::array_set_u8(_licm_repr, _licm_used + i, byte);
                 };
                 i = i + 1;
-                continue l28;
+                continue l31;
             };
         };
     };
@@ -587,7 +644,7 @@ fn String::append_char(self, c) {
 
 fn Array<i32>^IndexValue::index_value(self, index) {
     if index >= self.used {
-        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[4](0, 19)), used: 19 });
+        "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[0](0, 19)), used: 19 });
         unreachable;
     };
     return builtin::array_get<i32>(self.repr, index);
@@ -622,7 +679,7 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf = self.buf;
         block {
-            l37: loop {
+            l40: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
@@ -630,7 +687,7 @@ fn Formatter::write_char_n(self, c, n) {
                     String::append_char(_licm_buf, c);
                 };
                 i = i + 1;
-                continue l37;
+                continue l40;
             };
         };
     };

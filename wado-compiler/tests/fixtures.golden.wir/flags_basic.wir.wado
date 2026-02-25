@@ -24,6 +24,13 @@ struct Formatter {
     mut buf: ref String,
 }
 
+array array<u64> (mut u64);
+
+struct Array<u64> {  // Array<T> with T=u64
+    mut repr: ref array<u64>,
+    mut used: i32,
+}
+
 enum Alignment { Left = 0, Center = 1, Right = 2 };
 
 type "functype/mem/realloc" = fn(i32, i32, i32, i32) -> i32;
@@ -56,6 +63,8 @@ type "functype/core:cli/println" = fn(ref null String);
 
 type "functype/core:internal/wait_for_subtask" = fn(i32);
 
+type "functype/__initialize_module" = fn();
+
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
@@ -67,6 +76,9 @@ import fn waitable-set-new from "wasi/waitable-set-new";
 import fn waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
+
+global mut POW10: ref null Array<u64> = ref.null none;
+global mut __modules_initialized: bool = 0;
 
 fn run() with Stdout {
     let __local_0: u32;
@@ -118,6 +130,13 @@ fn run() with Stdout {
     let __local_46: ref null String;
     let __local_47: ref null "core:internal/Box<i32>";
     let __local_48: ref null Formatter;
+    __inline___initialize_modules_0: block {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        };
+        __initialize_module();
+        __modules_initialized = 1;
+    };
     "core:cli/println"(String { repr: ref.as_non_null(array.new_data<u8>[11](0, 2)), used: 2 });
 }
 
@@ -146,7 +165,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     __for_0: block {
         i = 0;
         block {
-            l2: loop {
+            l3: loop {
                 if (i < len) == 0 {
                     break __for_0;
                 };
@@ -155,7 +174,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
                     builtin::store_u8(ptr + i, byte);
                 };
                 i = i + 1;
-                continue l2;
+                continue l3;
             };
         };
     };
@@ -192,6 +211,10 @@ fn "core:internal/wait_for_subtask"(packed) {  // from core:internal
         drop("mem/realloc"(ptr, 8, 4, 0));
         "wasi/subtask-drop"(handle);
     };
+}
+
+fn __initialize_module() {
+    POW10 = Array<u64> { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
 }
 
 export fn __cm_export__run as "run"

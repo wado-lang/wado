@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 enum Color {
     Red,
     Green,
@@ -20,16 +22,15 @@ enum Color {
 }
 
 export fn run() with Stdout {
-    core::cli::println(__inline_color_name_0: {
-        let c: Color = Color::Red;
-        break __inline_color_name_0: match c {
-            Red => "red",
-            Green => "green",
-            Blue => "blue",
-        };
-    });
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     core::cli::println(__inline_color_name_1: {
-        let c: Color = Color::Green;
+        let c: Color = Color::Red;
         break __inline_color_name_1: match c {
             Red => "red",
             Green => "green",
@@ -37,8 +38,16 @@ export fn run() with Stdout {
         };
     });
     core::cli::println(__inline_color_name_2: {
-        let c: Color = Color::Blue;
+        let c: Color = Color::Green;
         break __inline_color_name_2: match c {
+            Red => "red",
+            Green => "green",
+            Blue => "blue",
+        };
+    });
+    core::cli::println(__inline_color_name_3: {
+        let c: Color = Color::Blue;
+        break __inline_color_name_3: match c {
             Red => "red",
             Green => "green",
             Blue => "blue",

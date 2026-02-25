@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 pub struct Options {
     align: Align,
     width: i32,
@@ -77,6 +79,13 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let opts: Options = move Options { align: Align::Right, width: 0 };
     let s: String = move format_with_opts(move "test", opts);
     core::cli::println(s);

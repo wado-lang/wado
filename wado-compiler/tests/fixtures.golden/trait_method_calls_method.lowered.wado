@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct Point {
     x: i32,
     y: i32,
@@ -56,6 +58,13 @@ fn "Point^Describable::describe"(self: &Point) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let p: Point = move Point { x: 3, y: 4 };
     core::cli::println(move p."Point^Describable::describe"());
 }

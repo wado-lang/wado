@@ -21,7 +21,7 @@ pub struct ComponentPlan {
     pub canonical_intrinsics: Vec<String>,
     /// Whether future intrinsics are needed (future-new, future-write, etc.).
     pub needs_future_intrinsics: bool,
-    /// Bundled module function names (e.g., "`f64_to_buffer`", "`libm_sin`").
+    /// Bundled module function names (e.g., "`libm_sin`").
     /// These are TIR imports with namespace "bundled".
     pub bundled_functions: Vec<String>,
     /// World exports to create at the component boundary.

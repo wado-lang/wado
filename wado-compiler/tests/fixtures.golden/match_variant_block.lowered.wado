@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 fn apply_align(align: Align) -> String {
     let mut result: String = move "";
     return match align {
@@ -32,6 +34,13 @@ fn apply_align(align: Align) -> String {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     core::cli::println(move apply_align(move Align::Left));
     core::cli::println(move apply_align(move Align::Center));
     core::cli::println(move apply_align(move Align::Right));

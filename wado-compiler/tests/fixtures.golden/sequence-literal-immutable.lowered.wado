@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct "FrozenVecBuilder<i32>" {
     items: Array<i32>,
 }
@@ -22,32 +24,39 @@ struct "FrozenVec<i32>" {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let v: FrozenVec<i32> = __seq_lit: {
         let mut __b: FrozenVecBuilder<i32> = move FrozenVecBuilder<i32> { items: Array<i32> { repr: core::builtin::array_new::<i32>(5), used: 0 } };
-        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_1: {
+        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_2: {
             __b.items."Array<i32>::append"(1);
         };
-        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_2: {
+        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_3: {
             __b.items."Array<i32>::append"(2);
         };
-        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_3: {
+        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_4: {
             __b.items."Array<i32>::append"(3);
         };
-        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_4: {
+        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_5: {
             __b.items."Array<i32>::append"(4);
         };
-        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_5: {
+        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_6: {
             __b.items."Array<i32>::append"(5);
         };
-        break __seq_lit: __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__build_6: {
+        break __seq_lit: __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__build_7: {
             let self: FrozenVecBuilder<i32> = __b;
-            break __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__build_6: FrozenVec<i32> { items: self.items };
+            break __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__build_7: FrozenVec<i32> { items: self.items };
         };
     };
     __assert_0: {
-        let __v0: i32 = __inline_Array_i32___len_8: {
+        let __v0: i32 = __inline_Array_i32___len_9: {
             let self: &Array<i32> = &v.items;
-            break __inline_Array_i32___len_8: self.used;
+            break __inline_Array_i32___len_9: self.used;
         };
         let __cond: bool = (__v0 == 5);
         if !__cond {
@@ -58,22 +67,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/sequence-literal-immutable.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_10: {
+                let mut __f: Formatter = __inline_Formatter__new_11: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_11: {
+                __inline_i32_Display__fmt_12: {
                     let self: Box<i32> = move Box<i32> { value: 48 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: v.len() == 5\n");
                 __r.String::append(move "v.len(): ");
-                __f = __inline_Formatter__new_12: {
+                __f = __inline_Formatter__new_13: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_13: {
+                __inline_i32_Display__fmt_14: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -94,22 +103,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/sequence-literal-immutable.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_16: {
+                let mut __f: Formatter = __inline_Formatter__new_17: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_17: {
+                __inline_i32_Display__fmt_18: {
                     let self: Box<i32> = move Box<i32> { value: 49 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: v.get(0) == 1\n");
                 __r.String::append(move "v.get(0): ");
-                __f = __inline_Formatter__new_18: {
+                __f = __inline_Formatter__new_19: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_19: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_19: {
+                __inline_i32_Display__fmt_20: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -130,22 +139,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/sequence-literal-immutable.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_22: {
+                let mut __f: Formatter = __inline_Formatter__new_23: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_23: {
+                __inline_i32_Display__fmt_24: {
                     let self: Box<i32> = move Box<i32> { value: 50 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: v.get(2) == 3\n");
                 __r.String::append(move "v.get(2): ");
-                __f = __inline_Formatter__new_24: {
+                __f = __inline_Formatter__new_25: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_24: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_25: {
+                __inline_i32_Display__fmt_26: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -166,22 +175,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/sequence-literal-immutable.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_28: {
+                let mut __f: Formatter = __inline_Formatter__new_29: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_28: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_29: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_29: {
+                __inline_i32_Display__fmt_30: {
                     let self: Box<i32> = move Box<i32> { value: 51 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: v.get(4) == 5\n");
                 __r.String::append(move "v.get(4): ");
-                __f = __inline_Formatter__new_30: {
+                __f = __inline_Formatter__new_31: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_30: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_31: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_31: {
+                __inline_i32_Display__fmt_32: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -193,21 +202,21 @@ export fn run() with Stdout {
     }
     let v2: FrozenVec<i32> = __seq_lit: {
         let mut __b: FrozenVecBuilder<i32> = move FrozenVecBuilder<i32> { items: Array<i32> { repr: core::builtin::array_new::<i32>(2), used: 0 } };
-        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_33: {
+        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_34: {
             __b.items."Array<i32>::append"(10);
         };
-        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_34: {
+        __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__push_literal_35: {
             __b.items."Array<i32>::append"(20);
         };
-        break __seq_lit: __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__build_35: {
+        break __seq_lit: __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__build_36: {
             let self: FrozenVecBuilder<i32> = __b;
-            break __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__build_35: FrozenVec<i32> { items: self.items };
+            break __inline_FrozenVecBuilder_i32__SequenceLiteralBuilder__build_36: FrozenVec<i32> { items: self.items };
         };
     };
     __assert_4: {
-        let __v0: i32 = __inline_Array_i32___len_37: {
+        let __v0: i32 = __inline_Array_i32___len_38: {
             let self: &Array<i32> = &v2.items;
-            break __inline_Array_i32___len_37: self.used;
+            break __inline_Array_i32___len_38: self.used;
         };
         let __cond: bool = (__v0 == 2);
         if !__cond {
@@ -218,22 +227,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/sequence-literal-immutable.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_39: {
+                let mut __f: Formatter = __inline_Formatter__new_40: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_39: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_40: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_40: {
+                __inline_i32_Display__fmt_41: {
                     let self: Box<i32> = move Box<i32> { value: 55 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: v2.len() == 2\n");
                 __r.String::append(move "v2.len(): ");
-                __f = __inline_Formatter__new_41: {
+                __f = __inline_Formatter__new_42: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_41: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_42: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_42: {
+                __inline_i32_Display__fmt_43: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -254,22 +263,22 @@ export fn run() with Stdout {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/sequence-literal-immutable.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_45: {
+                let mut __f: Formatter = __inline_Formatter__new_46: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_45: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_46: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_46: {
+                __inline_i32_Display__fmt_47: {
                     let self: Box<i32> = move Box<i32> { value: 56 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: v2.get(1) == 20\n");
                 __r.String::append(move "v2.get(1): ");
-                __f = __inline_Formatter__new_47: {
+                __f = __inline_Formatter__new_48: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_47: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_48: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_48: {
+                __inline_i32_Display__fmt_49: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

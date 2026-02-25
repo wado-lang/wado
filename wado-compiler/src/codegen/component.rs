@@ -13,7 +13,7 @@
 use super::component_context::ComponentModelContext;
 use super::postprocess;
 use crate::ast::Type;
-use crate::bundled::{is_fts_function, wado_bundled_fts_wasm, wado_bundled_libm_wasm};
+use crate::bundled::wado_bundled_libm_wasm;
 use crate::component_model::{CmInstanceTypeGen, WasiFunctionInfo};
 use crate::project::Project;
 use indexmap::{IndexMap, IndexSet};
@@ -553,83 +553,40 @@ fn embed_bundled_modules(
     ctx: &mut ComponentModelContext,
     bundled_functions: &[String],
 ) {
-    let fts_functions: Vec<_> = bundled_functions
-        .iter()
-        .filter(|f| is_fts_function(f))
-        .cloned()
-        .collect();
-    let libm_functions: Vec<_> = bundled_functions
-        .iter()
-        .filter(|f| !is_fts_function(f))
-        .cloned()
-        .collect();
-
-    if !fts_functions.is_empty() {
-        let fts_module =
-            postprocess::convert_memory_to_import(wado_bundled_fts_wasm(), "env", "memory")
-                .expect("Failed to process wado-bundled-fts module");
-
-        let keep_exports: IndexSet<_> = fts_functions.iter().cloned().collect();
-        let final_module = postprocess::eliminate_dead_code(&fts_module, &keep_exports);
-
-        ctx.register_core_module("fts-mod");
-        builder.core_module_raw(Some("fts-mod"), &final_module);
-
-        ctx.register_core_instance("fts-env");
-        let fts_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
-        let fts_env_instance =
-            builder.core_instantiate_exports(Some("fts-env-instance"), fts_env_exports);
-
-        ctx.register_core_instance("fts");
-        builder.core_instantiate(
-            Some("fts"),
-            ctx.core_module_idx("fts-mod"),
-            [("env", ModuleArg::Instance(fts_env_instance))],
-        );
-
-        for func_name in &fts_functions {
-            ctx.register_core_func(func_name);
-            builder.core_alias_export(
-                Some(func_name),
-                ctx.core_instance_idx("fts"),
-                func_name,
-                ExportKind::Func,
-            );
-        }
+    if bundled_functions.is_empty() {
+        return;
     }
 
-    if !libm_functions.is_empty() {
-        let libm_module =
-            postprocess::convert_memory_to_import(wado_bundled_libm_wasm(), "env", "memory")
-                .expect("Failed to process wado-bundled-libm module");
+    let libm_module =
+        postprocess::convert_memory_to_import(wado_bundled_libm_wasm(), "env", "memory")
+            .expect("Failed to process wado-bundled-libm module");
 
-        let keep_exports: IndexSet<_> = libm_functions.iter().cloned().collect();
-        let final_module = postprocess::eliminate_dead_code(&libm_module, &keep_exports);
+    let keep_exports: IndexSet<_> = bundled_functions.iter().cloned().collect();
+    let final_module = postprocess::eliminate_dead_code(&libm_module, &keep_exports);
 
-        ctx.register_core_module("libm-mod");
-        builder.core_module_raw(Some("libm-mod"), &final_module);
+    ctx.register_core_module("libm-mod");
+    builder.core_module_raw(Some("libm-mod"), &final_module);
 
-        ctx.register_core_instance("libm-env");
-        let libm_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
-        let libm_env_instance =
-            builder.core_instantiate_exports(Some("libm-env-instance"), libm_env_exports);
+    ctx.register_core_instance("libm-env");
+    let libm_env_exports = [("memory", ExportKind::Memory, ctx.memory_idx())];
+    let libm_env_instance =
+        builder.core_instantiate_exports(Some("libm-env-instance"), libm_env_exports);
 
-        ctx.register_core_instance("libm");
-        builder.core_instantiate(
-            Some("libm"),
-            ctx.core_module_idx("libm-mod"),
-            [("env", ModuleArg::Instance(libm_env_instance))],
+    ctx.register_core_instance("libm");
+    builder.core_instantiate(
+        Some("libm"),
+        ctx.core_module_idx("libm-mod"),
+        [("env", ModuleArg::Instance(libm_env_instance))],
+    );
+
+    for func_name in bundled_functions {
+        ctx.register_core_func(func_name);
+        builder.core_alias_export(
+            Some(func_name),
+            ctx.core_instance_idx("libm"),
+            func_name,
+            ExportKind::Func,
         );
-
-        for func_name in &libm_functions {
-            ctx.register_core_func(func_name);
-            builder.core_alias_export(
-                Some(func_name),
-                ctx.core_instance_idx("libm"),
-                func_name,
-                ExportKind::Func,
-            );
-        }
     }
 }
 

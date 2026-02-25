@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct "Node<i32>" {
     value: i32,
     left: Option<&mut Node<i32>>,
@@ -20,6 +22,13 @@ struct "Node<i32>" {
 }
 
 fn __test_0_create_recursive_node() {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut node: Node<i32> = move "Node<i32>::new"(42);
     __assert_0: {
         let __v0: i32 = node.value;
@@ -32,22 +41,22 @@ fn __test_0_create_recursive_node() {
                 __r.String::append(move " at ");
                 __r.String::append(move "wado-compiler/tests/fixtures/recursive-generic-struct.wado");
                 __r.String::append(move ":");
-                let mut __f: Formatter = __inline_Formatter__new_1: {
+                let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_2: {
+                __inline_i32_Display__fmt_3: {
                     let self: Box<i32> = move Box<i32> { value: 22 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
                 __r.String::append(move "\ncondition: node.value == 42\n");
                 __r.String::append(move "node.value: ");
-                __f = __inline_Formatter__new_3: {
+                __f = __inline_Formatter__new_4: {
                     let buf: &mut String = &mut __r;
-                    break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                    break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
-                __inline_i32_Display__fmt_4: {
+                __inline_i32_Display__fmt_5: {
                     let self: Box<i32> = move Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

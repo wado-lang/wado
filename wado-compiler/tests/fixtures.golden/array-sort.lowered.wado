@@ -13,6 +13,8 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
+global mut __modules_initialized: bool = false;
+
 struct __Closure_0 {
 }
 
@@ -61,13 +63,20 @@ fn print_array(arr: &Array<i32>) with Stdout {
 }
 
 export fn run() with Stdout {
+    __inline___initialize_modules_0: {
+        if __modules_initialized {
+            break __inline___initialize_modules_0;
+        }
+        "core::prelude/fpfmt.wado::__initialize_module"();
+        __modules_initialized = true;
+    };
     let mut a: Array<i32> = move [5, 3, 8, 1, 9, 2, 7, 4, 6];
     a."Array<i32>::sort_by$__Closure_0"(&__Closure_0 {  });
     print_array(&a);
     a."Array<i32>::sort_by$__Closure_1"(&__Closure_1 {  });
     print_array(&a);
     let mut b: Array<i32> = move [42, 17, 99, 3, 55, 1];
-    __inline_Array_i32___sort_0: {
+    __inline_Array_i32___sort_1: {
         let self: &mut Array<i32> = &mut b;
         self."Array<i32>::sort_by$__Closure_4"(&__Closure_4 {  });
     };
@@ -81,18 +90,18 @@ export fn run() with Stdout {
     print_array(&e);
     print_array(&f);
     let mut empty: Array<i32> = move [];
-    __inline_Array_i32___sort_1: {
+    __inline_Array_i32___sort_2: {
         let self: &mut Array<i32> = &mut empty;
         self."Array<i32>::sort_by$__Closure_4"(&__Closure_4 {  });
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
         __r.String::append(move "empty len: ");
-        let mut __f: Formatter = __inline_Formatter__new_3: {
+        let mut __f: Formatter = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_4: {
+        __inline_i32_Display__fmt_5: {
             let self: Box<i32> = move Box<i32> { value: empty.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -100,13 +109,13 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     let mut single: Array<i32> = move [42];
-    __inline_Array_i32___sort_6: {
+    __inline_Array_i32___sort_7: {
         let self: &mut Array<i32> = &mut single;
         self."Array<i32>::sort_by$__Closure_4"(&__Closure_4 {  });
     };
     print_array(&single);
     let mut two: Array<i32> = move [2, 1];
-    __inline_Array_i32___sort_7: {
+    __inline_Array_i32___sort_8: {
         let self: &mut Array<i32> = &mut two;
         self."Array<i32>::sort_by$__Closure_4"(&__Closure_4 {  });
     };
