@@ -1,6 +1,6 @@
 ---
 name: git-upstream-sync
-description: Sync current branch with origin/main when a GitHub PR has conflicts. Merges with zdiff3, commits conflict markers separately, then resolves conflicts.
+description: Sync current branch with origin/main when a GitHub PR has conflicts. Merges with zdiff3 conflict style, commits conflict markers separately, then resolves conflicts.
 ---
 
 # Git Upstream Sync
@@ -9,11 +9,11 @@ Resolve GitHub PR conflicts by merging origin/main into the current branch.
 
 ## Procedure
 
-### 1. Fetch and merge with diff3
+### 1. Fetch and merge with zdiff3
 
 ```sh
 git fetch origin main
-git merge --conflict=diff3 origin/main
+git -c merge.conflictstyle=zdiff3 merge origin/main
 ```
 
 ### 2. If conflicts exist, commit them as-is
@@ -42,6 +42,6 @@ If conflicts happen on golden fixtures, just update golden fixtures.
 
 ## Important
 
-- Always use `--conflict=diff3` so the merge base is visible in conflict markers
+- Always use `-c merge.conflictstyle=zdiff3` so the merge base is visible in conflict markers (with zealous zdiff3 reducing noise)
 - Always commit the unresolved conflicts first, then resolve in a separate commit — this preserves a clear record of what the conflicts looked like vs how they were resolved
 - Do NOT squash the two commits together
