@@ -363,6 +363,18 @@ is deferred: it requires an `Into<E>` conversion per element.
 2. **Heterogeneous elements deferred**: both traits currently require a uniform
    `Value`/`Element` type.
 
+3. **Non-String keys not supported**: `insert_literal` takes `key: String`, so all
+   literal keys must be plain identifiers (written as strings by the compiler). Typed
+   or computed keys — e.g., an enum discriminant or an integer — are not supported.
+   When this feature is added, the syntax will follow JavaScript's computed-property
+   notation:
+
+   ```wado
+   let m: Map<Color, i32> = { [Color::Red]: 1, [Color::Blue]: 2 };
+   ```
+
+   Until then, use explicit insertion calls instead.
+
 ## Related WEPs
 
 - [Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
