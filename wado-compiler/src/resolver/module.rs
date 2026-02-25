@@ -227,32 +227,38 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let old_type_params = std::mem::take(&mut self.current_type_params);
                     let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
 
-                    // First, collect explicit type params from impl<T>
-                    for (index, param) in impl_block.type_params.iter().enumerate() {
+                    // First, collect explicit type params from impl<T>, skipping concrete types
+                    // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
+                    let mut actual_idx = 0u32;
+                    for param in &impl_block.type_params {
+                        if self.is_known_type_name(&param.name) {
+                            continue;
+                        }
                         let type_id = self
                             .type_table
                             .borrow_mut()
-                            .make_type_param(param.name.clone(), index as u32);
+                            .make_type_param(param.name.clone(), actual_idx);
                         self.current_type_params
-                            .insert(param.name.clone(), (index as u32, type_id));
+                            .insert(param.name.clone(), (actual_idx, type_id));
                         if !param.bounds.is_empty() {
                             self.current_type_param_bounds.insert(
                                 param.name.clone(),
                                 param.bounds.iter().map(|b| b.name.clone()).collect(),
                             );
                         }
+                        actual_idx += 1;
                     }
 
                     // Also collect type params from generic type: impl Array<T> {...}
                     // The type args in Array<T> are type parameters
                     if let ast::Type::Generic(generic) = &impl_block.ty {
-                        let offset = impl_block.type_params.len();
+                        let offset = actual_idx as usize;
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
-                                // Check if this looks like a type parameter (single uppercase letter or PascalCase)
-                                // In practice, T, U, V etc. are type params
                                 let name = &named.name;
-                                if !self.current_type_params.contains_key(name) {
+                                if !self.current_type_params.contains_key(name)
+                                    && !self.is_known_type_name(name)
+                                {
                                     let index = (offset + i) as u32;
                                     let type_id = self
                                         .type_table

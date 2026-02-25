@@ -309,13 +309,21 @@ impl IndexValue<K> for TreeMap<K, V> {
     }
 }
 
-// KeyValueLiteral for { key: value, ... } -> TreeMap<String, V>
-impl KeyValueLiteral for TreeMap<String, V> {
+// KeyValueLiteralBuilder for { key: value, ... } -> TreeMap<String, V>
+// The blanket impl in core:prelude automatically provides KeyValueLiteral for TreeMap.
+impl KeyValueLiteralBuilder for TreeMap<String, V> {
     type Value = V;
-    fn new_literal() -> TreeMap<String, V> {
+    type Output = TreeMap<String, V>;
+
+    fn new_literal(capacity: i32) -> TreeMap<String, V> {
         return TreeMap::<String, V>::new();
     }
+
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.insert(key, value);
+    }
+
+    fn build(self) -> TreeMap<String, V> {
+        return self;
     }
 }

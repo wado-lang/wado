@@ -276,12 +276,53 @@ pub trait FromIterator<T> {
     fn from_iter(iter: Self::Iter) -> Self;
 }
 
-/// Trait for constructing a value from a key-value literal `{ key: value, ... }`.
-/// Types implementing this trait can receive struct literal coercion when used as
-/// a type context (let binding, function argument, cast).
+/// Builder trait for constructing a value from a key-value literal `{ key: value, ... }`.
+/// Implement this to make a type constructible from `{ key: value, ... }` literals.
 /// Keys are always String (from field names); `Value` is the element type.
+/// `Output` is the finished value (often `Self` for mutable types).
+pub trait KeyValueLiteralBuilder {
+    type Value;
+    type Output;
+    /// Create an empty builder pre-allocated for `capacity` entries.
+    fn new_literal(capacity: i32) -> Self;
+    /// Record one field from the literal.
+    fn insert_literal(&mut self, key: String, value: Self::Value);
+    /// Consume the builder and return the finished value.
+    fn build(self) -> Self::Output;
+}
+
+/// Marker trait for types constructible from a key-value literal.
+/// Implemented automatically for any `T: KeyValueLiteralBuilder<Output = T>`.
 pub trait KeyValueLiteral {
     type Value;
-    fn new_literal() -> Self;
-    fn insert_literal(&mut self, key: String, value: Self::Value);
+}
+
+/// Blanket implementation: any self-as-builder type satisfies KeyValueLiteral.
+impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
+    type Value = T::Value;
+}
+
+/// Builder trait for constructing a value from a sequence literal `[e0, e1, ...]`.
+/// Implement this to make a type constructible from sequence literals.
+/// `Element` is the element type; `Output` is the finished value.
+pub trait SequenceLiteralBuilder {
+    type Element;
+    type Output;
+    /// Create an empty builder pre-allocated for `capacity` elements.
+    fn new_literal(capacity: i32) -> Self;
+    /// Append one element from the literal.
+    fn push_literal(&mut self, value: Self::Element);
+    /// Consume the builder and return the finished value.
+    fn build(self) -> Self::Output;
+}
+
+/// Marker trait for types constructible from a sequence literal.
+/// Implemented automatically for any `T: SequenceLiteralBuilder<Output = T>`.
+pub trait SequenceLiteral {
+    type Element;
+}
+
+/// Blanket implementation: any self-as-builder type satisfies SequenceLiteral.
+impl<T: SequenceLiteralBuilder<Output = T>> SequenceLiteral for T {
+    type Element = T::Element;
 }

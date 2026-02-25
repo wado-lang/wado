@@ -737,12 +737,28 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) rhs_type: Option<TypeId>,
 }
 
-/// Info about a `KeyValueLiteral` trait implementation
+/// Info about a `KeyValueLiteralBuilder` trait implementation
 pub(super) struct KeyValueLiteralTraitInfo {
     /// The Value associated type (element type for literal values)
     pub(super) value_type: TypeId,
+    /// The Builder type (the type that accumulates key-value pairs)
+    pub(super) builder_type: TypeId,
     /// Self kind for the `insert_literal` method (&mut self)
     pub(super) self_kind: ast::SelfKind,
-    /// The trait name (e.g., "`KeyValueLiteral`")
+    /// The trait name used for method mangling (e.g., "`KeyValueLiteralBuilder`")
+    pub(super) trait_name: String,
+}
+
+/// Info about a `SequenceLiteralBuilder` trait implementation
+pub(super) struct SequenceLiteralTraitInfo {
+    /// The Element associated type (element type for literal values)
+    pub(super) element_type: TypeId,
+    /// The Builder type (the type that accumulates elements)
+    pub(super) builder_type: TypeId,
+    /// The Output type (the final type after `build()`)
+    pub(super) output_type: TypeId,
+    /// Self kind for the `push_literal` method (&mut self)
+    pub(super) self_kind: ast::SelfKind,
+    /// The trait name used for method mangling (e.g., "`SequenceLiteralBuilder`")
     pub(super) trait_name: String,
 }

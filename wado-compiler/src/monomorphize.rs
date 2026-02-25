@@ -640,7 +640,12 @@ impl Monomorphizer {
             TirStmtKind::Loop { body } => {
                 self.rewrite_types_in_block(body, type_table);
             }
-            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.rewrite_types_in_expr(v, type_table);
+                }
+            }
+            TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
             }
@@ -1316,7 +1321,12 @@ impl Monomorphizer {
             TirStmtKind::Loop { body } => {
                 self.collect_func_instantiation_sites_in_block(body, generic_functions, type_table);
             }
-            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.collect_func_instantiation_sites_in_expr(v, generic_functions, type_table);
+                }
+            }
+            TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.collect_func_instantiation_sites_in_block(
                     block,
@@ -2131,7 +2141,12 @@ impl Monomorphizer {
             TirStmtKind::Loop { body } => {
                 self.substitute_types_in_block(body, substitution, type_table);
             }
-            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.substitute_types_in_expr(v, substitution, type_table);
+                }
+            }
+            TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
@@ -2884,7 +2899,12 @@ impl Monomorphizer {
             TirStmtKind::Loop { body } => {
                 self.rewrite_function_calls_in_block(body, type_table);
             }
-            TirStmtKind::Break { .. } | TirStmtKind::Continue => {}
+            TirStmtKind::Break { value, .. } => {
+                if let Some(v) = value {
+                    self.rewrite_function_calls_in_expr(v, type_table);
+                }
+            }
+            TirStmtKind::Continue => {}
             TirStmtKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);
             }

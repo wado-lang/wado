@@ -12,16 +12,21 @@ struct StatusMap<S, V> {
     values: Array<V>,
 }
 
-impl KeyValueLiteral for StatusMap<Status, V> {
+impl KeyValueLiteralBuilder for StatusMap<Status, V> {
     type Value = V;
+    type Output = StatusMap<Status, V>;
 
-    fn new_literal() -> StatusMap<Status, V> {
+    fn new_literal(capacity: i32) -> StatusMap<Status, V> {
         return StatusMap { keys: [], values: [] };
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.keys.append(key);
         self.values.append(value);
+    }
+
+    fn build(self) -> StatusMap<Status, V> {
+        return self;
     }
 }
 

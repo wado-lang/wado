@@ -66,6 +66,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return TypeTable::ERROR;
         }
 
+        // Handle T::AssociatedType where T is a type parameter in scope
+        if let Some(&(_, param_type_id)) = self.current_type_params.get(&namespaced.namespace) {
+            return self
+                .type_table
+                .borrow_mut()
+                .make_assoc_type_projection(param_type_id, namespaced.name.clone());
+        }
+
         if namespaced.namespace.as_str() == "builtin" {
             if namespaced.name.as_str() == "array" {
                 if namespaced.args.len() != 1 {

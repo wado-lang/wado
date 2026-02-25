@@ -8,16 +8,21 @@ struct TagMap<K, V> {
     values: Array<V>,
 }
 
-impl KeyValueLiteral for TagMap<Tag, V> {
+impl KeyValueLiteralBuilder for TagMap<Tag, V> {
     type Value = V;
+    type Output = TagMap<Tag, V>;
 
-    fn new_literal() -> TagMap<Tag, V> {
+    fn new_literal(capacity: i32) -> TagMap<Tag, V> {
         return TagMap { keys: [], values: [] };
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.keys.append(key);
         self.values.append(value);
+    }
+
+    fn build(self) -> TagMap<Tag, V> {
+        return self;
     }
 }
 

@@ -3514,9 +3514,14 @@ impl Parser {
         let name = self.consume_ident()?;
         let params = self.parse_generic_params()?;
 
-        // Add params to type_params if not already present (avoid duplicates from impl<T>)
+        // Only add params that have explicit bounds (e.g., `T: Ord`) to type_params.
+        // Params without bounds are either concrete types (like `i32` in `impl IndexValue<i32>`)
+        // or bare type params that will be handled by the generic-args loops in the resolver.
+        // Adding them would shift the index of real type params like T, breaking
+        // associated type resolution (e.g., `type Output = T` would resolve to TypeParam(T,1)
+        // instead of TypeParam(T,0) for `impl IndexValue<i32> for Array<T>`).
         for param in &params {
-            if !type_params.iter().any(|p| p.name == param.name) {
+            if !param.bounds.is_empty() && !type_params.iter().any(|p| p.name == param.name) {
                 type_params.push(param.clone());
             }
         }

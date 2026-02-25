@@ -17,16 +17,21 @@ impl LinearMap<V> {
     }
 }
 
-impl KeyValueLiteral for LinearMap<V> {
+impl KeyValueLiteralBuilder for LinearMap<V> {
     type Value = V;
+    type Output = LinearMap<V>;
 
-    fn new_literal() -> LinearMap<V> {
+    fn new_literal(capacity: i32) -> LinearMap<V> {
         return LinearMap::<V>::new();
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.keys.append(key);
         self.values.append(value);
+    }
+
+    fn build(self) -> LinearMap<V> {
+        return self;
     }
 }
 

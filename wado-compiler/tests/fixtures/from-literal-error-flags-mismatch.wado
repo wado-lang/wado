@@ -8,16 +8,21 @@ struct PermsMap<P, V> {
     values: Array<V>,
 }
 
-impl KeyValueLiteral for PermsMap<Perms, V> {
+impl KeyValueLiteralBuilder for PermsMap<Perms, V> {
     type Value = V;
+    type Output = PermsMap<Perms, V>;
 
-    fn new_literal() -> PermsMap<Perms, V> {
+    fn new_literal(capacity: i32) -> PermsMap<Perms, V> {
         return PermsMap { keys: [], values: [] };
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.keys.append(key);
         self.values.append(value);
+    }
+
+    fn build(self) -> PermsMap<Perms, V> {
+        return self;
     }
 }
 

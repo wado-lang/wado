@@ -291,21 +291,46 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                     let old_type_params = std::mem::take(&mut self.current_type_params);
                     let old_type_param_bounds = std::mem::take(&mut self.current_type_param_bounds);
 
-                    // First, collect explicit type params from impl<T: Bound>
+                    // Register explicit type params from impl<T: Bound> declarations,
+                    // skipping concrete types (e.g., `impl<i32, T>` — skip "i32").
+                    // This handles both `impl<T> Trait for Struct<T>` and
+                    // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
+                    let mut actual_idx = 0u32;
                     for param in &impl_block.type_params {
-                        if !param.bounds.is_empty() {
-                            self.current_type_param_bounds.insert(
-                                param.name.clone(),
-                                param.bounds.iter().map(|b| b.name.clone()).collect(),
-                            );
+                        if self.is_known_type_name(&param.name) {
+                            // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
+                            if !param.bounds.is_empty() {
+                                self.current_type_param_bounds
+                                    .entry(param.name.clone())
+                                    .or_insert_with(Vec::new)
+                                    .extend(param.bounds.iter().map(|b| b.name.clone()));
+                            }
+                            continue;
                         }
+                        if !self.current_type_params.contains_key(&param.name) {
+                            let type_id = self
+                                .type_table
+                                .borrow_mut()
+                                .make_type_param(param.name.clone(), actual_idx);
+                            self.current_type_params
+                                .insert(param.name.clone(), (actual_idx, type_id));
+                        }
+                        if !param.bounds.is_empty() {
+                            self.current_type_param_bounds
+                                .entry(param.name.clone())
+                                .or_insert_with(Vec::new)
+                                .extend(param.bounds.iter().map(|b| b.name.clone()));
+                        }
+                        actual_idx += 1;
                     }
 
                     if let ast::Type::Generic(generic) = &impl_block.ty {
                         for (i, arg) in generic.args.iter().enumerate() {
                             if let ast::Type::Named(named) = arg {
                                 let name = &named.name;
-                                if !self.current_type_params.contains_key(name) {
+                                if !self.current_type_params.contains_key(name)
+                                    && !self.is_known_type_name(name)
+                                {
                                     let type_id = self
                                         .type_table
                                         .borrow_mut()
@@ -313,18 +338,6 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     self.current_type_params
                                         .insert(name.clone(), (i as u32, type_id));
                                 }
-                            }
-                        }
-                        // Also collect bounds from generic type args
-                        // e.g., impl Array<T: Ord> has bounds on the type arg
-                        for param in &impl_block.type_params {
-                            if !param.bounds.is_empty()
-                                && !self.current_type_param_bounds.contains_key(&param.name)
-                            {
-                                self.current_type_param_bounds.insert(
-                                    param.name.clone(),
-                                    param.bounds.iter().map(|b| b.name.clone()).collect(),
-                                );
                             }
                         }
                     }

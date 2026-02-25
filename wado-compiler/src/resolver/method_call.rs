@@ -835,8 +835,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         };
 
-        let mangled_func_name =
-            MethodName::format_local(&mangled_struct_name, None, &static_call.method);
+        // Find trait name: if the static method belongs to a trait impl, include the
+        // trait name in the mangled function name so WIR can resolve it correctly.
+        let trait_name_opt = self.find_static_method_trait(&struct_name, &static_call.method);
+
+        let mangled_func_name = MethodName::format_local(
+            &mangled_struct_name,
+            trait_name_opt.as_deref(),
+            &static_call.method,
+        );
 
         // Look up return type
         let mut return_type = self.lookup_static_method_return_type(
@@ -856,9 +863,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             if struct_type_args.is_empty() {
                 (None, vec![])
             } else {
-                // Generic static method: track the original generic name
-                let generic_name =
-                    MethodName::format_local(&struct_name, None, &static_call.method);
+                // Generic static method: track the original generic name (with trait if applicable)
+                let generic_name = MethodName::format_local(
+                    &struct_name,
+                    trait_name_opt.as_deref(),
+                    &static_call.method,
+                );
                 let type_arg_names: Vec<String> = struct_type_args
                     .iter()
                     .map(|t| self.type_table.borrow().mangle_type_name(*t))
@@ -872,13 +882,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 )
             };
 
-        // Build method_info with base struct name, then apply type args
-        let method_info = LocalMethodName::new(
-            struct_name, // Use base struct name without type params
-            None,        // Static methods are inherent, no trait
-            static_call.method.clone(),
-        )
-        .with_struct_type_args(&impl_type_arg_names);
+        // Build method_info with base struct name and trait name (if applicable)
+        let method_info =
+            LocalMethodName::new(struct_name, trait_name_opt, static_call.method.clone())
+                .with_struct_type_args(&impl_type_arg_names);
 
         TirExpr::new(
             TirExprKind::StaticCall {
@@ -1164,6 +1171,54 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         Vec::new()
+    }
+
+    /// Find the trait name for a static method on a struct, if the method belongs to a trait impl.
+    /// Returns `None` for inherent static methods, `Some(trait_name)` for trait static methods.
+    pub(super) fn find_static_method_trait(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<String> {
+        // Check current module items first
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
+            {
+                for method in &impl_block.methods {
+                    let has_self = method
+                        .params
+                        .iter()
+                        .any(|p| p.self_kind != ast::SelfKind::None);
+                    if method.name == method_name && !has_self {
+                        return Some(Self::get_type_name_static(trait_type));
+                    }
+                }
+            }
+        }
+
+        // Check loaded modules
+        for module in self.loaded_modules.values() {
+            for item in &module.items {
+                if let Item::Impl(impl_block) = item
+                    && let Some(trait_type) = &impl_block.trait_type
+                    && Self::get_type_name_static(&impl_block.ty) == struct_name
+                {
+                    for method in &impl_block.methods {
+                        let has_self = method
+                            .params
+                            .iter()
+                            .any(|p| p.self_kind != ast::SelfKind::None);
+                        if method.name == method_name && !has_self {
+                            return Some(Self::get_type_name_static(trait_type));
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Get the operator trait and method name for a binary operator.
