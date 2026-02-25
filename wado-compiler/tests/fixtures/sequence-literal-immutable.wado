@@ -1,0 +1,62 @@
+// SequenceLiteral with separate builder for immutable output
+// The output type (FrozenVec) has no mutation methods; construction uses a builder.
+use { println } from "core:cli";
+
+struct FrozenVec<T> {
+    items: Array<T>,
+}
+
+impl FrozenVec<T> {
+    fn len(&self) -> i32 {
+        return self.items.len();
+    }
+
+    fn get(&self, i: i32) -> T {
+        return self.items[i];
+    }
+}
+
+struct FrozenVecBuilder<T> {
+    items: Array<T>,
+}
+
+impl SequenceLiteralBuilder for FrozenVecBuilder<T> {
+    type Element = T;
+    type Output = FrozenVec<T>;
+
+    fn new_literal(capacity: i32) -> FrozenVecBuilder<T> {
+        return FrozenVecBuilder { items: Array::<T>::with_capacity(capacity) };
+    }
+
+    fn push_literal(&mut self, value: T) {
+        self.items.append(value);
+    }
+
+    fn build(self) -> FrozenVec<T> {
+        return FrozenVec { items: self.items };
+    }
+}
+
+impl SequenceLiteral for FrozenVec<T> {
+    type Element = T;
+    type Builder = FrozenVecBuilder<T>;
+}
+
+export fn run() with Stdout {
+    let v: FrozenVec<i32> = [1, 2, 3, 4, 5];
+
+    assert v.len() == 5;
+    assert v.get(0) == 1;
+    assert v.get(2) == 3;
+    assert v.get(4) == 5;
+
+    // Cast coercion
+    let v2 = [10, 20] as FrozenVec<i32>;
+    assert v2.len() == 2;
+    assert v2.get(1) == 20;
+
+    println("sequence-literal-immutable: ok");
+}
+
+__DATA__
+{"stdout": "sequence-literal-immutable: ok\n"}

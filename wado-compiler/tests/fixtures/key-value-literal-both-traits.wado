@@ -1,0 +1,91 @@
+// A single type implementing both KeyValueLiteralBuilder and SequenceLiteralBuilder.
+// Demonstrates how the same type can be constructed from both { k: v } and [e0, e1] literals.
+use { println } from "core:cli";
+
+// A simple multi-value container that can hold either a list or a named-field record.
+// Both literal forms produce the same type (with keys empty for sequences).
+struct Bag<T> {
+    keys: Array<String>,
+    values: Array<T>,
+}
+
+impl Bag<T> {
+    fn len(&self) -> i32 {
+        return self.values.len();
+    }
+
+    fn get_by_index(&self, i: i32) -> T {
+        return self.values[i];
+    }
+
+    fn get_by_key(&self, key: String) -> Option<T> {
+        let mut i = 0;
+        while i < self.keys.len() {
+            if self.keys[i] == key {
+                return Option::<T>::Some(self.values[i]);
+            }
+            i += 1;
+        }
+        return null;
+    }
+
+    fn is_named(&self) -> bool {
+        return self.keys.len() > 0;
+    }
+}
+
+impl KeyValueLiteralBuilder for Bag<T> {
+    type Value = T;
+    type Output = Bag<T>;
+
+    fn new_literal(capacity: i32) -> Bag<T> {
+        return Bag { keys: [], values: [] };
+    }
+
+    fn insert_literal(&mut self, key: String, value: T) {
+        self.keys.append(key);
+        self.values.append(value);
+    }
+
+    fn build(self) -> Bag<T> {
+        return self;
+    }
+}
+
+impl SequenceLiteralBuilder for Bag<T> {
+    type Element = T;
+    type Output = Bag<T>;
+
+    fn new_literal(capacity: i32) -> Bag<T> {
+        return Bag { keys: [], values: Array::<T>::with_capacity(capacity) };
+    }
+
+    fn push_literal(&mut self, value: T) {
+        self.values.append(value);
+    }
+
+    fn build(self) -> Bag<T> {
+        return self;
+    }
+}
+
+export fn run() with Stdout {
+    // Key-value literal: { k: v, ... }
+    let named: Bag<i32> = { x: 10, y: 20, z: 30 };
+    assert named.len() == 3;
+    assert named.is_named();
+    if let Some(v) = named.get_by_key("y") {
+        assert v == 20;
+    }
+
+    // Sequence literal: [e0, e1, ...]
+    let indexed: Bag<i32> = [100, 200, 300];
+    assert indexed.len() == 3;
+    assert indexed.get_by_index(0) == 100;
+    assert indexed.get_by_index(2) == 300;
+
+    println("key-value-literal-both-traits: ok");
+}
+
+__DATA__
+{"stdout": "key-value-literal-both-traits: ok\n"}

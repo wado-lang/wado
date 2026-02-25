@@ -293,13 +293,17 @@ pub trait KeyValueLiteralBuilder {
 
 /// Marker trait for types constructible from a key-value literal.
 /// Implemented automatically for any `T: KeyValueLiteralBuilder<Output = T>`.
+/// For immutable output types, implement this explicitly and set `type Builder`
+/// to the mutable builder struct that builds this type.
 pub trait KeyValueLiteral {
     type Value;
+    type Builder;
 }
 
 /// Blanket implementation: any self-as-builder type satisfies KeyValueLiteral.
 impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
     type Value = T::Value;
+    type Builder = T;
 }
 
 /// Builder trait for constructing a value from a sequence literal `[e0, e1, ...]`.
@@ -318,11 +322,15 @@ pub trait SequenceLiteralBuilder {
 
 /// Marker trait for types constructible from a sequence literal.
 /// Implemented automatically for any `T: SequenceLiteralBuilder<Output = T>`.
+/// For immutable output types, implement this explicitly and set `type Builder`
+/// to the mutable builder struct that builds this type.
 pub trait SequenceLiteral {
     type Element;
+    type Builder;
 }
 
 /// Blanket implementation: any self-as-builder type satisfies SequenceLiteral.
 impl<T: SequenceLiteralBuilder<Output = T>> SequenceLiteral for T {
     type Element = T::Element;
+    type Builder = T;
 }

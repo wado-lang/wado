@@ -1282,13 +1282,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ///
     /// Checks first for an explicit `impl KeyValueLiteralBuilder for T` (with `Output = T`
     /// check for blanket-style self-as-builder usage), then falls back to checking whether
-    /// `T` implements the legacy `KeyValueLiteral` trait for backwards compatibility.
+    /// `T` implements the `KeyValueLiteral` trait (separate builder pattern).
     pub(super) fn find_key_value_literal_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
     ) -> Option<KeyValueLiteralTraitInfo> {
-        // Primary: explicit impl KeyValueLiteralBuilder for T
+        // Primary: explicit impl KeyValueLiteralBuilder for T (self-as-builder pattern)
         if let Some((value_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
@@ -1316,17 +1316,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Fallback: legacy explicit impl KeyValueLiteral for T
-        if let Some((value_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+        // Secondary: explicit impl KeyValueLiteral for T with type Builder (separate builder
+        // pattern for immutable output types).
+        let builder_type = self.find_assoc_type_in_trait_impl(
             struct_name,
             base_type_id,
             "KeyValueLiteral",
+            "Builder",
+        )?;
+        let builder_name = self.struct_name_for_type(builder_type)?;
+        if let Some((value_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+            &builder_name,
+            builder_type,
+            "KeyValueLiteralBuilder",
             "insert_literal",
             "Value",
         ) {
             return Some(KeyValueLiteralTraitInfo {
                 value_type,
-                builder_type: base_type_id,
+                builder_type,
                 self_kind,
                 trait_name,
             });
@@ -1431,37 +1439,72 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
     /// Find `SequenceLiteralBuilder` trait implementation for a type.
     ///
-    /// Checks for an explicit `impl SequenceLiteralBuilder for T` and returns info
-    /// needed to desugar a sequence literal `[e0, e1, ...]` targeting that type.
+    /// Checks for an explicit `impl SequenceLiteralBuilder for T` (self-as-builder) first.
+    /// If not found, checks for `impl SequenceLiteral for T` with `type Builder` (separate
+    /// builder pattern for immutable output types).
     pub(super) fn find_sequence_literal_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
     ) -> Option<SequenceLiteralTraitInfo> {
-        let (element_type, self_kind, trait_name) = self.find_indexing_trait_impl(
+        // Primary: self-as-builder (impl SequenceLiteralBuilder for T)
+        if let Some((element_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
             "SequenceLiteralBuilder",
             "push_literal",
             "Element",
+        ) {
+            let output_type = self
+                .find_assoc_type_in_trait_impl(
+                    struct_name,
+                    base_type_id,
+                    "SequenceLiteralBuilder",
+                    "Output",
+                )
+                .unwrap_or(base_type_id);
+            return Some(SequenceLiteralTraitInfo {
+                element_type,
+                builder_type: base_type_id,
+                output_type,
+                self_kind,
+                trait_name,
+            });
+        }
+
+        // Secondary: separate builder (impl SequenceLiteral for T with type Builder)
+        let builder_type = self.find_assoc_type_in_trait_impl(
+            struct_name,
+            base_type_id,
+            "SequenceLiteral",
+            "Builder",
         )?;
+        let builder_name = self.struct_name_for_type(builder_type)?;
+        if let Some((element_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+            &builder_name,
+            builder_type,
+            "SequenceLiteralBuilder",
+            "push_literal",
+            "Element",
+        ) {
+            let output_type = self
+                .find_assoc_type_in_trait_impl(
+                    &builder_name,
+                    builder_type,
+                    "SequenceLiteralBuilder",
+                    "Output",
+                )
+                .unwrap_or(base_type_id);
+            return Some(SequenceLiteralTraitInfo {
+                element_type,
+                builder_type,
+                output_type,
+                self_kind,
+                trait_name,
+            });
+        }
 
-        let output_type = self
-            .find_assoc_type_in_trait_impl(
-                struct_name,
-                base_type_id,
-                "SequenceLiteralBuilder",
-                "Output",
-            )
-            .unwrap_or(base_type_id);
-
-        Some(SequenceLiteralTraitInfo {
-            element_type,
-            builder_type: base_type_id,
-            output_type,
-            self_kind,
-            trait_name,
-        })
+        None
     }
 
     /// Find `IndexAssign` trait implementation for a type
@@ -2349,12 +2392,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let inner = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
                     self.type_table.borrow_mut().make_option(inner)
                 } else {
-                    // For generic types, create a generic instance
-                    // Use the variant's defining module source if available
+                    // For generic types, create a generic instance.
+                    // Use the defining module source of the struct/variant to ensure the
+                    // resulting TypeId matches what resolve_type produces for the same type.
+                    // Falling back to current_module_source causes type identity mismatches when
+                    // the struct is defined in a different module.
                     let module_source = self
                         .variant_cases
                         .get(base_name.as_str())
                         .map(|info| info.module_source.clone())
+                        .or_else(|| {
+                            self.struct_fields
+                                .get(base_name.as_str())
+                                .map(|info| info.module_source.clone())
+                        })
                         .unwrap_or_else(|| self.current_module_source.clone());
                     self.type_table
                         .borrow_mut()

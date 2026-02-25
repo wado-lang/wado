@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::name::ModuleSource;
-use crate::tir::TypeTable;
+use crate::tir::{TypeId, TypeTable};
 
 use super::Resolver;
 use super::types::{
@@ -88,12 +88,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             )
                         })
                         .collect();
+                    // Collect TypeIds for struct's own type params in declaration order.
+                    let type_param_type_ids: Vec<TypeId> = struct_decl
+                        .type_params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, param)| {
+                            self.type_table
+                                .borrow_mut()
+                                .make_type_param(param.name.clone(), i as u32)
+                        })
+                        .collect();
+
                     self.struct_fields.insert(
                         struct_decl.name.clone(),
                         StructFieldInfo {
                             module_source: self.current_module_source.clone(),
                             fields,
                             type_param_bounds,
+                            type_param_type_ids,
                         },
                     );
 

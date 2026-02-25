@@ -1,0 +1,57 @@
+// SequenceLiteralBuilder: custom type implementing SequenceLiteralBuilder
+// Verifies that sequence literal coercion works for user-defined types
+use { println } from "core:cli";
+
+struct SeqVec<T> {
+    items: Array<T>,
+}
+
+impl SeqVec<T> {
+    fn new() -> SeqVec<T> {
+        return SeqVec { items: [] };
+    }
+
+    fn len(&self) -> i32 {
+        return self.items.len();
+    }
+
+    fn get(&self, i: i32) -> T {
+        return self.items[i];
+    }
+}
+
+impl SequenceLiteralBuilder for SeqVec<T> {
+    type Element = T;
+    type Output = SeqVec<T>;
+
+    fn new_literal(capacity: i32) -> SeqVec<T> {
+        return SeqVec::<T>::new();
+    }
+
+    fn push_literal(&mut self, value: Self::Element) {
+        self.items.append(value);
+    }
+
+    fn build(self) -> SeqVec<T> {
+        return self;
+    }
+}
+
+export fn run() with Stdout {
+    // Type annotation coercion
+    let s: SeqVec<i32> = [10, 20, 30];
+
+    assert s.len() == 3;
+    assert s.get(0) == 10;
+    assert s.get(1) == 20;
+    assert s.get(2) == 30;
+
+    // Explicit cast
+    let s2 = [1, 2, 3] as SeqVec<i32>;
+    assert s2.len() == 3;
+
+    println("sequence-literal-custom: ok");
+}
+
+__DATA__
+{"stdout": "sequence-literal-custom: ok\n"}

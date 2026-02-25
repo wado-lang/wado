@@ -1,0 +1,21 @@
+// KeyValueLiteralBuilder: coercion in conditional branch expressions
+// Covers WEP coercion context #5: conditional branches
+use { println } from "core:cli";
+use { TreeMap } from "core:collections";
+
+export fn run() with Stdout {
+    let flag = true;
+
+    // if-else branches both coerce to TreeMap<String, i32>
+    let m: TreeMap<String, i32> = if flag { { a: 1 } } else { { b: 2 } };
+    assert m["a"] == 1;
+
+    // else branch
+    let m2: TreeMap<String, i32> = if !flag { { a: 1 } } else { { b: 2 } };
+    assert m2["b"] == 2;
+
+    println("key-value-literal-conditional: ok");
+}
+
+__DATA__
+{"stdout": "key-value-literal-conditional: ok\n"}

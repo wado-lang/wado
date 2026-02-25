@@ -32,6 +32,10 @@ pub(super) struct StructFieldInfo {
     /// Type parameter bounds: (`param_name`, `trait_bounds`)
     /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
     pub(super) type_param_bounds: Vec<(String, Vec<String>)>,
+    /// `TypeIds` of the struct's own type parameters in declaration order.
+    /// Used by `infer_type_args_from_fields` to fill phantom type params
+    /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
+    pub(super) type_param_type_ids: Vec<TypeId>,
 }
 
 /// Variant case info: case name and payload type
