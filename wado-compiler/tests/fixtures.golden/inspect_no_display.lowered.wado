@@ -120,12 +120,19 @@ export fn run() with Stdout {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline___inspect_fn_i32_____i32_18: {
-            __inline_Formatter__write_str_19: {
-                let s: String = move "|i32| -> i32";
+        if &mut __f.alternate {
+            __inline_Formatter__write_str_18: {
+                let s: String = move "|x: i32| x * 2";
                 __f.buf.String::append(s);
             };
-        };
+        } else {
+            __inline___inspect_fn_i32_____i32_19: {
+                __inline_Formatter__write_str_20: {
+                    let s: String = move "|i32| -> i32";
+                    __f.buf.String::append(s);
+                };
+            };
+        }
         break __tmpl: __r;
     });
     core::cli::println(move "ok");

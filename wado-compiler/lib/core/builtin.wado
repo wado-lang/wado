@@ -502,11 +502,11 @@ fn f64_copysign(magnitude: f64, sign: f64) -> f64;
 /// Synthesis marker: write inspect (debug) output for a value into a Formatter.
 /// Replaced by inspect synthesis phase with type-specific code.
 /// Used for `:?` format specifier in template strings: `{value:?}`.
-/// The `alternate` flag controls pretty-printing (e.g., closure source text).
-fn inspect<T>(value: T, fmt: &mut Formatter, alternate: bool);
+/// The Formatter's `alternate` flag controls pretty-printing (e.g., closure source text).
+fn inspect<T>(value: T, fmt: &mut Formatter);
 
 /// Synthesis marker: write display output for a value into a Formatter.
 /// Replaced by inspect synthesis phase: if the concrete type has a Display impl,
 /// calls Type@Display::fmt; otherwise falls back to inspect output.
 /// Used for `{value}` format specifier on generic type parameters.
-fn display<T>(value: T, fmt: &mut Formatter, alternate: bool);
+fn display<T>(value: T, fmt: &mut Formatter);

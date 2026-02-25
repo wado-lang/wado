@@ -398,11 +398,6 @@ fn replace_markers_in_block(
                 && let TirExprKind::StaticCall { args, .. } = expr.kind
             {
                 let mut args = args;
-                let alternate = if args.len() >= 3 {
-                    matches!(args.pop().unwrap().kind, TirExprKind::BoolLiteral(true))
-                } else {
-                    false
-                };
                 let fmt_ref = args.pop().unwrap();
                 let value_expr = args.pop().unwrap();
                 let type_id = value_expr.type_id;
@@ -421,8 +416,9 @@ fn replace_markers_in_block(
                         block.stmts.insert(i + j, s);
                     }
                     first
-                } else if alternate && matches!(resolved, ResolvedType::Function { .. }) {
-                    // Special case: closure with alternate=true => inline source text
+                } else if matches!(resolved, ResolvedType::Function { .. }) {
+                    // Closure: check Formatter.alternate at runtime to decide
+                    // between source text (if available) and signature display.
                     let source = match &value_expr.kind {
                         TirExprKind::Closure {
                             source_text: Some(text),
@@ -432,7 +428,35 @@ fn replace_markers_in_block(
                         _ => None,
                     };
                     if let Some(text) = source {
-                        ws(&text, fmt_ref, tt, span)
+                        // Generate: if fmt.alternate { write source } else { inspect }
+                        let alternate_cond = TirExpr::new(
+                            TirExprKind::FieldAccess {
+                                expr: Box::new(fmt_ref.clone()),
+                                field_index: 3, // alternate field
+                                field_name: "alternate".to_string(),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        );
+                        let then_stmt = ws(&text, fmt_ref.clone(), tt, span);
+                        let else_stmt = call_inspect_fn(
+                            reg,
+                            type_id,
+                            value_expr,
+                            fmt_ref,
+                            tt,
+                            fmt_type,
+                            module_source,
+                            span,
+                        );
+                        TirStmt::new(
+                            TirStmtKind::If {
+                                condition: alternate_cond,
+                                then_block: TirBlock::new(vec![then_stmt], span),
+                                else_block: Some(TirBlock::new(vec![else_stmt], span)),
+                            },
+                            span,
+                        )
                     } else {
                         call_inspect_fn(
                             reg,
