@@ -562,9 +562,11 @@ Rewrites internal functions that return small scalar structs (2–4 fields) to u
 
 Rewrites `array.new_fixed` with more than 256 elements into `array.new_default` + per-element `array.set`. This prevents pathological JIT compilation time in Cranelift's register allocator, which degrades severely when thousands of values are simultaneously on the operand stack. The rewrite preserves each element expression as-is, so dynamic expressions (variable references, function calls, arithmetic) work correctly.
 
-### Future: Constant Array Data Segments (`array.new_data`)
+### Constant Array Data Promotion (`array.new_data`)
 
-For arrays where all elements are compile-time constants, values could be packed into a Wasm data segment and initialized via `array.new_data`. This is orthogonal to the split pass — it reduces Wasm binary size and initialization overhead, but only applies to all-constant arrays (no dynamic expressions).
+Replaces `array.new_fixed` with `array.new_data` when all elements are compile-time constants of a primitive type. Packs constant values into a passive Wasm data segment and initializes the array via a single `array.new_data` instruction, reducing both Wasm binary size and initialization overhead.
+
+Eligibility: all elements must be compile-time constants (`I32Const`, `I64Const`, `F32Const`, `F64Const`), the array element type must be a packable primitive (`i8`–`i64`, `u8`–`u64`, `f32`, `f64`, `bool`, `char`, enum, flags), and the array must have at least 16 elements. Runs before the split pass, so promoted arrays avoid the `array.new_default` + `array.set` fallback.
 
 ## Testing Strategy
 
