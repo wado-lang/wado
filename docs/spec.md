@@ -1434,22 +1434,16 @@ let len = arr.len(); // Get length
 Sequence literals `[e0, e1, ...]` and key-value literals `{ k: v, ... }` can be
 coerced to any collection type by implementing the corresponding builder trait:
 
-| Literal         | Trait                    | Example target               |
-| --------------- | ------------------------ | ---------------------------- |
-| `[e0, e1, ...]` | `SequenceLiteralBuilder` | `Array<T>`, custom           |
-| `{ k: v, ... }` | `KeyValueLiteralBuilder` | `TreeMap<String, V>`, custom |
+| Literal         | Trait                    | Example target      |
+| --------------- | ------------------------ | ------------------- |
+| `[e0, e1, ...]` | `SequenceLiteralBuilder` | `Array<T>`          |
+| `{ k: v, ... }` | `KeyValueLiteralBuilder` | `TreeMap<String, V>` |
 
 ```wado
-// Array<T> implements SequenceLiteralBuilder — coercion is built-in
 let arr: Array<i32> = [1, 2, 3];
 
-// TreeMap implements KeyValueLiteralBuilder — coercion is built-in
 use { TreeMap } from "core:collections";
 let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
-
-// User-defined types can implement either trait to gain the same literal syntax
-impl SequenceLiteralBuilder for MyVec<T> { ... }
-let v: MyVec<i32> = [1, 2, 3];
 ```
 
 See [`docs/wep-2026-01-18-iterator-based-literal-coercion.md`](./wep-2026-01-18-iterator-based-literal-coercion.md)
