@@ -1,0 +1,56 @@
+// SequenceLiteralBuilder: sequence literal as function argument
+use { println } from "core:cli";
+
+struct SeqVec<T> {
+    items: Array<T>,
+}
+
+impl SeqVec<T> {
+    fn new() -> SeqVec<T> {
+        return SeqVec { items: [] };
+    }
+
+    fn len(&self) -> i32 {
+        return self.items.len();
+    }
+
+    fn get(&self, i: i32) -> T {
+        return self.items[i];
+    }
+}
+
+impl SequenceLiteralBuilder for SeqVec<T> {
+    type Element = T;
+    type Output = SeqVec<T>;
+
+    fn new_literal(capacity: i32) -> SeqVec<T> {
+        return SeqVec::<T>::new();
+    }
+
+    fn push_literal(&mut self, value: Self::Element) {
+        self.items.append(value);
+    }
+
+    fn build(self) -> SeqVec<T> {
+        return self;
+    }
+}
+
+fn count_items(v: SeqVec<i32>) -> i32 {
+    return v.len();
+}
+
+export fn run() with Stdout {
+    // Function argument coercion
+    let result = count_items([1, 2, 3, 4, 5]);
+    assert result == 5;
+
+    // Empty sequence literal
+    let empty: SeqVec<i32> = [];
+    assert empty.len() == 0;
+
+    println("sequence-literal-fn-arg: ok");
+}
+
+__DATA__
+{"stdout": "sequence-literal-fn-arg: ok\n"}

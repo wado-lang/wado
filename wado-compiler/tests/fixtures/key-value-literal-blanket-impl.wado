@@ -1,9 +1,6 @@
-// TODO: The blanket impl below requires `T::AssocType` (associated type projection on
-// a type parameter) to be resolved by the resolver, which is not yet implemented.
-// The parser now supports `T: Trait<Assoc = Val>` bounds; the remaining blocker is
-// resolver support for `T::Value` when T has a bound that declares `Value`.
-// Once resolved, this blanket impl will auto-satisfy KeyValueLiteral for any type
-// that implements KeyValueLiteralBuilder with Output = Self.
+// Tests that a blanket impl `impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T`
+// compiles successfully (T::Value on a type parameter is resolved by the resolver).
+// Also tests that a user-defined type implementing KeyValueLiteralBuilder works end-to-end.
 use { println } from "core:cli";
 
 trait KeyValueLiteralBuilder {
@@ -20,7 +17,6 @@ trait KeyValueLiteral {
 }
 
 // Blanket: self-as-builder types get KeyValueLiteral for free.
-// Requires `T: Trait<Assoc = Val>` bound syntax — not yet parsed.
 impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
     type Value = T::Value;
     type Builder = T;
@@ -60,4 +56,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "ok\n"}
+{"stdout": "ok\n"}

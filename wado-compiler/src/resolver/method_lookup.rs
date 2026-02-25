@@ -11,7 +11,7 @@ use crate::token::Span;
 use super::Resolver;
 use super::types::{
     ArithmeticTraitInfo, FunctionContext, IndexAssignTraitInfo, IndexMutTraitInfo, IndexTraitInfo,
-    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, TypeError,
+    IndexValueTraitInfo, KeyValueLiteralTraitInfo, MethodInfo, SequenceLiteralTraitInfo, TypeError,
 };
 
 impl<H: CompilerHost> Resolver<'_, H> {
@@ -46,7 +46,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Check if a name refers to a known type (struct, variant, enum, flags, newtype, or primitive).
     /// Used to distinguish concrete types from type parameters in impl blocks,
     /// since the parser treats all args in `<String, V>` as type params.
-    fn is_known_type_name(&self, name: &str) -> bool {
+    pub(super) fn is_known_type_name(&self, name: &str) -> bool {
         self.struct_fields.contains_key(name)
             || self
                 .all_struct_fields
@@ -1139,6 +1139,23 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
 
+                // For blanket impls where impl_ty is a free type parameter
+                // (e.g., `impl<T: Trait> OtherTrait for T`), register T as a TypeParam
+                // so T::AssocType in associated type bindings resolves to
+                // AssocTypeProjection(T, "AssocType") rather than emitting an error.
+                if let Type::Named(named) = &impl_ty {
+                    let name = &named.name;
+                    if !self.current_type_params.contains_key(name)
+                        && !self.is_known_type_name(name)
+                    {
+                        let type_id = self
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(name.clone(), 0);
+                        self.current_type_params.insert(name.clone(), (0, type_id));
+                    }
+                }
+
                 // Set up associated type bindings for resolving Self::* types
                 let old_associated_type_bindings =
                     std::mem::take(&mut self.current_associated_type_bindings);
@@ -1261,27 +1278,233 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
     }
 
-    /// Find `KeyValueLiteral` trait implementation for a type.
-    /// Returns the Value associated type and `insert_literal` self kind.
+    /// Find `KeyValueLiteralBuilder` trait implementation for a type.
+    ///
+    /// Checks first for an explicit `impl KeyValueLiteralBuilder for T` (with `Output = T`
+    /// check for blanket-style self-as-builder usage), then falls back to checking whether
+    /// `T` implements the `KeyValueLiteral` trait (separate builder pattern).
     pub(super) fn find_key_value_literal_trait_impl(
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
     ) -> Option<KeyValueLiteralTraitInfo> {
-        self.find_indexing_trait_impl(
+        // Primary: explicit impl KeyValueLiteralBuilder for T (self-as-builder pattern)
+        if let Some((value_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "KeyValueLiteralBuilder",
+            "insert_literal",
+            "Value",
+        ) {
+            // Check if Output = Self (self-as-builder pattern)
+            let output_type = self
+                .find_assoc_type_in_trait_impl(
+                    struct_name,
+                    base_type_id,
+                    "KeyValueLiteralBuilder",
+                    "Output",
+                )
+                .unwrap_or(TypeTable::UNKNOWN);
+            // Accept if no Output constraint mismatch (output == Self or unknown)
+            if output_type == TypeTable::UNKNOWN || output_type == base_type_id {
+                return Some(KeyValueLiteralTraitInfo {
+                    value_type,
+                    builder_type: base_type_id,
+                    self_kind,
+                    trait_name,
+                });
+            }
+        }
+
+        // Secondary: explicit impl KeyValueLiteral for T with type Builder (separate builder
+        // pattern for immutable output types).
+        let builder_type = self.find_assoc_type_in_trait_impl(
             struct_name,
             base_type_id,
             "KeyValueLiteral",
+            "Builder",
+        )?;
+        let builder_name = self.struct_name_for_type(builder_type)?;
+        if let Some((value_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+            &builder_name,
+            builder_type,
+            "KeyValueLiteralBuilder",
             "insert_literal",
             "Value",
-        )
-        .map(
-            |(value_type, self_kind, trait_name)| KeyValueLiteralTraitInfo {
+        ) {
+            return Some(KeyValueLiteralTraitInfo {
                 value_type,
+                builder_type,
                 self_kind,
                 trait_name,
-            },
-        )
+            });
+        }
+
+        None
+    }
+
+    /// Find the value of a specific associated type in a trait impl for a given struct.
+    fn find_assoc_type_in_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+        trait_base_name: &str,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let concrete_type_args: Vec<TypeId> =
+            if let ResolvedType::GenericInstance { type_args, .. } =
+                self.type_table.borrow().get(base_type_id).clone()
+            {
+                type_args
+            } else {
+                Vec::new()
+            };
+
+        let mut impls_to_check: Vec<(
+            crate::ast::Type,
+            crate::ast::Type,
+            Vec<crate::ast::AssociatedTypeBinding>,
+            Vec<crate::ast::GenericParam>,
+        )> = Vec::new();
+
+        if let Some(entries) = self.trait_impl_index.get(struct_name) {
+            for (module_src, item_idx) in entries {
+                let module = &self.loaded_modules[module_src];
+                if let Item::Impl(impl_block) = &module.items[*item_idx]
+                    && let Some(trait_type) = &impl_block.trait_type
+                {
+                    impls_to_check.push((
+                        impl_block.ty.clone(),
+                        trait_type.clone(),
+                        impl_block.associated_types.clone(),
+                        impl_block.type_params.clone(),
+                    ));
+                }
+            }
+        }
+        for item in &self.current_module_items {
+            if let Item::Impl(impl_block) = item
+                && let Some(trait_type) = &impl_block.trait_type
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
+            {
+                impls_to_check.push((
+                    impl_block.ty.clone(),
+                    trait_type.clone(),
+                    impl_block.associated_types.clone(),
+                    impl_block.type_params.clone(),
+                ));
+            }
+        }
+
+        for (impl_ty, trait_type, associated_types, impl_type_params) in impls_to_check {
+            let trait_name = self.get_type_name(&trait_type);
+            if !trait_name.starts_with(trait_base_name) {
+                continue;
+            }
+            let binding = match associated_types.iter().find(|b| b.name == assoc_name) {
+                Some(b) => b.clone(),
+                None => continue,
+            };
+            let mut declared_type_params: IndexSet<String> = impl_type_params
+                .iter()
+                .map(|p| p.name.clone())
+                .filter(|name| !self.is_known_type_name(name))
+                .collect();
+            if let Type::Generic(g) = &impl_ty {
+                for arg in &g.args {
+                    if let Type::Named(n) = arg
+                        && !self.is_known_type_name(&n.name)
+                    {
+                        declared_type_params.insert(n.name.clone());
+                    }
+                }
+            }
+            let type_param_mapping = Self::build_type_param_mapping(
+                &impl_ty,
+                &concrete_type_args,
+                &declared_type_params,
+            );
+            if !Self::verify_impl_type_compatibility(
+                &impl_ty,
+                &concrete_type_args,
+                &declared_type_params,
+                &self.type_table,
+            ) {
+                continue;
+            }
+            return Some(self.resolve_type_with_param_mapping(&binding.ty, &type_param_mapping));
+        }
+        None
+    }
+
+    /// Find `SequenceLiteralBuilder` trait implementation for a type.
+    ///
+    /// Checks for an explicit `impl SequenceLiteralBuilder for T` (self-as-builder) first.
+    /// If not found, checks for `impl SequenceLiteral for T` with `type Builder` (separate
+    /// builder pattern for immutable output types).
+    pub(super) fn find_sequence_literal_trait_impl(
+        &mut self,
+        struct_name: &str,
+        base_type_id: TypeId,
+    ) -> Option<SequenceLiteralTraitInfo> {
+        // Primary: self-as-builder (impl SequenceLiteralBuilder for T)
+        if let Some((element_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+            struct_name,
+            base_type_id,
+            "SequenceLiteralBuilder",
+            "push_literal",
+            "Element",
+        ) {
+            let output_type = self
+                .find_assoc_type_in_trait_impl(
+                    struct_name,
+                    base_type_id,
+                    "SequenceLiteralBuilder",
+                    "Output",
+                )
+                .unwrap_or(base_type_id);
+            return Some(SequenceLiteralTraitInfo {
+                element_type,
+                builder_type: base_type_id,
+                output_type,
+                self_kind,
+                trait_name,
+            });
+        }
+
+        // Secondary: separate builder (impl SequenceLiteral for T with type Builder)
+        let builder_type = self.find_assoc_type_in_trait_impl(
+            struct_name,
+            base_type_id,
+            "SequenceLiteral",
+            "Builder",
+        )?;
+        let builder_name = self.struct_name_for_type(builder_type)?;
+        if let Some((element_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+            &builder_name,
+            builder_type,
+            "SequenceLiteralBuilder",
+            "push_literal",
+            "Element",
+        ) {
+            let output_type = self
+                .find_assoc_type_in_trait_impl(
+                    &builder_name,
+                    builder_type,
+                    "SequenceLiteralBuilder",
+                    "Output",
+                )
+                .unwrap_or(base_type_id);
+            return Some(SequenceLiteralTraitInfo {
+                element_type,
+                builder_type,
+                output_type,
+                self_kind,
+                trait_name,
+            });
+        }
+
+        None
     }
 
     /// Find `IndexAssign` trait implementation for a type
@@ -1953,11 +2176,22 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Collect declared type parameter names for this impl block.
             // The parser treats all args in `<String, V>` as type params,
             // so filter out names that are known types (structs, primitives).
-            let declared_type_params: IndexSet<String> = impl_type_params
+            let mut declared_type_params: IndexSet<String> = impl_type_params
                 .iter()
                 .map(|p| p.name.clone())
                 .filter(|name| !self.is_known_type_name(name))
                 .collect();
+            // Also infer type params from impl type args when no explicit type params clause.
+            // e.g., for `impl Foo for TreeMap<String, V>`, infer V (not String) as a type param.
+            if let Type::Generic(g) = &impl_ty {
+                for arg in &g.args {
+                    if let Type::Named(n) = arg
+                        && !self.is_known_type_name(&n.name)
+                    {
+                        declared_type_params.insert(n.name.clone());
+                    }
+                }
+            }
 
             // Build type parameter mapping from impl_ty to concrete types
             // e.g., for `impl IndexValue<i32> for Triple<T>` with concrete type `Triple<i32>`
@@ -2158,12 +2392,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let inner = resolved_args.first().copied().unwrap_or(TypeTable::UNKNOWN);
                     self.type_table.borrow_mut().make_option(inner)
                 } else {
-                    // For generic types, create a generic instance
-                    // Use the variant's defining module source if available
+                    // For generic types, create a generic instance.
+                    // Use the defining module source of the struct/variant to ensure the
+                    // resulting TypeId matches what resolve_type produces for the same type.
+                    // Falling back to current_module_source causes type identity mismatches when
+                    // the struct is defined in a different module.
                     let module_source = self
                         .variant_cases
                         .get(base_name.as_str())
                         .map(|info| info.module_source.clone())
+                        .or_else(|| {
+                            self.struct_fields
+                                .get(base_name.as_str())
+                                .map(|info| info.module_source.clone())
+                        })
                         .unwrap_or_else(|| self.current_module_source.clone());
                     self.type_table
                         .borrow_mut()
@@ -2182,9 +2424,112 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 let inner_id = self.resolve_type_with_param_mapping(inner, type_param_mapping);
                 self.type_table.borrow_mut().make_mut_ref(inner_id)
             }
+            Type::NamespacedGeneric(n) => {
+                // T::AssocType where T maps to a concrete type → resolve the assoc type
+                if let Some(&concrete_type_id) = type_param_mapping.get(&n.namespace)
+                    && let Some(assoc_id) =
+                        self.resolve_assoc_type_from_concrete(concrete_type_id, &n.name)
+                {
+                    return assoc_id;
+                }
+                self.resolve_type(ty)
+            }
             // For other types, fall back to normal resolution
             _ => self.resolve_type(ty),
         }
+    }
+
+    /// Resolve an associated type name from a concrete type's trait implementations.
+    /// Searches all trait impls for the struct and returns the `TypeId` of the associated type
+    /// binding with the given name, with type parameters substituted.
+    pub(super) fn resolve_assoc_type_from_concrete(
+        &mut self,
+        type_id: TypeId,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
+        let struct_name = self.struct_name_for_type(type_id)?;
+        let concrete_type_args: Vec<TypeId> =
+            if let ResolvedType::GenericInstance { type_args, .. } =
+                self.type_table.borrow().get(type_id).clone()
+            {
+                type_args
+            } else {
+                Vec::new()
+            };
+
+        let mut impls_to_check: Vec<(
+            crate::ast::Type,
+            Vec<crate::ast::AssociatedTypeBinding>,
+            Vec<crate::ast::GenericParam>,
+        )> = Vec::new();
+
+        if let Some(entries) = self.trait_impl_index.get(&struct_name) {
+            for (module_src, item_idx) in entries {
+                let module = &self.loaded_modules[module_src];
+                if let crate::ast::Item::Impl(impl_block) = &module.items[*item_idx]
+                    && impl_block.trait_type.is_some()
+                {
+                    impls_to_check.push((
+                        impl_block.ty.clone(),
+                        impl_block.associated_types.clone(),
+                        impl_block.type_params.clone(),
+                    ));
+                }
+            }
+        }
+        for item in &self.current_module_items {
+            if let crate::ast::Item::Impl(impl_block) = item
+                && impl_block.trait_type.is_some()
+                && Self::get_type_name_static(&impl_block.ty) == struct_name
+            {
+                impls_to_check.push((
+                    impl_block.ty.clone(),
+                    impl_block.associated_types.clone(),
+                    impl_block.type_params.clone(),
+                ));
+            }
+        }
+
+        for (impl_ty, associated_types, impl_type_params) in impls_to_check {
+            let binding = match associated_types.iter().find(|b| b.name == assoc_name) {
+                Some(b) => b.clone(),
+                None => continue,
+            };
+
+            let mut declared_type_params: indexmap::IndexSet<String> = impl_type_params
+                .iter()
+                .map(|p| p.name.clone())
+                .filter(|name| !self.is_known_type_name(name))
+                .collect();
+            if let Type::Generic(g) = &impl_ty {
+                for arg in &g.args {
+                    if let Type::Named(n) = arg
+                        && !self.is_known_type_name(&n.name)
+                    {
+                        declared_type_params.insert(n.name.clone());
+                    }
+                }
+            }
+
+            let type_param_mapping = Self::build_type_param_mapping(
+                &impl_ty,
+                &concrete_type_args,
+                &declared_type_params,
+            );
+
+            if !Self::verify_impl_type_compatibility(
+                &impl_ty,
+                &concrete_type_args,
+                &declared_type_params,
+                &self.type_table,
+            ) {
+                continue;
+            }
+
+            return Some(self.resolve_type_with_param_mapping(&binding.ty, &type_param_mapping));
+        }
+
+        None
     }
 
     /// Try to resolve a method call on an index expression using `IndexMut`.

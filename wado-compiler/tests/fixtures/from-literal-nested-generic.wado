@@ -1,6 +1,5 @@
-// TODO: Parser doesn't support nested generics (e.g. Array<String>) in impl type positions.
-// When fixed, verify_impl_type_compatibility's recursive impl_type_matches_concrete check
-// should correctly match Array<String> against the concrete type arg.
+// Tests that a nested generic type (e.g. Array<String>) works as a concrete type position
+// in an impl target, and that impl_type_matches_concrete recursively validates it.
 use { println } from "core:cli";
 
 struct NestedMap<K, V> {
@@ -14,16 +13,21 @@ impl NestedMap<K, V> {
     }
 }
 
-impl KeyValueLiteral for NestedMap<Array<String>, V> {
+impl KeyValueLiteralBuilder for NestedMap<Array<String>, V> {
     type Value = V;
+    type Output = NestedMap<Array<String>, V>;
 
-    fn new_literal() -> NestedMap<Array<String>, V> {
+    fn new_literal(capacity: i32) -> NestedMap<Array<String>, V> {
         return NestedMap::<Array<String>, V>::new();
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.keys.append(key);
         self.values.append(value);
+    }
+
+    fn build(self) -> NestedMap<Array<String>, V> {
+        return self;
     }
 }
 
@@ -34,4 +38,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"TODO": true, "stdout": "ok\n"}
+{"stdout": "ok\n"}

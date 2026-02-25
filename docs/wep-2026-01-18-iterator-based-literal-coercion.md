@@ -165,7 +165,8 @@ When the compiler sees `[e0, e1, ...]` targeting type `T: SequenceLiteral<Elemen
 #### Concrete type positions in impl
 
 A known type (struct, enum, variant, flags, newtype, primitive) in a generic
-position of an impl is treated as a concrete constraint, not a free type parameter:
+position of an impl is treated as a concrete constraint, not a free type parameter.
+This includes nested generic types (e.g. `Array<String>`):
 
 ```wado
 enum Direction { North, South }
@@ -181,7 +182,22 @@ impl KeyValueLiteralBuilder for DirMap<Direction, V> {
 
 let m: DirMap<Direction, i32> = { north: 1 };  // OK
 let m: DirMap<String, i32>    = { a: 1 };       // ERROR: String != Direction
+
+// Nested generic type in concrete position
+struct NestedMap<K, V> { ... }
+
+impl KeyValueLiteralBuilder for NestedMap<Array<String>, V> {
+    type Value = V;
+    type Output = NestedMap<Array<String>, V>;
+    ...
+}
+
+let m: NestedMap<Array<String>, i32> = { a: 1 };   // OK
+let m: NestedMap<Array<i32>, i32>    = { a: 1 };   // ERROR: Array<i32> != Array<String>
 ```
+
+The validation is recursive: `impl_type_matches_concrete` descends into nested
+generic args to ensure every concrete position matches exactly.
 
 ### 8. Coercion Contexts
 
@@ -343,25 +359,38 @@ is deferred: it requires an `Into<E>` conversion per element.
 
 ### Positive
 
-1. **Self-as-builder is zero extra work**: the blanket impl covers the common case with
-   one `impl` block
-2. **Immutable output types**: the two-trait split makes them first-class without complicating
+1. **Self-as-builder is zero extra work**: implementing `KeyValueLiteralBuilder` is
+   sufficient — no explicit `impl KeyValueLiteral` block needed. The coercion resolves
+   `KeyValueLiteralBuilder` directly, and the blanket impl satisfies any
+   `T: KeyValueLiteral` bound automatically.
+2. **Blanket impl works**: the `impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T`
+   blanket compiles and is active. Associated type projection on type params (`T::Value`)
+   is supported by the resolver.
+3. **Immutable output types**: the two-trait split makes them first-class without complicating
    the simple path
-3. **Capacity hint**: `new_literal(capacity)` allows pre-allocation; the compiler always
+4. **Capacity hint**: `new_literal(capacity)` allows pre-allocation; the compiler always
    knows the count at compile time
-4. **Extensible**: any type — user-defined or standard — can implement either trait
-5. **Compile-time only**: all expansion happens at compile time; no runtime overhead
-6. **Key position safety**: concrete types in impl positions are correctly validated
+5. **Extensible**: any type — user-defined or standard — can implement either trait
+6. **Compile-time only**: all expansion happens at compile time; no runtime overhead
+7. **Key position safety**: concrete types in impl positions are correctly validated,
+   including nested generics (e.g. `Array<String>` in `impl Trait for Foo<Array<String>, V>`)
 
 ### Negative
 
-1. **Blanket impl pending**: the `impl<T: KeyValueLiteralBuilder<Output = T>>` blanket
-   requires `T::AssocType` (associated type projection on type params) in the resolver,
-   which is not yet implemented. Until then, self-as-builder types must also write an
-   explicit (trivial) `impl KeyValueLiteral` block.
-
-2. **Heterogeneous elements deferred**: both traits currently require a uniform
+1. **Heterogeneous elements deferred**: both traits currently require a uniform
    `Value`/`Element` type.
+
+2. **Non-String keys not supported**: `insert_literal` takes `key: String`, so all
+   literal keys must be plain identifiers (written as strings by the compiler). Typed
+   or computed keys — e.g., an enum discriminant or an integer — are not supported.
+   When this feature is added, the syntax will follow JavaScript's computed-property
+   notation:
+
+   ```wado
+   let m: Map<Color, i32> = { [Color::Red]: 1, [Color::Blue]: 2 };
+   ```
+
+   Until then, use explicit insertion calls instead.
 
 ## Related WEPs
 

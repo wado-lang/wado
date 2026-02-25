@@ -41,19 +41,22 @@ pub struct "ArrayIter<TreeMapEntry<String,i32>>" {
 }
 
 fn make_map() -> TreeMap<String,i32> {
-    return __map_lit: {
-        let mut __m: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
-        __inline_TreeMap_String_i32__KeyValueLiteral__insert_literal_1: {
-            let self: &mut TreeMap<String,i32> = &mut __m;
+    return __kv_lit: {
+        let mut __b: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
+        __inline_TreeMap_String_i32__KeyValueLiteralBuilder__insert_literal_1: {
+            let self: &mut TreeMap<String,i32> = &mut __b;
             let key: String = move "x";
             self."TreeMap<String,i32>::insert"(key, 10);
         };
-        __inline_TreeMap_String_i32__KeyValueLiteral__insert_literal_2: {
-            let self: &mut TreeMap<String,i32> = &mut __m;
+        __inline_TreeMap_String_i32__KeyValueLiteralBuilder__insert_literal_2: {
+            let self: &mut TreeMap<String,i32> = &mut __b;
             let key: String = move "y";
             self."TreeMap<String,i32>::insert"(key, 20);
         };
-        break __map_lit: __m;
+        break __kv_lit: __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_3: {
+            let self: TreeMap<String,i32> = __b;
+            break __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_3: self;
+        };
     };
 }
 

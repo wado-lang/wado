@@ -25,16 +25,21 @@ impl SimpleMap<V> {
     }
 }
 
-impl KeyValueLiteral for SimpleMap<V> {
+impl KeyValueLiteralBuilder for SimpleMap<V> {
     type Value = V;
+    type Output = SimpleMap<V>;
 
-    fn new_literal() -> SimpleMap<V> {
+    fn new_literal(capacity: i32) -> SimpleMap<V> {
         return SimpleMap::<V>::new();
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.keys.append(key);
         self.values.append(value);
+    }
+
+    fn build(self) -> SimpleMap<V> {
+        return self;
     }
 }
 

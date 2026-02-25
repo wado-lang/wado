@@ -1,0 +1,77 @@
+// KeyValueLiteral with separate builder for immutable output
+// The output type (FrozenMap) has no mutation methods; construction uses a builder.
+use { println } from "core:cli";
+
+struct FrozenMap<V> {
+    keys: Array<String>,
+    values: Array<V>,
+}
+
+impl FrozenMap<V> {
+    fn len(&self) -> i32 {
+        return self.keys.len();
+    }
+
+    fn get(&self, key: String) -> Option<V> {
+        let mut i = 0;
+        while i < self.keys.len() {
+            if self.keys[i] == key {
+                return Option::<V>::Some(self.values[i]);
+            }
+            i += 1;
+        }
+        return null;
+    }
+}
+
+struct FrozenMapBuilder<V> {
+    keys: Array<String>,
+    values: Array<V>,
+}
+
+impl KeyValueLiteralBuilder for FrozenMapBuilder<V> {
+    type Value = V;
+    type Output = FrozenMap<V>;
+
+    fn new_literal(capacity: i32) -> FrozenMapBuilder<V> {
+        return FrozenMapBuilder { keys: [], values: [] };
+    }
+
+    fn insert_literal(&mut self, key: String, value: V) {
+        self.keys.append(key);
+        self.values.append(value);
+    }
+
+    fn build(self) -> FrozenMap<V> {
+        return FrozenMap { keys: self.keys, values: self.values };
+    }
+}
+
+impl KeyValueLiteral for FrozenMap<V> {
+    type Value = V;
+    type Builder = FrozenMapBuilder<V>;
+}
+
+export fn run() with Stdout {
+    let m: FrozenMap<i32> = { x: 10, y: 20, z: 30 };
+
+    assert m.len() == 3;
+    if let Some(v) = m.get("x") {
+        assert v == 10;
+    }
+    if let Some(v) = m.get("y") {
+        assert v == 20;
+    }
+    if let Some(v) = m.get("z") {
+        assert v == 30;
+    }
+
+    // Cast coercion
+    let m2 = { a: 1, b: 2 } as FrozenMap<i32>;
+    assert m2.len() == 2;
+
+    println("key-value-literal-immutable: ok");
+}
+
+__DATA__
+{"stdout": "key-value-literal-immutable: ok\n"}

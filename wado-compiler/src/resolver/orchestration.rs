@@ -74,6 +74,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                     module_source: module_source.clone(),
                                     fields: Vec::new(),
                                     type_param_bounds,
+                                    type_param_type_ids: Vec::new(), // filled in second pass
                                 },
                             );
                     }
@@ -200,11 +201,25 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                                 )
                             })
                             .collect();
+                        // Collect TypeIds for struct's own type params in declaration order.
+                        // This allows infer_type_args_from_fields to fill phantom type params
+                        // that don't appear in any field (e.g., D in struct DirMap<D, V>).
+                        let type_param_type_ids: Vec<TypeId> = type_params
+                            .iter()
+                            .enumerate()
+                            .map(|(i, name)| {
+                                type_table
+                                    .borrow_mut()
+                                    .make_type_param(name.clone(), i as u32)
+                            })
+                            .collect();
+
                         // Update the nested map entry with actual fields
                         let info = StructFieldInfo {
                             module_source: module_source.clone(),
                             fields,
                             type_param_bounds,
+                            type_param_type_ids,
                         };
                         all_struct_fields
                             .entry(module_source.clone())

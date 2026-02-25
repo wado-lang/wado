@@ -1803,7 +1803,8 @@ fn collect_type_dependencies(
         | ResolvedType::Enum { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Resource { .. }
-        | ResolvedType::TypeParam { .. } => {}
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::AssocTypeProjection { .. } => {}
 
         // Newtype: collect dependency on base type
         ResolvedType::Newtype { base_type, .. } => {

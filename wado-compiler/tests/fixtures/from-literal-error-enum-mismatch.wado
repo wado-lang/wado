@@ -8,16 +8,21 @@ struct DirMap<D, V> {
     values: Array<V>,
 }
 
-impl KeyValueLiteral for DirMap<Direction, V> {
+impl KeyValueLiteralBuilder for DirMap<Direction, V> {
     type Value = V;
+    type Output = DirMap<Direction, V>;
 
-    fn new_literal() -> DirMap<Direction, V> {
+    fn new_literal(capacity: i32) -> DirMap<Direction, V> {
         return DirMap { keys: [], values: [] };
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.keys.append(key);
         self.values.append(value);
+    }
+
+    fn build(self) -> DirMap<Direction, V> {
+        return self;
     }
 }
 

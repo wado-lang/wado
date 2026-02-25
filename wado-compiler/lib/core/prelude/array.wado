@@ -236,6 +236,25 @@ impl FromIterator<T> for Array<T> {
     }
 }
 
+// SequenceLiteralBuilder for [e0, e1, ...] -> Array<T>
+// The blanket impl in core:prelude automatically provides SequenceLiteral for Array<T>.
+impl SequenceLiteralBuilder for Array<T> {
+    type Element = T;
+    type Output = Array<T>;
+
+    fn new_literal(capacity: i32) -> Array<T> {
+        return Array::<T>::with_capacity(capacity);
+    }
+
+    fn push_literal(&mut self, value: T) {
+        self.append(value);
+    }
+
+    fn build(self) -> Array<T> {
+        return self;
+    }
+}
+
 impl ArrayIter<T> {
     pub fn collect(&mut self) -> Array<T> {
         let remaining = self.used - self.index;

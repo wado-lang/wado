@@ -1429,6 +1429,26 @@ let len = arr.len(); // Get length
 - Index must be within bounds (runtime check, traps if out of bounds)
 - Works with arrays of any element type
 
+#### Collection Literal Coercion
+
+Sequence literals `[e0, e1, ...]` and key-value literals `{ k: v, ... }` can be
+coerced to any collection type by implementing the corresponding builder trait:
+
+| Literal         | Trait                    | Example target       |
+| --------------- | ------------------------ | -------------------- |
+| `[e0, e1, ...]` | `SequenceLiteralBuilder` | `Array<T>`           |
+| `{ k: v, ... }` | `KeyValueLiteralBuilder` | `TreeMap<String, V>` |
+
+```wado
+let arr: Array<i32> = [1, 2, 3];
+
+use { TreeMap } from "core:collections";
+let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
+```
+
+See [`docs/wep-2026-01-18-iterator-based-literal-coercion.md`](./wep-2026-01-18-iterator-based-literal-coercion.md)
+for the full trait definitions, desugaring rules, and the immutable-output builder pattern.
+
 ### Compile-Time Location Literals
 
 Compile-time location literals provide source location information at compile time. They use the `#` prefix to clearly signal compile-time evaluation.

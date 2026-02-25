@@ -1177,6 +1177,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             );
         }
 
+        // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
+        // [1, 2, 3] as SeqVec<i32>
+        if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
+            return coerced;
+        }
+
         // Special case: struct literal cast to a type implementing KeyValueLiteral
         // { a: 1, b: 2 } as TreeMap<String, i32>
         if let Some(coerced) = self.try_coerce_struct_to_map(&cast.expr, ctx, target_type) {
@@ -1682,6 +1688,25 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .collect();
 
         type_args.sort_by_key(|(index, _)| *index);
+
+        // If the struct has known type_param_type_ids, produce a full-length vector.
+        // This handles phantom type parameters (e.g., D in `struct DirMap<D, V>` where D
+        // is not used in any field). Without this, the inferred vector would be sparse
+        // (e.g., [V] instead of [D, V]), causing the monomorphizer to create `DirMap<i32>`
+        // instead of `DirMap<Direction,i32>`.
+        let n = struct_info.type_param_type_ids.len();
+        if n > 0 {
+            let inferred_map: IndexMap<u32, TypeId> = type_args.into_iter().collect();
+            return (0..n as u32)
+                .map(|i| {
+                    inferred_map
+                        .get(&i)
+                        .copied()
+                        .unwrap_or(struct_info.type_param_type_ids[i as usize])
+                })
+                .collect();
+        }
+
         type_args.into_iter().map(|(_, type_id)| type_id).collect()
     }
 

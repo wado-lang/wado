@@ -108,6 +108,11 @@ impl SubstitutionContext {
                 // Direct substitution: TypeParam at index -> concrete type
                 self.substitutions.get(&index).copied().unwrap_or(type_id)
             }
+            ResolvedType::AssocTypeProjection { param_id, .. } => {
+                // Substitute the underlying type param; projection stays unresolved
+                // until method_lookup resolves it against concrete impls
+                self.substitute(param_id, type_table)
+            }
             ResolvedType::BuiltinArray(elem) => {
                 let new_elem = self.substitute(elem, type_table);
                 type_table.make_builtin_array(new_elem)
@@ -321,6 +326,14 @@ pub enum ResolvedType {
         module_source: ModuleSource,
         /// Concrete type arguments (e.g., [i32])
         type_args: Vec<TypeId>,
+    },
+    /// Associated type projection: `T::X` where T is a type parameter with a trait bound.
+    /// During concrete instantiation this is resolved to the concrete associated type.
+    AssocTypeProjection {
+        /// The type-parameter `TypeId` (must be a `TypeParam` variant)
+        param_id: TypeId,
+        /// Name of the associated type (e.g., `"Value"` in `T::Value`)
+        assoc_name: String,
     },
     /// Raw GC array intrinsic (`builtin::array<T>`)
     /// This is the underlying storage type for String and Array<T> structs
@@ -688,6 +701,14 @@ impl TypeTable {
         self.intern(ResolvedType::TypeParam { name, index })
     }
 
+    /// Create an associated type projection: `T::X` where T is a type parameter.
+    pub fn make_assoc_type_projection(&mut self, param_id: TypeId, assoc_name: String) -> TypeId {
+        self.intern(ResolvedType::AssocTypeProjection {
+            param_id,
+            assoc_name,
+        })
+    }
+
     /// Create a generic instance (e.g., `Box<i32>`)
     pub fn make_generic_instance(
         &mut self,
@@ -765,7 +786,10 @@ impl TypeTable {
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {
-            ResolvedType::TypeParam { .. } | ResolvedType::Unknown | ResolvedType::Error => true,
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
@@ -899,6 +923,12 @@ impl TypeTable {
             }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", self.type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+            } => {
+                format!("{}::{}", self.type_name(*param_id), assoc_name)
+            }
             ResolvedType::GenericInstance {
                 name, type_args, ..
             } => {
@@ -998,6 +1028,14 @@ impl TypeTable {
                 TypeNameInfo::FutureWritable(self.mangle_type_name(*inner))
             }
             ResolvedType::Reactive(inner) => TypeNameInfo::Reactive(self.mangle_type_name(*inner)),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+            } => TypeNameInfo::Named(format!(
+                "{}::{}",
+                self.mangle_type_name(*param_id),
+                assoc_name
+            )),
             ResolvedType::Never | ResolvedType::Unknown | ResolvedType::Error => {
                 TypeNameInfo::Unknown
             }

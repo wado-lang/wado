@@ -16,16 +16,21 @@ impl PairList<V> {
     }
 }
 
-impl KeyValueLiteral for PairList<V> {
+impl KeyValueLiteralBuilder for PairList<V> {
     type Value = V;
+    type Output = PairList<V>;
 
-    fn new_literal() -> PairList<V> {
+    fn new_literal(capacity: i32) -> PairList<V> {
         return PairList::<V>::new();
     }
 
     fn insert_literal(&mut self, key: String, value: Self::Value) {
         self.keys.append(key);
         self.values.append(value);
+    }
+
+    fn build(self) -> PairList<V> {
+        return self;
     }
 }
 
