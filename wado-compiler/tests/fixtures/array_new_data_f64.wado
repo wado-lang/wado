@@ -1,0 +1,23 @@
+// Tests that constant f64 arrays with >= 16 elements are promoted to array.new_data.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a: Array<f64> = [
+        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
+        9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+    ];
+    assert a.len() == 16;
+    assert a[0] == 1.0;
+    assert a[15] == 16.0;
+
+    let mut sum = 0.0;
+    for let item of a {
+        sum += item;
+    }
+    // 1+2+...+16 = 136
+    assert sum == 136.0;
+    println(`len={a.len()} sum={sum:0.1f} first={a[0]:0.1f} last={a[15]:0.1f}`);
+}
+
+__DATA__
+{"stdout": "len=16 sum=136.0 first=1.0 last=16.0\n"}

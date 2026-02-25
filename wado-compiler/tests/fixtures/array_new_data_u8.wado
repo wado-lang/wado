@@ -1,0 +1,21 @@
+// Tests that constant u8 arrays with >= 16 elements are promoted to array.new_data.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a: Array<u8> = [
+        0 as u8, 1 as u8, 2 as u8, 3 as u8, 4 as u8, 5 as u8, 6 as u8, 7 as u8,
+        8 as u8, 9 as u8, 10 as u8, 11 as u8, 12 as u8, 13 as u8, 14 as u8, 15 as u8,
+        255 as u8, 128 as u8, 64 as u8, 32 as u8,
+    ];
+    assert a.len() == 20;
+    assert a[0] as i32 == 0;
+    assert a[15] as i32 == 15;
+    assert a[16] as i32 == 255;
+    assert a[17] as i32 == 128;
+    assert a[18] as i32 == 64;
+    assert a[19] as i32 == 32;
+    println(`len={a.len()} [0]={a[0] as i32} [16]={a[16] as i32} [19]={a[19] as i32}`);
+}
+
+__DATA__
+{"stdout": "len=20 [0]=0 [16]=255 [19]=32\n"}

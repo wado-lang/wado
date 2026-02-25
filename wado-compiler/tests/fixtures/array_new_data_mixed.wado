@@ -1,0 +1,34 @@
+// Tests that arrays with mixed constant/dynamic elements are NOT promoted
+// to array.new_data (they keep using array.new_fixed or the split fallback).
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn get_dynamic() -> i32 {
+    return 42;
+}
+
+export fn run() with Stdout {
+    let dynamic_val = get_dynamic();
+    // 16 elements but one is dynamic — should NOT be promoted to new_data
+    let a: Array<i32> = [
+        1, 2, 3, 4, 5, 6, 7, 8,
+        9, 10, 11, 12, 13, 14, 15, dynamic_val,
+    ];
+    assert a.len() == 16;
+    assert a[0] == 1;
+    assert a[15] == 42;
+
+    // All constant — should be promoted
+    let b: Array<i32> = [
+        100, 200, 300, 400, 500, 600, 700, 800,
+        900, 1000, 1100, 1200, 1300, 1400, 1500, 1600,
+    ];
+    assert b.len() == 16;
+    assert b[0] == 100;
+    assert b[15] == 1600;
+
+    println(`a[15]={a[15]} b[0]={b[0]} b[15]={b[15]}`);
+}
+
+__DATA__
+{"stdout": "a[15]=42 b[0]=100 b[15]=1600\n"}
