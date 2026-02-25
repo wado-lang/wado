@@ -493,11 +493,12 @@ fn "TreeMap<String,i32>::compact"(self: &mut TreeMap<String,i32>) {
     self.entries = new_entries;
     self.deleted_count = 0;
     let mut i: i32 = 0;
+    let _licm_entries: Array<TreeMapEntry<String,i32>> = self.entries;
     loop {
-        if !(i < self.entries."Array<TreeMapEntry<String,i32>>::len"()) {
+        if !(i < _licm_entries."Array<TreeMapEntry<String,i32>>::len"()) {
             break;
         }
-        let entry: &TreeMapEntry<String,i32> = &self.entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(i);
+        let entry: &TreeMapEntry<String,i32> = &_licm_entries."Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(i);
         self.root = move self."TreeMap<String,i32>::insert_node"(self.root, entry.key, i);
         i = (i + 1);
     }

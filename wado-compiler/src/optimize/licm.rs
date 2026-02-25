@@ -12,6 +12,39 @@ use crate::tir::{
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 
+/// Tracks which variables and fields are modified within a loop.
+///
+/// Distinguishes between full-object modification (e.g., `buf = new_string`, `&mut buf`)
+/// and field-level modification (e.g., `buf.len = buf.len + 1`), enabling LICM to
+/// hoist field accesses like `buf.repr` even when `buf.len` is modified.
+#[derive(Default)]
+struct ModifiedVars {
+    /// Locals that are fully modified (assigned as a whole, passed as &mut, etc.).
+    fully: IndexSet<u32>,
+    /// (`local_index`, `field_index`) pairs where only a specific field is modified.
+    fields: IndexSet<(u32, u32)>,
+}
+
+impl ModifiedVars {
+    fn insert_full(&mut self, local_idx: u32) {
+        self.fully.insert(local_idx);
+    }
+
+    fn insert_field(&mut self, local_idx: u32, field_idx: u32) {
+        self.fields.insert((local_idx, field_idx));
+    }
+
+    fn extend_full(&mut self, other: &IndexSet<u32>) {
+        self.fully.extend(other.iter().copied());
+    }
+
+    /// Returns true if the given local is not fully modified AND
+    /// the specific field of that local is not field-modified.
+    fn is_field_hoistable(&self, local_idx: u32, field_idx: u32) -> bool {
+        !self.fully.contains(&local_idx) && !self.fields.contains(&(local_idx, field_idx))
+    }
+}
+
 /// Apply Loop-Invariant Code Motion to all functions in the project.
 pub fn apply_licm(project: &mut Project) -> bool {
     let mut changed = false;
@@ -119,7 +152,8 @@ fn licm_loop(
     const MAX_LICM_ITERATIONS: usize = 10;
     for _iteration in 0..MAX_LICM_ITERATIONS {
         // Step 1: Collect all variables modified in the loop
-        let mut modified_vars = extra_modified.clone();
+        let mut modified_vars = ModifiedVars::default();
+        modified_vars.extend_full(extra_modified);
         collect_modified_vars_in_block(loop_body, &mut modified_vars);
 
         // Step 2: Collect immutable reference bindings for look-through optimization
@@ -203,38 +237,69 @@ fn licm_loop(
 }
 
 /// Collect all local variable indices that are modified (assigned) in a block.
-fn collect_modified_vars_in_block(block: &TirBlock, modified: &mut IndexSet<u32>) {
+fn collect_modified_vars_in_block(block: &TirBlock, modified: &mut ModifiedVars) {
     for stmt in &block.stmts {
         collect_modified_vars_in_stmt(stmt, modified);
     }
 }
 
-/// Mark the underlying local variable as modified, traversing through field accesses.
-/// This is used when taking a mutable reference to a field, e.g., `&mut self.items`.
-fn mark_local_as_modified(expr: &TirExpr, modified: &mut IndexSet<u32>) {
+/// Mark a local as fully modified (e.g., passed as &mut, direct assignment).
+/// Traverses through unary ops and nested field accesses, always marking the root as fully modified.
+fn mark_local_as_fully_modified(expr: &TirExpr, modified: &mut ModifiedVars) {
     match &expr.kind {
         TirExprKind::Local { index, .. } => {
-            modified.insert(*index);
+            modified.insert_full(*index);
         }
         TirExprKind::FieldAccess { expr: inner, .. } => {
-            mark_local_as_modified(inner, modified);
+            mark_local_as_fully_modified(inner, modified);
         }
         TirExprKind::Unary { expr: inner, .. } => {
-            // Handle cases like *ptr where ptr is a reference
-            mark_local_as_modified(inner, modified);
+            mark_local_as_fully_modified(inner, modified);
         }
         _ => {}
     }
 }
 
-fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut IndexSet<u32>) {
+/// Mark what is modified by an assignment target expression.
+///
+/// Distinguishes between field assignments (`buf.len = x` marks only the `len` field
+/// of `buf` as modified) and direct/deeper assignments (marks the root local as fully
+/// modified). This enables LICM to hoist `buf.repr` even when `buf.len` is assigned.
+fn mark_assignment_target_as_modified(expr: &TirExpr, modified: &mut ModifiedVars) {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => {
+            // Direct assignment: `buf = x` — fully modified
+            modified.insert_full(*index);
+        }
+        TirExprKind::FieldAccess {
+            expr: inner,
+            field_index,
+            ..
+        } => {
+            if let TirExprKind::Local { index, .. } = &inner.kind {
+                // Single-level field assignment: `buf.field = x` — only that field is modified
+                modified.insert_field(*index, *field_index);
+            } else {
+                // Deeper nesting: `a.b.c = x` — conservatively mark root as fully modified
+                mark_local_as_fully_modified(inner, modified);
+            }
+        }
+        TirExprKind::Unary { expr: inner, .. } => {
+            // E.g., `*ptr = x` — mark root local as fully modified
+            mark_local_as_fully_modified(inner, modified);
+        }
+        _ => {}
+    }
+}
+
+fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut ModifiedVars) {
     match &stmt.kind {
         TirStmtKind::Let {
             local_index, value, ..
         } => {
             // Let statements define new variables, mark them as modified
             // (they're not invariant within the loop where they're defined)
-            modified.insert(*local_index);
+            modified.insert_full(*local_index);
             // Also check the value expression for mutable references
             collect_modified_vars_in_expr(value, modified);
         }
@@ -299,10 +364,10 @@ fn collect_modified_vars_in_stmt(stmt: &TirStmt, modified: &mut IndexSet<u32>) {
 
 /// Collect all local variable indices bound by a pattern.
 /// These variables are assigned fresh each time the pattern matches.
-fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut IndexSet<u32>) {
+fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut ModifiedVars) {
     match pattern {
         TirPattern::Binding { local_index, .. } => {
-            modified.insert(*local_index);
+            modified.insert_full(*local_index);
         }
         TirPattern::Variant { bindings, .. } => {
             for binding in bindings {
@@ -325,11 +390,13 @@ fn collect_pattern_bindings(pattern: &TirPattern, modified: &mut IndexSet<u32>) 
     }
 }
 
-fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
+fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
     match &expr.kind {
         TirExprKind::Assign { target, value } => {
-            // Mark the root local as modified (handles field accesses, dereferences, etc.)
-            mark_local_as_modified(target, modified);
+            // Mark the assignment target appropriately.
+            // Field assignment (buf.field = x) only marks that specific field as modified,
+            // enabling LICM to still hoist other fields of the same object.
+            mark_assignment_target_as_modified(target, modified);
             collect_modified_vars_in_expr(target, modified);
             collect_modified_vars_in_expr(value, modified);
         }
@@ -338,11 +405,9 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut IndexSet<u32>) {
             collect_modified_vars_in_expr(right, modified);
         }
         TirExprKind::Unary { op, expr } => {
-            // If taking a mutable reference, the target could be modified
-            // Mark the underlying local as modified so LICM doesn't hoist it
+            // If taking a mutable reference, the target is fully modified (caller may write anything)
             if matches!(op, TirUnaryOp::MutRef) {
-                // Traverse through field accesses to find the root local
-                mark_local_as_modified(expr, modified);
+                mark_local_as_fully_modified(expr, modified);
             }
             collect_modified_vars_in_expr(expr, modified);
         }
@@ -777,7 +842,7 @@ struct HoistCandidate {
 /// Returns a list of candidates to hoist.
 fn find_hoist_candidates_in_block(
     block: &TirBlock,
-    modified_vars: &IndexSet<u32>,
+    modified_vars: &ModifiedVars,
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
     seen: &mut IndexSet<(u32, u32)>, // (local_index, field_index) pairs already seen
@@ -797,7 +862,7 @@ fn find_hoist_candidates_in_block(
 
 fn find_hoist_candidates_in_stmt(
     stmt: &TirStmt,
-    modified_vars: &IndexSet<u32>,
+    modified_vars: &ModifiedVars,
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
     seen: &mut IndexSet<(u32, u32)>,
@@ -952,7 +1017,7 @@ fn find_hoist_candidates_in_stmt(
 
 fn find_hoist_candidates_in_expr(
     expr: &TirExpr,
-    modified_vars: &IndexSet<u32>,
+    modified_vars: &ModifiedVars,
     ref_bindings: &IndexMap<u32, LicmRefBinding>,
     candidates: &mut Vec<HoistCandidate>,
     seen: &mut IndexSet<(u32, u32)>,
@@ -966,8 +1031,11 @@ fn find_hoist_candidates_in_expr(
             field_name,
         } => {
             if let TirExprKind::Local { index, name } = &inner.kind {
-                // Case 1: Direct access on a loop-invariant local
-                if !modified_vars.contains(index) {
+                // Case 1: Direct access on a loop-invariant local.
+                // A field is hoistable if neither the whole local nor that specific field
+                // is modified (field-level tracking lets us hoist buf.repr even when buf.len
+                // is modified by assignment).
+                if modified_vars.is_field_hoistable(*index, *field_index) {
                     let key = (*index, *field_index);
                     if !seen.contains(&key) {
                         seen.insert(key);
@@ -986,7 +1054,7 @@ fn find_hoist_candidates_in_expr(
                 // e.g., `let self: &T = &source; ... self.field ...`
                 // Since &T guarantees immutability, self.field == source.field
                 else if let Some(ref_binding) = ref_bindings.get(index)
-                    && !modified_vars.contains(&ref_binding.source_index)
+                    && modified_vars.is_field_hoistable(ref_binding.source_index, *field_index)
                 {
                     let key = (ref_binding.source_index, *field_index);
                     if !seen.contains(&key) {
