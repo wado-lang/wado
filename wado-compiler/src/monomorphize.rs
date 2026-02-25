@@ -1516,8 +1516,11 @@ impl Monomorphizer {
                             let generic_func = generic_func_rc.borrow();
                             // Check if method has its own type params (double generics)
                             let has_method_type_params = !generic_func.type_params.is_empty();
-                            // Only queue if we have the right number of impl type args
-                            if impl_type_args.len() == generic_func.impl_type_params.len() {
+                            // Queue if we have at least enough impl type args.
+                            // impl_type_args may be longer than impl_type_params when the impl
+                            // fixes some struct type params to concrete types
+                            // (e.g., `impl Trait for Foo<Array<String>, V>` where only V is free).
+                            if impl_type_args.len() >= generic_func.impl_type_params.len() {
                                 // Combine impl type args with method type args
                                 let mut combined_type_args = impl_type_args.clone();
                                 if has_method_type_params && !type_args.is_empty() {
@@ -1530,10 +1533,12 @@ impl Monomorphizer {
                                     method_info,
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
+                                    // Pass total struct type args count for name generation so that
+                                    // concrete positions are included in the mangled struct name.
                                     let mangled = self.method_instantiation_name(
                                         &key,
                                         type_table,
-                                        generic_func.impl_type_params.len(),
+                                        impl_type_args.len(),
                                     );
                                     self.function_instantiated
                                         .insert(key.clone(), mangled.clone());
@@ -1576,8 +1581,11 @@ impl Monomorphizer {
                             let generic_func = generic_func_rc.borrow();
                             // Check if method has its own type params (double generics)
                             let has_method_type_params = !generic_func.type_params.is_empty();
-                            // Only queue if we have the right number of impl type args
-                            if impl_type_args.len() == generic_func.impl_type_params.len() {
+                            // Queue if we have at least enough impl type args.
+                            // impl_type_args may be longer than impl_type_params when the impl
+                            // fixes some struct type params to concrete types
+                            // (e.g., `impl Trait for Foo<Array<String>, V>` where only V is free).
+                            if impl_type_args.len() >= generic_func.impl_type_params.len() {
                                 // Combine impl type args with method type args
                                 let mut combined_type_args = impl_type_args.clone();
                                 if has_method_type_params && !type_args.is_empty() {
@@ -1590,10 +1598,12 @@ impl Monomorphizer {
                                     method_info,
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
+                                    // Pass total struct type args count for name generation so that
+                                    // concrete positions are included in the mangled struct name.
                                     let mangled = self.method_instantiation_name(
                                         &key,
                                         type_table,
-                                        generic_func.impl_type_params.len(),
+                                        impl_type_args.len(),
                                     );
                                     self.function_instantiated
                                         .insert(key.clone(), mangled.clone());
@@ -1649,8 +1659,11 @@ impl Monomorphizer {
                         );
                         if let Some(generic_func_rc) = generic_functions.get(&generic_method_name) {
                             let generic_func = generic_func_rc.borrow();
-                            // Only queue if we have the right number of type args
-                            if type_args.len() == generic_func.impl_type_params.len() {
+                            // Queue if we have at least enough type args.
+                            // type_args may be longer than impl_type_params when the impl
+                            // fixes some struct type params to concrete types
+                            // (e.g., `impl Trait for Foo<Array<String>, V>` where only V is free).
+                            if type_args.len() >= generic_func.impl_type_params.len() {
                                 let method_info = generic_func.method_info.clone();
                                 let key = InstantiationKey {
                                     name: generic_method_name,
@@ -1658,10 +1671,12 @@ impl Monomorphizer {
                                     method_info,
                                 };
                                 if !self.function_instantiated.contains_key(&key) {
+                                    // Pass total type args count for name generation so that
+                                    // concrete positions are included in the mangled struct name.
                                     let mangled = self.method_instantiation_name(
                                         &key,
                                         type_table,
-                                        generic_func.impl_type_params.len(),
+                                        type_args.len(),
                                     );
                                     self.function_instantiated
                                         .insert(key.clone(), mangled.clone());
@@ -2002,8 +2017,12 @@ impl Monomorphizer {
         let mut substitution: IndexMap<u32, TypeId> = IndexMap::new();
 
         // Add impl block type params first (e.g., T from impl Counter<T>)
-        for (param, &arg) in generic.impl_type_params.iter().zip(key.type_args.iter()) {
-            substitution.insert(param.index, arg);
+        // Use param.index for lookup so that impls with concrete type args at earlier positions
+        // (e.g., `impl Trait for Foo<ConcreteType, V>` where V has index 1) work correctly.
+        for param in &generic.impl_type_params {
+            if let Some(&arg) = key.type_args.get(param.index as usize) {
+                substitution.insert(param.index, arg);
+            }
         }
 
         // Add method-level type params (offset by impl type params count)
@@ -2065,8 +2084,14 @@ impl Monomorphizer {
             // Update method_info with mangled struct name including impl type args
             // and method type args (from the method's own type params)
             method_info: generic.method_info.as_ref().map(|info| {
-                // Impl type args are the first impl_type_params.len() elements
-                let impl_type_args_count = generic.impl_type_params.len();
+                // Impl type args are all struct type args (key.type_args minus the method's
+                // own type params). This handles impls with concrete type args at fixed
+                // positions (e.g. `impl Trait for Foo<ConcreteType, V>` where only V is
+                // a free impl_type_param but Foo still has 2 total type args).
+                let impl_type_args_count = key
+                    .type_args
+                    .len()
+                    .saturating_sub(generic.type_params.len());
                 let impl_type_args: Vec<String> = key
                     .type_args
                     .iter()
@@ -2392,15 +2417,51 @@ impl Monomorphizer {
                     let old_func_name = static_func.name();
                     let module_source = static_func.module_source();
 
+                    // When method_info has explicit type args in struct_name (e.g.,
+                    // "NestedMap<Array<String>,V>"), clone the existing MonomorphInfo's type_args
+                    // so we can substitute all positions (including concrete ones) to produce the
+                    // full instantiated name.  This handles `impl Trait for Foo<ConcreteType, V>`
+                    // where ConcreteType is not in the substitution map.
+                    let existing_monomorph_type_args: Option<Vec<TypeId>> =
+                        if has_explicit_type_params {
+                            if let FunctionRef::External {
+                                monomorph_info: Some(mi),
+                                ..
+                            } = &*static_func
+                            {
+                                Some(mi.type_args.clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
                     // Build type args from substitution
                     let mut sorted_entries: Vec<_> = substitution.iter().collect();
                     sorted_entries.sort_by_key(|(idx, _)| **idx);
-                    let type_names: Vec<String> = sorted_entries
-                        .iter()
-                        .map(|(_, tid)| type_table.mangle_type_name(**tid))
-                        .collect();
-                    let type_args: Vec<TypeId> =
-                        sorted_entries.iter().map(|(_, tid)| **tid).collect();
+                    let (type_names, type_args) =
+                        if let Some(ref existing) = existing_monomorph_type_args {
+                            // Use the existing MonomorphInfo's type_args (substituted) to preserve
+                            // concrete positions that aren't in the substitution map.
+                            let sub_args: Vec<TypeId> = existing
+                                .iter()
+                                .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                .collect();
+                            let sub_names: Vec<String> = sub_args
+                                .iter()
+                                .map(|&tid| type_table.mangle_type_name(tid))
+                                .collect();
+                            (sub_names, sub_args)
+                        } else {
+                            let names: Vec<String> = sorted_entries
+                                .iter()
+                                .map(|(_, tid)| type_table.mangle_type_name(**tid))
+                                .collect();
+                            let args: Vec<TypeId> =
+                                sorted_entries.iter().map(|(_, tid)| **tid).collect();
+                            (names, args)
+                        };
 
                     // Apply type args to get monomorphized method info
                     // Skip for non-generic structs that don't use the enclosing type params.

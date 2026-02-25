@@ -546,8 +546,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         )];
 
         // --- For each field: __b.insert_literal(key, value) ---
+        // Use the mangled builder name (with type args) so WIR can resolve the instantiated
+        // function directly, which is needed when inlining is blocked (e.g., nested generics).
         let insert_mangled_name =
-            MethodName::format_local(&builder_base_name, Some(&trait_name), "insert_literal");
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "insert_literal");
 
         let insert_method_info = LocalMethodName::new(
             builder_base_name.clone(),
@@ -628,8 +630,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         let result_expr = if use_new_api {
+            // Use the mangled builder name (with type args) so WIR can resolve the instantiated
+            // function directly, which is needed when inlining is blocked (e.g., nested generics).
             let build_mangled_name =
-                MethodName::format_local(&builder_base_name, Some(&trait_name), "build");
+                MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
             let build_method_info = LocalMethodName::new(
                 builder_base_name.clone(),
                 Some(trait_name.clone()),

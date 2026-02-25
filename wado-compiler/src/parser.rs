@@ -3492,6 +3492,7 @@ impl Parser {
 
     /// Parse a type in impl block context, supporting bounds on generic type args.
     /// `impl Array<T: Ord>` extracts T: Ord into `type_params` and returns Generic("Array", [Named("T")]).
+    /// `impl Foo<Array<String>, V>` parses `Array<String>` as a full nested generic type.
     /// Falls back to normal `parse_type()` for non-identifier starts (e.g., reference types).
     fn parse_impl_target_type(
         &mut self,
@@ -3502,41 +3503,65 @@ impl Parser {
             return self.parse_type();
         }
 
-        // Check if this is Ident < ... pattern where <...> may contain bounds
-        // If there's no <, or the explicit type_params already cover these params,
-        // use normal parse_type.
+        // Check if this is Ident < ... pattern where <...> may contain bounds or complex types.
+        // If there's no <, use normal parse_type.
         if self.peek_nth(1).kind != TokenKind::Lt {
             return self.parse_type();
         }
 
-        // We have Ident < ... - parse the name and use parse_generic_params for <...>
+        // We have Ident < ... - parse each type arg individually.
+        // Each arg is either:
+        //   - A bounded type param: `T: Ord` (ident followed by colon) → extract into type_params
+        //   - A full type: `Array<String>`, `i32`, `V`, etc. → parse with parse_type()
+        //
+        // Only bounded type params are added to type_params. Params without bounds are either
+        // concrete types (like `i32` in `impl IndexValue<i32>`) or bare type params handled by
+        // the resolver. Adding bare params would shift the index of real type params, breaking
+        // associated type resolution (e.g., `type Output = T` for `impl IndexValue<i32> for Array<T>`).
         let start_span = self.peek().span;
         let name = self.consume_ident()?;
-        let params = self.parse_generic_params()?;
+        self.advance(); // consume '<'
 
-        // Only add params that have explicit bounds (e.g., `T: Ord`) to type_params.
-        // Params without bounds are either concrete types (like `i32` in `impl IndexValue<i32>`)
-        // or bare type params that will be handled by the generic-args loops in the resolver.
-        // Adding them would shift the index of real type params like T, breaking
-        // associated type resolution (e.g., `type Output = T` would resolve to TypeParam(T,1)
-        // instead of TypeParam(T,0) for `impl IndexValue<i32> for Array<T>`).
-        for param in &params {
-            if !param.bounds.is_empty() && !type_params.iter().any(|p| p.name == param.name) {
-                type_params.push(param.clone());
+        let mut args: Vec<Type> = Vec::new();
+        while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
+            // Bounded type param: `ident : bounds`
+            if matches!(self.peek_kind(), TokenKind::Ident(_))
+                && self.peek_nth(1).kind == TokenKind::Colon
+            {
+                let param_span = self.peek().span;
+                let param_name = self.consume_ident()?;
+                self.advance(); // consume ':'
+                let mut bounds = vec![self.parse_trait_bound()?];
+                while self.check(&TokenKind::Plus) {
+                    self.advance();
+                    bounds.push(self.parse_trait_bound()?);
+                }
+                if !type_params.iter().any(|p| p.name == param_name) {
+                    type_params.push(crate::ast::GenericParam {
+                        name: param_name.clone(),
+                        bounds,
+                        default: None,
+                        span: param_span,
+                    });
+                }
+                args.push(Type::Named(crate::ast::NamedType {
+                    name: param_name,
+                    span: param_span,
+                }));
+            } else {
+                // Full type: bare ident, generic type like Array<String>, reference, etc.
+                args.push(self.parse_type()?);
+            }
+
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            } else {
+                break;
             }
         }
 
-        // Construct generic type from param names
+        self.expect_gt()?;
         let end_span = self.tokens[self.pos - 1].span; // span of >
-        let args: Vec<Type> = params
-            .iter()
-            .map(|p| {
-                Type::Named(crate::ast::NamedType {
-                    name: p.name.clone(),
-                    span: p.span,
-                })
-            })
-            .collect();
 
         Ok(Type::Generic(crate::ast::GenericType {
             name,
