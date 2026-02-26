@@ -66,6 +66,12 @@ Eliminates function call overhead by replacing small pure function calls with th
 
 Eligibility: pure (no effects), non-recursive, no reference parameters/returns, no generics, not from core library, expression count below threshold.
 
+Inline hints via `#[inline]` attributes override the default heuristics:
+
+- `#[inline]` — prefer inlining (treated as eligible even if slightly above threshold)
+- `#[inline(always)]` — always inline regardless of size or threshold
+- `#[inline(never)]` — never inline (useful for cold error paths or debugging)
+
 ### Reference Elimination
 
 **Module:** `optimize/ref_elim.rs`

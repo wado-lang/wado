@@ -1603,6 +1603,16 @@ struct Foo {
     secret: String, // won't be shown in debug stringify
 }
 
+// Inline hints for optimizer
+#[inline]              // hint: prefer inlining this function
+fn small_helper() -> i32 { return 42; }
+
+#[inline(always)]      // always inline (ignores threshold)
+fn critical_path() -> i32 { return 1; }
+
+#[inline(never)]       // never inline (useful for cold paths, debugging)
+fn error_handler() { panic("error"); }
+
 // Test attributes
 #[expect_trap]
 test "should panic" {
