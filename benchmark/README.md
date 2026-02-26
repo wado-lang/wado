@@ -58,7 +58,7 @@ Converts 500,000 random f64 values (0.0–1.0) to decimal strings with 6 decimal
 
 - **Use case**: Float formatting, string allocation throughput
 - **Operations**: Float-to-string conversion, byte iteration, string buffer management
-- **Comparison**: C (`snprintf`), Rust (`write!`), Zig (`std.fmt`), Wado (bundled fts via template literal)
+- **Comparison**: C (`snprintf`), Rust (`write!`), Zig (`std.fmt`), Wado (pure Wado via template literal)
 
 ```bash
 make benchmark-fts
@@ -159,9 +159,9 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 | C (gcc -O3)          | 57        | 2.28x     |
 | **Wado**             | 97,979    | 3,919.16x |
 
-All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's bundled fts has minor last-digit rounding differences in some values).
+All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
 
-The large overhead in Wado is due to the float-to-string conversion going through the bundled fts library (compiled Rust→Wasm), which involves cross-module calls and GC-managed string allocation per conversion.
+The large overhead in Wado is due to the float-to-string conversion going through the pure Wado fts implementation, which involves GC-managed string allocation per conversion.
 
 ## Profiling Wado Programs
 
