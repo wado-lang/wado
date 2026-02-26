@@ -913,7 +913,7 @@ impl Point {
 }
 ```
 
-In languages with ownership semantics (e.g., Rust), `self` by value transfers ownership to the method, preventing subsequent use of the receiver. In Wado, all types have value semantics with GC-managed memory and no ownership system — assignment always copies the value. This makes `self` by value semantically identical to `&self` (both receive a copy), so supporting it would only add confusion without any benefit. The parser rejects it with a clear error message guiding the user to `&self` or `&mut self`.
+In languages with ownership semantics (e.g., Rust), `self` by value transfers ownership to the method, preventing subsequent use of the receiver. Wado has no ownership system — there is no concept of "consuming" a value — so `self` by value serves no purpose. The parser rejects it with a clear error message guiding the user to `&self` or `&mut self`.
 
 ### String Type
 
