@@ -873,6 +873,10 @@ builtin::realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32
 // Stream/Future intrinsics (Component Model)
 // These are low-level i32 handle operations used internally by the resolver.
 // User code accesses Stream<T>/Future<T> resource types from core:prelude/types.wado.
+// NOTE: Migration from builtin-based to resource-based is incomplete.
+// Resource declarations exist in types.wado but method resolution (.new(), .read(),
+// .write(), .close(), .drop()) is still hardcoded in the resolver (method_call.rs)
+// rather than being driven by the resource declarations.
 builtin::stream_new() -> i64              // Create stream, returns rx|tx packed
                                           // Extract: rx = handles as i32, tx = (handles >> 32) as i32
 builtin::stream_read(rx: i32, ptr: i32, len: i32) -> i32
@@ -1595,6 +1599,7 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 
 - **Variant pattern matching**: Single-payload and tuple-payload cases work (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`). Struct payloads not yet supported. See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
 - **Function types**: Parser supports `fn(T) -> U` syntax, closure codegen works (both pure and capturing), but full function type support is incomplete.
+- **Stream/Future resource migration**: Resource declarations (`resource Stream<T>`, `resource Future<T>`, etc.) exist in `core:prelude/types.wado`, but method resolution (`.new()`, `.read()`, `.write()`, `.close()`, `.drop()`) is still hardcoded in the resolver (`method_call.rs`) rather than being driven by the resource declarations. The low-level canonical builtins in `builtin.wado` (`stream_new`, `stream_read`, `future_write`, etc.) remain the actual backing implementation.
 
 ### Known Limitations
 
