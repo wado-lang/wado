@@ -843,8 +843,7 @@ pub fn parse(d: u64, p: i32) -> f64 {
 // Apply sign to a f64 value. val must be non-negative.
 fn apply_sign_f64(val: f64, neg: bool) -> f64 {
     if neg {
-        let neg_zero = builtin::f64_reinterpret_i64(0x8000000000000000 as i64);
-        return builtin::f64_copysign(val, neg_zero);
+        return builtin::f64_copysign(val, -1.0);
     }
     return val;
 }

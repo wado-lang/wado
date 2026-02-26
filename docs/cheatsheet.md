@@ -602,8 +602,8 @@ Primitive types provide built-in associated constants:
 
 | Type                     | Constants                                                                                                                           |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `f64`                    | `PI`, `TAU`, `E`, `LN2`, `LN10`, `LOG2_E`, `LOG10_E`, `SQRT2`, `FRAC_1_SQRT2`, `FRAC_PI_2`, `FRAC_PI_4`, `INFINITY`, `NEG_INFINITY` |
-| `f32`                    | `PI`, `TAU`, `E`, `INFINITY`, `NEG_INFINITY`                                                                                        |
+| `f64`                    | `PI`, `TAU`, `E`, `LN2`, `LN10`, `LOG2_E`, `LOG10_E`, `SQRT2`, `FRAC_1_SQRT2`, `FRAC_PI_2`, `FRAC_PI_4`, `INFINITY`, `NEG_INFINITY`, `NAN` |
+| `f32`                    | `PI`, `TAU`, `E`, `INFINITY`, `NEG_INFINITY`, `NAN`                                                                                 |
 | `i8`..`i64`, `u8`..`u64` | `MAX`, `MIN`                                                                                                                        |
 
 ## Traits
@@ -1339,6 +1339,17 @@ f64::atanh(x)      f64::exp(x)        f64::exp2(x)
 f64::expm1(x)      f64::ln(x)         f64::log2(x)
 f64::log10(x)      f64::ln1p(x)       f64::pow(x, y)
 f64::cbrt(x)       f64::hypot(x, y)   f64::fmod(x, y)
+
+// NaN check
+f64::is_nan(x)     // true if x is NaN
+f32::is_nan(x)
+
+// Parsing from strings
+f64::parse("3.14")   // Option<f64>: Some(3.14)
+f32::parse("-42")    // Option<f32>: Some(-42.0)
+f64::parse("inf")    // Some(f64::INFINITY)
+f64::parse("nan")    // Some(NaN)
+f64::parse("abc")    // None
 
 // f32 has the same set of functions
 f32::sin(x)        f32::sqrt(x)       f32::PI
