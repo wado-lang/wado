@@ -626,10 +626,12 @@ fn run_normal_test(
     };
 
     // Use CompilerOptions to pass the target world through
+    let has_wir = spec.has_wir_expectations(opt_level);
     let options = CompilerOptions {
         opt_level,
         target_world,
         skip_validation: false,
+        retain_wir: has_wir,
     };
 
     // Try to compile the fixture
@@ -699,19 +701,14 @@ fn run_normal_test(
     }
 
     // Verify WIR pattern expectations (if any for this optimization level)
-    if spec.has_wir_expectations(opt_level) {
-        let target_world_str = if spec.http_service.is_some() {
-            Some("wasi:http/service")
-        } else if spec.test_world.is_some() {
-            Some("test")
-        } else {
-            None
-        };
-
-        let wir_text = common::dump_source_wir(fixture_path, source, opt_level, target_world_str)
-            .unwrap_or_else(|e| {
-                panic!("[{test_id}] WIR dump failed: {e}");
-            });
+    if has_wir {
+        let wir_module = compile_result
+            .wir_module
+            .as_ref()
+            .expect("wir_module should be retained when retain_wir is set");
+        let filename = fixture_path.to_string_lossy();
+        let wir_text =
+            wado_compiler::wir_unparse::unparse_wir(wir_module, Some(&filename));
 
         let (expect, not_expect) = spec.wir_expectations(opt_level);
         let opt_name = common::opt_level_name(opt_level);

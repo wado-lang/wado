@@ -134,6 +134,8 @@ pub struct CompileResult {
     pub wasm: Vec<u8>,
     /// Parsed module AST (includes data section if present)
     pub module: ast::Module,
+    /// WIR module (retained when `CompilerOptions::retain_wir` is true)
+    pub wir_module: Option<wir::WirModule>,
 }
 
 /// Result of dumping compiler internal state
@@ -180,6 +182,9 @@ pub struct CompilerOptions {
     /// When true, the compiler returns raw Wasm bytes even if they fail validation.
     /// Useful for debugging the code generator.
     pub skip_validation: bool,
+    /// When true, retain the WIR module in [`CompileResult::wir_module`].
+    /// Used by test infrastructure to inspect WIR without a second compilation pass.
+    pub retain_wir: bool,
 }
 
 /// Compile Wado source code with a `CompilerHost` for I/O operations.
@@ -348,6 +353,11 @@ pub async fn compile_with_options<H: CompilerHost>(
     Ok(CompileResult {
         wasm,
         module: load_result.entry_ast,
+        wir_module: if options.retain_wir {
+            Some(wir_module)
+        } else {
+            None
+        },
     })
 }
 
