@@ -111,12 +111,28 @@ export fn run() with Stdout {
         "__inspect$Option<Point>"(opt_p, &mut __f);
         break __tmpl: __r;
     });
-    let arr: Array<Point> = move [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let arr: Array<Point> = __seq_lit: {
+        let mut __b: Array<Point> = move Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_16: {
+            let self: &mut Array<Point> = &mut __b;
+            let value: Point = move Point { x: 1, y: 2 };
+            self."Array<Point>::append"(value);
+        };
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_17: {
+            let self: &mut Array<Point> = &mut __b;
+            let value: Point = move Point { x: 3, y: 4 };
+            self."Array<Point>::append"(value);
+        };
+        break __seq_lit: __inline_Array_Point__SequenceLiteralBuilder__build_18: {
+            let self: Array<Point> = __b;
+            break __inline_Array_Point__SequenceLiteralBuilder__build_18: self;
+        };
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_16: {
+        let mut __f: Formatter = __inline_Formatter__new_20: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         "__inspect$Array<Point>"(arr, &mut __f);
         break __tmpl: __r;
@@ -124,18 +140,18 @@ export fn run() with Stdout {
     let f: fn(i32) -> i32 = &__Closure_0 {  };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_18: {
+        let mut __f: Formatter = __inline_Formatter__new_22: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         if &mut __f.alternate {
-            __inline_Formatter__write_str_19: {
+            __inline_Formatter__write_str_23: {
                 let s: String = move "|x: i32| x * 2";
                 __f.buf.String::append(s);
             };
         } else {
-            __inline___inspect_fn_i32_____i32_20: {
-                __inline_Formatter__write_str_21: {
+            __inline___inspect_fn_i32_____i32_24: {
+                __inline_Formatter__write_str_25: {
                     let s: String = move "|i32| -> i32";
                     __f.buf.String::append(s);
                 };
@@ -338,6 +354,22 @@ fn "__inspect$Array<Point>"(__val: Array<Point>, __fmt: &mut Formatter) {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
+}
+
+pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<Point> = core::builtin::array_new::<Point>(new_capacity);
+        core::builtin::array_copy::<Point>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<Point>(self.repr, used, value);
+    self.used = (used + 1);
 }
 
 fn __Closure_0::__call(self: &__Closure_0, x: i32) -> i32 {

@@ -152,6 +152,12 @@ type "functype/__initialize_module" = fn();
 
 type "functype/fmt_f64" = fn(f64, ref null Formatter);
 
+type "functype/Array<u64>^SequenceLiteralBuilder::build" = fn(ref null Array<u64>) -> ref null Array<u64>;
+
+type "functype/Array<u64>^SequenceLiteralBuilder::push_literal" = fn(ref null Array<u64>, u64);
+
+type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
+
 type "functype/Array<u64>^IndexValue::index_value" = fn(ref null Array<u64>, i32) -> u64;
 
 type "functype/String::grow" = fn(ref null String, i32);
@@ -1265,7 +1271,33 @@ fn check_special(f) {
 }
 
 fn __initialize_module() {
-    POW10 = Array<u64> { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
+    let __local_0: ref null Array<u64>;
+    let __local_1: i32;
+    let __local_2: i32;
+    POW10 = __seq_lit: block -> ref null Array<u64> {
+        __local_0 = Array<u64> { repr: ref.as_non_null(builtin::array_new<u64>(20)), used: 0 };
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000000000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000000000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000000000000000_i64);
+        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, -8446744073709551616_i64);
+        break __seq_lit: Array<u64>^SequenceLiteralBuilder::build(__local_0);
+    };
 }
 
 fn fmt_f64(value, f) {
@@ -1334,6 +1366,36 @@ fn fmt_f64(value, f) {
     };
 }
 
+fn Array<u64>^SequenceLiteralBuilder::build(self) {
+    return self;
+}
+
+fn Array<u64>^SequenceLiteralBuilder::push_literal(self, value) {
+    Array<u64>::append(self, value);
+}
+
+fn Array<u64>::append(self, value) {
+    let used: i32;
+    let capacity: i32;
+    let new_capacity: i32;
+    let new_repr: ref null array<u64>;
+    let __local_6: i32;
+    let __local_7: i32;
+    used = self.used;
+    capacity = builtin::array_len(self.repr);
+    if builtin::unlikely(used >= capacity) {
+        new_capacity = __inline_i32_max_0: block -> i32 {
+            __local_6 = capacity * 2;
+            break __inline_i32_max_0: select i32(__local_6 > 4, __local_6, 4);
+        };
+        new_repr = builtin::array_new<u64>(new_capacity);
+        builtin::array_copy<u64>(new_repr, 0, self.repr, 0, used);
+        self.repr = ref.as_non_null(new_repr);
+    };
+    builtin::array_set<u64>(self.repr, used, value);
+    self.used = used + 1;
+}
+
 fn Array<u64>^IndexValue::index_value(self, index) {
     if index >= self.used {
         "core:internal/panic"(String { repr: ref.as_non_null(array.new_data<u8>[0](0, 19)), used: 19 });
@@ -1371,7 +1433,7 @@ fn String::grow(self, min_capacity) {
         _licm_used = self.used;
         _licm_repr = self.repr;
         block {
-            l124: loop {
+            l125: loop {
                 if (i < _licm_used) == 0 {
                     break __for_0;
                 };
@@ -1380,7 +1442,7 @@ fn String::grow(self, min_capacity) {
                     builtin::array_set_u8(new_repr, i, byte);
                 };
                 i = i + 1;
-                continue l124;
+                continue l125;
             };
         };
     };
@@ -1424,7 +1486,7 @@ fn String::append(self, other) {
         _licm_repr = self.repr;
         _licm_used = self.used;
         block {
-            l131: loop {
+            l132: loop {
                 if (i < other_len) == 0 {
                     break __for_2;
                 };
@@ -1433,7 +1495,7 @@ fn String::append(self, other) {
                     builtin::array_set_u8(_licm_repr, _licm_used + i, byte);
                 };
                 i = i + 1;
-                continue l131;
+                continue l132;
             };
         };
     };
@@ -1463,7 +1525,7 @@ fn String::concat(a, b) {
     __for_3: block {
         i_7 = 0;
         block {
-            l134: loop {
+            l135: loop {
                 if (i_7 < len_a) == 0 {
                     break __for_3;
                 };
@@ -1472,7 +1534,7 @@ fn String::concat(a, b) {
                     builtin::array_set_u8(repr, i_7, byte_8);
                 };
                 i_7 = i_7 + 1;
-                continue l134;
+                continue l135;
             };
         };
     };
@@ -1480,7 +1542,7 @@ fn String::concat(a, b) {
     __for_4: block {
         i_10 = 0;
         block {
-            l137: loop {
+            l138: loop {
                 if (i_10 < len_b) == 0 {
                     break __for_4;
                 };
@@ -1489,7 +1551,7 @@ fn String::concat(a, b) {
                     builtin::array_set_u8(repr, len_a + i_10, byte_11);
                 };
                 i_10 = i_10 + 1;
-                continue l137;
+                continue l138;
             };
         };
     };
@@ -1530,7 +1592,7 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf = self.buf;
         block {
-            l144: loop {
+            l145: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
@@ -1538,7 +1600,7 @@ fn Formatter::write_char_n(self, c, n) {
                     String::append_char(_licm_buf, c);
                 };
                 i = i + 1;
-                continue l144;
+                continue l145;
             };
         };
     };

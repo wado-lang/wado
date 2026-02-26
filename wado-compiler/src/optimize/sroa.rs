@@ -556,7 +556,7 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
                 check_escape_in_expr(&field.value, candidates, escaped);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 check_escape_in_expr(elem, candidates, escaped);
             }
@@ -970,7 +970,7 @@ fn check_soft_escape_in_expr(
                 check_soft_escape_in_expr(&field.value, candidates, hard_escaped, false);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 check_soft_escape_in_expr(elem, candidates, hard_escaped, false);
             }
@@ -1660,7 +1660,7 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 rewrite_expr(
                     elem,

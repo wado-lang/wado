@@ -1151,43 +1151,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> TirExpr {
         let target_type = self.resolve_type(&cast.target_type);
 
-        // Special case: tuple literal cast to Array<T>
-        // [1, 2, 3] as Array<i32> should become an ArrayLiteral, not a Cast of TupleLiteral
-        let element_type_opt = self.type_table.borrow().as_array(target_type);
-        if let ast::Expr::TupleLiteral(tuple_lit) = &cast.expr
-            && let Some(element_type) = element_type_opt
-        {
-            // Resolve each element and check type compatibility
-            let elements: Vec<TirExpr> = tuple_lit
-                .elements
-                .iter()
-                .map(|elem| {
-                    let resolved = self.resolve_expr(elem, ctx, Some(element_type));
-                    // Type check: each element must match Array element type.
-                    // `never` (bottom type) is assignable to any type.
-                    if resolved.type_id != element_type
-                        && resolved.type_id != TypeTable::UNKNOWN
-                        && resolved.type_id != TypeTable::NEVER
-                    {
-                        let _ = self.logger.error(TypeError::TypeMismatch {
-                            expected: self.type_table.borrow().type_name(element_type),
-                            found: self.type_table.borrow().type_name(resolved.type_id),
-                            span: elem.span(),
-                        });
-                    }
-                    resolved
-                })
-                .collect();
-
-            return TirExpr::new(
-                TirExprKind::ArrayLiteral { elements },
-                target_type,
-                cast.span,
-            );
-        }
-
         // Special case: tuple literal cast to a type implementing SequenceLiteralBuilder
-        // [1, 2, 3] as SeqVec<i32>
+        // [1, 2, 3] as Array<i32>, [1, 2, 3] as SeqVec<i32>
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(&cast.expr, ctx, target_type) {
             return coerced;
         }
@@ -1477,7 +1442,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
             .map(|info| info.fields.clone())
             .unwrap_or_default();
 
-        // Resolve field expressions, converting tuple literals to arrays when needed
+        // Resolve field expressions, converting tuple literals to arrays when needed.
+        // For generic structs, tuple-to-sequence coercion may be deferred to a second
+        // pass after type arguments are inferred from field values.
+        let mut deferred_coercions: Vec<(usize, usize)> = Vec::new(); // (field_index, ast_field_index)
         let fields: Vec<TirStructField> = struct_lit
             .fields
             .iter()
@@ -1514,74 +1482,43 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     ast::Expr::StructLiteral(s) if s.name.is_none()
                 );
 
-                let expected_field_type =
-                    if is_numeric_literal || is_null_literal || is_anonymous_struct_literal {
-                        struct_field_types
-                            .iter()
-                            .find(|(name, _)| name == &field.name)
-                            .map(|(_, type_id)| *type_id)
-                    } else {
-                        None
-                    };
+                let is_tuple_literal = matches!(&field.value, ast::Expr::TupleLiteral(_));
+
+                let expected_field_type = if is_numeric_literal
+                    || is_null_literal
+                    || is_anonymous_struct_literal
+                    || is_tuple_literal
+                {
+                    struct_field_types
+                        .iter()
+                        .find(|(name, _)| name == &field.name)
+                        .map(|(_, type_id)| *type_id)
+                } else {
+                    None
+                };
+
+                // For tuple literals in generic struct fields where the field type
+                // contains type params (e.g., Array<T>), skip providing the expected
+                // type so the tuple isn't coerced yet. Instead, resolve as a plain
+                // tuple and defer coercion to after type inference.
+                let needs_deferred_coercion = is_tuple_literal
+                    && expected_field_type
+                        .is_some_and(|t| self.type_table.borrow().contains_type_param(t));
+                let effective_expected = if needs_deferred_coercion {
+                    None
+                } else {
+                    expected_field_type
+                };
 
                 // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
-                let mut value = self.resolve_expr(&field.value, ctx, expected_field_type);
+                let value = self.resolve_expr(&field.value, ctx, effective_expected);
 
-                // Check if this is a tuple literal that should become an array
-                // This happens when the struct field expects Array<T> and we have [...]
-                if let TirExprKind::TupleLiteral { elements } = &value.kind {
-                    // Check if the expected field type is Array<T>
-                    if let Some((_, expected_type_id)) =
-                        struct_field_types.iter().find(|(n, _)| n == &field.name)
-                    {
-                        let expected = self.type_table.borrow().get(*expected_type_id).clone();
-                        if let ResolvedType::GenericInstance {
-                            name,
-                            type_args: expected_type_args,
-                            ..
-                        } = expected
-                            && name == "Array"
-                        {
-                            // Determine the element type for the array
-                            let elem_type = if elements.is_empty() {
-                                // Empty array: use the expected element type from Array<T>
-                                expected_type_args
-                                    .first()
-                                    .copied()
-                                    .unwrap_or(TypeTable::UNKNOWN)
-                            } else {
-                                // Non-empty: check if all elements have the same type
-                                let first_type = elements[0].type_id;
-                                let all_same = elements.iter().all(|e| e.type_id == first_type);
-                                if all_same {
-                                    first_type
-                                } else {
-                                    // Not homogeneous, skip conversion
-                                    return TirStructField {
-                                        name: field.name.clone(),
-                                        value,
-                                        field_index: index as u32,
-                                    };
-                                }
-                            };
-
-                            // Convert tuple literal to array literal
-                            let elements_clone =
-                                if let TirExprKind::TupleLiteral { elements } = &value.kind {
-                                    elements.clone()
-                                } else {
-                                    vec![]
-                                };
-                            let array_type = self.type_table.borrow_mut().make_array(elem_type);
-                            value = TirExpr::new(
-                                TirExprKind::ArrayLiteral {
-                                    elements: elements_clone,
-                                },
-                                array_type,
-                                value.span,
-                            );
-                        }
-                    }
+                // Track tuple literals whose coercion was deferred because the field
+                // type had unresolved type parameters. After type inference, we'll
+                // re-coerce with the concrete type.
+                if needs_deferred_coercion && matches!(value.kind, TirExprKind::TupleLiteral { .. })
+                {
+                    deferred_coercions.push((index, index));
                 }
 
                 // Check field value type against declared struct field type
@@ -1619,47 +1556,72 @@ impl<H: CompilerHost> Resolver<'_, H> {
         };
 
         // Check if this is a generic struct and infer type arguments
-        let (struct_type, mangled_struct_name, fields) =
-            if self.generic_struct_names.contains(&struct_name) {
-                // This is a generic struct - infer type arguments from field values
-                let type_args = self.infer_type_args_from_fields(&struct_name, &fields);
+        let (struct_type, mangled_struct_name, fields) = if self
+            .generic_struct_names
+            .contains(&struct_name)
+        {
+            // This is a generic struct - infer type arguments from field values
+            let type_args = self.infer_type_args_from_fields(&struct_name, &fields);
 
-                // Substitute type parameters in field value types.
-                // This is necessary for empty array literals in self-referential fields
-                // (e.g., `children: []` in `Node<K> { children: Array<&Node<K>> }`)
-                // which get typed with TypeParams before inference.
-                let fields: Vec<TirStructField> = if type_args.is_empty() {
-                    fields
-                } else {
-                    fields
-                        .into_iter()
-                        .map(|mut field| {
-                            field.value.type_id =
-                                self.substitute_type_params(field.value.type_id, &type_args);
-                            field
-                        })
-                        .collect()
-                };
-
-                let struct_type = self.type_table.borrow_mut().make_generic_instance(
-                    struct_name.clone(),
-                    struct_module_source.clone(),
-                    type_args.clone(),
-                );
-                // Build mangled name with type arguments
-                let arg_names: Vec<String> = type_args
-                    .iter()
-                    .map(|&t| self.type_table.borrow().type_name(t))
-                    .collect();
-                let mangled_name = mangle_generic_name(&struct_name, &arg_names);
-                (struct_type, mangled_name, fields)
+            // Substitute type parameters in field value types.
+            // This is necessary for empty array literals in self-referential fields
+            // (e.g., `children: []` in `Node<K> { children: Array<&Node<K>> }`)
+            // which get typed with TypeParams before inference.
+            let mut fields: Vec<TirStructField> = if type_args.is_empty() {
+                fields
             } else {
-                let struct_type = self
-                    .type_table
-                    .borrow_mut()
-                    .make_struct(struct_name.clone(), struct_module_source.clone());
-                (struct_type, struct_name, fields)
+                fields
+                    .into_iter()
+                    .map(|mut field| {
+                        field.value.type_id =
+                            self.substitute_type_params(field.value.type_id, &type_args);
+                        field
+                    })
+                    .collect()
             };
+
+            // Second pass: apply deferred tuple-to-sequence coercion now that
+            // concrete type arguments are known. For example, [10, 20, 30] in
+            // `Container<i32> { items: [10, 20, 30] }` needs Array<i32> coercion,
+            // but at first pass the field type was Array<T> (type param).
+            if !deferred_coercions.is_empty() && !type_args.is_empty() {
+                for &(field_idx, ast_idx) in &deferred_coercions {
+                    let field_name = &fields[field_idx].name;
+                    let concrete_field_type = struct_field_types
+                        .iter()
+                        .find(|(name, _)| name == field_name)
+                        .map(|(_, type_id)| self.substitute_type_params(*type_id, &type_args));
+
+                    if let Some(concrete_type) = concrete_field_type {
+                        let ast_field = &struct_lit.fields[ast_idx];
+                        if let Some(coerced) =
+                            self.try_coerce_tuple_to_sequence(&ast_field.value, ctx, concrete_type)
+                        {
+                            fields[field_idx].value = coerced;
+                        }
+                    }
+                }
+            }
+
+            let struct_type = self.type_table.borrow_mut().make_generic_instance(
+                struct_name.clone(),
+                struct_module_source.clone(),
+                type_args.clone(),
+            );
+            // Build mangled name with type arguments
+            let arg_names: Vec<String> = type_args
+                .iter()
+                .map(|&t| self.type_table.borrow().type_name(t))
+                .collect();
+            let mangled_name = mangle_generic_name(&struct_name, &arg_names);
+            (struct_type, mangled_name, fields)
+        } else {
+            let struct_type = self
+                .type_table
+                .borrow_mut()
+                .make_struct(struct_name.clone(), struct_module_source.clone());
+            (struct_type, struct_name, fields)
+        };
 
         TirExpr::new(
             TirExprKind::StructLiteral {

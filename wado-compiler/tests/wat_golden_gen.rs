@@ -45,6 +45,7 @@ fn compile_to_wat(source_filename: &str, world: Option<&str>) -> String {
         opt_level: OptLevel::O2,
         target_world: world.map(String::from),
         skip_validation: false,
+        ..Default::default()
     };
 
     // Use a stable relative filename so the WAT output is reproducible across environments

@@ -261,7 +261,7 @@ fn propagate_constants_in_expr(
                 changed |= propagate_constants_in_expr(&mut field.value, constants);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 changed |= propagate_constants_in_expr(elem, constants);
             }

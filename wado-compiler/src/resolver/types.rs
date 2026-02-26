@@ -765,4 +765,7 @@ pub(super) struct SequenceLiteralTraitInfo {
     pub(super) self_kind: ast::SelfKind,
     /// The trait name used for method mangling (e.g., "`SequenceLiteralBuilder`")
     pub(super) trait_name: String,
+    /// The module where the `SequenceLiteralBuilder` impl is defined.
+    /// `None` means it's in the current module.
+    pub(super) impl_module_source: Option<ModuleSource>,
 }

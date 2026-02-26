@@ -261,6 +261,7 @@ pub async fn compile_with_full_opts(
         opt_level: to_compiler_opt_level(opt_level),
         target_world,
         skip_validation,
+        ..Default::default()
     };
 
     // Compile using async API

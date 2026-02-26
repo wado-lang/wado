@@ -1,0 +1,69 @@
+// Verifies that Array<T> literals go through SequenceLiteralBuilder
+// and the collapse_array_append_sequences WIR pass recovers ArrayNewFixed.
+use { println } from "core:cli";
+
+export fn run() with Stdout {
+    // Direct Array<T> literal via type annotation
+    let a: Array<i32> = [10, 20, 30];
+    assert a.len() == 3;
+    assert a[0] == 10;
+    assert a[1] == 20;
+    assert a[2] == 30;
+
+    // Array<T> literal via explicit cast
+    let b = [100, 200] as Array<i32>;
+    assert b.len() == 2;
+    assert b[0] == 100;
+    assert b[1] == 200;
+
+    // Empty array
+    let c: Array<i32> = [];
+    assert c.len() == 0;
+
+    // Single element
+    let d: Array<i32> = [42];
+    assert d.len() == 1;
+    assert d[0] == 42;
+
+    // Different element type
+    let e: Array<i64> = [1, 2, 3];
+    assert e.len() == 3;
+    assert e[0] == 1;
+
+    // Wrapper type (SeqVec) also benefits from Array<T> optimization
+    let f: SeqVec<i32> = [5, 10, 15];
+    assert f.items.len() == 3;
+    assert f.items[0] == 5;
+    assert f.items[1] == 10;
+    assert f.items[2] == 15;
+
+    println("ok");
+}
+
+struct SeqVec<T> {
+    items: Array<T>,
+}
+
+impl SequenceLiteralBuilder for SeqVec<T> {
+    type Element = T;
+    type Output = SeqVec<T>;
+
+    fn new_literal(capacity: i32) -> SeqVec<T> {
+        return SeqVec { items: Array::<T>::with_capacity(capacity) };
+    }
+
+    fn push_literal(&mut self, value: Self::Element) {
+        self.items.append(value);
+    }
+
+    fn build(self) -> SeqVec<T> {
+        return self;
+    }
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)"],
+    "wir_not_expect:O2": ["Array<i32>^SequenceLiteralBuilder::push_literal("]
+}

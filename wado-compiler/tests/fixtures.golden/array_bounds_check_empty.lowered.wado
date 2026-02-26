@@ -23,7 +23,10 @@ export fn run() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let arr: Array<i32> = move [];
+    let arr: Array<i32> = __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
+        break __seq_lit: __b;
+    };
     arr."Array<i32>^IndexValue::index_value"(0);
 }
 
@@ -36,7 +39,10 @@ export fn __cm_export__run() {
             "core::prelude/fpfmt.wado::__initialize_module"();
             __modules_initialized = true;
         };
-        let arr: Array<i32> = move [];
+        let arr: Array<i32> = __seq_lit: {
+            let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
+            break __seq_lit: __b;
+        };
         arr."Array<i32>^IndexValue::index_value"(0);
     };
     cm_raw_call task-return(0);

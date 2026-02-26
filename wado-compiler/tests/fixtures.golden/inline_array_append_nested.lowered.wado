@@ -36,7 +36,10 @@ fn Container::add_items(self: &mut Container, count: i32) {
 }
 
 fn Container::process(self: &mut Container) {
-    let mut temp: Array<i32> = move [];
+    let mut temp: Array<i32> = __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
+        break __seq_lit: __b;
+    };
     __for_1: {
         let mut i: i32 = 0;
         let _licm_items: Array<i32> = self.items;
@@ -77,20 +80,23 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut c: Container = move Container { items: [] };
+    let mut c: Container = move Container { items: __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
+        break __seq_lit: __b;
+    } };
     c.Container::add_items(3);
     c.Container::process();
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(20), used: 0 };
         __r.String::append(move "len=");
-        let mut __f: Formatter = __inline_Formatter__new_2: {
+        let mut __f: Formatter = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_i32___len_4: {
+        __inline_i32_Display__fmt_5: {
+            let self: Box<i32> = move Box<i32> { value: __inline_Array_i32___len_6: {
                 let self: &Array<i32> = &c.items;
-                break __inline_Array_i32___len_4: self.used;
+                break __inline_Array_i32___len_6: self.used;
             } };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

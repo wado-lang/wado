@@ -578,7 +578,7 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
                 lower_wide_int_in_expr(&mut field.value, type_table);
             }
         }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 lower_wide_int_in_expr(elem, type_table);
             }
@@ -2022,7 +2022,7 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(&mut field.value, type_table);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.lower_expr(elem, type_table);
                 }
@@ -2193,17 +2193,19 @@ fn lower_global_initializers(module: &mut TirModule) {
     let type_table = module.type_table.borrow();
 
     // Collect non-constant initializers with their indices for topological sorting
-    let mut lazy_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr)> = Vec::new();
+    let mut lazy_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TypeId>)> =
+        Vec::new();
 
     for (idx, global) in module.globals.iter_mut().enumerate() {
         if !is_constant_initializer(&global.initializer) {
-            // Save the original initializer with index
+            // Save the original initializer with index and local types
             lazy_inits.push((
                 idx,
                 global.name.clone(),
                 global.module_source.clone(),
                 global.ty,
                 global.initializer.clone(),
+                global.local_types.clone(),
             ));
             // Replace with default value
             global.initializer = default_value_for_type(global.ty, &type_table, global.span);
@@ -2229,8 +2231,16 @@ fn lower_global_initializers(module: &mut TirModule) {
     // Generate __initialize_module function
     let span = Span::new(0, 0, 1, 1);
     let mut init_stmts: Vec<TirStmt> = Vec::new();
+    let mut merged_local_types: Vec<TypeId> = Vec::new();
 
-    for (_, name, module_source, _, initializer) in sorted_inits {
+    for (_, name, module_source, _, mut initializer, local_types) in sorted_inits {
+        // Renumber locals if this isn't the first global (to avoid index conflicts)
+        let offset = u32::try_from(merged_local_types.len()).unwrap();
+        if offset > 0 && !local_types.is_empty() {
+            renumber_locals_in_expr(&mut initializer, offset);
+        }
+        merged_local_types.extend_from_slice(&local_types);
+
         // Create: global_name = initializer;
         let global_set = TirExpr::new(
             TirExprKind::GlobalVarSet {
@@ -2243,6 +2253,8 @@ fn lower_global_initializers(module: &mut TirModule) {
         );
         init_stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
     }
+
+    let local_count = u32::try_from(merged_local_types.len()).unwrap();
 
     let init_body = TirBlock {
         stmts: init_stmts,
@@ -2263,11 +2275,12 @@ fn lower_global_initializers(module: &mut TirModule) {
         effects: Vec::new(),
         body: Some(init_body),
         span,
-        local_count: 0,
-        local_types: Vec::new(),
+        local_count,
+        local_types: merged_local_types,
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
+        comp_features: 0,
     };
 
     module.functions.push(Rc::new(RefCell::new(init_func)));
@@ -2301,11 +2314,6 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 collect_global_refs(&field.value, refs);
-            }
-        }
-        TirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                collect_global_refs(elem, refs);
             }
         }
         TirExprKind::TupleLiteral { elements, .. } => {
@@ -2375,9 +2383,9 @@ fn collect_global_refs(expr: &TirExpr, refs: &mut IndexSet<String>) {
 ///
 /// Returns the initializers in an order where dependencies are initialized first.
 fn topological_sort_global_inits(
-    lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr)],
+    lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr, Vec<TypeId>)],
     _all_globals: &[TirGlobal],
-) -> Vec<(usize, String, ModuleSource, TypeId, TirExpr)> {
+) -> Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TypeId>)> {
     if lazy_inits.len() <= 1 {
         return lazy_inits.to_vec();
     }
@@ -2386,13 +2394,13 @@ fn topological_sort_global_inits(
     let name_to_idx: IndexMap<String, usize> = lazy_inits
         .iter()
         .enumerate()
-        .map(|(i, (_, name, _, _, _))| (name.clone(), i))
+        .map(|(i, (_, name, ..))| (name.clone(), i))
         .collect();
 
     // Build dependency graph: deps[i] = set of indices that i depends on
     let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::new(); lazy_inits.len()];
 
-    for (i, (_, _, _, _, initializer)) in lazy_inits.iter().enumerate() {
+    for (i, (_, _, _, _, initializer, _)) in lazy_inits.iter().enumerate() {
         let mut refs = IndexSet::new();
         collect_global_refs(initializer, &mut refs);
 
@@ -2438,7 +2446,7 @@ fn topological_sort_global_inits(
             .iter()
             .enumerate()
             .filter(|(i, _)| in_degree[*i] > 0)
-            .map(|(_, (_, name, _, _, _))| name.as_str())
+            .map(|(_, (_, name, ..))| name.as_str())
             .collect();
         panic!(
             "Circular dependency detected among global variables: {}",
@@ -2447,6 +2455,185 @@ fn topological_sort_global_inits(
     }
 
     sorted
+}
+
+/// Renumber all local variable indices in a TIR expression by adding an offset.
+/// Used when merging multiple global initializers into a single `__initialize_module` function.
+fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
+    match &mut expr.kind {
+        TirExprKind::Local { index, .. } => *index += offset,
+        TirExprKind::Binary { left, right, .. } => {
+            renumber_locals_in_expr(left, offset);
+            renumber_locals_in_expr(right, offset);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::OptionSome { value: inner }
+        | TirExprKind::Move { expr: inner }
+        | TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::ClosureToCanonical { functor: inner, .. } => {
+            renumber_locals_in_expr(inner, offset);
+        }
+        TirExprKind::Index { expr: e, index: i } => {
+            renumber_locals_in_expr(e, offset);
+            renumber_locals_in_expr(i, offset);
+        }
+        TirExprKind::Assign { target, value } => {
+            renumber_locals_in_expr(target, offset);
+            renumber_locals_in_expr(value, offset);
+        }
+        TirExprKind::Call { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                renumber_locals_in_expr(arg, offset);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. }
+        | TirExprKind::IndirectCall {
+            callee: receiver,
+            args,
+        } => {
+            renumber_locals_in_expr(receiver, offset);
+            for arg in args {
+                renumber_locals_in_expr(arg, offset);
+            }
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(p) = payload {
+                renumber_locals_in_expr(p, offset);
+            }
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                renumber_locals_in_expr(&mut field.value, offset);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                renumber_locals_in_expr(elem, offset);
+            }
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            renumber_locals_in_block(block, offset);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            renumber_locals_in_expr(condition, offset);
+            renumber_locals_in_block(then_branch, offset);
+            if let Some(eb) = else_branch {
+                renumber_locals_in_block(eb, offset);
+            }
+        }
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
+            renumber_locals_in_expr(scrutinee, offset);
+            for arm in arms {
+                renumber_locals_in_pattern(&mut arm.pattern, offset);
+                if let Some(ref mut guard) = arm.guard {
+                    renumber_locals_in_expr(guard, offset);
+                }
+                renumber_locals_in_expr(&mut arm.body, offset);
+            }
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            renumber_locals_in_expr(value, offset);
+        }
+        // Leaf nodes with no locals
+        _ => {}
+    }
+}
+
+fn renumber_locals_in_block(block: &mut TirBlock, offset: u32) {
+    for stmt in &mut block.stmts {
+        renumber_locals_in_stmt(stmt, offset);
+    }
+}
+
+fn renumber_locals_in_stmt(stmt: &mut TirStmt, offset: u32) {
+    match &mut stmt.kind {
+        TirStmtKind::Let {
+            local_index, value, ..
+        } => {
+            *local_index += offset;
+            renumber_locals_in_expr(value, offset);
+        }
+        TirStmtKind::Expr(expr) => renumber_locals_in_expr(expr, offset),
+        TirStmtKind::Return { value } => {
+            if let Some(v) = value {
+                renumber_locals_in_expr(v, offset);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            renumber_locals_in_expr(condition, offset);
+            renumber_locals_in_block(then_block, offset);
+            if let Some(eb) = else_block {
+                renumber_locals_in_block(eb, offset);
+            }
+        }
+        TirStmtKind::Loop { body } => renumber_locals_in_block(body, offset),
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                renumber_locals_in_expr(v, offset);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::LabeledBlock { block, .. } => renumber_locals_in_block(block, offset),
+        TirStmtKind::IfPattern {
+            scrutinee,
+            pattern,
+            then_block,
+            else_block,
+        } => {
+            renumber_locals_in_expr(scrutinee, offset);
+            renumber_locals_in_pattern(pattern, offset);
+            renumber_locals_in_block(then_block, offset);
+            if let Some(eb) = else_block {
+                renumber_locals_in_block(eb, offset);
+            }
+        }
+        TirStmtKind::LetPattern { pattern, value, .. } => {
+            renumber_locals_in_pattern(pattern, offset);
+            renumber_locals_in_expr(value, offset);
+        }
+        TirStmtKind::TaskReturn { .. } => {}
+    }
+}
+
+fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
+    match pattern {
+        TirPattern::Binding { local_index, .. } => *local_index += offset,
+        TirPattern::Tuple(patterns) => {
+            for p in patterns {
+                renumber_locals_in_pattern(p, offset);
+            }
+        }
+        TirPattern::Variant { bindings, .. } => {
+            for p in bindings {
+                renumber_locals_in_pattern(p, offset);
+            }
+        }
+        TirPattern::Struct { fields, .. } => {
+            for f in fields {
+                renumber_locals_in_pattern(&mut f.pattern, offset);
+            }
+        }
+        TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Enum { .. } => {}
+    }
 }
 
 /// Generate `__initialize_modules` function in the entry module.
@@ -2503,6 +2690,7 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         module_source: entry_source.clone(),
         span,
         is_nullable: false,
+        local_types: Vec::new(),
     };
     entry_module.globals.push(init_flag_global);
 
@@ -2592,6 +2780,7 @@ fn generate_initialize_modules(modules: &mut IndexMap<ModuleSource, TirModule>) 
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
+        comp_features: 0,
     };
 
     entry_module
@@ -3287,11 +3476,6 @@ impl BoxLowerer {
                     self.transform_expr(&mut field.value, address_taken, type_table);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } => {
-                for elem in elements {
-                    self.transform_expr(elem, address_taken, type_table);
-                }
-            }
             TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.transform_expr(elem, address_taken, type_table);
@@ -3889,7 +4073,7 @@ impl ClosureLowerer {
                     self.collect_closures_in_expr(&field.value);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.collect_closures_in_expr(elem);
                 }
@@ -4116,7 +4300,7 @@ impl ClosureLowerer {
                     self.analyze_closure_safety_expr(&field.value, false);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.analyze_closure_safety_expr(elem, false);
                 }
@@ -4347,6 +4531,7 @@ impl ClosureLowerer {
                 address_taken_locals: IndexSet::new(),
                 is_cm_adapter: false,
                 inline_hint: InlineHint::Auto,
+                comp_features: 0,
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -4482,7 +4667,7 @@ impl ClosureLowerer {
                     Self::collect_locals_from_expr(&field.value, locals);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     Self::collect_locals_from_expr(elem, locals);
                 }
@@ -4856,27 +5041,6 @@ impl ClosureLowerer {
                     TirExprKind::Index {
                         expr: Box::new(new_array),
                         index: Box::new(new_index),
-                    },
-                    expr.type_id,
-                    expr.span,
-                )
-            }
-            TirExprKind::ArrayLiteral { elements } => {
-                let new_elements = elements
-                    .iter()
-                    .map(|e| {
-                        self.transform_closure_body(
-                            e,
-                            captures,
-                            struct_type_id,
-                            self_ref_type,
-                            span,
-                        )
-                    })
-                    .collect();
-                TirExpr::new(
-                    TirExprKind::ArrayLiteral {
-                        elements: new_elements,
                     },
                     expr.type_id,
                     expr.span,
@@ -5342,11 +5506,9 @@ impl ClosureLowerer {
                         .as_ref()
                         .is_some_and(|b| self.fn_param_stored_in_struct_field(b, fn_param_indices))
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
-                elements
-                    .iter()
-                    .any(|e| self.fn_param_in_struct_field_expr(e, fn_param_indices))
-            }
+            TirExprKind::TupleLiteral { elements } => elements
+                .iter()
+                .any(|e| self.fn_param_in_struct_field_expr(e, fn_param_indices)),
             TirExprKind::Assign { target, value } => {
                 self.fn_param_in_struct_field_expr(target, fn_param_indices)
                     || self.fn_param_in_struct_field_expr(value, fn_param_indices)
@@ -5613,7 +5775,7 @@ impl ClosureLowerer {
                     );
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.collect_fn_param_specs_expr(elem, func_by_name, type_table, requests);
                 }
@@ -5795,7 +5957,7 @@ impl ClosureLowerer {
                     self.count_closures_in_expr(&field.value, counter);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.count_closures_in_expr(elem, counter);
                 }
@@ -5985,6 +6147,7 @@ impl ClosureLowerer {
             address_taken_locals: callee.address_taken_locals.clone(),
             is_cm_adapter: false,
             inline_hint: callee.inline_hint,
+            comp_features: callee.comp_features,
         };
 
         self.generated_functions
@@ -6454,16 +6617,6 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::ArrayLiteral { elements } => TirExpr::new(
-                TirExprKind::ArrayLiteral {
-                    elements: elements
-                        .iter()
-                        .map(|e| self.specialize_expr(e, param_to_functor, type_table))
-                        .collect(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
             TirExprKind::TupleLiteral { elements } => TirExpr::new(
                 TirExprKind::TupleLiteral {
                     elements: elements
@@ -6926,7 +7079,7 @@ impl ClosureLowerer {
                     self.transform_expr(&mut field.value, type_table);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.transform_expr(elem, type_table);
                 }
@@ -7274,7 +7427,7 @@ impl ClosureLowerer {
                     self.transform_remaining_closures_expr(&mut field.value);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.transform_remaining_closures_expr(elem);
                 }
@@ -7535,7 +7688,7 @@ impl StringCollector {
                     self.collect_expr(&field.value);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.collect_expr(elem);
                 }

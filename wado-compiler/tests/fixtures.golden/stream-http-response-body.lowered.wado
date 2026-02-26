@@ -329,7 +329,33 @@ export fn handle(request: Request) {
         }
         cm_raw_call task-return(__tv_0, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    let data: Array<u8> = move [72, 101, 108, 108, 111];
+    let data: Array<u8> = __seq_lit: {
+        let mut __b: Array<u8> = move Array<u8> { repr: core::builtin::array_new::<u8>(5), used: 0 };
+        __inline_Array_u8__SequenceLiteralBuilder__push_literal_1: {
+            let self: &mut Array<u8> = &mut __b;
+            self."Array<u8>::append"(72);
+        };
+        __inline_Array_u8__SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<u8> = &mut __b;
+            self."Array<u8>::append"(101);
+        };
+        __inline_Array_u8__SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<u8> = &mut __b;
+            self."Array<u8>::append"(108);
+        };
+        __inline_Array_u8__SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<u8> = &mut __b;
+            self."Array<u8>::append"(108);
+        };
+        __inline_Array_u8__SequenceLiteralBuilder__push_literal_5: {
+            let self: &mut Array<u8> = &mut __b;
+            self."Array<u8>::append"(111);
+        };
+        break __seq_lit: __inline_Array_u8__SequenceLiteralBuilder__build_6: {
+            let self: Array<u8> = __b;
+            break __inline_Array_u8__SequenceLiteralBuilder__build_6: self;
+        };
+    };
     body_tx."StreamWritable<u8>::write"(data);
     body_tx."StreamWritable<u8>::close"();
     trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(move Result<Option<Trailers>, ErrorCode>::Ok(null));
@@ -348,5 +374,21 @@ fn __cm_adapter__Response_new(headers: i32, contents_flat0: i32, contents_flat1:
 
 export fn __cm_export__handle(request: Request) {
     handle(request);
+}
+
+pub fn "Array<u8>::append"(self: &mut Array<u8>, value: u8) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<u8> = core::builtin::array_new::<u8>(new_capacity);
+        core::builtin::array_copy::<u8>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<u8>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

@@ -553,7 +553,10 @@ fn "TreeMap<String,i32>::compact"(self: &mut TreeMap<String,i32>) {
     if (self.deleted_count == 0) {
         return;
     }
-    let mut new_entries: Array<TreeMapEntry<String,i32>> = move [];
+    let mut new_entries: Array<TreeMapEntry<String,i32>> = __seq_lit: {
+        let mut __b: Array<TreeMapEntry<String,i32>> = move "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"();
+    };
     __for_of_0: {
         let mut __iter_0: ArrayIter<TreeMapEntry<String,i32>> = move self.entries."Array<TreeMapEntry<String,i32>>^IntoIterator::into_iter"();
         loop {
@@ -674,6 +677,18 @@ fn "Array<TreeMapEntry<String,i32>>^IntoIterator::into_iter"(self: &Array<TreeMa
     return ArrayIter<TreeMapEntry<String,i32>> { repr: self.repr, used: self.used, index: 0 };
 }
 
+fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
+    return self;
+}
+
+fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<TreeMapEntry<String,i32>> {
+    return "Array<TreeMapEntry<String,i32>>::with_capacity"(capacity);
+}
+
+pub fn "Array<TreeMapEntry<String,i32>>::with_capacity"(capacity: i32) -> Array<TreeMapEntry<String,i32>> {
+    return Array<TreeMapEntry<String,i32>> { repr: core::builtin::array_new::<TreeMapEntry<String,i32>>(capacity), used: 0 };
+}
+
 fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, value: i32) {
     let existing_index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (existing_index >= 0) {
@@ -688,6 +703,9 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
 }
 
 pub fn "TreeMap<String,i32>::new"() -> TreeMap<String,i32> {
-    return TreeMap<String,i32> { root: null, entries: [], size: 0, deleted_count: 0 };
+    return TreeMap<String,i32> { root: null, entries: __seq_lit: {
+        let mut __b: Array<TreeMapEntry<String,i32>> = move "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"();
+    }, size: 0, deleted_count: 0 };
 }
 

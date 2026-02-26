@@ -23,22 +23,30 @@ export fn run() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let arr: Array<i32> = move [10, 20, 30];
+    let arr: Array<i32> = __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(10);
+        };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(20);
+        };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(30);
+        };
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_5: {
+            let self: Array<i32> = __b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_5: self;
+        };
+    };
     arr."Array<i32>^IndexValue::index_value"(3);
 }
 
 export fn __cm_export__run() {
-    __inline_run_0: {
-        __inline___initialize_modules_1: {
-            if __modules_initialized {
-                break __inline___initialize_modules_1;
-            }
-            "core::prelude/fpfmt.wado::__initialize_module"();
-            __modules_initialized = true;
-        };
-        let arr: Array<i32> = move [10, 20, 30];
-        arr."Array<i32>^IndexValue::index_value"(3);
-    };
+    run();
     cm_raw_call task-return(0);
 }
 
@@ -47,5 +55,21 @@ fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<i32>(self.repr, index);
+}
+
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<i32>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

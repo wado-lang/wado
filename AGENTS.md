@@ -40,18 +40,20 @@ The target world is indicated by the top-level key in the JSON object:
 - `"test": {}` → test world (runs test block exports)
 - `"wasi:http/service": {...}` → HTTP service world
 
-| Field                 | Type                 | Description                                                |
-| --------------------- | -------------------- | ---------------------------------------------------------- |
-| `"test"`              | `{}`                 | Run as test world (`wasi:test`), executing test exports    |
-| `"wasi:http/service"` | `object`             | Run as HTTP service (see HTTP sub-fields below)            |
-| `stdout`              | `string`             | Expected stdout (exact match)                              |
-| `stderr`              | `string`             | Expected stderr (exact match)                              |
-| `stdout_contains`     | `string[]`           | Strings that must appear in stdout                         |
-| `stderr_contains`     | `string[]`           | Strings that must appear in stderr                         |
-| `trapped`             | `bool`               | Whether the program should trap                            |
-| `compile_error`       | `string`             | Expected compile error (substring match)                   |
-| `TODO`                | `bool`               | Mark as TODO test - must fail until feature is implemented |
-| `preopened_dirs`      | `[string, string][]` | Preopened directories `[host_path, guest_path]`            |
+| Field                 | Type                 | Description                                                 |
+| --------------------- | -------------------- | ----------------------------------------------------------- |
+| `"test"`              | `{}`                 | Run as test world (`wasi:test`), executing test exports     |
+| `"wasi:http/service"` | `object`             | Run as HTTP service (see HTTP sub-fields below)             |
+| `stdout`              | `string`             | Expected stdout (exact match)                               |
+| `stderr`              | `string`             | Expected stderr (exact match)                               |
+| `stdout_contains`     | `string[]`           | Strings that must appear in stdout                          |
+| `stderr_contains`     | `string[]`           | Strings that must appear in stderr                          |
+| `trapped`             | `bool`               | Whether the program should trap                             |
+| `compile_error`       | `string`             | Expected compile error (substring match)                    |
+| `TODO`                | `bool`               | Mark as TODO test - must fail until feature is implemented  |
+| `preopened_dirs`      | `[string, string][]` | Preopened directories `[host_path, guest_path]`             |
+| `wir_expect:Ox`       | `string[]`           | Patterns that must appear in WIR at `-Ox` (substring match) |
+| `wir_not_expect:Ox`   | `string[]`           | Patterns that must NOT appear in WIR at `-Ox`               |
 
 HTTP sub-fields (inside `"wasi:http/service": {...}`):
 
@@ -131,6 +133,22 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 __DATA__
 {"wasi:http/service": {"status": 200}}
+```
+
+```wado
+// WIR pattern test - verify optimization effects at a specific -Ox level
+// Use `wado dump --wir --unparse -O2 file.wado` to discover WIR patterns
+export fn run() {
+    let a: Array<i32> = [10, 20, 30];
+    assert a.len() == 3;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)"],
+    "wir_not_expect:O2": ["SequenceLiteralBuilder::push_literal("]
+}
 ```
 
 ### Adding New Test Fixtures

@@ -179,7 +179,7 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
             }
             (all_ok, total)
         }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             let mut total = 0;
             let mut all_ok = true;
             for elem in elements {
@@ -400,7 +400,7 @@ fn replace_ref_field_access_in_expr(
                 );
             }
         }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 replace_ref_field_access_in_expr(elem, ref_local, target_local, target_name);
             }
@@ -740,7 +740,7 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
                 collect_ref_bindings_in_expr(&field.value, bindings);
             }
         }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_ref_bindings_in_expr(elem, bindings);
             }
@@ -948,7 +948,7 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u
                 remove_dead_ref_bindings_in_expr(&mut field.value, dead_locals);
             }
         }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 remove_dead_ref_bindings_in_expr(elem, dead_locals);
             }

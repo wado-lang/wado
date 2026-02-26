@@ -609,15 +609,25 @@ async fn run_single(opts: &DumpOptions, input: &str) {
         .unwrap_or_default();
     let host = FilesystemCompilerHost::new(base_path);
 
-    // Dump using async API
-    let result =
-        match wado_compiler::dump_with_host(&source, &host, Some(input), opts.opt_level).await {
-            Ok(r) => r,
-            Err(_bail) => {
-                // Errors already printed by host via emit_diagnostic
-                process::exit(1);
-            }
-        };
+    // Extract target world from __DATA__ section if present
+    let target_world = extract_world_from_data_section(&source);
+
+    // Dump using async API with target world
+    let result = match wado_compiler::dump_with_host_and_world(
+        &source,
+        &host,
+        Some(input),
+        opts.opt_level,
+        target_world.as_deref(),
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(_bail) => {
+            // Errors already printed by host via emit_diagnostic
+            process::exit(1);
+        }
+    };
 
     // Tokens section (Lexer phase)
     if opts.show_tokens {

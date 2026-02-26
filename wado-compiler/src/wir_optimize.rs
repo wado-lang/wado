@@ -13,14 +13,19 @@
 use indexmap::IndexSet;
 
 use crate::wir::{
-    WirData, WirExportDesc, WirFuncType, WirImportDesc, WirInstr, WirModule, WirType, WirTypeDef,
-    WirTypeId,
+    COMP_FEATURE_ARRAY_APPEND, WirData, WirExportDesc, WirFuncType, WirImportDesc, WirInstr,
+    WirModule, WirType, WirTypeDef, WirTypeId,
 };
 
 /// Run all WIR-level optimizations on the module (in-place).
 pub fn optimize_wir(module: &mut WirModule) {
     // Whole-module pass: rewrite struct-returning functions to multi-value.
     sroa_multi_value_returns(module);
+
+    // Whole-module pass: collapse inlined Array::append sequences back to ArrayNewFixed.
+    // Runs before promote/split so that recovered ArrayNewFixed nodes are eligible
+    // for data segment promotion and large-literal splitting.
+    collapse_array_append_sequences(module);
 
     // Whole-module pass: promote constant primitive arrays to data segments.
     // Runs before split_large_array_literals so promoted arrays don't get split.
@@ -1429,4 +1434,469 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
     seq.push(WirInstr::LocalGet { name: arr_local });
 
     *instr = WirInstr::Seq(seq);
+}
+
+/// Collapse inlined `Array::append` sequences back to `ArrayNewFixed`.
+///
+/// After the `SequenceLiteralBuilder` trait path is inlined, array literals like
+/// `[10, 20, 30]` become:
+///
+/// ```text
+/// LocalSet { name: X, value: StructNew { ... ArrayNewDefault(N) ... I32Const(0) } }
+/// Block { Call { Array::append(receiver, v0) } }
+/// Block { Call { Array::append(receiver, v1) } }
+/// ...
+/// ```
+///
+/// This pass recognizes that pattern and rewrites it to use `ArrayNewFixed`
+/// (replacing `ArrayNewDefault` and removing the append calls), which is then
+/// eligible for `promote_constant_arrays_to_data` and `split_large_array_literals`.
+fn collapse_array_append_sequences(module: &mut WirModule) {
+    let import_func_count = module
+        .imports
+        .iter()
+        .filter(|i| matches!(i.desc, WirImportDesc::Func { .. }))
+        .count() as u32;
+
+    // Build set of function indices that have COMP_FEATURE_ARRAY_APPEND.
+    let append_func_indices: IndexSet<u32> = module
+        .functions
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.comp_features & COMP_FEATURE_ARRAY_APPEND != 0)
+        .map(|(i, _)| import_func_count + u32::try_from(i).unwrap())
+        .collect();
+
+    if append_func_indices.is_empty() {
+        return;
+    }
+
+    // Build map: type index → is Array<T> struct (has generic_origin.base_name == "Array").
+    let array_struct_types: IndexSet<u32> = module
+        .types
+        .iter()
+        .enumerate()
+        .filter_map(|(i, td)| {
+            if let WirTypeDef::Struct(s) = td
+                && s.generic_origin
+                    .as_ref()
+                    .is_some_and(|g| g.base_name == "Array")
+            {
+                Some(u32::try_from(i).unwrap())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            collapse_appends_in_body(body, &append_func_indices, &array_struct_types);
+        }
+    }
+}
+
+/// Describes how the Array<T> is accessed from the local variable.
+#[derive(Debug, Clone)]
+enum ArrayAccessPath {
+    /// The local IS the Array<T> struct directly.
+    Direct,
+    /// The Array<T> is a field of the local's struct type.
+    Field { outer_type_idx: u32 },
+}
+
+/// Information about a detected Array<T> initialization via `SequenceLiteralBuilder`.
+struct ArrayInitInfo {
+    /// Name of the local variable holding the struct.
+    local_name: String,
+    /// WIR type ID of the raw Wasm array type (e.g., `builtin::array<i32>`).
+    raw_array_type_id: WirTypeId,
+    /// Expected number of appends (from `ArrayNewDefault` capacity).
+    capacity: usize,
+    /// How to access the Array<T> from the local.
+    access_path: ArrayAccessPath,
+    /// Index of the `I32Const(0)` field (the `used` counter) within the Array struct fields.
+    /// Needed to rewrite it to `I32Const(N)`.
+    used_field_index: usize,
+}
+
+/// Scan an instruction tree for init + N×append patterns and collapse them.
+/// Recurses into all instruction bodies (blocks, loops, ifs, and also block bodies
+/// nested inside tree nodes like `ValueCopy { expr: Block { ... } }`).
+fn collapse_appends_in_instr(
+    instr: &mut WirInstr,
+    append_func_indices: &IndexSet<u32>,
+    array_struct_types: &IndexSet<u32>,
+) {
+    // If this instruction contains a Vec<WirInstr> body, process it.
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            collapse_appends_in_body(body, append_func_indices, array_struct_types);
+            return;
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            collapse_appends_in_instr(condition, append_func_indices, array_struct_types);
+            collapse_appends_in_body(then_body, append_func_indices, array_struct_types);
+            if let Some(eb) = else_body {
+                collapse_appends_in_body(eb, append_func_indices, array_struct_types);
+            }
+            return;
+        }
+        _ => {}
+    }
+
+    // For non-body instructions, recurse into all Box children.
+    instr.for_each_boxed_child_mut(&mut |child| {
+        collapse_appends_in_instr(child, append_func_indices, array_struct_types);
+    });
+}
+
+/// Scan a flat instruction list for init + N×append patterns and collapse them.
+fn collapse_appends_in_body(
+    body: &mut Vec<WirInstr>,
+    append_func_indices: &IndexSet<u32>,
+    array_struct_types: &IndexSet<u32>,
+) {
+    // First recurse into all children.
+    for instr in body.iter_mut() {
+        collapse_appends_in_instr(instr, append_func_indices, array_struct_types);
+    }
+
+    // Now scan the flat body for init + append patterns.
+    let mut i = 0;
+    while i < body.len() {
+        if let Some(init_info) = try_match_array_init(&body[i], array_struct_types) {
+            let n = init_info.capacity;
+            // Check if the next N instructions are matching append calls.
+            if n > 0
+                && i + n < body.len()
+                && let Some(values) = try_match_append_sequence(
+                    &body[i + 1..i + 1 + n],
+                    &init_info,
+                    append_func_indices,
+                )
+            {
+                // Rewrite: replace ArrayNewDefault with ArrayNewFixed in the init.
+                rewrite_init_to_fixed(&mut body[i], &init_info, values);
+                // Remove the N append instructions.
+                body.drain(i + 1..i + 1 + n);
+                // Continue from the next instruction after the rewritten init.
+                i += 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+}
+
+/// Try to match a `LocalSet` that initializes an Array<T> via `SequenceLiteralBuilder`.
+///
+/// Matches patterns like:
+/// ```text
+/// LocalSet { name: X, value: StructNew { type_id: OUTER,
+///   fields: [RefAsNonNull(StructNew { type_id: ARRAY,
+///     fields: [RefAsNonNull(ArrayNewDefault { type_id: RAW, len: I32Const(N) }), I32Const(0)]
+///   })]
+/// }}
+/// ```
+/// or the direct Array<T> case:
+/// ```text
+/// LocalSet { name: X, value: StructNew { type_id: ARRAY,
+///   fields: [RefAsNonNull(ArrayNewDefault { type_id: RAW, len: I32Const(N) }), I32Const(0)]
+/// }}
+/// ```
+fn try_match_array_init(
+    instr: &WirInstr,
+    array_struct_types: &IndexSet<u32>,
+) -> Option<ArrayInitInfo> {
+    let WirInstr::LocalSet { name, value } = instr else {
+        return None;
+    };
+
+    let WirInstr::StructNew { type_id, fields } = value.as_ref() else {
+        return None;
+    };
+
+    // Case 1: Direct Array<T> init (LocalSet { name, StructNew { Array<T>, [RefAsNonNull(ArrayNewDefault), I32Const(0)] } })
+    if array_struct_types.contains(&type_id.index()) {
+        return try_extract_array_new_default(fields, name.clone(), ArrayAccessPath::Direct);
+    }
+
+    // Case 2: Wrapper struct with Array<T> field
+    // Look through fields for a RefAsNonNull(StructNew { Array<T>, ... })
+    for (field_idx, field) in fields.iter().enumerate() {
+        let inner_struct_new = match field {
+            WirInstr::RefAsNonNull(inner) => inner.as_ref(),
+            _ => field,
+        };
+
+        if let WirInstr::StructNew {
+            type_id: inner_type_id,
+            fields: inner_fields,
+        } = inner_struct_new
+            && array_struct_types.contains(&inner_type_id.index())
+        {
+            // Find the field name for this index from the outer struct.
+            // We need to match against the access path later, so we need
+            // the field name. Since WIR doesn't store field names in StructNew,
+            // we need to figure it out differently. Actually, looking at the
+            // WIR debug output, the `StructGet` uses the field name, and
+            // the StructNew field order matches the struct definition order.
+            // We'll use the field index to look up the name later in matching.
+            // For now, record the outer type and field index.
+            let _ = field_idx; // suppress unused warning
+            return try_extract_array_new_default(
+                inner_fields,
+                name.clone(),
+                ArrayAccessPath::Field {
+                    outer_type_idx: type_id.index(),
+                },
+            );
+        }
+    }
+
+    None
+}
+
+/// Try to extract `ArrayNewDefault` info from Array<T> struct fields.
+/// Expected: `[RefAsNonNull(ArrayNewDefault { type_id, len: I32Const(N) }), I32Const(0)]`
+fn try_extract_array_new_default(
+    fields: &[WirInstr],
+    local_name: String,
+    access_path: ArrayAccessPath,
+) -> Option<ArrayInitInfo> {
+    if fields.len() != 2 {
+        return None;
+    }
+
+    // First field: RefAsNonNull(ArrayNewDefault { type_id, len: I32Const(N) })
+    let WirInstr::RefAsNonNull(inner) = &fields[0] else {
+        return None;
+    };
+    let WirInstr::ArrayNewDefault { type_id, len } = inner.as_ref() else {
+        return None;
+    };
+    let WirInstr::I32Const(capacity) = len.as_ref() else {
+        return None;
+    };
+    let capacity = usize::try_from(*capacity).ok()?;
+
+    // Second field: I32Const(0) (the `used` counter)
+    let WirInstr::I32Const(0) = &fields[1] else {
+        return None;
+    };
+
+    Some(ArrayInitInfo {
+        local_name,
+        raw_array_type_id: type_id.clone(),
+        capacity,
+        access_path,
+        used_field_index: 1,
+    })
+}
+
+/// Try to match N consecutive instructions as `Array::append(receiver, value)` calls.
+/// Each append may be wrapped in a `Block` (from inlining), possibly with
+/// `LocalSet` instructions that copy the receiver into a temporary local.
+/// Returns the extracted element values if successful.
+fn try_match_append_sequence(
+    instrs: &[WirInstr],
+    init_info: &ArrayInitInfo,
+    append_func_indices: &IndexSet<u32>,
+) -> Option<Vec<WirInstr>> {
+    let mut values = Vec::with_capacity(instrs.len());
+
+    for instr in instrs {
+        // Extract the Call and any local aliases from inside a Block.
+        let (call, aliases) = extract_call_from_block(instr);
+
+        let WirInstr::Call { func_id, args } = call else {
+            return None;
+        };
+
+        // Check if this is a recognized append function.
+        if !append_func_indices.contains(&func_id.index()) {
+            return None;
+        }
+
+        // Verify the receiver matches the access path.
+        if args.len() != 2 {
+            return None;
+        }
+
+        if !receiver_matches_with_aliases(&args[0], init_info, &aliases) {
+            return None;
+        }
+
+        values.push(args[1].clone());
+    }
+
+    Some(values)
+}
+
+/// Extract a Call instruction from inside a Block, along with any local
+/// aliases created by preceding `LocalSet { name, value: LocalGet }` instructions.
+///
+/// After inlining, a `push_literal` call often expands to:
+/// ```text
+/// Block { body: [
+///   LocalSet { name: "__local_7", value: LocalGet { name: "__local_0" } },
+///   Call { func_id: append, args: [LocalGet { name: "__local_7" }, value] }
+/// ] }
+/// ```
+///
+/// Returns the Call instruction and a list of (`alias_name`, `original_name`) pairs.
+fn extract_call_from_block(instr: &WirInstr) -> (&WirInstr, Vec<(String, String)>) {
+    let WirInstr::Block {
+        body, result: None, ..
+    } = instr
+    else {
+        return (instr, Vec::new());
+    };
+
+    if body.is_empty() {
+        return (instr, Vec::new());
+    }
+
+    // The last instruction should be the Call.
+    let call = body.last().unwrap();
+
+    // All preceding instructions should be LocalSet aliases (LocalSet copying from LocalGet).
+    let mut aliases = Vec::new();
+    for preceding in &body[..body.len() - 1] {
+        if let WirInstr::LocalSet { name, value } = preceding
+            && let WirInstr::LocalGet { name: src_name } = value.as_ref()
+        {
+            aliases.push((name.clone(), src_name.clone()));
+        } else {
+            // Non-alias instruction before the call — bail out.
+            return (instr, Vec::new());
+        }
+    }
+
+    (call, aliases)
+}
+
+/// Check if a receiver expression matches the expected access path for the Array<T>,
+/// resolving local aliases from inline expansion.
+fn receiver_matches_with_aliases(
+    receiver: &WirInstr,
+    init_info: &ArrayInitInfo,
+    aliases: &[(String, String)],
+) -> bool {
+    match &init_info.access_path {
+        ArrayAccessPath::Direct => {
+            // Receiver should be LocalGet { name } where name resolves to init_info.local_name
+            if let WirInstr::LocalGet { name } = receiver {
+                resolve_alias(name, aliases) == init_info.local_name
+            } else {
+                false
+            }
+        }
+        ArrayAccessPath::Field { outer_type_idx } => {
+            // Receiver should be StructGet { type_id, expr: LocalGet { name } }
+            if let WirInstr::StructGet { type_id, expr, .. } = receiver {
+                if type_id.index() != *outer_type_idx {
+                    return false;
+                }
+                if let WirInstr::LocalGet { name } = expr.as_ref() {
+                    resolve_alias(name, aliases) == init_info.local_name
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+    }
+}
+
+/// Resolve a local name through a chain of aliases.
+/// If `name` appears as an alias target, return the source name (recursively).
+fn resolve_alias<'a>(name: &'a str, aliases: &'a [(String, String)]) -> &'a str {
+    for (alias_name, original_name) in aliases {
+        if alias_name == name {
+            return resolve_alias(original_name, aliases);
+        }
+    }
+    name
+}
+
+/// Rewrite the init instruction to use `ArrayNewFixed` instead of `ArrayNewDefault`,
+/// and update the `used` counter from 0 to N.
+fn rewrite_init_to_fixed(instr: &mut WirInstr, init_info: &ArrayInitInfo, values: Vec<WirInstr>) {
+    let n = i32::try_from(values.len()).unwrap_or(0);
+
+    // Navigate into the instruction tree to find and replace ArrayNewDefault.
+    let WirInstr::LocalSet { value, .. } = instr else {
+        return;
+    };
+
+    let array_fields = match value.as_mut() {
+        // Direct Array<T>
+        WirInstr::StructNew { fields, .. } if init_info.access_path.is_direct() => fields,
+        // Wrapper struct containing Array<T>
+        WirInstr::StructNew { fields, .. } => {
+            // Find the Array<T> StructNew inside the wrapper fields.
+            let Some(inner_fields) = find_inner_array_fields(fields) else {
+                return;
+            };
+            inner_fields
+        }
+        _ => return,
+    };
+
+    // Replace fields[0]: RefAsNonNull(ArrayNewDefault) → RefAsNonNull(ArrayNewFixed)
+    if let Some(WirInstr::RefAsNonNull(inner)) = array_fields.first_mut() {
+        **inner = WirInstr::ArrayNewFixed {
+            type_id: init_info.raw_array_type_id.clone(),
+            elements: values,
+        };
+    }
+
+    // Replace fields[used_field_index]: I32Const(0) → I32Const(N)
+    if let Some(used_field) = array_fields.get_mut(init_info.used_field_index) {
+        *used_field = WirInstr::I32Const(n);
+    }
+}
+
+impl ArrayAccessPath {
+    fn is_direct(&self) -> bool {
+        matches!(self, Self::Direct)
+    }
+}
+
+/// Find the inner Array<T> fields within a wrapper struct's fields.
+/// Looks for RefAsNonNull(StructNew { fields }) pattern.
+fn find_inner_array_fields(outer_fields: &mut [WirInstr]) -> Option<&mut Vec<WirInstr>> {
+    for field in outer_fields.iter_mut() {
+        match field {
+            WirInstr::RefAsNonNull(inner) => {
+                if let WirInstr::StructNew { fields, .. } = inner.as_mut() {
+                    // Check if this has the ArrayNewDefault pattern
+                    if fields.len() == 2
+                        && matches!(&fields[0], WirInstr::RefAsNonNull(i) if matches!(i.as_ref(), WirInstr::ArrayNewDefault { .. }))
+                        && matches!(&fields[1], WirInstr::I32Const(0))
+                    {
+                        return Some(fields);
+                    }
+                }
+            }
+            WirInstr::StructNew { fields, .. } => {
+                if fields.len() == 2
+                    && matches!(&fields[0], WirInstr::RefAsNonNull(i) if matches!(i.as_ref(), WirInstr::ArrayNewDefault { .. }))
+                    && matches!(&fields[1], WirInstr::I32Const(0))
+                {
+                    return Some(fields);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }

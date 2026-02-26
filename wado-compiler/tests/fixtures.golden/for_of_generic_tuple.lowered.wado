@@ -33,7 +33,23 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let h: Holder<String,i32> = move Holder<String,i32> { items: [["a", 1], ["b", 2]] };
+    let h: Holder<String,i32> = move Holder<String,i32> { items: __seq_lit: {
+        let mut __b: Array<[String, i32]> = move Array<Tuple<String,i32>> { repr: core::builtin::array_new::<[String, i32]>(2), used: 0 };
+        __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<[String, i32]> = &mut __b;
+            let value: [String, i32] = move ["a", 1];
+            self."Array<Tuple<String,i32>>::append"(value);
+        };
+        __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<[String, i32]> = &mut __b;
+            let value: [String, i32] = move ["b", 2];
+            self."Array<Tuple<String,i32>>::append"(value);
+        };
+        break __seq_lit: __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_4: {
+            let self: Array<[String, i32]> = __b;
+            break __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_4: self;
+        };
+    } };
     h."Holder<String,i32>::process"();
     core::cli::println(move "ok");
 }
@@ -67,5 +83,21 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
     let item: [String, i32] = move core::builtin::array_get::<[String, i32]>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
+}
+
+pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value: [String, i32]) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<[String, i32]> = core::builtin::array_new::<[String, i32]>(new_capacity);
+        core::builtin::array_copy::<[String, i32]>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<[String, i32]>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

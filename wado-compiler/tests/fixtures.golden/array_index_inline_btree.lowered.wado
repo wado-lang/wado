@@ -33,16 +33,64 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let tree: Tree<String> = move Tree<String> { root: Node<String> { keys: ["apple", "banana", "cherry", "date"], deleted: [false, true, false, false] }, max_keys: 5 };
+    let tree: Tree<String> = move Tree<String> { root: Node<String> { keys: __seq_lit: {
+        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(4), used: 0 };
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<String> = &mut __b;
+            let value: String = move "apple";
+            self."Array<String>::append"(value);
+        };
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<String> = &mut __b;
+            let value: String = move "banana";
+            self."Array<String>::append"(value);
+        };
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<String> = &mut __b;
+            let value: String = move "cherry";
+            self."Array<String>::append"(value);
+        };
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_5: {
+            let self: &mut Array<String> = &mut __b;
+            let value: String = move "date";
+            self."Array<String>::append"(value);
+        };
+        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_6: {
+            let self: Array<String> = __b;
+            break __inline_Array_String__SequenceLiteralBuilder__build_6: self;
+        };
+    }, deleted: __seq_lit: {
+        let mut __b: Array<bool> = move Array<bool> { repr: core::builtin::array_new::<bool>(4), used: 0 };
+        __inline_Array_bool__SequenceLiteralBuilder__push_literal_8: {
+            let self: &mut Array<bool> = &mut __b;
+            self."Array<bool>::append"(false);
+        };
+        __inline_Array_bool__SequenceLiteralBuilder__push_literal_9: {
+            let self: &mut Array<bool> = &mut __b;
+            self."Array<bool>::append"(true);
+        };
+        __inline_Array_bool__SequenceLiteralBuilder__push_literal_10: {
+            let self: &mut Array<bool> = &mut __b;
+            self."Array<bool>::append"(false);
+        };
+        __inline_Array_bool__SequenceLiteralBuilder__push_literal_11: {
+            let self: &mut Array<bool> = &mut __b;
+            self."Array<bool>::append"(false);
+        };
+        break __seq_lit: __inline_Array_bool__SequenceLiteralBuilder__build_12: {
+            let self: Array<bool> = __b;
+            break __inline_Array_bool__SequenceLiteralBuilder__build_12: self;
+        };
+    } }, max_keys: 5 };
     let result: i32 = tree."Tree<String>::check"();
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
         __r.String::append(move "result: ");
-        let mut __f: Formatter = __inline_Formatter__new_2: {
+        let mut __f: Formatter = __inline_Formatter__new_14: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_3: {
+        __inline_i32_Display__fmt_15: {
             let self: Box<i32> = move Box<i32> { value: result };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -54,6 +102,22 @@ export fn run() with Stdout {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
+}
+
+pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+        core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<String>(self.repr, used, value);
+    self.used = (used + 1);
 }
 
 fn "Tree<String>::check"(self: &Tree<String>) -> i32 {
@@ -135,5 +199,21 @@ fn "Node<String>::count_active"(self: &Node<String>) -> i32 {
         }
     }
     return count;
+}
+
+pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<bool> = core::builtin::array_new::<bool>(new_capacity);
+        core::builtin::array_copy::<bool>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<bool>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

@@ -29,7 +29,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut arr: Array<String> = move [];
+    let mut arr: Array<String> = __seq_lit: {
+        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
+        break __seq_lit: __b;
+    };
     arr."Array<String>::append"(move "hello");
     arr."Array<String>::append"(move "world");
     arr."Array<String>::append"(move "!");

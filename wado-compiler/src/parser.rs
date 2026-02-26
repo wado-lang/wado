@@ -3445,7 +3445,6 @@ impl Parser {
                     span: type_span.merge(&end),
                 });
             } else {
-                let _ = attrs; // attrs handled in parse_function
                 let is_pub = if self.check(&TokenKind::Pub) {
                     self.advance();
                     true
@@ -3472,7 +3471,7 @@ impl Parser {
                     });
                 } else {
                     // Methods cannot be exported at the CM boundary
-                    methods.push(self.parse_function(is_pub, false, false, Vec::new())?);
+                    methods.push(self.parse_function(is_pub, false, false, attrs)?);
                 }
             }
         }

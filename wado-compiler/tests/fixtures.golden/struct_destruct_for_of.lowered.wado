@@ -34,7 +34,28 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let points: Array<Point> = move [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }, Point { x: 5, y: 6 }];
+    let points: Array<Point> = __seq_lit: {
+        let mut __b: Array<Point> = move Array<Point> { repr: core::builtin::array_new::<Point>(3), used: 0 };
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<Point> = &mut __b;
+            let value: Point = move Point { x: 1, y: 2 };
+            self."Array<Point>::append"(value);
+        };
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<Point> = &mut __b;
+            let value: Point = move Point { x: 3, y: 4 };
+            self."Array<Point>::append"(value);
+        };
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<Point> = &mut __b;
+            let value: Point = move Point { x: 5, y: 6 };
+            self."Array<Point>::append"(value);
+        };
+        break __seq_lit: __inline_Array_Point__SequenceLiteralBuilder__build_5: {
+            let self: Array<Point> = __b;
+            break __inline_Array_Point__SequenceLiteralBuilder__build_5: self;
+        };
+    };
     __for_of_0: {
         let mut __iter_0: ArrayIter<Point> = move ArrayIter<Point> { repr: points.repr, used: points.used, index: 0 };
         loop {
@@ -45,11 +66,11 @@ export fn run() with Stdout {
                 let y: i32 = __pattern_temp_1.y;
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_3: {
+                    let mut __f: Formatter = __inline_Formatter__new_8: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_i32_Display__fmt_4: {
+                    __inline_i32_Display__fmt_9: {
                         let self: Box<i32> = move Box<i32> { value: (x + y) };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -71,11 +92,11 @@ export fn run() with Stdout {
                 let b: i32 = __pattern_temp_3.y;
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_7: {
+                    let mut __f: Formatter = __inline_Formatter__new_12: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_i32_Display__fmt_8: {
+                    __inline_i32_Display__fmt_13: {
                         let self: Box<i32> = move Box<i32> { value: (a * b) };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -101,5 +122,21 @@ fn "ArrayIter<Point>^Iterator::next"(self: &mut ArrayIter<Point>) -> Option<Poin
     let item: Point = move core::builtin::array_get::<Point>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
+}
+
+pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<Point> = core::builtin::array_new::<Point>(new_capacity);
+        core::builtin::array_copy::<Point>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<Point>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

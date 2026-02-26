@@ -1258,6 +1258,7 @@ fn make_adapter_function(
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: true,
         inline_hint: InlineHint::Auto,
+        comp_features: 0,
     }))
 }
 

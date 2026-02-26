@@ -1358,9 +1358,6 @@ pub enum TirExprKind {
         struct_name: String,
         fields: Vec<TirStructField>,
     },
-    ArrayLiteral {
-        elements: Vec<TirExpr>,
-    },
     TupleLiteral {
         elements: Vec<TirExpr>,
     },
@@ -1748,6 +1745,9 @@ pub struct TirGlobal {
     /// True if this global's Wasm type should be nullable.
     /// Set by lower phase for lazy-initialized reference type globals.
     pub is_nullable: bool,
+    /// Local variable types used by the initializer expression.
+    /// Populated when the initializer is non-trivial (e.g., `SequenceLiteralBuilder` coercion).
+    pub local_types: Vec<TypeId>,
 }
 
 #[derive(Debug, Clone)]
@@ -1786,6 +1786,9 @@ pub struct TirFunction {
 
     /// Inline hint from `#[inline]`, `#[inline(always)]`, or `#[inline(never)]` attributes.
     pub inline_hint: InlineHint,
+
+    /// Compiler feature bitflags from `#[comp_feature("...")]` attributes.
+    pub comp_features: u32,
 }
 
 /// Inline hint for a function, extracted from `#[inline(...)]` attributes.
