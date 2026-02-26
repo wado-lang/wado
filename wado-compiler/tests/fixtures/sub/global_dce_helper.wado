@@ -1,0 +1,11 @@
+// Helper module for cross-module global DCE test
+// Has multiple globals: some will be used by the main module, some won't.
+
+pub global mut USED_COUNTER: i32 = 0;
+pub global UNUSED_A: i32 = 100;
+pub global UNUSED_B: i32 = 200;
+pub global mut UNUSED_MUT: i32 = 0;
+
+pub fn bump() {
+    USED_COUNTER = USED_COUNTER + 1;
+}

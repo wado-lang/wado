@@ -99,17 +99,16 @@
     (import "wasi" "waitable-set-wait" (func (;8;) (type 13)))
     (import "wasi" "wasi:cli/Stdout::write_via_stream" (func (;9;) (type 14)))
     (import "mem" "memory" (memory (;0;) 1))
-    (global (;0;) (mut (ref null 4)) (ref.null none))
-    (global (;1;) (mut i32) (i32.const 0))
+    (global (;0;) (mut i32) (i32.const 0))
     (export "run" (func 11))
     (func (;10;) (type 15)
       (block ;; label = @1
         (if ;; label = @2
-          (global.get 1)
+          (global.get 0)
           (then
             (br 1 (;@1;))))
         (call 15)
-        (global.set 1
+        (global.set 0
           (i32.const 1)))
       (call 13
         (struct.new 2
@@ -250,7 +249,7 @@
     )
     (func (;15;) (type 20)
       (local (ref null 4) i32 i32)
-      (global.set 0
+      (drop
         (block (result (ref null 4)) ;; label = @1
           (local.set 0
             (struct.new 4

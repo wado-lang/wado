@@ -1,0 +1,16 @@
+// Test DCE removes unused globals from imported modules
+use { println, Stdout } from "core:cli";
+use { bump, USED_COUNTER } from "./sub/global_dce_helper.wado";
+
+export fn run() with Stdout {
+    bump();
+    bump();
+    println(`counter={USED_COUNTER}`);
+}
+
+__DATA__
+{
+    "stdout": "counter=2\n",
+    "wir_expect:O0": ["global mut USED_COUNTER:"],
+    "wir_not_expect:O0": ["UNUSED_A", "UNUSED_B", "UNUSED_MUT"]
+}
