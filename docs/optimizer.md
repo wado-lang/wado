@@ -168,6 +168,41 @@ Wraps fresh values (literals, call results) in `Move` nodes to avoid unnecessary
 
 ## Not Yet Implemented
 
+### Library Call Optimization
+
+Rewrites calls to known stdlib functions into more efficient instruction sequences when arguments are compile-time constants. Similar to LLVM's `SimplifyLibCalls` pass.
+
+#### `String.append(short_const)` → `append_char` sequence
+
+When `append` is called with a constant string of 4 bytes or fewer, expand into a sequence of `append_char` calls. This eliminates the constant string's GC array allocation and avoids the general-purpose append loop.
+
+```wado
+// Before:
+builder.append("OK");
+
+// After (optimized):
+builder.append_char('O');
+builder.append_char('K');
+```
+
+Each `append_char` is a simple array grow + set, while `append(str)` requires allocating the constant string as a GC array, then looping over its bytes. For short constants (1–4 bytes), the expanded form is strictly cheaper.
+
+#### Template string with single interpolation → direct `to_string`
+
+When a template string contains exactly one interpolation with no prefix or suffix (`` `{expr}` ``), the StringBuilder allocation is unnecessary. Replace with a direct stringification of the expression.
+
+```wado
+// Before (desugared):
+let __sb = String::with_capacity(16);
+__sb.append(expr.to_string());
+// result = __sb
+
+// After (optimized):
+// result = expr.to_string()
+```
+
+Eliminates the StringBuilder GC allocation entirely. For the common pattern of `` `{x}` `` used to convert a value to a string, this is a significant win.
+
 ### Strength Reduction
 
 Transform expensive loop operations into cheaper equivalents. For example, replace `p * p` recomputed each iteration with an accumulator updated by addition.
