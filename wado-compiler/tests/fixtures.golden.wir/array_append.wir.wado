@@ -298,7 +298,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
-    let byte: i32;
+    let byte: u8;
     let __local_9: ref null String;
     let __local_10: ref null String;
     len = message.used;
@@ -497,7 +497,7 @@ fn write_decimal_digits(arr, offset, abs_val, digit_count) {
                     };
                     block {
                         pos = pos - 1;
-                        builtin::array_set_u8(arr, pos, 48 + builtin::i32_wrap_i64(temp % 10_i64));
+                        builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(temp % 10_i64)) & 255);
                     };
                     temp = temp / 10_i64;
                     continue l18;
@@ -592,7 +592,7 @@ fn String::grow(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref null array<u8>;
     let i: i32;
-    let byte: i32;
+    let byte: u8;
     let __local_7: i32;
     let __local_8: i32;
     let __local_9: i32;
@@ -649,7 +649,7 @@ fn String::append(self, other) {
     let new_used: i32;
     let other_repr: ref null array<u8>;
     let i: i32;
-    let byte: i32;
+    let byte: u8;
     let __local_7: ref null String;
     let __local_8: ref null String;
     let _licm_repr: ref null array<u8>;
@@ -691,22 +691,22 @@ fn String::append_char(self, c) {
         String::grow(self, self.used + 4);
     };
     if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code);
+        builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
     } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, 192 | (code >>u 6));
-        builtin::array_set_u8(self.repr, self.used + 1, 128 | (code & 63));
+        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
         self.used = self.used + 2;
     } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, 224 | (code >>u 12));
-        builtin::array_set_u8(self.repr, self.used + 1, 128 | ((code >>u 6) & 63));
-        builtin::array_set_u8(self.repr, self.used + 2, 128 | (code & 63));
+        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, 240 | (code >>u 18));
-        builtin::array_set_u8(self.repr, self.used + 1, 128 | ((code >>u 12) & 63));
-        builtin::array_set_u8(self.repr, self.used + 2, 128 | ((code >>u 6) & 63));
-        builtin::array_set_u8(self.repr, self.used + 3, 128 | (code & 63));
+        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
 }

@@ -301,7 +301,7 @@ fn "core:cli/write_to_stream"(tx, message, add_newline) {  // from core:cli
     let alloc_size: i32;
     let ptr: i32;
     let i: i32;
-    let byte: i32;
+    let byte: u8;
     let __local_9: ref null String;
     let __local_10: ref null String;
     len = message.used;
@@ -1126,7 +1126,7 @@ fn format_decimal(d, p, nd) {
                     __local_27 = i;
                     __local_28 = __inline_String__get_byte_10: block -> u8 {
                         __local_30 = i - 1;
-                        break __inline_String__get_byte_10: builtin::array_get_u8(_licm_repr, __local_30) & 255;
+                        break __inline_String__get_byte_10: builtin::array_get_u8(_licm_repr, __local_30);
                     };
                     builtin::array_set_u8(_licm_repr, __local_27, __local_28);
                 };
@@ -1190,7 +1190,7 @@ fn format_exp(d, p, nd, upper) {
                     __local_12 = i;
                     __local_13 = __inline_String__get_byte_3: block -> u8 {
                         __local_15 = i - 1;
-                        break __inline_String__get_byte_3: builtin::array_get_u8(_licm_repr, __local_15) & 255;
+                        break __inline_String__get_byte_3: builtin::array_get_u8(_licm_repr, __local_15);
                     };
                     builtin::array_set_u8(_licm_repr, __local_12, __local_13);
                 };
@@ -1417,7 +1417,7 @@ fn String::grow(self, min_capacity) {
     let new_capacity: i32;
     let new_repr: ref null array<u8>;
     let i: i32;
-    let byte: i32;
+    let byte: u8;
     let __local_7: i32;
     let __local_8: i32;
     let __local_9: i32;
@@ -1475,7 +1475,7 @@ fn String::append(self, other) {
     let new_used: i32;
     let other_repr: ref null array<u8>;
     let i: i32;
-    let byte: i32;
+    let byte: u8;
     let __local_7: ref null String;
     let __local_8: ref null String;
     let _licm_repr: ref null array<u8>;
@@ -1517,10 +1517,10 @@ fn String::concat(a, b) {
     let repr: ref null array<u8>;
     let a_repr: ref null array<u8>;
     let i_7: i32;
-    let byte_8: i32;
+    let byte_8: u8;
     let b_repr: ref null array<u8>;
     let i_10: i32;
-    let byte_11: i32;
+    let byte_11: u8;
     let __local_12: ref null String;
     let __local_13: ref null String;
     let __local_14: ref null String;
@@ -1573,22 +1573,22 @@ fn String::append_char(self, c) {
         String::grow(self, self.used + 4);
     };
     if code <u 128 {
-        builtin::array_set_u8(self.repr, self.used, code);
+        builtin::array_set_u8(self.repr, self.used, code & 255);
         self.used = self.used + 1;
     } else if code <u 2048 {
-        builtin::array_set_u8(self.repr, self.used, 192 | (code >>u 6));
-        builtin::array_set_u8(self.repr, self.used + 1, 128 | (code & 63));
+        builtin::array_set_u8(self.repr, self.used, (192 | (code >>u 6)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | (code & 63)) & 255);
         self.used = self.used + 2;
     } else if code <u 65536 {
-        builtin::array_set_u8(self.repr, self.used, 224 | (code >>u 12));
-        builtin::array_set_u8(self.repr, self.used + 1, 128 | ((code >>u 6) & 63));
-        builtin::array_set_u8(self.repr, self.used + 2, 128 | (code & 63));
+        builtin::array_set_u8(self.repr, self.used, (224 | (code >>u 12)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | (code & 63)) & 255);
         self.used = self.used + 3;
     } else {
-        builtin::array_set_u8(self.repr, self.used, 240 | (code >>u 18));
-        builtin::array_set_u8(self.repr, self.used + 1, 128 | ((code >>u 12) & 63));
-        builtin::array_set_u8(self.repr, self.used + 2, 128 | ((code >>u 6) & 63));
-        builtin::array_set_u8(self.repr, self.used + 3, 128 | (code & 63));
+        builtin::array_set_u8(self.repr, self.used, (240 | (code >>u 18)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 1, (128 | ((code >>u 12) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 2, (128 | ((code >>u 6) & 63)) & 255);
+        builtin::array_set_u8(self.repr, self.used + 3, (128 | (code & 63)) & 255);
         self.used = self.used + 4;
     };
 }
