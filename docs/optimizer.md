@@ -174,34 +174,11 @@ Rewrites calls to known stdlib functions into more efficient instruction sequenc
 
 #### `String.append(short_const)` → `append_char` sequence
 
-When `append` is called with a constant string of 4 bytes or fewer, expand into a sequence of `append_char` calls. This eliminates the constant string's GC array allocation and avoids the general-purpose append loop.
-
-```wado
-// Before:
-builder.append("OK");
-
-// After (optimized):
-builder.append_char('O');
-builder.append_char('K');
-```
-
-Each `append_char` is a simple array grow + set, while `append(str)` requires allocating the constant string as a GC array, then looping over its bytes. For short constants (1–4 bytes), the expanded form is strictly cheaper.
+When `append` is called with a constant string of 4 bytes or fewer, expand into a sequence of `append_char` calls. Each `append_char` is a simple array grow + set, while `append(str)` requires allocating the constant string as a GC array and looping over its bytes.
 
 #### Template string with single interpolation → direct `to_string`
 
-When a template string contains exactly one interpolation with no prefix or suffix (`` `{expr}` ``), the StringBuilder allocation is unnecessary. Replace with a direct stringification of the expression.
-
-```wado
-// Before (desugared):
-let __sb = String::with_capacity(16);
-__sb.append(expr.to_string());
-// result = __sb
-
-// After (optimized):
-// result = expr.to_string()
-```
-
-Eliminates the StringBuilder GC allocation entirely. For the common pattern of `` `{x}` `` used to convert a value to a string, this is a significant win.
+When a template string contains exactly one interpolation with no prefix or suffix (`` `{expr}` ``), replace with `expr.to_string()` directly. Eliminates the StringBuilder GC allocation entirely.
 
 ### Strength Reduction
 
@@ -276,139 +253,7 @@ Apply algebraic laws to simplify expressions. Often implemented as part of peeph
 
 When a function returns a struct or tuple that is immediately destructured at every call site, the return can be scalarized using Wasm multi-value returns. This eliminates the GC struct allocation at the function boundary without requiring inlining.
 
-The compiler already implements this for builtins (e.g., `i64_add128` returns two `i64` values on the Wasm stack via `MultiValueStructNew`/`MultiValueLocalBind` in WIR). Extending this to user-defined functions is a natural next step.
-
-#### Current State: Builtin Multi-Value Pipeline
-
-The existing pipeline for builtins:
-
-1. `lower.rs`: `is_multivalue_builtin_pattern()` detects builtin multi-value calls and **preserves** `LetPattern` (instead of lowering to `Let + FieldAccess`)
-2. `wir_build/translate.rs`: Wraps the Wasm multi-value instruction in `MultiValueStructNew`
-3. `translate_let_pattern()`: Detects `MultiValueStructNew` → replaces with `MultiValueLocalBind` (tuple elision, no struct allocation)
-
-#### Goal: Extend to User-Defined Functions
-
-Example:
-
-```wado
-fn minmax(a: i32, b: i32) -> [i32, i32] {
-    if a < b { return [a, b]; }
-    return [b, a];
-}
-let [lo, hi] = minmax(x, y);  // immediate destructuring
-```
-
-Current codegen:
-
-```wat
-(func $minmax (param i32 i32) (result (ref $tuple_i32_i32))
-  ;; ... compute ...
-  (struct.new $tuple_i32_i32)  ;; heap allocation
-)
-;; caller:
-(call $minmax)
-(local.tee $tmp)
-(struct.get $tuple_i32_i32 0)  ;; field extraction
-(local.set $lo)
-(local.get $tmp)
-(struct.get $tuple_i32_i32 1)
-(local.set $hi)
-```
-
-Optimized codegen with multi-value return:
-
-```wat
-(func $minmax (param i32 i32) (result i32 i32)
-  ;; ... compute ...
-  ;; no struct.new — two i32 values on stack
-)
-;; caller:
-(call $minmax)
-(local.set $hi)  ;; directly from stack (LIFO order)
-(local.set $lo)
-```
-
-#### Implementation Phase: Hybrid TIR Analysis + WIR Generation
-
-Two approaches were considered:
-
-**Option A: Pure WIR optimization pass** — Add an optimization phase after WIR build that rewrites signatures and call sites. WIR already has `MultiValueStructNew`/`MultiValueLocalBind` infrastructure and Wasm-level types. However, WIR currently has no optimization framework, and introducing one is a significant architectural change.
-
-**Option B (preferred): Hybrid TIR analysis + WIR generation** — The TIR optimizer identifies candidate functions via whole-program analysis and marks them. WIR build then uses these marks to generate multi-value signatures and call sites.
-
-Rationale for Option B:
-
-1. **Whole-program analysis is natural at TIR level** — The TIR optimizer already performs cross-function analysis (inlining, DCE). Adding call-site analysis fits this model.
-2. **Leverages existing fixed-point iteration** — SROA decomposes struct locals, copy propagation cleans up, then multi-value candidate detection runs in the same loop. Interplay between passes is valuable.
-3. **No new WIR optimization framework needed** — The "decision" happens at TIR, the "execution" happens during WIR build (which already handles the builtin case).
-4. **Clean separation of concerns** — "What to optimize" is a TIR-level question. "How to emit multi-value Wasm" is a WIR-level question.
-
-Note: A WIR optimization framework may be useful in the future for other purposes (stack scheduling, register allocation, peephole). Option B does not preclude adding one later.
-
-#### Implementation Strategy
-
-1. **TIR analysis pass** (new pass in `optimize/`): Scan all internal functions that return a struct or tuple. For each, check that ALL call sites either:
-   - Immediately destructure via `LetPattern` (tuple or struct destructuring)
-   - Only access fields without escaping the value (SROA will have decomposed these)
-     Mark qualifying functions with a metadata flag (e.g., `multivalue_return: true`).
-
-2. **Callee rewrite at WIR build**: When generating a marked function, emit multiple Wasm result types instead of a single struct ref. Replace `struct.new` at return sites with bare stack values.
-
-3. **Call site rewrite at WIR build**: For calls to marked functions, emit `MultiValueLocalBind` instead of `Call` + `StructGet` sequences. The existing `translate_let_pattern()` mechanism can be extended.
-
-4. **Fallback**: If any call site uses the return value as a whole (passes it to another function, stores it, etc.), the function is NOT marked. No cloning — keep it simple.
-
-#### Applicable Syntax Patterns
-
-**Pattern 1: Direct destructuring (primary target)**
-
-```wado
-let [lo, hi] = minmax(x, y);
-```
-
-Directly maps to `MultiValueLocalBind`. Simplest case.
-
-**Pattern 2: Struct destructuring**
-
-```wado
-struct Point { x: i32, y: i32 }
-fn origin() -> Point { return Point { x: 0, y: 0 }; }
-let { x, y } = origin();
-```
-
-Same as tuple but field order follows struct definition order.
-
-**Pattern 3: Field access only (SROA-assisted)**
-
-```wado
-let result = minmax(x, y);
-use(result.0);
-use(result.1);
-```
-
-After SROA decomposes `result` into `__sroa_result_0` and `__sroa_result_1`, the pattern becomes equivalent to destructuring. The multi-value analysis can recognize SROA-decomposed call results.
-
-**Pattern 4: Partial use with wildcard**
-
-```wado
-let [lo, _] = minmax(x, y);
-```
-
-The unused return value is emitted as `drop` in Wasm. Already supported by `MultiValueLocalBind`.
-
-**Not applicable:**
-
-- Mixed call sites (some destructure, some use whole value) — would require function cloning
-- CM export boundaries — always need single-value returns per Component Model ABI
-- Deeply nested tuples (`[i32, [String, bool]]`) — recursive flattening adds complexity, defer to future work
-- Functions with reference-type return fields — `struct.get` on GC refs has different semantics than stack values
-- Best limited to small returns (2-4 fields) to avoid Wasm stack depth issues
-
-#### Interaction with Existing Passes
-
-- **SROA**: Decomposes local struct variables. Multi-value return scalarization complements SROA by eliminating the struct at the function boundary. SROA handles the "local" case, multi-value handles the "cross-function" case.
-- **Function inlining**: Inlining eliminates the function boundary entirely, making multi-value optimization unnecessary. Multi-value is most valuable for functions too large to inline.
-- **Copy propagation**: After multi-value rewrite, trivial copies (`let x = __multivalue_0`) are cleaned up by copy propagation.
+The compiler already implements this for builtins (e.g., `i64_add128` returns two `i64` values on the Wasm stack via `MultiValueStructNew`/`MultiValueLocalBind` in WIR). Extending this to user-defined functions is a natural next step. Complements SROA: SROA handles the local case, multi-value handles the cross-function case. Most valuable for functions too large to inline.
 
 ### Function Specialization
 
@@ -416,17 +261,33 @@ Create specialized versions of functions for known constant arguments. When cons
 
 LLVM implements this as `FunctionSpecialization`. It is particularly effective when combined with interprocedural constant propagation.
 
+### Argument Promotion
+
+When a function takes a reference parameter (`&T`) but only accesses specific fields, promote those fields to direct scalar parameters (LLVM: `-argpromotion`). Eliminates the GC ref parameter, which in turn enables caller-side SROA on the struct that was only constructed to pass as a reference. Particularly impactful for `&self` methods that only read a few fields.
+
+### Dead Argument Elimination
+
+Remove function parameters that are unused at all call sites (LLVM: `-deadargelim`). Common after monomorphization where generic parameters or feature-specific arguments become dead. Reduces call overhead and enables further interprocedural optimizations.
+
+### Store-to-Load Forwarding
+
+When a `struct.set` is followed by a `struct.get` on the same object and field with no intervening aliasing writes, forward the stored value directly without the load (part of LLVM's GVN). Common pattern after function inlining exposes field write + field read sequences.
+
+### Jump Threading
+
+When a branch condition is already determined along a specific incoming edge, thread the jump directly to the target block, bypassing redundant comparisons (LLVM: `-jump-threading`). Effective for `match` expression chains and sequential `if-else if` patterns.
+
+### Reassociation
+
+Reorder associative and commutative operations to group constants together, enabling more constant folding (LLVM: `-reassociate`). For example, `(x + 1) + 2` → `x + (1 + 2)` → `x + 3`.
+
+### SimplifyCFG
+
+General control flow graph simplification: merge redundant blocks, eliminate empty blocks, simplify trivial branches (LLVM: `-simplifycfg`). The current Constant Branch Pruning is a subset of this. Extending it to handle block merging and unreachable block elimination would clean up more patterns exposed by other passes.
+
 ### Tail Call Optimization via `return_call`
 
-Emit WebAssembly's `return_call` instruction for tail-recursive function calls instead of a regular `call` + `return`. Part of Wasm 3.0 standard.
-
-Detection pattern: `return func(...)` where the call is the direct child of `return`.
-
-Benefits:
-
-- Eliminates stack overflow for deep recursion
-- Reduces function call overhead
-- Simple implementation — just emit a different Wasm instruction
+Emit WebAssembly's `return_call` instruction for tail-recursive function calls instead of a regular `call` + `return`. Part of Wasm 3.0 standard. Eliminates stack overflow for deep recursion.
 
 ## Leveraging Bit Manipulation Intrinsics
 
@@ -445,78 +306,7 @@ The compiler exposes `i32_clz` and `i64_clz` in `core/builtin.wado`, mapped dire
 
 ### Pattern Recognition Opportunities
 
-The optimizer could detect these idioms in user code and rewrite them to use single Wasm instructions:
-
-#### Log2 (integer)
-
-```wado
-// User writes:
-fn ilog2(x: i32) -> i32 {
-    let mut n = 0;
-    let mut v = x;
-    while v > 1 { v = v / 2; n += 1; }
-    return n;
-}
-
-// Optimizer rewrites to:
-fn ilog2(x: i32) -> i32 {
-    return 31 - builtin::i32_clz(x);
-}
-```
-
-#### Power-of-2 Check
-
-```wado
-// User writes:
-fn is_power_of_2(x: i32) -> bool {
-    return x > 0 && (x & (x - 1)) == 0;
-}
-
-// With popcnt, this becomes:
-fn is_power_of_2(x: i32) -> bool {
-    return builtin::i32_popcnt(x) == 1;  // single instruction
-}
-```
-
-#### Find Lowest Set Bit
-
-```wado
-// User writes a loop scanning bits from LSB:
-let mut pos = 0;
-let mut v = mask;
-while v & 1 == 0 { v = v >> 1; pos += 1; }
-
-// Optimizer rewrites to:
-let pos = builtin::i32_ctz(mask);  // single instruction
-```
-
-#### Bit Count / Hamming Weight
-
-```wado
-// User writes:
-fn popcount(x: i32) -> i32 {
-    let mut count = 0;
-    let mut v = x;
-    while v != 0 { count += v & 1; v = v >> 1; }
-    return count;
-}
-
-// Optimizer rewrites to:
-fn popcount(x: i32) -> i32 {
-    return builtin::i32_popcnt(x);  // single instruction
-}
-```
-
-#### Integer Width / Bit Length
-
-```wado
-// Number of bits needed to represent a value:
-fn bit_length(x: i32) -> i32 {
-    return 32 - builtin::i32_clz(x);
-}
-```
-
-These patterns appear frequently in bitmap data structures, hash tables, memory allocators, and compression algorithms. Recognizing them turns O(n) loops into O(1) instructions.
+The optimizer could detect common bit manipulation idioms (log2 via division loop, popcount via shift loop, find-lowest-bit via LSB scan) and rewrite them to use single Wasm instructions (`clz`, `ctz`, `popcnt`). These patterns appear frequently in bitmap data structures, hash tables, and compression algorithms. Recognizing them turns O(n) loops into O(1) instructions.
 
 ## WebAssembly-Specific Optimizations
 
