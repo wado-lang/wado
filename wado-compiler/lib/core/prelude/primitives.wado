@@ -823,7 +823,8 @@ impl f32 {
     /// Floating-point remainder of x/y
     pub fn fmod(x: f32, y: f32) -> f32 { return builtin::f32_fmod(x, y); }
 
-    pub fn is_nan(x: f32) -> bool { return x != x; }
+    pub fn is_nan(&self) -> bool { return *self != *self; }
+    pub fn is_finite(&self) -> bool { return *self - *self == 0.0 as f32; }
 
     pub fn parse(s: String) -> Option<f32> {
         if let Some(v) = parse_text(s) {
@@ -960,7 +961,8 @@ impl f64 {
     /// Floating-point remainder of x/y
     pub fn fmod(x: f64, y: f64) -> f64 { return builtin::f64_fmod(x, y); }
 
-    pub fn is_nan(x: f64) -> bool { return x != x; }
+    pub fn is_nan(&self) -> bool { return *self != *self; }
+    pub fn is_finite(&self) -> bool { return *self - *self == 0.0; }
 
     pub fn parse(s: String) -> Option<f64> {
         return parse_text(s);

@@ -224,16 +224,29 @@ test "f32 constants" {
     assert f32::FRAC_PI_4 == f32::PI / 4.0 as f32;
 }
 
-test "f64::is_nan and f32::is_nan" {
-    assert f64::is_nan(f64::NAN);
-    assert !f64::is_nan(0.0);
-    assert !f64::is_nan(f64::INFINITY);
-    assert !f64::is_nan(f64::NEG_INFINITY);
-    assert f64::is_nan(0.0 / 0.0);
+test "f64.is_nan and f64.is_finite" {
+    assert f64::NAN.is_nan();
+    assert !(0.0).is_nan();
+    assert !f64::INFINITY.is_nan();
+    assert !f64::NEG_INFINITY.is_nan();
+    assert (0.0 / 0.0).is_nan();
 
-    assert f32::is_nan(f32::NAN);
-    assert !f32::is_nan(0.0 as f32);
-    assert !f32::is_nan(f32::INFINITY);
+    assert (1.0).is_finite();
+    assert (0.0).is_finite();
+    assert (-42.5).is_finite();
+    assert !f64::INFINITY.is_finite();
+    assert !f64::NEG_INFINITY.is_finite();
+    assert !f64::NAN.is_finite();
+}
+
+test "f32.is_nan and f32.is_finite" {
+    assert f32::NAN.is_nan();
+    assert !(0.0 as f32).is_nan();
+    assert !f32::INFINITY.is_nan();
+
+    assert (1.0 as f32).is_finite();
+    assert !f32::INFINITY.is_finite();
+    assert !f32::NAN.is_finite();
 }
 
 test "f64::NAN and f32::NAN" {

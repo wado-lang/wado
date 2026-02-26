@@ -1340,9 +1340,9 @@ f64::expm1(x)      f64::ln(x)         f64::log2(x)
 f64::log10(x)      f64::ln1p(x)       f64::pow(x, y)
 f64::cbrt(x)       f64::hypot(x, y)   f64::fmod(x, y)
 
-// NaN check
-f64::is_nan(x)     // true if x is NaN
-f32::is_nan(x)
+// Float classification (instance methods)
+x.is_nan()         // true if x is NaN
+x.is_finite()      // true if x is not NaN or infinity
 
 // Parsing from strings
 f64::parse("3.14")   // Option<f64>: Some(3.14)
