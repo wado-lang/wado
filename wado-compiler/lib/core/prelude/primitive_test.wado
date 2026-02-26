@@ -42,6 +42,15 @@ test "f64::parse overflow underflow" {
     assert f64::parse("1e999") matches { Some(v) && v == f64::INFINITY };
     assert f64::parse("-1e999") matches { Some(v) && v == f64::NEG_INFINITY };
     assert f64::parse("1e-999") matches { Some(v) && v == 0.0 };
+
+    // Boundary: eff_p 350 is within table, 351 overflows
+    assert f64::parse("1e350") matches { Some(v) && v.is_finite() };
+    assert f64::parse("1e351") matches { Some(v) && v == f64::INFINITY };
+    assert f64::parse("-1e351") matches { Some(v) && v == f64::NEG_INFINITY };
+
+    // Boundary: eff_p -351 is within table (subnormal), -352 underflows to zero
+    assert f64::parse("1e-351") matches { Some(v) && v.is_finite() && v > 0.0 };
+    assert f64::parse("1e-352") matches { Some(v) && v == 0.0 };
 }
 
 test "f64::parse malformed" {
