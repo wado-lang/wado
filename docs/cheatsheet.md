@@ -582,6 +582,8 @@ let origin = Point::origin();
 let arr = Array::<i32>::with_capacity(10);
 ```
 
+Note: `self` by value (bare `self`) is not allowed — Wado has no ownership system, so it would be identical to `&self`. Use `&self` or `&mut self` instead.
+
 ## Associated Constants
 
 ```wado

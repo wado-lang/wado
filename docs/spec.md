@@ -901,6 +901,20 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 - **Cost**: Runtime overhead from garbage collection
 - **Safety**: Memory safety guaranteed by GC, not compile-time checks
 
+**Method Receiver: `self` by Value is Prohibited**
+
+In method definitions, the `self` parameter must always be a reference (`&self` or `&mut self`). Bare `self` (by value) is a syntax error:
+
+```wado
+impl Point {
+    fn sum(&self) -> i32 { ... }          // OK: immutable reference
+    fn reset(&mut self) { ... }           // OK: mutable reference
+    // fn consume(self) -> i32 { ... }    // ERROR: `self` by value is not allowed
+}
+```
+
+In languages with ownership semantics (e.g., Rust), `self` by value transfers ownership to the method, preventing subsequent use of the receiver. In Wado, all types have value semantics with GC-managed memory and no ownership system — assignment always copies the value. This makes `self` by value semantically identical to `&self` (both receive a copy), so supporting it would only add confusion without any benefit. The parser rejects it with a clear error message guiding the user to `&self` or `&mut self`.
+
 ### String Type
 
 `String` is a built-in type representing UTF-8 encoded text with value semantics and GC management.
