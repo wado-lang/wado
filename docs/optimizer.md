@@ -54,7 +54,7 @@ The optimizer runs after lowering and before Wasm emission:
    9. Loop-Invariant Code Motion (LICM)
 2. DCE Analysis and removal of unreachable functions/types (all levels)
 3. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
-4. WIR-level optimizations (multi-value SROA, large array splitting; see [WIR Optimizations](#wir-optimizations))
+4. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
 
 ## Implemented Optimizations
 
