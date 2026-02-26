@@ -195,6 +195,8 @@ type "functype/Formatter::pad" = fn(ref null Formatter, ref null String);
 
 type "functype/Formatter::prepare_int_write" = fn(ref null Formatter, bool, ref null String, i32) -> i32;
 
+type "functype/StrCharIter^Iterator::next" = fn(ref null StrCharIter) -> [i32, char];
+
 import fn realloc from "mem/realloc";
 import fn stream-drop-writable from "wasi/stream-drop-writable";
 import fn stream-new from "wasi/stream-new";
@@ -874,9 +876,11 @@ fn "core:internal/write_escaped_string"(s, f) {  // from core:internal
         });
         b24: block {
             l25: loop {
-                __pattern_temp_0 = StrCharIter^Iterator::next(__iter_2);
-                if ref.test Option<char>::Some(__pattern_temp_0) {
-                    c = ref.cast Option<char>::Some(__pattern_temp_0).payload_0;
+                let __sroa___pattern_temp_0_discriminant: i32;
+                let __sroa___pattern_temp_0_payload_0: char;
+                multivalue_bind [__sroa___pattern_temp_0_discriminant, __sroa___pattern_temp_0_payload_0] = StrCharIter^Iterator::next(__iter_2);
+                if __sroa___pattern_temp_0_discriminant == 0 {
+                    c = __sroa___pattern_temp_0_payload_0;
                     let __match_scrut_0: char;
                     __match_scrut_0 = c;
                     if __match_scrut_0 == 34 {
@@ -1230,44 +1234,44 @@ fn StrCharIter^Iterator::next(self) {
     let __local_13: u32;
     let __local_14: u32;
     if self.byte_index >= self.used {
-        return Option<char> { 1 };
+        return 1; 0;
     };
     b0 = builtin::array_get_u8(self.repr, self.byte_index);
     self.byte_index = self.byte_index + 1;
     if b0 <u 128 {
-        return Option<char>::Some { discriminant: 0, payload_0: __inline_char__from_u32_unchecked_0: block -> char {
+        return 0; __inline_char__from_u32_unchecked_0: block -> char {
             __local_11 = b0;
             break __inline_char__from_u32_unchecked_0: __local_11;
-        } };
+        };
     };
     if b0 <u 224 {
         b1_2 = builtin::array_get_u8(self.repr, self.byte_index);
         self.byte_index = self.byte_index + 1;
         code_3 = ((b0 & 31) << 6) | (b1_2 & 63);
-        return Option<char>::Some { discriminant: 0, payload_0: __inline_char__from_u32_unchecked_1: block -> char {
+        return 0; __inline_char__from_u32_unchecked_1: block -> char {
             __local_12 = code_3;
             break __inline_char__from_u32_unchecked_1: __local_12;
-        } };
+        };
     };
     if b0 <u 240 {
         b1_4 = builtin::array_get_u8(self.repr, self.byte_index);
         b2_5 = builtin::array_get_u8(self.repr, self.byte_index + 1);
         self.byte_index = self.byte_index + 2;
         code_6 = (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (b2_5 & 63);
-        return Option<char>::Some { discriminant: 0, payload_0: __inline_char__from_u32_unchecked_2: block -> char {
+        return 0; __inline_char__from_u32_unchecked_2: block -> char {
             __local_13 = code_6;
             break __inline_char__from_u32_unchecked_2: __local_13;
-        } };
+        };
     };
     b1_7 = builtin::array_get_u8(self.repr, self.byte_index);
     b2_8 = builtin::array_get_u8(self.repr, self.byte_index + 1);
     b3 = builtin::array_get_u8(self.repr, self.byte_index + 2);
     self.byte_index = self.byte_index + 3;
     code_10 = ((((b0 & 7) << 18) | ((b1_7 & 63) << 12)) | ((b2_8 & 63) << 6)) | (b3 & 63);
-    return Option<char>::Some { discriminant: 0, payload_0: __inline_char__from_u32_unchecked_3: block -> char {
+    return 0; __inline_char__from_u32_unchecked_3: block -> char {
         __local_14 = code_10;
         break __inline_char__from_u32_unchecked_3: __local_14;
-    } };
+    };
 }
 
 fn String::append_char(self, c) {

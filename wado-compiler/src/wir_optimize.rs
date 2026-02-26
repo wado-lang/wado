@@ -95,13 +95,13 @@ struct SroaCandidate {
     struct_type_idx: u32,
     /// The field types of the new multi-value result types.
     /// For structs: the struct field types directly.
-    /// For variants: [i32 (discriminant), payload_type_0, payload_type_1, ...].
+    /// For variants: [i32 (discriminant), `payload_type_0`, `payload_type_1`, ...].
     field_types: Vec<WirType>,
     /// Number of multi-value result fields.
     field_count: usize,
     /// Field names for the multi-value results.
     /// For structs: struct field names.
-    /// For variants: ["discriminant", "payload_0", "payload_1", ...].
+    /// For variants: ["discriminant", "`payload_0`", "`payload_1`", ...].
     field_names: Vec<String>,
     /// Variant-specific info (None for struct candidates).
     variant_info: Option<VariantSroaInfo>,
@@ -165,14 +165,10 @@ fn wir_types_equal(a: &WirType, b: &WirType) -> bool {
                 nullable: b_null,
             },
         ) => a_id.index() == b_id.index() && a_null == b_null,
-        (
-            WirType::Enum { type_id: a_id },
-            WirType::Enum { type_id: b_id },
-        )
-        | (
-            WirType::Flags { type_id: a_id },
-            WirType::Flags { type_id: b_id },
-        ) => a_id.index() == b_id.index(),
+        (WirType::Enum { type_id: a_id }, WirType::Enum { type_id: b_id })
+        | (WirType::Flags { type_id: a_id }, WirType::Flags { type_id: b_id }) => {
+            a_id.index() == b_id.index()
+        }
         _ => false,
     }
 }
@@ -304,13 +300,9 @@ fn find_sroa_candidates(
             }
             // --- Variant SROA (new) ---
             Some(WirTypeDef::Variant(variant_type)) => {
-                if let Some(candidate) = try_variant_sroa_candidate(
-                    module,
-                    i,
-                    ret_type_idx,
-                    variant_type,
-                    body,
-                ) {
+                if let Some(candidate) =
+                    try_variant_sroa_candidate(module, i, ret_type_idx, variant_type, body)
+                {
                     candidates.push((func_id_index, candidate));
                 }
             }
@@ -326,7 +318,7 @@ fn find_sroa_candidates(
 /// A variant is eligible if:
 /// - All payload types across all cases are eligible scalar types
 /// - Max payload count across all cases is ≤ 3 (so total fields ≤ 4: disc + 3 payloads)
-/// - All returns are StructNew of the variant's case types
+/// - All returns are `StructNew` of the variant's case types
 /// - Case type indices can be resolved via `variant_case_info`
 fn try_variant_sroa_candidate(
     module: &WirModule,
@@ -441,7 +433,10 @@ fn try_variant_sroa_candidate(
 }
 
 /// Check that every `Return` in the body is a `StructNew` of one of the variant's case types.
-fn all_returns_are_variant_struct_new(instrs: &[WirInstr], valid_type_indices: &IndexSet<u32>) -> bool {
+fn all_returns_are_variant_struct_new(
+    instrs: &[WirInstr],
+    valid_type_indices: &IndexSet<u32>,
+) -> bool {
     for instr in instrs {
         if !check_return_variant_struct_new(instr, valid_type_indices) {
             return false;
@@ -536,12 +531,7 @@ fn validate_call_sites(
 
     for func in &module.functions {
         if let Some(body) = &func.body {
-            validate_call_sites_in_body(
-                body,
-                &candidate_ids,
-                &variant_candidate_ids,
-                &mut invalid,
-            );
+            validate_call_sites_in_body(body, &candidate_ids, &variant_candidate_ids, &mut invalid);
         }
     }
 
@@ -596,12 +586,7 @@ fn validate_call_sites_in_body(
                     invalid,
                 );
                 if let Some(eb) = else_body {
-                    validate_call_sites_in_body(
-                        eb,
-                        candidate_ids,
-                        variant_candidate_ids,
-                        invalid,
-                    );
+                    validate_call_sites_in_body(eb, candidate_ids, variant_candidate_ids, invalid);
                 }
             }
             WirInstr::Seq(body) => {
@@ -653,7 +638,7 @@ fn all_uses_are_variant_access(instrs: &[WirInstr], local_name: &str) -> bool {
 enum VariantAccessCtx {
     /// Not inside any variant access pattern.
     None,
-    /// Inside RefTest or RefCast — LocalGet is valid here.
+    /// Inside `RefTest` or `RefCast` — `LocalGet` is valid here.
     InsideRefTestOrCast,
 }
 
@@ -1184,8 +1169,7 @@ fn rewrite_call_sites(
 
             for (disc_val, case_type_opt) in vi.case_type_indices.iter().enumerate() {
                 if let Some(case_type_idx) = case_type_opt {
-                    case_disc_values
-                        .insert(*case_type_idx, i32::try_from(disc_val).unwrap());
+                    case_disc_values.insert(*case_type_idx, i32::try_from(disc_val).unwrap());
 
                     // Look up the case struct type to map field names → sroa locals
                     if let Some(WirTypeDef::Struct(st)) = types.get(*case_type_idx as usize) {
@@ -1380,21 +1364,18 @@ fn replace_variant_accesses(
     }
 
     // Pattern 1: RefTest { type_id, expr: LocalGet(temp) }
-    if let WirInstr::RefTest {
-        type_id, expr, ..
-    } = instr
+    if let WirInstr::RefTest { type_id, expr, .. } = instr
         && let WirInstr::LocalGet { name: temp_name } = expr.as_ref()
         && let Some(vr) = variant_replacements.get(temp_name.as_str())
+        && let Some(&disc_val) = vr.case_disc_values.get(&type_id.index())
     {
-        if let Some(&disc_val) = vr.case_disc_values.get(&type_id.index()) {
-            *instr = WirInstr::I32Eq(
-                Box::new(WirInstr::LocalGet {
-                    name: vr.disc_local.clone(),
-                }),
-                Box::new(WirInstr::I32Const(disc_val)),
-            );
-            return;
-        }
+        *instr = WirInstr::I32Eq(
+            Box::new(WirInstr::LocalGet {
+                name: vr.disc_local.clone(),
+            }),
+            Box::new(WirInstr::I32Const(disc_val)),
+        );
+        return;
     }
 
     // Pattern 2: StructGet { field, expr: RefCast { type_id, expr: LocalGet(temp) } }
