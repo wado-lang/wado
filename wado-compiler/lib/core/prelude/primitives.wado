@@ -534,8 +534,16 @@ impl char {
     /// SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
     /// Matches POSIX isspace() for the ASCII range.
     pub fn is_ascii_space(&self) -> bool {
-        let c = (*self) as u32;
-        return c == 0x20 || (c >= 0x09 && c <= 0x0D);
+        return match *self {
+            ' ' => true,
+            '\t' => true,
+            '\n' => true,
+            '\r' => true,
+            _ => {
+                let c = (*self) as u32;
+                c == 0x0B || c == 0x0C
+            },
+        };
     }
 
     /// Returns true if the character is a Unicode whitespace character.
