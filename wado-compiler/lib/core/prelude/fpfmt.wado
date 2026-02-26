@@ -505,71 +505,76 @@ fn fill_zeros(buf: &mut String, n: i32) {
     buf.append_byte_filled('0' as u8, n);
 }
 
-// Format result to decimal string (no exponent)
-pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
+// Write decimal representation directly into buf (appends to existing content).
+pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
     let decimal_pos = nd + p;
 
     if decimal_pos <= 0 {
         // Need leading zeros: 0.00...digits
-        let total = 2 + (-decimal_pos) + nd;
-        let mut buf = String::with_capacity(total);
         buf.append_char('0');
         buf.append_char('.');
-        fill_zeros(&mut buf, -decimal_pos);
+        fill_zeros(buf, -decimal_pos);
         let digit_offset = buf.len();
-        fill_zeros(&mut buf, nd);
-        write_digits_at(&mut buf, digit_offset, d, nd);
-        return buf;
+        fill_zeros(buf, nd);
+        write_digits_at(buf, digit_offset, d, nd);
     } else if decimal_pos >= nd {
         // Integer with trailing zeros: digits000...
-        let total = decimal_pos;
-        let mut buf = String::with_capacity(total);
-        fill_zeros(&mut buf, nd);
-        write_digits_at(&mut buf, 0, d, nd);
-        fill_zeros(&mut buf, decimal_pos - nd);
-        return buf;
+        let start = buf.len();
+        fill_zeros(buf, nd);
+        write_digits_at(buf, start, d, nd);
+        fill_zeros(buf, decimal_pos - nd);
     } else {
         // Decimal point in the middle: dig.its
-        let total = nd + 1;
-        let mut buf = String::with_capacity(total);
-        fill_zeros(&mut buf, nd + 1);
-        // Write all digits first, then insert decimal point
-        write_digits_at(&mut buf, 0, d, nd);
+        let start = buf.len();
+        fill_zeros(buf, nd + 1);
+        write_digits_at(buf, start, d, nd);
         // Shift fractional part right by 1 and insert '.'
-        let mut i = nd;
-        while i > decimal_pos {
+        let mut i = start + nd;
+        while i > start + decimal_pos {
             buf.set_byte(i, buf.get_byte(i - 1));
             i = i - 1;
         }
-        buf.set_byte(decimal_pos, '.' as u8);
-        return buf;
+        buf.set_byte(start + decimal_pos, '.' as u8);
     }
 }
 
-// Format result to exponential string (upper: true for 'E', false for 'e')
-pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
-    let mut buf = String::with_capacity(30);
+// Format result to decimal string (no exponent)
+pub fn format_decimal(d: u64, p: i32, nd: i32) -> String {
+    let decimal_pos = nd + p;
+    let total = if decimal_pos <= 0 {
+        2 + (-decimal_pos) + nd
+    } else if decimal_pos >= nd {
+        decimal_pos
+    } else {
+        nd + 1
+    };
+    let mut buf = String::with_capacity(total);
+    write_decimal(&mut buf, d, p, nd);
+    return buf;
+}
+
+// Write exponential representation directly into buf (appends to existing content).
+pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     let exp = p + nd - 1;
 
     // Write digits: first digit, then '.' and rest
     if nd > 1 {
-        // "d.ddd" = nd + 1 characters (digits + decimal point)
-        fill_zeros(&mut buf, nd + 1);
-        write_digits_at(&mut buf, 0, d, nd);
-        // Shift fractional digits right by 1 and insert '.'
-        let mut i = nd;
-        while i > 1 {
+        let start = buf.len();
+        fill_zeros(buf, nd + 1);
+        write_digits_at(buf, start, d, nd);
+        let mut i = start + nd;
+        while i > start + 1 {
             buf.set_byte(i, buf.get_byte(i - 1));
             i = i - 1;
         }
-        buf.set_byte(1, '.' as u8);
+        buf.set_byte(start + 1, '.' as u8);
     } else {
-        // Single digit, no decimal point
-        fill_zeros(&mut buf, 1);
-        write_digits_at(&mut buf, 0, d, 1);
+        let start = buf.len();
+        fill_zeros(buf, 1);
+        write_digits_at(buf, start, d, 1);
     }
 
-    // Exponent (no '+' sign, no leading zero for single-digit)
+    // Exponent
     buf.append_char(if upper { 'E' } else { 'e' });
     if exp < 0 {
         buf.append_char('-');
@@ -586,44 +591,37 @@ pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
         buf.append_char(i2a_first(abs_exp % 100));
         buf.append_char(i2a_second(abs_exp % 100));
     }
+}
 
+// Format result to exponential string (upper: true for 'E', false for 'e')
+pub fn format_exp(d: u64, p: i32, nd: i32, upper: bool) -> String {
+    let mut buf = String::with_capacity(30);
+    write_exp(&mut buf, d, p, nd, upper);
     return buf;
 }
 
 
-/// Format f64 to decimal string with specified precision (digits after decimal point)
-/// precision < 0 means use shortest representation
-pub fn format_decimal_prec(d: u64, p: i32, nd: i32, precision: i32) -> String {
+// Write decimal with specified precision directly into buf (appends to existing content).
+pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32) {
     if precision < 0 {
-        // Use shortest representation
-        return format_decimal(d, p, nd);
+        write_decimal(buf, d, p, nd);
+        return;
     }
 
     let decimal_pos = nd + p;
 
     if decimal_pos <= 0 {
-        // Need leading zeros: 0.00...digits
         let leading_zeros = -decimal_pos;
+        buf.append_char('0');
+        buf.append_char('.');
         if precision <= leading_zeros {
-            // Precision is less than leading zeros - output 0.000...
-            let total = 2 + precision;
-            let mut buf = String::with_capacity(total);
-            buf.append_char('0');
-            buf.append_char('.');
-            fill_zeros(&mut buf, precision);
-            return buf;
+            fill_zeros(buf, precision);
+            return;
         }
+        fill_zeros(buf, leading_zeros);
         let remaining_prec = precision - leading_zeros;
         let digits_to_output = if remaining_prec < nd { remaining_prec } else { nd };
         let trailing = precision - leading_zeros - digits_to_output;
-        let total = 2 + leading_zeros + digits_to_output + trailing;
-        let mut buf = String::with_capacity(total);
-        buf.append_char('0');
-        buf.append_char('.');
-        fill_zeros(&mut buf, leading_zeros);
-        // Write the significant digits (leftmost digits_to_output of d)
-        // d has nd digits total; we want the first digits_to_output digits.
-        // Divide d by 10^(nd - digits_to_output) to get them.
         let mut trim_d = d;
         let mut skip = nd - digits_to_output;
         while skip > 0 {
@@ -631,30 +629,22 @@ pub fn format_decimal_prec(d: u64, p: i32, nd: i32, precision: i32) -> String {
             skip = skip - 1;
         }
         let digit_offset = buf.len();
-        fill_zeros(&mut buf, digits_to_output);
-        write_digits_at(&mut buf, digit_offset, trim_d, digits_to_output);
-        fill_zeros(&mut buf, trailing);
-        return buf;
+        fill_zeros(buf, digits_to_output);
+        write_digits_at(buf, digit_offset, trim_d, digits_to_output);
+        fill_zeros(buf, trailing);
     } else if decimal_pos >= nd {
-        // Integer part only: digits000...
-        let trailing_int_zeros = decimal_pos - nd;
-        let total = if precision > 0 { decimal_pos + 1 + precision } else { decimal_pos };
-        let mut buf = String::with_capacity(total);
-        fill_zeros(&mut buf, nd);
-        write_digits_at(&mut buf, 0, d, nd);
-        fill_zeros(&mut buf, trailing_int_zeros);
+        let start = buf.len();
+        fill_zeros(buf, nd);
+        write_digits_at(buf, start, d, nd);
+        fill_zeros(buf, decimal_pos - nd);
         if precision > 0 {
             buf.append_char('.');
-            fill_zeros(&mut buf, precision);
+            fill_zeros(buf, precision);
         }
-        return buf;
     } else {
-        // Decimal point in the middle: dig.its
         let after_decimal = nd - decimal_pos;
         if precision <= after_decimal {
-            // Only output precision digits after decimal
             let output_nd = decimal_pos + precision;
-            // Divide d by 10^(nd - output_nd) to get the digits we need
             let mut trim_d = d;
             let mut skip = nd - output_nd;
             while skip > 0 {
@@ -662,84 +652,79 @@ pub fn format_decimal_prec(d: u64, p: i32, nd: i32, precision: i32) -> String {
                 skip = skip - 1;
             }
             let total = output_nd + 1;
-            let mut buf = String::with_capacity(total);
-            fill_zeros(&mut buf, total);
-            write_digits_at(&mut buf, 0, trim_d, output_nd);
-            // Shift fractional part right by 1 and insert '.'
-            let mut i = output_nd;
-            while i > decimal_pos {
+            let start = buf.len();
+            fill_zeros(buf, total);
+            write_digits_at(buf, start, trim_d, output_nd);
+            let mut i = start + output_nd;
+            while i > start + decimal_pos {
                 buf.set_byte(i, buf.get_byte(i - 1));
                 i = i - 1;
             }
-            buf.set_byte(decimal_pos, '.' as u8);
-            return buf;
+            buf.set_byte(start + decimal_pos, '.' as u8);
+            return;
         }
-        // Output all digits then trailing zeros
         let trailing = precision - after_decimal;
-        let total = nd + 1 + trailing;
-        let mut buf = String::with_capacity(total);
-        fill_zeros(&mut buf, nd + 1);
-        write_digits_at(&mut buf, 0, d, nd);
-        // Shift fractional part right by 1 and insert '.'
-        let mut i = nd;
-        while i > decimal_pos {
+        let start = buf.len();
+        fill_zeros(buf, nd + 1);
+        write_digits_at(buf, start, d, nd);
+        let mut i = start + nd;
+        while i > start + decimal_pos {
             buf.set_byte(i, buf.get_byte(i - 1));
             i = i - 1;
         }
-        buf.set_byte(decimal_pos, '.' as u8);
-        fill_zeros(&mut buf, trailing);
-        return buf;
+        buf.set_byte(start + decimal_pos, '.' as u8);
+        fill_zeros(buf, trailing);
     }
 }
 
-/// Format f64 to exponential string with specified precision (digits after decimal point)
+/// Format f64 to decimal string with specified precision (digits after decimal point)
 /// precision < 0 means use shortest representation
-pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> String {
+pub fn format_decimal_prec(d: u64, p: i32, nd: i32, precision: i32) -> String {
+    let mut buf = String::with_capacity(30);
+    write_decimal_prec(&mut buf, d, p, nd, precision);
+    return buf;
+}
+
+// Write exponential with precision directly into buf (appends to existing content).
+pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32, upper: bool) {
     if precision < 0 {
-        // Use shortest representation
-        return format_exp(d, p, nd, upper);
+        write_exp(buf, d, p, nd, upper);
+        return;
     }
 
-    let mut buf = String::with_capacity(30);
-
     if precision > 0 {
-        // "d.ddd" format: first digit, '.', then precision digits from remaining
         let available = nd - 1;
         let to_output = if precision < available { precision } else { available };
         let trailing = precision - to_output;
         let digit_count = 1 + to_output;
-        // Write digits, then shift for decimal point
-        fill_zeros(&mut buf, digit_count + 1);
-        // Trim d to the digits we need (first digit_count digits)
+        let start = buf.len();
+        fill_zeros(buf, digit_count + 1);
         let mut trim_d = d;
         let mut skip = nd - digit_count;
         while skip > 0 {
             trim_d = trim_d / 10;
             skip = skip - 1;
         }
-        write_digits_at(&mut buf, 0, trim_d, digit_count);
-        // Shift fractional digits right by 1 and insert '.'
-        let mut i = digit_count;
-        while i > 1 {
+        write_digits_at(buf, start, trim_d, digit_count);
+        let mut i = start + digit_count;
+        while i > start + 1 {
             buf.set_byte(i, buf.get_byte(i - 1));
             i = i - 1;
         }
-        buf.set_byte(1, '.' as u8);
-        fill_zeros(&mut buf, trailing);
+        buf.set_byte(start + 1, '.' as u8);
+        fill_zeros(buf, trailing);
     } else {
-        // Single digit, no decimal point
-        fill_zeros(&mut buf, 1);
-        // Get first digit only
+        let start = buf.len();
+        fill_zeros(buf, 1);
         let mut first_d = d;
         let mut skip = nd - 1;
         while skip > 0 {
             first_d = first_d / 10;
             skip = skip - 1;
         }
-        write_digits_at(&mut buf, 0, first_d, 1);
+        write_digits_at(buf, start, first_d, 1);
     }
 
-    // Exponent (no '+' sign, no leading zero for single-digit)
     let exp = p + nd - 1;
     buf.append_char(if upper { 'E' } else { 'e' });
     if exp < 0 {
@@ -757,7 +742,13 @@ pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> 
         buf.append_char(i2a_first(abs_exp % 100));
         buf.append_char(i2a_second(abs_exp % 100));
     }
+}
 
+/// Format f64 to exponential string with specified precision (digits after decimal point)
+/// precision < 0 means use shortest representation
+pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> String {
+    let mut buf = String::with_capacity(30);
+    write_exp_prec(&mut buf, d, p, nd, precision, upper);
     return buf;
 }
 
