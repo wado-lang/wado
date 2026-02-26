@@ -1,0 +1,198 @@
+// Test f64::parse and f32::parse
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // Basic decimal parsing
+    if let Some(v) = f64::parse("3.14") {
+        assert v == 3.14;
+    } else {
+        panic("f64::parse failed for 3.14");
+    }
+
+    if let Some(v) = f64::parse("0.5") {
+        assert v == 0.5;
+    } else {
+        panic("f64::parse failed for 0.5");
+    }
+
+    if let Some(v) = f64::parse("123") {
+        assert v == 123.0;
+    } else {
+        panic("f64::parse failed for 123");
+    }
+
+    if let Some(v) = f64::parse("0") {
+        assert v == 0.0;
+    } else {
+        panic("f64::parse failed for 0");
+    }
+
+    // Exponent
+    if let Some(v) = f64::parse("1e2") {
+        assert v == 100.0;
+    } else {
+        panic("f64::parse failed for 1e2");
+    }
+
+    if let Some(v) = f64::parse("1.5e-3") {
+        assert v == 0.0015;
+    } else {
+        panic("f64::parse failed for 1.5e-3");
+    }
+
+    if let Some(v) = f64::parse("25E+2") {
+        assert v == 2500.0;
+    } else {
+        panic("f64::parse failed for 25E+2");
+    }
+
+    // Signs
+    if let Some(v) = f64::parse("-42") {
+        assert v == -42.0;
+    } else {
+        panic("f64::parse failed for -42");
+    }
+
+    if let Some(v) = f64::parse("+3.14") {
+        assert v == 3.14;
+    } else {
+        panic("f64::parse failed for +3.14");
+    }
+
+    if let Some(v) = f64::parse("-0.5e2") {
+        assert v == -50.0;
+    } else {
+        panic("f64::parse failed for -0.5e2");
+    }
+
+    // Special values: infinity
+    if let Some(v) = f64::parse("inf") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("f64::parse failed for inf");
+    }
+
+    if let Some(v) = f64::parse("Inf") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("f64::parse failed for Inf");
+    }
+
+    if let Some(v) = f64::parse("-inf") {
+        assert v == f64::NEG_INFINITY;
+    } else {
+        panic("f64::parse failed for -inf");
+    }
+
+    if let Some(v) = f64::parse("+infinity") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("f64::parse failed for +infinity");
+    }
+
+    if let Some(v) = f64::parse("-Infinity") {
+        assert v == f64::NEG_INFINITY;
+    } else {
+        panic("f64::parse failed for -Infinity");
+    }
+
+    if let Some(v) = f64::parse("INF") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("f64::parse failed for INF");
+    }
+
+    if let Some(v) = f64::parse("INFINITY") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("f64::parse failed for INFINITY");
+    }
+
+    // Special values: NaN (sign is ignored)
+    if let Some(v) = f64::parse("nan") {
+        println(`nan parsed: {v}`);
+    } else {
+        panic("f64::parse failed for nan");
+    }
+
+    if let Some(v) = f64::parse("NaN") {
+        println(`NaN parsed: {v}`);
+    } else {
+        panic("f64::parse failed for NaN");
+    }
+
+    if let Some(v) = f64::parse("NAN") {
+        println(`NAN parsed: {v}`);
+    } else {
+        panic("f64::parse failed for NAN");
+    }
+
+    // Negative zero
+    if let Some(v) = f64::parse("-0") {
+        // Check it's negative zero via bit pattern
+        println(`-0 parsed: {v}`);
+    } else {
+        panic("f64::parse failed for -0");
+    }
+
+    // Overflow to infinity
+    if let Some(v) = f64::parse("1e999") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("f64::parse failed for 1e999");
+    }
+
+    if let Some(v) = f64::parse("-1e999") {
+        assert v == f64::NEG_INFINITY;
+    } else {
+        panic("f64::parse failed for -1e999");
+    }
+
+    // Underflow to zero
+    if let Some(v) = f64::parse("1e-999") {
+        assert v == 0.0;
+    } else {
+        panic("f64::parse failed for 1e-999");
+    }
+
+    // Malformed input
+    assert f64::parse("") matches { None };
+    assert f64::parse("abc") matches { None };
+    assert f64::parse(".5") matches { None };
+    assert f64::parse("5.") matches { None };
+    assert f64::parse("+") matches { None };
+    assert f64::parse("-") matches { None };
+    assert f64::parse("1.2.3") matches { None };
+    assert f64::parse("e5") matches { None };
+    assert f64::parse("1e") matches { None };
+    assert f64::parse("infi") matches { None };
+    assert f64::parse("nana") matches { None };
+
+    // f32::parse
+    if let Some(v) = f32::parse("3.14") {
+        assert v == 3.14 as f32;
+    } else {
+        panic("f32::parse failed for 3.14");
+    }
+
+    if let Some(v) = f32::parse("-42") {
+        assert v == -42.0 as f32;
+    } else {
+        panic("f32::parse failed for -42");
+    }
+
+    if let Some(v) = f32::parse("inf") {
+        assert v == f32::INFINITY;
+    } else {
+        panic("f32::parse failed for inf");
+    }
+
+    assert f32::parse("") matches { None };
+    assert f32::parse(".5") matches { None };
+
+    println("all float parse tests passed");
+}
+
+__DATA__
+{"stdout_contains": ["all float parse tests passed"]}

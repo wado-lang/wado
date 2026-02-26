@@ -11,6 +11,7 @@ use {
     short, short32, fixed_width, digits,
     format_decimal, format_exp,
     format_decimal_prec, format_exp_prec,
+    parse_text,
 } from "core:prelude/fpfmt.wado";
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
@@ -820,6 +821,13 @@ impl f32 {
 
     /// Floating-point remainder of x/y
     pub fn fmod(x: f32, y: f32) -> f32 { return builtin::f32_fmod(x, y); }
+
+    pub fn parse(s: String) -> Option<f32> {
+        if let Some(v) = parse_text(s) {
+            return Option::<f32>::Some(v as f32);
+        }
+        return null;
+    }
 }
 
 impl f64 {
@@ -947,6 +955,10 @@ impl f64 {
 
     /// Floating-point remainder of x/y
     pub fn fmod(x: f64, y: f64) -> f64 { return builtin::f64_fmod(x, y); }
+
+    pub fn parse(s: String) -> Option<f64> {
+        return parse_text(s);
+    }
 }
 
 impl Display for bool {
