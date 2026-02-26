@@ -870,12 +870,19 @@ builtin::memory_store8(addr: i32, value: i32)  // Store byte to memory
 builtin::memory_load8_u(addr: i32) -> i32      // Load unsigned byte from memory
 builtin::realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32
 
-// Stream intrinsics (Component Model)
+// Stream/Future intrinsics (Component Model)
+// These are low-level i32 handle operations used internally by the resolver.
+// User code accesses Stream<T>/Future<T> resource types from core:prelude/types.wado.
 builtin::stream_new() -> i64              // Create stream, returns rx|tx packed
                                           // Extract: rx = handles as i32, tx = (handles >> 32) as i32
+builtin::stream_read(rx: i32, ptr: i32, len: i32) -> i32
 builtin::stream_write(tx: i32, ptr: i32, len: i32) -> i32
 builtin::stream_drop_writable(tx: i32)
 builtin::stream_drop_readable(rx: i32)
+builtin::future_new() -> i64             // Create future, returns rx|tx packed
+builtin::future_write(tx: i32, ptr: i32) -> i32
+builtin::future_drop_writable(tx: i32)
+builtin::future_drop_readable(rx: i32)
 
 // Async task intrinsics (Component Model)
 builtin::waitable_set_new() -> i32
@@ -1078,7 +1085,7 @@ pub struct FormatSpec {
 - Interpolation expressions are evaluated
 - Template strings produce `ref (array u8)` type
 - Integer interpolation (signed i8/i16/i32/i64 and unsigned u8/u16/u32/u64 converted to decimal string)
-- Float interpolation (f32/f64 via `wado-bundled` functions using the `ryu` algorithm)
+- Float interpolation (f32/f64 via `core:prelude/fpfmt.wado` pure Wado formatter)
 - String concatenation using GC array allocation and `array.copy`
 
 ### Inspect Synthesis (`synthesize_inspect.rs`)
@@ -1534,13 +1541,13 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 
 - Component Model binary output
 - WASI P3 imports (`wasi:cli/stdout`, `wasi:cli/types`)
-- Stream intrinsics (`stream.new`, `stream.write`, `stream.drop-*`)
+- Stream/Future intrinsics (`stream.*`, `future.*`)
 - Async task intrinsics (`task.return`, `waitable-set.*`, `subtask.drop`)
 - Memory module with string data
 - `println` function (core::cli)
 - Multiple function calls
 - Async function lifting/lowering
-- Template strings (literals, integer interpolation, float interpolation via wado-bundled)
+- Template strings (literals, integer interpolation, float interpolation, format specifiers)
 - Variables and locals (`let`, `let mut`)
 - Global variables (`global`, `global mut`) with Wasm global section
 - Control flow (`if` statements, `if let init`, `while`, `for`, `loop`, `for-of`)
@@ -1570,8 +1577,8 @@ Checked during analysis phase. Non-exhaustive patterns are compile errors.
 - Variant construction (`Option::<T>::Some(x)`, `Color::Red`, `Shape::Circle(r)`)
 - Option pattern matching (`if let Some(x) = ...`)
 - Custom variant pattern matching (`if let Circle(r) = shape`, `if let Rect([w, h]) = shape`)
-- Closures - pure (no captures)
-- Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string via wado-bundled)
+- Closures (pure and capturing, `&mut ||` for mutable captures)
+- Template string type conversion (i8/i16/i32/i64/u8/u16/u32/u64/bool/char → string, f32/f64 → string)
 - Value semantics for structs (field-by-field copy on assignment)
 - Value semantics for arrays (element-by-element copy on assignment)
 - Value semantics for tuples (field-by-field copy on assignment)
