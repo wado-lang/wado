@@ -76,9 +76,13 @@ Eliminates unnecessary reference bindings introduced during inlining. When `let 
 
 **Module:** `optimize/sroa.rs`
 
-Decomposes struct and tuple allocations into individual scalar locals when the aggregate does not escape. After inlining exposes patterns like `let s = Point { x: expr1, y: expr2 }; let a = s.x;`, SROA replaces the struct with per-field scalar locals (`__sroa_s_x`, `__sroa_s_y`), eliminating the GC heap allocation. Copy propagation then cleans up the trivial copies.
+Decomposes struct and tuple allocations into individual scalar locals, eliminating GC heap allocations. After inlining exposes patterns like `let s = Point { x: expr1, y: expr2 }; let a = s.x;`, SROA replaces the struct with per-field scalar locals (`__sroa_s_x`, `__sroa_s_y`). Copy propagation then cleans up the trivial copies. Mutable field writes (`s.x = value`) are transformed into scalar local assignments.
 
-Escape analysis ensures safety: a candidate is decomposed only if it is never passed to a function, returned, address-taken, captured by a closure, or stored into another aggregate. Field reads, field writes, and reads through `Move` wrappers are allowed.
+Two-tier escape analysis determines eligibility:
+
+- **Safe (non-escaping):** The aggregate is only used for field reads, field writes, and reads through `Move` wrappers. Fully decomposed with no reconstruction overhead.
+- **Soft escape (reconstructible):** The aggregate escapes only to call arguments, return statements, or labeled block breaks. SROA still decomposes the aggregate into scalars for field accesses, and automatically reconstructs a fresh struct/tuple literal at each escape site. This enables SROA even when the aggregate is partially passed around.
+- **Hard escape (excluded):** Address taken (`&s`), captured by a closure, stored into another aggregate, or used as a bare local in a non-reconstructible position. Not decomposed.
 
 This is the single most impactful optimization for WasmGC-targeting compilers, as struct allocations are GC-managed heap objects.
 
