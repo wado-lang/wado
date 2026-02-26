@@ -1531,6 +1531,30 @@ coerced to any collection type by implementing the corresponding builder trait:
 | `[e0, e1, ...]` | `SequenceLiteralBuilder` | `Array<T>`           |
 | `{ k: v, ... }` | `KeyValueLiteralBuilder` | `TreeMap<String, V>` |
 
+**Builder Traits:**
+
+```wado
+pub trait SequenceLiteralBuilder {
+    type Element;
+    type Output;
+    fn new_literal(capacity: i32) -> Self;
+    fn push_literal(&mut self, value: Self::Element);
+    fn build(self) -> Self::Output;
+}
+
+pub trait KeyValueLiteralBuilder {
+    type Value;
+    type Output;
+    fn new_literal(capacity: i32) -> Self;
+    fn insert_literal(&mut self, key: String, value: Self::Value);
+    fn build(self) -> Self::Output;
+}
+```
+
+When a type implements `SequenceLiteralBuilder<Output = Self>` or `KeyValueLiteralBuilder<Output = Self>`, a blanket impl provides the corresponding `SequenceLiteral` / `KeyValueLiteral` trait automatically (self-as-builder pattern).
+
+**Usage:**
+
 ```wado
 let arr: Array<i32> = [1, 2, 3];
 
@@ -1538,8 +1562,10 @@ use { TreeMap } from "core:collections";
 let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
 ```
 
+Coercion is literal-only — it does not apply to bound variables. If the target type is a struct with matching fields, it is interpreted as a struct literal and coercion is not attempted.
+
 See [`docs/wep-2026-01-18-iterator-based-literal-coercion.md`](./wep-2026-01-18-iterator-based-literal-coercion.md)
-for the full trait definitions, desugaring rules, and the immutable-output builder pattern.
+for desugaring rules, the immutable-output (separate builder) pattern, and concrete type validation.
 
 ### Compile-Time Location Literals
 
@@ -2052,6 +2078,33 @@ impl Container for IntBox {
 ```
 
 Within trait methods and implementations, `Self::TypeName` refers to the associated type. The type is resolved at compile time based on the implementing type.
+
+**Bounded Associated Types:**
+
+Associated types can have trait bounds that constrain what types can be used as the associated type:
+
+```wado
+trait Collection {
+    type Element;
+    type Builder: CollectionBuilder<Element = Self::Element, Output = Self>;
+}
+```
+
+Here `Builder` must implement `CollectionBuilder` with matching `Element` and `Output` types. The `Type = ConcreteType` syntax constrains associated types of the bound trait to specific types.
+
+**Blanket Implementations:**
+
+A blanket impl provides a trait implementation for all types that satisfy a given bound:
+
+```wado
+// Any type that builds itself satisfies Collection automatically
+impl<T: CollectionBuilder<Output = T>> Collection for T {
+    type Element = T::Element;
+    type Builder = T;
+}
+```
+
+This avoids the need for explicit `impl Collection for ...` on every self-building type. The compiler resolves `T::Element` via associated type projection on the type parameter.
 
 **Standard Library Traits:**
 
