@@ -332,6 +332,113 @@ test "parse_text malformed input" {
     assert parse_text("") matches { None };
     assert parse_text("abc") matches { None };
     assert parse_text("1.2.3") matches { None };
+    assert parse_text(".5") matches { None };
+    assert parse_text("5.") matches { None };
+    assert parse_text("+") matches { None };
+    assert parse_text("-") matches { None };
+    assert parse_text("e5") matches { None };
+    assert parse_text("1e") matches { None };
+    assert parse_text("infi") matches { None };
+    assert parse_text("nana") matches { None };
+}
+
+test "parse_text with sign" {
+    if let Some(v) = parse_text("-42") {
+        assert v == -42.0;
+    } else {
+        panic("parse_text failed for -42");
+    }
+
+    if let Some(v) = parse_text("+3.14") {
+        assert v == 3.14;
+    } else {
+        panic("parse_text failed for +3.14");
+    }
+
+    if let Some(v) = parse_text("-0.5e2") {
+        assert v == -50.0;
+    } else {
+        panic("parse_text failed for -0.5e2");
+    }
+}
+
+test "parse_text infinity" {
+    if let Some(v) = parse_text("inf") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("parse_text failed for inf");
+    }
+
+    if let Some(v) = parse_text("Inf") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("parse_text failed for Inf");
+    }
+
+    if let Some(v) = parse_text("-inf") {
+        assert v == f64::NEG_INFINITY;
+    } else {
+        panic("parse_text failed for -inf");
+    }
+
+    if let Some(v) = parse_text("+infinity") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("parse_text failed for +infinity");
+    }
+
+    if let Some(v) = parse_text("-Infinity") {
+        assert v == f64::NEG_INFINITY;
+    } else {
+        panic("parse_text failed for -Infinity");
+    }
+
+    if let Some(v) = parse_text("INF") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("parse_text failed for INF");
+    }
+
+    if let Some(v) = parse_text("INFINITY") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("parse_text failed for INFINITY");
+    }
+}
+
+test "parse_text nan" {
+    assert parse_text("nan") matches { Some(_) };
+    assert parse_text("NaN") matches { Some(_) };
+    assert parse_text("NAN") matches { Some(_) };
+}
+
+test "parse_text negative zero" {
+    if let Some(v) = parse_text("-0") {
+        // -0.0 compares equal to 0.0 but has different bit pattern
+        assert v == 0.0;
+    } else {
+        panic("parse_text failed for -0");
+    }
+}
+
+test "parse_text overflow underflow" {
+    if let Some(v) = parse_text("1e999") {
+        assert v == f64::INFINITY;
+    } else {
+        panic("parse_text failed for 1e999");
+    }
+
+    if let Some(v) = parse_text("-1e999") {
+        assert v == f64::NEG_INFINITY;
+    } else {
+        panic("parse_text failed for -1e999");
+    }
+
+    if let Some(v) = parse_text("1e-999") {
+        assert v == 0.0;
+    } else {
+        panic("parse_text failed for 1e-999");
+    }
 }
 
 test "parse roundtrip via short" {
