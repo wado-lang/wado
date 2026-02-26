@@ -1496,12 +1496,12 @@ let len = arr.len(); // Get length
 
 **Sorting** (stable, O(n log n) worst case):
 
-| Method      | Mutates? | Comparator        |
-| ----------- | -------- | ----------------- |
-| `sort()`    | Yes      | `<` (requires `T: Ord`) |
-| `sort_by()` | Yes      | Custom `fn(&T, &T) -> Ordering` |
-| `sorted()`  | No       | `<` (requires `T: Ord`) |
-| `sorted_by()` | No    | Custom `fn(&T, &T) -> Ordering` |
+| Method        | Mutates? | Comparator                      |
+| ------------- | -------- | ------------------------------- |
+| `sort()`      | Yes      | `<` (requires `T: Ord`)         |
+| `sort_by()`   | Yes      | Custom `fn(&T, &T) -> Ordering` |
+| `sorted()`    | No       | `<` (requires `T: Ord`)         |
+| `sorted_by()` | No       | Custom `fn(&T, &T) -> Ordering` |
 
 ```wado
 let mut nums: Array<i32> = [5, 3, 8, 1];
@@ -1654,7 +1654,7 @@ capture(5);  // Returns 15
 
 Closures capture variables by value (copy semantics) by default. Use `&mut ||` for mutable capture (see below).
 
-Note: `stores[...]` is a separate concept for declaring that a *function* stores reference *parameters* beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
+Note: `stores[...]` is a separate concept for declaring that a _function_ stores reference _parameters_ beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
 
 **Mutable Closures (`&mut ||`):**
 

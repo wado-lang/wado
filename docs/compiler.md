@@ -24,7 +24,7 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 | Synthesis    | Project       | Project         | Enum traits, inspect debug output, CM adapter synthesis   |
 | Monomorphize | Project       | Project         | Instantiate generics with concrete types                  |
 | Lower        | Project       | Project         | Closure, i128 match, global init, string literal lowering |
-| Optimize     | Project       | Project         | Inlining, copy-prop, LICM, DCE, post-opt rewrite         |
+| Optimize     | Project       | Project         | Inlining, copy-prop, LICM, DCE, post-opt rewrite          |
 | WIR Build    | Project       | WirModule       | Planning + TIR → WIR (Wasm IR) translation                |
 | WIR Optimize | WirModule     | WirModule       | Multi-value SROA, array data promotion, peephole          |
 | Codegen      | WirModule     | Wasm bytes      | WIR emission to core Wasm + Component Model wrapping      |
@@ -33,57 +33,57 @@ Source (.wado) → Lexer → Parser → Bind → Load → Analyze → Resolve �
 
 ### Modules
 
-| Module         | File                      | Description                                               |
-| -------------- | ------------------------- | --------------------------------------------------------- |
-| Lexer          | `lexer.rs`                | Tokenizes source code, extracts `__DATA__` section        |
-| Parser         | `parser.rs`               | Recursive descent parser, builds AST                      |
-| AST            | `ast.rs`                  | AST node definitions, `Module::data_section()` API        |
-| Token          | `token.rs`                | Token types and spans                                     |
-| Syntax         | `syntax.rs`               | Syntax definitions (keywords, operators)                  |
-| Comment        | `comment.rs`              | Comment collection and CommentMap for formatting          |
-| Bind           | `bind.rs`                 | Local name binding, scope analysis, mutability check      |
-| Loader         | `loader.rs`               | Module loading, dependency resolution                     |
-| Desugar        | `desugar.rs`              | AST transformations (compound assign, etc.)               |
-| EffectCheck    | `effect_check.rs`         | Validates effect requirements for function calls          |
-| Unparser       | `unparse.rs`              | Converts AST/TIR back to source code                     |
-| Analyzer       | `analyze.rs`              | Semantic analysis, symbol table construction              |
-| Symbol         | `symbol.rs`               | Symbol table data structures                              |
-| Name           | `name.rs`                 | Name mangling utilities for methods and symbols           |
-| Resolver       | `resolver.rs`             | Type resolution, AST to TIR, produces Project (`resolver/`) |
-| TIR            | `tir.rs`                  | Typed Intermediate Representation                         |
-| Synthesis      | `synthesis.rs`            | Unified synthesis phase (`synthesis/`)                    |
-| SynthCommon    | `synthesis/common.rs`     | Shared TIR builders for synthesis phases                  |
-| SynthTraits    | `synthesis/traits.rs`     | Auto-derived Eq/Ord for enum types                        |
-| SynthInspect   | `synthesis/inspect.rs`    | Inspect debug output synthesis (type→TIR)                 |
-| SynthCmAdapter | `synthesis/cm_adapter.rs` | CM boundary adapter synthesis (TIR functions)             |
-| CmAbi          | `cm_abi.rs`               | Canonical ABI layout computation                          |
-| Monomorphize   | `monomorphize.rs`         | Generic type/function instantiation (Project→Project)     |
-| Lower          | `lower.rs`                | Closure, i128 match, global init, string lowering         |
-| Project        | `project.rs`              | Project: compilation context passed through pipeline      |
-| Optimize       | `optimize.rs`             | Optimization coordinator (`optimize/`)                    |
-| ConstFold      | `optimize/const_fold.rs`  | Constant folding for integer/float arithmetic             |
-| ConstProp      | `optimize/const_prop.rs`  | Constant propagation for immutable globals                |
-| ConstGlobal    | `optimize/const_global_promotion.rs` | Promote runtime globals to compile-time constants |
-| DCE            | `optimize/dce.rs`         | Dead code elimination via reachability analysis           |
-| Inline         | `optimize/inline.rs`      | Function inlining for small, pure functions               |
-| RefElim        | `optimize/ref_elim.rs`    | Reference elimination after inlining                      |
-| CopyProp       | `optimize/copy_prop.rs`   | Copy propagation for trivial bindings                     |
-| SROA           | `optimize/sroa.rs`        | Scalar replacement of aggregates (struct/tuple elim)      |
-| LICM           | `optimize/licm.rs`        | Loop-invariant code motion                                |
-| Rewrite        | `optimize/rewrite.rs`     | Select lowering, move insertion, block simplification     |
-| WasmPlan       | `wasm_plan.rs`            | `ComponentPlan` types and `build_component_plan`          |
-| Stdlib         | `stdlib.rs`               | Embedded core library sources                             |
-| CompilerHost   | `compiler_host.rs`        | I/O abstraction for the compiler                          |
-| Logger         | `logger.rs`               | Diagnostic logging with timestamps                        |
-| ComponentModel | `component_model.rs`      | WASI import registry and CM ABI type support              |
-| BuiltinRegistry | `builtin_registry.rs`    | Builtin function registry from `core:builtin`             |
-| WorldRegistry  | `world_registry.rs`       | World definitions registry for export signatures          |
-| WIR            | `wir.rs`                  | Wasm IR data structures                                   |
-| WIR Unparse    | `wir_unparse.rs`          | WIR → pseudo-Wado source code for debugging               |
-| WIR Build      | `wir_build.rs`            | Planning + TIR→WIR translation (`wir_build/`)             |
-| WIR Optimize   | `wir_optimize.rs`         | WIR-level optimizations (multi-value SROA, etc.)          |
-| Codegen        | `codegen.rs`              | WIR→Wasm emission + Component Model wrapping (`codegen/`) |
-| Bundled        | `bundled.rs`              | Loads pre-compiled Wasm builtins (wado-bundled-libm)      |
+| Module          | File                                 | Description                                                 |
+| --------------- | ------------------------------------ | ----------------------------------------------------------- |
+| Lexer           | `lexer.rs`                           | Tokenizes source code, extracts `__DATA__` section          |
+| Parser          | `parser.rs`                          | Recursive descent parser, builds AST                        |
+| AST             | `ast.rs`                             | AST node definitions, `Module::data_section()` API          |
+| Token           | `token.rs`                           | Token types and spans                                       |
+| Syntax          | `syntax.rs`                          | Syntax definitions (keywords, operators)                    |
+| Comment         | `comment.rs`                         | Comment collection and CommentMap for formatting            |
+| Bind            | `bind.rs`                            | Local name binding, scope analysis, mutability check        |
+| Loader          | `loader.rs`                          | Module loading, dependency resolution                       |
+| Desugar         | `desugar.rs`                         | AST transformations (compound assign, etc.)                 |
+| EffectCheck     | `effect_check.rs`                    | Validates effect requirements for function calls            |
+| Unparser        | `unparse.rs`                         | Converts AST/TIR back to source code                        |
+| Analyzer        | `analyze.rs`                         | Semantic analysis, symbol table construction                |
+| Symbol          | `symbol.rs`                          | Symbol table data structures                                |
+| Name            | `name.rs`                            | Name mangling utilities for methods and symbols             |
+| Resolver        | `resolver.rs`                        | Type resolution, AST to TIR, produces Project (`resolver/`) |
+| TIR             | `tir.rs`                             | Typed Intermediate Representation                           |
+| Synthesis       | `synthesis.rs`                       | Unified synthesis phase (`synthesis/`)                      |
+| SynthCommon     | `synthesis/common.rs`                | Shared TIR builders for synthesis phases                    |
+| SynthTraits     | `synthesis/traits.rs`                | Auto-derived Eq/Ord for enum types                          |
+| SynthInspect    | `synthesis/inspect.rs`               | Inspect debug output synthesis (type→TIR)                   |
+| SynthCmAdapter  | `synthesis/cm_adapter.rs`            | CM boundary adapter synthesis (TIR functions)               |
+| CmAbi           | `cm_abi.rs`                          | Canonical ABI layout computation                            |
+| Monomorphize    | `monomorphize.rs`                    | Generic type/function instantiation (Project→Project)       |
+| Lower           | `lower.rs`                           | Closure, i128 match, global init, string lowering           |
+| Project         | `project.rs`                         | Project: compilation context passed through pipeline        |
+| Optimize        | `optimize.rs`                        | Optimization coordinator (`optimize/`)                      |
+| ConstFold       | `optimize/const_fold.rs`             | Constant folding for integer/float arithmetic               |
+| ConstProp       | `optimize/const_prop.rs`             | Constant propagation for immutable globals                  |
+| ConstGlobal     | `optimize/const_global_promotion.rs` | Promote runtime globals to compile-time constants           |
+| DCE             | `optimize/dce.rs`                    | Dead code elimination via reachability analysis             |
+| Inline          | `optimize/inline.rs`                 | Function inlining for small, pure functions                 |
+| RefElim         | `optimize/ref_elim.rs`               | Reference elimination after inlining                        |
+| CopyProp        | `optimize/copy_prop.rs`              | Copy propagation for trivial bindings                       |
+| SROA            | `optimize/sroa.rs`                   | Scalar replacement of aggregates (struct/tuple elim)        |
+| LICM            | `optimize/licm.rs`                   | Loop-invariant code motion                                  |
+| Rewrite         | `optimize/rewrite.rs`                | Select lowering, move insertion, block simplification       |
+| WasmPlan        | `wasm_plan.rs`                       | `ComponentPlan` types and `build_component_plan`            |
+| Stdlib          | `stdlib.rs`                          | Embedded core library sources                               |
+| CompilerHost    | `compiler_host.rs`                   | I/O abstraction for the compiler                            |
+| Logger          | `logger.rs`                          | Diagnostic logging with timestamps                          |
+| ComponentModel  | `component_model.rs`                 | WASI import registry and CM ABI type support                |
+| BuiltinRegistry | `builtin_registry.rs`                | Builtin function registry from `core:builtin`               |
+| WorldRegistry   | `world_registry.rs`                  | World definitions registry for export signatures            |
+| WIR             | `wir.rs`                             | Wasm IR data structures                                     |
+| WIR Unparse     | `wir_unparse.rs`                     | WIR → pseudo-Wado source code for debugging                 |
+| WIR Build       | `wir_build.rs`                       | Planning + TIR→WIR translation (`wir_build/`)               |
+| WIR Optimize    | `wir_optimize.rs`                    | WIR-level optimizations (multi-value SROA, etc.)            |
+| Codegen         | `codegen.rs`                         | WIR→Wasm emission + Component Model wrapping (`codegen/`)   |
+| Bundled         | `bundled.rs`                         | Loads pre-compiled Wasm builtins (wado-bundled-libm)        |
 
 ---
 
@@ -223,14 +223,14 @@ Embedded `.wado` files in `wado-compiler/lib/`:
 
 **WASI Library (`wasi/`):**
 
-| Module            | File              | Description         |
-| ----------------- | ----------------- | ------------------- |
-| `wasi:cli`        | `cli.wado`        | CLI interfaces      |
-| `wasi:clocks`     | `clocks.wado`     | Clock interfaces    |
-| `wasi:filesystem` | `filesystem.wado` | FS interfaces       |
-| `wasi:http`       | `http.wado`       | HTTP interfaces     |
-| `wasi:random`     | `random.wado`     | Random interfaces   |
-| `wasi:sockets`    | `sockets.wado`    | Socket interfaces   |
+| Module            | File              | Description       |
+| ----------------- | ----------------- | ----------------- |
+| `wasi:cli`        | `cli.wado`        | CLI interfaces    |
+| `wasi:clocks`     | `clocks.wado`     | Clock interfaces  |
+| `wasi:filesystem` | `filesystem.wado` | FS interfaces     |
+| `wasi:http`       | `http.wado`       | HTTP interfaces   |
+| `wasi:random`     | `random.wado`     | Random interfaces |
+| `wasi:sockets`    | `sockets.wado`    | Socket interfaces |
 
 ### Standard Library Tests
 
@@ -384,24 +384,24 @@ fn i32_and(a: i32, b: i32) -> i32;
 
 Builtins with `#[canonical("namespace", "name")]` are imported as CM canonical built-ins. The namespace determines the import source: `"wasi"` for CM canonical builtins, `"mem"` for memory operations, `"bundled"` for wado-bundled-libm.
 
-| Wado Name              | Namespace  | Canonical Name         | Category       |
-| ---------------------- | ---------- | ---------------------- | -------------- |
-| `stream_new`           | `wasi`     | `stream-new`           | Stream         |
-| `stream_read`          | `wasi`     | `stream-read`          | Stream         |
-| `stream_write`         | `wasi`     | `stream-write`         | Stream         |
-| `stream_drop_writable` | `wasi`     | `stream-drop-writable` | Stream         |
-| `stream_drop_readable` | `wasi`     | `stream-drop-readable` | Stream         |
-| `future_new`           | `wasi`     | `future-new`           | Future         |
-| `future_write`         | `wasi`     | `future-write`         | Future         |
-| `future_drop_writable` | `wasi`     | `future-drop-writable` | Future         |
-| `future_drop_readable` | `wasi`     | `future-drop-readable` | Future         |
-| `task_return`          | `wasi`     | `task-return`          | Async task     |
-| `waitable_set_new`     | `wasi`     | `waitable-set-new`     | Async task     |
-| `waitable_join`        | `wasi`     | `waitable-join`        | Async task     |
-| `waitable_set_wait`    | `wasi`     | `waitable-set-wait`    | Async task     |
-| `subtask_drop`         | `wasi`     | `subtask-drop`         | Async task     |
-| `realloc`              | `mem`      | `realloc`              | Memory         |
-| `libm_sin`, etc.       | `bundled`  | `libm_sin`, etc.       | Math (libm)    |
+| Wado Name              | Namespace | Canonical Name         | Category    |
+| ---------------------- | --------- | ---------------------- | ----------- |
+| `stream_new`           | `wasi`    | `stream-new`           | Stream      |
+| `stream_read`          | `wasi`    | `stream-read`          | Stream      |
+| `stream_write`         | `wasi`    | `stream-write`         | Stream      |
+| `stream_drop_writable` | `wasi`    | `stream-drop-writable` | Stream      |
+| `stream_drop_readable` | `wasi`    | `stream-drop-readable` | Stream      |
+| `future_new`           | `wasi`    | `future-new`           | Future      |
+| `future_write`         | `wasi`    | `future-write`         | Future      |
+| `future_drop_writable` | `wasi`    | `future-drop-writable` | Future      |
+| `future_drop_readable` | `wasi`    | `future-drop-readable` | Future      |
+| `task_return`          | `wasi`    | `task-return`          | Async task  |
+| `waitable_set_new`     | `wasi`    | `waitable-set-new`     | Async task  |
+| `waitable_join`        | `wasi`    | `waitable-join`        | Async task  |
+| `waitable_set_wait`    | `wasi`    | `waitable-set-wait`    | Async task  |
+| `subtask_drop`         | `wasi`    | `subtask-drop`         | Async task  |
+| `realloc`              | `mem`     | `realloc`              | Memory      |
+| `libm_sin`, etc.       | `bundled` | `libm_sin`, etc.       | Math (libm) |
 
 **Instruction Builtins:**
 
