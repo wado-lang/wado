@@ -600,11 +600,11 @@ let max = i32::MAX;
 
 Primitive types provide built-in associated constants:
 
-| Type                     | Constants                                                                                                                           |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Type                     | Constants                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `f64`                    | `PI`, `TAU`, `E`, `LN2`, `LN10`, `LOG2_E`, `LOG10_E`, `SQRT2`, `FRAC_1_SQRT2`, `FRAC_PI_2`, `FRAC_PI_4`, `INFINITY`, `NEG_INFINITY`, `NAN` |
-| `f32`                    | `PI`, `TAU`, `E`, `INFINITY`, `NEG_INFINITY`, `NAN`                                                                                 |
-| `i8`..`i64`, `u8`..`u64` | `MAX`, `MIN`                                                                                                                        |
+| `f32`                    | `PI`, `TAU`, `E`, `INFINITY`, `NEG_INFINITY`, `NAN`                                                                                        |
+| `i8`..`i64`, `u8`..`u64` | `MAX`, `MIN`                                                                                                                               |
 
 ## Traits
 
