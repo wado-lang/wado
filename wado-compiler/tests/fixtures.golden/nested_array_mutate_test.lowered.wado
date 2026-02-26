@@ -37,7 +37,7 @@ export fn run() with Stdout {
             };
             break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_4: {
                 let self: Array<i32> = __b;
-                break __inline_Array_i32__SequenceLiteralBuilder__build_4: self;
+                break __inline_Array_i32__SequenceLiteralBuilder__build_4: *self;
             };
         });
         __b."Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(__seq_lit: {
@@ -52,7 +52,7 @@ export fn run() with Stdout {
             };
             break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_8: {
                 let self: Array<i32> = __b;
-                break __inline_Array_i32__SequenceLiteralBuilder__build_8: self;
+                break __inline_Array_i32__SequenceLiteralBuilder__build_8: *self;
             };
         });
         break __seq_lit: __b."Array<Array<i32>>^SequenceLiteralBuilder::build"();
@@ -84,7 +84,7 @@ export fn run() with Stdout {
         };
         break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_15: {
             let self: Array<i32> = __b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_15: self;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_15: *self;
         };
     };
     matrix."Array<Array<i32>>^IndexAssign::index_assign"(0, new_row);
@@ -197,8 +197,8 @@ fn "Array<Array<i32>>^IndexValue::index_value"(self: &Array<Array<i32>>, index: 
     return core::builtin::array_get::<Array<i32>>(self.repr, index);
 }
 
-fn "Array<Array<i32>>^SequenceLiteralBuilder::build"(self: Array<Array<i32>>) -> Array<Array<i32>> {
-    return self;
+fn "Array<Array<i32>>^SequenceLiteralBuilder::build"(self: &Array<Array<i32>>) -> Array<Array<i32>> {
+    return *self;
 }
 
 fn "Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Array<i32>>, value: Array<i32>) {

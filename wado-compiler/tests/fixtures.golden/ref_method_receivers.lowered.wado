@@ -27,7 +27,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut c: Counter = move Counter { value: 0 };
+    let mut __sroa_c_value: i32 = 0;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
         __r.String::append(move "get: ");
@@ -36,20 +36,20 @@ export fn run() with Stdout {
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: c.value };
+            let self: Box<i32> = move Box<i32> { value: __sroa_c_value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     __inline_Counter__increment_6: {
-        c.value = (c.value + 1);
+        __sroa_c_value = (__sroa_c_value + 1);
     };
     __inline_Counter__increment_7: {
-        c.value = (c.value + 1);
+        __sroa_c_value = (__sroa_c_value + 1);
     };
     __inline_Counter__increment_8: {
-        c.value = (c.value + 1);
+        __sroa_c_value = (__sroa_c_value + 1);
     };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
@@ -59,39 +59,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_11: {
-            let self: Box<i32> = move Box<i32> { value: c.value };
-            let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-        };
-        break __tmpl: __r;
-    });
-    let v: i32 = __inline_Counter__into_value_13: {
-        let self: Counter = c;
-        break __inline_Counter__into_value_13: self.value;
-    };
-    core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(28), used: 0 };
-        __r.String::append(move "into_value: ");
-        let mut __f: Formatter = __inline_Formatter__new_15: {
-            let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        __inline_i32_Display__fmt_16: {
-            let self: Box<i32> = move Box<i32> { value: v };
-            let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
-        };
-        break __tmpl: __r;
-    });
-    core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(30), used: 0 };
-        __r.String::append(move "still usable: ");
-        let mut __f: Formatter = __inline_Formatter__new_18: {
-            let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
-        };
-        __inline_i32_Display__fmt_19: {
-            let self: Box<i32> = move Box<i32> { value: c.value };
+            let self: Box<i32> = move Box<i32> { value: __sroa_c_value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

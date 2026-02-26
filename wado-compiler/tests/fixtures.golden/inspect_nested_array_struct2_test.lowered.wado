@@ -40,7 +40,7 @@ export fn run() with Stdout {
         };
         break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_4: {
             let self: Array<i32> = __b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_4: self;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_4: *self;
         };
     };
     let row2: Array<i32> = __seq_lit: {
@@ -55,7 +55,7 @@ export fn run() with Stdout {
         };
         break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_8: {
             let self: Array<i32> = __b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_8: self;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_8: *self;
         };
     };
     let data: Array<Array<i32>> = __seq_lit: {
@@ -173,8 +173,8 @@ pub fn "Array<Array<i32>>::len"(self: &Array<Array<i32>>) -> i32 {
     return self.used;
 }
 
-fn "Array<Array<i32>>^SequenceLiteralBuilder::build"(self: Array<Array<i32>>) -> Array<Array<i32>> {
-    return self;
+fn "Array<Array<i32>>^SequenceLiteralBuilder::build"(self: &Array<Array<i32>>) -> Array<Array<i32>> {
+    return *self;
 }
 
 fn "Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Array<i32>>, value: Array<i32>) {
