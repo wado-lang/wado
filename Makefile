@@ -188,6 +188,10 @@ benchmark-sieve:
 benchmark-zlib:
 	mise run -C benchmark zlib
 
+.PHONY: benchmark-fts
+benchmark-fts:
+	mise run -C benchmark fts
+
 .PHONY: report-wasm-size
 report-wasm-size:
 	mise run -C wasm-size report-wasm-size

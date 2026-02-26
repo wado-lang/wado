@@ -1,0 +1,35 @@
+// Float-to-string benchmark
+// Converts 500K random f64 values to decimal strings using :0.6f format.
+// Uses a linear congruential generator for deterministic float sequence.
+//
+// How to run:
+//   make benchmark-fts
+
+use { println, Stdout } from "core:cli";
+use { now, MonotonicClock } from "core:clocks";
+
+export fn run() with Stdout, MonotonicClock {
+    let n = 500000;
+    let mut state: u32 = 42;
+    let mut total_bytes: u64 = 0;
+    let mut byte_sum: u64 = 0;
+
+    let t0 = now();
+
+    for let mut i = 0; i < n; i += 1 {
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF;
+        let x = (state as f64) / 2147483648.0;
+        let s = `{x:0.6f}`;
+        total_bytes += s.len() as u64;
+        for let b of s.bytes() {
+            byte_sum += b as u64;
+        }
+    }
+
+    let elapsed_ns = (now() - t0) as u64;
+    let elapsed_ms = elapsed_ns / 1000000;
+
+    println(`fts: {n} f64 conversions (%.6f)`);
+    println(`Total bytes: {total_bytes}, byte sum: {byte_sum}`);
+    println(`Elapsed: {elapsed_ms} ms`);
+}
