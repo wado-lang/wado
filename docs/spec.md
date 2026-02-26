@@ -53,6 +53,15 @@ Block comments do not nest.
 
 TODO: the parser keeps comments in the AST.
 
+### Shebang
+
+```wado
+#!/usr/bin/env wado
+export fn run() { ... }
+```
+
+`#!` at position 0 is a shebang and is ignored. `#![` is an inner attribute, not a shebang.
+
 ### Data Section
 
 The `__DATA__` marker separates source code from embedded data. Everything after `__DATA__` on its own line is captured as raw text and is not parsed as Wado code.
@@ -88,17 +97,7 @@ if let Some(data) = result.module.data_section() {
 }
 ```
 
-**Future: `#[data]` Attribute (TODO):**
-
-A future `#[data]` attribute will allow injecting the data section content into code:
-
-```wado
-#[data]
-const TEST_DATA: String;  // Injected from __DATA__ section
-
-#[data("json")]
-const CONFIG: Config;     // Parsed as JSON from __DATA__ section
-```
+The data section content can be accessed at runtime using the `#data` compile-time location literal. See [Compile-Time Location Literals](#compile-time-location-literals).
 
 ### Identifiers
 
@@ -315,6 +314,38 @@ if x < 0 {
     println("zero");
 } else {
     println("positive");
+}
+```
+
+**If Expression:**
+
+```wado
+let abs = if x < 0 { -x } else { x };
+
+let grade = if score >= 90 { "A" } else if score >= 80 { "B" } else { "C" };
+```
+
+Trailing semicolons are optional in expression blocks (like trailing commas).
+
+**If with Init (Go-style):**
+
+```wado
+if let x = get_value(); x > 0 {
+    println(`positive: {x}`);
+} else {
+    println(`non-positive: {x}`);
+}
+// x is not in scope here
+```
+
+**If Let Pattern Matching:**
+
+```wado
+let opt: Option<i32> = Option::<i32>::Some(42);
+if let Some(x) = opt {
+    println(`Got: {x}`);
+} else {
+    println("None");
 }
 ```
 
@@ -894,8 +925,8 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 // Conceptual representation (not user-visible)
 struct String {
     data: GcArray<u8>,   // UTF-8 bytes
-    len: usize,          // Length in bytes
-    capacity: usize,     // Buffer capacity for += operations
+    len: i32,            // Length in bytes
+    capacity: i32,       // Buffer capacity for += operations
 }
 ```
 
@@ -923,11 +954,36 @@ let chars: Array<char> = s.chars();
 let first_char = chars[0];
 
 // Other methods
-s.len() -> usize           // Length in bytes
+s.len() -> i32             // Length in bytes
 s.is_empty() -> bool       // Check if empty
 ```
 
-**Note**: `bytes()` and `chars()` currently return `Array<T>` (copy). Future versions will support slices and iterators for zero-copy access.
+**Note**: `bytes()` and `chars()` return iterator objects (`StrUtf8ByteIter` and `StrCharIter`) that implement both `Iterator` and `IntoIterator`, so they work with `for-of` directly:
+
+```wado
+for let c of "hello".chars() {
+    println(`{c}`);  // h, e, l, l, o
+}
+
+for let b of "hello".bytes() {
+    println(`{b}`);  // 104, 101, 108, 108, 111
+}
+```
+
+**String Building:**
+
+The `append` method provides efficient O(1) amortized string building:
+
+```wado
+let mut builder = String::with_capacity(20);
+builder.append("Hello");
+builder.append(", ");
+builder.append("World!");
+// builder is now "Hello, World!"
+
+// Static method for two-string concatenation
+let combined = String::concat("Hello, ", "World!");  // "Hello, World!"
+```
 
 #### Concatenation
 
@@ -956,7 +1012,7 @@ s += "!";          // May reallocate if capacity exceeded
 ```wado
 // Allocate capacity upfront for efficient building
 let mut result = String::with_capacity(1000);
-for item in items {
+for let item of items {
     result += item;  // No reallocations if within capacity
 }
 ```
@@ -1010,12 +1066,12 @@ This special treatment will be generalized via traits in the future, allowing us
 ```wado
 // 1. Pre-allocate when size is known
 let mut s = String::with_capacity(estimated_size);
-for item in items {
+for let item of items {
     s += item;
 }
 
 // 2. Use += for repeated concatenation
-let mut result = String::new();
+let mut result = "";
 result += "Line 1\n";
 result += "Line 2\n";
 result += "Line 3\n";
@@ -1058,7 +1114,7 @@ let missing: Option<i32> = null;  // Same as None
 let also_missing = None;          // Standard library identifier
 
 // Both are equivalent
-assert(null == None);
+assert null == None;
 ```
 
 Note: `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same instructions.
@@ -1408,6 +1464,15 @@ See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
 
 Arrays support index-based access and assignment:
 
+**Array Constructors:**
+
+```wado
+let arr = Array::<i32>::with_capacity(10);     // empty array with pre-allocated capacity
+let bools = Array::<bool>::filled(100, true);  // array of 100 elements, all true
+```
+
+**Array Operations:**
+
 ```wado
 let mut arr: Array<i32> = [1, 2, 3];
 
@@ -1429,6 +1494,23 @@ let len = arr.len(); // Get length
 - Index must be within bounds (runtime check, traps if out of bounds)
 - Works with arrays of any element type
 
+**Sorting** (stable, O(n log n) worst case):
+
+| Method        | Mutates? | Comparator                      |
+| ------------- | -------- | ------------------------------- |
+| `sort()`      | Yes      | `<` (requires `T: Ord`)         |
+| `sort_by()`   | Yes      | Custom `fn(&T, &T) -> Ordering` |
+| `sorted()`    | No       | `<` (requires `T: Ord`)         |
+| `sorted_by()` | No       | Custom `fn(&T, &T) -> Ordering` |
+
+```wado
+let mut nums: Array<i32> = [5, 3, 8, 1];
+nums.sort();                             // in-place ascending
+
+let orig: Array<i32> = [5, 3, 8, 1];
+let asc = orig.sorted();                // returns new sorted array
+```
+
 #### Collection Literal Coercion
 
 Sequence literals `[e0, e1, ...]` and key-value literals `{ k: v, ... }` can be
@@ -1439,6 +1521,30 @@ coerced to any collection type by implementing the corresponding builder trait:
 | `[e0, e1, ...]` | `SequenceLiteralBuilder` | `Array<T>`           |
 | `{ k: v, ... }` | `KeyValueLiteralBuilder` | `TreeMap<String, V>` |
 
+**Builder Traits:**
+
+```wado
+pub trait SequenceLiteralBuilder {
+    type Element;
+    type Output;
+    fn new_literal(capacity: i32) -> Self;
+    fn push_literal(&mut self, value: Self::Element);
+    fn build(self) -> Self::Output;
+}
+
+pub trait KeyValueLiteralBuilder {
+    type Value;
+    type Output;
+    fn new_literal(capacity: i32) -> Self;
+    fn insert_literal(&mut self, key: String, value: Self::Value);
+    fn build(self) -> Self::Output;
+}
+```
+
+When a type implements `SequenceLiteralBuilder<Output = Self>` or `KeyValueLiteralBuilder<Output = Self>`, a blanket impl provides the corresponding `SequenceLiteral` / `KeyValueLiteral` trait automatically (self-as-builder pattern).
+
+**Usage:**
+
 ```wado
 let arr: Array<i32> = [1, 2, 3];
 
@@ -1446,8 +1552,10 @@ use { TreeMap } from "core:collections";
 let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
 ```
 
+Coercion is literal-only — it does not apply to bound variables. If the target type is a struct with matching fields, it is interpreted as a struct literal and coercion is not attempted.
+
 See [`docs/wep-2026-01-18-iterator-based-literal-coercion.md`](./wep-2026-01-18-iterator-based-literal-coercion.md)
-for the full trait definitions, desugaring rules, and the immutable-output builder pattern.
+for desugaring rules, the immutable-output (separate builder) pattern, and concrete type validation.
 
 ### Compile-Time Location Literals
 
@@ -1544,7 +1652,29 @@ let capture = |x: i32| x + outer;  // Captures `outer` by value
 capture(5);  // Returns 15
 ```
 
-Closures capture variables by value (copy semantics). For capturing by reference, see the `stores[...]` syntax in the Effect System section.
+Closures capture variables by value (copy semantics) by default. Use `&mut ||` for mutable capture (see below).
+
+Note: `stores[...]` is a separate concept for declaring that a _function_ stores reference _parameters_ beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
+
+**Mutable Closures (`&mut ||`):**
+
+`&mut ||` creates a closure that captures variables by mutable reference instead of by value:
+
+```wado
+let mut count = 0;
+let inc = &mut || { count += 1; };
+inc();
+inc();
+println(`{count}`);  // 2
+
+// Multiple closures sharing the same mutable variable
+let mut count = 0;
+let inc = &mut || { count += 1; };
+let get = || count;
+inc();
+inc();
+println(`{get()}`);  // 2
+```
 
 ### Tagged Template Literals
 
@@ -1760,6 +1890,51 @@ type UserData = struct {
 };
 ```
 
+**Struct Construction:**
+
+```wado
+let user = User { name: "Alice", age: 30, active: true };
+
+// Shorthand (variable name matches field)
+let name = "Bob";
+let age = 25;
+let bob: User = { name, age, active: false };
+
+// Implicit struct literal (requires type annotation)
+let user: User = { name: "Alice", age: 30, active: true };
+```
+
+**Struct Destructuring:**
+
+```wado
+let p = Point { x: 10, y: 20 };
+
+// Unnamed destructuring (type inferred from RHS)
+let { x, y } = p;
+
+// Named destructuring (explicit type)
+let Point { x, y } = p;
+
+// Renaming fields
+let { x: horizontal, y: vertical } = p;
+
+// Ignore remaining fields with ..
+struct Person { name: String, age: i32, email: String }
+let { name, .. } = person;
+
+// Mutable destructuring
+let mut { x, y } = p;
+
+// Nested destructuring
+struct Line { start: Point, end: Point }
+let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
+
+// In for-of
+for let { x, y } of points {
+    println(`{x}, {y}`);
+}
+```
+
 ### Traits
 
 Traits define shared behavior that types can implement. Wado uses **static dispatch** for trait methods - all calls are resolved at compile time.
@@ -1896,28 +2071,78 @@ impl Container for IntBox {
 
 Within trait methods and implementations, `Self::TypeName` refers to the associated type. The type is resolved at compile time based on the implementing type.
 
-**Standard Library Traits:**
+**Bounded Associated Types:**
 
-The prelude defines `Index` and `IndexAssign` traits using associated types:
+Associated types can have trait bounds that constrain what types can be used as the associated type:
 
 ```wado
-pub trait Index<IndexType> {
-    type Output;
-    fn index(&self, index: IndexType) -> &Self::Output;
-}
-
-pub trait IndexAssign<IndexType> {
-    type Input;
-    fn index_assign(&mut self, index: IndexType, value: Self::Input);
+trait Collection {
+    type Element;
+    type Builder: CollectionBuilder<Element = Self::Element, Output = Self>;
 }
 ```
 
-Note: `IndexAssign` takes a value parameter rather than returning `&mut T` (like Rust's `IndexMut`). This design reflects Wasm GC semantics where you cannot get a mutable reference to an array element - reading (`array.get`) and writing (`array.set`) are fundamentally different operations.
+Here `Builder` must implement `CollectionBuilder` with matching `Element` and `Output` types. The `Type = ConcreteType` syntax constrains associated types of the bound trait to specific types.
+
+**Blanket Implementations:**
+
+A blanket impl provides a trait implementation for all types that satisfy a given bound:
+
+```wado
+// Any type that builds itself satisfies Collection automatically
+impl<T: CollectionBuilder<Output = T>> Collection for T {
+    type Element = T::Element;
+    type Builder = T;
+}
+```
+
+This avoids the need for explicit `impl Collection for ...` on every self-building type. The compiler resolves `T::Element` via associated type projection on the type parameter.
+
+**Standard Library Traits:**
+
+The prelude defines `IndexValue`, `IndexAssign`, and `Index` traits using associated types. See [Indexing Traits](#indexing-traits) for full definitions.
+
+**Trait Bounds:**
+
+Type parameters can have trait bounds that constrain what types can be used:
+
+```wado
+// Struct with trait bound
+struct SortedPair<T: Ord> {
+    first: T,
+    second: T,
+}
+
+// Multiple bounds with + syntax
+struct PrintableOrd<T: Ord + Printable> {
+    value: T,
+}
+
+// Bounds on function type parameters
+fn max<T: Ord>(a: T, b: T) -> T {
+    if a > b { return a; }
+    return b;
+}
+
+// Bounded impl blocks - methods only available when T: Ord
+impl Array<T: Ord> {
+    pub fn sort(&mut self) { ... }
+    pub fn sorted(&self) -> Array<T> { ... }
+}
+
+// Bounded trait implementations - Pair<T> implements Eq only when T: Eq
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+```
 
 **Not Yet Implemented:**
 
 - Trait objects (`dyn Trait`)
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
+- Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
 
 ### Iterator Traits
 
@@ -2036,6 +2261,33 @@ impl IntoIterator for Stack<T> {
 for let x of stack { ... }
 ```
 
+**Iterator Combinators:**
+
+Iterators support `map`, `filter`, and `fold` for functional-style data processing:
+
+```wado
+let arr: Array<i32> = [1, 2, 3, 4, 5];
+
+// map - transform each element
+let doubled = arr.iter().map(|x: i32| x * 2).collect();
+// [2, 4, 6, 8, 10]
+
+// filter - keep elements matching predicate
+let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+// [2, 4]
+
+// fold - reduce to single value
+let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);
+// 15
+
+// Chaining combinators
+let result = arr.iter()
+    .filter(|x: i32| x > 2)
+    .map(|x: i32| x * 10)
+    .collect();
+// [30, 40, 50]
+```
+
 ### Builtin Comparison Traits
 
 The prelude defines traits for comparison operators:
@@ -2055,22 +2307,33 @@ The `==` and `!=` operators use `Eq::eq`:
 - `a == b` desugars to `Eq::eq(&a, &b)`
 - `a != b` desugars to `!Eq::eq(&a, &b)`
 
+**Ordering Enum:**
+
+```wado
+/// Result of a three-way comparison
+pub enum Ordering {
+    Less,    // first value is less than second
+    Equal,   // values are equal
+    Greater, // first value is greater than second
+}
+```
+
 **Ord - Ordering:**
 
 ```wado
 /// Types that can be ordered
 pub trait Ord {
-    /// Returns true if self is less than other
-    fn lt(&self, other: &Self) -> bool;
+    /// Compares self with other and returns an Ordering
+    fn cmp(&self, other: &Self) -> Ordering;
 }
 ```
 
-Comparison operators use `Ord::lt`:
+Comparison operators use `Ord::cmp`:
 
-- `a < b` desugars to `Ord::lt(&a, &b)`
-- `a <= b` desugars to `Ord::lt(&a, &b) || Eq::eq(&a, &b)`
-- `a > b` desugars to `Ord::lt(&b, &a)`
-- `a >= b` desugars to `Ord::lt(&b, &a) || Eq::eq(&a, &b)`
+- `a < b` desugars to `Ord::cmp(&a, &b) == Ordering::Less`
+- `a > b` desugars to `Ord::cmp(&a, &b) == Ordering::Greater`
+- `a <= b` desugars to `Ord::cmp(&a, &b) != Ordering::Greater`
+- `a >= b` desugars to `Ord::cmp(&a, &b) != Ordering::Less`
 
 **Default Implementations:**
 
@@ -2294,31 +2557,9 @@ Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `
 
 Object literal syntax supports unquoted keys and shorthand properties.
 
-### Syntax Rules
+For struct initialization syntax, see the [Structs](#structs) section.
 
-- Identifier keys: Quotes optional
-- Non-identifier keys: Quotes required
-- Computed key: `[expr]` syntax (dict only)
-- Shorthand: Can omit when variable name matches key
-
-### Struct Initialization
-
-```wado
-// Named struct literal
-let user = User { name: "Alice", age: 30, active: true };
-
-// Implicit struct literal (requires type annotation)
-let user: User = { name: "Alice", age: 30, active: true };
-
-// Shorthand
-let name = "Bob";
-let age = 25;
-let bob: User = { name, age, active: false };
-
-// Computed keys not allowed in structs
-```
-
-### TreeMap (Sorted Map)
+### TreeMap (Insertion-Order Map)
 
 For associative arrays, use `TreeMap` from `core:collections`:
 
@@ -2331,10 +2572,11 @@ map.insert("y", 20);
 
 // Index syntax
 map["z"] = 30;                    // assignment
-if let Some(v) = map["x"] { ... } // access returns Option<V>
+let v = map["x"];                 // panics if key not found
+let opt = map.get("x");          // returns Option<V>
 
-// Keys are stored in sorted order
-let keys = map.keys();  // returns Array<K> in sorted order
+// Keys preserve insertion order
+let keys = map.keys();  // returns Array<K> in insertion order
 ```
 
 ### Access Methods
@@ -2344,7 +2586,7 @@ let keys = map.keys();  // returns Array<K> in sorted order
 user.name
 
 // TreeMap: bracket notation or methods
-map["key"]        // returns Option<V>
+map["key"]        // panics if key not found
 map.get("key")    // returns Option<V>
 ```
 
@@ -3131,7 +3373,7 @@ pub fn println(message: String) with Stdout {
 
 pub fn env(name: String) -> Option<String> with Environment {
     let vars = get_environment();  // No need for Environment:: prefix
-    for [key, value] in vars {
+    for let [key, value] of vars {
         if key == name {
             return Some(value);
         }
@@ -3184,6 +3426,8 @@ pub fn api_function() with Http, FileSystem {
 
 ### Reference Storage (`stores[...]`)
 
+> **Not yet implemented.** See [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md) for the design.
+
 The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion.
 
 **Syntax**: `with stores[param1, param2, ...]`
@@ -3191,7 +3435,7 @@ The `stores[...]` keyword declares that a function stores reference parameters b
 ```wado
 // Function that stores a reference parameter
 fn register(data: &Data) -> Handle with stores[data] {
-    registry.push(data);  // Stores the reference
+    registry.append(data);  // Stores the reference
     return new_handle();
 }
 
@@ -3216,11 +3460,11 @@ fn store_and_log(data: &Data) -> Handle with Stdout, stores[data] {
 **Functor types** can also declare stores (positional: 0 = first parameter):
 
 ```wado
-fn take_storing(f: Fn(&Data) with stores[0]) { ... }
-fn take_pure(f: Fn(&Data) -> Result) { ... }  // cannot store
+fn take_storing(f: fn(&Data) with stores[0]) { ... }
+fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
 ```
 
-See `docs/adr-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
+See `docs/wep-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
 
 ### Handlers
 
@@ -3290,7 +3534,7 @@ fn collect_all() -> Array<i32> {
 
     with handler Generator<i32> {
         yield(value) => |resume| {
-            result.push(value);
+            result.append(value);
             resume();
         },
     } {
@@ -3516,7 +3760,7 @@ fn App() -> Element with Dom {
 
 Wado targets **WASI Preview 3** (0.3.0-rc-2025-09-16), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
 
-All Wado types map directly to Component Model (WIT) types. See the [Component Model Mapping](#component-model-mapping) table in the Type System section for the complete mapping reference.
+All Wado types map directly to Component Model (WIT) types. See the [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries) table in the Type System section for the complete mapping reference.
 
 ### WASI P3 CLI Interfaces
 

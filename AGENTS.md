@@ -14,7 +14,7 @@ The compiler is implemented in `wado-compiler/`.
 
 Standard libraries (a.k.a. stdlib) are implemented in `wado-compiler/lib`, with `wasi/` for WASI interface and `core/` for the core library.
 
-See `docs/compiler.md` in order to develop the compiler.
+See `docs/compiler.md` in order to develop the compiler. See `docs/optimizer.md` for optimization passes and future plans.
 
 Builtin functions that are directly mapped to wasm instructions or external functions are implemented in `wado-compiler/lib/core/builtin.wado`.
 

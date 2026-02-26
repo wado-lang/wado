@@ -2,8 +2,6 @@
 
 Quick reference for Wado syntax.
 
-## Concepts
-
 ## Comments
 
 ```wado
@@ -71,6 +69,8 @@ let z: i64 = 100;       // with type annotation
 
 ## Global Variables
 
+See [WEP: Global Variables](./wep-2026-01-27-global-variables.md).
+
 ```wado
 // Module-level globals
 global PI: f64 = 3.14159;           // immutable
@@ -127,6 +127,8 @@ Result<T, E>            // result type
 
 ## Newtype
 
+See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
+
 ```wado
 type Meters = f64;
 type Kilometers = f64;
@@ -166,6 +168,8 @@ impl Location {
 ```
 
 ## Tuples and Arrays
+
+See [WEP: Tuple and Array Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md).
 
 ```wado
 // Tuples
@@ -447,13 +451,13 @@ pub flags PathFlags {
 
 ## Variants
 
-Variants are sum types with payloads (unlike enums which have no payloads):
+Variants are sum types with payloads (unlike enums which have no payloads). See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
 
 ```wado
 // Custom variant with unit and payload cases
 variant Shape {
     Circle(f64),           // radius
-    Rectangle(f64, f64),   // width, height
+    Rectangle([f64, f64]), // width, height (explicit tuple payload)
     Point,                 // no payload
 }
 
@@ -465,6 +469,7 @@ variant Maybe<T> {
 
 // Construction
 let c = Shape::Circle(5.0);
+let r = Shape::Rectangle([10.0, 20.0]);
 let p = Shape::Point;
 
 // Option and Result are defined as variants in core:prelude
@@ -775,7 +780,7 @@ Note: `IndexValue` returns elements by value (copy) and panics if the index/key 
 
 ### Trait Bounds
 
-Type parameters can have trait bounds that constrain what types can be used:
+Type parameters can have trait bounds that constrain what types can be used. See [WEP: Trait Bounds Enforcement](./wep-2026-02-07-trait-bounds.md).
 
 ```wado
 // Struct with trait bound - T must implement Ord
@@ -976,7 +981,7 @@ let name = match color {
 let description = match value {
     Some(n) => {
         let doubled = n * 2;
-        return `value is {doubled}`;
+        `value is {doubled}`
     },
     None => "no value",
 };
@@ -1011,6 +1016,8 @@ if let Some(x) = opt {
 ```
 
 ## Operators
+
+See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md) and [WEP: Operator Overloading](./wep-2026-01-18-operator-overloading.md).
 
 ```wado
 // Arithmetic
@@ -1076,6 +1083,8 @@ read(&mut y);         // OK: &mut i32 coerced to &i32
 ```
 
 ## Value Semantics
+
+See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
 ```wado
 // Value types copy on assignment
@@ -1162,6 +1171,8 @@ pub use { foo as baz } from "./internal.wado"; // re-export with rename
 
 ## Effects
 
+See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
+
 ```wado
 // Declare effect requirement
 fn write_file(path: String, data: String) with FileSystem {
@@ -1188,10 +1199,12 @@ fn for_each(items: Array<i32>, f: fn(i32) with Stdout) with Stdout {
 
 ## Reference Storage (`stores`)
 
+> Not yet implemented. See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+
 ```wado
 // Declare that function stores a reference parameter
 fn register(data: &Data) -> Handle with stores[data] {
-    registry.push(data);  // stores the reference
+    registry.append(data);  // stores the reference
     return new_handle();
 }
 
@@ -1202,7 +1215,7 @@ fn store_and_log(data: &Data) with Stdout, stores[data] {
 }
 
 // Functor type that stores its parameter
-fn take_storing(f: Fn(&Data) with stores[0]) { ... }
+fn take_storing(f: fn(&Data) with stores[0]) { ... }
 ```
 
 Note: `stores` is for function parameters. Closures use "capture" terminology (`|| x + 1` captures `x`).
@@ -1361,6 +1374,8 @@ let y = container.transform::<i32, i64>(10, 20 as i64);
 
 ## Closures
 
+See [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation.md).
+
 ```wado
 // Pure closure (no captures) - expression body
 let add_one = |x: i32| x + 1;
@@ -1408,7 +1423,7 @@ println(`{get()}`);  // 2
 
 ## Iterators
 
-Wado provides iterator traits for generic iteration over collections.
+Wado provides iterator traits for generic iteration over collections. See [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md).
 
 ### Iterator Traits
 
@@ -1588,6 +1603,16 @@ struct Foo {
     secret: String, // won't be shown in debug stringify
 }
 
+// Inline hints for optimizer
+#[inline]              // hint: prefer inlining this function
+fn small_helper() -> i32 { return 42; }
+
+#[inline(always)]      // always inline (ignores threshold)
+fn critical_path() -> i32 { return 1; }
+
+#[inline(never)]       // never inline (useful for cold paths, debugging)
+fn error_handler() { panic("error"); }
+
 // Test attributes
 #[expect_trap]
 test "should panic" {
@@ -1619,4 +1644,6 @@ Wado intentionally does not support macros.
 
 ## See Also
 
+- [Language Specification](./spec.md) - Full language specification
+- [Wado Evolution Proposals](../CLAUDE.md#wado-evolution-proposals-wep) - Design decisions and rationale
 - [wado-compiler/tests/fixtures/\*.wado](wado-compiler/tests/fixtures) - E2E test fixtures

@@ -39,6 +39,41 @@ wado compile --format wat example/hello.wado # generates example/hello.wat with 
 wado compile -o example/hello.wat example/hello.wado  # ditto
 ```
 
+## FizzBuzz
+
+```wado
+use { println, Stdout } from "core:cli";
+
+variant FizzBuzz {
+    Fizz,
+    Buzz,
+    FizzBuzz,
+    Number(i32),
+}
+
+fn classify(n: i32) -> FizzBuzz {
+    if n % 15 == 0 { return FizzBuzz::FizzBuzz; }
+    if n % 3 == 0 { return FizzBuzz::Fizz; }
+    if n % 5 == 0 { return FizzBuzz::Buzz; }
+    return FizzBuzz::Number(n);
+}
+
+export fn run() with Stdout {
+    for let mut i = 1; i <= 20; i += 1 {
+        println(match classify(i) {
+            Fizz => "Fizz",
+            Buzz => "Buzz",
+            FizzBuzz => "FizzBuzz",
+            Number(n) => `{n}`,
+        });
+    }
+}
+```
+
+```sh
+wado run example/fizzbuzz.wado
+```
+
 ## Key Features
 
 ### Language Basics
