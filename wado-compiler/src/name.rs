@@ -358,6 +358,24 @@ impl ModuleSource {
     pub fn qualify_name(&self, name: &str) -> String {
         format!("{self}//{name}")
     }
+
+    /// Return a filename suitable for diagnostic messages.
+    ///
+    /// Returns an empty string for entry points without real filenames
+    /// (e.g., `<stdin>`, `<entry>`) so that `Logger::apply_file_context`
+    /// can fill in the correct file from the logger's current file context.
+    #[must_use]
+    pub fn diagnostic_filename(&self) -> String {
+        match self {
+            Self::EntryPoint { filename } => {
+                match filename.as_deref() {
+                    Some(name) if !name.starts_with('<') => name.to_string(),
+                    _ => String::new(), // synthetic names like <stdin>, <entry>
+                }
+            }
+            other => other.to_string(),
+        }
+    }
 }
 
 impl fmt::Display for ModuleSource {

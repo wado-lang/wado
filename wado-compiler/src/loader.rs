@@ -111,16 +111,16 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         match e {
             LoadError::LexError {
+                module_source,
                 message,
                 line,
                 column,
-                ..
             } => Self {
                 severity: Severity::Error,
                 code: Code::InvalidSyntax,
                 message: format!("lexer error: {message}"),
                 span: Some(DiagnosticSpan {
-                    file: String::new(),
+                    file: module_source.diagnostic_filename(),
                     line,
                     column,
                     end_line: None,
@@ -128,16 +128,16 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                 }),
             },
             LoadError::ParseError {
+                module_source,
                 message,
                 line,
                 column,
-                ..
             } => Self {
                 severity: Severity::Error,
                 code: Code::InvalidSyntax,
                 message: format!("parse error: {message}"),
                 span: Some(DiagnosticSpan {
-                    file: String::new(),
+                    file: module_source.diagnostic_filename(),
                     line,
                     column,
                     end_line: None,
@@ -585,6 +585,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Bind errors are emitted directly to the host via Logger.
         // We use a temporary logger per module so error counting is per-module.
         let logger = Logger::new(self.host, self.log_level);
+        logger.set_file(module_source.diagnostic_filename());
         bind::bind_module(module, &logger).map_err(|_bail| {
             let error_count = logger.error_count();
             LoadError::BindError {
