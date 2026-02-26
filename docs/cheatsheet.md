@@ -453,7 +453,7 @@ Variants are sum types with payloads (unlike enums which have no payloads):
 // Custom variant with unit and payload cases
 variant Shape {
     Circle(f64),           // radius
-    Rectangle(f64, f64),   // width, height
+    Rectangle([f64, f64]), // width, height (explicit tuple payload)
     Point,                 // no payload
 }
 
@@ -465,6 +465,7 @@ variant Maybe<T> {
 
 // Construction
 let c = Shape::Circle(5.0);
+let r = Shape::Rectangle([10.0, 20.0]);
 let p = Shape::Point;
 
 // Option and Result are defined as variants in core:prelude

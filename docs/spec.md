@@ -53,6 +53,15 @@ Block comments do not nest.
 
 TODO: the parser keeps comments in the AST.
 
+### Shebang
+
+```wado
+#!/usr/bin/env wado
+export fn run() { ... }
+```
+
+`#!` at position 0 is a shebang and is ignored. `#![` is an inner attribute, not a shebang.
+
 ### Data Section
 
 The `__DATA__` marker separates source code from embedded data. Everything after `__DATA__` on its own line is captured as raw text and is not parsed as Wado code.
@@ -315,6 +324,38 @@ if x < 0 {
     println("zero");
 } else {
     println("positive");
+}
+```
+
+**If Expression:**
+
+```wado
+let abs = if x < 0 { -x } else { x };
+
+let grade = if score >= 90 { "A" } else if score >= 80 { "B" } else { "C" };
+```
+
+Trailing semicolons are optional in expression blocks (like trailing commas).
+
+**If with Init (Go-style):**
+
+```wado
+if let x = get_value(); x > 0 {
+    println(`positive: {x}`);
+} else {
+    println(`non-positive: {x}`);
+}
+// x is not in scope here
+```
+
+**If Let Pattern Matching:**
+
+```wado
+let opt: Option<i32> = Option::<i32>::Some(42);
+if let Some(x) = opt {
+    println(`Got: {x}`);
+} else {
+    println("None");
 }
 ```
 
@@ -927,7 +968,32 @@ s.len() -> usize           // Length in bytes
 s.is_empty() -> bool       // Check if empty
 ```
 
-**Note**: `bytes()` and `chars()` currently return `Array<T>` (copy). Future versions will support slices and iterators for zero-copy access.
+**Note**: `bytes()` and `chars()` return iterator objects (`StrUtf8ByteIter` and `StrCharIter`) that implement both `Iterator` and `IntoIterator`, so they work with `for-of` directly:
+
+```wado
+for let c of "hello".chars() {
+    println(`{c}`);  // h, e, l, l, o
+}
+
+for let b of "hello".bytes() {
+    println(`{b}`);  // 104, 101, 108, 108, 111
+}
+```
+
+**String Building:**
+
+The `append` method provides efficient O(1) amortized string building:
+
+```wado
+let mut builder = String::with_capacity(20);
+builder.append("Hello");
+builder.append(", ");
+builder.append("World!");
+// builder is now "Hello, World!"
+
+// Static method for two-string concatenation
+let combined = String::concat("Hello, ", "World!");  // "Hello, World!"
+```
 
 #### Concatenation
 
@@ -1408,6 +1474,15 @@ See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
 
 Arrays support index-based access and assignment:
 
+**Array Constructors:**
+
+```wado
+let arr = Array::<i32>::with_capacity(10);     // empty array with pre-allocated capacity
+let bools = Array::<bool>::filled(100, true);  // array of 100 elements, all true
+```
+
+**Array Operations:**
+
 ```wado
 let mut arr: Array<i32> = [1, 2, 3];
 
@@ -1428,6 +1503,23 @@ let len = arr.len(); // Get length
 - Requires the array variable to be declared with `let mut`
 - Index must be within bounds (runtime check, traps if out of bounds)
 - Works with arrays of any element type
+
+**Sorting** (stable, O(n log n) worst case):
+
+| Method      | Mutates? | Comparator        |
+| ----------- | -------- | ----------------- |
+| `sort()`    | Yes      | `<` (requires `T: Ord`) |
+| `sort_by()` | Yes      | Custom `fn(&T, &T) -> Ordering` |
+| `sorted()`  | No       | `<` (requires `T: Ord`) |
+| `sorted_by()` | No    | Custom `fn(&T, &T) -> Ordering` |
+
+```wado
+let mut nums: Array<i32> = [5, 3, 8, 1];
+nums.sort();                             // in-place ascending
+
+let orig: Array<i32> = [5, 3, 8, 1];
+let asc = orig.sorted();                // returns new sorted array
+```
 
 #### Collection Literal Coercion
 
@@ -1544,7 +1636,27 @@ let capture = |x: i32| x + outer;  // Captures `outer` by value
 capture(5);  // Returns 15
 ```
 
-Closures capture variables by value (copy semantics). For capturing by reference, see the `stores[...]` syntax in the Effect System section.
+Closures capture variables by value (copy semantics) by default. For capturing by reference, see the `stores[...]` syntax in the Effect System section.
+
+**Mutable Closures (`&mut ||`):**
+
+`&mut ||` creates a closure that captures variables by mutable reference instead of by value:
+
+```wado
+let mut count = 0;
+let inc = &mut || { count += 1; };
+inc();
+inc();
+println(`{count}`);  // 2
+
+// Multiple closures sharing the same mutable variable
+let mut count = 0;
+let inc = &mut || { count += 1; };
+let get = || count;
+inc();
+inc();
+println(`{get()}`);  // 2
+```
 
 ### Tagged Template Literals
 
@@ -1760,6 +1872,51 @@ type UserData = struct {
 };
 ```
 
+**Struct Construction:**
+
+```wado
+let user = User { name: "Alice", age: 30, active: true };
+
+// Shorthand (variable name matches field)
+let name = "Bob";
+let age = 25;
+let bob: User = { name, age, active: false };
+
+// Implicit struct literal (requires type annotation)
+let user: User = { name: "Alice", age: 30, active: true };
+```
+
+**Struct Destructuring:**
+
+```wado
+let p = Point { x: 10, y: 20 };
+
+// Unnamed destructuring (type inferred from RHS)
+let { x, y } = p;
+
+// Named destructuring (explicit type)
+let Point { x, y } = p;
+
+// Renaming fields
+let { x: horizontal, y: vertical } = p;
+
+// Ignore remaining fields with ..
+struct Person { name: String, age: i32, email: String }
+let { name, .. } = person;
+
+// Mutable destructuring
+let mut { x, y } = p;
+
+// Nested destructuring
+struct Line { start: Point, end: Point }
+let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
+
+// In for-of
+for let { x, y } of points {
+    println(`{x}, {y}`);
+}
+```
+
 ### Traits
 
 Traits define shared behavior that types can implement. Wado uses **static dispatch** for trait methods - all calls are resolved at compile time.
@@ -1914,10 +2071,47 @@ pub trait IndexAssign<IndexType> {
 
 Note: `IndexAssign` takes a value parameter rather than returning `&mut T` (like Rust's `IndexMut`). This design reflects Wasm GC semantics where you cannot get a mutable reference to an array element - reading (`array.get`) and writing (`array.set`) are fundamentally different operations.
 
+**Trait Bounds:**
+
+Type parameters can have trait bounds that constrain what types can be used:
+
+```wado
+// Struct with trait bound
+struct SortedPair<T: Ord> {
+    first: T,
+    second: T,
+}
+
+// Multiple bounds with + syntax
+struct PrintableOrd<T: Ord + Printable> {
+    value: T,
+}
+
+// Bounds on function type parameters
+fn max<T: Ord>(a: T, b: T) -> T {
+    if a > b { return a; }
+    return b;
+}
+
+// Bounded impl blocks - methods only available when T: Ord
+impl Array<T: Ord> {
+    pub fn sort(&mut self) { ... }
+    pub fn sorted(&self) -> Array<T> { ... }
+}
+
+// Bounded trait implementations - Pair<T> implements Eq only when T: Eq
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+```
+
 **Not Yet Implemented:**
 
 - Trait objects (`dyn Trait`)
 - Fully qualified syntax for disambiguation (`<Type as Trait>::method()`)
+- Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
 
 ### Iterator Traits
 
@@ -2036,6 +2230,33 @@ impl IntoIterator for Stack<T> {
 for let x of stack { ... }
 ```
 
+**Iterator Combinators:**
+
+Iterators support `map`, `filter`, and `fold` for functional-style data processing:
+
+```wado
+let arr: Array<i32> = [1, 2, 3, 4, 5];
+
+// map - transform each element
+let doubled = arr.iter().map(|x: i32| x * 2).collect();
+// [2, 4, 6, 8, 10]
+
+// filter - keep elements matching predicate
+let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+// [2, 4]
+
+// fold - reduce to single value
+let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);
+// 15
+
+// Chaining combinators
+let result = arr.iter()
+    .filter(|x: i32| x > 2)
+    .map(|x: i32| x * 10)
+    .collect();
+// [30, 40, 50]
+```
+
 ### Builtin Comparison Traits
 
 The prelude defines traits for comparison operators:
@@ -2055,22 +2276,33 @@ The `==` and `!=` operators use `Eq::eq`:
 - `a == b` desugars to `Eq::eq(&a, &b)`
 - `a != b` desugars to `!Eq::eq(&a, &b)`
 
+**Ordering Enum:**
+
+```wado
+/// Result of a three-way comparison
+pub enum Ordering {
+    Less,    // first value is less than second
+    Equal,   // values are equal
+    Greater, // first value is greater than second
+}
+```
+
 **Ord - Ordering:**
 
 ```wado
 /// Types that can be ordered
 pub trait Ord {
-    /// Returns true if self is less than other
-    fn lt(&self, other: &Self) -> bool;
+    /// Compares self with other and returns an Ordering
+    fn cmp(&self, other: &Self) -> Ordering;
 }
 ```
 
-Comparison operators use `Ord::lt`:
+Comparison operators use `Ord::cmp`:
 
-- `a < b` desugars to `Ord::lt(&a, &b)`
-- `a <= b` desugars to `Ord::lt(&a, &b) || Eq::eq(&a, &b)`
-- `a > b` desugars to `Ord::lt(&b, &a)`
-- `a >= b` desugars to `Ord::lt(&b, &a) || Eq::eq(&a, &b)`
+- `a < b` desugars to `Ord::cmp(&a, &b) == Ordering::Less`
+- `a > b` desugars to `Ord::cmp(&a, &b) == Ordering::Greater`
+- `a <= b` desugars to `Ord::cmp(&a, &b) != Ordering::Greater`
+- `a >= b` desugars to `Ord::cmp(&a, &b) != Ordering::Less`
 
 **Default Implementations:**
 

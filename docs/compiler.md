@@ -789,16 +789,16 @@ Eq::eq(&a, &b)
 
 ```wado
 // a < b desugars to:
-Ord::lt(&a, &b)
-
-// a <= b desugars to:
-Ord::lt(&a, &b) || Eq::eq(&a, &b)
+Ord::cmp(&a, &b) == Ordering::Less
 
 // a > b desugars to:
-Ord::lt(&b, &a)
+Ord::cmp(&a, &b) == Ordering::Greater
+
+// a <= b desugars to:
+Ord::cmp(&a, &b) != Ordering::Greater
 
 // a >= b desugars to:
-Ord::lt(&b, &a) || Eq::eq(&a, &b)
+Ord::cmp(&a, &b) != Ordering::Less
 ```
 
 **Resolution:**
