@@ -10,6 +10,35 @@ Existing solutions bundle their own memory management runtime into every `.wasm`
 
 The timing matters too. With Wasm Component Model and WASI P3 maturing in 2026, Wado is designed from the ground up for this new era — no legacy baggage, no retrofitting.
 
+## Hello World
+
+```wado
+#!/usr/bin/env wado run
+use { println, Stdout } from "core:cli";
+
+// run() is the entry point of the wasi:cli/command hosted world
+export fn run() with Stdout {
+    println("Hello, world!");
+}
+```
+
+Run it:
+
+```sh
+wado run example/hello.wado
+```
+
+Compile to WebAssembly:
+
+```sh
+wado compile example/hello.wado # generates example/hello.wasm
+wado compile -o example/hello.wasm example/hello.wado # ditto
+wado compile --format wasm example/hello.wado # ditto
+
+wado compile --format wat example/hello.wado # generates example/hello.wat with WAT format
+wado compile -o example/hello.wat example/hello.wado  # ditto
+```
+
 ## FizzBuzz
 
 ```wado
@@ -41,17 +70,8 @@ export fn run() with Stdout {
 }
 ```
 
-Run it:
-
 ```sh
 wado run example/fizzbuzz.wado
-```
-
-Compile to WebAssembly:
-
-```sh
-wado compile example/fizzbuzz.wado          # generates example/fizzbuzz.wasm
-wado compile --format wat example/fizzbuzz.wado  # generates example/fizzbuzz.wat
 ```
 
 ## Key Features
