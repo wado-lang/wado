@@ -8,7 +8,7 @@ trait KeyValueLiteralBuilder {
     type Output;
     fn new_literal(capacity: i32) -> Self;
     fn insert_literal(&mut self, key: String, value: Self::Value);
-    fn build(self) -> Self::Output;
+    fn build(&self) -> Self::Output;
 }
 
 trait KeyValueLiteral {
@@ -38,8 +38,8 @@ impl KeyValueLiteralBuilder for Bag<V> {
         self.keys.append(key);
         self.values.append(value);
     }
-    fn build(self) -> Bag<V> {
-        return self;
+    fn build(&self) -> Bag<V> {
+        return *self;
     }
 }
 

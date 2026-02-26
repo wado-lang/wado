@@ -1,0 +1,19 @@
+// self by value is not allowed — must use &self or &mut self
+
+struct Foo {
+    x: i32,
+}
+
+impl Foo {
+    fn consume(self) -> i32 {
+        return self.x;
+    }
+}
+
+export fn run() {
+    let f = Foo { x: 42 };
+    let v = f.consume();
+}
+
+__DATA__
+{"compile_error": "`self` by value is not allowed; use `&self` or `&mut self` instead"}

@@ -1,4 +1,4 @@
-// All three method receiver types: &self, &mut self, self
+// Method receiver types: &self and &mut self (self by value is not allowed)
 
 use { println, Stdout } from "core:cli";
 
@@ -13,10 +13,6 @@ impl Counter {
 
     fn increment(&mut self) {
         self.value = self.value + 1;
-    }
-
-    fn into_value(self) -> i32 {
-        return self.value;
     }
 
     fn new(v: i32) -> Counter {
@@ -35,14 +31,7 @@ export fn run() with Stdout {
     c.increment();
     c.increment();
     println(`after increment: {c.get()}`);
-
-    // self by value: consume (copy)
-    let v = c.into_value();
-    println(`into_value: {v}`);
-
-    // c is still usable because of value semantics (copy)
-    println(`still usable: {c.get()}`);
 }
 
 __DATA__
-{"stdout": "get: 0\nafter increment: 3\ninto_value: 3\nstill usable: 3\n"}
+{"stdout": "get: 0\nafter increment: 3\n"}

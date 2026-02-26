@@ -469,10 +469,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut params = Vec::new();
         for param in &func.params {
             let type_id = match param.self_kind {
-                ast::SelfKind::Value => {
-                    // self by value: use impl type directly
-                    self.resolve_type(impl_type)
-                }
                 ast::SelfKind::Ref => {
                     // &self: wrap impl type in immutable reference
                     let inner_type = self.resolve_type(impl_type);

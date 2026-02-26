@@ -484,10 +484,10 @@ fn fmt_int_base(abs_val: i64, is_negative: bool, f: &mut Formatter, base: i32, u
 
 
 impl bool {
-    pub fn to_string(self) -> String {
+    pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(5);
         let mut f = Formatter::new(&mut buf);
-        f.pad(if self { "true" } else { "false" });
+        f.pad(if *self { "true" } else { "false" });
         return buf;
     }
 }
@@ -524,23 +524,23 @@ impl char {
         return builtin::i32_as_char(value as i32);
     }
 
-    pub fn to_string(self) -> String {
+    pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(4);
-        buf.append_char(self);
+        buf.append_char(*self);
         return buf;
     }
 
     /// Returns true if the character is an ASCII whitespace character:
     /// space (0x20), tab (0x09), newline (0x0A), or carriage return (0x0D).
-    pub fn is_ascii_space(self) -> bool {
-        return self == ' ' || self == '\t' || self == '\n' || self == '\r';
+    pub fn is_ascii_space(&self) -> bool {
+        return *self == ' ' || *self == '\t' || *self == '\n' || *self == '\r';
     }
 
     /// Returns true if the character is a Unicode whitespace character.
     /// Covers ASCII whitespace plus form feed (0x0C), vertical tab (0x0B),
     /// and Unicode general category Zs/Zl/Zp code points.
-    pub fn is_unicode_space(self) -> bool {
-        let c = self as u32;
+    pub fn is_unicode_space(&self) -> bool {
+        let c = (*self) as u32;
         // ASCII whitespace: HT, LF, VT, FF, CR, SP
         if c <= 0x20 {
             return c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0B || c == 0x0C || c == 0x0D;
@@ -566,8 +566,8 @@ impl i8 {
 
     pub fn min(a: i8, b: i8) -> i8 { return builtin::select::<i8>(a < b, a, b); }
 
-    pub fn to_string(self) -> String {
-        return ((self) as i32).to_string();
+    pub fn to_string(&self) -> String {
+        return ((*self) as i32).to_string();
     }
 }
 
@@ -579,8 +579,8 @@ impl u8 {
 
     pub fn min(a: u8, b: u8) -> u8 { return builtin::select::<u8>(a < b, a, b); }
 
-    pub fn to_string(self) -> String {
-        return ((self) as i32).to_string();
+    pub fn to_string(&self) -> String {
+        return ((*self) as i32).to_string();
     }
 }
 
@@ -592,8 +592,8 @@ impl i16 {
 
     pub fn min(a: i16, b: i16) -> i16 { return builtin::select::<i16>(a < b, a, b); }
 
-    pub fn to_string(self) -> String {
-        return ((self) as i32).to_string();
+    pub fn to_string(&self) -> String {
+        return ((*self) as i32).to_string();
     }
 }
 
@@ -605,8 +605,8 @@ impl u16 {
 
     pub fn min(a: u16, b: u16) -> u16 { return builtin::select::<u16>(a < b, a, b); }
 
-    pub fn to_string(self) -> String {
-        return ((self) as i32).to_string();
+    pub fn to_string(&self) -> String {
+        return ((*self) as i32).to_string();
     }
 }
 
@@ -618,10 +618,10 @@ impl i32 {
 
     pub fn min(a: i32, b: i32) -> i32 { return builtin::select::<i32>(a < b, a, b); }
 
-    pub fn to_string(self) -> String {
+    pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(12);
         let mut f = Formatter::new(&mut buf);
-        fmt_i32_decimal(self, &mut f);
+        fmt_i32_decimal(*self, &mut f);
         return buf;
     }
 }
@@ -634,10 +634,10 @@ impl u32 {
 
     pub fn min(a: u32, b: u32) -> u32 { return builtin::select::<u32>(a < b, a, b); }
 
-    pub fn to_string(self) -> String {
+    pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(11);
         let mut f = Formatter::new(&mut buf);
-        fmt_u32_decimal(self, &mut f);
+        fmt_u32_decimal(*self, &mut f);
         return buf;
     }
 }
@@ -650,10 +650,10 @@ impl i64 {
 
     pub fn min(a: i64, b: i64) -> i64 { return builtin::select::<i64>(a < b, a, b); }
 
-    pub fn to_string(self) -> String {
+    pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(21);
         let mut f = Formatter::new(&mut buf);
-        fmt_i64_decimal(self, &mut f);
+        fmt_i64_decimal(*self, &mut f);
         return buf;
     }
 }
@@ -666,10 +666,10 @@ impl u64 {
 
     pub fn min(a: u64, b: u64) -> u64 { return builtin::select::<u64>(a < b, a, b); }
 
-    pub fn to_string(self) -> String {
+    pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(21);
         let mut f = Formatter::new(&mut buf);
-        fmt_u64_decimal(self, &mut f);
+        fmt_u64_decimal(*self, &mut f);
         return buf;
     }
 }
@@ -690,10 +690,10 @@ impl f32 {
     pub const INFINITY: f32 = 1.0 / 0.0;
     pub const NEG_INFINITY: f32 = -1.0 / 0.0;
 
-    pub fn to_string(self) -> String {
+    pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(16);
         let mut f = Formatter::new(&mut buf);
-        fmt_f32(self, &mut f);
+        fmt_f32(*self, &mut f);
         return buf;
     }
 
@@ -817,10 +817,10 @@ impl f64 {
     pub const INFINITY: f64 = 1.0 / 0.0;
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
 
-    pub fn to_string(self) -> String {
+    pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(24);
         let mut f = Formatter::new(&mut buf);
-        fmt_f64(self, &mut f);
+        fmt_f64(*self, &mut f);
         return buf;
     }
 

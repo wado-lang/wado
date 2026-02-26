@@ -1529,7 +1529,7 @@ pub trait SequenceLiteralBuilder {
     type Output;
     fn new_literal(capacity: i32) -> Self;
     fn push_literal(&mut self, value: Self::Element);
-    fn build(self) -> Self::Output;
+    fn build(&self) -> Self::Output;
 }
 
 pub trait KeyValueLiteralBuilder {
@@ -1537,7 +1537,7 @@ pub trait KeyValueLiteralBuilder {
     type Output;
     fn new_literal(capacity: i32) -> Self;
     fn insert_literal(&mut self, key: String, value: Self::Value);
-    fn build(self) -> Self::Output;
+    fn build(&self) -> Self::Output;
 }
 ```
 
