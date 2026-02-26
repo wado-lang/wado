@@ -282,31 +282,101 @@ test "is_ascii_whitespace false cases" {
     assert !char::from_u32_unchecked(0x0E as u32).is_ascii_whitespace();
 }
 
-test "is_unicode_whitespace covers ASCII" {
-    assert ' '.is_unicode_whitespace();
-    assert '\t'.is_unicode_whitespace();
-    assert '\n'.is_unicode_whitespace();
-    assert '\r'.is_unicode_whitespace();
-    assert char::from_u32_unchecked(0x0B as u32).is_unicode_whitespace();
-    assert char::from_u32_unchecked(0x0C as u32).is_unicode_whitespace();
+test "is_whitespace covers ASCII" {
+    assert ' '.is_whitespace();
+    assert '\t'.is_whitespace();
+    assert '\n'.is_whitespace();
+    assert '\r'.is_whitespace();
+    assert char::from_u32_unchecked(0x0B as u32).is_whitespace();
+    assert char::from_u32_unchecked(0x0C as u32).is_whitespace();
 }
 
-test "is_unicode_whitespace non-ASCII spaces" {
-    assert char::from_u32_unchecked(0x85 as u32).is_unicode_whitespace();    // NEXT LINE
-    assert char::from_u32_unchecked(0xA0 as u32).is_unicode_whitespace();    // NO-BREAK SPACE
-    assert char::from_u32_unchecked(0x1680 as u32).is_unicode_whitespace();  // OGHAM SPACE MARK
-    assert char::from_u32_unchecked(0x2000 as u32).is_unicode_whitespace();  // EN QUAD
-    assert char::from_u32_unchecked(0x200A as u32).is_unicode_whitespace();  // HAIR SPACE
-    assert char::from_u32_unchecked(0x2028 as u32).is_unicode_whitespace();  // LINE SEPARATOR
-    assert char::from_u32_unchecked(0x2029 as u32).is_unicode_whitespace();  // PARAGRAPH SEPARATOR
-    assert char::from_u32_unchecked(0x202F as u32).is_unicode_whitespace();  // NARROW NO-BREAK SPACE
-    assert char::from_u32_unchecked(0x205F as u32).is_unicode_whitespace();  // MEDIUM MATHEMATICAL SPACE
-    assert char::from_u32_unchecked(0x3000 as u32).is_unicode_whitespace();  // IDEOGRAPHIC SPACE
+test "is_whitespace non-ASCII spaces" {
+    assert char::from_u32_unchecked(0x85 as u32).is_whitespace();    // NEXT LINE
+    assert char::from_u32_unchecked(0xA0 as u32).is_whitespace();    // NO-BREAK SPACE
+    assert char::from_u32_unchecked(0x1680 as u32).is_whitespace();  // OGHAM SPACE MARK
+    assert char::from_u32_unchecked(0x2000 as u32).is_whitespace();  // EN QUAD
+    assert char::from_u32_unchecked(0x200A as u32).is_whitespace();  // HAIR SPACE
+    assert char::from_u32_unchecked(0x2028 as u32).is_whitespace();  // LINE SEPARATOR
+    assert char::from_u32_unchecked(0x2029 as u32).is_whitespace();  // PARAGRAPH SEPARATOR
+    assert char::from_u32_unchecked(0x202F as u32).is_whitespace();  // NARROW NO-BREAK SPACE
+    assert char::from_u32_unchecked(0x205F as u32).is_whitespace();  // MEDIUM MATHEMATICAL SPACE
+    assert char::from_u32_unchecked(0x3000 as u32).is_whitespace();  // IDEOGRAPHIC SPACE
 }
 
-test "is_unicode_whitespace false for non-space" {
-    assert !'A'.is_unicode_whitespace();
-    assert !'あ'.is_unicode_whitespace();
+test "is_whitespace false for non-space" {
+    assert !'A'.is_whitespace();
+    assert !'あ'.is_whitespace();
     // ZERO WIDTH SPACE (0x200B) is NOT whitespace
-    assert !char::from_u32_unchecked(0x200B as u32).is_unicode_whitespace();
+    assert !char::from_u32_unchecked(0x200B as u32).is_whitespace();
+}
+
+test "trim_ascii both sides" {
+    assert "  hello  ".trim_ascii() == "hello";
+    assert "\t\nhello\r\n".trim_ascii() == "hello";
+    assert "hello".trim_ascii() == "hello";
+    assert "   ".trim_ascii() == "";
+    assert "".trim_ascii() == "";
+}
+
+test "trim_ascii_start" {
+    assert "  hello  ".trim_ascii_start() == "hello  ";
+    assert "\t\nhello".trim_ascii_start() == "hello";
+    assert "hello".trim_ascii_start() == "hello";
+    assert "   ".trim_ascii_start() == "";
+}
+
+test "trim_ascii_end" {
+    assert "  hello  ".trim_ascii_end() == "  hello";
+    assert "hello\t\n".trim_ascii_end() == "hello";
+    assert "hello".trim_ascii_end() == "hello";
+    assert "   ".trim_ascii_end() == "";
+}
+
+test "trim_ascii preserves non-ASCII" {
+    // NO-BREAK SPACE (0xA0) is not ASCII whitespace
+    let nbsp = char::from_u32_unchecked(0xA0 as u32).to_string();
+    let s = String::concat(nbsp, "hello");
+    assert s.trim_ascii() == s;
+}
+
+test "trim both sides" {
+    assert "  hello  ".trim() == "hello";
+    assert "\t\nhello\r\n".trim() == "hello";
+    assert "hello".trim() == "hello";
+    assert "   ".trim() == "";
+    assert "".trim() == "";
+}
+
+test "trim_start" {
+    assert "  hello  ".trim_start() == "hello  ";
+    assert "\t\nhello".trim_start() == "hello";
+    assert "hello".trim_start() == "hello";
+    assert "   ".trim_start() == "";
+}
+
+test "trim_end" {
+    assert "  hello  ".trim_end() == "  hello";
+    assert "hello\t\n".trim_end() == "hello";
+    assert "hello".trim_end() == "hello";
+    assert "   ".trim_end() == "";
+}
+
+test "trim Unicode whitespace" {
+    // NO-BREAK SPACE (0xA0) is Unicode whitespace
+    let nbsp = char::from_u32_unchecked(0xA0 as u32).to_string();
+    let s = String::concat(String::concat(nbsp, "hello"), nbsp);
+    assert s.trim() == "hello";
+}
+
+test "trim IDEOGRAPHIC SPACE" {
+    let ideographic = char::from_u32_unchecked(0x3000 as u32).to_string();
+    let s = String::concat(String::concat(ideographic, "日本語"), ideographic);
+    assert s.trim() == "日本語";
+}
+
+test "trim mixed ASCII and Unicode whitespace" {
+    let nbsp = char::from_u32_unchecked(0xA0 as u32).to_string();
+    let s = String::concat(String::concat(" ", String::concat(nbsp, "hello")), " ");
+    assert s.trim() == "hello";
 }
