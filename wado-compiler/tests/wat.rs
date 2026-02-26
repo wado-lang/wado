@@ -8,13 +8,18 @@ mod common;
 use std::path::PathBuf;
 use wado_compiler::OptLevel;
 
-/// Compile a fixture file with O0 optimization
-fn compile_fixture(fixture: &str) -> wado_compiler::CompileResult {
+/// Compile a fixture file at the given optimization level.
+fn compile_fixture_opt(fixture: &str, opt: OptLevel) -> wado_compiler::CompileResult {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let source_path = PathBuf::from(manifest_dir).join(format!("tests/fixtures/{fixture}"));
 
-    common::compile_file_with_opts(&source_path, OptLevel::O0)
+    common::compile_file_with_opts(&source_path, opt)
         .unwrap_or_else(|e| panic!("Compilation failed: {e}"))
+}
+
+/// Compile a fixture file with O0 optimization
+fn compile_fixture(fixture: &str) -> wado_compiler::CompileResult {
+    compile_fixture_opt(fixture, OptLevel::O0)
 }
 
 /// Test that branch hints are correctly emitted for likely/unlikely builtins
@@ -65,9 +70,10 @@ fn test_branch_hints_values() {
 /// Test that multi-value builtin calls with destructuring do not generate tuple structs.
 /// When `let [lo, hi] = builtin::i64_add128(...)` is used, the codegen should directly
 /// bind stack values to locals without creating a tuple struct (no struct.new after i64.add128).
+/// Requires O1+ because tuple elision is a WIR optimization pass.
 #[test]
 fn test_tuple_elision_multivalue() {
-    let result = compile_fixture("tuple_elision_multivalue.wado");
+    let result = compile_fixture_opt("tuple_elision_multivalue.wado", OptLevel::O1);
 
     // Get WAT representation
     let wat = wasmprinter::print_bytes(&result.wasm)

@@ -11,6 +11,8 @@ use {
     short, short32, fixed_width, digits,
     format_decimal, format_exp,
     format_decimal_prec, format_exp_prec,
+    write_decimal, write_exp,
+    write_decimal_prec, write_exp_prec,
     parse_text,
 } from "core:prelude/fpfmt.wado";
 
@@ -292,13 +294,15 @@ fn fmt_u64_decimal(value: u64, f: &mut Formatter) {
 fn fmt_f64(value: f64, f: &mut Formatter) {
     let [is_special, is_neg, kind] = check_special(value);
     if is_special {
+        let mark = f.mark();
         if kind matches { NaN } {
-            f.pad("NaN");
+            f.buf_mut().append("NaN");
         } else if kind matches { Inf } {
-            f.pad(if is_neg { "-inf" } else { "inf" });
+            f.buf_mut().append(if is_neg { "-inf" } else { "inf" });
         } else {
-            f.pad(if is_neg { "-0.0" } else { "0.0" });
+            f.buf_mut().append(if is_neg { "-0.0" } else { "0.0" });
         }
+        f.apply_padding(mark);
         return;
     }
     let abs_f = if is_neg { -value } else { value };
@@ -307,18 +311,18 @@ fn fmt_f64(value: f64, f: &mut Formatter) {
     let p = result.exponent;
     let nd = digits(d);
     let exp = p + nd - 1;
-    let formatted = if exp < -4 || exp >= 16 {
-        format_exp(d, p, nd, false)
+    let mark = f.mark();
+    if is_neg { f.buf_mut().append("-"); }
+    else if f.sign_plus() { f.buf_mut().append("+"); }
+    if exp < -4 || exp >= 16 {
+        write_exp(f.buf_mut(), d, p, nd, false);
     } else if p >= 0 {
-        String::concat(format_decimal(d, p, nd), ".0")
+        write_decimal(f.buf_mut(), d, p, nd);
+        f.buf_mut().append(".0");
     } else {
-        format_decimal(d, p, nd)
-    };
-    if is_neg {
-        f.pad(String::concat("-", formatted));
-    } else {
-        f.pad(formatted);
+        write_decimal(f.buf_mut(), d, p, nd);
     }
+    f.apply_padding(mark);
 }
 
 /// Write f32 shortest representation to formatter.
@@ -327,13 +331,15 @@ fn fmt_f32(value: f32, f: &mut Formatter) {
     let f64_val = value as f64;
     let [is_special, is_neg, kind] = check_special(f64_val);
     if is_special {
+        let mark = f.mark();
         if kind matches { NaN } {
-            f.pad("NaN");
+            f.buf_mut().append("NaN");
         } else if kind matches { Inf } {
-            f.pad(if is_neg { "-inf" } else { "inf" });
+            f.buf_mut().append(if is_neg { "-inf" } else { "inf" });
         } else {
-            f.pad(if is_neg { "-0.0" } else { "0.0" });
+            f.buf_mut().append(if is_neg { "-0.0" } else { "0.0" });
         }
+        f.apply_padding(mark);
         return;
     }
     let abs_f = if is_neg { -value } else { value };
@@ -342,41 +348,40 @@ fn fmt_f32(value: f32, f: &mut Formatter) {
     let p = result.exponent;
     let nd = digits(d);
     let exp = p + nd - 1;
-    let formatted = if exp < -4 || exp >= 16 {
-        format_exp(d, p, nd, false)
+    let mark = f.mark();
+    if is_neg { f.buf_mut().append("-"); }
+    else if f.sign_plus() { f.buf_mut().append("+"); }
+    if exp < -4 || exp >= 16 {
+        write_exp(f.buf_mut(), d, p, nd, false);
     } else if p >= 0 {
-        String::concat(format_decimal(d, p, nd), ".0")
+        write_decimal(f.buf_mut(), d, p, nd);
+        f.buf_mut().append(".0");
     } else {
-        format_decimal(d, p, nd)
-    };
-    if is_neg {
-        f.pad(String::concat("-", formatted));
-    } else {
-        f.pad(formatted);
+        write_decimal(f.buf_mut(), d, p, nd);
     }
+    f.apply_padding(mark);
 }
 
 /// Write f64 with fixed-point precision to formatter.
 fn fmt_f64_fixed(value: f64, precision: i32, f: &mut Formatter) {
     let [is_special, is_neg, kind] = check_special(value);
     if is_special {
+        let mark = f.mark();
         if kind matches { NaN } {
-            f.pad("NaN");
+            f.buf_mut().append("NaN");
         } else if kind matches { Inf } {
-            f.pad(if is_neg { "-inf" } else { "inf" });
+            f.buf_mut().append(if is_neg { "-inf" } else { "inf" });
         } else {
             // Zero with precision
-            let mut s = String::with_capacity(4 + precision);
-            if is_neg { s.append("-"); }
-            s.append("0");
+            let buf = f.buf_mut();
+            if is_neg { buf.append("-"); }
+            buf.append("0");
             if precision > 0 {
-                s.append(".");
-                for let mut i = 0; i < precision; i += 1 {
-                    s.append_char('0');
-                }
+                buf.append(".");
+                buf.append_byte_filled('0' as u8, precision);
             }
-            f.pad(s);
         }
+        f.apply_padding(mark);
         return;
     }
     let abs_f = if is_neg { -value } else { value };
@@ -390,12 +395,11 @@ fn fmt_f64_fixed(value: f64, precision: i32, f: &mut Formatter) {
     let d = result.digits;
     let p = result.exponent;
     let nd = digits(d);
-    let formatted = format_decimal_prec(d as i64, p, nd, precision);
-    if is_neg {
-        f.pad(String::concat("-", formatted));
-    } else {
-        f.pad(formatted);
-    }
+    let mark = f.mark();
+    if is_neg { f.buf_mut().append("-"); }
+    else if f.sign_plus() { f.buf_mut().append("+"); }
+    write_decimal_prec(f.buf_mut(), d, p, nd, precision);
+    f.apply_padding(mark);
 }
 
 /// Write f32 with fixed-point precision to formatter.
@@ -408,28 +412,30 @@ fn fmt_f64_exp(value: f64, precision: i32, upper: i32, f: &mut Formatter) {
     let upper_bool = upper != 0;
     let [is_special, is_neg, kind] = check_special(value);
     if is_special {
+        let mark = f.mark();
         if kind matches { NaN } {
-            f.pad("NaN");
+            f.buf_mut().append("NaN");
         } else if kind matches { Inf } {
-            f.pad(if is_neg { "-inf" } else { "inf" });
+            f.buf_mut().append(if is_neg { "-inf" } else { "inf" });
         } else {
             // Zero in exponential
-            let mut s = String::with_capacity(10 + precision);
-            if is_neg { s.append("-"); }
-            s.append("0");
+            let buf = f.buf_mut();
+            if is_neg { buf.append("-"); }
+            buf.append("0");
             if precision > 0 {
-                s.append(".");
-                for let mut i = 0; i < precision; i += 1 {
-                    s.append_char('0');
-                }
+                buf.append(".");
+                buf.append_byte_filled('0' as u8, precision);
             }
-            s.append_char(if upper_bool { 'E' } else { 'e' });
-            s.append_char('0');
-            f.pad(s);
+            buf.append_char(if upper_bool { 'E' } else { 'e' });
+            buf.append_char('0');
         }
+        f.apply_padding(mark);
         return;
     }
     let abs_f = if is_neg { -value } else { value };
+    let mark = f.mark();
+    if is_neg { f.buf_mut().append("-"); }
+    else if f.sign_plus() { f.buf_mut().append("+"); }
     if precision >= 0 {
         let total_digits = precision + 1;
         let clamped = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
@@ -437,24 +443,15 @@ fn fmt_f64_exp(value: f64, precision: i32, upper: i32, f: &mut Formatter) {
         let d = result.digits;
         let p = result.exponent;
         let nd = digits(d);
-        let formatted = format_exp_prec(d as i64, p, nd, precision, upper_bool);
-        if is_neg {
-            f.pad(String::concat("-", formatted));
-        } else {
-            f.pad(formatted);
-        }
+        write_exp_prec(f.buf_mut(), d, p, nd, precision, upper_bool);
     } else {
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
         let nd = digits(d);
-        let formatted = format_exp(d, p, nd, upper_bool);
-        if is_neg {
-            f.pad(String::concat("-", formatted));
-        } else {
-            f.pad(formatted);
-        }
+        write_exp(f.buf_mut(), d, p, nd, upper_bool);
     }
+    f.apply_padding(mark);
 }
 
 /// Write f32 in exponential notation.

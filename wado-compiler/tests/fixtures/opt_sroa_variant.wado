@@ -1,0 +1,53 @@
+// Test: variant SROA decomposes Option<T> returns into multi-value scalars
+//
+// Verifies that the WIR-level SROA pass rewrites variant-returning functions
+// (like StrUtf8ByteIter::next → Option<u8>) to use multi-value returns
+// [i32 discriminant, payload...] instead of heap-allocated GC variant structs.
+
+use { println, Stdout } from "core:cli";
+
+fn sum_bytes(s: String) -> i32 {
+    let mut sum = 0;
+    for let b of s.bytes() {
+        sum += b as i32;
+    }
+    return sum;
+}
+
+fn count_chars(s: String) -> i32 {
+    let mut count = 0;
+    for let _c of s.chars() {
+        count += 1;
+    }
+    return count;
+}
+
+fn first_byte(s: String) -> i32 {
+    let mut iter = s.bytes();
+    if let Some(b) = iter.next() {
+        return b as i32;
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    assert sum_bytes("ABC") == 198;
+    assert sum_bytes("") == 0;
+    assert count_chars("hello") == 5;
+    assert first_byte("Z") == 90;
+    assert first_byte("") == -1;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O1": [
+        "-> [i32, u8]",
+        "multivalue_bind [__sroa_",
+        "__sroa___pattern_temp_0_discriminant == 0"
+    ],
+    "wir_not_expect:O1": [
+        "ref.test"
+    ]
+}
