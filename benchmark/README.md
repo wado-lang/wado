@@ -93,71 +93,71 @@ make benchmark-fts
 
 ### Environment
 
-| Component  | Version                      |
-| ---------- | ---------------------------- |
-| Wado       | commit `ef75dd1`             |
-| wasmtime   | 41.0.4                       |
-| Node.js    | v24.14.0                     |
-| Python     | 3.14.3 (CPython, no JIT)     |
-| Ruby       | 4.0.1 (CRuby)               |
-| C compiler | gcc 13.3.0                   |
-| Rust       | rustc 1.93.1                 |
-| Zig        | 0.15.2                       |
-| Platform   | Linux x86_64                 |
+| Component  | Version                  |
+| ---------- | ------------------------ |
+| Wado       | commit `ef75dd1`         |
+| wasmtime   | 41.0.4                   |
+| Node.js    | v24.14.0                 |
+| Python     | 3.14.3 (CPython, no JIT) |
+| Ruby       | 4.0.1 (CRuby)            |
+| C compiler | gcc 13.3.0               |
+| Rust       | rustc 1.93.1             |
+| Zig        | 0.15.2                   |
+| Platform   | Linux x86_64             |
 
 ### Mandelbrot (1024x768, max_iter=256)
 
-| Runtime       | Time (ms) | Relative |
-| ------------- | --------- | -------- |
-| C (gcc -O3)   | 130       | 1.00x    |
-| **Wado**      | 139       | 1.07x    |
-| JavaScript    | 201       | 1.55x    |
-| Python        | 3,371     | 25.93x   |
-| Ruby          | 4,240     | 32.62x   |
+| Runtime     | Time (ms) | Relative |
+| ----------- | --------- | -------- |
+| C (gcc -O3) | 130       | 1.00x    |
+| **Wado**    | 139       | 1.07x    |
+| JavaScript  | 201       | 1.55x    |
+| Python      | 3,371     | 25.93x   |
+| Ruby        | 4,240     | 32.62x   |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
 ### Prime Counting (limit=10,000,000)
 
-| Runtime       | Time (ms) | Relative |
-| ------------- | --------- | -------- |
-| C (gcc -O3)   | 3,190     | 1.00x    |
-| **Wado**      | 3,276     | 1.03x    |
-| JavaScript    | 3,384     | 1.06x    |
-| Ruby          | 41,941    | 13.15x   |
-| Python        | 69,825    | 21.89x   |
+| Runtime     | Time (ms) | Relative |
+| ----------- | --------- | -------- |
+| C (gcc -O3) | 3,190     | 1.00x    |
+| **Wado**    | 3,276     | 1.03x    |
+| JavaScript  | 3,384     | 1.06x    |
+| Ruby        | 41,941    | 13.15x   |
+| Python      | 69,825    | 21.89x   |
 
 All implementations produce the same result: 664,579 primes.
 
 ### Sieve of Eratosthenes (limit=10,000,000)
 
-| Runtime       | Time (ms) | Relative |
-| ------------- | --------- | -------- |
-| C (gcc -O3)   | 49        | 1.00x    |
-| JavaScript    | 74        | 1.51x    |
-| **Wado**      | 164       | 3.35x    |
-| Python        | 727       | 14.84x   |
-| Ruby          | 1,113     | 22.71x   |
+| Runtime     | Time (ms) | Relative |
+| ----------- | --------- | -------- |
+| C (gcc -O3) | 49        | 1.00x    |
+| JavaScript  | 74        | 1.51x    |
+| **Wado**    | 164       | 3.35x    |
+| Python      | 727       | 14.84x   |
+| Ruby        | 1,113     | 22.71x   |
 
 All implementations produce the same result: 664,579 primes.
 
 ### zlib Compression (100KB x 10 iterations)
 
-| Runtime                | Compress (ms) | Decompress (ms) | Total (ms) |
-| ---------------------- | ------------- | --------------- | ---------- |
-| zlib-rs (native Rust)  | 2             | 0.2             | 2          |
-| **Wado** (pure Wado)    | 519           | 148,482         | 149,002    |
+| Runtime               | Compress (ms) | Decompress (ms) | Total (ms) |
+| --------------------- | ------------- | --------------- | ---------- |
+| zlib-rs (native Rust) | 2             | 0.2             | 2          |
+| **Wado** (pure Wado)  | 519           | 148,482         | 149,002    |
 
 Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native. The decompression path is especially slow due to byte-at-a-time array operations.
 
 ### Float-to-String (500,000 conversions, 6 decimal places)
 
-| Runtime              | Time (ms) | Relative  |
-| -------------------- | --------- | --------- |
-| Zig (-OReleaseFast)  | 25        | 1.00x     |
-| Rust (rustc -O)      | 35        | 1.40x     |
-| C (gcc -O3)          | 57        | 2.28x     |
-| **Wado**             | 97,979    | 3,919.16x |
+| Runtime             | Time (ms) | Relative  |
+| ------------------- | --------- | --------- |
+| Zig (-OReleaseFast) | 25        | 1.00x     |
+| Rust (rustc -O)     | 35        | 1.40x     |
+| C (gcc -O3)         | 57        | 2.28x     |
+| **Wado**            | 97,979    | 3,919.16x |
 
 All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
 
