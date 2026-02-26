@@ -429,9 +429,11 @@ fn try_fold_f64_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedEx
 
 /// Fold f32 binary operations.
 ///
-/// Arithmetic is performed in f32 precision (matching Wasm f32 semantics)
-/// to avoid double-rounding. The result is widened back to f64 for TIR
-/// storage. See cranelift's `f32_add` etc. in `isle_prelude.rs`.
+/// Both arithmetic and comparison are performed in f32 precision (matching
+/// Wasm f32 semantics). The `value: f64` stored in `FloatLiteral` may have
+/// extra f64 precision from the original decimal parse, so both operands
+/// must be narrowed to f32 before any operation.
+/// See cranelift's `f32_add` etc. in `isle_prelude.rs`.
 fn try_fold_f32_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedExpr> {
     let l = lval as f32;
     let r = rval as f32;
@@ -440,8 +442,13 @@ fn try_fold_f32_binary(lval: f64, op: TirBinaryOp, rval: f64) -> Option<FoldedEx
         TirBinaryOp::Sub => non_nan_float(f64::from(l - r)),
         TirBinaryOp::Mul => non_nan_float(f64::from(l * r)),
         TirBinaryOp::Div => non_nan_float(f64::from(l / r)),
-        // Comparison on f64 values is correct: f32 round-trips exactly through f64.
-        _ => try_fold_float_comparison(lval, op, rval),
+        TirBinaryOp::Eq => Some(FoldedExpr::Bool(l == r)),
+        TirBinaryOp::NotEq => Some(FoldedExpr::Bool(l != r)),
+        TirBinaryOp::Lt => Some(FoldedExpr::Bool(l < r)),
+        TirBinaryOp::LtEq => Some(FoldedExpr::Bool(l <= r)),
+        TirBinaryOp::Gt => Some(FoldedExpr::Bool(l > r)),
+        TirBinaryOp::GtEq => Some(FoldedExpr::Bool(l >= r)),
+        _ => None,
     }
 }
 
@@ -1015,6 +1022,33 @@ mod tests {
         assert!(try_fold_f64_binary(0.0, TirBinaryOp::Mul, f64::INFINITY).is_none());
         // f32: NaN also skipped
         assert!(try_fold_f32_binary(0.0, TirBinaryOp::Div, 0.0).is_none());
+    }
+
+    #[test]
+    fn test_f32_comparison() {
+        // f32::PI * 2.0 == f32::TAU: the f64 storage values differ
+        // (one is from f32 arithmetic, the other from decimal parse),
+        // but both round to the same f32.
+        let pi_f64 = std::f64::consts::PI;
+        let tau_f64 = std::f64::consts::TAU;
+        let pi_times_2 = f64::from(pi_f64 as f32 * 2.0_f32);
+        // Sanity: the f64 representations differ
+        assert_ne!(tau_f64, pi_times_2);
+        // But f32 comparison should say they're equal
+        assert!(matches!(
+            try_fold_f32_binary(tau_f64, TirBinaryOp::Eq, pi_times_2),
+            Some(FoldedExpr::Bool(true))
+        ));
+        // And inequality checks should also work correctly in f32
+        assert!(matches!(
+            try_fold_f32_binary(tau_f64, TirBinaryOp::NotEq, pi_times_2),
+            Some(FoldedExpr::Bool(false))
+        ));
+        // NaN comparisons still work
+        assert!(matches!(
+            try_fold_f32_binary(f64::NAN, TirBinaryOp::Eq, f64::NAN),
+            Some(FoldedExpr::Bool(false))
+        ));
     }
 
     #[test]
