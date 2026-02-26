@@ -347,5 +347,6 @@ pub fn make_synthetic_method(
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
+        comp_features: 0,
     }
 }

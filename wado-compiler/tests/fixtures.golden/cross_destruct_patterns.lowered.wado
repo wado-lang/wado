@@ -91,7 +91,23 @@ export fn run() with Stdout {
         };
         break __tmpl: __r;
     });
-    let items: Array<Tagged> = move [Tagged { label: "P", coords: [3, 4] }, Tagged { label: "Q", coords: [5, 6] }];
+    let items: Array<Tagged> = __seq_lit: {
+        let mut __b: Array<Tagged> = move Array<Tagged> { repr: core::builtin::array_new::<Tagged>(2), used: 0 };
+        __inline_Array_Tagged__SequenceLiteralBuilder__push_literal_12: {
+            let self: &mut Array<Tagged> = &mut __b;
+            let value: Tagged = move Tagged { label: "P", coords: [3, 4] };
+            self."Array<Tagged>::append"(value);
+        };
+        __inline_Array_Tagged__SequenceLiteralBuilder__push_literal_13: {
+            let self: &mut Array<Tagged> = &mut __b;
+            let value: Tagged = move Tagged { label: "Q", coords: [5, 6] };
+            self."Array<Tagged>::append"(value);
+        };
+        break __seq_lit: __inline_Array_Tagged__SequenceLiteralBuilder__build_14: {
+            let self: Array<Tagged> = __b;
+            break __inline_Array_Tagged__SequenceLiteralBuilder__build_14: self;
+        };
+    };
     __for_of_0: {
         let mut __iter_0: ArrayIter<Tagged> = move ArrayIter<Tagged> { repr: items.repr, used: items.used, index: 0 };
         loop {
@@ -106,11 +122,11 @@ export fn run() with Stdout {
                     let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
                     __r.String::append(l);
                     __r.String::append(move ": ");
-                    let mut __f: Formatter = __inline_Formatter__new_13: {
+                    let mut __f: Formatter = __inline_Formatter__new_17: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_i32_Display__fmt_14: {
+                    __inline_i32_Display__fmt_18: {
                         let self: Box<i32> = move Box<i32> { value: (a + b) };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -127,20 +143,20 @@ export fn run() with Stdout {
         { coords: (x, y) } && ((x + y) > 250) => "large",
         { coords: (x, y) } => __tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
-            let mut __f: Formatter = __inline_Formatter__new_16: {
+            let mut __f: Formatter = __inline_Formatter__new_20: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_16: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            __inline_i32_Display__fmt_17: {
+            __inline_i32_Display__fmt_21: {
                 let f: &mut Formatter = &mut __f;
                 "core::prelude/primitives.wado::fmt_i32_decimal"(x, f);
             };
             __r.String::append(move ", ");
-            __f = __inline_Formatter__new_18: {
+            __f = __inline_Formatter__new_22: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_22: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            __inline_i32_Display__fmt_19: {
+            __inline_i32_Display__fmt_23: {
                 let f: &mut Formatter = &mut __f;
                 "core::prelude/primitives.wado::fmt_i32_decimal"(y, f);
             };
@@ -155,11 +171,11 @@ export fn run() with Stdout {
         let y: i32 = __pattern_temp_8.y;
         core::cli::println(__tmpl: {
             let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-            let mut __f: Formatter = __inline_Formatter__new_21: {
+            let mut __f: Formatter = __inline_Formatter__new_25: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_21: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_25: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            __inline_i32_Display__fmt_22: {
+            __inline_i32_Display__fmt_26: {
                 let self: Box<i32> = move Box<i32> { value: (x + y) };
                 let f: &mut Formatter = &mut __f;
                 "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -181,5 +197,21 @@ fn "ArrayIter<Tagged>^Iterator::next"(self: &mut ArrayIter<Tagged>) -> Option<Ta
     let item: Tagged = move core::builtin::array_get::<Tagged>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
+}
+
+pub fn "Array<Tagged>::append"(self: &mut Array<Tagged>, value: Tagged) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<Tagged> = core::builtin::array_new::<Tagged>(new_capacity);
+        core::builtin::array_copy::<Tagged>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<Tagged>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

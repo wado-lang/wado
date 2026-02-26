@@ -29,9 +29,66 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let __sroa_node_keys: Array<String> = move ["apple", "banana", "cherry"];
-    let __sroa_node_values: Array<i32> = move [10, 20, 30];
-    let __sroa_node_deleted: Array<bool> = move [false, true, false];
+    let __sroa_node_keys: Array<String> = __seq_lit: {
+        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<String> = &mut __b;
+            let value: String = move "apple";
+            self."Array<String>::append"(value);
+        };
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<String> = &mut __b;
+            let value: String = move "banana";
+            self."Array<String>::append"(value);
+        };
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<String> = &mut __b;
+            let value: String = move "cherry";
+            self."Array<String>::append"(value);
+        };
+        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
+            let self: Array<String> = __b;
+            break __inline_Array_String__SequenceLiteralBuilder__build_5: self;
+        };
+    };
+    let __sroa_node_values: Array<i32> = __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_7: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(10);
+        };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_8: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(20);
+        };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_9: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(30);
+        };
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_10: {
+            let self: Array<i32> = __b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_10: self;
+        };
+    };
+    let __sroa_node_deleted: Array<bool> = __seq_lit: {
+        let mut __b: Array<bool> = move Array<bool> { repr: core::builtin::array_new::<bool>(3), used: 0 };
+        __inline_Array_bool__SequenceLiteralBuilder__push_literal_12: {
+            let self: &mut Array<bool> = &mut __b;
+            self."Array<bool>::append"(false);
+        };
+        __inline_Array_bool__SequenceLiteralBuilder__push_literal_13: {
+            let self: &mut Array<bool> = &mut __b;
+            self."Array<bool>::append"(true);
+        };
+        __inline_Array_bool__SequenceLiteralBuilder__push_literal_14: {
+            let self: &mut Array<bool> = &mut __b;
+            self."Array<bool>::append"(false);
+        };
+        break __seq_lit: __inline_Array_bool__SequenceLiteralBuilder__build_15: {
+            let self: Array<bool> = __b;
+            break __inline_Array_bool__SequenceLiteralBuilder__build_15: self;
+        };
+    };
     let mut sum: i32 = 0;
     __for_0: {
         let mut i: i32 = 0;
@@ -51,11 +108,11 @@ export fn run() with Stdout {
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(41), used: 0 };
         __r.String::append(move "sum (excluding deleted): ");
-        let mut __f: Formatter = __inline_Formatter__new_3: {
+        let mut __f: Formatter = __inline_Formatter__new_18: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_i32_Display__fmt_4: {
+        __inline_i32_Display__fmt_19: {
             let self: Box<i32> = move Box<i32> { value: sum };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -73,6 +130,22 @@ export fn run() with Stdout {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
+}
+
+pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
+        core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<String>(self.repr, used, value);
+    self.used = (used + 1);
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
@@ -94,5 +167,37 @@ fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<bool>(self.repr, index);
+}
+
+pub fn "Array<bool>::append"(self: &mut Array<bool>, value: bool) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<bool> = core::builtin::array_new::<bool>(new_capacity);
+        core::builtin::array_copy::<bool>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<bool>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<i32>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

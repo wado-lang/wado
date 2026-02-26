@@ -456,11 +456,6 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
                 collect_modified_vars_in_expr(&field.value, modified);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                collect_modified_vars_in_expr(elem, modified);
-            }
-        }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_modified_vars_in_expr(elem, modified);
@@ -763,7 +758,7 @@ fn collect_licm_ref_bindings_in_expr(
                 collect_licm_ref_bindings_in_expr(&field.value, type_table, bindings);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_licm_ref_bindings_in_expr(elem, type_table, bindings);
             }
@@ -1253,18 +1248,6 @@ fn find_hoist_candidates_in_expr(
                 );
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                find_hoist_candidates_in_expr(
-                    elem,
-                    modified_vars,
-                    ref_bindings,
-                    candidates,
-                    seen,
-                    next_local,
-                );
-            }
-        }
         TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 find_hoist_candidates_in_expr(
@@ -1611,11 +1594,6 @@ fn replace_hoisted_in_expr(
         TirExprKind::StructLiteral { fields, .. } => {
             for field in fields {
                 replace_hoisted_in_expr(&mut field.value, candidates, ref_bindings);
-            }
-        }
-        TirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                replace_hoisted_in_expr(elem, candidates, ref_bindings);
             }
         }
         TirExprKind::TupleLiteral { elements } => {

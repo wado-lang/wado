@@ -604,6 +604,15 @@ impl Monomorphizer {
                 self.rewrite_types_in_block(body, &mut module.type_table.borrow_mut());
             }
         }
+
+        // Rewrite global variable initializers
+        for global in &mut module.globals {
+            global.ty = self.rewrite_type_id(global.ty, &mut module.type_table.borrow_mut());
+            self.rewrite_types_in_expr(
+                &mut global.initializer,
+                &mut module.type_table.borrow_mut(),
+            );
+        }
     }
 
     fn rewrite_types_in_block(&self, block: &mut TirBlock, type_table: &mut TypeTable) {
@@ -784,7 +793,7 @@ impl Monomorphizer {
                     self.rewrite_types_in_block(else_blk, type_table);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.rewrite_types_in_expr(elem, type_table);
                 }
@@ -1260,6 +1269,15 @@ impl Monomorphizer {
                 );
             }
         }
+
+        // Also scan global variable initializers for function instantiation sites
+        for global in &module.globals {
+            self.collect_func_instantiation_sites_in_expr(
+                &global.initializer,
+                generic_functions,
+                &module.type_table.borrow(),
+            );
+        }
     }
 
     fn collect_func_instantiation_sites_in_block(
@@ -1732,7 +1750,7 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.collect_func_instantiation_sites_in_expr(
                         elem,
@@ -2118,6 +2136,7 @@ impl Monomorphizer {
             // Scratch local fields - computed by lower phase (after monomorphization)
             is_cm_adapter: false,
             inline_hint: generic.inline_hint,
+            comp_features: generic.comp_features,
         })
     }
 
@@ -2532,7 +2551,7 @@ impl Monomorphizer {
                     self.substitute_types_in_block(else_blk, substitution, type_table);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.substitute_types_in_expr(elem, substitution, type_table);
                 }
@@ -2763,6 +2782,14 @@ impl Monomorphizer {
                 func.body = Some(body);
             }
         }
+
+        // Rewrite function calls in global variable initializers
+        for global in &mut module.globals {
+            self.rewrite_function_calls_in_expr(
+                &mut global.initializer,
+                &module.type_table.borrow(),
+            );
+        }
     }
 
     /// Sync `local_types` array from Let statements that may have been updated
@@ -2877,7 +2904,7 @@ impl Monomorphizer {
                     Self::update_local_expr_types(else_blk, local_types);
                 }
             }
-            TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     Self::update_local_expr_types_in_expr(elem, local_types);
                 }
@@ -3248,7 +3275,7 @@ impl Monomorphizer {
                     self.rewrite_function_calls_in_block(else_blk, type_table);
                 }
             }
-            TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+            TirExprKind::TupleLiteral { elements } => {
                 for elem in elements {
                     self.rewrite_function_calls_in_expr(elem, type_table);
                 }

@@ -155,6 +155,7 @@ fn ensure_inspect_fn(
         address_taken_locals: IndexSet::new(),
         is_cm_adapter: false,
         inline_hint: InlineHint::Auto,
+        comp_features: 0,
     };
     let rc = Rc::new(RefCell::new(func));
     reg.functions.insert(type_id, Rc::clone(&rc));
@@ -661,7 +662,7 @@ fn walk_expr(
                 walk_expr(&mut f.value, tt, mods, cs, reg, fmt_type, ms);
             }
         }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for e in elements {
                 walk_expr(e, tt, mods, cs, reg, fmt_type, ms);
             }

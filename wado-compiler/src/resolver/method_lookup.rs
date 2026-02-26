@@ -1271,7 +1271,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<IndexTraitInfo> {
         // Look for impl Index<...> for StructName
         self.find_indexing_trait_impl(struct_name, base_type_id, "Index", "index", "Output")
-            .map(|(output_type, self_kind, trait_name)| IndexTraitInfo {
+            .map(|(output_type, self_kind, trait_name, _)| IndexTraitInfo {
                 output_type,
                 self_kind,
                 trait_name,
@@ -1289,7 +1289,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         base_type_id: TypeId,
     ) -> Option<KeyValueLiteralTraitInfo> {
         // Primary: explicit impl KeyValueLiteralBuilder for T (self-as-builder pattern)
-        if let Some((value_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+        if let Some((value_type, self_kind, trait_name, _)) = self.find_indexing_trait_impl(
             struct_name,
             base_type_id,
             "KeyValueLiteralBuilder",
@@ -1325,7 +1325,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "Builder",
         )?;
         let builder_name = self.struct_name_for_type(builder_type)?;
-        if let Some((value_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
+        if let Some((value_type, self_kind, trait_name, _)) = self.find_indexing_trait_impl(
             &builder_name,
             builder_type,
             "KeyValueLiteralBuilder",
@@ -1448,13 +1448,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
         base_type_id: TypeId,
     ) -> Option<SequenceLiteralTraitInfo> {
         // Primary: self-as-builder (impl SequenceLiteralBuilder for T)
-        if let Some((element_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
-            struct_name,
-            base_type_id,
-            "SequenceLiteralBuilder",
-            "push_literal",
-            "Element",
-        ) {
+        if let Some((element_type, self_kind, trait_name, impl_source)) = self
+            .find_indexing_trait_impl(
+                struct_name,
+                base_type_id,
+                "SequenceLiteralBuilder",
+                "push_literal",
+                "Element",
+            )
+        {
             let output_type = self
                 .find_assoc_type_in_trait_impl(
                     struct_name,
@@ -1469,6 +1471,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 output_type,
                 self_kind,
                 trait_name,
+                impl_module_source: impl_source,
             });
         }
 
@@ -1480,13 +1483,15 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "Builder",
         )?;
         let builder_name = self.struct_name_for_type(builder_type)?;
-        if let Some((element_type, self_kind, trait_name)) = self.find_indexing_trait_impl(
-            &builder_name,
-            builder_type,
-            "SequenceLiteralBuilder",
-            "push_literal",
-            "Element",
-        ) {
+        if let Some((element_type, self_kind, trait_name, impl_source)) = self
+            .find_indexing_trait_impl(
+                &builder_name,
+                builder_type,
+                "SequenceLiteralBuilder",
+                "push_literal",
+                "Element",
+            )
+        {
             let output_type = self
                 .find_assoc_type_in_trait_impl(
                     &builder_name,
@@ -1501,6 +1506,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 output_type,
                 self_kind,
                 trait_name,
+                impl_module_source: impl_source,
             });
         }
 
@@ -1522,11 +1528,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "index_assign",
             "Input",
         )
-        .map(|(input_type, self_kind, trait_name)| IndexAssignTraitInfo {
-            input_type,
-            self_kind,
-            trait_name,
-        })
+        .map(
+            |(input_type, self_kind, trait_name, _)| IndexAssignTraitInfo {
+                input_type,
+                self_kind,
+                trait_name,
+            },
+        )
     }
 
     /// Find `IndexMut` trait implementation for a type
@@ -1538,11 +1546,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
     ) -> Option<IndexMutTraitInfo> {
         // Look for impl IndexMut<...> for StructName
         self.find_indexing_trait_impl(struct_name, base_type_id, "IndexMut", "index_mut", "Output")
-            .map(|(output_type, self_kind, trait_name)| IndexMutTraitInfo {
-                output_type,
-                self_kind,
-                trait_name,
-            })
+            .map(
+                |(output_type, self_kind, trait_name, _)| IndexMutTraitInfo {
+                    output_type,
+                    self_kind,
+                    trait_name,
+                },
+            )
     }
 
     /// Find `IndexValue` trait implementation for a type
@@ -1560,11 +1570,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
             "index_value",
             "Output",
         )
-        .map(|(output_type, self_kind, trait_name)| IndexValueTraitInfo {
-            output_type,
-            self_kind,
-            trait_name,
-        })
+        .map(
+            |(output_type, self_kind, trait_name, _)| IndexValueTraitInfo {
+                output_type,
+                self_kind,
+                trait_name,
+            },
+        )
     }
 
     /// Find `Eq` trait implementation for a type
@@ -2105,7 +2117,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
         trait_base_name: &str,
         method_name: &str,
         assoc_type_name: &str,
-    ) -> Option<(TypeId, ast::SelfKind, String)> {
+    ) -> Option<(
+        TypeId,
+        ast::SelfKind,
+        String,
+        Option<crate::name::ModuleSource>,
+    )> {
         // Get concrete type arguments from the base type (for generic instances like Triple<i32>)
         let concrete_type_args: Vec<TypeId> =
             if let ResolvedType::GenericInstance { type_args, .. } =
@@ -2116,12 +2133,14 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Vec::new()
             };
         // Collect impl blocks to check — use pre-built index for O(1) lookup by type name.
+        // The Option<ModuleSource> tracks where the impl was found (None = current module).
         let mut impl_blocks_to_check: Vec<(
             Type,
             Type,
             Vec<Function>,
             Vec<crate::ast::AssociatedTypeBinding>,
             Vec<crate::ast::GenericParam>,
+            Option<crate::name::ModuleSource>,
         )> = Vec::new();
 
         if let Some(entries) = self.trait_impl_index.get(struct_name) {
@@ -2136,6 +2155,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         impl_block.methods.clone(),
                         impl_block.associated_types.clone(),
                         impl_block.type_params.clone(),
+                        Some(module_src.clone()),
                     ));
                 }
             }
@@ -2153,12 +2173,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     impl_block.methods.clone(),
                     impl_block.associated_types.clone(),
                     impl_block.type_params.clone(),
+                    None,
                 ));
             }
         }
 
         // Process collected impl blocks
-        for (impl_ty, trait_type, methods, associated_types, impl_type_params) in
+        for (impl_ty, trait_type, methods, associated_types, impl_type_params, impl_source) in
             impl_blocks_to_check
         {
             let impl_struct_name = self.get_type_name(&impl_ty);
@@ -2243,7 +2264,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.current_associated_type_bindings = old_bindings;
 
                     // trait_name is already base name (get_type_name returns name without type args)
-                    return Some((assoc_type, self_kind, trait_name));
+                    return Some((assoc_type, self_kind, trait_name, impl_source));
                 }
             }
         }

@@ -264,11 +264,6 @@ fn collect_usage_in_expr(
                 collect_usage_in_expr(&field.value, usage, in_loop, in_condition);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                collect_usage_in_expr(elem, usage, in_loop, in_condition);
-            }
-        }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 collect_usage_in_expr(elem, usage, in_loop, in_condition);
@@ -587,11 +582,6 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
                 substitute_in_expr(&mut field.value, substitutions);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } => {
-            for elem in elements {
-                substitute_in_expr(elem, substitutions);
-            }
-        }
         TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 substitute_in_expr(elem, substitutions);
@@ -788,7 +778,7 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
                 collect_copy_bindings_in_expr(&field.value, bindings);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 collect_copy_bindings_in_expr(elem, bindings);
             }
@@ -990,7 +980,7 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
                 remove_copy_bindings_in_expr(&mut field.value, dead_locals);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 remove_copy_bindings_in_expr(elem, dead_locals);
             }

@@ -29,7 +29,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut arr: Array<f64> = move [];
+    let mut arr: Array<f64> = __seq_lit: {
+        let mut __b: Array<f64> = move Array<f64> { repr: core::builtin::array_new::<f64>(0), used: 0 };
+        break __seq_lit: __b;
+    };
     arr."Array<f64>::append"(1.5);
     arr."Array<f64>::append"(2.5);
     arr."Array<f64>::append"(3.5);
@@ -41,11 +44,11 @@ export fn run() with Stdout {
                 let x: f64 = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_3: {
+                    let mut __f: Formatter = __inline_Formatter__new_5: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
-                    __inline_f64_Display__fmt_4: {
+                    __inline_f64_Display__fmt_6: {
                         let self: Box<f64> = move Box<f64> { value: x };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_f64"(self.value, f);

@@ -200,7 +200,7 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
                 changed |= fold_constants_in_expr(&mut field.value, type_table);
             }
         }
-        TirExprKind::ArrayLiteral { elements, .. } | TirExprKind::TupleLiteral { elements, .. } => {
+        TirExprKind::TupleLiteral { elements, .. } => {
             for elem in elements {
                 changed |= fold_constants_in_expr(elem, type_table);
             }

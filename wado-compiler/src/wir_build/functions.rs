@@ -435,6 +435,7 @@ fn register_single_function(
                     .collect(),
             }),
         effects,
+        comp_features: tir_func.comp_features,
     };
 
     let _func_id = ctx.register_function(wir_func);

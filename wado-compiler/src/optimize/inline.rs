@@ -31,9 +31,7 @@ fn count_expr(expr: &TirExpr) -> usize {
         }
         TirExprKind::FieldAccess { expr, .. } => count_expr(expr),
         TirExprKind::Index { expr, index, .. } => count_expr(expr) + count_expr(index),
-        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
-            elements.iter().map(count_expr).sum()
-        }
+        TirExprKind::TupleLiteral { elements } => elements.iter().map(count_expr).sum(),
         TirExprKind::StructLiteral { fields, .. } => {
             fields.iter().map(|f| count_expr(&f.value)).sum()
         }
@@ -340,7 +338,7 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::StructLiteral { fields, .. } => fields
             .iter()
             .any(|f| expr_has_complex_generic_types(&f.value, type_table)),
-        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => elements
+        TirExprKind::TupleLiteral { elements } => elements
             .iter()
             .any(|e| expr_has_complex_generic_types(e, type_table)),
         TirExprKind::If {
@@ -566,7 +564,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
                 collect_callees_from_expr(&field.value, callees);
             }
         }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 collect_callees_from_expr(elem, callees);
             }
@@ -2359,12 +2357,6 @@ fn remap_expr(
                 })
                 .collect(),
         },
-        TirExprKind::ArrayLiteral { elements } => TirExprKind::ArrayLiteral {
-            elements: elements
-                .iter()
-                .map(|e| remap_expr(e, param_to_local, local_offset, param_count, source_module))
-                .collect(),
-        },
         TirExprKind::TupleLiteral { elements } => TirExprKind::TupleLiteral {
             elements: elements
                 .iter()
@@ -3043,7 +3035,7 @@ fn inline_calls_in_expr(
                 );
             }
         }
-        TirExprKind::ArrayLiteral { elements } | TirExprKind::TupleLiteral { elements } => {
+        TirExprKind::TupleLiteral { elements } => {
             for elem in elements {
                 inline_calls_in_expr(
                     elem,

@@ -29,8 +29,40 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let outer: Array<i32> = move [1, 2, 3];
-    let inner: Array<i32> = move [10, 20];
+    let outer: Array<i32> = __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(1);
+        };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(2);
+        };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(3);
+        };
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_5: {
+            let self: Array<i32> = __b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_5: self;
+        };
+    };
+    let inner: Array<i32> = __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(2), used: 0 };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_7: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(10);
+        };
+        __inline_Array_i32__SequenceLiteralBuilder__push_literal_8: {
+            let self: &mut Array<i32> = &mut __b;
+            self."Array<i32>::append"(20);
+        };
+        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_9: {
+            let self: Array<i32> = __b;
+            break __inline_Array_i32__SequenceLiteralBuilder__build_9: self;
+        };
+    };
     __for_of_0: {
         let mut __iter_0: ArrayIter<i32> = move ArrayIter<i32> { repr: outer.repr, used: outer.used, index: 0 };
         let _licm_repr: builtin::array<i32> = inner.repr;
@@ -47,21 +79,21 @@ export fn run() with Stdout {
                             let j: i32 = __variant_payload(__pattern_temp_1, case=0);
                             core::cli::println(__tmpl: {
                                 let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
-                                let mut __f: Formatter = __inline_Formatter__new_4: {
+                                let mut __f: Formatter = __inline_Formatter__new_13: {
                                     let buf: &mut String = &mut __r;
-                                    break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                                    break __inline_Formatter__new_13: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                                 };
-                                __inline_i32_Display__fmt_5: {
+                                __inline_i32_Display__fmt_14: {
                                     let self: Box<i32> = move Box<i32> { value: i };
                                     let f: &mut Formatter = &mut __f;
                                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                                 };
                                 __r.String::append(move ",");
-                                __f = __inline_Formatter__new_6: {
+                                __f = __inline_Formatter__new_15: {
                                     let buf: &mut String = &mut __r;
-                                    break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                                    break __inline_Formatter__new_15: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                                 };
-                                __inline_i32_Display__fmt_7: {
+                                __inline_i32_Display__fmt_16: {
                                     let self: Box<i32> = move Box<i32> { value: j };
                                     let f: &mut Formatter = &mut __f;
                                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -92,5 +124,21 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
+}
+
+pub fn "Array<i32>::append"(self: &mut Array<i32>, value: i32) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<i32> = core::builtin::array_new::<i32>(new_capacity);
+        core::builtin::array_copy::<i32>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<i32>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

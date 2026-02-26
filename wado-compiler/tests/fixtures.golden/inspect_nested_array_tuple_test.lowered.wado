@@ -23,12 +23,28 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let arr: Array<[i32, String]> = move [[1, "one"], [2, "two"]];
+    let arr: Array<[i32, String]> = __seq_lit: {
+        let mut __b: Array<[i32, String]> = move Array<Tuple<i32,String>> { repr: core::builtin::array_new::<[i32, String]>(2), used: 0 };
+        __inline_Array_Tuple_i32_String___SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<[i32, String]> = &mut __b;
+            let value: [i32, String] = move [1, "one"];
+            self."Array<Tuple<i32,String>>::append"(value);
+        };
+        __inline_Array_Tuple_i32_String___SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<[i32, String]> = &mut __b;
+            let value: [i32, String] = move [2, "two"];
+            self."Array<Tuple<i32,String>>::append"(value);
+        };
+        break __seq_lit: __inline_Array_Tuple_i32_String___SequenceLiteralBuilder__build_4: {
+            let self: Array<[i32, String]> = __b;
+            break __inline_Array_Tuple_i32_String___SequenceLiteralBuilder__build_4: self;
+        };
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_2: {
+        let mut __f: Formatter = __inline_Formatter__new_6: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         "__inspect$Array<[i32, String]>"(arr, &mut __f);
         break __tmpl: __r;
@@ -95,5 +111,21 @@ fn "__inspect$[i32, String]"(__val: [i32, String], __fmt: &mut Formatter) {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
+}
+
+pub fn "Array<Tuple<i32,String>>::append"(self: &mut Array<[i32, String]>, value: [i32, String]) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<[i32, String]> = core::builtin::array_new::<[i32, String]>(new_capacity);
+        core::builtin::array_copy::<[i32, String]>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<[i32, String]>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

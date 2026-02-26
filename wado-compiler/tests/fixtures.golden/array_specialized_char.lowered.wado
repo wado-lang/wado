@@ -29,7 +29,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut arr: Array<char> = move [];
+    let mut arr: Array<char> = __seq_lit: {
+        let mut __b: Array<char> = move Array<char> { repr: core::builtin::array_new::<char>(0), used: 0 };
+        break __seq_lit: __b;
+    };
     arr."Array<char>::append"('A');
     arr."Array<char>::append"('B');
     arr."Array<char>::append"('C');
@@ -41,9 +44,9 @@ export fn run() with Stdout {
                 let x: char = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
                     let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-                    let mut __f: Formatter = __inline_Formatter__new_3: {
+                    let mut __f: Formatter = __inline_Formatter__new_5: {
                         let buf: &mut String = &mut __r;
-                        break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                        break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     Box<char> { value: x }."char^Display::fmt"(&mut __f);
                     break __tmpl: __r;

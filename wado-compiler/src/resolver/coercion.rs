@@ -369,25 +369,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
-        // Tuple literal → Array<T>
-        let element_type_opt = self.type_table.borrow().as_array(target_type);
-        if let Expr::TupleLiteral(tuple_lit) = expr
-            && let Some(element_type) = element_type_opt
-        {
-            let elements: Vec<TirExpr> = tuple_lit
-                .elements
-                .iter()
-                .map(|elem| self.resolve_expr(elem, ctx, Some(element_type)))
-                .collect();
-
-            return Some(TirExpr::new(
-                TirExprKind::ArrayLiteral { elements },
-                target_type,
-                expr.span(),
-            ));
-        }
-
-        // Tuple literal → user type implementing SequenceLiteralBuilder
+        // Tuple literal → type implementing SequenceLiteralBuilder (Array<T> and user types)
         if let Some(coerced) = self.try_coerce_tuple_to_sequence(expr, ctx, target_type) {
             return Some(coerced);
         }
@@ -445,6 +427,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let trait_name = from_literal_info.trait_name.clone();
         let builder_type = from_literal_info.builder_type;
         let use_new_api = trait_name == "KeyValueLiteralBuilder";
+        let impl_module_source = self.current_module_source.clone();
 
         let span = expr.span();
         let string_type = self
@@ -514,7 +497,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let new_call = TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source: self.current_module_source.clone(),
+                    module_source: impl_module_source.clone(),
                     name: new_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
                         None
@@ -691,8 +674,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// Try to coerce a tuple/sequence literal `[e0, e1, ...]` to a user-defined type
     /// implementing `SequenceLiteralBuilder`.
     ///
-    /// This is NOT used for built-in `Array<T>` (which uses the hardcoded `ArrayLiteral`
-    /// path in `try_coerce`); it handles user types like custom vectors or `JSONValue`.
+    /// Coerce a tuple/sequence literal `[e0, e1, ...]` to a type implementing
+    /// `SequenceLiteralBuilder` (including built-in `Array<T>` and user types).
     pub(super) fn try_coerce_tuple_to_sequence(
         &mut self,
         expr: &Expr,
@@ -703,11 +686,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
             return None;
         };
 
-        // Don't interfere with the built-in Array<T> path
-        if self.type_table.borrow().as_array(target_type).is_some() {
-            return None;
-        }
-
         let base_name = self.struct_name_for_type(target_type)?;
         let seq_info = self.find_sequence_literal_trait_impl(&base_name, target_type)?;
         let element_type = seq_info.element_type;
@@ -715,6 +693,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let trait_name = seq_info.trait_name.clone();
         let builder_type = seq_info.builder_type;
         let output_type = seq_info.output_type;
+        let impl_module_source = seq_info
+            .impl_module_source
+            .unwrap_or_else(|| self.current_module_source.clone());
         let builder_base_name = self
             .struct_name_for_type(builder_type)
             .unwrap_or_else(|| base_name.clone());
@@ -757,7 +738,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let new_call = TirExpr::new(
             TirExprKind::StaticCall {
                 func: FunctionRef::External {
-                    module_source: self.current_module_source.clone(),
+                    module_source: impl_module_source.clone(),
                     name: new_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
                         None
@@ -797,15 +778,35 @@ impl<H: CompilerHost> Resolver<'_, H> {
 
         // --- For each element: __b.push_literal(elem) ---
         let push_mangled_name =
-            MethodName::format_local(&builder_base_name, Some(&trait_name), "push_literal");
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "push_literal");
         let push_method_info = LocalMethodName::new(
             builder_base_name.clone(),
             Some(trait_name.clone()),
             "push_literal".to_string(),
-        );
+        )
+        .with_struct_type_args(&type_arg_names);
 
         for element in &tuple_lit.elements {
             let elem_expr = self.resolve_expr(element, ctx, Some(element_type));
+            // Verify element type is compatible with the expected element type.
+            // Catches heterogeneous literals like `[1, "hello"] as Array<i32>`.
+            if elem_expr.type_id != element_type
+                && elem_expr.type_id != TypeTable::UNKNOWN
+                && element_type != TypeTable::UNKNOWN
+                && !self.type_table.borrow().contains_type_param(element_type)
+            {
+                let _ = self.logger.error(TypeError::TypeMismatch {
+                    expected: format!(
+                        "homogeneous elements of type '{}'",
+                        self.type_table.borrow().type_name(element_type)
+                    ),
+                    found: format!(
+                        "heterogeneous element of type '{}'",
+                        self.type_table.borrow().type_name(elem_expr.type_id)
+                    ),
+                    span: element.span(),
+                });
+            }
             let builder_local = TirExpr::new(
                 TirExprKind::Local {
                     index: builder_index,
@@ -819,9 +820,16 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 TirExprKind::MethodCall {
                     receiver: Box::new(receiver),
                     func: FunctionRef::External {
-                        module_source: self.current_module_source.clone(),
+                        module_source: impl_module_source.clone(),
                         name: push_mangled_name.clone(),
-                        monomorph_info: None,
+                        monomorph_info: if type_arg_ids.is_empty() {
+                            None
+                        } else {
+                            Some(MonomorphInfo {
+                                generic_name: format!("{builder_base_name}::push_literal"),
+                                type_args: type_arg_ids.clone(),
+                            })
+                        },
                         method_info: Some(push_method_info.clone()),
                     },
                     type_args: vec![],
@@ -843,17 +851,18 @@ impl<H: CompilerHost> Resolver<'_, H> {
             span,
         );
         let build_mangled_name =
-            MethodName::format_local(&builder_base_name, Some(&trait_name), "build");
+            MethodName::format_local(&mangled_builder_name, Some(&trait_name), "build");
         let build_method_info = LocalMethodName::new(
             builder_base_name.clone(),
             Some(trait_name.clone()),
             "build".to_string(),
-        );
+        )
+        .with_struct_type_args(&type_arg_names);
         let build_call = TirExpr::new(
             TirExprKind::MethodCall {
                 receiver: Box::new(builder_local_final),
                 func: FunctionRef::External {
-                    module_source: self.current_module_source.clone(),
+                    module_source: impl_module_source.clone(),
                     name: build_mangled_name,
                     monomorph_info: if type_arg_ids.is_empty() {
                         None

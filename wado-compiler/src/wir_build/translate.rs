@@ -206,6 +206,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 meta: crate::wir::WirMeta::default(),
                 generic_origin: None,
                 effects: Vec::new(),
+                comp_features: 0,
             };
 
             let func_id = ctx.register_function(func);
@@ -395,7 +396,6 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::Move { .. }
                 | TirExprKind::StructLiteral { .. }
                 | TirExprKind::TupleLiteral { .. }
-                | TirExprKind::ArrayLiteral { .. }
                 | TirExprKind::VariantConstruct { .. }
                 | TirExprKind::EnumConstruct { .. }
                 | TirExprKind::OptionSome { .. }
@@ -1334,11 +1334,6 @@ impl FunctionTranslator<'_, '_> {
                 expr: array_expr,
                 index: index_expr,
             } => self.translate_index(array_expr, index_expr),
-
-            // === Array Literal ===
-            TirExprKind::ArrayLiteral { elements } => {
-                self.translate_array_literal(elements, expr.type_id)
-            }
 
             // === Tuple Literal ===
             TirExprKind::TupleLiteral { elements } => {
@@ -3481,50 +3476,6 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Translate array literal: `[1, 2, 3]`
-    fn translate_array_literal(&mut self, elements: &[TirExpr], result_type: TypeId) -> WirInstr {
-        if let Some(element_type_id) = self.type_table.as_array(result_type) {
-            // Get the raw GC array type
-            let elem_name = self.type_table.mangle_type_name(element_type_id);
-            let raw_array_type = self
-                .ctx
-                .array_type_by_name
-                .get(&elem_name)
-                .or_else(|| self.ctx.array_type_map.get(&element_type_id))
-                .cloned();
-
-            // Get the Array<T> struct type
-            let array_struct_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
-
-            if let (
-                Some(raw_type),
-                WirType::Ref {
-                    type_id: struct_type,
-                    ..
-                },
-            ) = (raw_array_type, array_struct_wir)
-            {
-                let elem_instrs: Vec<WirInstr> =
-                    elements.iter().map(|e| self.translate_expr(e)).collect();
-                let len = i32::try_from(elements.len()).unwrap_or(0);
-
-                self.struct_new(
-                    struct_type,
-                    vec![
-                        WirInstr::ArrayNewFixed {
-                            type_id: raw_type,
-                            elements: elem_instrs,
-                        },
-                        WirInstr::I32Const(len),
-                    ],
-                )
-            } else {
-                WirInstr::Unreachable
-            }
-        } else {
-            WirInstr::Unreachable
-        }
-    }
-
     /// Translate map literal: `{ a: 1, b: 2 }` coerced to `TreeMap<String, V>`.
     ///
     /// Generates WIR equivalent to:

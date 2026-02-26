@@ -23,34 +23,52 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let a: Array<f64> = move [1.5, 2.5, 3.5];
+    let a: Array<f64> = __seq_lit: {
+        let mut __b: Array<f64> = move Array<f64> { repr: core::builtin::array_new::<f64>(3), used: 0 };
+        __inline_Array_f64__SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<f64> = &mut __b;
+            self."Array<f64>::append"(1.5);
+        };
+        __inline_Array_f64__SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<f64> = &mut __b;
+            self."Array<f64>::append"(2.5);
+        };
+        __inline_Array_f64__SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<f64> = &mut __b;
+            self."Array<f64>::append"(3.5);
+        };
+        break __seq_lit: __inline_Array_f64__SequenceLiteralBuilder__build_5: {
+            let self: Array<f64> = __b;
+            break __inline_Array_f64__SequenceLiteralBuilder__build_5: self;
+        };
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(52), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_2: {
+        let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_f64_Display__fmt_3: {
+        __inline_f64_Display__fmt_8: {
             let self: Box<f64> = move Box<f64> { value: a."Array<f64>^IndexValue::index_value"(0) };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_f64"(self.value, f);
         };
         __r.String::append(move ", ");
-        __f = __inline_Formatter__new_4: {
+        __f = __inline_Formatter__new_9: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_f64_Display__fmt_5: {
+        __inline_f64_Display__fmt_10: {
             let self: Box<f64> = move Box<f64> { value: a."Array<f64>^IndexValue::index_value"(1) };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_f64"(self.value, f);
         };
         __r.String::append(move ", ");
-        __f = __inline_Formatter__new_6: {
+        __f = __inline_Formatter__new_11: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
-        __inline_f64_Display__fmt_7: {
+        __inline_f64_Display__fmt_12: {
             let self: Box<f64> = move Box<f64> { value: a."Array<f64>^IndexValue::index_value"(2) };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_f64"(self.value, f);
@@ -69,5 +87,21 @@ fn "Array<f64>^IndexValue::index_value"(self: &Array<f64>, index: i32) -> f64 {
         core::internal::panic(move "index out of bounds");
     }
     return core::builtin::array_get::<f64>(self.repr, index);
+}
+
+pub fn "Array<f64>::append"(self: &mut Array<f64>, value: f64) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<f64> = core::builtin::array_new::<f64>(new_capacity);
+        core::builtin::array_copy::<f64>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<f64>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

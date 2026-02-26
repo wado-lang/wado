@@ -349,6 +349,21 @@ pub fn "Array<TreeMapEntry<String,String>>::len"(self: &Array<TreeMapEntry<Strin
 }
 
 pub fn "TreeMap<String,String>::new"() -> TreeMap<String,String> {
-    return TreeMap<String,String> { root: null, entries: [], size: 0, deleted_count: 0 };
+    return TreeMap<String,String> { root: null, entries: __seq_lit: {
+        let mut __b: Array<TreeMapEntry<String,String>> = move "Array<TreeMapEntry<String,String>>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<TreeMapEntry<String,String>>^SequenceLiteralBuilder::build"();
+    }, size: 0, deleted_count: 0 };
+}
+
+fn "Array<TreeMapEntry<String,String>>^SequenceLiteralBuilder::build"(self: Array<TreeMapEntry<String,String>>) -> Array<TreeMapEntry<String,String>> {
+    return self;
+}
+
+fn "Array<TreeMapEntry<String,String>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<TreeMapEntry<String,String>> {
+    return "Array<TreeMapEntry<String,String>>::with_capacity"(capacity);
+}
+
+pub fn "Array<TreeMapEntry<String,String>>::with_capacity"(capacity: i32) -> Array<TreeMapEntry<String,String>> {
+    return Array<TreeMapEntry<String,String>> { repr: core::builtin::array_new::<TreeMapEntry<String,String>>(capacity), used: 0 };
 }
 

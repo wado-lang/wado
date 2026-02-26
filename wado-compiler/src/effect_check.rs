@@ -290,11 +290,6 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(elem)?;
                 }
             }
-            TirExprKind::ArrayLiteral { elements } => {
-                for elem in elements {
-                    self.check_expr(elem)?;
-                }
-            }
             TirExprKind::Closure { body, .. } => {
                 // Closures inherit effects from enclosing function, so we continue checking
                 self.check_expr(body)?;

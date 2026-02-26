@@ -266,9 +266,18 @@ fn "TreeMap<String,i32>::compact"(self: &mut TreeMap<String,i32>) {
 }
 
 fn "BTreeNode<String,i32>::compact"(self: &mut BTreeNode<String,i32>) {
-    let new_keys: Array<String> = move [];
-    let new_values: Array<i32> = move [];
-    let new_deleted: Array<bool> = move [];
+    let new_keys: Array<String> = __seq_lit: {
+        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
+        break __seq_lit: __b;
+    };
+    let new_values: Array<i32> = __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
+        break __seq_lit: __b;
+    };
+    let new_deleted: Array<bool> = __seq_lit: {
+        let mut __b: Array<bool> = move Array<bool> { repr: core::builtin::array_new::<bool>(0), used: 0 };
+        break __seq_lit: __b;
+    };
     __for_1: {
         let mut i: i32 = 0;
         let _licm_keys: Array<String> = self.keys;
@@ -387,7 +396,10 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
 }
 
 fn "TreeMap<String,i32>::iter"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
-    let mut result: Array<[String, i32]> = move [];
+    let mut result: Array<[String, i32]> = __seq_lit: {
+        let mut __b: Array<[String, i32]> = move Array<Tuple<String,i32>> { repr: core::builtin::array_new::<[String, i32]>(0), used: 0 };
+        break __seq_lit: __b;
+    };
     let __pattern_temp_0: Option<&mut BTreeNode<String,i32>> = self.root;
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
         let root: &mut BTreeNode<String,i32> = __variant_payload(__pattern_temp_0, case=0);
@@ -713,7 +725,31 @@ pub fn "Array<BTreeNode<String,i32>>::append"(self: &mut Array<&mut BTreeNode<St
 }
 
 fn "BTreeNode<String,i32>::new_internal"() -> BTreeNode<String,i32> {
-    return BTreeNode<String,i32> { keys: [], values: [], deleted: [], children: [], is_leaf: false };
+    return BTreeNode<String,i32> { keys: __seq_lit: {
+        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
+        break __seq_lit: __b;
+    }, values: __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
+        break __seq_lit: __b;
+    }, deleted: __seq_lit: {
+        let mut __b: Array<bool> = move Array<bool> { repr: core::builtin::array_new::<bool>(0), used: 0 };
+        break __seq_lit: __b;
+    }, children: __seq_lit: {
+        let mut __b: Array<&mut BTreeNode<String,i32>> = move "Array<BTreeNode<String,i32>>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<BTreeNode<String,i32>>^SequenceLiteralBuilder::build"();
+    }, is_leaf: false };
+}
+
+fn "Array<BTreeNode<String,i32>>^SequenceLiteralBuilder::build"(self: Array<&mut BTreeNode<String,i32>>) -> Array<&mut BTreeNode<String,i32>> {
+    return self;
+}
+
+fn "Array<BTreeNode<String,i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<&mut BTreeNode<String,i32>> {
+    return "Array<BTreeNode<String,i32>>::with_capacity"(capacity);
+}
+
+pub fn "Array<BTreeNode<String,i32>>::with_capacity"(capacity: i32) -> Array<&mut BTreeNode<String,i32>> {
+    return Array<BTreeNode<String,i32>> { repr: core::builtin::array_new::<&mut BTreeNode<String,i32>>(capacity), used: 0 };
 }
 
 fn "BTreeNode<String,i32>::is_full"(self: &BTreeNode<String,i32>, max_keys: i32) -> bool {
@@ -739,7 +775,19 @@ fn "BTreeNode<String,i32>::is_full"(self: &BTreeNode<String,i32>, max_keys: i32)
 }
 
 fn "BTreeNode<String,i32>::new_leaf"() -> BTreeNode<String,i32> {
-    return BTreeNode<String,i32> { keys: [], values: [], deleted: [], children: [], is_leaf: true };
+    return BTreeNode<String,i32> { keys: __seq_lit: {
+        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
+        break __seq_lit: __b;
+    }, values: __seq_lit: {
+        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(0), used: 0 };
+        break __seq_lit: __b;
+    }, deleted: __seq_lit: {
+        let mut __b: Array<bool> = move Array<bool> { repr: core::builtin::array_new::<bool>(0), used: 0 };
+        break __seq_lit: __b;
+    }, children: __seq_lit: {
+        let mut __b: Array<&mut BTreeNode<String,i32>> = move "Array<BTreeNode<String,i32>>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<BTreeNode<String,i32>>^SequenceLiteralBuilder::build"();
+    }, is_leaf: true };
 }
 
 fn "TreeMap<String,i32>::new"(t: i32) -> TreeMap<String,i32> {

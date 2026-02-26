@@ -98,6 +98,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             module_source: self.current_module_source.clone(),
             span: global_decl.span,
             is_nullable: false, // Set by lower phase for lazy-init reference types
+            local_types: ctx.local_types.clone(),
         })
     }
 
@@ -170,6 +171,21 @@ impl<H: CompilerHost> Resolver<'_, H> {
             None => crate::tir::InlineHint::Hint,
             _ => crate::tir::InlineHint::Auto,
         }
+    }
+
+    /// Extract compiler feature bitflags from `#[comp_feature("...")]` attributes.
+    pub(super) fn extract_comp_features(attrs: &[crate::ast::Attribute]) -> u32 {
+        let mut features = 0u32;
+        for attr in attrs {
+            if attr.name == "comp_feature" {
+                for arg in &attr.args {
+                    if arg.as_str() == "array_append" {
+                        features |= crate::wir::COMP_FEATURE_ARRAY_APPEND;
+                    }
+                }
+            }
+        }
+        features
     }
 
     /// Resolve a function
@@ -283,6 +299,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             // Scratch local fields - computed by lower phase
             is_cm_adapter: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
+            comp_features: Self::extract_comp_features(&func.attrs),
         })
     }
 
@@ -344,6 +361,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             address_taken_locals: ctx.address_taken_locals,
             is_cm_adapter: false,
             inline_hint: crate::tir::InlineHint::Auto,
+            comp_features: 0,
         };
 
         let tir_test = TirTest {
@@ -537,6 +555,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
             address_taken_locals: ctx.address_taken_locals,
             is_cm_adapter: false,
             inline_hint: Self::extract_inline_hint(&func.attrs),
+            comp_features: Self::extract_comp_features(&func.attrs),
         })
     }
 }

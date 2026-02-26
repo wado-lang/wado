@@ -27,7 +27,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut dict: MiniDict<String,String> = move MiniDict<String,String> { entries: [] };
+    let mut dict: MiniDict<String,String> = move MiniDict<String,String> { entries: __seq_lit: {
+        let mut __b: Array<[String, String]> = move Array<Tuple<String,String>> { repr: core::builtin::array_new::<[String, String]>(0), used: 0 };
+        break __seq_lit: __b;
+    } };
     dict."MiniDict<String,String>::set"(move "name", move "Wado");
     dict."MiniDict<String,String>::set"(move "type", move "language");
     dict."MiniDict<String,String>::set"(move "target", move "WebAssembly");
@@ -106,9 +109,9 @@ export fn run() with Stdout {
             break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_13: {
-            let self: Box<i32> = move Box<i32> { value: __inline_Array_Tuple_String_String____len_0: {
+            let self: Box<i32> = move Box<i32> { value: __inline_Array_Tuple_String_String____len_2: {
                 let self: &Array<[String, String]> = &dict.entries;
-                break __inline_Array_Tuple_String_String____len_0: self.used;
+                break __inline_Array_Tuple_String_String____len_2: self.used;
             } };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);

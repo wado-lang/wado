@@ -116,7 +116,10 @@ fn __test_1_array_of_boxes() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut arr: Array<Box<i32>> = move [];
+    let mut arr: Array<Box<i32>> = __seq_lit: {
+        let mut __b: Array<Box<i32>> = move "Array<Box<i32>>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<Box<i32>>^SequenceLiteralBuilder::build"();
+    };
     arr."Array<Box<i32>>::append"(move Box<i32> { value: 10 });
     arr."Array<Box<i32>>::append"(move Box<i32> { value: 20 });
     __assert_2: {
@@ -259,6 +262,18 @@ pub fn "Array<Box<i32>>::append"(self: &mut Array<Box<i32>>, value: Box<i32>) {
     self.used = (used + 1);
 }
 
+fn "Array<Box<i32>>^SequenceLiteralBuilder::build"(self: Array<Box<i32>>) -> Array<Box<i32>> {
+    return self;
+}
+
+fn "Array<Box<i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<Box<i32>> {
+    return "Array<Box<i32>>::with_capacity"(capacity);
+}
+
+pub fn "Array<Box<i32>>::with_capacity"(capacity: i32) -> Array<Box<i32>> {
+    return Array<Box<i32>> { repr: core::builtin::array_new::<Box<i32>>(capacity), used: 0 };
+}
+
 fn "Array<Box<i32>>^IndexValue::index_value"(self: &Array<Box<i32>>, index: i32) -> Box<i32> {
     if (index >= self.used) {
         core::internal::panic(move "index out of bounds");
@@ -272,6 +287,9 @@ fn "Container<Box<i32>>::add"(self: &mut Container<Box<i32>>, item: Box<i32>) {
 }
 
 fn "Container<Box<i32>>::new"() -> Container<Box<i32>> {
-    return Container<Box<i32>> { items: [], size: 0 };
+    return Container<Box<i32>> { items: __seq_lit: {
+        let mut __b: Array<Box<i32>> = move "Array<Box<i32>>^SequenceLiteralBuilder::new_literal"(0);
+        break __seq_lit: __b."Array<Box<i32>>^SequenceLiteralBuilder::build"();
+    }, size: 0 };
 }
 

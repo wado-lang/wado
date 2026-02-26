@@ -514,6 +514,9 @@ pub enum WirAbstractHeapType {
     Extern,
 }
 
+/// Compiler feature flag: function implements `Array<T>::append`.
+pub const COMP_FEATURE_ARRAY_APPEND: u32 = 1 << 0;
+
 /// A function declaration with optional body.
 #[derive(Debug)]
 pub struct WirFunction {
@@ -531,6 +534,9 @@ pub struct WirFunction {
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
     pub effects: Vec<String>,
+    /// Compiler feature bitflags (e.g., `COMP_FEATURE_ARRAY_APPEND`).
+    /// Set via `#[comp_feature("array_append")]` attribute in Wado source.
+    pub comp_features: u32,
 }
 
 /// WIR instructions are tree-structured where operands are child nodes,

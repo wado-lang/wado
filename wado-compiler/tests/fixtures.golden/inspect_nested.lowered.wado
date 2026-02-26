@@ -43,12 +43,28 @@ export fn run() with Stdout {
         "__inspect$Line"(line, &mut __f);
         break __tmpl: __r;
     });
-    let points: Array<Point> = move [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let points: Array<Point> = __seq_lit: {
+        let mut __b: Array<Point> = move Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<Point> = &mut __b;
+            let value: Point = move Point { x: 1, y: 2 };
+            self."Array<Point>::append"(value);
+        };
+        __inline_Array_Point__SequenceLiteralBuilder__push_literal_5: {
+            let self: &mut Array<Point> = &mut __b;
+            let value: Point = move Point { x: 3, y: 4 };
+            self."Array<Point>::append"(value);
+        };
+        break __seq_lit: __inline_Array_Point__SequenceLiteralBuilder__build_6: {
+            let self: Array<Point> = __b;
+            break __inline_Array_Point__SequenceLiteralBuilder__build_6: self;
+        };
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_4: {
+        let mut __f: Formatter = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         "__inspect$Array<Point>"(points, &mut __f);
         break __tmpl: __r;
@@ -56,9 +72,9 @@ export fn run() with Stdout {
     let opt_p: Option<Point> = move Option::Some(Point { x: 10, y: 20 });
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_6: {
+        let mut __f: Formatter = __inline_Formatter__new_10: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         "__inspect$Option<Point>"(opt_p, &mut __f);
         break __tmpl: __r;
@@ -66,9 +82,9 @@ export fn run() with Stdout {
     let none_p: Option<Point> = move null;
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
-        let mut __f: Formatter = __inline_Formatter__new_8: {
+        let mut __f: Formatter = __inline_Formatter__new_12: {
             let buf: &mut String = &mut __r;
-            break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+            break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         "__inspect$Option<Point>"(none_p, &mut __f);
         break __tmpl: __r;
@@ -185,5 +201,21 @@ fn "__inspect$Point"(__val: Point, __fmt: &mut Formatter) {
 export fn __cm_export__run() {
     run();
     cm_raw_call task-return(0);
+}
+
+pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<Point> = core::builtin::array_new::<Point>(new_capacity);
+        core::builtin::array_copy::<Point>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<Point>(self.repr, used, value);
+    self.used = (used + 1);
 }
 

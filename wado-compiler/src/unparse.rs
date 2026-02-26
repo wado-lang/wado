@@ -3451,16 +3451,6 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push_str(" }");
             }
-            TirExprKind::ArrayLiteral { elements } => {
-                self.output.push('[');
-                for (i, elem) in elements.iter().enumerate() {
-                    if i > 0 {
-                        self.output.push_str(", ");
-                    }
-                    self.unparse_expr(elem);
-                }
-                self.output.push(']');
-            }
             TirExprKind::TupleLiteral { elements } => {
                 self.output.push('[');
                 for (i, elem) in elements.iter().enumerate() {

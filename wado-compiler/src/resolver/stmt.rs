@@ -92,37 +92,9 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let (value, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let target_type = self.resolve_type(annotated_type);
 
-            // Special case: tuple literal with Array<T> or Tuple type annotation
+            // Special case: tuple literal with Tuple type annotation
             if let ast::Expr::TupleLiteral(tuple_lit) = &let_stmt.value {
-                // let a: Array<i32> = [1, 2, 3]
-                let element_type_opt = self.type_table.borrow().as_array(target_type);
-                if let Some(element_type) = element_type_opt {
-                    let elements: Vec<TirExpr> = tuple_lit
-                        .elements
-                        .iter()
-                        .map(|elem| {
-                            let resolved = self.resolve_expr(elem, ctx, Some(element_type));
-                            if resolved.type_id != element_type
-                                && resolved.type_id != TypeTable::UNKNOWN
-                                && resolved.type_id != TypeTable::NEVER
-                            {
-                                let _ = self.logger.error(TypeError::TypeMismatch {
-                                    expected: self.type_table.borrow().type_name(element_type),
-                                    found: self.type_table.borrow().type_name(resolved.type_id),
-                                    span: elem.span(),
-                                });
-                            }
-                            resolved
-                        })
-                        .collect();
-
-                    let value = TirExpr::new(
-                        TirExprKind::ArrayLiteral { elements },
-                        target_type,
-                        let_stmt.value.span(),
-                    );
-                    (value, target_type)
-                } else {
+                {
                     let target_resolved = self.type_table.borrow().get(target_type).clone();
                     if let ResolvedType::Tuple(expected_elem_types) = target_resolved {
                         // let t: [i32, String] = [1, "hello"] - check element types

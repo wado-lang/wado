@@ -23,7 +23,13 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let arr: Array<Option<i32>> = move [Option::Some(1), null, Option::Some(3)];
+    let arr: Array<Option<i32>> = __seq_lit: {
+        let mut __b: Array<Option<i32>> = move "Array<Option<i32>>^SequenceLiteralBuilder::new_literal"(3);
+        __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(Option::Some(1));
+        __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(move null);
+        __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(Option::Some(3));
+        break __seq_lit: __b."Array<Option<i32>>^SequenceLiteralBuilder::build"();
+    };
     core::cli::println(__tmpl: {
         let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_2: {
@@ -90,5 +96,37 @@ export fn __cm_export__run() {
 
 pub fn "Array<Option<i32>>::len"(self: &Array<Option<i32>>) -> i32 {
     return self.used;
+}
+
+fn "Array<Option<i32>>^SequenceLiteralBuilder::build"(self: Array<Option<i32>>) -> Array<Option<i32>> {
+    return self;
+}
+
+fn "Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Option<i32>>, value: Option<i32>) {
+    self."Array<Option<i32>>::append"(value);
+}
+
+pub fn "Array<Option<i32>>::append"(self: &mut Array<Option<i32>>, value: Option<i32>) {
+    let used: i32 = self.used;
+    let capacity: i32 = core::builtin::array_len(self.repr);
+    if core::builtin::unlikely((used >= capacity)) {
+        let new_capacity: i32 = __inline_i32_max_0: {
+            let a: i32 = (capacity * 2);
+            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+        };
+        let new_repr: builtin::array<Option<i32>> = core::builtin::array_new::<Option<i32>>(new_capacity);
+        core::builtin::array_copy::<Option<i32>>(new_repr, 0, self.repr, 0, used);
+        self.repr = new_repr;
+    }
+    core::builtin::array_set::<Option<i32>>(self.repr, used, value);
+    self.used = (used + 1);
+}
+
+fn "Array<Option<i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<Option<i32>> {
+    return "Array<Option<i32>>::with_capacity"(capacity);
+}
+
+pub fn "Array<Option<i32>>::with_capacity"(capacity: i32) -> Array<Option<i32>> {
+    return Array<Option<i32>> { repr: core::builtin::array_new::<Option<i32>>(capacity), used: 0 };
 }
 
