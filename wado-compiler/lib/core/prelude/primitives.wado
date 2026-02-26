@@ -11,8 +11,13 @@ use {
     short, short32, fixed_width, digits,
     format_decimal, format_exp,
     format_decimal_prec, format_exp_prec,
+<<<<<<< HEAD
     write_decimal, write_exp,
     write_decimal_prec, write_exp_prec,
+||||||| 357b223
+=======
+    parse_text,
+>>>>>>> origin/main
 } from "core:prelude/fpfmt.wado";
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
@@ -707,6 +712,7 @@ impl f32 {
     pub const FRAC_PI_4: f32 = 0.78539816339744830962;
     pub const INFINITY: f32 = 1.0 / 0.0;
     pub const NEG_INFINITY: f32 = -1.0 / 0.0;
+    pub const NAN: f32 = 0.0 / 0.0;
 
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(16);
@@ -817,6 +823,16 @@ impl f32 {
 
     /// Floating-point remainder of x/y
     pub fn fmod(x: f32, y: f32) -> f32 { return builtin::f32_fmod(x, y); }
+
+    pub fn is_nan(&self) -> bool { return *self != *self; }
+    pub fn is_finite(&self) -> bool { return *self - *self == 0.0 as f32; }
+
+    pub fn parse(s: String) -> Option<f32> {
+        if let Some(v) = parse_text(s) {
+            return Option::<f32>::Some(v as f32);
+        }
+        return null;
+    }
 }
 
 impl f64 {
@@ -834,6 +850,7 @@ impl f64 {
     pub const FRAC_PI_4: f64 = 0.78539816339744830962;
     pub const INFINITY: f64 = 1.0 / 0.0;
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
+    pub const NAN: f64 = 0.0 / 0.0;
 
     pub fn to_string(&self) -> String {
         let mut buf = String::with_capacity(24);
@@ -944,6 +961,13 @@ impl f64 {
 
     /// Floating-point remainder of x/y
     pub fn fmod(x: f64, y: f64) -> f64 { return builtin::f64_fmod(x, y); }
+
+    pub fn is_nan(&self) -> bool { return *self != *self; }
+    pub fn is_finite(&self) -> bool { return *self - *self == 0.0; }
+
+    pub fn parse(s: String) -> Option<f64> {
+        return parse_text(s);
+    }
 }
 
 impl Display for bool {
