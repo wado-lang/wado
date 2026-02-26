@@ -564,11 +564,6 @@ impl Point {
         self.y = 0;
     }
 
-    // Instance method with self by value (copies value)
-    fn to_tuple(self) -> [i32, i32] {
-        return [self.x, self.y];
-    }
-
     // Static method (no self parameter)
     fn origin() -> Point {
         return Point { x: 0, y: 0 };
@@ -586,6 +581,8 @@ let origin = Point::origin();
 // Static method on generic type (turbofish syntax)
 let arr = Array::<i32>::with_capacity(10);
 ```
+
+Note: bare `self` (by value) is not allowed. Use `&self` or `&mut self`.
 
 ## Associated Constants
 

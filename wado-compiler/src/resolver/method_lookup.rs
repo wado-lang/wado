@@ -963,8 +963,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let receiver_type = self.type_table.borrow().get(receiver.type_id).clone();
 
         match self_kind {
-            ast::SelfKind::None | ast::SelfKind::Value => {
-                // Method expects value (self), so deref all refs
+            ast::SelfKind::None => {
+                // No self parameter (static method context), deref all refs
                 self.deref_to_value(receiver, span)
             }
             ast::SelfKind::Ref => {

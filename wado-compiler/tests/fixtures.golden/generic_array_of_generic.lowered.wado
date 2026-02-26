@@ -82,8 +82,8 @@ fn "Array<Pair<i32,String>>^IndexValue::index_value"(self: &Array<Pair<i32, Stri
     return core::builtin::array_get::<Pair<i32, String>>(self.repr, index);
 }
 
-fn "Array<Pair<i32,String>>^SequenceLiteralBuilder::build"(self: Array<Pair<i32, String>>) -> Array<Pair<i32, String>> {
-    return self;
+fn "Array<Pair<i32,String>>^SequenceLiteralBuilder::build"(self: &Array<Pair<i32, String>>) -> Array<Pair<i32, String>> {
+    return *self;
 }
 
 fn "Array<Pair<i32,String>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Pair<i32, String>>, value: Pair<i32,String>) {

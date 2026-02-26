@@ -95,7 +95,7 @@ export fn run() with Stdout {
         };
         break __kv_lit: __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_5: {
             let self: TreeMap<String,i32> = __b;
-            break __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_5: self;
+            break __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_5: *self;
         };
     });
     __assert_0: {
@@ -272,8 +272,8 @@ pub fn "TreeMap<String,i32>::new"() -> TreeMap<String,i32> {
     }, size: 0, deleted_count: 0 };
 }
 
-fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
-    return self;
+fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: &Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
+    return *self;
 }
 
 fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<TreeMapEntry<String,i32>> {
@@ -296,7 +296,7 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
 pub fn "TreeMap<String,i32>::entries"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
     let mut result: Array<[String, i32]> = __seq_lit: {
         let mut __b: Array<[String, i32]> = move Array<Tuple<String,i32>> { repr: core::builtin::array_new::<[String, i32]>(0), used: 0 };
-        break __seq_lit: __b;
+        break __seq_lit: *__b;
     };
     __for_of_3: {
         let mut __iter_3: ArrayIter<TreeMapEntry<String,i32>> = move self.entries."Array<TreeMapEntry<String,i32>>^IntoIterator::into_iter"();

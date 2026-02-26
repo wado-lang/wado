@@ -39,7 +39,7 @@ export fn run() with Stdout {
             };
             break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_4: {
                 let self: Array<String> = __b;
-                break __inline_Array_String__SequenceLiteralBuilder__build_4: self;
+                break __inline_Array_String__SequenceLiteralBuilder__build_4: *self;
             };
         });
         __b."Array<Array<String>>^SequenceLiteralBuilder::push_literal"(__seq_lit: {
@@ -51,7 +51,7 @@ export fn run() with Stdout {
             };
             break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_7: {
                 let self: Array<String> = __b;
-                break __inline_Array_String__SequenceLiteralBuilder__build_7: self;
+                break __inline_Array_String__SequenceLiteralBuilder__build_7: *self;
             };
         });
         break __seq_lit: __b."Array<Array<String>>^SequenceLiteralBuilder::build"();
@@ -154,8 +154,8 @@ pub fn "Array<Array<String>>::len"(self: &Array<Array<String>>) -> i32 {
     return self.used;
 }
 
-fn "Array<Array<String>>^SequenceLiteralBuilder::build"(self: Array<Array<String>>) -> Array<Array<String>> {
-    return self;
+fn "Array<Array<String>>^SequenceLiteralBuilder::build"(self: &Array<Array<String>>) -> Array<Array<String>> {
+    return *self;
 }
 
 fn "Array<Array<String>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Array<String>>, value: Array<String>) {

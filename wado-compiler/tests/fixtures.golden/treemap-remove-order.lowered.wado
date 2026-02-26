@@ -600,7 +600,7 @@ fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> 
 pub fn "TreeMap<String,i32>::keys"(self: &TreeMap<String,i32>) -> Array<String> {
     let mut result: Array<String> = __seq_lit: {
         let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(0), used: 0 };
-        break __seq_lit: __b;
+        break __seq_lit: *__b;
     };
     __for_of_1: {
         let mut __iter_1: ArrayIter<TreeMapEntry<String,i32>> = move self.entries."Array<TreeMapEntry<String,i32>>^IntoIterator::into_iter"();
@@ -761,8 +761,8 @@ pub fn "Array<TreeMapEntry<String,i32>>::append"(self: &mut Array<TreeMapEntry<S
     self.used = (used + 1);
 }
 
-fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
-    return self;
+fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: &Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
+    return *self;
 }
 
 fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<TreeMapEntry<String,i32>> {

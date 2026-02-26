@@ -607,8 +607,8 @@ fn "Array<TreeMapEntry<String,i32>>^IntoIterator::into_iter"(self: &Array<TreeMa
     return ArrayIter<TreeMapEntry<String,i32>> { repr: self.repr, used: self.used, index: 0 };
 }
 
-fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
-    return self;
+fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: &Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
+    return *self;
 }
 
 fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<TreeMapEntry<String,i32>> {

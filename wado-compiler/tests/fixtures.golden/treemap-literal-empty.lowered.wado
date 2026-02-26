@@ -46,7 +46,7 @@ export fn run() with Stdout {
     };
     let m: TreeMap<String,i32> = __kv_lit: {
         let mut __b: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
-        break __kv_lit: __b;
+        break __kv_lit: *__b;
     };
     __assert_0: {
         let __v0: i32 = m.size;
@@ -138,8 +138,8 @@ pub fn "TreeMap<String,i32>::new"() -> TreeMap<String,i32> {
     }, size: 0, deleted_count: 0 };
 }
 
-fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
-    return self;
+fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"(self: &Array<TreeMapEntry<String,i32>>) -> Array<TreeMapEntry<String,i32>> {
+    return *self;
 }
 
 fn "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<TreeMapEntry<String,i32>> {
