@@ -2179,7 +2179,8 @@ fn remove_dead_global_sets_block(block: &mut TirBlock, used: &IndexSet<(String, 
             let key = (module_source.to_path().join("::"), name.clone());
             if !used.contains(&key) {
                 // Dead global: keep the value expression only if it has side effects
-                if expr_has_calls(value) {
+                // (e.g., panic() / unreachable — detected via never type)
+                if expr_has_side_effects(value) {
                     new_stmts.push(TirStmt::new(TirStmtKind::Expr(*value.clone()), stmt.span));
                 }
                 continue;
@@ -2190,53 +2191,32 @@ fn remove_dead_global_sets_block(block: &mut TirBlock, used: &IndexSet<(String, 
     block.stmts = new_stmts;
 }
 
-/// Check whether an expression tree contains any function calls (potential side effects).
-fn expr_has_calls(expr: &TirExpr) -> bool {
+/// Check whether an expression tree contains observable side effects.
+///
+/// Only diverging expressions (type `never` — e.g. `panic()`, `unreachable()`) are
+/// considered side effects. Pure function calls like array construction are not.
+fn expr_has_side_effects(expr: &TirExpr) -> bool {
+    if expr.type_id == TypeTable::NEVER {
+        return true;
+    }
     match &expr.kind {
-        TirExprKind::Call { .. }
-        | TirExprKind::MethodCall { .. }
-        | TirExprKind::StaticCall { .. }
-        | TirExprKind::CmRawCall { .. }
-        | TirExprKind::IndirectCall { .. } => true,
-        TirExprKind::Binary { left, right, .. } => expr_has_calls(left) || expr_has_calls(right),
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Move { expr: inner }
-        | TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner } => expr_has_calls(inner),
-        TirExprKind::Assign { target, value } => expr_has_calls(target) || expr_has_calls(value),
-        TirExprKind::Index { expr, index } => expr_has_calls(expr) || expr_has_calls(index),
-        TirExprKind::StructLiteral { fields, .. } => {
-            fields.iter().any(|f| expr_has_calls(&f.value))
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            block_has_side_effects(block)
         }
-        TirExprKind::TupleLiteral { elements } => elements.iter().any(expr_has_calls),
-        TirExprKind::GlobalVarSet { value, .. } => expr_has_calls(value),
-        TirExprKind::VariantConstruct { payload, .. } => {
-            payload.as_ref().is_some_and(|p| expr_has_calls(p))
-        }
-        TirExprKind::ClosureToCanonical { functor, .. } => expr_has_calls(functor),
-        TirExprKind::Closure { body, .. } => expr_has_calls(body),
         TirExprKind::If {
             condition,
             then_branch,
             else_branch,
         } => {
-            expr_has_calls(condition)
-                || block_has_calls(then_branch)
-                || else_branch.as_ref().is_some_and(block_has_calls)
-        }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            block_has_calls(block)
+            expr_has_side_effects(condition)
+                || block_has_side_effects(then_branch)
+                || else_branch.as_ref().is_some_and(block_has_side_effects)
         }
         TirExprKind::Match { expr, arms } => {
-            expr_has_calls(expr)
+            expr_has_side_effects(expr)
                 || arms.iter().any(|a| {
-                    a.guard.as_ref().is_some_and(expr_has_calls) || expr_has_calls(&a.body)
+                    a.guard.as_ref().is_some_and(expr_has_side_effects)
+                        || expr_has_side_effects(&a.body)
                 })
         }
         TirExprKind::Switch {
@@ -2245,30 +2225,29 @@ fn expr_has_calls(expr: &TirExpr) -> bool {
             default,
             ..
         } => {
-            expr_has_calls(scrutinee)
-                || arms.iter().any(block_has_calls)
-                || block_has_calls(default)
+            expr_has_side_effects(scrutinee)
+                || arms.iter().any(block_has_side_effects)
+                || block_has_side_effects(default)
         }
-        // Leaf nodes — no side effects
         _ => false,
     }
 }
 
-fn block_has_calls(block: &TirBlock) -> bool {
+fn block_has_side_effects(block: &TirBlock) -> bool {
     block.stmts.iter().any(|stmt| match &stmt.kind {
-        TirStmtKind::Expr(e) | TirStmtKind::Let { value: e, .. } => expr_has_calls(e),
-        TirStmtKind::Return { value } => value.as_ref().is_some_and(expr_has_calls),
+        TirStmtKind::Expr(e) | TirStmtKind::Let { value: e, .. } => expr_has_side_effects(e),
+        TirStmtKind::Return { value } => value.as_ref().is_some_and(expr_has_side_effects),
         TirStmtKind::If {
             condition,
             then_block,
             else_block,
         } => {
-            expr_has_calls(condition)
-                || block_has_calls(then_block)
-                || else_block.as_ref().is_some_and(block_has_calls)
+            expr_has_side_effects(condition)
+                || block_has_side_effects(then_block)
+                || else_block.as_ref().is_some_and(block_has_side_effects)
         }
         TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            block_has_calls(body)
+            block_has_side_effects(body)
         }
         TirStmtKind::IfPattern {
             scrutinee,
@@ -2276,13 +2255,13 @@ fn block_has_calls(block: &TirBlock) -> bool {
             else_block,
             ..
         } => {
-            expr_has_calls(scrutinee)
-                || block_has_calls(then_block)
-                || else_block.as_ref().is_some_and(block_has_calls)
+            expr_has_side_effects(scrutinee)
+                || block_has_side_effects(then_block)
+                || else_block.as_ref().is_some_and(block_has_side_effects)
         }
-        TirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_calls),
+        TirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_side_effects),
         TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => false,
-        TirStmtKind::LetPattern { value, .. } => expr_has_calls(value),
+        TirStmtKind::LetPattern { value, .. } => expr_has_side_effects(value),
     })
 }
 
