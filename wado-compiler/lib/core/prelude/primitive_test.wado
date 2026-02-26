@@ -29,9 +29,9 @@ test "f64::parse infinity" {
 }
 
 test "f64::parse nan" {
-    assert f64::parse("nan") matches { Some(_) };
-    assert f64::parse("NaN") matches { Some(_) };
-    assert f64::parse("NAN") matches { Some(_) };
+    assert f64::parse("nan") matches { Some(v) && v.is_nan() };
+    assert f64::parse("NaN") matches { Some(v) && v.is_nan() };
+    assert f64::parse("NAN") matches { Some(v) && v.is_nan() };
 }
 
 test "f64::parse negative zero" {
@@ -95,29 +95,23 @@ test "f64 wasm instruction math" {
 
 test "f64 trigonometric" {
     assert f64::sin(0.0) == 0.0;
-    let sin_half_pi = f64::sin(f64::PI / 2.0);
-    assert sin_half_pi > 0.99 && sin_half_pi < 1.01;
+    assert 0.99 < f64::sin(f64::PI / 2.0) < 1.01;
 
     assert f64::cos(0.0) == 1.0;
-    let cos_half_pi = f64::cos(f64::PI / 2.0);
-    assert cos_half_pi > -0.01 && cos_half_pi < 0.01;
+    assert -0.01 < f64::cos(f64::PI / 2.0) < 0.01;
 
     assert f64::tan(0.0) == 0.0;
 
     assert f64::asin(0.0) == 0.0;
-    let asin_1 = f64::asin(1.0);
-    assert asin_1 > 1.57 && asin_1 < 1.58;
+    assert 1.57 < f64::asin(1.0) < 1.58;
 
     assert f64::acos(1.0) == 0.0;
-    let acos_0 = f64::acos(0.0);
-    assert acos_0 > 1.57 && acos_0 < 1.58;
+    assert 1.57 < f64::acos(0.0) < 1.58;
 
     assert f64::atan(0.0) == 0.0;
-    let atan_1 = f64::atan(1.0);
-    assert atan_1 > 0.78 && atan_1 < 0.79;
+    assert 0.78 < f64::atan(1.0) < 0.79;
 
-    let atan2_result = f64::atan2(1.0, 1.0);
-    assert atan2_result > 0.78 && atan2_result < 0.79;
+    assert 0.78 < f64::atan2(1.0, 1.0) < 0.79;
 }
 
 test "f64 hyperbolic" {
@@ -131,8 +125,7 @@ test "f64 hyperbolic" {
 
 test "f64 exponential and logarithmic" {
     assert f64::exp(0.0) == 1.0;
-    let exp_1 = f64::exp(1.0);
-    assert exp_1 > 2.71 && exp_1 < 2.72;
+    assert 2.71 < f64::exp(1.0) < 2.72;
 
     assert f64::exp2(0.0) == 1.0;
     assert f64::exp2(3.0) == 8.0;
@@ -140,8 +133,7 @@ test "f64 exponential and logarithmic" {
     assert f64::expm1(0.0) == 0.0;
 
     assert f64::ln(1.0) == 0.0;
-    let ln_e = f64::ln(f64::E);
-    assert ln_e > 0.99 && ln_e < 1.01;
+    assert 0.99 < f64::ln(f64::E) < 1.01;
 
     assert f64::log2(1.0) == 0.0;
     assert f64::log2(8.0) == 3.0;
@@ -214,21 +206,17 @@ test "f32 power functions" {
 }
 
 test "f64 constants" {
-    let pi = f64::PI;
-    assert pi > 3.14159 && pi < 3.14160;
+    assert 3.14159 < f64::PI < 3.14160;
     assert f64::TAU == f64::PI * 2.0;
-    let e = f64::E;
-    assert e > 2.71828 && e < 2.71829;
+    assert 2.71828 < f64::E < 2.71829;
     assert f64::FRAC_PI_2 == f64::PI / 2.0;
     assert f64::FRAC_PI_4 == f64::PI / 4.0;
 }
 
 test "f32 constants" {
-    let pi = f32::PI;
-    assert pi > 3.14 as f32 && pi < 3.15 as f32;
+    assert (3.14 as f32) < f32::PI < (3.15 as f32);
     assert f32::TAU == f32::PI * 2.0 as f32;
-    let e = f32::E;
-    assert e > 2.71 as f32 && e < 2.72 as f32;
+    assert (2.71 as f32) < f32::E < (2.72 as f32);
     assert f32::FRAC_PI_2 == f32::PI / 2.0 as f32;
     assert f32::FRAC_PI_4 == f32::PI / 4.0 as f32;
 }
