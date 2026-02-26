@@ -539,29 +539,43 @@ impl char {
             '\t' => true,
             '\n' => true,
             '\r' => true,
-            _ => {
-                let c = (*self) as u32;
-                c == 0x0B || c == 0x0C
-            },
+            '\u{0B}' => true,
+            '\u{0C}' => true,
+            _ => false,
         };
     }
 
     /// Returns true if the character is a Unicode whitespace character.
     /// Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
     pub fn is_whitespace(&self) -> bool {
-        if self.is_ascii_whitespace() {
-            return true;
-        }
-        let c = (*self) as u32;
-        return c == 0x85       // NEXT LINE
-            || c == 0xA0       // NO-BREAK SPACE
-            || c == 0x1680     // OGHAM SPACE MARK
-            || (c >= 0x2000 && c <= 0x200A)  // EN QUAD..HAIR SPACE
-            || c == 0x2028     // LINE SEPARATOR
-            || c == 0x2029     // PARAGRAPH SEPARATOR
-            || c == 0x202F     // NARROW NO-BREAK SPACE
-            || c == 0x205F     // MEDIUM MATHEMATICAL SPACE
-            || c == 0x3000;    // IDEOGRAPHIC SPACE
+        return match *self {
+            ' ' => true,
+            '\t' => true,
+            '\n' => true,
+            '\r' => true,
+            '\u{0B}' => true,
+            '\u{0C}' => true,
+            '\u{85}' => true,
+            '\u{A0}' => true,
+            '\u{1680}' => true,
+            '\u{2000}' => true,
+            '\u{2001}' => true,
+            '\u{2002}' => true,
+            '\u{2003}' => true,
+            '\u{2004}' => true,
+            '\u{2005}' => true,
+            '\u{2006}' => true,
+            '\u{2007}' => true,
+            '\u{2008}' => true,
+            '\u{2009}' => true,
+            '\u{200A}' => true,
+            '\u{2028}' => true,
+            '\u{2029}' => true,
+            '\u{202F}' => true,
+            '\u{205F}' => true,
+            '\u{3000}' => true,
+            _ => false,
+        };
     }
 }
 
