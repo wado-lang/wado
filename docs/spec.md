@@ -97,17 +97,7 @@ if let Some(data) = result.module.data_section() {
 }
 ```
 
-**Future: `#[data]` Attribute (TODO):**
-
-A future `#[data]` attribute will allow injecting the data section content into code:
-
-```wado
-#[data]
-const TEST_DATA: String;  // Injected from __DATA__ section
-
-#[data("json")]
-const CONFIG: Config;     // Parsed as JSON from __DATA__ section
-```
+The data section content can be accessed at runtime using the `#data` compile-time location literal. See [Compile-Time Location Literals](#compile-time-location-literals).
 
 ### Identifiers
 
@@ -935,8 +925,8 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 // Conceptual representation (not user-visible)
 struct String {
     data: GcArray<u8>,   // UTF-8 bytes
-    len: usize,          // Length in bytes
-    capacity: usize,     // Buffer capacity for += operations
+    len: i32,            // Length in bytes
+    capacity: i32,       // Buffer capacity for += operations
 }
 ```
 
@@ -964,7 +954,7 @@ let chars: Array<char> = s.chars();
 let first_char = chars[0];
 
 // Other methods
-s.len() -> usize           // Length in bytes
+s.len() -> i32             // Length in bytes
 s.is_empty() -> bool       // Check if empty
 ```
 
@@ -1022,7 +1012,7 @@ s += "!";          // May reallocate if capacity exceeded
 ```wado
 // Allocate capacity upfront for efficient building
 let mut result = String::with_capacity(1000);
-for item in items {
+for let item of items {
     result += item;  // No reallocations if within capacity
 }
 ```
@@ -1076,12 +1066,12 @@ This special treatment will be generalized via traits in the future, allowing us
 ```wado
 // 1. Pre-allocate when size is known
 let mut s = String::with_capacity(estimated_size);
-for item in items {
+for let item of items {
     s += item;
 }
 
 // 2. Use += for repeated concatenation
-let mut result = String::new();
+let mut result = "";
 result += "Line 1\n";
 result += "Line 2\n";
 result += "Line 3\n";
@@ -1124,7 +1114,7 @@ let missing: Option<i32> = null;  // Same as None
 let also_missing = None;          // Standard library identifier
 
 // Both are equivalent
-assert(null == None);
+assert null == None;
 ```
 
 Note: `null` is a language keyword, while `None` is an identifier from the prelude (`Option::None`). They compile to the same instructions.
@@ -1662,7 +1652,9 @@ let capture = |x: i32| x + outer;  // Captures `outer` by value
 capture(5);  // Returns 15
 ```
 
-Closures capture variables by value (copy semantics) by default. For capturing by reference, see the `stores[...]` syntax in the Effect System section.
+Closures capture variables by value (copy semantics) by default. Use `&mut ||` for mutable capture (see below).
+
+Note: `stores[...]` is a separate concept for declaring that a *function* stores reference *parameters* beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
 
 **Mutable Closures (`&mut ||`):**
 
@@ -2108,21 +2100,7 @@ This avoids the need for explicit `impl Collection for ...` on every self-buildi
 
 **Standard Library Traits:**
 
-The prelude defines `Index` and `IndexAssign` traits using associated types:
-
-```wado
-pub trait Index<IndexType> {
-    type Output;
-    fn index(&self, index: IndexType) -> &Self::Output;
-}
-
-pub trait IndexAssign<IndexType> {
-    type Input;
-    fn index_assign(&mut self, index: IndexType, value: Self::Input);
-}
-```
-
-Note: `IndexAssign` takes a value parameter rather than returning `&mut T` (like Rust's `IndexMut`). This design reflects Wasm GC semantics where you cannot get a mutable reference to an array element - reading (`array.get`) and writing (`array.set`) are fundamentally different operations.
+The prelude defines `IndexValue`, `IndexAssign`, and `Index` traits using associated types. See [Indexing Traits](#indexing-traits) for full definitions.
 
 **Trait Bounds:**
 
@@ -2579,31 +2557,9 @@ Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `
 
 Object literal syntax supports unquoted keys and shorthand properties.
 
-### Syntax Rules
+For struct initialization syntax, see the [Structs](#structs) section.
 
-- Identifier keys: Quotes optional
-- Non-identifier keys: Quotes required
-- Computed key: `[expr]` syntax (dict only)
-- Shorthand: Can omit when variable name matches key
-
-### Struct Initialization
-
-```wado
-// Named struct literal
-let user = User { name: "Alice", age: 30, active: true };
-
-// Implicit struct literal (requires type annotation)
-let user: User = { name: "Alice", age: 30, active: true };
-
-// Shorthand
-let name = "Bob";
-let age = 25;
-let bob: User = { name, age, active: false };
-
-// Computed keys not allowed in structs
-```
-
-### TreeMap (Sorted Map)
+### TreeMap (Insertion-Order Map)
 
 For associative arrays, use `TreeMap` from `core:collections`:
 
@@ -2616,10 +2572,11 @@ map.insert("y", 20);
 
 // Index syntax
 map["z"] = 30;                    // assignment
-if let Some(v) = map["x"] { ... } // access returns Option<V>
+let v = map["x"];                 // panics if key not found
+let opt = map.get("x");          // returns Option<V>
 
-// Keys are stored in sorted order
-let keys = map.keys();  // returns Array<K> in sorted order
+// Keys preserve insertion order
+let keys = map.keys();  // returns Array<K> in insertion order
 ```
 
 ### Access Methods
@@ -2629,7 +2586,7 @@ let keys = map.keys();  // returns Array<K> in sorted order
 user.name
 
 // TreeMap: bracket notation or methods
-map["key"]        // returns Option<V>
+map["key"]        // panics if key not found
 map.get("key")    // returns Option<V>
 ```
 
@@ -3416,7 +3373,7 @@ pub fn println(message: String) with Stdout {
 
 pub fn env(name: String) -> Option<String> with Environment {
     let vars = get_environment();  // No need for Environment:: prefix
-    for [key, value] in vars {
+    for let [key, value] of vars {
         if key == name {
             return Some(value);
         }
@@ -3469,6 +3426,8 @@ pub fn api_function() with Http, FileSystem {
 
 ### Reference Storage (`stores[...]`)
 
+> **Not yet implemented.** See [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md) for the design.
+
 The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion.
 
 **Syntax**: `with stores[param1, param2, ...]`
@@ -3476,7 +3435,7 @@ The `stores[...]` keyword declares that a function stores reference parameters b
 ```wado
 // Function that stores a reference parameter
 fn register(data: &Data) -> Handle with stores[data] {
-    registry.push(data);  // Stores the reference
+    registry.append(data);  // Stores the reference
     return new_handle();
 }
 
@@ -3501,11 +3460,11 @@ fn store_and_log(data: &Data) -> Handle with Stdout, stores[data] {
 **Functor types** can also declare stores (positional: 0 = first parameter):
 
 ```wado
-fn take_storing(f: Fn(&Data) with stores[0]) { ... }
-fn take_pure(f: Fn(&Data) -> Result) { ... }  // cannot store
+fn take_storing(f: fn(&Data) with stores[0]) { ... }
+fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
 ```
 
-See `docs/adr-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
+See `docs/wep-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
 
 ### Handlers
 
@@ -3575,7 +3534,7 @@ fn collect_all() -> Array<i32> {
 
     with handler Generator<i32> {
         yield(value) => |resume| {
-            result.push(value);
+            result.append(value);
             resume();
         },
     } {
@@ -3801,7 +3760,7 @@ fn App() -> Element with Dom {
 
 Wado targets **WASI Preview 3** (0.3.0-rc-2025-09-16), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
 
-All Wado types map directly to Component Model (WIT) types. See the [Component Model Mapping](#component-model-mapping) table in the Type System section for the complete mapping reference.
+All Wado types map directly to Component Model (WIT) types. See the [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries) table in the Type System section for the complete mapping reference.
 
 ### WASI P3 CLI Interfaces
 
