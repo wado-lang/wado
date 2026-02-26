@@ -104,15 +104,19 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
         .collect();
 
     if let Some(d) = errors.first() {
-        let fname = filename.map(String::from).or_else(|| {
-            d.span.as_ref().and_then(|s| {
+        // Prefer the diagnostic's span file (the actual error location) over
+        // the passed-in filename (which is the entry module).
+        let fname = d
+            .span
+            .as_ref()
+            .and_then(|s| {
                 if s.file.is_empty() {
                     None
                 } else {
                     Some(s.file.clone())
                 }
             })
-        });
+            .or_else(|| filename.map(String::from));
         let code = d.code;
         let message = d.message.clone();
         let line = d.span.as_ref().map_or(0, |s| s.line);
@@ -144,12 +148,16 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
             let all_messages: Vec<String> = errors.iter().map(|d| d.message.clone()).collect();
             CompileError::Analyzer {
                 message: all_messages.join("; "),
+                line,
+                column,
                 filename: fname,
             }
         }
     } else {
         CompileError::Analyzer {
             message: "compilation failed".to_string(),
+            line: 0,
+            column: 0,
             filename: filename.map(String::from),
         }
     }

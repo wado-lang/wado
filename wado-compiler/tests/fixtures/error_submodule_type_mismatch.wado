@@ -1,0 +1,9 @@
+// Test: type mismatch error in a sub-module reports correct file, line, column
+use { bad_let } from "./sub/error_type_mismatch.wado";
+
+export fn run() {
+    let x = bad_let();
+}
+
+__DATA__
+{"compile_error": "./sub/error_type_mismatch.wado:4:18: analysis error: type mismatch: expected 'i32', found 'String'"}

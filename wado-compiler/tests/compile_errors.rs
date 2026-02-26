@@ -235,7 +235,7 @@ fn main() {
 
     let err = result.unwrap_err();
     match err {
-        CompileError::Analyzer { message, filename } => {
+        CompileError::Analyzer { message, filename, .. } => {
             assert!(
                 message.contains("unknown") || message.contains("not found"),
                 "Unexpected message: {message}"
@@ -261,7 +261,7 @@ fn main() {
 
     let err = result.unwrap_err();
     match err {
-        CompileError::Analyzer { message, filename } => {
+        CompileError::Analyzer { message, filename, .. } => {
             assert!(
                 message.contains("nonexistent_function") || message.contains("not found"),
                 "Unexpected message: {message}"
@@ -513,11 +513,13 @@ fn test_error_display_io() {
 fn test_error_display_analyzer_with_filename() {
     let err = CompileError::Analyzer {
         message: "undefined variable 'x'".to_string(),
+        line: 5,
+        column: 10,
         filename: Some("main.wado".to_string()),
     };
 
     let display = format!("{err}");
-    assert!(display.contains("main.wado"));
+    assert!(display.contains("main.wado:5:10"));
     assert!(display.contains("undefined variable 'x'"));
     assert!(display.contains("analysis error"));
 }
@@ -526,6 +528,8 @@ fn test_error_display_analyzer_with_filename() {
 fn test_error_display_analyzer_without_filename() {
     let err = CompileError::Analyzer {
         message: "type mismatch".to_string(),
+        line: 0,
+        column: 0,
         filename: None,
     };
 
