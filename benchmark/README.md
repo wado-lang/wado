@@ -1,6 +1,6 @@
 # Wado Benchmarks
 
-This directory contains performance benchmarks comparing Wado against C, JavaScript, Python, and Ruby.
+This directory contains performance benchmarks comparing Wado against C, Rust, Zig, JavaScript, Python, and Ruby.
 
 ## Benchmarks
 
@@ -40,11 +40,37 @@ Counts prime numbers up to 10,000,000 using the sieve algorithm.
 make benchmark-sieve
 ```
 
+### zlib Compression (`zlib/`)
+
+Compresses and decompresses 100KB of patterned data (bytes `i % 256`) for 10 iterations.
+
+- **Use case**: Compression library performance, byte array throughput
+- **Operations**: zlib compress/decompress, large byte array manipulation
+- **Comparison**: Wado (`core:zlib`, pure Wado implementation) vs zlib-rs (native Rust)
+
+```bash
+make benchmark-zlib
+```
+
+### Float-to-String (`fts.*`)
+
+Converts 500,000 random f64 values (0.0–1.0) to decimal strings with 6 decimal places. Uses a linear congruential generator (seed=42) for a deterministic float sequence, ensuring all implementations produce identical output.
+
+- **Use case**: Float formatting, string allocation throughput
+- **Operations**: Float-to-string conversion, byte iteration, string buffer management
+- **Comparison**: C (`snprintf`), Rust (`write!`), Zig (`std.fmt`), Wado (pure Wado via template literal)
+
+```bash
+make benchmark-fts
+```
+
 ## Prerequisites
 
 To run all benchmarks, ensure you have the following tools installed:
 
 - `cc` (C compiler, e.g., clang or gcc)
+- `rustc` (Rust compiler — for fts benchmark)
+- `zig` (Zig compiler — for fts benchmark)
 - `node` (Node.js)
 - `python3` (Python 3)
 - `ruby` (Ruby)
@@ -52,49 +78,90 @@ To run all benchmarks, ensure you have the following tools installed:
 ## Running Benchmarks
 
 ```bash
-# Run all benchmarks
+# Run all benchmarks at once
+make benchmark-all
+
+# Or run individually
 make benchmark-mandelbrot
 make benchmark-count-prime
 make benchmark-sieve
-
-# Or run them individually (see comments in each source file)
+make benchmark-zlib
+make benchmark-fts
 ```
 
 ## Recent Results
 
 ### Environment
 
-| Component  | Version                              |
-| ---------- | ------------------------------------ |
-| Wado       | commit `8f2537f`                     |
-| wasmtime   | 40.0.0 (0807b003e 2025-12-22)        |
-| Node.js    | v24.11.0                             |
-| Python     | 3.14.2 (CPython, no JIT)             |
-| Ruby       | 3.4.7 (CRuby)                        |
-| C compiler | Apple clang 17.0.0                   |
-| Platform   | macOS (Darwin 24.6.0), Apple Silicon |
+| Component  | Version                  |
+| ---------- | ------------------------ |
+| Wado       | commit `ef75dd1`         |
+| wasmtime   | 41.0.4                   |
+| Node.js    | v24.14.0                 |
+| Python     | 3.14.3 (CPython, no JIT) |
+| Ruby       | 4.0.1 (CRuby)            |
+| C compiler | gcc 13.3.0               |
+| Rust       | rustc 1.93.1             |
+| Zig        | 0.15.2                   |
+| Platform   | Linux x86_64             |
 
 ### Mandelbrot (1024x768, max_iter=256)
 
-| Runtime       | Time (ms) | Relative |
-| ------------- | --------- | -------- |
-| C (clang -O3) | 136       | 1.00x    |
-| JavaScript    | 143       | 1.05x    |
-| **Wado**      | 173       | 1.27x    |
-| Python        | 4,137     | 30.42x   |
+| Runtime     | Time (ms) | Relative |
+| ----------- | --------- | -------- |
+| C (gcc -O3) | 130       | 1.00x    |
+| **Wado**    | 139       | 1.07x    |
+| JavaScript  | 201       | 1.55x    |
+| Python      | 3,371     | 25.93x   |
+| Ruby        | 4,240     | 32.62x   |
 
 All implementations produce the same result: 47,407,790 total iterations.
 
 ### Prime Counting (limit=10,000,000)
 
-| Runtime       | Time (ms) | Relative |
-| ------------- | --------- | -------- |
-| **Wado**      | 1,363     | 1.00x    |
-| C (clang -O3) | 1,496     | 1.10x    |
-| JavaScript    | 2,427     | 1.78x    |
-| Python        | 74,360    | 54.56x   |
+| Runtime     | Time (ms) | Relative |
+| ----------- | --------- | -------- |
+| C (gcc -O3) | 3,190     | 1.00x    |
+| **Wado**    | 3,276     | 1.03x    |
+| JavaScript  | 3,384     | 1.06x    |
+| Ruby        | 41,941    | 13.15x   |
+| Python      | 69,825    | 21.89x   |
 
 All implementations produce the same result: 664,579 primes.
+
+### Sieve of Eratosthenes (limit=10,000,000)
+
+| Runtime     | Time (ms) | Relative |
+| ----------- | --------- | -------- |
+| C (gcc -O3) | 49        | 1.00x    |
+| JavaScript  | 74        | 1.51x    |
+| **Wado**    | 164       | 3.35x    |
+| Python      | 727       | 14.84x   |
+| Ruby        | 1,113     | 22.71x   |
+
+All implementations produce the same result: 664,579 primes.
+
+### zlib Compression (100KB x 10 iterations)
+
+| Runtime               | Compress (ms) | Decompress (ms) | Total (ms) |
+| --------------------- | ------------- | --------------- | ---------- |
+| zlib-rs (native Rust) | 2             | 0.2             | 2          |
+| **Wado** (pure Wado)  | 519           | 148,482         | 149,002    |
+
+Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native. The decompression path is especially slow due to byte-at-a-time array operations.
+
+### Float-to-String (500,000 conversions, 6 decimal places)
+
+| Runtime             | Time (ms) | Relative  |
+| ------------------- | --------- | --------- |
+| Zig (-OReleaseFast) | 25        | 1.00x     |
+| Rust (rustc -O)     | 35        | 1.40x     |
+| C (gcc -O3)         | 57        | 2.28x     |
+| **Wado**            | 97,979    | 3,919.16x |
+
+All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
+
+The large overhead in Wado is due to the float-to-string conversion going through the pure Wado fts implementation, which involves GC-managed string allocation per conversion.
 
 ## Profiling Wado Programs
 
@@ -192,6 +259,10 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 - Ruby uses CRuby
 - Times include program initialization overhead
 - Wado benchmarks use `MonotonicClock::now()` from `core:clocks` for timing
+- zlib benchmark compares Wado's pure Wado zlib against native zlib-rs (Rust)
+- fts benchmark compares Wado, C (`snprintf`), Rust (`write!`), and Zig (`std.fmt`)
+- Rust benchmarks use `rustc -O` (release optimization)
+- Zig benchmarks use `-OReleaseFast`
 
 ## File Structure
 
@@ -199,7 +270,8 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 benchmark/
 ├── README.md
 ├── count_prime/count_prime.{wado,c,js,py,rb}
+├── fts/fts.{wado,c,rs,zig}
 ├── mandelbrot/mandelbrot.{wado,c,js,py,rb}
 ├── sieve/sieve.{wado,c,js,py,rb}
-└── zlib/
+└── zlib/{zlib_bench.wado,zlib_rs.rs}
 ```
