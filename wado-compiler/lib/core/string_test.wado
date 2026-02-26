@@ -262,3 +262,51 @@ test "truncate_chars exact count" {
     s.truncate_chars(3);
     assert s == "abc";
 }
+
+test "is_ascii_whitespace true cases" {
+    assert ' '.is_ascii_whitespace();
+    assert '\t'.is_ascii_whitespace();
+    assert '\n'.is_ascii_whitespace();
+    assert '\r'.is_ascii_whitespace();
+    // VT (0x0B) and FF (0x0C)
+    assert char::from_u32_unchecked(0x0B as u32).is_ascii_whitespace();
+    assert char::from_u32_unchecked(0x0C as u32).is_ascii_whitespace();
+}
+
+test "is_ascii_whitespace false cases" {
+    assert !'a'.is_ascii_whitespace();
+    assert !'0'.is_ascii_whitespace();
+    assert !'\0'.is_ascii_whitespace();
+    // 0x08 (BS) and 0x0E (SO) are adjacent to the 0x09..0x0D range
+    assert !char::from_u32_unchecked(0x08 as u32).is_ascii_whitespace();
+    assert !char::from_u32_unchecked(0x0E as u32).is_ascii_whitespace();
+}
+
+test "is_unicode_whitespace covers ASCII" {
+    assert ' '.is_unicode_whitespace();
+    assert '\t'.is_unicode_whitespace();
+    assert '\n'.is_unicode_whitespace();
+    assert '\r'.is_unicode_whitespace();
+    assert char::from_u32_unchecked(0x0B as u32).is_unicode_whitespace();
+    assert char::from_u32_unchecked(0x0C as u32).is_unicode_whitespace();
+}
+
+test "is_unicode_whitespace non-ASCII spaces" {
+    assert char::from_u32_unchecked(0x85 as u32).is_unicode_whitespace();    // NEXT LINE
+    assert char::from_u32_unchecked(0xA0 as u32).is_unicode_whitespace();    // NO-BREAK SPACE
+    assert char::from_u32_unchecked(0x1680 as u32).is_unicode_whitespace();  // OGHAM SPACE MARK
+    assert char::from_u32_unchecked(0x2000 as u32).is_unicode_whitespace();  // EN QUAD
+    assert char::from_u32_unchecked(0x200A as u32).is_unicode_whitespace();  // HAIR SPACE
+    assert char::from_u32_unchecked(0x2028 as u32).is_unicode_whitespace();  // LINE SEPARATOR
+    assert char::from_u32_unchecked(0x2029 as u32).is_unicode_whitespace();  // PARAGRAPH SEPARATOR
+    assert char::from_u32_unchecked(0x202F as u32).is_unicode_whitespace();  // NARROW NO-BREAK SPACE
+    assert char::from_u32_unchecked(0x205F as u32).is_unicode_whitespace();  // MEDIUM MATHEMATICAL SPACE
+    assert char::from_u32_unchecked(0x3000 as u32).is_unicode_whitespace();  // IDEOGRAPHIC SPACE
+}
+
+test "is_unicode_whitespace false for non-space" {
+    assert !'A'.is_unicode_whitespace();
+    assert !'あ'.is_unicode_whitespace();
+    // ZERO WIDTH SPACE (0x200B) is NOT whitespace
+    assert !char::from_u32_unchecked(0x200B as u32).is_unicode_whitespace();
+}

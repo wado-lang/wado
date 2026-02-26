@@ -16,7 +16,7 @@ fn trim(s: String) -> String {
     let mut found_start = false;
     for let c of s.chars() {
         if !found_start {
-            if !c.is_ascii_space() {
+            if !c.is_ascii_whitespace() {
                 found_start = true;
                 result.append_char(c);
             }
@@ -28,7 +28,7 @@ fn trim(s: String) -> String {
     // ASCII whitespace is single-byte, so byte-level reverse scan is safe.
     let mut end = result.len();
     while end > 0 {
-        if (result.get_byte(end - 1) as char).is_ascii_space() {
+        if (result.get_byte(end - 1) as char).is_ascii_whitespace() {
             end -= 1;
         } else {
             break;

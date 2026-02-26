@@ -533,7 +533,7 @@ impl char {
     /// Returns true if the character is an ASCII whitespace character:
     /// SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
     /// Matches POSIX isspace() for the ASCII range.
-    pub fn is_ascii_space(&self) -> bool {
+    pub fn is_ascii_whitespace(&self) -> bool {
         return match *self {
             ' ' => true,
             '\t' => true,
@@ -548,8 +548,8 @@ impl char {
 
     /// Returns true if the character is a Unicode whitespace character.
     /// Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
-    pub fn is_unicode_space(&self) -> bool {
-        if self.is_ascii_space() {
+    pub fn is_unicode_whitespace(&self) -> bool {
+        if self.is_ascii_whitespace() {
             return true;
         }
         let c = (*self) as u32;
