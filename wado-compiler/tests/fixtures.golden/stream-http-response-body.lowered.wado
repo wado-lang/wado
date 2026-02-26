@@ -15,8 +15,6 @@
 // wasi::waitable-set-new
 // wasi::waitable-set-wait
 
-global mut __modules_initialized: bool = false;
-
 export fn handle(request: Request) {
     let [trailers_future, trailers_tx] = move core::builtin::future_create_pair();
     let [body_rx, body_tx] = move core::builtin::stream_create_pair();

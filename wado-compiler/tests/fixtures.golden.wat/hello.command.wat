@@ -99,17 +99,16 @@
     (import "wasi" "waitable-set-wait" (func (;8;) (type 13)))
     (import "wasi" "wasi:cli/Stdout::write_via_stream" (func (;9;) (type 14)))
     (import "mem" "memory" (memory (;0;) 1))
-    (global (;0;) (mut (ref null 4)) (ref.null none))
-    (global (;1;) (mut i32) (i32.const 0))
+    (global (;0;) (mut i32) (i32.const 0))
     (export "run" (func 11))
     (func (;10;) (type 15)
       (block ;; label = @1
         (if ;; label = @2
-          (global.get 1)
+          (global.get 0)
           (then
             (br 1 (;@1;))))
         (call 15)
-        (global.set 1
+        (global.set 0
           (i32.const 1)))
       (call 13
         (struct.new 2
@@ -250,77 +249,6 @@
     )
     (func (;15;) (type 20)
       (local (ref null 4) i32 i32)
-      (global.set 0
-        (block (result (ref null 4)) ;; label = @1
-          (local.set 0
-            (struct.new 4
-              (ref.as_non_null
-                (array.new_default 3
-                  (i32.const 20)))
-              (i32.const 0)))
-          (call 17
-            (local.get 0)
-            (i64.const 1))
-          (call 17
-            (local.get 0)
-            (i64.const 10))
-          (call 17
-            (local.get 0)
-            (i64.const 100))
-          (call 17
-            (local.get 0)
-            (i64.const 1000))
-          (call 17
-            (local.get 0)
-            (i64.const 10000))
-          (call 17
-            (local.get 0)
-            (i64.const 100000))
-          (call 17
-            (local.get 0)
-            (i64.const 1000000))
-          (call 17
-            (local.get 0)
-            (i64.const 10000000))
-          (call 17
-            (local.get 0)
-            (i64.const 100000000))
-          (call 17
-            (local.get 0)
-            (i64.const 1000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 10000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 100000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 1000000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 10000000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 100000000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 1000000000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 10000000000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 100000000000000000))
-          (call 17
-            (local.get 0)
-            (i64.const 1000000000000000000))
-          (call 17
-            (local.get 0)
-            (i64.const -8446744073709551616))
-          (br 0 (;@1;)
-            (call 16
-              (local.get 0)))))
     )
     (func (;16;) (type 21) (param (ref null 4)) (result (ref null 4))
       (return

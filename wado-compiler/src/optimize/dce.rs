@@ -1921,6 +1921,433 @@ pub fn remove_unreachable_types(project: &mut Project) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Global variable DCE
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Remove unreachable global variables from the project's TIR modules.
+///
+/// A global is considered "used" if any surviving function references it via
+/// `GlobalVarGet`. Globals only referenced by `GlobalVarSet` (e.g., their
+/// lazy initializer in `__initialize_module`) are dead.
+///
+/// When a global is removed:
+/// 1. Its declaration is removed from `module.globals`
+/// 2. Any `GlobalVarSet` statements for it are removed from function bodies
+///    (this covers both the original `__initialize_module` and inlined copies)
+pub fn remove_unreachable_globals(project: &mut Project) {
+    // Phase 1: Collect all GlobalVarGet references from surviving functions.
+    // Key: (module_source path as string, global name)
+    let mut used_globals: IndexSet<(String, String)> = IndexSet::new();
+
+    for module in project.tir_modules.values() {
+        for func_rc in &module.functions {
+            let func = func_rc.borrow();
+            if let Some(body) = &func.body {
+                collect_global_reads_block(body, &mut used_globals);
+            }
+        }
+    }
+
+    // Phase 2: Remove unused globals from module.globals
+    for module in project.tir_modules.values_mut() {
+        let module_key = module.module_source.to_path().join("::");
+        module.globals.retain(|global| {
+            let global_module_key = global.module_source.to_path().join("::");
+            used_globals.contains(&(global_module_key, global.name.clone()))
+                || used_globals.contains(&(module_key.clone(), global.name.clone()))
+        });
+    }
+
+    // Phase 3: Remove GlobalVarSet statements for dead globals from function bodies
+    for module in project.tir_modules.values_mut() {
+        for func_rc in &module.functions {
+            let mut func = func_rc.borrow_mut();
+            if let Some(body) = &mut func.body {
+                remove_dead_global_sets_block(body, &used_globals);
+            }
+        }
+    }
+}
+
+/// Collect all `GlobalVarGet` references from a block.
+fn collect_global_reads_block(block: &TirBlock, used: &mut IndexSet<(String, String)>) {
+    for stmt in &block.stmts {
+        collect_global_reads_stmt(stmt, used);
+    }
+}
+
+fn collect_global_reads_stmt(stmt: &TirStmt, used: &mut IndexSet<(String, String)>) {
+    match &stmt.kind {
+        TirStmtKind::Let { value, .. } | TirStmtKind::Expr(value) => {
+            collect_global_reads_expr(value, used);
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(expr) = value {
+                collect_global_reads_expr(expr, used);
+            }
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            collect_global_reads_expr(condition, used);
+            collect_global_reads_block(then_block, used);
+            if let Some(else_blk) = else_block {
+                collect_global_reads_block(else_blk, used);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            collect_global_reads_block(body, used);
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            collect_global_reads_expr(scrutinee, used);
+            collect_global_reads_block(then_block, used);
+            if let Some(else_blk) = else_block {
+                collect_global_reads_block(else_blk, used);
+            }
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(v) = value {
+                collect_global_reads_expr(v, used);
+            }
+        }
+        TirStmtKind::Continue => {}
+        TirStmtKind::LetPattern { value, .. } => {
+            collect_global_reads_expr(value, used);
+        }
+        TirStmtKind::TaskReturn { .. } => {}
+    }
+}
+
+fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String)>) {
+    match &expr.kind {
+        TirExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } => {
+            used.insert((module_source.to_path().join("::"), name.clone()));
+        }
+        // Recurse into sub-expressions — mirrors analyze_expr structure
+        TirExprKind::Call { args, .. }
+        | TirExprKind::StaticCall { args, .. }
+        | TirExprKind::CmRawCall { args, .. } => {
+            for arg in args {
+                collect_global_reads_expr(arg, used);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            collect_global_reads_expr(receiver, used);
+            for arg in args {
+                collect_global_reads_expr(arg, used);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            collect_global_reads_expr(left, used);
+            collect_global_reads_expr(right, used);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::Move { expr: inner }
+        | TirExprKind::IsNotNull { expr: inner }
+        | TirExprKind::UnwrapOption { expr: inner, .. }
+        | TirExprKind::VariantTag { expr: inner }
+        | TirExprKind::VariantTest { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. } => {
+            collect_global_reads_expr(inner, used);
+        }
+        TirExprKind::Assign { target, value } => {
+            collect_global_reads_expr(target, used);
+            collect_global_reads_expr(value, used);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            collect_global_reads_expr(condition, used);
+            collect_global_reads_block(then_branch, used);
+            if let Some(else_blk) = else_branch {
+                collect_global_reads_block(else_blk, used);
+            }
+        }
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            collect_global_reads_block(block, used);
+        }
+        TirExprKind::Index { expr, index } => {
+            collect_global_reads_expr(expr, used);
+            collect_global_reads_expr(index, used);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for field in fields {
+                collect_global_reads_expr(&field.value, used);
+            }
+        }
+        TirExprKind::TupleLiteral { elements } => {
+            for elem in elements {
+                collect_global_reads_expr(elem, used);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            collect_global_reads_expr(body, used);
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            collect_global_reads_expr(callee, used);
+            for arg in args {
+                collect_global_reads_expr(arg, used);
+            }
+        }
+        TirExprKind::ClosureToCanonical { functor, .. } => {
+            collect_global_reads_expr(functor, used);
+        }
+        TirExprKind::OptionSome { value } => {
+            collect_global_reads_expr(value, used);
+        }
+        TirExprKind::VariantConstruct { payload, .. } => {
+            if let Some(payload_expr) = payload {
+                collect_global_reads_expr(payload_expr, used);
+            }
+        }
+        TirExprKind::GlobalVarSet { value, .. } => {
+            collect_global_reads_expr(value, used);
+        }
+        TirExprKind::Match { expr, arms } => {
+            collect_global_reads_expr(expr, used);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_global_reads_expr(guard, used);
+                }
+                collect_global_reads_expr(&arm.body, used);
+            }
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            collect_global_reads_expr(scrutinee, used);
+            for arm in arms {
+                collect_global_reads_block(arm, used);
+            }
+            collect_global_reads_block(default, used);
+        }
+        // Leaf nodes — no GlobalVarGet possible
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::StringLiteral(_)
+        | TirExprKind::Null
+        | TirExprKind::Unit
+        | TirExprKind::Local { .. }
+        | TirExprKind::Global { .. }
+        | TirExprKind::Capture { .. }
+        | TirExprKind::EnumConstruct { .. } => {}
+    }
+}
+
+/// Remove `GlobalVarSet` statements for dead globals from a block.
+///
+/// For dead globals whose initializer contains function calls (potential side
+/// effects), the `GlobalVarSet` is replaced with the value expression to
+/// preserve the side effects. For pure initializers (constants, struct/array
+/// literals without calls), the entire statement is removed.
+fn remove_dead_global_sets_block(block: &mut TirBlock, used: &IndexSet<(String, String)>) {
+    // Recurse into sub-statements first
+    for stmt in &mut block.stmts {
+        remove_dead_global_sets_stmt(stmt, used);
+    }
+
+    // Process GlobalVarSet statements for dead globals
+    let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(block.stmts.len());
+    for stmt in std::mem::take(&mut block.stmts) {
+        if let TirStmtKind::Expr(ref expr) = stmt.kind
+            && let TirExprKind::GlobalVarSet {
+                ref module_source,
+                ref name,
+                ref value,
+                ..
+            } = expr.kind
+        {
+            let key = (module_source.to_path().join("::"), name.clone());
+            if !used.contains(&key) {
+                // Dead global: keep the value expression only if it has side effects
+                // (e.g., panic() / unreachable — detected via never type)
+                if expr_has_side_effects(value) {
+                    new_stmts.push(TirStmt::new(TirStmtKind::Expr(*value.clone()), stmt.span));
+                }
+                continue;
+            }
+        }
+        new_stmts.push(stmt);
+    }
+    block.stmts = new_stmts;
+}
+
+/// Check whether an expression tree contains observable side effects.
+///
+/// Only diverging expressions (type `never` — e.g. `panic()`, `unreachable()`) are
+/// considered side effects. Pure function calls like array construction are not.
+fn expr_has_side_effects(expr: &TirExpr) -> bool {
+    if expr.type_id == TypeTable::NEVER {
+        return true;
+    }
+    match &expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            block_has_side_effects(block)
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            expr_has_side_effects(condition)
+                || block_has_side_effects(then_branch)
+                || else_branch.as_ref().is_some_and(block_has_side_effects)
+        }
+        TirExprKind::Match { expr, arms } => {
+            expr_has_side_effects(expr)
+                || arms.iter().any(|a| {
+                    a.guard.as_ref().is_some_and(expr_has_side_effects)
+                        || expr_has_side_effects(&a.body)
+                })
+        }
+        TirExprKind::Switch {
+            scrutinee,
+            arms,
+            default,
+            ..
+        } => {
+            expr_has_side_effects(scrutinee)
+                || arms.iter().any(block_has_side_effects)
+                || block_has_side_effects(default)
+        }
+        _ => false,
+    }
+}
+
+fn block_has_side_effects(block: &TirBlock) -> bool {
+    block.stmts.iter().any(|stmt| match &stmt.kind {
+        TirStmtKind::Expr(e) | TirStmtKind::Let { value: e, .. } => expr_has_side_effects(e),
+        TirStmtKind::Return { value } => value.as_ref().is_some_and(expr_has_side_effects),
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            expr_has_side_effects(condition)
+                || block_has_side_effects(then_block)
+                || else_block.as_ref().is_some_and(block_has_side_effects)
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            block_has_side_effects(body)
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            expr_has_side_effects(scrutinee)
+                || block_has_side_effects(then_block)
+                || else_block.as_ref().is_some_and(block_has_side_effects)
+        }
+        TirStmtKind::Break { value, .. } => value.as_ref().is_some_and(expr_has_side_effects),
+        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } => false,
+        TirStmtKind::LetPattern { value, .. } => expr_has_side_effects(value),
+    })
+}
+
+fn remove_dead_global_sets_stmt(stmt: &mut TirStmt, used: &IndexSet<(String, String)>) {
+    match &mut stmt.kind {
+        TirStmtKind::Expr(expr) | TirStmtKind::Let { value: expr, .. } => {
+            remove_dead_global_sets_expr(expr, used);
+        }
+        TirStmtKind::If {
+            then_block,
+            else_block,
+            ..
+        } => {
+            remove_dead_global_sets_block(then_block, used);
+            if let Some(else_blk) = else_block {
+                remove_dead_global_sets_block(else_blk, used);
+            }
+        }
+        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
+            remove_dead_global_sets_block(body, used);
+        }
+        TirStmtKind::IfPattern {
+            then_block,
+            else_block,
+            ..
+        } => {
+            remove_dead_global_sets_block(then_block, used);
+            if let Some(else_blk) = else_block {
+                remove_dead_global_sets_block(else_blk, used);
+            }
+        }
+        TirStmtKind::Return { value } => {
+            if let Some(expr) = value {
+                remove_dead_global_sets_expr(expr, used);
+            }
+        }
+        TirStmtKind::Break { value, .. } => {
+            if let Some(expr) = value {
+                remove_dead_global_sets_expr(expr, used);
+            }
+        }
+        TirStmtKind::Continue | TirStmtKind::TaskReturn { .. } | TirStmtKind::LetPattern { .. } => {
+        }
+    }
+}
+
+/// Recursively remove dead `GlobalVarSet` from expressions that contain blocks.
+fn remove_dead_global_sets_expr(expr: &mut TirExpr, used: &IndexSet<(String, String)>) {
+    match &mut expr.kind {
+        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
+            remove_dead_global_sets_block(block, used);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            remove_dead_global_sets_expr(condition, used);
+            remove_dead_global_sets_block(then_branch, used);
+            if let Some(else_blk) = else_branch {
+                remove_dead_global_sets_block(else_blk, used);
+            }
+        }
+        TirExprKind::Closure { body, .. } => {
+            remove_dead_global_sets_expr(body, used);
+        }
+        TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } => {
+            remove_dead_global_sets_expr(scrutinee, used);
+            for arm in arms {
+                remove_dead_global_sets_expr(&mut arm.body, used);
+            }
+        }
+        TirExprKind::Switch { arms, default, .. } => {
+            for arm in arms {
+                remove_dead_global_sets_block(arm, used);
+            }
+            remove_dead_global_sets_block(default, used);
+        }
+        _ => {}
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Constant branch pruning
 // ──────────────────────────────────────────────────────────────────────────────
 

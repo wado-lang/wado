@@ -64,30 +64,29 @@
     (import "mem" "realloc" (func (;0;) (type 6)))
     (import "wasi" "task-return" (func (;1;) (type 7)))
     (import "mem" "memory" (memory (;0;) 1))
-    (global (;0;) (mut (ref null 5)) (ref.null none))
-    (global (;1;) (mut i32) (i32.const 0))
+    (global (;0;) (mut i32) (i32.const 0))
     (export "__test_0_greeting" (func 4))
     (export "__test_1" (func 5))
     (func (;2;) (type 8)
       (local i32 i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3) (ref null 2) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
-          (global.get 1)
+          (global.get 0)
           (then
             (br 1 (;@1;))))
         (call 6)
-        (global.set 1
+        (global.set 0
           (i32.const 1)))
     )
     (func (;3;) (type 9)
       (local i32 (ref null 2) (ref null 3) i32 (ref null 2) (ref null 0) (ref null 3))
       (block ;; label = @1
         (if ;; label = @2
-          (global.get 1)
+          (global.get 0)
           (then
             (br 1 (;@1;))))
         (call 6)
-        (global.set 1
+        (global.set 0
           (i32.const 1)))
     )
     (func (;4;) (type 10)
@@ -95,11 +94,11 @@
       (block ;; label = @1
         (block ;; label = @2
           (if ;; label = @3
-            (global.get 1)
+            (global.get 0)
             (then
               (br 1 (;@2;))))
           (call 6)
-          (global.set 1
+          (global.set 0
             (i32.const 1))))
       (call 1
         (i32.const 0))
@@ -109,88 +108,17 @@
       (block ;; label = @1
         (block ;; label = @2
           (if ;; label = @3
-            (global.get 1)
+            (global.get 0)
             (then
               (br 1 (;@2;))))
           (call 6)
-          (global.set 1
+          (global.set 0
             (i32.const 1))))
       (call 1
         (i32.const 0))
     )
     (func (;6;) (type 12)
       (local (ref null 5) i32 i32)
-      (global.set 0
-        (block (result (ref null 5)) ;; label = @1
-          (local.set 0
-            (struct.new 5
-              (ref.as_non_null
-                (array.new_default 4
-                  (i32.const 20)))
-              (i32.const 0)))
-          (call 8
-            (local.get 0)
-            (i64.const 1))
-          (call 8
-            (local.get 0)
-            (i64.const 10))
-          (call 8
-            (local.get 0)
-            (i64.const 100))
-          (call 8
-            (local.get 0)
-            (i64.const 1000))
-          (call 8
-            (local.get 0)
-            (i64.const 10000))
-          (call 8
-            (local.get 0)
-            (i64.const 100000))
-          (call 8
-            (local.get 0)
-            (i64.const 1000000))
-          (call 8
-            (local.get 0)
-            (i64.const 10000000))
-          (call 8
-            (local.get 0)
-            (i64.const 100000000))
-          (call 8
-            (local.get 0)
-            (i64.const 1000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 10000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 100000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 1000000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 10000000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 100000000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 1000000000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 10000000000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 100000000000000000))
-          (call 8
-            (local.get 0)
-            (i64.const 1000000000000000000))
-          (call 8
-            (local.get 0)
-            (i64.const -8446744073709551616))
-          (br 0 (;@1;)
-            (call 7
-              (local.get 0)))))
     )
     (func (;7;) (type 13) (param (ref null 5)) (result (ref null 5))
       (return

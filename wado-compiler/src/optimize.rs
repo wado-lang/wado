@@ -28,7 +28,7 @@ use const_prop::propagate_constants;
 use copy_prop::propagate_copies;
 use dce::{
     analyze_project, prune_constant_branches, remove_unreachable_functions,
-    remove_unreachable_types,
+    remove_unreachable_globals, remove_unreachable_types,
 };
 use inline::inline_functions;
 use licm::apply_licm;
@@ -101,6 +101,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             // No optimizations, but still run DCE to reduce codegen work
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
+            remove_unreachable_globals(&mut project);
             remove_unreachable_types(&mut project);
         }
         OptLevel::O1 => {
@@ -113,6 +114,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             // DCE: analyze and remove unreachable functions and types
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
+            remove_unreachable_globals(&mut project);
             remove_unreachable_types(&mut project);
         }
         OptLevel::O2 | OptLevel::Os => {
@@ -125,6 +127,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             // DCE: analyze and remove unreachable functions and types
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
+            remove_unreachable_globals(&mut project);
             remove_unreachable_types(&mut project);
             if opt_level == OptLevel::Os {
                 project.strip_names = true;
@@ -140,6 +143,7 @@ pub fn optimize(mut project: Project, opt_level: OptLevel) -> Project {
             // DCE: analyze and remove unreachable functions and types
             analyze_project(&mut project);
             remove_unreachable_functions(&mut project);
+            remove_unreachable_globals(&mut project);
             remove_unreachable_types(&mut project);
         }
     }

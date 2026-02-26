@@ -265,13 +265,6 @@ struct Result<Option<Trailers>,ErrorCode>::Err {
     payload_0: ref null "wasi:http/ErrorCode",
 }
 
-array array<u64> (mut u64);
-
-struct Array<u64> {  // Array<T> with T=u64
-    mut repr: ref array<u64>,
-    mut used: i32,
-}
-
 type "functype/wasi/future-drop-writable" = fn(i32);
 
 type "functype/wasi/future-new" = fn() -> i64;
@@ -308,9 +301,6 @@ import fn task-return from "wasi/task-return";
 import fn wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
-
-global mut POW10: ref null Array<u64> = ref.null none;
-global mut __modules_initialized: bool = 0;
 
 fn handle(request) {
     let __local_1: i32;

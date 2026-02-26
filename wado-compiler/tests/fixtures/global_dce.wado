@@ -1,0 +1,34 @@
+// Test DCE of unreferenced global variables
+// Unused globals (both constant and lazy-init) should be eliminated.
+use { println, Stdout } from "core:cli";
+
+// Used mutable global — should survive DCE (not const-propagated due to mutability)
+global mut USED_MUT: i32 = 0;
+
+// Used lazy-init global — should survive DCE
+global mut USED_STRING: String = "alive";
+
+// Unused constant global — should be eliminated
+global UNUSED_CONST: i32 = 99;
+
+// Unused mutable global — should be eliminated
+global mut UNUSED_MUT: i32 = 0;
+
+// Unused object global (lazy-init) — should be eliminated along with its initializer
+global mut UNUSED_OBJ: String = "dead";
+
+// Unused array global (lazy-init) — should be eliminated along with its initializer
+global mut UNUSED_ARRAY: Array<i32> = [10, 20, 30];
+
+export fn run() with Stdout {
+    // Reference USED_MUT and USED_STRING so they survive DCE
+    USED_MUT = USED_MUT + 1;
+    println(`{USED_MUT},{USED_STRING}`);
+}
+
+__DATA__
+{
+    "stdout": "1,alive\n",
+    "wir_expect:O0": ["global mut USED_MUT:", "global mut USED_STRING:"],
+    "wir_not_expect:O0": ["UNUSED_CONST", "UNUSED_MUT", "UNUSED_OBJ", "UNUSED_ARRAY"]
+}
