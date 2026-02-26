@@ -531,21 +531,20 @@ impl char {
     }
 
     /// Returns true if the character is an ASCII whitespace character:
-    /// space (0x20), tab (0x09), newline (0x0A), or carriage return (0x0D).
+    /// SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
+    /// Matches POSIX isspace() for the ASCII range.
     pub fn is_ascii_space(&self) -> bool {
-        return *self == ' ' || *self == '\t' || *self == '\n' || *self == '\r';
+        let c = (*self) as u32;
+        return c == 0x20 || (c >= 0x09 && c <= 0x0D);
     }
 
     /// Returns true if the character is a Unicode whitespace character.
-    /// Covers ASCII whitespace plus form feed (0x0C), vertical tab (0x0B),
-    /// and Unicode general category Zs/Zl/Zp code points.
+    /// Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
     pub fn is_unicode_space(&self) -> bool {
-        let c = (*self) as u32;
-        // ASCII whitespace: HT, LF, VT, FF, CR, SP
-        if c <= 0x20 {
-            return c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0B || c == 0x0C || c == 0x0D;
+        if self.is_ascii_space() {
+            return true;
         }
-        // Non-ASCII Unicode whitespace
+        let c = (*self) as u32;
         return c == 0x85       // NEXT LINE
             || c == 0xA0       // NO-BREAK SPACE
             || c == 0x1680     // OGHAM SPACE MARK
