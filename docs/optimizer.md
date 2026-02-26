@@ -194,6 +194,18 @@ Could be extended to Global Value Numbering (GVN), which is more powerful: it de
 
 The current constant propagation handles immutable globals with scalar initializers. SCCP is a more powerful variant that simultaneously propagates constants through local variables and eliminates dead branches, handling inter-dependent constant conditions that the current separate passes miss.
 
+### Interprocedural Sparse Conditional Constant Propagation (IPSCCP)
+
+Extends SCCP across function boundaries. Propagates constants from call sites into callee parameters, and propagates constant return values back to callers. When a function is always called with a constant argument, the parameter is replaced with the constant inside the function body, enabling further folding and dead branch elimination. When a function always returns the same constant, all call sites are replaced with that constant.
+
+LLVM's IPSCCP is one of its most effective interprocedural passes. In Wado's context, it is particularly valuable because:
+
+- Monomorphized generic functions often receive constant arguments (e.g., capacity values, flag booleans)
+- Stdlib wrapper functions frequently forward constants through several call layers
+- Combined with function specialization, it enables aggressive optimization of hot paths without inlining
+
+Depends on SCCP as the intraprocedural foundation.
+
 ### Copy Propagation (Cross-Block)
 
 The current copy propagation works within simple cases. Extending it to handle cross-block propagation using reaching definitions would catch more redundant copies.
