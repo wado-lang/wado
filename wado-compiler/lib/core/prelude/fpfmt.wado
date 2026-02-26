@@ -840,11 +840,11 @@ pub fn parse(d: u64, p: i32) -> f64 {
     return pack64(unrounded_round(u), -e);
 }
 
-// Set the sign bit on a f64 value (used for negation without arithmetic operators).
+// Apply sign to a f64 value. val must be non-negative.
 fn apply_sign_f64(val: f64, neg: bool) -> f64 {
     if neg {
-        let bits = builtin::i64_reinterpret_f64(val) as u64;
-        return builtin::f64_reinterpret_i64((bits | (0x8000000000000000 as u64)) as i64);
+        let neg_zero = builtin::f64_reinterpret_i64(0x8000000000000000 as i64);
+        return builtin::f64_copysign(val, neg_zero);
     }
     return val;
 }
@@ -860,6 +860,9 @@ pub fn parse_text(s: String) -> Option<f64> {
     if len == 0 {
         return null;
     }
+
+    let pos_inf = builtin::f64_reinterpret_i64(0x7FF0000000000000 as i64);
+    let canon_nan = builtin::f64_reinterpret_i64(0x7FF8000000000000 as i64);
 
     let mut i = 0;
 
@@ -889,8 +892,7 @@ pub fn parse_text(s: String) -> Option<f64> {
             && (c2 == 'f' as u8 || c2 == 'F' as u8)
         {
             if remaining == 3 {
-                let inf = builtin::f64_reinterpret_i64(0x7FF0000000000000 as i64);
-                return Option::<f64>::Some(apply_sign_f64(inf, neg));
+                return Option::<f64>::Some(apply_sign_f64(pos_inf, neg));
             }
             if remaining == 8 {
                 let c3 = s.get_byte(i + 3);
@@ -904,8 +906,7 @@ pub fn parse_text(s: String) -> Option<f64> {
                     && (c6 == 't' as u8 || c6 == 'T' as u8)
                     && (c7 == 'y' as u8 || c7 == 'Y' as u8)
                 {
-                    let inf = builtin::f64_reinterpret_i64(0x7FF0000000000000 as i64);
-                    return Option::<f64>::Some(apply_sign_f64(inf, neg));
+                    return Option::<f64>::Some(apply_sign_f64(pos_inf, neg));
                 }
             }
         }
@@ -919,7 +920,7 @@ pub fn parse_text(s: String) -> Option<f64> {
         if (c1 == 'a' as u8 || c1 == 'A' as u8)
             && (c2 == 'n' as u8 || c2 == 'N' as u8)
         {
-            return Option::<f64>::Some(builtin::f64_reinterpret_i64(0x7FF8000000000000 as i64));
+            return Option::<f64>::Some(canon_nan);
         }
         return null;
     }
@@ -996,8 +997,7 @@ pub fn parse_text(s: String) -> Option<f64> {
     // The pow10 table supports [-351, 350]; beyond that, result is definitely inf or 0.
     let eff_p = p - frac;
     if eff_p > 350 {
-        let inf = builtin::f64_reinterpret_i64(0x7FF0000000000000 as i64);
-        return Option::<f64>::Some(apply_sign_f64(inf, neg));
+        return Option::<f64>::Some(apply_sign_f64(pos_inf, neg));
     }
     if eff_p < -351 {
         return Option::<f64>::Some(apply_sign_f64(0.0, neg));
