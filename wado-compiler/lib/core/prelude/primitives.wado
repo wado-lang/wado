@@ -17,7 +17,7 @@ use {
 fn memory_to_gc_array(ptr: i32, len: i32) -> builtin::array<u8> {
     let arr = builtin::array_new::<u8>(len);
     for let mut i = 0; i < len; i += 1 {
-        builtin::array_set_u8(arr, i, builtin::i32_load8_u(ptr + i));
+        builtin::array_set_u8(arr, i, builtin::i32_load8_u(ptr + i) as u8);
     }
     return arr;
 }
@@ -43,11 +43,11 @@ fn write_decimal_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digi
     let ten: i64 = 10;
     let mut pos = offset + digit_count;
     if abs_val == zero {
-        builtin::array_set_u8(arr, offset, '0' as i32);
+        builtin::array_set_u8(arr, offset, '0' as u8);
     } else {
         for let mut temp: i64 = abs_val; temp > zero; temp = temp / ten {
             pos -= 1;
-            builtin::array_set_u8(arr, pos, ('0' as i32) + ((temp % ten) as i32));
+            builtin::array_set_u8(arr, pos, (('0' as i32) + ((temp % ten) as i32)) as u8);
         }
     }
 }
@@ -58,7 +58,7 @@ fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_c
     let base64: i64 = base as i64;
     let mut pos = offset + digit_count;
     if abs_val == zero {
-        builtin::array_set_u8(arr, offset, '0' as i32);
+        builtin::array_set_u8(arr, offset, '0' as u8);
     } else {
         for let mut temp: i64 = abs_val; temp > zero; temp = temp / base64 {
             pos -= 1;
@@ -70,7 +70,7 @@ fn write_base_digits(arr: builtin::array<u8>, offset: i32, abs_val: i64, digit_c
             } else {
                 ('a' as i32) + digit - 10
             };
-            builtin::array_set_u8(arr, pos, ch);
+            builtin::array_set_u8(arr, pos, ch as u8);
         }
     }
 }
@@ -128,7 +128,7 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
     let mask64: i64 = mask as i64;
     let mut pos = offset + digit_count;
     if val_i64 == zero {
-        builtin::array_set_u8(arr, offset, '0' as i32);
+        builtin::array_set_u8(arr, offset, '0' as u8);
     } else {
         let mut temp: i64 = val_i64;
         while temp != zero {
@@ -141,7 +141,7 @@ fn write_u64_base_digits(arr: builtin::array<u8>, offset: i32, val_i64: i64, dig
             } else {
                 ('a' as i32) + digit - 10
             };
-            builtin::array_set_u8(arr, pos, ch);
+            builtin::array_set_u8(arr, pos, ch as u8);
             // Unsigned right shift: use Wasm's i64.shr_u semantics
             // In Wado, >> on i64 is arithmetic shift. For unsigned shift we need:
             // (val as u64 >> bits) as i64
@@ -214,7 +214,7 @@ fn fmt_i64_decimal(value: i64, f: &mut Formatter) {
         let repr = f.buf.internal_raw_bytes();
         // Write the remaining digits, then the last '8'
         write_decimal_digits(repr, offset, remaining, remaining_digits);
-        builtin::array_set_u8(repr, offset + remaining_digits, '8' as i32);
+        builtin::array_set_u8(repr, offset + remaining_digits, '8' as u8);
     } else {
         let abs_val: i64 = if is_negative { zero_i64 - value } else { value };
         let digit_count = count_digits_i64(abs_val);
@@ -232,7 +232,7 @@ fn fmt_u64_decimal(value: u64, f: &mut Formatter) {
 
     if val_i64 == zero {
         let offset = f.prepare_int_write(false, "", 1);
-        builtin::array_set_u8(f.buf.internal_raw_bytes(), offset, '0' as i32);
+        builtin::array_set_u8(f.buf.internal_raw_bytes(), offset, '0' as u8);
         return;
     }
 
@@ -283,7 +283,7 @@ fn fmt_u64_decimal(value: u64, f: &mut Formatter) {
             }
             temp = signed_quot + offset_div + carry;
         }
-        builtin::array_set_u8(repr, pos, ('0' as i32) + digit);
+        builtin::array_set_u8(repr, pos, (('0' as i32) + digit) as u8);
     }
 }
 
@@ -531,30 +531,51 @@ impl char {
     }
 
     /// Returns true if the character is an ASCII whitespace character:
-    /// space (0x20), tab (0x09), newline (0x0A), or carriage return (0x0D).
-    pub fn is_ascii_space(&self) -> bool {
-        return *self == ' ' || *self == '\t' || *self == '\n' || *self == '\r';
+    /// SP (0x20), HT (0x09), LF (0x0A), VT (0x0B), FF (0x0C), CR (0x0D).
+    /// Matches POSIX isspace() for the ASCII range.
+    pub fn is_ascii_whitespace(&self) -> bool {
+        return match *self {
+            ' ' => true,
+            '\t' => true,
+            '\n' => true,
+            '\r' => true,
+            '\u{0B}' => true,
+            '\u{0C}' => true,
+            _ => false,
+        };
     }
 
     /// Returns true if the character is a Unicode whitespace character.
-    /// Covers ASCII whitespace plus form feed (0x0C), vertical tab (0x0B),
-    /// and Unicode general category Zs/Zl/Zp code points.
-    pub fn is_unicode_space(&self) -> bool {
-        let c = (*self) as u32;
-        // ASCII whitespace: HT, LF, VT, FF, CR, SP
-        if c <= 0x20 {
-            return c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0B || c == 0x0C || c == 0x0D;
-        }
-        // Non-ASCII Unicode whitespace
-        return c == 0x85       // NEXT LINE
-            || c == 0xA0       // NO-BREAK SPACE
-            || c == 0x1680     // OGHAM SPACE MARK
-            || (c >= 0x2000 && c <= 0x200A)  // EN QUAD..HAIR SPACE
-            || c == 0x2028     // LINE SEPARATOR
-            || c == 0x2029     // PARAGRAPH SEPARATOR
-            || c == 0x202F     // NARROW NO-BREAK SPACE
-            || c == 0x205F     // MEDIUM MATHEMATICAL SPACE
-            || c == 0x3000;    // IDEOGRAPHIC SPACE
+    /// Covers ASCII whitespace plus Unicode general category Zs/Zl/Zp code points.
+    pub fn is_whitespace(&self) -> bool {
+        return match *self {
+            ' ' => true,              // SP
+            '\t' => true,             // HT
+            '\n' => true,             // LF
+            '\r' => true,             // CR
+            '\u{0B}' => true,         // VT
+            '\u{0C}' => true,         // FF
+            '\u{85}' => true,         // NEXT LINE
+            '\u{A0}' => true,         // NO-BREAK SPACE
+            '\u{1680}' => true,       // OGHAM SPACE MARK
+            '\u{2000}' => true,       // EN QUAD
+            '\u{2001}' => true,       // EM QUAD
+            '\u{2002}' => true,       // EN SPACE
+            '\u{2003}' => true,       // EM SPACE
+            '\u{2004}' => true,       // THREE-PER-EM SPACE
+            '\u{2005}' => true,       // FOUR-PER-EM SPACE
+            '\u{2006}' => true,       // SIX-PER-EM SPACE
+            '\u{2007}' => true,       // FIGURE SPACE
+            '\u{2008}' => true,       // PUNCTUATION SPACE
+            '\u{2009}' => true,       // THIN SPACE
+            '\u{200A}' => true,       // HAIR SPACE
+            '\u{2028}' => true,       // LINE SEPARATOR
+            '\u{2029}' => true,       // PARAGRAPH SEPARATOR
+            '\u{202F}' => true,       // NARROW NO-BREAK SPACE
+            '\u{205F}' => true,       // MEDIUM MATHEMATICAL SPACE
+            '\u{3000}' => true,       // IDEOGRAPHIC SPACE
+            _ => false,
+        };
     }
 }
 

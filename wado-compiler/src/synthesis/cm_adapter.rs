@@ -156,10 +156,10 @@ fn synthesize_lift_inner(
             "i64" | "u64" => builtin_call("i64_load", vec![addr], TypeTable::I64),
             "f32" => builtin_call("f32_load", vec![addr], TypeTable::F32),
             "f64" => builtin_call("f64_load", vec![addr], TypeTable::F64),
-            "i8" | "u8" => builtin_call("i32_load8_u", vec![addr], TypeTable::I32),
-            "i16" | "u16" => builtin_call("i32_load16_u", vec![addr], TypeTable::I32),
+            "i8" | "u8" => builtin_call("i32_load8_u", vec![addr], TypeTable::U8),
+            "i16" | "u16" => builtin_call("i32_load16_u", vec![addr], TypeTable::U16),
             "bool" => {
-                let raw = builtin_call("i32_load8_u", vec![addr], TypeTable::I32);
+                let raw = builtin_call("i32_load8_u", vec![addr], TypeTable::U8);
                 binary(
                     crate::tir::TirBinaryOp::NotEq,
                     raw,
