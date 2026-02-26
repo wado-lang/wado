@@ -397,6 +397,45 @@ pub fn parse_data_section<T: serde::de::DeserializeOwned>(data_section: &str, co
     })
 }
 
+/// Compile source and return WIR as unparsed text.
+///
+/// Uses `dump_with_host_and_world` to get the full WIR module, then unparses it.
+/// Returns `Err` if compilation fails.
+pub fn dump_source_wir(
+    path: &std::path::Path,
+    source: &str,
+    opt_level: OptLevel,
+    target_world: Option<&str>,
+) -> Result<String, CompileError> {
+    let base_path = path
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
+    let host = FilesystemHost::new(base_path);
+    let filename = path.to_string_lossy();
+
+    let result = runtime()
+        .block_on(wado_compiler::dump_with_host_and_world(
+            source,
+            &host,
+            Some(&filename),
+            opt_level,
+            target_world,
+        ))
+        .map_err(|_: wado_compiler::Bail| {
+            bail_to_compile_error(&host.diagnostics(), Some(&filename))
+        })?;
+
+    let wir_module = result
+        .wir_module
+        .expect("WIR module should be available after dump");
+
+    Ok(wado_compiler::wir_unparse::unparse_wir(
+        &wir_module,
+        Some(&filename),
+    ))
+}
+
 /// Get human-readable name for optimization level
 pub fn opt_level_name(opt: OptLevel) -> &'static str {
     match opt {

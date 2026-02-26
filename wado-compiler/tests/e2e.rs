@@ -165,6 +165,63 @@ struct TestSpec {
     /// Presence of this key implies `world = "wasi:http/service"`.
     #[serde(rename = "wasi:http/service")]
     http_service: Option<HttpServiceSpec>,
+
+    // --- WIR pattern expectations (per optimization level) ---
+
+    /// Patterns that must appear in WIR output at -O0
+    #[serde(rename = "wir_expect:O0", default)]
+    wir_expect_o0: Vec<String>,
+    /// Patterns that must NOT appear in WIR output at -O0
+    #[serde(rename = "wir_not_expect:O0", default)]
+    wir_not_expect_o0: Vec<String>,
+
+    /// Patterns that must appear in WIR output at -O1
+    #[serde(rename = "wir_expect:O1", default)]
+    wir_expect_o1: Vec<String>,
+    /// Patterns that must NOT appear in WIR output at -O1
+    #[serde(rename = "wir_not_expect:O1", default)]
+    wir_not_expect_o1: Vec<String>,
+
+    /// Patterns that must appear in WIR output at -O2
+    #[serde(rename = "wir_expect:O2", default)]
+    wir_expect_o2: Vec<String>,
+    /// Patterns that must NOT appear in WIR output at -O2
+    #[serde(rename = "wir_not_expect:O2", default)]
+    wir_not_expect_o2: Vec<String>,
+
+    /// Patterns that must appear in WIR output at -O3
+    #[serde(rename = "wir_expect:O3", default)]
+    wir_expect_o3: Vec<String>,
+    /// Patterns that must NOT appear in WIR output at -O3
+    #[serde(rename = "wir_not_expect:O3", default)]
+    wir_not_expect_o3: Vec<String>,
+
+    /// Patterns that must appear in WIR output at -Os
+    #[serde(rename = "wir_expect:Os", default)]
+    wir_expect_os: Vec<String>,
+    /// Patterns that must NOT appear in WIR output at -Os
+    #[serde(rename = "wir_not_expect:Os", default)]
+    wir_not_expect_os: Vec<String>,
+}
+
+impl TestSpec {
+    /// Get WIR expect/not-expect patterns for a given optimization level.
+    /// Returns `(expect, not_expect)` slices.
+    fn wir_expectations(&self, opt_level: OptLevel) -> (&[String], &[String]) {
+        match opt_level {
+            OptLevel::O0 => (&self.wir_expect_o0, &self.wir_not_expect_o0),
+            OptLevel::O1 => (&self.wir_expect_o1, &self.wir_not_expect_o1),
+            OptLevel::O2 => (&self.wir_expect_o2, &self.wir_not_expect_o2),
+            OptLevel::O3 => (&self.wir_expect_o3, &self.wir_not_expect_o3),
+            OptLevel::Os => (&self.wir_expect_os, &self.wir_not_expect_os),
+        }
+    }
+
+    /// Whether this test has any WIR expectations for the given optimization level.
+    fn has_wir_expectations(&self, opt_level: OptLevel) -> bool {
+        let (expect, not_expect) = self.wir_expectations(opt_level);
+        !expect.is_empty() || !not_expect.is_empty()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -639,6 +696,43 @@ fn run_normal_test(
                     panic!("[{test_id}] runtime error: {e}");
                 });
         verify_result(&result, spec, test_id);
+    }
+
+    // Verify WIR pattern expectations (if any for this optimization level)
+    if spec.has_wir_expectations(opt_level) {
+        let target_world_str = if spec.http_service.is_some() {
+            Some("wasi:http/service")
+        } else if spec.test_world.is_some() {
+            Some("test")
+        } else {
+            None
+        };
+
+        let wir_text = common::dump_source_wir(fixture_path, source, opt_level, target_world_str)
+            .unwrap_or_else(|e| {
+                panic!("[{test_id}] WIR dump failed: {e}");
+            });
+
+        let (expect, not_expect) = spec.wir_expectations(opt_level);
+        let opt_name = common::opt_level_name(opt_level);
+
+        for pattern in expect {
+            assert!(
+                wir_text.contains(pattern),
+                "[{test_id}] wir_expect:{opt_name} failed: pattern not found in WIR\n\
+                 pattern: {pattern}\n\
+                 WIR output:\n{wir_text}"
+            );
+        }
+
+        for pattern in not_expect {
+            assert!(
+                !wir_text.contains(pattern),
+                "[{test_id}] wir_not_expect:{opt_name} failed: pattern unexpectedly found in WIR\n\
+                 pattern: {pattern}\n\
+                 WIR output:\n{wir_text}"
+            );
+        }
     }
 }
 
