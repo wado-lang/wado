@@ -235,7 +235,9 @@ fn main() {
 
     let err = result.unwrap_err();
     match err {
-        CompileError::Analyzer { message, filename, .. } => {
+        CompileError::Analyzer {
+            message, filename, ..
+        } => {
             assert!(
                 message.contains("unknown") || message.contains("not found"),
                 "Unexpected message: {message}"
@@ -261,7 +263,9 @@ fn main() {
 
     let err = result.unwrap_err();
     match err {
-        CompileError::Analyzer { message, filename, .. } => {
+        CompileError::Analyzer {
+            message, filename, ..
+        } => {
             assert!(
                 message.contains("nonexistent_function") || message.contains("not found"),
                 "Unexpected message: {message}"
