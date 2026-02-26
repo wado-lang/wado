@@ -12,13 +12,19 @@
 
 use indexmap::IndexSet;
 
+use crate::optimize::OptLevel;
 use crate::wir::{
     COMP_FEATURE_ARRAY_APPEND, WirData, WirExportDesc, WirFuncType, WirImportDesc, WirInstr,
     WirModule, WirType, WirTypeDef, WirTypeId, WirVariantType,
 };
 
 /// Run all WIR-level optimizations on the module (in-place).
-pub fn optimize_wir(module: &mut WirModule) {
+///
+/// Skipped entirely at `-O0`.
+pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
+    if opt_level == OptLevel::O0 {
+        return;
+    }
     // Whole-module pass: rewrite struct-returning functions to multi-value.
     sroa_multi_value_returns(module);
 

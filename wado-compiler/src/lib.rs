@@ -340,7 +340,7 @@ pub async fn compile_with_options<H: CompilerHost>(
     // === Phase 11.5: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
-        wir_optimize::optimize_wir(&mut wir_module);
+        wir_optimize::optimize_wir(&mut wir_module, options.opt_level);
     }
 
     // === Phase 12: Emit Wasm (WirModule → Wasm component bytes) ===
@@ -548,7 +548,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         // WIR: Translate optimized Project to WirModule for inspection.
         let wir_module = Some({
             let mut wir = wir_build::build_wir_module(&project);
-            wir_optimize::optimize_wir(&mut wir);
+            wir_optimize::optimize_wir(&mut wir, opt_level);
             wir
         });
         let optimized = Some(project);
