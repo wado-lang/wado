@@ -842,35 +842,106 @@ pub fn parse(d: u64, p: i32) -> f64 {
 
 // parse_text parses a decimal string and returns the nearest f64.
 // Returns null if the input is malformed.
-// Accepts: integer digits, optional fractional part, optional exponent.
-// Examples: "3.14", "1e2", "0.1", "123", "1.5e-3"
+// Accepts: optional sign, decimal digits, optional fractional part, optional exponent,
+//          "inf"/"infinity" (case-insensitive), "nan" (case-insensitive).
+// Rejects: leading dot (".5"), trailing dot ("5."), empty string.
+// Examples: "3.14", "1e2", "0.5", "123", "+1.5e-3", "-42", "inf", "NaN"
 pub fn parse_text(s: String) -> Option<f64> {
     let len = s.len();
+    if len == 0 {
+        return null;
+    }
+
+    // Parse optional sign
+    let mut sign = 1.0;
+    let mut i = 0;
+    let first = s.get_byte(0);
+    if first == '-' as u8 {
+        sign = -1.0;
+        i = 1;
+    } else if first == '+' as u8 {
+        i = 1;
+    }
+
+    if i >= len {
+        return null;
+    }
+
+    // Check for special values (case-insensitive)
+    let remaining = len - i;
+    let c0 = s.get_byte(i);
+
+    // "inf" or "infinity"
+    if (c0 == 'i' as u8 || c0 == 'I' as u8) && remaining >= 3 {
+        let c1 = s.get_byte(i + 1);
+        let c2 = s.get_byte(i + 2);
+        if (c1 == 'n' as u8 || c1 == 'N' as u8)
+            && (c2 == 'f' as u8 || c2 == 'F' as u8)
+        {
+            if remaining == 3 {
+                return Option::<f64>::Some(builtin::f64_copysign(f64::INFINITY, sign));
+            }
+            if remaining == 8 {
+                let c3 = s.get_byte(i + 3);
+                let c4 = s.get_byte(i + 4);
+                let c5 = s.get_byte(i + 5);
+                let c6 = s.get_byte(i + 6);
+                let c7 = s.get_byte(i + 7);
+                if (c3 == 'i' as u8 || c3 == 'I' as u8)
+                    && (c4 == 'n' as u8 || c4 == 'N' as u8)
+                    && (c5 == 'i' as u8 || c5 == 'I' as u8)
+                    && (c6 == 't' as u8 || c6 == 'T' as u8)
+                    && (c7 == 'y' as u8 || c7 == 'Y' as u8)
+                {
+                    return Option::<f64>::Some(builtin::f64_copysign(f64::INFINITY, sign));
+                }
+            }
+        }
+        return null;
+    }
+
+    // "nan" (sign is ignored for NaN)
+    if (c0 == 'n' as u8 || c0 == 'N' as u8) && remaining == 3 {
+        let c1 = s.get_byte(i + 1);
+        let c2 = s.get_byte(i + 2);
+        if (c1 == 'a' as u8 || c1 == 'A' as u8)
+            && (c2 == 'n' as u8 || c2 == 'N' as u8)
+        {
+            return Option::<f64>::Some(f64::NAN);
+        }
+        return null;
+    }
+
+    // Parse decimal number
     let MAX_DIGITS = 19;
     let mut d: u64 = 0;
     let mut frac = 0;
-    let mut i = 0;
+    let digit_start = i;
 
     // Read integer digits
     for ; i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8; i += 1 {
         d = d * 10 + (s.get_byte(i) - '0' as u8) as u64;
     }
-    if i > MAX_DIGITS {
-        return null;
-    }
+    let int_digits = i - digit_start;
 
     // Read fractional digits
     if i < len && s.get_byte(i) == '.' as u8 {
+        if int_digits == 0 {
+            return null; // leading dot not allowed
+        }
         i += 1;
+        let frac_start = i;
         for ; i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8; i += 1 {
             d = d * 10 + (s.get_byte(i) - '0' as u8) as u64;
             frac += 1;
         }
-        if i == 1 || i > MAX_DIGITS + 1 {
-            return null;
+        if i == frac_start {
+            return null; // trailing dot not allowed
         }
     }
-    if i == 0 {
+
+    let total_digits = int_digits + frac;
+    if total_digits == 0 || total_digits > MAX_DIGITS {
         return null;
     }
 
@@ -878,25 +949,47 @@ pub fn parse_text(s: String) -> Option<f64> {
     let mut p = 0;
     if i < len && (s.get_byte(i) == 'e' as u8 || s.get_byte(i) == 'E' as u8) {
         i += 1;
-        let mut sign = 1;
+        let mut exp_sign = 1;
         if i < len {
             if s.get_byte(i) == '-' as u8 {
-                sign = -1;
+                exp_sign = -1;
                 i += 1;
             } else if s.get_byte(i) == '+' as u8 {
                 i += 1;
             }
         }
+        let exp_start = i;
         if i >= len || len - i > 3 {
             return null;
         }
         for ; i < len && s.get_byte(i) >= '0' as u8 && s.get_byte(i) <= '9' as u8; i += 1 {
             p = p * 10 + (s.get_byte(i) - '0' as u8) as i32;
         }
-        p = p * sign;
+        if i == exp_start {
+            return null;
+        }
+        p = p * exp_sign;
     }
+
     if i != len {
         return null;
     }
-    return Option::<f64>::Some(parse(d, p - frac));
+
+    // Handle d == 0 (preserve negative zero)
+    if d == 0 {
+        return Option::<f64>::Some(builtin::f64_copysign(0.0, sign));
+    }
+
+    // Handle overflow/underflow for extreme exponents.
+    // The pow10 table supports [-351, 350]; beyond that, result is definitely inf or 0.
+    let eff_p = p - frac;
+    if eff_p > 350 {
+        return Option::<f64>::Some(builtin::f64_copysign(f64::INFINITY, sign));
+    }
+    if eff_p < -351 {
+        return Option::<f64>::Some(builtin::f64_copysign(0.0, sign));
+    }
+
+    let val = parse(d, eff_p);
+    return Option::<f64>::Some(builtin::f64_copysign(val, sign));
 }
