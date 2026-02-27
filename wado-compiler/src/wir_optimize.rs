@@ -14,8 +14,9 @@ use indexmap::IndexSet;
 
 use crate::optimize::OptLevel;
 use crate::wir::{
-    COMP_FEATURE_ARRAY_APPEND, WirData, WirExportDesc, WirFuncType, WirImportDesc, WirInstr,
-    WirModule, WirType, WirTypeDef, WirTypeId, WirVariantType,
+    COMP_FEATURE_ARRAY_APPEND, COMP_FEATURE_STRING_APPEND, COMP_FEATURE_STRING_APPEND_CHAR,
+    WirData, WirExportDesc, WirFuncId, WirFuncType, WirImportDesc, WirInstr, WirModule, WirType,
+    WirTypeDef, WirTypeId, WirVariantType,
 };
 
 /// Run all WIR-level optimizations on the module (in-place).
@@ -32,6 +33,10 @@ pub fn optimize_wir(module: &mut WirModule, opt_level: OptLevel) {
     // Runs before promote/split so that recovered ArrayNewFixed nodes are eligible
     // for data segment promotion and large-literal splitting.
     collapse_array_append_sequences(module);
+
+    // Whole-module pass: rewrite String::append of short constant strings to
+    // sequences of String::append_char calls, eliminating GC allocations.
+    simplify_short_string_appends(module);
 
     // Whole-module pass: promote constant primitive arrays to data segments.
     // Runs before split_large_array_literals so promoted arrays don't get split.
@@ -2835,4 +2840,212 @@ fn find_inner_array_fields(outer_fields: &mut [WirInstr]) -> Option<&mut Vec<Wir
         }
     }
     None
+}
+
+/// Rewrite `String::append(buf, "short_constant")` calls into sequences of
+/// `String::append_char(buf, ch)` calls when the constant string is ≤8 bytes.
+///
+/// This eliminates GC allocations for the temporary `String` struct and its
+/// backing `array<u8>` that are created for each short constant string argument.
+///
+/// Pattern matched (WIR):
+/// ```text
+/// Call { func_id: <string_append>,
+///   args: [receiver, StructNew { String,
+///     fields: [RefAsNonNull(ArrayNewData { data_index, offset: 0, len: L }), I32Const(L)]
+///   }]
+/// }
+/// ```
+/// Rewritten to:
+/// ```text
+/// Call { func_id: <string_append_char>, args: [receiver, I32Const(byte0)] }
+/// Call { func_id: <string_append_char>, args: [receiver, I32Const(byte1)] }
+/// ...
+/// ```
+fn simplify_short_string_appends(module: &mut WirModule) {
+    let import_func_count = module
+        .imports
+        .iter()
+        .filter(|i| matches!(i.desc, WirImportDesc::Func { .. }))
+        .count() as u32;
+
+    // Find string_append and string_append_char function indices.
+    let mut append_func_id: Option<WirFuncId> = None;
+    let mut append_char_func_id: Option<WirFuncId> = None;
+
+    for (i, f) in module.functions.iter().enumerate() {
+        let idx = import_func_count + u32::try_from(i).unwrap();
+        if f.comp_features & COMP_FEATURE_STRING_APPEND != 0 {
+            append_func_id = Some(WirFuncId::new(idx, f.name.fq.as_str().into()));
+        }
+        if f.comp_features & COMP_FEATURE_STRING_APPEND_CHAR != 0 {
+            append_char_func_id = Some(WirFuncId::new(idx, f.name.fq.as_str().into()));
+        }
+    }
+
+    let (Some(append_id), Some(append_char_id)) = (append_func_id, append_char_func_id) else {
+        return;
+    };
+
+    let data = &module.data;
+    for func in &mut module.functions {
+        if let Some(body) = &mut func.body {
+            simplify_short_appends_in_body(body, &append_id, &append_char_id, data);
+        }
+    }
+}
+
+/// Recursively process instructions, looking for Call patterns to rewrite.
+fn simplify_short_appends_in_instr(
+    instr: &mut WirInstr,
+    append_id: &WirFuncId,
+    append_char_id: &WirFuncId,
+    data: &[WirData],
+) {
+    match instr {
+        WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } | WirInstr::Seq(body) => {
+            simplify_short_appends_in_body(body, append_id, append_char_id, data);
+            return;
+        }
+        WirInstr::If {
+            condition,
+            then_body,
+            else_body,
+            ..
+        } => {
+            simplify_short_appends_in_instr(condition, append_id, append_char_id, data);
+            simplify_short_appends_in_body(then_body, append_id, append_char_id, data);
+            if let Some(eb) = else_body {
+                simplify_short_appends_in_body(eb, append_id, append_char_id, data);
+            }
+            return;
+        }
+        _ => {}
+    }
+
+    instr.for_each_boxed_child_mut(&mut |child| {
+        simplify_short_appends_in_instr(child, append_id, append_char_id, data);
+    });
+}
+
+/// Process a flat instruction body, replacing short-constant `String::append` calls.
+fn simplify_short_appends_in_body(
+    body: &mut Vec<WirInstr>,
+    append_id: &WirFuncId,
+    append_char_id: &WirFuncId,
+    data: &[WirData],
+) {
+    // First recurse into children.
+    for instr in body.iter_mut() {
+        simplify_short_appends_in_instr(instr, append_id, append_char_id, data);
+    }
+
+    // Scan for String::append calls with short constant string args.
+    let mut i = 0;
+    while i < body.len() {
+        if let Some(replacements) =
+            try_rewrite_short_string_append(&body[i], append_id, append_char_id, data)
+        {
+            let n = replacements.len();
+            body.splice(i..=i, replacements);
+            i += n;
+        } else {
+            i += 1;
+        }
+    }
+}
+
+/// Maximum byte length for short-constant string append optimization.
+const MAX_SHORT_STRING_APPEND_LEN: usize = 8;
+
+/// Try to match and rewrite a single `String::append(buf, "short")` call.
+/// Returns `None` if the instruction doesn't match the pattern.
+/// Returns `Some(vec![append_char calls])` on success.
+fn try_rewrite_short_string_append(
+    instr: &WirInstr,
+    append_id: &WirFuncId,
+    append_char_id: &WirFuncId,
+    data: &[WirData],
+) -> Option<Vec<WirInstr>> {
+    // Match: Call { func_id: string_append, args: [receiver, string_arg] }
+    // Also match: Block { body: [Call { ... }] } (optimizer sometimes wraps in blocks)
+    let call = match instr {
+        WirInstr::Call { .. } => instr,
+        WirInstr::Block { body, .. } | WirInstr::Seq(body) if body.len() == 1 => &body[0],
+        _ => return None,
+    };
+
+    let WirInstr::Call { func_id, args } = call else {
+        return None;
+    };
+
+    if func_id != append_id || args.len() != 2 {
+        return None;
+    }
+
+    // Match the second arg: StructNew { fields: [RefAsNonNull(ArrayNewData { ... }), I32Const(len)] }
+    let WirInstr::StructNew { fields, .. } = &args[1] else {
+        return None;
+    };
+
+    if fields.len() != 2 {
+        return None;
+    }
+
+    // Extract ArrayNewData from RefAsNonNull wrapper.
+    let array_new_data = match &fields[0] {
+        WirInstr::RefAsNonNull(inner) => inner.as_ref(),
+        other => other,
+    };
+
+    let WirInstr::ArrayNewData {
+        data_index,
+        offset,
+        len,
+        ..
+    } = array_new_data
+    else {
+        return None;
+    };
+
+    // Verify offset is 0 and len is a small constant.
+    let WirInstr::I32Const(0) = offset.as_ref() else {
+        return None;
+    };
+    let WirInstr::I32Const(str_len_i32) = len.as_ref() else {
+        return None;
+    };
+    let str_len = usize::try_from(*str_len_i32).ok()?;
+
+    if str_len == 0 || str_len > MAX_SHORT_STRING_APPEND_LEN {
+        return None;
+    }
+
+    // Verify the used field matches.
+    let WirInstr::I32Const(used) = &fields[1] else {
+        return None;
+    };
+    if *used != *str_len_i32 {
+        return None;
+    }
+
+    // Get the actual bytes from the data segment.
+    let seg = data.get(*data_index as usize)?;
+    if seg.bytes.len() < str_len {
+        return None;
+    }
+    let bytes = &seg.bytes[..str_len];
+
+    // Clone the receiver expression for each append_char call.
+    let receiver = &args[0];
+
+    let mut replacements = Vec::with_capacity(str_len);
+    for &byte in bytes {
+        replacements.push(WirInstr::Call {
+            func_id: append_char_id.clone(),
+            args: vec![receiver.clone(), WirInstr::I32Const(i32::from(byte))],
+        });
+    }
+
+    Some(replacements)
 }

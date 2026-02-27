@@ -416,6 +416,11 @@ impl FunctionTranslator<'_, '_> {
             // Variant/enum constructors produce fresh values
             TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
 
+            // Template string blocks produce fresh values: the builder String
+            // is created within the block and never escapes, so copying on
+            // assignment is unnecessary (copy elision).
+            TirExprKind::LabeledBlock { label, .. } if label == "__tmpl" => true,
+
             // Everything else is not fresh (locals, field access, index, etc.)
             _ => false,
         }

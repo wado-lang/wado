@@ -9,8 +9,10 @@
 
 // Powers of 10 from 10^0 to 10^19
 global POW10: Array<u64> = [
-    1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9,
-    1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19,
+    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
+    1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000,
+    100000000000000, 1000000000000000, 10000000000000000, 100000000000000000,
+    1000000000000000000, 10000000000000000000,
 ];
 
 pub fn pow10(n: i32) -> u64 {
@@ -309,6 +311,45 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
     return FormatResult { digits: d, exponent: -p };
 }
 
+// Compute fixed_width result for fixed-point formatting with given precision.
+// Combines decimal position estimation and digit computation in a single function,
+// sharing the unpack64 call. This avoids the expensive short() + fixed_width() two-pass.
+// Cost: 1×unpack64 + 2×get_pow10 + 2×uscale (vs 2×unpack64 + 2×get_pow10 + 3-4×uscale)
+pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
+    let unpack = unpack64(f);
+    let m = unpack.mantissa;
+    let e = unpack.exponent;
+
+    // Phase 1: Determine exact decimal position using floor of 1-digit scaling.
+    // log10_pow2(e+63) approximates floor(log10(f)) but may underestimate by 1.
+    // One uscale + floor check resolves the ambiguity exactly.
+    let log10_e63 = log10_pow2(e + 63);
+    let p1 = -log10_e63;
+    let lp1 = log2_pow10(p1);
+    let pm1 = get_pow10(p1);
+    let s1 = -(e + lp1 + 3);
+    let u1 = uscale(m, pm1.hi, pm1.lo, s1);
+    let d1_floor = unrounded_floor(u1);
+    let decimal_pos = if d1_floor >= 10 { 2 - p1 } else { 1 - p1 };
+
+    // Phase 2: Compute fixed_width(f, n) reusing the unpacked mantissa and exponent.
+    let int_digits = if decimal_pos > 0 { decimal_pos } else { 1 };
+    let total_digits = int_digits + precision;
+    let n = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
+
+    let p = n - 1 - log10_e63;
+    let lp = log2_pow10(p);
+    let pm = get_pow10(p);
+    let s = -(e + lp + 3);
+    let u = uscale(m, pm.hi, pm.lo, s);
+    let mut d = unrounded_round(u);
+    if d >= pow10(n) {
+        d = unrounded_round(unrounded_div(u, 10));
+        return FormatResult { digits: d, exponent: -p + 1 };
+    }
+    return FormatResult { digits: d, exponent: -p };
+}
+
 // Short computes the shortest formatting of f that round-trips
 pub fn short(f: f64) -> FormatResult {
     let min_exp = -1085;
@@ -511,8 +552,7 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
 
     if decimal_pos <= 0 {
         // Need leading zeros: 0.00...digits
-        buf.append_char('0');
-        buf.append_char('.');
+        buf.append("0.");
         fill_zeros(buf, -decimal_pos);
         let digit_offset = buf.len();
         fill_zeros(buf, nd);
@@ -529,11 +569,8 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
         fill_zeros(buf, nd + 1);
         write_digits_at(buf, start, d, nd);
         // Shift fractional part right by 1 and insert '.'
-        let mut i = start + nd;
-        while i > start + decimal_pos {
-            buf.set_byte(i, buf.get_byte(i - 1));
-            i = i - 1;
-        }
+        let raw = buf.internal_raw_bytes();
+        builtin::array_copy::<u8>(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
         buf.set_byte(start + decimal_pos, '.' as u8);
     }
 }
@@ -562,11 +599,8 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
         let start = buf.len();
         fill_zeros(buf, nd + 1);
         write_digits_at(buf, start, d, nd);
-        let mut i = start + nd;
-        while i > start + 1 {
-            buf.set_byte(i, buf.get_byte(i - 1));
-            i = i - 1;
-        }
+        let raw = buf.internal_raw_bytes();
+        builtin::array_copy::<u8>(raw, start + 2, raw, start + 1, nd - 1);
         buf.set_byte(start + 1, '.' as u8);
     } else {
         let start = buf.len();
@@ -575,9 +609,9 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     }
 
     // Exponent
-    buf.append_char(if upper { 'E' } else { 'e' });
+    buf.append(if upper { "E" } else { "e" });
     if exp < 0 {
-        buf.append_char('-');
+        buf.append("-");
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };
@@ -612,8 +646,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
 
     if decimal_pos <= 0 {
         let leading_zeros = -decimal_pos;
-        buf.append_char('0');
-        buf.append_char('.');
+        buf.append("0.");
         if precision <= leading_zeros {
             fill_zeros(buf, precision);
             return;
@@ -638,7 +671,7 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         write_digits_at(buf, start, d, nd);
         fill_zeros(buf, decimal_pos - nd);
         if precision > 0 {
-            buf.append_char('.');
+            buf.append(".");
             fill_zeros(buf, precision);
         }
     } else {
@@ -655,11 +688,8 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
             let start = buf.len();
             fill_zeros(buf, total);
             write_digits_at(buf, start, trim_d, output_nd);
-            let mut i = start + output_nd;
-            while i > start + decimal_pos {
-                buf.set_byte(i, buf.get_byte(i - 1));
-                i = i - 1;
-            }
+            let raw = buf.internal_raw_bytes();
+            builtin::array_copy::<u8>(raw, start + decimal_pos + 1, raw, start + decimal_pos, output_nd - decimal_pos);
             buf.set_byte(start + decimal_pos, '.' as u8);
             return;
         }
@@ -667,11 +697,8 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         let start = buf.len();
         fill_zeros(buf, nd + 1);
         write_digits_at(buf, start, d, nd);
-        let mut i = start + nd;
-        while i > start + decimal_pos {
-            buf.set_byte(i, buf.get_byte(i - 1));
-            i = i - 1;
-        }
+        let raw = buf.internal_raw_bytes();
+        builtin::array_copy::<u8>(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
         buf.set_byte(start + decimal_pos, '.' as u8);
         fill_zeros(buf, trailing);
     }
@@ -706,11 +733,8 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
             skip = skip - 1;
         }
         write_digits_at(buf, start, trim_d, digit_count);
-        let mut i = start + digit_count;
-        while i > start + 1 {
-            buf.set_byte(i, buf.get_byte(i - 1));
-            i = i - 1;
-        }
+        let raw = buf.internal_raw_bytes();
+        builtin::array_copy::<u8>(raw, start + 2, raw, start + 1, digit_count - 1);
         buf.set_byte(start + 1, '.' as u8);
         fill_zeros(buf, trailing);
     } else {
@@ -726,9 +750,9 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
     }
 
     let exp = p + nd - 1;
-    buf.append_char(if upper { 'E' } else { 'e' });
+    buf.append(if upper { "E" } else { "e" });
     if exp < 0 {
-        buf.append_char('-');
+        buf.append("-");
     }
 
     let abs_exp = if exp < 0 { -exp } else { exp };

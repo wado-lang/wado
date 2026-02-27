@@ -139,7 +139,14 @@ fn run() with Stdout {
     };
     "core:cli/println"(__tmpl: block -> ref null String {
         __local_3 = String { repr: ref.as_non_null(builtin::array_new<u8>(24)), used: 0 };
-        String::append(__local_3, String { repr: ref.as_non_null(array.new_data<u8>[1](0, 8)), used: 8 });
+        String::append_char(__local_3, 114);
+        String::append_char(__local_3, 101);
+        String::append_char(__local_3, 115);
+        String::append_char(__local_3, 117);
+        String::append_char(__local_3, 108);
+        String::append_char(__local_3, 116);
+        String::append_char(__local_3, 58);
+        String::append_char(__local_3, 32);
         __local_4 = value_copy Formatter(__inline_Formatter__new_4: block -> ref null Formatter {
             __local_10 = __local_3;
             break __inline_Formatter__new_4: Formatter { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -1, buf: ref.as_non_null(__local_10) };
@@ -341,44 +348,23 @@ fn String::grow(self, min_capacity) {
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref null array<u8>;
-    let i: i32;
-    let byte: u8;
+    let __local_5: i32;
+    let __local_6: i32;
     let __local_7: i32;
     let __local_8: i32;
-    let __local_9: i32;
-    let __local_10: i32;
-    let _licm_used: i32;
-    let _licm_repr: ref null array<u8>;
     capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     };
     new_capacity = __inline_i32_max_0: block -> i32 {
-        __local_7 = __inline_i32_max_1: block -> i32 {
-            __local_9 = capacity * 2;
-            break __inline_i32_max_1: select i32(__local_9 > min_capacity, __local_9, min_capacity);
+        __local_5 = __inline_i32_max_1: block -> i32 {
+            __local_7 = capacity * 2;
+            break __inline_i32_max_1: select i32(__local_7 > min_capacity, __local_7, min_capacity);
         };
-        break __inline_i32_max_0: select i32(__local_7 > 8, __local_7, 8);
+        break __inline_i32_max_0: select i32(__local_5 > 8, __local_5, 8);
     };
     new_repr = builtin::array_new<u8>(new_capacity);
-    __for_0: block {
-        i = 0;
-        _licm_used = self.used;
-        _licm_repr = self.repr;
-        block {
-            l19: loop {
-                if (i < _licm_used) == 0 {
-                    break __for_0;
-                };
-                block {
-                    byte = builtin::array_get_u8(_licm_repr, i);
-                    builtin::array_set_u8(new_repr, i, byte);
-                };
-                i = i + 1;
-                continue l19;
-            };
-        };
-    };
+    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
     self.repr = ref.as_non_null(new_repr);
 }
 
@@ -397,13 +383,8 @@ fn String::internal_reserve_uninit(self, n) {
 fn String::append(self, other) {
     let other_len: i32;
     let new_used: i32;
-    let other_repr: ref null array<u8>;
-    let i: i32;
-    let byte: u8;
-    let __local_7: ref null String;
-    let __local_8: ref null String;
-    let _licm_repr: ref null array<u8>;
-    let _licm_used: i32;
+    let __local_4: ref null String;
+    let __local_5: ref null String;
     other_len = other.used;
     if other_len == 0 {
         return;
@@ -412,25 +393,7 @@ fn String::append(self, other) {
     if builtin::unlikely(new_used > builtin::array_len(self.repr)) {
         String::grow(self, new_used);
     };
-    other_repr = other.repr;
-    __for_2: block {
-        i = 0;
-        _licm_repr = self.repr;
-        _licm_used = self.used;
-        block {
-            l25: loop {
-                if (i < other_len) == 0 {
-                    break __for_2;
-                };
-                block {
-                    byte = builtin::array_get_u8(other_repr, i);
-                    builtin::array_set_u8(_licm_repr, _licm_used + i, byte);
-                };
-                i = i + 1;
-                continue l25;
-            };
-        };
-    };
+    builtin::array_copy<u8>(self.repr, self.used, other.repr, 0, other_len);
     self.used = new_used;
 }
 
@@ -468,7 +431,7 @@ fn Formatter::write_char_n(self, c, n) {
         i = 0;
         _licm_buf = self.buf;
         block {
-            l32: loop {
+            l26: loop {
                 if (i < n) == 0 {
                     break __for_0;
                 };
@@ -476,7 +439,7 @@ fn Formatter::write_char_n(self, c, n) {
                     String::append_char(_licm_buf, c);
                 };
                 i = i + 1;
-                continue l32;
+                continue l26;
             };
         };
     };
