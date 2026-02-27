@@ -1,0 +1,24 @@
+// Test: inlining generic functions with nested reference types
+// Ensures Array<&mut Struct> works correctly after inlining
+
+use { println, Stdout } from "core:cli";
+
+struct Item {
+    value: i32,
+}
+
+export fn run() with Stdout {
+    let mut a = Item { value: 10 };
+    let mut b = Item { value: 20 };
+
+    // Array literal uses SequenceLiteralBuilder which is generic
+    // When inlined, the type Array<&mut Item> must be preserved correctly
+    let items: Array<&mut Item> = [&mut a, &mut b];
+
+    for let mut i = 0; i < items.len(); i += 1 {
+        println(`{items[i].value}`);
+    }
+}
+
+__DATA__
+{"stdout": "10\n20\n"}

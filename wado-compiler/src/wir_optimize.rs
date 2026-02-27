@@ -2778,25 +2778,38 @@ fn try_match_append_sequence(
             return None;
         }
 
-        // Resolve the element value through value bindings.
+        // Resolve the element value through value bindings and aliases.
         // For non-scalar elements (e.g., String, struct), the value is materialized
         // in a preceding LocalSet and referenced via LocalGet in the call arg.
-        let element = resolve_value_binding(&args[1], &value_bindings);
+        // For reference elements (e.g., &mut Item), the value may be a LocalGet alias.
+        let element = resolve_value_binding(&args[1], &value_bindings, &aliases);
         values.push(element);
     }
 
     Some(values)
 }
 
-/// Resolve a value through value bindings from the enclosing block.
+/// Resolve a value through value bindings and aliases from the enclosing block.
 /// If the instruction is a `LocalGet` that refers to a value binding, return the
-/// bound value. Otherwise return a clone of the instruction as-is.
-fn resolve_value_binding(instr: &WirInstr, value_bindings: &[(String, WirInstr)]) -> WirInstr {
+/// bound value. If it refers to an alias, resolve through the alias chain.
+/// Otherwise return a clone of the instruction as-is.
+fn resolve_value_binding(
+    instr: &WirInstr,
+    value_bindings: &[(String, WirInstr)],
+    aliases: &[(String, String)],
+) -> WirInstr {
     if let WirInstr::LocalGet { name } = instr {
         for (binding_name, binding_value) in value_bindings {
             if binding_name == name {
                 return binding_value.clone();
             }
+        }
+        // Also resolve through aliases (e.g., inlined parameter that aliases a caller local)
+        let resolved = resolve_alias(name, aliases);
+        if resolved != name {
+            return WirInstr::LocalGet {
+                name: resolved.to_string(),
+            };
         }
     }
     instr.clone()

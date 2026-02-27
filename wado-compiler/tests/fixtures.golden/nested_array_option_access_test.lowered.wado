@@ -33,11 +33,20 @@ export fn run() with Stdout {
     let b: Option<i32> = null;
     let c: Option<i32> = Option<i32>::Some(99);
     let arr: Array<Option<i32>> = __seq_lit: {
-        let mut __b: Array<Option<i32>> = "Array<Option<i32>>^SequenceLiteralBuilder::new_literal"(3);
-        __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(a);
-        __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(b);
-        __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(c);
-        break __seq_lit: __b."Array<Option<i32>>^SequenceLiteralBuilder::build"();
+        let mut __b: Array<Option<i32>> = Array<Option<i32>> { repr: core::builtin::array_new::<Option<i32>>(3), used: 0 };
+        __inline_Array_Option_i32___SequenceLiteralBuilder__push_literal_2: {
+            let self: &mut Array<Option<i32>> = &mut __b;
+            self."Array<Option<i32>>::append"(a);
+        };
+        __inline_Array_Option_i32___SequenceLiteralBuilder__push_literal_3: {
+            let self: &mut Array<Option<i32>> = &mut __b;
+            self."Array<Option<i32>>::append"(b);
+        };
+        __inline_Array_Option_i32___SequenceLiteralBuilder__push_literal_4: {
+            let self: &mut Array<Option<i32>> = &mut __b;
+            self."Array<Option<i32>>::append"(c);
+        };
+        break __seq_lit: *__b;
     };
     let __pattern_temp_0: Option<i32> = arr."Array<Option<i32>>^IndexValue::index_value"(0);
     if __variant_test(__pattern_temp_0, case=0, name=Some) {
@@ -45,11 +54,11 @@ export fn run() with Stdout {
         core::cli::println(__tmpl: {
             let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(23), used: 0 };
             __r.String::append("first: ");
-            let mut __f: Formatter = __inline_Formatter__new_2: {
+            let mut __f: Formatter = __inline_Formatter__new_7: {
                 let buf: &mut String = &mut __r;
-                break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
-            __inline_i32_Display__fmt_3: {
+            __inline_i32_Display__fmt_8: {
                 let self: Box<i32> = Box<i32> { value: x };
                 let f: &mut Formatter = &mut __f;
                 "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
@@ -62,7 +71,7 @@ export fn run() with Stdout {
         core::cli::println("second: null");
     }
     __for_of_0: {
-        let mut __iter_0: ArrayIter<Option<i32>> = arr."Array<Option<i32>>^IntoIterator::into_iter"();
+        let mut __iter_0: ArrayIter<Option<i32>> = ArrayIter<Option<i32>> { repr: arr.repr, used: arr.used, index: 0 };
         loop {
             let __pattern_temp_2: Option<Option<i32>> = __iter_0."ArrayIter<Option<i32>>^Iterator::next"();
             if __variant_test(__pattern_temp_2, case=0, name=Some) {
@@ -71,11 +80,11 @@ export fn run() with Stdout {
                     Some(n) => __tmpl: {
                         let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(22), used: 0 };
                         __r.String::append("Some(");
-                        let mut __f: Formatter = __inline_Formatter__new_5: {
+                        let mut __f: Formatter = __inline_Formatter__new_11: {
                             let buf: &mut String = &mut __r;
-                            break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
+                            break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                         };
-                        __inline_i32_Display__fmt_6: {
+                        __inline_i32_Display__fmt_12: {
                             let f: &mut Formatter = &mut __f;
                             "core::prelude/primitives.wado::fmt_i32_decimal"(n, f);
                         };
@@ -107,23 +116,11 @@ fn "ArrayIter<Option<i32>>^Iterator::next"(self: &mut ArrayIter<Option<i32>>) ->
     return Option<Option<i32>>::Some(item);
 }
 
-fn "Array<Option<i32>>^IntoIterator::into_iter"(self: &Array<Option<i32>>) -> ArrayIter<Option<i32>> {
-    return ArrayIter<Option<i32>> { repr: self.repr, used: self.used, index: 0 };
-}
-
 fn "Array<Option<i32>>^IndexValue::index_value"(self: &Array<Option<i32>>, index: i32) -> Option<i32> {
     if (index >= self.used) {
         core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<Option<i32>>(self.repr, index);
-}
-
-fn "Array<Option<i32>>^SequenceLiteralBuilder::build"(self: &Array<Option<i32>>) -> Array<Option<i32>> {
-    return *self;
-}
-
-fn "Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<Option<i32>>, value: Option<i32>) {
-    self."Array<Option<i32>>::append"(value);
 }
 
 pub fn "Array<Option<i32>>::append"(self: &mut Array<Option<i32>>, value: Option<i32>) {
@@ -140,13 +137,5 @@ pub fn "Array<Option<i32>>::append"(self: &mut Array<Option<i32>>, value: Option
     }
     core::builtin::array_set::<Option<i32>>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<Option<i32>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<Option<i32>> {
-    return "Array<Option<i32>>::with_capacity"(capacity);
-}
-
-pub fn "Array<Option<i32>>::with_capacity"(capacity: i32) -> Array<Option<i32>> {
-    return Array<Option<i32>> { repr: core::builtin::array_new::<Option<i32>>(capacity), used: 0 };
 }
 
