@@ -5,7 +5,9 @@ use indexmap::{IndexMap, IndexSet};
 use crate::ast::{self, BinaryOp, Expr, Function, Item, Literal, Type, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
-use crate::tir::{FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable};
+use crate::tir::{
+    FunctionRef, PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 use super::Resolver;
@@ -1773,7 +1775,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             match trait_name {
                 // All primitives implement Eq and Ord
                 "Eq" | "Ord" => return true,
-                // Add other built-in trait implementations as needed
+                // Numeric primitives implement arithmetic traits
+                "Add" | "Sub" | "Mul" | "Div" | "Rem"
+                    if !matches!(prim, PrimitiveType::Bool | PrimitiveType::Char) =>
+                {
+                    return true;
+                }
                 _ => {}
             }
             // For other traits, check the type name

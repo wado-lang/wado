@@ -391,6 +391,146 @@ impl ArrayIter<T> {
             pred,
         };
     }
+
+    pub fn find(&mut self, pred: fn(T) -> bool) -> Option<T> {
+        loop {
+            if let Some(item) = self.next() {
+                if (pred)(item) {
+                    return Option::<T>::Some(item);
+                }
+            } else {
+                return null;
+            }
+        }
+    }
+
+    pub fn any(&mut self, pred: fn(T) -> bool) -> bool {
+        loop {
+            if let Some(item) = self.next() {
+                if (pred)(item) {
+                    return true;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
+
+    pub fn all(&mut self, pred: fn(T) -> bool) -> bool {
+        loop {
+            if let Some(item) = self.next() {
+                if !(pred)(item) {
+                    return false;
+                }
+            } else {
+                return true;
+            }
+        }
+    }
+
+    pub fn last(&mut self) -> Option<T> {
+        let mut result: Option<T> = null;
+        loop {
+            if let Some(item) = self.next() {
+                result = Option::<T>::Some(item);
+            } else {
+                return result;
+            }
+        }
+    }
+
+    pub fn nth(&mut self, n: i32) -> Option<T> {
+        let mut remaining = n;
+        loop {
+            if let Some(item) = self.next() {
+                if remaining <= 0 {
+                    return Option::<T>::Some(item);
+                }
+                remaining -= 1;
+            } else {
+                return null;
+            }
+        }
+    }
+
+    pub fn position(&mut self, pred: fn(T) -> bool) -> Option<i32> {
+        let mut idx = 0;
+        loop {
+            if let Some(item) = self.next() {
+                if (pred)(item) {
+                    return Option::<i32>::Some(idx);
+                }
+                idx += 1;
+            } else {
+                return null;
+            }
+        }
+    }
+
+    pub fn for_each(&mut self, f: fn(T)) {
+        loop {
+            if let Some(item) = self.next() {
+                (f)(item);
+            } else {
+                return;
+            }
+        }
+    }
+
+    pub fn reduce(&mut self, f: fn(T, T) -> T) -> Option<T> {
+        if let Some(first) = self.next() {
+            let mut acc = first;
+            loop {
+                if let Some(item) = self.next() {
+                    acc = (f)(acc, item);
+                } else {
+                    return Option::<T>::Some(acc);
+                }
+            }
+        } else {
+            return null;
+        }
+    }
+
+    pub fn take(&self, n: i32) -> TakeIter<T> {
+        return TakeIter {
+            repr: self.repr,
+            used: self.used,
+            index: self.index,
+            remaining: n,
+        };
+    }
+
+    pub fn skip(&self, n: i32) -> ArrayIter<T> {
+        let new_index = i32_min(self.index + i32_max(n, 0), self.used);
+        return ArrayIter {
+            repr: self.repr,
+            used: self.used,
+            index: new_index,
+        };
+    }
+
+    pub fn chain(&self, other: ArrayIter<T>) -> ChainIter<T> {
+        return ChainIter {
+            repr1: self.repr,
+            used1: self.used,
+            index1: self.index,
+            repr2: other.repr,
+            used2: other.used,
+            index2: other.index,
+        };
+    }
+
+    pub fn zip<U>(&self, other: ArrayIter<U>) -> ZipIter<T, U> {
+        return ZipIter {
+            repr1: self.repr,
+            used1: self.used,
+            index1: self.index,
+            repr2: other.repr,
+            used2: other.used,
+            index2: other.index,
+        };
+    }
 }
 pub struct EnumerateIter<T> {
     repr: builtin::array<T>,
@@ -539,5 +679,127 @@ impl FilterMapIter<T, U> {
             }
         }
         return acc;
+    }
+}
+
+pub struct TakeIter<T> {
+    repr: builtin::array<T>,
+    used: i32,
+    index: i32,
+    remaining: i32,
+}
+
+impl Iterator for TakeIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining <= 0 || self.index >= self.used {
+            return null;
+        }
+        let item = builtin::array_get::<T>(self.repr, self.index);
+        self.index += 1;
+        self.remaining -= 1;
+        return Option::<T>::Some(item);
+    }
+}
+
+// TakeIter uses Iterator::collect() and Iterator::count() default methods
+
+pub struct ChainIter<T> {
+    repr1: builtin::array<T>,
+    used1: i32,
+    index1: i32,
+    repr2: builtin::array<T>,
+    used2: i32,
+    index2: i32,
+}
+
+impl Iterator for ChainIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index1 < self.used1 {
+            let item = builtin::array_get::<T>(self.repr1, self.index1);
+            self.index1 += 1;
+            return Option::<T>::Some(item);
+        }
+        if self.index2 < self.used2 {
+            let item = builtin::array_get::<T>(self.repr2, self.index2);
+            self.index2 += 1;
+            return Option::<T>::Some(item);
+        }
+        return null;
+    }
+}
+
+// ChainIter uses Iterator::collect() and Iterator::count() default methods
+
+pub struct ZipIter<T, U> {
+    repr1: builtin::array<T>,
+    used1: i32,
+    index1: i32,
+    repr2: builtin::array<U>,
+    used2: i32,
+    index2: i32,
+}
+
+impl Iterator for ZipIter<T, U> {
+    type Item = [T, U];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index1 >= self.used1 || self.index2 >= self.used2 {
+            return null;
+        }
+        let a = builtin::array_get::<T>(self.repr1, self.index1);
+        let b = builtin::array_get::<U>(self.repr2, self.index2);
+        self.index1 += 1;
+        self.index2 += 1;
+        return Option::<[T, U]>::Some([a, b]);
+    }
+}
+
+// ZipIter uses Iterator::collect() and Iterator::count() default methods
+
+use { Add } from "core:prelude/traits.wado";
+
+impl ArrayIter<T: Add> {
+    pub fn sum(&mut self) -> Option<T> {
+        return self.reduce(|a: T, b: T| a + b);
+    }
+}
+
+impl ArrayIter<T: Ord> {
+    pub fn min(&mut self) -> Option<T> {
+        if let Some(first) = self.next() {
+            let mut result = first;
+            loop {
+                if let Some(item) = self.next() {
+                    if let Less = item.cmp(&result) {
+                        result = item;
+                    }
+                } else {
+                    return Option::<T>::Some(result);
+                }
+            }
+        } else {
+            return null;
+        }
+    }
+
+    pub fn max(&mut self) -> Option<T> {
+        if let Some(first) = self.next() {
+            let mut result = first;
+            loop {
+                if let Some(item) = self.next() {
+                    if let Greater = item.cmp(&result) {
+                        result = item;
+                    }
+                } else {
+                    return Option::<T>::Some(result);
+                }
+            }
+        } else {
+            return null;
+        }
     }
 }
