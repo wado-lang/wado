@@ -93,10 +93,7 @@ export fn run() with Stdout {
             let key: String = "z";
             self."TreeMap<String,i32>::insert"(key, 30);
         };
-        break __kv_lit: __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_5: {
-            let self: TreeMap<String,i32> = __b;
-            break __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_5: *self;
-        };
+        break __kv_lit: *__b;
     });
     __assert_0: {
         let __cond: bool = (total == 60);
@@ -290,7 +287,7 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
     }
     let item: [String, i32] = core::builtin::array_get::<[String, i32]>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<[String, i32]>::Some(item);
 }
 
 pub fn "TreeMap<String,i32>::entries"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
@@ -337,7 +334,7 @@ fn "ArrayIter<TreeMapEntry<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tre
     }
     let item: TreeMapEntry<String,i32> = core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<TreeMapEntry<String,i32>>::Some(item);
 }
 
 fn "Array<TreeMapEntry<String,i32>>^IntoIterator::into_iter"(self: &Array<TreeMapEntry<String,i32>>) -> ArrayIter<TreeMapEntry<String,i32>> {

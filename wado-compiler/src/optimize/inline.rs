@@ -77,7 +77,6 @@ fn count_expr(expr: &TirExpr) -> usize {
         }
         TirExprKind::Closure { body, .. } => count_expr(body),
         TirExprKind::ClosureToCanonical { functor, .. } => count_expr(functor),
-        TirExprKind::OptionSome { value } => count_expr(value),
         TirExprKind::Switch {
             scrutinee,
             arms,
@@ -89,9 +88,7 @@ fn count_expr(expr: &TirExpr) -> usize {
                 + count_block_exprs(default)
         }
         // Lowered pattern matching nodes - count inner expressions
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => count_expr(expr),
         TirExprKind::LabeledBlock { block, .. } => count_block_exprs(block),
@@ -327,8 +324,7 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner } => {
+        | TirExprKind::Cast { expr: inner, .. } => {
             expr_has_complex_generic_types(inner, type_table)
         }
         TirExprKind::Index { expr: base, index } => {
@@ -371,9 +367,7 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::GlobalVarSet { value, .. } => {
             expr_has_complex_generic_types(value, type_table)
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             expr_has_complex_generic_types(expr, type_table)
@@ -595,9 +589,6 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
                 collect_callees_from_expr(&arm.body, callees);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            collect_callees_from_expr(value, callees);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_callees_from_expr(payload_expr, callees);
@@ -609,9 +600,7 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_callees_from_expr(value, callees);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             collect_callees_from_expr(expr, callees);
@@ -802,6 +791,7 @@ fn inline_calls_in_block(
                 is_reactive,
                 type_id,
                 value,
+                skip_value_copy,
             } => {
                 // Try to inline the value expression if it's a call or method call
                 let inline_result = try_inline_call_expr(
@@ -851,6 +841,7 @@ fn inline_calls_in_block(
                             is_reactive,
                             type_id,
                             value: inlined_expr,
+                            skip_value_copy,
                         },
                         stmt.span,
                     ));
@@ -876,6 +867,7 @@ fn inline_calls_in_block(
                             is_reactive,
                             type_id,
                             value: new_value,
+                            skip_value_copy,
                         },
                         stmt.span,
                     ));
@@ -1325,6 +1317,7 @@ fn try_inline_call_expr(
                 is_reactive: false,
                 type_id: arg.type_id,
                 value: arg.clone(),
+                skip_value_copy: false,
             },
             expr.span,
         ));
@@ -1468,6 +1461,7 @@ fn try_inline_method_call_expr(
             is_reactive: false,
             type_id: receiver.type_id,
             value: (**receiver).clone(),
+            skip_value_copy: false,
         },
         expr.span,
     ));
@@ -1489,6 +1483,7 @@ fn try_inline_method_call_expr(
                 is_reactive: false,
                 type_id: arg.type_id,
                 value: arg.clone(),
+                skip_value_copy: false,
             },
             expr.span,
         ));
@@ -1624,6 +1619,7 @@ fn try_inline_static_call_expr(
                 is_reactive: false,
                 type_id: arg.type_id,
                 value: arg.clone(),
+                skip_value_copy: false,
             },
             expr.span,
         ));
@@ -1820,6 +1816,7 @@ fn remap_stmt_with_label(
             is_reactive,
             type_id,
             value,
+            skip_value_copy,
         } => {
             let new_index =
                 remap_local_index(*local_index, param_to_local, local_offset, param_count);
@@ -1836,6 +1833,7 @@ fn remap_stmt_with_label(
                     param_count,
                     source_module,
                 ),
+                skip_value_copy: *skip_value_copy,
             }
         }
         TirStmtKind::Expr(expr) => TirStmtKind::Expr(remap_expr(
@@ -2407,15 +2405,6 @@ fn remap_expr(
             functor_id: *functor_id,
             target_fn_type: *target_fn_type,
         },
-        TirExprKind::OptionSome { value } => TirExprKind::OptionSome {
-            value: Box::new(remap_expr(
-                value,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-        },
         TirExprKind::VariantConstruct {
             variant_type,
             case_index,
@@ -2464,25 +2453,6 @@ fn remap_expr(
                 param_count,
                 source_module,
             )),
-        },
-        TirExprKind::IsNotNull { expr } => TirExprKind::IsNotNull {
-            expr: Box::new(remap_expr(
-                expr,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-        },
-        TirExprKind::UnwrapOption { expr, inner_type } => TirExprKind::UnwrapOption {
-            expr: Box::new(remap_expr(
-                expr,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-            inner_type: *inner_type,
         },
         TirExprKind::VariantTag { expr } => TirExprKind::VariantTag {
             expr: Box::new(remap_expr(
@@ -2638,6 +2608,7 @@ fn remap_stmt(
             is_reactive,
             type_id,
             value,
+            skip_value_copy,
         } => {
             let new_index =
                 remap_local_index(*local_index, param_to_local, local_offset, param_count);
@@ -2654,6 +2625,7 @@ fn remap_stmt(
                     param_count,
                     source_module,
                 ),
+                skip_value_copy: *skip_value_copy,
             }
         }
         TirStmtKind::Expr(expr) => TirStmtKind::Expr(remap_expr(
@@ -3077,19 +3049,6 @@ fn inline_calls_in_expr(
                 inline_counter,
             );
         }
-        TirExprKind::OptionSome { value } => {
-            inline_calls_in_expr(
-                value,
-                candidates,
-                current_module,
-                local_count,
-                local_types,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 inline_calls_in_expr(
@@ -3234,9 +3193,7 @@ fn inline_calls_in_expr(
                 inline_counter,
             );
         }
-        TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
+        TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             inline_calls_in_expr(

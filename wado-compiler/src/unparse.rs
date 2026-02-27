@@ -3150,11 +3150,6 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::Null => {
                 self.output.push_str("null");
             }
-            TirExprKind::OptionSome { value } => {
-                self.output.push_str("Option::Some(");
-                self.unparse_expr(value);
-                self.output.push(')');
-            }
             TirExprKind::VariantConstruct {
                 case_name, payload, ..
             } => {
@@ -3509,16 +3504,6 @@ impl<'a> TirUnparser<'a> {
             }
 
             // Lowered pattern matching nodes
-            TirExprKind::IsNotNull { expr } => {
-                self.output.push_str("__is_not_null(");
-                self.unparse_expr(expr);
-                self.output.push(')');
-            }
-            TirExprKind::UnwrapOption { expr, .. } => {
-                self.output.push_str("__unwrap_option(");
-                self.unparse_expr(expr);
-                self.output.push(')');
-            }
             TirExprKind::VariantTag { expr } => {
                 self.output.push_str("__variant_tag(");
                 self.unparse_expr(expr);

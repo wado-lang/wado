@@ -70,10 +70,7 @@ export fn run() with Stdout {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(50);
         };
-        break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_7: {
-            let self: Array<i32> = __b;
-            break __inline_Array_i32__SequenceLiteralBuilder__build_7: *self;
-        };
+        break __seq_lit: *__b;
     };
     let s: ArraySlice<i32> = arr."Array<i32>::slice"(1, 4);
     __assert_0: {
@@ -914,7 +911,7 @@ fn "MapIter<i32,i32>^Iterator::next"(self: &mut MapIter<i32,i32>) -> Option<i32>
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(self.f(item));
+    return Option<i32>::Some(self.f(item));
 }
 
 fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
@@ -923,7 +920,7 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<i32>::Some(item);
 }
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
@@ -965,7 +962,7 @@ pub fn "ArraySlice<i32>::get"(self: &ArraySlice<i32>, index: i32) -> Option<i32>
     if ((index < 0) || (index >= (self.end - self.start))) {
         return null;
     }
-    return Option::Some(core::builtin::array_get::<i32>(self.repr, (self.start + index)));
+    return Option<i32>::Some(core::builtin::array_get::<i32>(self.repr, (self.start + index)));
 }
 
 fn "ArraySlice<i32>^IndexValue::index_value"(self: &ArraySlice<i32>, index: i32) -> i32 {

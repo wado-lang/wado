@@ -269,9 +269,6 @@ fn collect_usage_in_expr(
                 collect_usage_in_expr(elem, usage, in_loop, in_condition);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            collect_usage_in_expr(value, usage, in_loop, in_condition);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_usage_in_expr(payload_expr, usage, in_loop, in_condition);
@@ -296,10 +293,7 @@ fn collect_usage_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_usage_in_expr(value, usage, in_loop, in_condition);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             collect_usage_in_expr(expr, usage, in_loop, in_condition);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -382,6 +376,21 @@ fn can_propagate_copy(
                 if su.is_assigned {
                     return false;
                 }
+            }
+
+            let is_value_type = needs_value_copy(binding.type_id, type_table);
+
+            // For value-type copies where the target is used exactly once,
+            // we can safely propagate even when the source's address was taken.
+            // The source is not reassigned (checked above), so reading it at the
+            // target's single use point yields the same value as the snapshot.
+            // This enables elimination of inlined builder patterns like:
+            //   __inline_build: { let self = __b; break: *self; }
+            let single_use_value_copy = is_value_type && target_usage.read_count == 1;
+
+            if let Some(su) = source_usage
+                && !single_use_value_copy
+            {
                 // Source could be modified through a reference
                 if su.address_taken {
                     return false;
@@ -393,8 +402,10 @@ fn can_propagate_copy(
             }
 
             // For value types (structs, arrays, tuples, strings), only propagate
-            // if the source is dead after this binding (read_count == 1)
-            if needs_value_copy(binding.type_id, type_table)
+            // if the source is dead after this binding (read_count == 1),
+            // unless the target is single-use (already verified safe above).
+            if is_value_type
+                && !single_use_value_copy
                 && let Some(su) = source_usage
             {
                 // Source must only be read once (in this binding) and not captured
@@ -584,9 +595,6 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
                 substitute_in_expr(elem, substitutions);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            substitute_in_expr(value, substitutions);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 substitute_in_expr(payload_expr, substitutions);
@@ -607,10 +615,7 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
         TirExprKind::GlobalVarSet { value, .. } => {
             substitute_in_expr(value, substitutions);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             substitute_in_expr(expr, substitutions);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -777,9 +782,6 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
                 collect_copy_bindings_in_expr(elem, bindings);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            collect_copy_bindings_in_expr(value, bindings);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_copy_bindings_in_expr(payload_expr, bindings);
@@ -800,10 +802,7 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_copy_bindings_in_expr(value, bindings);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             collect_copy_bindings_in_expr(expr, bindings);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -976,9 +975,6 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
                 remove_copy_bindings_in_expr(elem, dead_locals);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            remove_copy_bindings_in_expr(value, dead_locals);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 remove_copy_bindings_in_expr(payload_expr, dead_locals);
@@ -999,10 +995,7 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         TirExprKind::GlobalVarSet { value, .. } => {
             remove_copy_bindings_in_expr(value, dead_locals);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             remove_copy_bindings_in_expr(expr, dead_locals);
         }
         TirExprKind::VariantPayload { expr, .. } => {

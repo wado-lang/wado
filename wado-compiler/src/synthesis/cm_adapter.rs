@@ -28,7 +28,8 @@ use crate::tir::{
 use super::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
     generic_method_call, generic_static_call, i32_const, i64_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_some, return_stmt, synth_span,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, return_stmt,
+    synth_span,
 };
 
 /// Context for lifting CM values to GC types, providing access to
@@ -677,7 +678,7 @@ fn synthesize_lift_option_inner(
         "__option_result",
         result_local,
         option_type_id,
-        null_expr(option_type_id),
+        option_none(option_type_id),
     ));
 
     // if __disc != 0 { __option_result = Some(lift(inner, addr + offset)); }
@@ -2558,7 +2559,7 @@ fn synthesize_lift_from_flat_params(
                     "__opt_result",
                     result_local,
                     target_type_id,
-                    null_expr(target_type_id),
+                    option_none(target_type_id),
                 ));
 
                 // if disc != 0
@@ -4353,7 +4354,7 @@ fn fixup_adapter_let(
     }
 }
 
-/// Fix up an expression statement (e.g., Assign with VariantConstruct/OptionSome).
+/// Fix up an expression statement (e.g., Assign with `VariantConstruct`).
 fn fixup_adapter_expr(expr: &mut TirExpr, return_type: TypeId) {
     if let TirExprKind::Assign { target, value } = &mut expr.kind {
         fixup_variant_construct(value, return_type);
@@ -4364,23 +4365,15 @@ fn fixup_adapter_expr(expr: &mut TirExpr, return_type: TypeId) {
     }
 }
 
-/// Fix up `VariantConstruct` and `OptionSome` expressions to use the real type.
+/// Fix up `VariantConstruct` expressions to use the real type.
 fn fixup_variant_construct(expr: &mut TirExpr, return_type: TypeId) {
-    match &mut expr.kind {
-        TirExprKind::VariantConstruct { variant_type, .. } => {
-            if *variant_type == TypeTable::I32 {
-                *variant_type = return_type;
-            }
-            if expr.type_id == TypeTable::I32 {
-                expr.type_id = return_type;
-            }
+    if let TirExprKind::VariantConstruct { variant_type, .. } = &mut expr.kind {
+        if *variant_type == TypeTable::I32 {
+            *variant_type = return_type;
         }
-        TirExprKind::OptionSome { .. } => {
-            if expr.type_id == TypeTable::I32 {
-                expr.type_id = return_type;
-            }
+        if expr.type_id == TypeTable::I32 {
+            expr.type_id = return_type;
         }
-        _ => {}
     }
 }
 
@@ -4395,7 +4388,6 @@ fn fixup_expr_type(expr: &mut TirExpr, type_id: TypeId) {
                 *variant_type = type_id;
             }
         }
-        TirExprKind::OptionSome { .. } | TirExprKind::Null => {}
         _ => {}
     }
 }
@@ -4412,23 +4404,30 @@ fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut
                 flat_args.push(i32_const(0));
             }
         }
-        // OptionSome(value) → discriminant=1, then flatten inner value
-        TirExprKind::OptionSome { value } => {
-            // First flat type is always the discriminant
+        // VariantConstruct None → discriminant=0, payload=0 for each flat type
+        TirExprKind::VariantConstruct {
+            case_name,
+            payload: None,
+            ..
+        } if case_name == "None" => {
+            for _ in flat_tys {
+                flat_args.push(i32_const(0));
+            }
+        }
+        // VariantConstruct Some(value) → discriminant=1, then flatten inner value
+        TirExprKind::VariantConstruct {
+            case_name,
+            payload: Some(value),
+            ..
+        } if case_name == "Some" => {
             flat_args.push(i32_const(1));
-            // Remaining flat types are the inner value
-            if flat_tys.len() == 2 {
-                // Single inner flat value (e.g., resource handle)
-                flat_args.push((**value).clone());
-            } else {
-                // Multi-value inner: would need further flattening
-                // For now, handle the common single-value case
-                for j in 1..flat_tys.len() {
-                    if j == 1 {
-                        flat_args.push((**value).clone());
-                    } else {
-                        flat_args.push(i32_const(0));
-                    }
+            // Multi-value inner: would need further flattening
+            // For now, handle the common single-value case
+            for j in 1..flat_tys.len() {
+                if j == 1 {
+                    flat_args.push((**value).clone());
+                } else {
+                    flat_args.push(i32_const(0));
                 }
             }
         }
@@ -4437,7 +4436,7 @@ fn flatten_arg_for_call_site(arg: &TirExpr, flat_tys: &[TypeId], flat_args: &mut
         _ => {
             panic!(
                 "StaticCall adapter: cannot flatten arg of kind {:?} into {} flat types at call site; \
-                 only null and OptionSome literals are supported",
+                 only null and VariantConstruct literals are supported",
                 arg.kind,
                 flat_tys.len()
             );
@@ -4758,8 +4757,7 @@ fn rewrite_calls_in_expr(
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner } => {
+        | TirExprKind::FieldAccess { expr: inner, .. } => {
             rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry);
         }
         TirExprKind::If {
@@ -4960,8 +4958,7 @@ fn collect_effect_calls_in_expr(
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner } => {
+        | TirExprKind::FieldAccess { expr: inner, .. } => {
             collect_effect_calls_in_expr(inner, effects, wasi_registry);
         }
         TirExprKind::If {

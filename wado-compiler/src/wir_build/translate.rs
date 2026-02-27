@@ -9,7 +9,7 @@ use crate::tir::{
     TypeId, TypeTable,
 };
 use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
 
@@ -240,6 +240,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 match_counter: 0,
                 local_counter: 0,
                 local_names,
+                immutable_locals: IndexSet::new(),
             };
             let wir_body = translator.translate_block(body);
             drop(type_table);
@@ -272,6 +273,10 @@ struct FunctionTranslator<'a, 'b> {
     local_counter: u32,
     /// Map from local index to variable name (built from params + Let stmts).
     local_names: IndexMap<u32, String>,
+    /// Set of local indices declared as immutable (`let`, not `let mut`).
+    /// Used to skip unnecessary value copies when an immutable binding
+    /// is initialized from another immutable local.
+    immutable_locals: IndexSet<u32>,
 }
 
 impl FunctionTranslator<'_, '_> {
@@ -393,6 +398,20 @@ impl FunctionTranslator<'_, '_> {
     /// Fresh values are newly created and don't alias existing data,
     /// so they can be used directly without copying.
     fn is_fresh_value(expr: &TirExpr) -> bool {
+        Self::is_fresh_in_context(expr, &IndexSet::new())
+    }
+
+    /// Check if an expression is fresh, considering locals known to hold fresh values.
+    ///
+    /// `fresh_locals` tracks local variable indices that were assigned fresh values
+    /// within the enclosing block scope. This enables copy elision for patterns like:
+    /// ```text
+    /// __seq_lit: {
+    ///     let mut __b = Array { ... };   // __b is fresh
+    ///     break __seq_lit: *__b;          // *__b is fresh (deref of fresh local)
+    /// }
+    /// ```
+    fn is_fresh_in_context(expr: &TirExpr, fresh_locals: &IndexSet<u32>) -> bool {
         match &expr.kind {
             // Literals always produce fresh values
             TirExprKind::StringLiteral(_)
@@ -410,19 +429,132 @@ impl FunctionTranslator<'_, '_> {
             // ClosureToCanonical creates a fresh closure struct
             TirExprKind::ClosureToCanonical { .. } => true,
 
-            // OptionSome wrapping a fresh value is itself fresh
-            TirExprKind::OptionSome { value } => Self::is_fresh_value(value),
-
             // Variant/enum constructors produce fresh values
             TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
 
-            // Template string blocks produce fresh values: the builder String
-            // is created within the block and never escapes, so copying on
-            // assignment is unnecessary (copy elision).
-            TirExprKind::LabeledBlock { label, .. } if label == "__tmpl" => true,
+            // Local variable reference: fresh if the local is known to hold a fresh value
+            TirExprKind::Local { index, .. } => fresh_locals.contains(index),
 
-            // Everything else is not fresh (locals, field access, index, etc.)
+            // Deref of a fresh value is still fresh (e.g., *self where self is fresh)
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } => Self::is_fresh_in_context(inner, fresh_locals),
+
+            // Labeled blocks: fresh if every break value targeting this label is fresh,
+            // tracking which locals hold fresh values within the block
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                Self::block_breaks_are_fresh(label, block, fresh_locals)
+            }
+
+            // Everything else is not fresh (field access, index, etc.)
             _ => false,
+        }
+    }
+
+    /// Check if every `break label(value)` in a block has a fresh value.
+    ///
+    /// Tracks locals assigned fresh values within the block, enabling copy
+    /// elision for inlined builder patterns where the break value references
+    /// a locally-created object.
+    fn block_breaks_are_fresh(label: &str, block: &TirBlock, parent_fresh: &IndexSet<u32>) -> bool {
+        let mut found = false;
+        let mut fresh_locals = parent_fresh.clone();
+        if Self::scan_block_for_breaks(label, block, &mut found, &mut fresh_locals) {
+            found
+        } else {
+            false
+        }
+    }
+
+    /// Recursively scan a block for `Break` targeting `label`.
+    /// Tracks fresh locals and returns `false` if any break value is not fresh.
+    fn scan_block_for_breaks(
+        label: &str,
+        block: &TirBlock,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
+        for stmt in &block.stmts {
+            if !Self::scan_stmt_for_breaks(label, stmt, found, fresh_locals) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn scan_stmt_for_breaks(
+        label: &str,
+        stmt: &TirStmt,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
+        match &stmt.kind {
+            // Track locals assigned fresh values
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => {
+                if Self::is_fresh_in_context(value, fresh_locals) {
+                    fresh_locals.insert(*local_index);
+                }
+                true
+            }
+            TirStmtKind::Break {
+                label: Some(l),
+                value: Some(v),
+            } if l == label => {
+                *found = true;
+                Self::is_fresh_in_context(v, fresh_locals)
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if !Self::scan_block_for_breaks(label, then_block, found, fresh_locals) {
+                    return false;
+                }
+                if let Some(eb) = else_block
+                    && !Self::scan_block_for_breaks(label, eb, found, fresh_locals)
+                {
+                    return false;
+                }
+                true
+            }
+            TirStmtKind::Loop { body } => {
+                Self::scan_block_for_breaks(label, body, found, fresh_locals)
+            }
+            TirStmtKind::Expr(expr) => Self::scan_expr_for_breaks(label, expr, found, fresh_locals),
+            _ => true,
+        }
+    }
+
+    fn scan_expr_for_breaks(
+        label: &str,
+        expr: &TirExpr,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
+                Self::scan_block_for_breaks(label, block, found, fresh_locals)
+            }
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                if !Self::scan_block_for_breaks(label, then_branch, found, fresh_locals) {
+                    return false;
+                }
+                if let Some(eb) = else_branch
+                    && !Self::scan_block_for_breaks(label, eb, found, fresh_locals)
+                {
+                    return false;
+                }
+                true
+            }
+            _ => true,
         }
     }
 
@@ -432,6 +564,19 @@ impl FunctionTranslator<'_, '_> {
             self.build_value_copy(value.type_id, translated)
         } else {
             translated
+        }
+    }
+
+    /// Check if a source expression's root local is immutable.
+    /// Returns true when the expression is a Local or `FieldAccess` chain
+    /// whose root local is in the immutable set. In that case, sharing
+    /// the value without deep-copying is safe because neither the
+    /// destination (non-mut let) nor the source can be mutated.
+    fn is_source_immutable(&self, expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => self.immutable_locals.contains(index),
+            TirExprKind::FieldAccess { expr: inner, .. } => self.is_source_immutable(inner),
+            _ => false,
         }
     }
 
@@ -754,8 +899,16 @@ impl FunctionTranslator<'_, '_> {
     fn translate_stmt(&mut self, stmt: &TirStmt) -> Option<WirInstr> {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value,
+                is_mut,
+                skip_value_copy,
+                ..
             } => {
+                // Track immutable locals for value-copy elision on subsequent bindings.
+                if !is_mut {
+                    self.immutable_locals.insert(*local_index);
+                }
                 let value_instr = self.translate_expr(value);
                 // If the initializer diverges (`never`), no value reaches the stack,
                 // so LocalSet would be invalid. `translate_expr` already appends
@@ -769,7 +922,16 @@ impl FunctionTranslator<'_, '_> {
                     Some(value_instr)
                 } else {
                     let local_name = self.local_name(*local_index);
-                    let value_instr = self.maybe_value_copy(value, value_instr);
+                    // Skip deep value-copy when safe:
+                    // 1. LICM-hoisted variables (skip_value_copy flag set by optimizer)
+                    // 2. Immutable binding from an immutable source (no mutation possible)
+                    let can_skip_copy =
+                        *skip_value_copy || (!is_mut && self.is_source_immutable(value));
+                    let value_instr = if can_skip_copy {
+                        value_instr
+                    } else {
+                        self.maybe_value_copy(value, value_instr)
+                    };
                     Some(WirInstr::LocalSet {
                         name: local_name,
                         value: Box::new(value_instr),
@@ -1370,14 +1532,6 @@ impl FunctionTranslator<'_, '_> {
             } => self.translate_switch(scrutinee, *min_value, arms, default, expr.type_id),
 
             // === Variant Operations (lowered) ===
-            TirExprKind::IsNotNull { expr: inner } => {
-                let val = self.translate_expr(inner);
-                WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(Box::new(val))))
-            }
-            TirExprKind::UnwrapOption { expr: inner, .. } => {
-                let val = self.translate_expr(inner);
-                WirInstr::RefAsNonNull(Box::new(val))
-            }
             TirExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
                 let val = self.translate_expr(inner);
@@ -1415,17 +1569,6 @@ impl FunctionTranslator<'_, '_> {
                 expr.type_id,
             ),
             TirExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
-            TirExprKind::OptionSome { value } => {
-                // SubtypeHierarchy: construct Some variant struct
-                // TODO: Future NullableRef optimization would pass-through the value
-                self.translate_variant_construct(
-                    expr.type_id, // variant_type (Option<T>)
-                    0,            // case_index: Some is case 0
-                    "Some",
-                    Some(value),  // payload
-                    expr.type_id, // result_type
-                )
-            }
 
             // === CM Raw Call ===
             TirExprKind::CmRawCall {

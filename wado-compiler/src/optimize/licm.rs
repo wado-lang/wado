@@ -214,6 +214,7 @@ fn licm_loop(
                     is_reactive: false,
                     type_id: candidate.type_id,
                     value: field_access_expr,
+                    skip_value_copy: true,
                 },
                 crate::token::Span::new(0, 0, 0, 0),
             );
@@ -473,9 +474,6 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
         TirExprKind::Closure { body, .. } => {
             collect_modified_vars_in_expr(body, modified);
         }
-        TirExprKind::OptionSome { value } => {
-            collect_modified_vars_in_expr(value, modified);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_modified_vars_in_expr(payload_expr, modified);
@@ -487,10 +485,7 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_modified_vars_in_expr(value, modified);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             collect_modified_vars_in_expr(expr, modified);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -763,9 +758,6 @@ fn collect_licm_ref_bindings_in_expr(
         TirExprKind::Closure { body, .. } => {
             collect_licm_ref_bindings_in_expr(body, type_table, bindings);
         }
-        TirExprKind::OptionSome { value } => {
-            collect_licm_ref_bindings_in_expr(value, type_table, bindings);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_licm_ref_bindings_in_expr(payload_expr, type_table, bindings);
@@ -774,10 +766,7 @@ fn collect_licm_ref_bindings_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_licm_ref_bindings_in_expr(value, type_table, bindings);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             collect_licm_ref_bindings_in_expr(expr, type_table, bindings);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -1294,16 +1283,6 @@ fn find_hoist_candidates_in_expr(
                 next_local,
             );
         }
-        TirExprKind::OptionSome { value } => {
-            find_hoist_candidates_in_expr(
-                value,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 find_hoist_candidates_in_expr(
@@ -1336,10 +1315,7 @@ fn find_hoist_candidates_in_expr(
                 next_local,
             );
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             find_hoist_candidates_in_expr(
                 expr,
                 modified_vars,
@@ -1597,9 +1573,6 @@ fn replace_hoisted_in_expr(
         TirExprKind::Closure { body, .. } => {
             replace_hoisted_in_expr(body, candidates, ref_bindings);
         }
-        TirExprKind::OptionSome { value } => {
-            replace_hoisted_in_expr(value, candidates, ref_bindings);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 replace_hoisted_in_expr(payload_expr, candidates, ref_bindings);
@@ -1611,10 +1584,7 @@ fn replace_hoisted_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             replace_hoisted_in_expr(value, candidates, ref_bindings);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             replace_hoisted_in_expr(expr, candidates, ref_bindings);
         }
         TirExprKind::VariantPayload { expr, .. } => {

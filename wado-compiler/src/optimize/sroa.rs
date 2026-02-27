@@ -541,9 +541,6 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
                 check_escape_in_expr(elem, candidates, escaped);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            check_escape_in_expr(value, candidates, escaped);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 check_escape_in_expr(p, candidates, escaped);
@@ -552,10 +549,7 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
         TirExprKind::GlobalVarSet { value, .. } => {
             check_escape_in_expr(value, candidates, escaped);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             check_escape_in_expr(expr, candidates, escaped);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -939,9 +933,6 @@ fn check_soft_escape_in_expr(
                 check_soft_escape_in_expr(elem, candidates, hard_escaped, false);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            check_soft_escape_in_expr(value, candidates, hard_escaped, false);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 check_soft_escape_in_expr(p, candidates, hard_escaped, false);
@@ -950,9 +941,7 @@ fn check_soft_escape_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             check_soft_escape_in_expr(value, candidates, hard_escaped, false);
         }
-        TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
+        TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
@@ -1098,6 +1087,7 @@ fn expand_struct_let(
                         is_reactive: false,
                         type_id: *field_type,
                         value: field.value,
+                        skip_value_copy: false,
                     },
                     span,
                 ));
@@ -1124,6 +1114,7 @@ fn expand_struct_let(
                         is_reactive: false,
                         type_id: *field_type,
                         value: elem,
+                        skip_value_copy: false,
                     },
                     span,
                 ));
@@ -1606,16 +1597,6 @@ fn rewrite_expr(
                 );
             }
         }
-        TirExprKind::OptionSome { value } => {
-            rewrite_expr(
-                value,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {
                 rewrite_expr(
@@ -1648,10 +1629,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             rewrite_expr(
                 expr,
                 safe_set,

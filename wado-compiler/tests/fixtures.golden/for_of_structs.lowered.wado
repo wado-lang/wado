@@ -46,10 +46,7 @@ export fn run() with Stdout {
             let self: &mut Array<Point> = &mut __b;
             self."Array<Point>::append"(p2);
         };
-        break __seq_lit: __inline_Array_Point__SequenceLiteralBuilder__build_4: {
-            let self: Array<Point> = __b;
-            break __inline_Array_Point__SequenceLiteralBuilder__build_4: *self;
-        };
+        break __seq_lit: *__b;
     };
     __for_of_0: {
         let mut __iter_0: ArrayIter<Point> = ArrayIter<Point> { repr: points.repr, used: points.used, index: 0 };
@@ -98,7 +95,7 @@ fn "ArrayIter<Point>^Iterator::next"(self: &mut ArrayIter<Point>) -> Option<Poin
     }
     let item: Point = core::builtin::array_get::<Point>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<Point>::Some(item);
 }
 
 pub fn "Array<Point>::append"(self: &mut Array<Point>, value: Point) {

@@ -55,10 +55,7 @@ export fn run() with Stdout {
                     let self: &mut Array<i32> = &mut __b;
                     self."Array<i32>::append"(2);
                 };
-                break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_4: {
-                    let self: Array<i32> = __b;
-                    break __inline_Array_i32__SequenceLiteralBuilder__build_4: *self;
-                };
+                break __seq_lit: *__b;
             });
             __b."Array<Array<i32>>^SequenceLiteralBuilder::push_literal"(__seq_lit: {
                 let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(1), used: 0 };
@@ -66,10 +63,7 @@ export fn run() with Stdout {
                     let self: &mut Array<i32> = &mut __b;
                     self."Array<i32>::append"(3);
                 };
-                break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_7: {
-                    let self: Array<i32> = __b;
-                    break __inline_Array_i32__SequenceLiteralBuilder__build_7: *self;
-                };
+                break __seq_lit: *__b;
             });
             break __seq_lit: __b."Array<Array<i32>>^SequenceLiteralBuilder::build"();
         });
@@ -89,10 +83,7 @@ export fn run() with Stdout {
                     let self: &mut Array<i32> = &mut __b;
                     self."Array<i32>::append"(6);
                 };
-                break __seq_lit: __inline_Array_i32__SequenceLiteralBuilder__build_12: {
-                    let self: Array<i32> = __b;
-                    break __inline_Array_i32__SequenceLiteralBuilder__build_12: *self;
-                };
+                break __seq_lit: *__b;
             });
             break __seq_lit: __b."Array<Array<i32>>^SequenceLiteralBuilder::build"();
         });
@@ -186,7 +177,7 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<i32>::Some(item);
 }
 
 fn "ArrayIter<Array<i32>>^Iterator::next"(self: &mut ArrayIter<Array<i32>>) -> Option<Array<i32>> {
@@ -195,7 +186,7 @@ fn "ArrayIter<Array<i32>>^Iterator::next"(self: &mut ArrayIter<Array<i32>>) -> O
     }
     let item: Array<i32> = core::builtin::array_get::<Array<i32>>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<Array<i32>>::Some(item);
 }
 
 fn "Array<Array<i32>>^IntoIterator::into_iter"(self: &Array<Array<i32>>) -> ArrayIter<Array<i32>> {
@@ -208,7 +199,7 @@ fn "ArrayIter<Array<Array<i32>>>^Iterator::next"(self: &mut ArrayIter<Array<Arra
     }
     let item: Array<Array<i32>> = core::builtin::array_get::<Array<Array<i32>>>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<Array<Array<i32>>>::Some(item);
 }
 
 fn "Array<Array<Array<i32>>>^IntoIterator::into_iter"(self: &Array<Array<Array<i32>>>) -> ArrayIter<Array<Array<i32>>> {

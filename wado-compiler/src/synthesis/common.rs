@@ -131,6 +131,7 @@ pub fn let_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -
             is_reactive: false,
             type_id,
             value,
+            skip_value_copy: false,
         },
         synth_span(),
     )
@@ -146,6 +147,7 @@ pub fn let_mut_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExp
             is_reactive: false,
             type_id,
             value,
+            skip_value_copy: false,
         },
         synth_span(),
     )
@@ -216,8 +218,11 @@ pub fn cm_raw_call(local_name: &str, args: Vec<TirExpr>, return_type: TypeId) ->
 /// Create an `Option::Some(value)` expression.
 pub fn option_some(value: TirExpr, option_type_id: TypeId) -> TirExpr {
     TirExpr::new(
-        TirExprKind::OptionSome {
-            value: Box::new(value),
+        TirExprKind::VariantConstruct {
+            variant_type: option_type_id,
+            case_index: 0,
+            case_name: "Some".to_string(),
+            payload: Some(Box::new(value)),
         },
         option_type_id,
         synth_span(),
@@ -225,6 +230,21 @@ pub fn option_some(value: TirExpr, option_type_id: TypeId) -> TirExpr {
 }
 
 /// Create a `null` (`Option::None`) expression.
+pub fn option_none(option_type_id: TypeId) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::VariantConstruct {
+            variant_type: option_type_id,
+            case_index: 1,
+            case_name: "None".to_string(),
+            payload: None,
+        },
+        option_type_id,
+        synth_span(),
+    )
+}
+
+/// Create a default/zero value expression (ref.null for reference types, 0 for integers).
+/// Used as a placeholder initial value for mutable locals in synthesized code.
 pub fn null_expr(type_id: TypeId) -> TirExpr {
     TirExpr::new(TirExprKind::Null, type_id, synth_span())
 }

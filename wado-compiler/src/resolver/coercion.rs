@@ -526,6 +526,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_reactive: false,
                 type_id: builder_type,
                 value: new_call,
+                skip_value_copy: false,
             },
             span,
         )];
@@ -775,6 +776,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_reactive: false,
                 type_id: builder_type,
                 value: new_call,
+                skip_value_copy: false,
             },
             span,
         )];

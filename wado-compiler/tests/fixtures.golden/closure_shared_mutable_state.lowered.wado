@@ -32,10 +32,7 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let mut count: Box<i32> = Box<i32> { value: 0 };
-    let inc: fn() -> () = {
-        let __ref_count: Box<i32> = count;
-        &__Closure_0 { __capture_0: __ref_count };
-    };
+    let inc: fn() -> () = &__Closure_0 { __capture_0: count };
     let __sroa_get___capture_0: Box<i32> = count;
     inc();
     inc();

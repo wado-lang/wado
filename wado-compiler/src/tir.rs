@@ -1401,11 +1401,6 @@ pub enum TirExprKind {
         target_fn_type: TypeId,
     },
 
-    /// `Option::Some(value)` construction
-    OptionSome {
-        value: Box<TirExpr>,
-    },
-
     /// Custom variant construction: `Shape::Circle(5.0)` or `MyVariant::Unit`
     VariantConstruct {
         /// The variant type (e.g., `ResolvedType::Variant` { name: "Shape", ... })
@@ -1436,22 +1431,6 @@ pub enum TirExprKind {
         block: TirBlock,
         /// The type of value this block produces (from break expressions)
         result_type: TypeId,
-    },
-
-    /// Check if an Option/nullable reference is not null (has a value).
-    /// Generated from `if let Some(x) = expr` patterns.
-    /// Result type is always bool.
-    IsNotNull {
-        expr: Box<TirExpr>,
-    },
-
-    /// Unwrap an Option to get the inner value, assuming it's not null.
-    /// Generated from `if let Some(x) = expr` patterns after `IsNotNull` check.
-    /// The inner value's type depends on the Option<T> type.
-    UnwrapOption {
-        expr: Box<TirExpr>,
-        /// The inner type T from Option<T>
-        inner_type: TypeId,
     },
 
     /// Get the discriminant (tag) of a variant value.
@@ -1646,6 +1625,10 @@ pub enum TirStmtKind {
         is_reactive: bool,
         type_id: TypeId,
         value: TirExpr,
+        /// When true, the WIR builder skips deep value-copy for this binding.
+        /// Set by LICM for hoisted variables whose source field is verified
+        /// non-mutated in the loop, making aliasing safe.
+        skip_value_copy: bool,
     },
     Expr(TirExpr),
     Return {

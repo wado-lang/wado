@@ -1,0 +1,22 @@
+// Test: match expression on Result<T, E>
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let ok_val: Result<i32, String> = Result::<i32, String>::Ok(42);
+    let err_val: Result<i32, String> = Result::<i32, String>::Err("error");
+
+    let x = match ok_val {
+        Ok(v) => v * 2,
+        Err(_) => -1,
+    };
+    println(`match Ok: {x}`);
+
+    let y = match err_val {
+        Ok(v) => v * 2,
+        Err(_) => -1,
+    };
+    println(`match Err: {y}`);
+}
+
+__DATA__
+{"stdout": "match Ok: 84\nmatch Err: -1\n"}

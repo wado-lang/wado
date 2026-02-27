@@ -41,10 +41,7 @@ export fn run() with Stdout {
             let value: [String, i32] = ["b", 2];
             self."Array<Tuple<String,i32>>::append"(value);
         };
-        break __seq_lit: __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_4: {
-            let self: Array<[String, i32]> = __b;
-            break __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_4: *self;
-        };
+        break __seq_lit: *__b;
     };
     __for_of_0: {
         let mut __iter_0: ArrayIter<Tuple<String,i32>> = ArrayIter<Tuple<String,i32>> { repr: items.repr, used: items.used, index: 0 };
@@ -72,7 +69,7 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
     }
     let item: [String, i32] = core::builtin::array_get::<[String, i32]>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<[String, i32]>::Some(item);
 }
 
 pub fn "Array<Tuple<String,i32>>::append"(self: &mut Array<[String, i32]>, value: [String, i32]) {

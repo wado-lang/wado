@@ -53,10 +53,7 @@ export fn run() with Stdout {
             let value: String = "c";
             self."Array<String>::append"(value);
         };
-        break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
-            let self: Array<String> = __b;
-            break __inline_Array_String__SequenceLiteralBuilder__build_5: *self;
-        };
+        break __seq_lit: *__b;
     };
     let mut iter: EnumerateIter<String> = __inline_ArrayIter_String___enumerate_6: {
         let self: &ArrayIter<String> = &ArrayIter<String> { repr: arr.repr, used: arr.used, index: 0 };
@@ -118,6 +115,6 @@ fn "EnumerateIter<String>^Iterator::next"(self: &mut EnumerateIter<String>) -> O
     let idx: i32 = self.count;
     self.index = (self.index + 1);
     self.count = (self.count + 1);
-    return Option::Some([idx, item]);
+    return Option<[i32, String]>::Some([idx, item]);
 }
 

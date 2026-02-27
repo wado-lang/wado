@@ -37,10 +37,7 @@ export fn run() with Stdout {
                 let value: String = "b";
                 self."Array<String>::append"(value);
             };
-            break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_4: {
-                let self: Array<String> = __b;
-                break __inline_Array_String__SequenceLiteralBuilder__build_4: *self;
-            };
+            break __seq_lit: *__b;
         });
         __b."Array<Array<String>>^SequenceLiteralBuilder::push_literal"(__seq_lit: {
             let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(1), used: 0 };
@@ -49,10 +46,7 @@ export fn run() with Stdout {
                 let value: String = "c";
                 self."Array<String>::append"(value);
             };
-            break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_7: {
-                let self: Array<String> = __b;
-                break __inline_Array_String__SequenceLiteralBuilder__build_7: *self;
-            };
+            break __seq_lit: *__b;
         });
         break __seq_lit: __b."Array<Array<String>>^SequenceLiteralBuilder::build"();
     };
@@ -96,10 +90,7 @@ fn "__inspect$Array<String>"(__val: Array<String>, __fmt: &mut Formatter) {
     __inline_Formatter__write_char_0: {
         __fmt.buf.String::append_char('[');
     };
-    let __inspect_len: i32 = __inline_Array_String___len_1: {
-        let self: Array<String> = __val;
-        break __inline_Array_String___len_1: self.used;
-    };
+    let __inspect_len: i32 = __val.used;
     let mut __inspect_i: i32 = 0;
     let _licm_buf: &mut String = __fmt.buf;
     loop {

@@ -542,8 +542,7 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Assign { value: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner } => {
+        | TirExprKind::FieldAccess { expr: inner, .. } => {
             lower_wide_int_in_expr(inner, type_table);
         }
         TirExprKind::Call { args, .. }
@@ -603,13 +602,9 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
             lower_wide_int_in_expr(value, type_table);
         }
         // Lowered pattern matching nodes - recurse into sub-expressions
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
-            lower_wide_int_in_expr(expr, type_table);
-        }
-        TirExprKind::VariantPayload { expr, .. } => {
+        TirExprKind::VariantTag { expr }
+        | TirExprKind::VariantTest { expr, .. }
+        | TirExprKind::VariantPayload { expr, .. } => {
             lower_wide_int_in_expr(expr, type_table);
         }
         TirExprKind::Switch {
@@ -1089,6 +1084,7 @@ impl<'a> PatternLowerer<'a> {
                 is_mut,
                 is_reactive,
                 type_id,
+                ..
             } => {
                 // Lower expressions inside the Let value
                 let mut value = value;
@@ -1101,6 +1097,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive,
                         type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     stmt.span,
                 ));
@@ -1192,6 +1189,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1251,6 +1249,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1278,6 +1277,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1325,6 +1325,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1404,6 +1405,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1422,6 +1424,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1487,6 +1490,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: value.type_id,
                             value,
+                            skip_value_copy: false,
                         },
                         span,
                     );
@@ -1532,6 +1536,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1612,6 +1617,7 @@ impl<'a> PatternLowerer<'a> {
                     is_reactive: false,
                     type_id: scrutinee.type_id,
                     value: scrutinee.clone(),
+                    skip_value_copy: false,
                 },
                 span,
             ));
@@ -1669,7 +1675,7 @@ impl<'a> PatternLowerer<'a> {
     ///   `if let Some(x) = opt { then } else { else }`
     /// To:
     ///   `let $temp = opt;
-    ///    if IsNotNull($temp) { let x = UnwrapOption($temp); then } else { else }`
+    ///    if VariantTest($temp, case) { let x = VariantPayload($temp); then } else { else }`
     #[allow(clippy::too_many_arguments)]
     fn lower_if_pattern_option(
         &mut self,
@@ -1694,6 +1700,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id: scrutinee.type_id,
                 value: scrutinee.clone(),
+                skip_value_copy: false,
             },
             span,
         );
@@ -1760,7 +1767,6 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => {
                 // All variants (including Option) use VariantTest/VariantPayload
-                // TODO: Future optimization: NullableRef Option would use IsNotNull/UnwrapOption
 
                 // Get variant type name
                 let scrutinee_type = type_table.get(scrutinee.type_id);
@@ -1833,6 +1839,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value: scrutinee,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1985,9 +1992,6 @@ impl<'a> PatternLowerer<'a> {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::IsNotNull { expr: inner }
-            | TirExprKind::UnwrapOption { expr: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => {
@@ -2461,9 +2465,6 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
@@ -3020,6 +3021,7 @@ impl BoxLowerer {
                     is_mut: false,
                     is_reactive: false,
                     value: ref_owned,
+                    skip_value_copy: false,
                 },
                 span,
             });
@@ -3033,6 +3035,7 @@ impl BoxLowerer {
                     is_mut: false,
                     is_reactive: false,
                     value: val_owned,
+                    skip_value_copy: false,
                 },
                 span,
             });
@@ -3219,9 +3222,8 @@ impl BoxLowerer {
     ///
     /// Note: Option(primitive) is NOT rewritten here. The type table keeps `Option(primitive)`
     /// so that codegen and pattern matching can still see the original inner type. The lower
-    /// pass transforms Option expressions (`OptionSome`, `UnwrapOption`, `VariantConstruct`) to
-    /// wrap/unwrap Box structs, while codegen handles the type mapping from `Option(primitive)`
-    /// to a nullable Box reference.
+    /// pass transforms variant expressions (`VariantConstruct`) to wrap/unwrap Box structs,
+    /// while codegen handles the type mapping from `Option(primitive)` to a nullable Box reference.
     fn rewrite_types(&mut self, type_table: &mut TypeTable) {
         // Collect entries to rewrite (can't mutate while iterating)
         let mut replacements: Vec<(TypeId, ResolvedType)> = Vec::new();
@@ -3405,9 +3407,7 @@ impl BoxLowerer {
     /// 4. `Local { index }` for address-taken → `FieldAccess(Local, .value)`
     /// 5. `Assign { target: Local, value }` for address-taken → assign to `.value`
     /// 6. `Assign { target: Deref(..), value }` for primitives → assign to `.value`
-    /// 7. `OptionSome { value: primitive }` → wrap in Box
-    /// 8. `UnwrapOption { inner_type: primitive }` → add `.value` access
-    /// 9. `VariantConstruct { Option, Some, primitive }` → wrap payload in Box
+    /// 7. `VariantConstruct { Option, Some, primitive }` → wrap payload in Box
     fn transform_expr(
         &self,
         expr: &mut TirExpr,
@@ -3485,19 +3485,10 @@ impl BoxLowerer {
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.transform_expr(functor, address_taken, type_table);
             }
-            TirExprKind::OptionSome { value } => {
-                self.transform_expr(value, address_taken, type_table);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload) = payload {
                     self.transform_expr(payload, address_taken, type_table);
                 }
-            }
-            TirExprKind::IsNotNull { expr: inner } => {
-                self.transform_expr(inner, address_taken, type_table);
-            }
-            TirExprKind::UnwrapOption { expr: inner, .. } => {
-                self.transform_expr(inner, address_taken, type_table);
             }
             TirExprKind::VariantTag { expr: inner } => {
                 self.transform_expr(inner, address_taken, type_table);
@@ -3729,8 +3720,7 @@ impl BoxLowerer {
             }
 
             // Option now uses SubtypeHierarchy — no Box wrapping needed for
-            // OptionSome, VariantConstruct("Some"), or UnwrapOption.
-            // TODO: Future NullableRef optimization would re-enable Box wrapping here.
+            // VariantConstruct("Some").
             _ => {}
         }
     }
@@ -4096,9 +4086,6 @@ impl ClosureLowerer {
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.collect_closures_in_expr(functor);
             }
-            TirExprKind::OptionSome { value: inner } => {
-                self.collect_closures_in_expr(inner);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.collect_closures_in_expr(payload_expr);
@@ -4111,13 +4098,9 @@ impl ClosureLowerer {
                 self.collect_closures_in_expr(value);
             }
             // Lowered pattern matching nodes
-            TirExprKind::IsNotNull { expr }
-            | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. } => {
-                self.collect_closures_in_expr(expr);
-            }
-            TirExprKind::VariantPayload { expr, .. } => {
+            TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. }
+            | TirExprKind::VariantPayload { expr, .. } => {
                 self.collect_closures_in_expr(expr);
             }
             TirExprKind::Switch {
@@ -4314,9 +4297,6 @@ impl ClosureLowerer {
                     self.analyze_closure_safety_expr(&arm.body, false);
                 }
             }
-            TirExprKind::OptionSome { value: inner } => {
-                self.analyze_closure_safety_expr(inner, false);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.analyze_closure_safety_expr(payload_expr, false);
@@ -4329,13 +4309,9 @@ impl ClosureLowerer {
                 self.analyze_closure_safety_expr(value, false);
             }
             // Lowered pattern matching nodes
-            TirExprKind::IsNotNull { expr }
-            | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. } => {
-                self.analyze_closure_safety_expr(expr, false);
-            }
-            TirExprKind::VariantPayload { expr, .. } => {
+            TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. }
+            | TirExprKind::VariantPayload { expr, .. } => {
                 self.analyze_closure_safety_expr(expr, false);
             }
             TirExprKind::Switch {
@@ -4619,8 +4595,7 @@ impl ClosureLowerer {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner } => {
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
                 Self::collect_locals_from_expr(inner, locals);
             }
             TirExprKind::Call { args, .. }
@@ -5106,6 +5081,7 @@ impl ClosureLowerer {
                 is_reactive,
                 type_id,
                 value,
+                ..
             } => TirStmtKind::Let {
                 local_index: local_index + 1, // Shift by 1 for self parameter
                 name: name.clone(),
@@ -5119,6 +5095,7 @@ impl ClosureLowerer {
                     self_ref_type,
                     span,
                 ),
+                skip_value_copy: false,
             },
             TirStmtKind::Expr(expr) => TirStmtKind::Expr(self.transform_closure_body(
                 expr,
@@ -5455,8 +5432,7 @@ impl ClosureLowerer {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner } => {
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.fn_param_in_struct_field_expr(inner, fn_param_indices)
             }
             TirExprKind::Call { args, .. }
@@ -5528,13 +5504,9 @@ impl ClosureLowerer {
                 self.fn_param_in_struct_field_expr(value, fn_param_indices)
             }
             // Lowered pattern matching nodes
-            TirExprKind::IsNotNull { expr }
-            | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. } => {
-                self.fn_param_in_struct_field_expr(expr, fn_param_indices)
-            }
-            TirExprKind::VariantPayload { expr, .. } => {
+            TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. }
+            | TirExprKind::VariantPayload { expr, .. } => {
                 self.fn_param_in_struct_field_expr(expr, fn_param_indices)
             }
             TirExprKind::Switch {
@@ -5719,8 +5691,7 @@ impl ClosureLowerer {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner } => {
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.collect_fn_param_specs_expr(inner, func_by_name, type_table, requests);
             }
             TirExprKind::CmRawCall { args, .. } => {
@@ -5803,13 +5774,9 @@ impl ClosureLowerer {
                 self.collect_fn_param_specs_expr(value, func_by_name, type_table, requests);
             }
             // Lowered pattern matching nodes
-            TirExprKind::IsNotNull { expr }
-            | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. } => {
-                self.collect_fn_param_specs_expr(expr, func_by_name, type_table, requests);
-            }
-            TirExprKind::VariantPayload { expr, .. } => {
+            TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. }
+            | TirExprKind::VariantPayload { expr, .. } => {
                 self.collect_fn_param_specs_expr(expr, func_by_name, type_table, requests);
             }
             TirExprKind::Switch {
@@ -5900,8 +5867,7 @@ impl ClosureLowerer {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner } => {
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.count_closures_in_expr(inner, counter);
             }
             TirExprKind::Call { args, .. }
@@ -6171,6 +6137,7 @@ impl ClosureLowerer {
                 is_reactive,
                 type_id,
                 value,
+                ..
             } => TirStmtKind::Let {
                 name: name.clone(),
                 local_index: *local_index,
@@ -6178,6 +6145,7 @@ impl ClosureLowerer {
                 is_reactive: *is_reactive,
                 type_id: *type_id,
                 value: self.specialize_expr(value, param_to_functor, type_table),
+                skip_value_copy: false,
             },
             TirStmtKind::Expr(expr) => {
                 TirStmtKind::Expr(self.specialize_expr(expr, param_to_functor, type_table))
@@ -6612,13 +6580,6 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::OptionSome { value } => TirExpr::new(
-                TirExprKind::OptionSome {
-                    value: Box::new(self.specialize_expr(value, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
             TirExprKind::VariantConstruct {
                 variant_type,
                 case_index,
@@ -6747,24 +6708,6 @@ impl ClosureLowerer {
                     enum_type: *enum_type,
                     case_index: *case_index,
                     case_name: case_name.clone(),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::IsNotNull { expr: inner } => TirExpr::new(
-                TirExprKind::IsNotNull {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
-            TirExprKind::UnwrapOption {
-                expr: inner,
-                inner_type,
-            } => TirExpr::new(
-                TirExprKind::UnwrapOption {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                    inner_type: *inner_type,
                 },
                 expr.type_id,
                 expr.span,
@@ -7082,9 +7025,6 @@ impl ClosureLowerer {
                     self.transform_expr(&mut arm.body, type_table);
                 }
             }
-            TirExprKind::OptionSome { value: inner } => {
-                self.transform_expr(inner, type_table);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.transform_expr(payload_expr, type_table);
@@ -7097,13 +7037,9 @@ impl ClosureLowerer {
                 self.transform_expr(value, type_table);
             }
             // Lowered pattern matching nodes
-            TirExprKind::IsNotNull { expr }
-            | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. } => {
-                self.transform_expr(expr, type_table);
-            }
-            TirExprKind::VariantPayload { expr, .. } => {
+            TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. }
+            | TirExprKind::VariantPayload { expr, .. } => {
                 self.transform_expr(expr, type_table);
             }
             TirExprKind::Switch {
@@ -7427,9 +7363,6 @@ impl ClosureLowerer {
                     self.transform_remaining_closures_expr(&mut arm.body);
                 }
             }
-            TirExprKind::OptionSome { value } => {
-                self.transform_remaining_closures_expr(value);
-            }
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => {
@@ -7452,9 +7385,7 @@ impl ClosureLowerer {
                 // Closure without functor_id - just recurse into body
                 self.transform_remaining_closures_expr(body);
             }
-            TirExprKind::IsNotNull { expr: inner }
-            | TirExprKind::UnwrapOption { expr: inner, .. }
-            | TirExprKind::VariantTag { expr: inner }
+            TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.transform_remaining_closures_expr(inner);
@@ -7708,9 +7639,6 @@ impl StringCollector {
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.collect_expr(functor);
             }
-            TirExprKind::OptionSome { value } => {
-                self.collect_expr(value);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.collect_expr(payload_expr);
@@ -7723,13 +7651,9 @@ impl StringCollector {
                 self.collect_expr(value);
             }
             // Lowered pattern matching nodes
-            TirExprKind::IsNotNull { expr }
-            | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. } => {
-                self.collect_expr(expr);
-            }
-            TirExprKind::VariantPayload { expr, .. } => {
+            TirExprKind::VariantTag { expr }
+            | TirExprKind::VariantTest { expr, .. }
+            | TirExprKind::VariantPayload { expr, .. } => {
                 self.collect_expr(expr);
             }
             TirExprKind::Switch {
