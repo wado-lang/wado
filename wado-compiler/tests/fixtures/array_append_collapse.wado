@@ -30,12 +30,18 @@ export fn run() with Stdout {
     assert e.len() == 3;
     assert e[0] == 1;
 
+    // Non-scalar element type (String)
+    let f: Array<String> = ["hello", "world"];
+    assert f.len() == 2;
+    assert f[0] == "hello";
+    assert f[1] == "world";
+
     // Wrapper type (SeqVec) also benefits from Array<T> optimization
-    let f: SeqVec<i32> = [5, 10, 15];
-    assert f.items.len() == 3;
-    assert f.items[0] == 5;
-    assert f.items[1] == 10;
-    assert f.items[2] == 15;
+    let g: SeqVec<i32> = [5, 10, 15];
+    assert g.items.len() == 3;
+    assert g.items[0] == 5;
+    assert g.items[1] == 10;
+    assert g.items[2] == 15;
 
     println("ok");
 }
@@ -64,6 +70,6 @@ impl SequenceLiteralBuilder for SeqVec<T> {
 __DATA__
 {
     "stdout": "ok\n",
-    "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)"],
-    "wir_not_expect:O2": ["Array<i32>^SequenceLiteralBuilder::push_literal("]
+    "wir_expect:O2": ["array.new_fixed<i32>(10, 20, 30)", "array.new_fixed<ref null String>("],
+    "wir_not_expect:O2": ["Array<i32>^SequenceLiteralBuilder::push_literal(", "Array<String>::append(__local_"]
 }

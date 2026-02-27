@@ -85,9 +85,7 @@
     (type (;18;) (func (param (ref null 2))))
     (type (;19;) (func (param i32)))
     (type (;20;) (func))
-    (type (;21;) (func (param (ref null 4)) (result (ref null 4))))
-    (type (;22;) (func (param (ref null 4) i64)))
-    (type (;23;) (func (param (ref null 4) i64)))
+    (type (;21;) (func (param (ref null 4) i64)))
     (import "mem" "realloc" (func (;0;) (type 5)))
     (import "wasi" "stream-drop-writable" (func (;1;) (type 6)))
     (import "wasi" "stream-new" (func (;2;) (type 7)))
@@ -248,19 +246,9 @@
             (local.get 1))))
     )
     (func (;15;) (type 20)
-      (local (ref null 4) i32 i32)
+      (local (ref null 4) i32 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i64 (ref null 4) i32)
     )
-    (func (;16;) (type 21) (param (ref null 4)) (result (ref null 4))
-      (return
-        (local.get 0))
-      (unreachable)
-    )
-    (func (;17;) (type 22) (param (ref null 4) i64)
-      (call 18
-        (local.get 0)
-        (local.get 1))
-    )
-    (func (;18;) (type 23) (param (ref null 4) i64)
+    (func (;16;) (type 21) (param (ref null 4) i64)
       (local i32 i32 i32 (ref null 3) i32 i32)
       (local.set 2
         (struct.get 4 1

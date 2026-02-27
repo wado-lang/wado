@@ -152,10 +152,6 @@ type "functype/__initialize_module" = fn();
 
 type "functype/fmt_f64" = fn(f64, ref null Formatter);
 
-type "functype/Array<u64>^SequenceLiteralBuilder::build" = fn(ref null Array<u64>) -> ref null Array<u64>;
-
-type "functype/Array<u64>^SequenceLiteralBuilder::push_literal" = fn(ref null Array<u64>, u64);
-
 type "functype/Array<u64>::append" = fn(ref null Array<u64>, u64);
 
 type "functype/Array<u64>^IndexValue::index_value" = fn(ref null Array<u64>, i32) -> u64;
@@ -1219,30 +1215,51 @@ fn check_special(f) {
 fn __initialize_module() {
     let __local_0: ref null Array<u64>;
     let __local_1: i32;
-    let __local_2: i32;
+    let __local_2: ref null Array<u64>;
+    let __local_3: u64;
+    let __local_4: ref null Array<u64>;
+    let __local_5: u64;
+    let __local_6: ref null Array<u64>;
+    let __local_7: u64;
+    let __local_8: ref null Array<u64>;
+    let __local_9: u64;
+    let __local_10: ref null Array<u64>;
+    let __local_11: u64;
+    let __local_12: ref null Array<u64>;
+    let __local_13: u64;
+    let __local_14: ref null Array<u64>;
+    let __local_15: u64;
+    let __local_16: ref null Array<u64>;
+    let __local_17: u64;
+    let __local_18: ref null Array<u64>;
+    let __local_19: u64;
+    let __local_20: ref null Array<u64>;
+    let __local_21: u64;
+    let __local_22: ref null Array<u64>;
+    let __local_23: u64;
+    let __local_24: ref null Array<u64>;
+    let __local_25: u64;
+    let __local_26: ref null Array<u64>;
+    let __local_27: u64;
+    let __local_28: ref null Array<u64>;
+    let __local_29: u64;
+    let __local_30: ref null Array<u64>;
+    let __local_31: u64;
+    let __local_32: ref null Array<u64>;
+    let __local_33: u64;
+    let __local_34: ref null Array<u64>;
+    let __local_35: u64;
+    let __local_36: ref null Array<u64>;
+    let __local_37: u64;
+    let __local_38: ref null Array<u64>;
+    let __local_39: u64;
+    let __local_40: ref null Array<u64>;
+    let __local_41: u64;
+    let __local_42: ref null Array<u64>;
+    let __local_43: i32;
     POW10 = __seq_lit: block -> ref null Array<u64> {
-        __local_0 = Array<u64> { repr: ref.as_non_null(builtin::array_new<u64>(20)), used: 0 };
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 10000000000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 100000000000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, 1000000000000000000_i64);
-        Array<u64>^SequenceLiteralBuilder::push_literal(__local_0, -8446744073709551616_i64);
-        break __seq_lit: Array<u64>^SequenceLiteralBuilder::build(__local_0);
+        __local_0 = Array<u64> { repr: ref.as_non_null(array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64)), used: 20 };
+        break __seq_lit: __local_0;
     };
 }
 
@@ -1340,14 +1357,6 @@ fn fmt_f64(value, f) {
         write_decimal(f.buf, d, p, nd);
     };
     Formatter::apply_padding(f, mark_12);
-}
-
-fn Array<u64>^SequenceLiteralBuilder::build(self) {
-    return self;
-}
-
-fn Array<u64>^SequenceLiteralBuilder::push_literal(self, value) {
-    Array<u64>::append(self, value);
 }
 
 fn Array<u64>::append(self, value) {

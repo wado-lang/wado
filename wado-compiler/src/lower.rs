@@ -38,9 +38,8 @@ use crate::token::Span;
 ///
 /// Note: All loop constructs are desugared at the AST level in desugar.rs.
 pub fn lower(module: TirModule) -> TirModule {
-    let entry_source = module.module_source.clone();
     let modules = IndexMap::from([(module.module_source.clone(), module)]);
-    let mut modules = lower_modules_indexed(modules, &entry_source);
+    let mut modules = lower_modules_indexed(modules);
     modules.pop().unwrap().1
 }
 
@@ -84,8 +83,7 @@ fn lower_post_boxing(module: &mut TirModule) {
 /// This is the main entry point for the lower phase. It lowers all TIR modules
 /// in the project.
 pub fn lower_project(mut project: Project) -> Project {
-    let entry_module_source = project.entry_module_source.clone();
-    project.tir_modules = lower_modules_indexed(project.tir_modules, &entry_module_source);
+    project.tir_modules = lower_modules_indexed(project.tir_modules);
 
     // Post-processing: generate __initialize_modules in entry module
     generate_initialize_modules(&mut project.tir_modules);
@@ -99,7 +97,6 @@ pub fn lower_project(mut project: Project) -> Project {
 /// on imported variants, then applies lowering to each module.
 pub fn lower_modules_indexed(
     modules: IndexMap<ModuleSource, TirModule>,
-    entry_module_source: &ModuleSource,
 ) -> IndexMap<ModuleSource, TirModule> {
     // Build a global variant map from ALL modules so that cross-module pattern
     // matching works (e.g., `if let Greater = ord` where Ordering is from another module)
@@ -129,7 +126,7 @@ pub fn lower_modules_indexed(
     // creates Box<T> struct types, rewrites Ref/MutRef types, then transforms
     // expressions in each module's functions.
     {
-        let mut box_lowerer = BoxLowerer::new(entry_module_source.clone());
+        let mut box_lowerer = BoxLowerer::new();
 
         // Build struct fields map from all modules for deref assign expansion
         for module in modules.values() {
@@ -2825,19 +2822,22 @@ struct BoxLowerer {
     /// Generated Box<T> struct definitions to add to the module.
     generated_structs: Vec<TirStruct>,
     /// Module source for registering Box types in the type table.
-    /// Must match the entry module source so codegen can find them.
-    entry_module_source: ModuleSource,
+    /// Box is conceptually part of core:internal, matching the module where Box
+    /// is identified in downstream phases (`wir_build` checks `is_core_internal()`).
+    box_module_source: ModuleSource,
     /// Struct fields indexed by (name, `module_source`) for deref assign expansion.
     struct_fields_map: IndexMap<(String, ModuleSource), Vec<TirField>>,
 }
 
 impl BoxLowerer {
-    fn new(entry_module_source: ModuleSource) -> Self {
+    fn new() -> Self {
         Self {
             box_struct_types: IndexMap::new(),
             box_type_ids: IndexSet::new(),
             generated_structs: Vec::new(),
-            entry_module_source,
+            box_module_source: ModuleSource::Core {
+                name: "internal".to_string(),
+            },
             struct_fields_map: IndexMap::new(),
         }
     }
@@ -2856,12 +2856,11 @@ impl BoxLowerer {
         let inner_name = type_table.mangle_type_name(inner_type_id);
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
-        // Register under entry_module_source (matching monomorphizer convention).
-        // Codegen registers all monomorphized structs under entry_module_source,
-        // so the ResolvedType's module_source must match.
+        // Register under core:internal — Box is a compiler-synthesized type that
+        // downstream phases identify via `is_core_internal()`.
         let struct_type_id = type_table.make_monomorphized_struct(
             struct_name.clone(),
-            self.entry_module_source.clone(),
+            self.box_module_source.clone(),
             "Box".to_string(),
         );
 

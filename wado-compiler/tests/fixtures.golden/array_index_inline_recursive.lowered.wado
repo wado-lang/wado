@@ -23,7 +23,7 @@ struct "Node<String>" {
 
 fn print_depth(depth: i32) with Stdout {
     core::cli::println(__tmpl: {
-        let mut __r: String = String { repr: "array_new<u8>"(23), used: 0 };
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(23), used: 0 };
         __r.String::append("depth: ");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
@@ -108,7 +108,7 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
     if core::builtin::unlikely((used >= capacity)) {
         let new_capacity: i32 = __inline_i32_max_0: {
             let a: i32 = (capacity * 2);
-            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
         };
         let new_repr: builtin::array<String> = core::builtin::array_new::<String>(new_capacity);
         core::builtin::array_copy::<String>(new_repr, 0, self.repr, 0, used);
@@ -158,7 +158,7 @@ pub fn "Array<Node<String>>::append"(self: &mut Array<&mut Node<String>>, value:
     if core::builtin::unlikely((used >= capacity)) {
         let new_capacity: i32 = __inline_i32_max_0: {
             let a: i32 = (capacity * 2);
-            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
         };
         let new_repr: builtin::array<&mut Node<String>> = core::builtin::array_new::<&mut Node<String>>(new_capacity);
         core::builtin::array_copy::<&mut Node<String>>(new_repr, 0, self.repr, 0, used);

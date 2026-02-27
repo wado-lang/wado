@@ -51,7 +51,7 @@ export fn run() with Stdout {
         self."TreeMap<String,i32>::insert"(key, 42);
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = String { repr: "array_new<u8>"(23), used: 0 };
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(23), used: 0 };
         __r.String::append("value: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
@@ -75,7 +75,7 @@ fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (index < 0) {
         core::internal::panic(__tmpl: {
-            let mut __r: String = String { repr: "array_new<u8>"(31), used: 0 };
+            let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(31), used: 0 };
             __r.String::append("key not found: ");
             let mut __f: Formatter = __inline_Formatter__new_1: {
                 let buf: &mut String = &mut __r;
@@ -207,7 +207,7 @@ pub fn "Array<TreeMapEntry<String,i32>>::append"(self: &mut Array<TreeMapEntry<S
     if core::builtin::unlikely((used >= capacity)) {
         let new_capacity: i32 = __inline_i32_max_0: {
             let a: i32 = (capacity * 2);
-            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
         };
         let new_repr: builtin::array<TreeMapEntry<String,i32>> = core::builtin::array_new::<TreeMapEntry<String,i32>>(new_capacity);
         core::builtin::array_copy::<TreeMapEntry<String,i32>>(new_repr, 0, self.repr, 0, used);
