@@ -1,0 +1,38 @@
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    // f64 -> i64
+    let f = 42.0;
+    let i = f as i64;
+    assert i == 42 as i64;
+
+    // f64 -> u64
+    let g = 100.0;
+    let u = g as u64;
+    assert u == 100 as u64;
+
+    // f64 -> i64 negative
+    let neg = -7.9;
+    let neg_i = neg as i64;
+    assert neg_i == -7 as i64;
+
+    // f32 -> i32
+    let f32_val = 3.14 as f32;
+    let i32_val = f32_val as i32;
+    assert i32_val == 3;
+
+    // f32 -> i64
+    let f32_big = 1000.0 as f32;
+    let i64_val = f32_big as i64;
+    assert i64_val == 1000 as i64;
+
+    // f64 -> i64 large value
+    let large = 1000000.0;
+    let large_i = large as i64;
+    assert large_i == 1000000 as i64;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

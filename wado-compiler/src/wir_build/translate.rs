@@ -1964,6 +1964,36 @@ impl FunctionTranslator<'_, '_> {
             }
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => WirInstr::I64TruncF64S(Box::new(inner_instr)),
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => WirInstr::I64TruncF64U(Box::new(inner_instr)),
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(
+                    to_prim @ (PrimitiveType::I32
+                    | PrimitiveType::U32
+                    | PrimitiveType::I16
+                    | PrimitiveType::U16
+                    | PrimitiveType::I8
+                    | PrimitiveType::U8),
+                ),
+            ) => {
+                let truncated = WirInstr::I32TruncF32S(Box::new(inner_instr));
+                Self::truncate_to_sub_i32(truncated, to_prim)
+            }
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => WirInstr::I64TruncF32S(Box::new(inner_instr)),
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => WirInstr::I64TruncF32U(Box::new(inner_instr)),
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
                 ResolvedType::Primitive(PrimitiveType::F32),
             ) => WirInstr::F32DemoteF64(Box::new(inner_instr)),
             (
