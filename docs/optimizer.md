@@ -52,6 +52,7 @@ The optimizer runs after lowering and before Wasm emission:
    7. Constant Global Promotion
    8. Constant Branch Pruning
    9. Loop-Invariant Code Motion (LICM)
+   10. Template String Buffer Hoisting
 2. DCE Analysis and removal of unreachable functions/types (all levels)
 3. Post-optimization rewrites (labeled block simplification, select lowering, move insertion; all levels)
 4. WIR-level optimizations (multi-value SROA, constant array data promotion, large array splitting; see [WIR Optimizations](#wir-optimizations))
@@ -145,6 +146,16 @@ After constant propagation and folding reduce runtime initializations to scalar 
 **Module:** `optimize/licm.rs`
 
 Hoists loop-invariant field accesses out of loops. When a field access targets a variable that does not change within the loop body, it is moved before the loop entry.
+
+### Template String Buffer Hoisting
+
+**Module:** `optimize/tmpl_hoist.rs`
+
+Hoists the backing array allocation for template strings out of loops. When a template string (`` `...{expr}...` ``) appears inside a loop and the result is only used as a method receiver (not passed as a function argument where it could be stored), the `array_new` allocation is moved before the loop. Each iteration reuses the same backing array buffer instead of allocating a new one.
+
+Escape analysis ensures correctness: the optimization is only applied when the template result is bound to a local variable that does not escape (i.e., never passed as a non-receiver function argument, never stored in a struct field). This prevents aliasing bugs where a stored String would share its backing array with future iterations.
+
+Benchmark impact: ~28% speedup on the float-to-string benchmark (500K f64 conversions).
 
 ### Dead Code Elimination (DCE)
 

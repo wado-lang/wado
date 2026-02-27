@@ -21,6 +21,7 @@ mod licm;
 mod ref_elim;
 mod rewrite;
 mod sroa;
+mod tmpl_hoist;
 
 use const_fold::fold_constants;
 use const_global_promotion::promote_constant_globals;
@@ -34,6 +35,7 @@ use inline::inline_functions;
 use licm::apply_licm;
 use ref_elim::eliminate_unnecessary_refs;
 use sroa::scalar_replace_aggregates;
+use tmpl_hoist::hoist_template_buffers;
 
 use crate::project::Project;
 
@@ -180,6 +182,7 @@ fn run_optimization_passes(project: &mut Project, config: &OptConfig) {
         changed |= promote_constant_globals(project);
         changed |= prune_constant_branches(project);
         changed |= apply_licm(project);
+        changed |= hoist_template_buffers(project);
         if !changed {
             break;
         }
