@@ -193,12 +193,7 @@ fn collect_candidates_in_stmt(
             value,
             ..
         } => {
-            // Check if value is a struct/tuple literal (possibly wrapped in Move)
-            let inner_value = match &value.kind {
-                TirExprKind::Move { expr: inner } => &**inner,
-                _ => value,
-            };
-            match &inner_value.kind {
+            match &value.kind {
                 TirExprKind::StructLiteral {
                     struct_name,
                     fields,
@@ -213,7 +208,7 @@ fn collect_candidates_in_stmt(
                         local_name: name.clone(),
                         fields: field_info,
                         is_mut: *is_mut,
-                        aggregate_type_id: inner_value.type_id,
+                        aggregate_type_id: value.type_id,
                         struct_name: struct_name.clone(),
                     });
                 }
@@ -228,7 +223,7 @@ fn collect_candidates_in_stmt(
                         local_name: name.clone(),
                         fields: field_info,
                         is_mut: *is_mut,
-                        aggregate_type_id: inner_value.type_id,
+                        aggregate_type_id: value.type_id,
                         struct_name: String::new(),
                     });
                 }
@@ -430,12 +425,6 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
                 // Safe: field read on candidate. Don't recurse into inner (it's the local itself).
                 return;
             }
-            // If inner is Move { Local { candidate } }, also safe.
-            if let TirExprKind::Move { expr: move_inner } = &inner.kind
-                && is_candidate_local(move_inner, candidates).is_some()
-            {
-                return;
-            }
             // Not a candidate — recurse normally
             check_escape_in_expr(inner, candidates, escaped);
         }
@@ -452,15 +441,6 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
             // Assign to a candidate local as a whole → escape
             check_escape_in_expr(target, candidates, escaped);
             check_escape_in_expr(value, candidates, escaped);
-        }
-
-        // Move wrapping a candidate is not an escape by itself —
-        // it will be handled by the parent (FieldAccess checks for Move { Local }).
-        // But if Move wraps a candidate and is NOT inside a FieldAccess, it IS an escape.
-        // This case is handled naturally: if we reach here, it means the Move is not
-        // inside a FieldAccess (that case returned early above), so we recurse normally.
-        TirExprKind::Move { expr: inner } => {
-            check_escape_in_expr(inner, candidates, escaped);
         }
 
         // A bare Local reference to a candidate in any other position → escape
@@ -720,12 +700,6 @@ fn check_has_field_access_expr(
                 has_access.insert(idx);
                 return;
             }
-            if let TirExprKind::Move { expr: move_inner } = &inner.kind
-                && let Some(idx) = is_candidate_local_ref(move_inner, candidates)
-            {
-                has_access.insert(idx);
-                return;
-            }
             check_has_field_access_expr(inner, candidates, has_access);
         }
         TirExprKind::Assign { target, value } => {
@@ -848,11 +822,6 @@ fn check_soft_escape_in_expr(
             if is_candidate_local_ref(inner, candidates).is_some() {
                 return;
             }
-            if let TirExprKind::Move { expr: move_inner } = &inner.kind
-                && is_candidate_local_ref(move_inner, candidates).is_some()
-            {
-                return;
-            }
             check_soft_escape_in_expr(inner, candidates, hard_escaped, false);
         }
 
@@ -867,11 +836,6 @@ fn check_soft_escape_in_expr(
             // Assign to the whole candidate (not a field) → hard escape
             check_soft_escape_in_expr(target, candidates, hard_escaped, false);
             check_soft_escape_in_expr(value, candidates, hard_escaped, false);
-        }
-
-        TirExprKind::Move { expr: inner } => {
-            // Move preserves the context — if we're in a soft context, inner is too
-            check_soft_escape_in_expr(inner, candidates, hard_escaped, in_soft_context);
         }
 
         // Bare Local in a soft context (return, call arg) → soft escape (OK)
@@ -1110,12 +1074,7 @@ fn expand_struct_let(
     reconstruct_info: &IndexMap<u32, ReconstructInfo>,
     new_stmts: &mut Vec<TirStmt>,
 ) {
-    // Unwrap Move if present
-    let inner_value = match value.kind {
-        TirExprKind::Move { expr: inner } => *inner,
-        _ => value,
-    };
-    match inner_value.kind {
+    match value.kind {
         TirExprKind::StructLiteral { fields, .. } => {
             let mut sorted_fields: Vec<_> = fields.into_iter().collect();
             sorted_fields.sort_by_key(|f| f.field_index);
@@ -1358,21 +1317,6 @@ fn rewrite_expr(
                 return;
             }
         }
-        // Through Move: Move { candidate }.field
-        if let TirExprKind::Move { expr: move_inner } = &inner.kind
-            && let Some(local_idx) = is_candidate_local(move_inner, safe_set)
-        {
-            let field_idx = *field_index;
-            let key = (local_idx, field_idx);
-            if let Some(&new_local) = field_map.get(&key) {
-                let (new_name, _) = &info_map[&key];
-                expr.kind = TirExprKind::Local {
-                    index: new_local,
-                    name: new_name.clone(),
-                };
-                return;
-            }
-        }
     }
 
     // Check for field write: candidate.field = value → scalar_local = value
@@ -1473,16 +1417,6 @@ fn rewrite_expr(
             );
         }
         TirExprKind::Cast { expr: inner, .. } => {
-            rewrite_expr(
-                inner,
-                safe_set,
-                field_map,
-                info_map,
-                candidate_mut,
-                reconstruct_info,
-            );
-        }
-        TirExprKind::Move { expr: inner } => {
             rewrite_expr(
                 inner,
                 safe_set,

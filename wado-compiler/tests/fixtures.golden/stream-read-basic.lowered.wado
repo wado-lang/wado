@@ -25,47 +25,47 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let [rx, tx] = move core::builtin::stream_create_pair();
+    let [rx, tx] = core::builtin::stream_create_pair();
     tx."StreamWritable<u8>::close"();
-    let result: Array<u8> = move rx."Stream<u8>::read"(64);
+    let result: Array<u8> = rx."Stream<u8>::read"(64);
     __assert_0: {
         let __v0: i32 = result.used;
         let __cond: bool = (__v0 == 0);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(134), used: 0 };
-                __r.String::append(move "Assertion failed in ");
-                __r.String::append(move "run");
-                __r.String::append(move " at ");
-                __r.String::append(move "wado-compiler/tests/fixtures/stream-read-basic.wado");
-                __r.String::append(move ":");
+                let mut __r: String = String { repr: "array_new<u8>"(134), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/stream-read-basic.wado");
+                __r.String::append(":");
                 let mut __f: Formatter = __inline_Formatter__new_3: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_4: {
-                    let self: Box<i32> = move Box<i32> { value: 13 };
+                    let self: Box<i32> = Box<i32> { value: 13 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: result.len() == 0\n");
-                __r.String::append(move "result.len(): ");
+                __r.String::append("\ncondition: result.len() == 0\n");
+                __r.String::append("result.len(): ");
                 __f = __inline_Formatter__new_5: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_6: {
-                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\n");
+                __r.String::append("\n");
                 break __tmpl: __r;
             });
         }
     }
     rx."Stream<u8>::close"();
-    core::cli::println(move "read ok");
+    core::cli::println("read ok");
 }
 
 export fn __cm_export__run() {

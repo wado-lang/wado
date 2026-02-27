@@ -35,54 +35,54 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let leaf1: Tree = move Tree::Leaf(1);
-    let leaf2: Tree = move Tree::Leaf(2);
-    let leaf3: Tree = move Tree::Leaf(3);
-    let branch: Tree = move Tree::Branch(Node { left: leaf1, right: Tree::Branch(Node { left: leaf2, right: leaf3 }) });
+    let leaf1: Tree = Tree::Leaf(1);
+    let leaf2: Tree = Tree::Leaf(2);
+    let leaf3: Tree = Tree::Leaf(3);
+    let branch: Tree = Tree::Branch(Node { left: leaf1, right: Tree::Branch(Node { left: leaf2, right: leaf3 }) });
     let total: i32 = sum_tree(&branch);
     __assert_0: {
         let __cond: bool = (total == 6);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(120), used: 0 };
-                __r.String::append(move "Assertion failed in ");
-                __r.String::append(move "run");
-                __r.String::append(move " at ");
-                __r.String::append(move "wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado");
-                __r.String::append(move ":");
+                let mut __r: String = String { repr: "array_new<u8>"(120), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/wir_issue6_circular_struct_variant.wado");
+                __r.String::append(":");
                 let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_3: {
-                    let self: Box<i32> = move Box<i32> { value: 36 };
+                    let self: Box<i32> = Box<i32> { value: 36 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: total == 6\n");
-                __r.String::append(move "total: ");
+                __r.String::append("\ncondition: total == 6\n");
+                __r.String::append("total: ");
                 __f = __inline_Formatter__new_4: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_5: {
-                    let self: Box<i32> = move Box<i32> { value: total };
+                    let self: Box<i32> = Box<i32> { value: total };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\n");
+                __r.String::append("\n");
                 break __tmpl: __r;
             });
         }
     }
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
+        let mut __r: String = String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_8: {
-            let self: Box<i32> = move Box<i32> { value: total };
+            let self: Box<i32> = Box<i32> { value: total };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

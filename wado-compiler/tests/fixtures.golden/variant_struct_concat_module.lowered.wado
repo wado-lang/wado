@@ -21,11 +21,11 @@ pub struct Opts {
 }
 
 pub fn format_str(s: String, opts: Opts) -> String {
-    let pad: String = move "  ";
+    let pad: String = "  ";
     return match opts.align {
         Left => String::concat(s, pad),
         Right => String::concat(pad, s),
-        Center => String::concat(move String::concat(pad, s), pad),
+        Center => String::concat(String::concat(pad, s), pad),
     };
 }
 
@@ -37,13 +37,13 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let opts: Opts = move Opts { align: Align::Right, width: 0 };
-    let s: String = move format_str(move "hi", opts);
+    let opts: Opts = Opts { align: Align::Right, width: 0 };
+    let s: String = format_str("hi", opts);
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(18), used: 0 };
-        __r.String::append(move "[");
+        let mut __r: String = String { repr: "array_new<u8>"(18), used: 0 };
+        __r.String::append("[");
         __r.String::append(s);
-        __r.String::append(move "]");
+        __r.String::append("]");
         break __tmpl: __r;
     });
 }

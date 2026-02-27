@@ -543,8 +543,7 @@ fn lower_wide_int_in_expr(expr: &mut TirExpr, type_table: &Rc<RefCell<TypeTable>
         | TirExprKind::Assign { value: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::Move { expr: inner } => {
+        | TirExprKind::OptionSome { value: inner } => {
             lower_wide_int_in_expr(inner, type_table);
         }
         TirExprKind::Call { args, .. }
@@ -984,14 +983,8 @@ impl<'a> PatternLowerer<'a> {
             }
         }
 
-        // Unwrap Move wrapper if present
-        let inner_value = match &value.kind {
-            TirExprKind::Move { expr: v } => v.as_ref(),
-            _ => value,
-        };
-
         // Check if value is a builtin call
-        let is_builtin_call = match &inner_value.kind {
+        let is_builtin_call = match &value.kind {
             TirExprKind::Call { func: func_ref, .. } => {
                 if let FunctionRef::External { module_source, .. } = func_ref {
                     module_source.is_core_builtin()
@@ -1007,7 +1000,7 @@ impl<'a> PatternLowerer<'a> {
         }
 
         // Check if return type is a tuple (multi-value return)
-        let elem_types = match type_table.get(inner_value.type_id) {
+        let elem_types = match type_table.get(value.type_id) {
             ResolvedType::Tuple(types) => types,
             _ => return false,
         };
@@ -1993,7 +1986,6 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { expr: inner }
             | TirExprKind::IsNotNull { expr: inner }
             | TirExprKind::UnwrapOption { expr: inner, .. }
             | TirExprKind::VariantTag { expr: inner }
@@ -2470,7 +2462,6 @@ fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::Move { expr: inner }
         | TirExprKind::IsNotNull { expr: inner }
         | TirExprKind::UnwrapOption { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
@@ -3519,9 +3510,6 @@ impl BoxLowerer {
             TirExprKind::Cast { expr: inner, .. } => {
                 self.transform_expr(inner, address_taken, type_table);
             }
-            TirExprKind::Move { expr: inner } => {
-                self.transform_expr(inner, address_taken, type_table);
-            }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.transform_expr(value, address_taken, type_table);
             }
@@ -4107,7 +4095,7 @@ impl ClosureLowerer {
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.collect_closures_in_expr(functor);
             }
-            TirExprKind::OptionSome { value: inner } | TirExprKind::Move { expr: inner } => {
+            TirExprKind::OptionSome { value: inner } => {
                 self.collect_closures_in_expr(inner);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
@@ -4325,7 +4313,7 @@ impl ClosureLowerer {
                     self.analyze_closure_safety_expr(&arm.body, false);
                 }
             }
-            TirExprKind::OptionSome { value: inner } | TirExprKind::Move { expr: inner } => {
+            TirExprKind::OptionSome { value: inner } => {
                 self.analyze_closure_safety_expr(inner, false);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
@@ -4631,8 +4619,7 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { expr: inner } => {
+            | TirExprKind::OptionSome { value: inner } => {
                 Self::collect_locals_from_expr(inner, locals);
             }
             TirExprKind::Call { args, .. }
@@ -5468,8 +5455,7 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { expr: inner } => {
+            | TirExprKind::OptionSome { value: inner } => {
                 self.fn_param_in_struct_field_expr(inner, fn_param_indices)
             }
             TirExprKind::Call { args, .. }
@@ -5733,8 +5719,7 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { expr: inner } => {
+            | TirExprKind::OptionSome { value: inner } => {
                 self.collect_fn_param_specs_expr(inner, func_by_name, type_table, requests);
             }
             TirExprKind::CmRawCall { args, .. } => {
@@ -5915,8 +5900,7 @@ impl ClosureLowerer {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::OptionSome { value: inner }
-            | TirExprKind::Move { expr: inner } => {
+            | TirExprKind::OptionSome { value: inner } => {
                 self.count_closures_in_expr(inner, counter);
             }
             TirExprKind::Call { args, .. }
@@ -6651,13 +6635,6 @@ impl ClosureLowerer {
                 expr.type_id,
                 expr.span,
             ),
-            TirExprKind::Move { expr: inner } => TirExpr::new(
-                TirExprKind::Move {
-                    expr: Box::new(self.specialize_expr(inner, param_to_functor, type_table)),
-                },
-                expr.type_id,
-                expr.span,
-            ),
             TirExprKind::LabeledBlock {
                 label,
                 block,
@@ -7104,7 +7081,7 @@ impl ClosureLowerer {
                     self.transform_expr(&mut arm.body, type_table);
                 }
             }
-            TirExprKind::OptionSome { value: inner } | TirExprKind::Move { expr: inner } => {
+            TirExprKind::OptionSome { value: inner } => {
                 self.transform_expr(inner, type_table);
             }
             TirExprKind::VariantConstruct { payload, .. } => {
@@ -7396,8 +7373,7 @@ impl ClosureLowerer {
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::Move { expr: inner } => {
+            | TirExprKind::FieldAccess { expr: inner, .. } => {
                 self.transform_remaining_closures_expr(inner);
             }
             TirExprKind::Assign { target, value } => {
@@ -7738,9 +7714,6 @@ impl StringCollector {
                 if let Some(payload_expr) = payload {
                     self.collect_expr(payload_expr);
                 }
-            }
-            TirExprKind::Move { expr } => {
-                self.collect_expr(expr);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.collect_block(block);

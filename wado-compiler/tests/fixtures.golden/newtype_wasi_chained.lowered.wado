@@ -30,17 +30,17 @@ export fn run() with Stdout, MonotonicClock {
     let ts_u64: u64 = ts as u64;
     let evt_u64: u64 = evt as u64;
     if ((t1_u64 == ts_u64) && (ts_u64 == evt_u64)) {
-        core::cli::println(move "all casts produce same u64 value");
+        core::cli::println("all casts produce same u64 value");
     } else {
-        core::cli::println(move "FAILED: values differ");
+        core::cli::println("FAILED: values differ");
     }
     let t2: Mark = __cm_adapter__MonotonicClock_now();
     let ts2: Timestamp = t2 as Timestamp;
     let diff: Timestamp = (ts2 - ts);
     if (diff >= 0) {
-        core::cli::println(move "timestamp arithmetic works");
+        core::cli::println("timestamp arithmetic works");
     }
-    core::cli::println(move "chained newtype tests passed");
+    core::cli::println("chained newtype tests passed");
 }
 
 fn __cm_adapter__MonotonicClock_now() -> Mark {

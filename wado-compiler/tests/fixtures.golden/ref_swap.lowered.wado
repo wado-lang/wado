@@ -29,11 +29,11 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut x: Box<i32> = move Box<i32> { value: 1 };
-    let mut y: Box<i32> = move Box<i32> { value: 2 };
+    let mut x: Box<i32> = Box<i32> { value: 1 };
+    let mut y: Box<i32> = Box<i32> { value: 2 };
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(42), used: 0 };
-        __r.String::append(move "before: ");
+        let mut __r: String = String { repr: "array_new<u8>"(42), used: 0 };
+        __r.String::append("before: ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -43,7 +43,7 @@ export fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r.String::append(move ", ");
+        __r.String::append(", ");
         __f = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -57,8 +57,8 @@ export fn run() with Stdout {
     });
     swap(x, y);
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(41), used: 0 };
-        __r.String::append(move "after: ");
+        let mut __r: String = String { repr: "array_new<u8>"(41), used: 0 };
+        __r.String::append("after: ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -68,7 +68,7 @@ export fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r.String::append(move ", ");
+        __r.String::append(", ");
         __f = __inline_Formatter__new_9: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };

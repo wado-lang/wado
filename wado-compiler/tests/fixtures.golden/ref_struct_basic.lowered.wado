@@ -22,23 +22,23 @@ struct Point {
 
 fn print_point(p: &Point) with Stdout {
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
+        let mut __r: String = String { repr: "array_new<u8>"(33), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_2: {
-            let self: Box<i32> = move Box<i32> { value: p.x };
+            let self: Box<i32> = Box<i32> { value: p.x };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r.String::append(move ",");
+        __r.String::append(",");
         __f = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: p.y };
+            let self: Box<i32> = Box<i32> { value: p.y };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -54,7 +54,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let p: Point = move Point { x: 10, y: 20 };
+    let p: Point = Point { x: 10, y: 20 };
     print_point(&p);
 }
 

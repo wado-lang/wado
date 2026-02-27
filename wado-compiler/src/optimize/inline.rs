@@ -58,7 +58,6 @@ fn count_expr(expr: &TirExpr) -> usize {
         TirExprKind::Block(block) => count_block_exprs(block),
         TirExprKind::Cast { expr, .. } => count_expr(expr),
         TirExprKind::GlobalVarSet { value, .. } => count_expr(value),
-        TirExprKind::Move { expr } => count_expr(expr),
         // Leaf expressions (no children)
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
@@ -329,8 +328,9 @@ fn expr_has_complex_generic_types(expr: &TirExpr, type_table: &TypeTable) -> boo
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::Move { expr: inner } => expr_has_complex_generic_types(inner, type_table),
+        | TirExprKind::OptionSome { value: inner } => {
+            expr_has_complex_generic_types(inner, type_table)
+        }
         TirExprKind::Index { expr: base, index } => {
             expr_has_complex_generic_types(base, type_table)
                 || expr_has_complex_generic_types(index, type_table)
@@ -602,9 +602,6 @@ fn collect_callees_from_expr(expr: &TirExpr, callees: &mut IndexSet<String>) {
             if let Some(payload_expr) = payload {
                 collect_callees_from_expr(payload_expr, callees);
             }
-        }
-        TirExprKind::Move { expr } => {
-            collect_callees_from_expr(expr, callees);
         }
         TirExprKind::LabeledBlock { block, .. } => {
             collect_callees_from_block(block, callees);
@@ -2438,15 +2435,6 @@ fn remap_expr(
                 ))
             }),
         },
-        TirExprKind::Move { expr } => TirExprKind::Move {
-            expr: Box::new(remap_expr(
-                expr,
-                param_to_local,
-                local_offset,
-                param_count,
-                source_module,
-            )),
-        },
         TirExprKind::LabeledBlock {
             label,
             block,
@@ -3116,19 +3104,6 @@ fn inline_calls_in_expr(
                     inline_counter,
                 );
             }
-        }
-        TirExprKind::Move { expr } => {
-            inline_calls_in_expr(
-                expr,
-                candidates,
-                current_module,
-                local_count,
-                local_types,
-                type_table,
-                pre_stmts,
-                inlined_funcs,
-                inline_counter,
-            );
         }
         TirExprKind::LabeledBlock { block, .. } => {
             // Process the block for nested inlining opportunities

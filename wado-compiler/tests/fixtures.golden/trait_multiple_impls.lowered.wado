@@ -25,8 +25,8 @@ struct Dog {
 
 fn "Cat^Describe::describe"(self: &Cat) -> String {
     return __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(28), used: 0 };
-        __r.String::append(move "A cat named ");
+        let mut __r: String = String { repr: "array_new<u8>"(28), used: 0 };
+        __r.String::append("A cat named ");
         __r.String::append(self.name);
         break __tmpl: __r;
     };
@@ -34,8 +34,8 @@ fn "Cat^Describe::describe"(self: &Cat) -> String {
 
 fn "Dog^Describe::describe"(self: &Dog) -> String {
     return __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(28), used: 0 };
-        __r.String::append(move "A dog named ");
+        let mut __r: String = String { repr: "array_new<u8>"(28), used: 0 };
+        __r.String::append("A dog named ");
         __r.String::append(self.name);
         break __tmpl: __r;
     };
@@ -49,10 +49,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let cat: Cat = move Cat { name: "Whiskers" };
-    let dog: Dog = move Dog { name: "Buddy" };
-    core::cli::println(move cat."Cat^Describe::describe"());
-    core::cli::println(move dog."Dog^Describe::describe"());
+    let cat: Cat = Cat { name: "Whiskers" };
+    let dog: Dog = Dog { name: "Buddy" };
+    core::cli::println(cat."Cat^Describe::describe"());
+    core::cli::println(dog."Dog^Describe::describe"());
 }
 
 export fn __cm_export__run() {

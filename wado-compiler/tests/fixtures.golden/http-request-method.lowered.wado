@@ -17,7 +17,7 @@
 // wasi::waitable-set-wait
 
 export fn handle(request: Request) {
-    let method: Method = move __cm_adapter__Request_get_method(&request);
+    let method: Method = __cm_adapter__Request_get_method(&request);
     __assert_0: {
         let __cond: bool = match method {
             Post => true,
@@ -25,32 +25,32 @@ export fn handle(request: Request) {
         };
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(109), used: 0 };
-                __r.String::append(move "Assertion failed in ");
-                __r.String::append(move "handle");
-                __r.String::append(move " at ");
-                __r.String::append(move "wado-compiler/tests/fixtures/http-request-method.wado");
-                __r.String::append(move ":");
+                let mut __r: String = String { repr: "array_new<u8>"(109), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("handle");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/http-request-method.wado");
+                __r.String::append(":");
                 let mut __f: Formatter = __inline_Formatter__new_1: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_2: {
-                    let self: Box<i32> = move Box<i32> { value: 9 };
+                    let self: Box<i32> = Box<i32> { value: 9 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: method matches { Post }\n");
+                __r.String::append("\ncondition: method matches { Post }\n");
                 break __tmpl: __r;
             });
         }
     }
-    let [trailers_future, trailers_tx] = move core::builtin::future_create_pair();
+    let [trailers_future, trailers_tx] = core::builtin::future_create_pair();
     let headers: Fields = __cm_adapter__Fields_new();
-    let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = move __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
     let response: Response = __pattern_temp_0.0;
     let _tx_future: Future<Result<(), ErrorCode>> = __pattern_temp_0.1;
-    let __task_ret: Result<Response, ErrorCode> = move Result<Response, ErrorCode>::Ok(response);
+    let __task_ret: Result<Response, ErrorCode> = Result<Response, ErrorCode>::Ok(response);
     let mut __tv_0: i32 = 0;
     let mut __tv_1: i32 = 0;
     let mut __tv_2: i32 = 0;
@@ -355,42 +355,42 @@ export fn handle(request: Request) {
         }
         cm_raw_call task-return(__tv_0, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(move Result<Option<Trailers>, ErrorCode>::Ok(null));
+    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(Result<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 fn __cm_adapter__Request_get_method(self: &Request) -> Method {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 12);
     cm_raw_call wasi:http/Request::get_method(self, __outptr);
     let __vdisc: i32 = core::builtin::i32_load8_u(__outptr);
-    let mut __vresult: Method = move null;
+    let mut __vresult: Method = null;
     if (__vdisc == 0) {
-        __vresult = move Method::Get;
+        __vresult = Method::Get;
     } else {
         if (__vdisc == 1) {
-            __vresult = move Method::Head;
+            __vresult = Method::Head;
         } else {
             if (__vdisc == 2) {
-                __vresult = move Method::Post;
+                __vresult = Method::Post;
             } else {
                 if (__vdisc == 3) {
-                    __vresult = move Method::Put;
+                    __vresult = Method::Put;
                 } else {
                     if (__vdisc == 4) {
-                        __vresult = move Method::Delete;
+                        __vresult = Method::Delete;
                     } else {
                         if (__vdisc == 5) {
-                            __vresult = move Method::Connect;
+                            __vresult = Method::Connect;
                         } else {
                             if (__vdisc == 6) {
-                                __vresult = move Method::Options;
+                                __vresult = Method::Options;
                             } else {
                                 if (__vdisc == 7) {
-                                    __vresult = move Method::Trace;
+                                    __vresult = Method::Trace;
                                 } else {
                                     if (__vdisc == 8) {
-                                        __vresult = move Method::Patch;
+                                        __vresult = Method::Patch;
                                     } else {
-                                        __vresult = move Method::Other(__inline_memory_to_gc_string_0: {
+                                        __vresult = Method::Other(__inline_memory_to_gc_string_0: {
                                             let ptr: i32 = core::builtin::i32_load((__outptr + 4));
                                             let len: i32 = core::builtin::i32_load(((__outptr + 4) + 4));
                                             let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);

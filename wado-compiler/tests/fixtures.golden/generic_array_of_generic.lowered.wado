@@ -29,43 +29,43 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let pairs: Array<Pair<i32, String>> = __seq_lit: {
-        let mut __b: Array<Pair<i32, String>> = move "Array<Pair<i32,String>>^SequenceLiteralBuilder::new_literal"(2);
-        __b."Array<Pair<i32,String>>^SequenceLiteralBuilder::push_literal"(move Pair<i32,String> { first: 1, second: "one" });
-        __b."Array<Pair<i32,String>>^SequenceLiteralBuilder::push_literal"(move Pair<i32,String> { first: 2, second: "two" });
+        let mut __b: Array<Pair<i32, String>> = "Array<Pair<i32,String>>^SequenceLiteralBuilder::new_literal"(2);
+        __b."Array<Pair<i32,String>>^SequenceLiteralBuilder::push_literal"(Pair<i32,String> { first: 1, second: "one" });
+        __b."Array<Pair<i32,String>>^SequenceLiteralBuilder::push_literal"(Pair<i32,String> { first: 2, second: "two" });
         break __seq_lit: __b."Array<Pair<i32,String>>^SequenceLiteralBuilder::build"();
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(46), used: 0 };
-        __r.String::append(move "pairs[0]: (");
+        let mut __r: String = String { repr: "array_new<u8>"(46), used: 0 };
+        __r.String::append("pairs[0]: (");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).first };
+            let self: Box<i32> = Box<i32> { value: pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).first };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r.String::append(move ", ");
+        __r.String::append(", ");
         __r.String::append(pairs."Array<Pair<i32,String>>^IndexValue::index_value"(0).second);
-        __r.String::append(move ")");
+        __r.String::append(")");
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(46), used: 0 };
-        __r.String::append(move "pairs[1]: (");
+        let mut __r: String = String { repr: "array_new<u8>"(46), used: 0 };
+        __r.String::append("pairs[1]: (");
         let mut __f: Formatter = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_6: {
-            let self: Box<i32> = move Box<i32> { value: pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).first };
+            let self: Box<i32> = Box<i32> { value: pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).first };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r.String::append(move ", ");
+        __r.String::append(", ");
         __r.String::append(pairs."Array<Pair<i32,String>>^IndexValue::index_value"(1).second);
-        __r.String::append(move ")");
+        __r.String::append(")");
         break __tmpl: __r;
     });
 }
@@ -77,7 +77,7 @@ export fn __cm_export__run() {
 
 fn "Array<Pair<i32,String>>^IndexValue::index_value"(self: &Array<Pair<i32, String>>, index: i32) -> Pair<i32,String> {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<Pair<i32, String>>(self.repr, index);
 }

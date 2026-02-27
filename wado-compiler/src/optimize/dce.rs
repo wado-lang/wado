@@ -1034,9 +1034,6 @@ fn analyze_expr(
                 analyze_expr(payload_expr, current_module, type_table, analysis);
             }
         }
-        TirExprKind::Move { expr } => {
-            analyze_expr(expr, current_module, type_table, analysis);
-        }
         TirExprKind::LabeledBlock { block, .. } => {
             analyze_block(block, current_module, type_table, analysis);
         }
@@ -1634,9 +1631,6 @@ fn collect_types_from_expr(
                 collect_types_from_expr(payload_expr, type_table, reachable);
             }
         }
-        TirExprKind::Move { expr } => {
-            collect_types_from_expr(expr, type_table, reachable);
-        }
         TirExprKind::LabeledBlock { block, .. } => {
             collect_types_from_block(block, type_table, reachable);
         }
@@ -2054,7 +2048,6 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::Move { expr: inner }
         | TirExprKind::IsNotNull { expr: inner }
         | TirExprKind::UnwrapOption { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
@@ -2443,7 +2436,6 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Move { expr: inner }
         | TirExprKind::IsNotNull { expr: inner }
         | TirExprKind::UnwrapOption { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }

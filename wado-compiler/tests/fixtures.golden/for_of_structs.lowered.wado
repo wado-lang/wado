@@ -34,10 +34,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let p1: Point = move Point { x: 1, y: 2 };
-    let p2: Point = move Point { x: 3, y: 4 };
+    let p1: Point = Point { x: 1, y: 2 };
+    let p2: Point = Point { x: 3, y: 4 };
     let points: Array<Point> = __seq_lit: {
-        let mut __b: Array<Point> = move Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
+        let mut __b: Array<Point> = Array<Point> { repr: core::builtin::array_new::<Point>(2), used: 0 };
         __inline_Array_Point__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<Point> = &mut __b;
             self."Array<Point>::append"(p1);
@@ -52,29 +52,29 @@ export fn run() with Stdout {
         };
     };
     __for_of_0: {
-        let mut __iter_0: ArrayIter<Point> = move ArrayIter<Point> { repr: points.repr, used: points.used, index: 0 };
+        let mut __iter_0: ArrayIter<Point> = ArrayIter<Point> { repr: points.repr, used: points.used, index: 0 };
         loop {
-            let __pattern_temp_0: Option<Point> = move __iter_0."ArrayIter<Point>^Iterator::next"();
+            let __pattern_temp_0: Option<Point> = __iter_0."ArrayIter<Point>^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let p: Point = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
-                    let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
+                    let mut __r: String = String { repr: "array_new<u8>"(33), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_7: {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     __inline_i32_Display__fmt_8: {
-                        let self: Box<i32> = move Box<i32> { value: p.x };
+                        let self: Box<i32> = Box<i32> { value: p.x };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                     };
-                    __r.String::append(move ",");
+                    __r.String::append(",");
                     __f = __inline_Formatter__new_9: {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     __inline_i32_Display__fmt_10: {
-                        let self: Box<i32> = move Box<i32> { value: p.y };
+                        let self: Box<i32> = Box<i32> { value: p.y };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                     };
@@ -96,7 +96,7 @@ fn "ArrayIter<Point>^Iterator::next"(self: &mut ArrayIter<Point>) -> Option<Poin
     if (self.index >= self.used) {
         return null;
     }
-    let item: Point = move core::builtin::array_get::<Point>(self.repr, self.index);
+    let item: Point = core::builtin::array_get::<Point>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }

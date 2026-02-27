@@ -4759,8 +4759,7 @@ fn rewrite_calls_in_expr(
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::Move { expr: inner } => {
+        | TirExprKind::OptionSome { value: inner } => {
             rewrite_calls_in_expr(inner, adapters, entry_source, wasi_registry);
         }
         TirExprKind::If {
@@ -4962,8 +4961,7 @@ fn collect_effect_calls_in_expr(
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::Move { expr: inner } => {
+        | TirExprKind::OptionSome { value: inner } => {
             collect_effect_calls_in_expr(inner, effects, wasi_registry);
         }
         TirExprKind::If {

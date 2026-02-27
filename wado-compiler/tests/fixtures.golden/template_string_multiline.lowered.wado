@@ -23,20 +23,20 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let simple: String = move "Line 1\nLine 2\nLine 3";
+    let simple: String = "Line 1\nLine 2\nLine 3";
     core::cli::println(simple);
-    let name: String = move "Alice";
+    let name: String = "Alice";
     let greeting: String = __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(54), used: 0 };
-        __r.String::append(move "Dear ");
+        let mut __r: String = String { repr: "array_new<u8>"(54), used: 0 };
+        __r.String::append("Dear ");
         __r.String::append(name);
-        __r.String::append(move ",\n\nWelcome to Wado!\n\nBest regards");
+        __r.String::append(",\n\nWelcome to Wado!\n\nBest regards");
         break __tmpl: __r;
     };
     core::cli::println(greeting);
     let result: String = __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(70), used: 0 };
-        __r.String::append(move "First: ");
+        let mut __r: String = String { repr: "array_new<u8>"(70), used: 0 };
+        __r.String::append("First: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -45,7 +45,7 @@ export fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(1, f);
         };
-        __r.String::append(move "\nSecond: ");
+        __r.String::append("\nSecond: ");
         __f = __inline_Formatter__new_5: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -54,7 +54,7 @@ export fn run() with Stdout {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(2, f);
         };
-        __r.String::append(move "\nSum: ");
+        __r.String::append("\nSum: ");
         __f = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -66,7 +66,7 @@ export fn run() with Stdout {
         break __tmpl: __r;
     };
     core::cli::println(result);
-    core::cli::println(move "done");
+    core::cli::println("done");
 }
 
 export fn __cm_export__run() {

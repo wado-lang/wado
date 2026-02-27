@@ -16,13 +16,13 @@
 // wasi::waitable-set-wait
 
 export fn handle(request: Request) {
-    let [trailers_future, trailers_tx] = move core::builtin::future_create_pair();
-    let [body_rx, body_tx] = move core::builtin::stream_create_pair();
+    let [trailers_future, trailers_tx] = core::builtin::future_create_pair();
+    let [body_rx, body_tx] = core::builtin::stream_create_pair();
     let headers: Fields = __cm_adapter__Fields_new();
-    let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = move __cm_adapter__Response_new(headers, 1, body_rx, trailers_future);
+    let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = __cm_adapter__Response_new(headers, 1, body_rx, trailers_future);
     let response: Response = __pattern_temp_0.0;
     let _tx_future: Future<Result<(), ErrorCode>> = __pattern_temp_0.1;
-    let __task_ret: Result<Response, ErrorCode> = move Result<Response, ErrorCode>::Ok(response);
+    let __task_ret: Result<Response, ErrorCode> = Result<Response, ErrorCode>::Ok(response);
     let mut __tv_0: i32 = 0;
     let mut __tv_1: i32 = 0;
     let mut __tv_2: i32 = 0;
@@ -328,7 +328,7 @@ export fn handle(request: Request) {
         cm_raw_call task-return(__tv_0, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
     let data: Array<u8> = __seq_lit: {
-        let mut __b: Array<u8> = move Array<u8> { repr: core::builtin::array_new::<u8>(5), used: 0 };
+        let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(5), used: 0 };
         __inline_Array_u8__SequenceLiteralBuilder__push_literal_1: {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(72);
@@ -356,7 +356,7 @@ export fn handle(request: Request) {
     };
     body_tx."StreamWritable<u8>::write"(data);
     body_tx."StreamWritable<u8>::close"();
-    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(move Result<Option<Trailers>, ErrorCode>::Ok(null));
+    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(Result<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 fn __cm_adapter__Fields_new() -> Fields {

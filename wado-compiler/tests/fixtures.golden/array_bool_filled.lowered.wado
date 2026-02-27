@@ -23,9 +23,9 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let arr: Array<bool> = move "Array<bool>::filled"(3, true);
+    let arr: Array<bool> = "Array<bool>::filled"(3, true);
     if arr."Array<bool>^IndexValue::index_value"(0) {
-        core::cli::println(move "true");
+        core::cli::println("true");
     }
 }
 
@@ -36,7 +36,7 @@ export fn __cm_export__run() {
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<bool>(self.repr, index);
 }

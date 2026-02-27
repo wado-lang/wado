@@ -28,7 +28,7 @@ fn apply_padding(s: String, spec: FormatSpec) -> String {
     }
     let fill: char = spec.fill;
     let pad_len: i32 = (width - s.used);
-    let mut result: String = move String { repr: "array_new<u8>"(width), used: 0 };
+    let mut result: String = String { repr: "array_new<u8>"(width), used: 0 };
     return match spec.align {
         Left => {
             result.String::append(s);
@@ -103,12 +103,12 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let left: FormatSpec = move FormatSpec { align: Align::Left, width: 10, fill: '*' };
-    let center: FormatSpec = move FormatSpec { align: Align::Center, width: 10, fill: '*' };
-    let right: FormatSpec = move FormatSpec { align: Align::Right, width: 10, fill: '*' };
-    core::cli::println(move apply_padding(move "test", left));
-    core::cli::println(move apply_padding(move "test", center));
-    core::cli::println(move apply_padding(move "test", right));
+    let left: FormatSpec = FormatSpec { align: Align::Left, width: 10, fill: '*' };
+    let center: FormatSpec = FormatSpec { align: Align::Center, width: 10, fill: '*' };
+    let right: FormatSpec = FormatSpec { align: Align::Right, width: 10, fill: '*' };
+    core::cli::println(apply_padding("test", left));
+    core::cli::println(apply_padding("test", center));
+    core::cli::println(apply_padding("test", right));
 }
 
 export fn __cm_export__run() {

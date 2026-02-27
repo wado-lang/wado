@@ -30,26 +30,26 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let mut arr: Array<[bool, i32, String]> = __seq_lit: {
-        let mut __b: Array<[bool, i32, String]> = move Array<Tuple<bool,i32,String>> { repr: core::builtin::array_new::<[bool, i32, String]>(0), used: 0 };
+        let mut __b: Array<[bool, i32, String]> = Array<Tuple<bool,i32,String>> { repr: core::builtin::array_new::<[bool, i32, String]>(0), used: 0 };
         break __seq_lit: *__b;
     };
-    arr."Array<Tuple<bool,i32,String>>::append"(move [true, 1, "one"]);
-    arr."Array<Tuple<bool,i32,String>>::append"(move [false, 2, "two"]);
-    arr."Array<Tuple<bool,i32,String>>::append"(move [true, 3, "three"]);
+    arr."Array<Tuple<bool,i32,String>>::append"([true, 1, "one"]);
+    arr."Array<Tuple<bool,i32,String>>::append"([false, 2, "two"]);
+    arr."Array<Tuple<bool,i32,String>>::append"([true, 3, "three"]);
     __for_of_0: {
-        let mut __iter_0: ArrayIter<Tuple<bool,i32,String>> = move ArrayIter<Tuple<bool,i32,String>> { repr: arr.repr, used: arr.used, index: 0 };
+        let mut __iter_0: ArrayIter<Tuple<bool,i32,String>> = ArrayIter<Tuple<bool,i32,String>> { repr: arr.repr, used: arr.used, index: 0 };
         loop {
-            let __pattern_temp_0: Option<[bool, i32, String]> = move __iter_0."ArrayIter<Tuple<bool,i32,String>>^Iterator::next"();
+            let __pattern_temp_0: Option<[bool, i32, String]> = __iter_0."ArrayIter<Tuple<bool,i32,String>>^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let x: [bool, i32, String] = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
-                    let mut __r: String = move String { repr: "array_new<u8>"(50), used: 0 };
+                    let mut __r: String = String { repr: "array_new<u8>"(50), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_5: {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     __inline_bool_Display__fmt_6: {
-                        let self: Box<bool> = move Box<bool> { value: x.0 };
+                        let self: Box<bool> = Box<bool> { value: x.0 };
                         let f: &mut Formatter = &mut __f;
                         f.Formatter::pad(if self.value {
                             "true";
@@ -57,17 +57,17 @@ export fn run() with Stdout {
                             "false";
                         });
                     };
-                    __r.String::append(move " ");
+                    __r.String::append(" ");
                     __f = __inline_Formatter__new_7: {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     __inline_i32_Display__fmt_8: {
-                        let self: Box<i32> = move Box<i32> { value: x.1 };
+                        let self: Box<i32> = Box<i32> { value: x.1 };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                     };
-                    __r.String::append(move " ");
+                    __r.String::append(" ");
                     __r.String::append(x.2);
                     break __tmpl: __r;
                 });
@@ -87,7 +87,7 @@ fn "ArrayIter<Tuple<bool,i32,String>>^Iterator::next"(self: &mut ArrayIter<Tuple
     if (self.index >= self.used) {
         return null;
     }
-    let item: [bool, i32, String] = move core::builtin::array_get::<[bool, i32, String]>(self.repr, self.index);
+    let item: [bool, i32, String] = core::builtin::array_get::<[bool, i32, String]>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }

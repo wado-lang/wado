@@ -24,10 +24,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let [_rx, tx] = move core::builtin::stream_create_pair();
+    let [_rx, tx] = core::builtin::stream_create_pair();
     tx."StreamWritable<u8>::close"();
     _rx."Stream<u8>::close"();
-    core::cli::println(move "StreamWritable type exists");
+    core::cli::println("StreamWritable type exists");
 }
 
 export fn __cm_export__run() {

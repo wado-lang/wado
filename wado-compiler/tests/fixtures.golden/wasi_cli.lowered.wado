@@ -23,39 +23,39 @@ export fn run() with Stdout, Stderr, Environment {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    core::cli::println(move "test: stdout works");
-    core::cli::eprintln(move "test: stderr works");
-    let arguments: Array<String> = move __cm_adapter__Environment_get_arguments();
+    core::cli::println("test: stdout works");
+    core::cli::eprintln("test: stderr works");
+    let arguments: Array<String> = __cm_adapter__Environment_get_arguments();
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(57), used: 0 };
-        __r.String::append(move "test: Environment::get_arguments().len = ");
+        let mut __r: String = String { repr: "array_new<u8>"(57), used: 0 };
+        __r.String::append("test: Environment::get_arguments().len = ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: arguments.used };
+            let self: Box<i32> = Box<i32> { value: arguments.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let env_vars: Array<[String, String]> = move __cm_adapter__Environment_get_environment();
+    let env_vars: Array<[String, String]> = __cm_adapter__Environment_get_environment();
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(59), used: 0 };
-        __r.String::append(move "test: Environment::get_environment().len = ");
+        let mut __r: String = String { repr: "array_new<u8>"(59), used: 0 };
+        __r.String::append("test: Environment::get_environment().len = ");
         let mut __f: Formatter = __inline_Formatter__new_6: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_7: {
-            let self: Box<i32> = move Box<i32> { value: env_vars.used };
+            let self: Box<i32> = Box<i32> { value: env_vars.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    core::cli::println(move "all cli tests passed");
+    core::cli::println("all cli tests passed");
 }
 
 fn __cm_adapter__Environment_get_arguments() -> Array<String> {
@@ -63,7 +63,7 @@ fn __cm_adapter__Environment_get_arguments() -> Array<String> {
     cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(__count), used: 0 };
+    let mut __result: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(__count), used: 0 };
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {
@@ -91,14 +91,14 @@ fn __cm_adapter__Environment_get_environment() -> Array<[String, String]> {
     cm_raw_call wasi:cli/Environment::get_environment(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<[String, String]> = move Array<Tuple<String,String>> { repr: core::builtin::array_new::<[String, String]>(__count), used: 0 };
+    let mut __result: Array<[String, String]> = Array<Tuple<String,String>> { repr: core::builtin::array_new::<[String, String]>(__count), used: 0 };
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {
             break;
         }
         let __elem_addr: i32 = (__base + (__i * 16));
-        __result."Array<Tuple<String,String>>::append"(move [__inline_memory_to_gc_string_1: {
+        __result."Array<Tuple<String,String>>::append"([__inline_memory_to_gc_string_1: {
             let ptr: i32 = core::builtin::i32_load((__elem_addr + 0));
             let len: i32 = core::builtin::i32_load(((__elem_addr + 0) + 4));
             let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);

@@ -28,7 +28,7 @@ export fn run() with Stderr {
     let tx: i32 = (handles >> 32) as i32;
     let subtask: i32 = core::builtin::call_indirect_stderr_write_via_stream(rx);
     let data: Array<u8> = __seq_lit: {
-        let mut __b: Array<u8> = move Array<u8> { repr: core::builtin::array_new::<u8>(8), used: 0 };
+        let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(8), used: 0 };
         __inline_Array_u8__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(101);
@@ -91,7 +91,7 @@ export fn __cm_export__run() {
 
 fn "Array<u8>^IndexValue::index_value"(self: &Array<u8>, index: i32) -> u8 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<u8>(self.repr, index);
 }
