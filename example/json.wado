@@ -107,6 +107,10 @@ impl Parser {
         return Parser { bytes, pos: 0 };
     }
 
+    fn from_bytes(bytes: Array<u8>) -> Parser {
+        return Parser { bytes, pos: 0 };
+    }
+
     fn peek(&self) -> Option<u8> {
         return self.bytes.get(self.pos);
     }
@@ -140,6 +144,14 @@ impl Parser {
     }
 }
 
+
+test "parser-from-bytes" {
+    let bytes: Array<u8> = ['{' as u8, '}' as u8];
+    let mut p = Parser::from_bytes(bytes);
+    assert p.peek() matches { Some(b) && b == ('{' as u8) };
+    p.advance();
+    assert p.peek() matches { Some(b) && b == ('}' as u8) };
+}
 
 test "parser-peek-and-advance" {
     let mut p = Parser::new("abc");
