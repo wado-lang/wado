@@ -1,6 +1,6 @@
 // Escape analysis: optimization should NOT fire.
 // Each template result escapes (passed to a non-inlined function or stored
-// in a collection). The WIR must NOT contain __tmpl_repr_.
+// in a collection). The WIR must NOT contain __tmpl_buf_.
 use { println, Stdout } from "core:cli";
 use { TreeMap } from "core:collections";
 
@@ -30,5 +30,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "x=0\nx=1\nx=2\ny=0\ny=1\ny=2\nok\n",
-    "wir_not_expect:O2": ["__tmpl_repr_"]
+    "wir_not_expect:O2": ["__tmpl_buf_"]
 }

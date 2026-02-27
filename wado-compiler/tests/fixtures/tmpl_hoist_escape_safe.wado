@@ -1,6 +1,6 @@
 // Escape analysis: optimization SHOULD fire.
 // Each template result is only used as a method receiver or via field access.
-// The WIR should contain __tmpl_repr_ for the hoisted buffers.
+// The WIR should contain __tmpl_buf_ for the hoisted buffers.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -49,5 +49,5 @@ fn get_len(s: String) -> i32 {
 __DATA__
 {
     "stdout": "len=15\nbytes=684\nt1=9,t2=9\nt3=9\n",
-    "wir_expect:O2": ["__tmpl_repr_"]
+    "wir_expect:O2": ["__tmpl_buf_"]
 }

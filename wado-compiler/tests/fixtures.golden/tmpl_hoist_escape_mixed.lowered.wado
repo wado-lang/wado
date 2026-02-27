@@ -25,17 +25,17 @@ export fn run() with Stdout {
     let mut total: i32 = 0;
     __for_0: {
         let mut i: i32 = 0;
-        let mut __tmpl_repr_25: builtin::array<u8> = core::builtin::array_new(18);
+        let mut __tmpl_buf_25: String = String { repr: "core::prelude/string.wado::array_new<u8>"(18), used: 0 };
         loop {
             if !(i < 3) {
                 break __for_0;
             }
             __for_0_body: {
                 let safe: String = __tmpl: {
-                    let mut __r: String = String { repr: __tmpl_repr_25, used: 0 };
-                    __r.String::append("s=");
+                    __tmpl_buf_25.used = 0;
+                    __tmpl_buf_25.String::append("s=");
                     let mut __f: Formatter = __inline_Formatter__new_2: {
-                        let buf: &mut String = &mut __r;
+                        let buf: &mut String = &mut __tmpl_buf_25;
                         break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     __inline_i32_Display__fmt_3: {
@@ -43,8 +43,7 @@ export fn run() with Stdout {
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
                     };
-                    __tmpl_repr_25 = __r.repr;
-                    break __tmpl: __r;
+                    break __tmpl: __tmpl_buf_25;
                 };
                 total = (total + safe.used);
                 let escaped: String = __tmpl: {

@@ -1,8 +1,8 @@
 //! Template String Buffer Hoisting for Loops
 //!
 //! When a template string (`__tmpl` labeled block) appears inside a loop,
-//! this pass hoists the `String::with_capacity` allocation before the loop
-//! and reuses the backing array across iterations.
+//! this pass hoists the entire `String` allocation before the loop and reuses
+//! it across iterations, resetting `used = 0` instead of creating a new struct.
 //!
 //! **Before:**
 //! ```text
@@ -18,28 +18,25 @@
 //!
 //! **After:**
 //! ```text
-//! let __tmpl_repr_0 = builtin::array_new::<u8>(N);
+//! let mut __tmpl_buf_0 = String { repr: array_new(N), used: 0 };
 //! loop {
-//!     let s = __tmpl: {
-//!         let mut __r = String { repr: __tmpl_repr_0, used: 0 };
-//!         __r.append(...);
-//!         __tmpl_repr_0 = __r.repr;   // sync back in case of growth
-//!         break __tmpl: __r;
+//!     let s /* skip_value_copy */ = __tmpl: {
+//!         __tmpl_buf_0.used = 0;        // reset (no struct.new)
+//!         __tmpl_buf_0.append(...);      // reuse same String
+//!         break __tmpl: __tmpl_buf_0;
 //!     };
-//!     s.len();
+//!     s.len();   // s aliases __tmpl_buf_0
 //! }
 //! ```
 //!
-//! Safety: The optimization shares the backing array between iterations.
+//! Safety: The optimization reuses the same String GC struct across iterations.
 //! It is only applied when the template result does not escape the iteration:
 //! the result must be bound to a Let variable that is only used as a method
 //! receiver (`self`), never passed as a regular function argument.
 
-use crate::name::ModuleSource;
 use crate::project::Project;
 use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirStructField, TypeId,
-    TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
 use indexmap::IndexSet;
@@ -132,8 +129,8 @@ fn hoist_in_block(
 struct TmplCandidate {
     /// Index of the `__r` local in the `__tmpl` block
     buf_local_index: u32,
-    /// The capacity argument from `String::with_capacity(N)` / `array_new(N)`
-    capacity_expr: TirExpr,
+    /// The initial value expression (e.g., `String { repr: array_new(N), used: 0 }`)
+    init_value: TirExpr,
     /// The String type ID
     string_type: TypeId,
     /// The span of the original expression
@@ -378,7 +375,10 @@ fn transform_stmt(
 ) {
     match &mut stmt.kind {
         TirStmtKind::Let {
-            local_index, value, ..
+            local_index,
+            value,
+            skip_value_copy,
+            ..
         } => {
             // Check if this Let binds a __tmpl block result
             if let TirExprKind::LabeledBlock { label, block, .. } = &mut value.kind
@@ -394,6 +394,8 @@ fn transform_stmt(
                     local_types,
                     type_table,
                 );
+                // The hoisted String is reused; skip deep copy so `s` aliases `__tmpl_buf`.
+                *skip_value_copy = true;
                 return;
             }
             // Recurse into the value expression
@@ -678,7 +680,7 @@ fn transform_expr(
 fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
     // First statement must be: let mut __r = ...
     let first_stmt = block.stmts.first()?;
-    let (buf_local_index, string_type, capacity_expr, span) = match &first_stmt.kind {
+    let (buf_local_index, string_type, init_value, span) = match &first_stmt.kind {
         TirStmtKind::Let {
             name,
             local_index,
@@ -687,13 +689,12 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
             ..
         } if name == "__r" => {
             // Try pre-lowered form: String::with_capacity(N)
-            if let TirExprKind::StaticCall { func, args } = &value.kind
+            if let TirExprKind::StaticCall { func, .. } = &value.kind
                 && func.name() == "String::with_capacity"
             {
-                let capacity = args.first()?;
                 return Some(TmplCandidate {
                     buf_local_index: *local_index,
-                    capacity_expr: capacity.clone(),
+                    init_value: value.clone(),
                     string_type: *type_id,
                     span: value.span,
                 });
@@ -706,9 +707,9 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
             } = &value.kind
             {
                 if struct_name == "String" {
-                    // Find the repr field containing an array_new call
+                    // Verify the repr field contains an array_new call
                     let repr_field = fields.iter().find(|f| f.name == "repr")?;
-                    let capacity = extract_array_new_capacity(&repr_field.value)?;
+                    extract_array_new_capacity(&repr_field.value)?;
                     // Verify used field is 0
                     let used_field = fields.iter().find(|f| f.name == "used")?;
                     if !matches!(
@@ -717,7 +718,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
                     ) {
                         return None;
                     }
-                    (*local_index, *type_id, capacity, value.span)
+                    (*local_index, *type_id, value.clone(), value.span)
                 } else {
                     return None;
                 }
@@ -743,7 +744,7 @@ fn extract_tmpl_candidate(block: &TirBlock) -> Option<TmplCandidate> {
 
     Some(TmplCandidate {
         buf_local_index,
-        capacity_expr,
+        init_value,
         string_type,
         span,
     })
@@ -764,130 +765,72 @@ fn extract_array_new_capacity(expr: &TirExpr) -> Option<TirExpr> {
     }
 }
 
-/// Transform a `__tmpl` block to reuse a hoisted buffer.
+/// Transform a `__tmpl` block to reuse a hoisted String.
+///
+/// The entire String (not just the backing array) is hoisted before the loop.
+/// Inside the block, `let mut __r = String { ... }` is replaced with
+/// `__tmpl_buf.used = 0` (field reset), and all references to `__r` are
+/// renamed to `__tmpl_buf`. The outer Let binding gets `skip_value_copy = true`
+/// so the bound variable aliases the hoisted String directly.
 fn transform_tmpl_block(
     block: &mut TirBlock,
     candidate: &TmplCandidate,
     hoist_stmts: &mut Vec<TirStmt>,
     local_count: &mut u32,
     local_types: &mut Vec<TypeId>,
-    type_table: &std::cell::RefCell<TypeTable>,
+    _type_table: &std::cell::RefCell<TypeTable>,
 ) {
     let span = candidate.span;
     let string_type = candidate.string_type;
 
-    // Create the repr array type: builtin::array<u8>
-    let repr_type = type_table.borrow_mut().make_builtin_array(TypeTable::U8);
-
-    // Allocate a new local for the hoisted repr array
-    let repr_local_index = *local_count;
+    // Allocate a new local for the hoisted String
+    let buf_local_index = *local_count;
     *local_count += 1;
-    local_types.push(repr_type);
+    local_types.push(string_type);
 
-    let repr_local_name = format!("__tmpl_repr_{repr_local_index}");
+    let buf_local_name = format!("__tmpl_buf_{buf_local_index}");
 
-    // Hoist statement: let __tmpl_repr_N = builtin::array_new::<u8>(capacity)
-    let array_new_call = TirExpr::new(
-        TirExprKind::Call {
-            func: crate::tir::FunctionRef::External {
-                module_source: ModuleSource::builtin(),
-                name: "array_new".to_string(),
-                monomorph_info: Some(crate::tir::MonomorphInfo {
-                    generic_name: "array_new".to_string(),
-                    type_args: vec![TypeTable::U8],
-                    is_blanket: false,
-                }),
-                method_info: None,
-            },
-            type_args: vec![],
-            args: vec![candidate.capacity_expr.clone()],
-        },
-        repr_type,
-        span,
-    );
-
+    // Hoist statement: let mut __tmpl_buf_N = String { repr: array_new(N), used: 0 };
     hoist_stmts.push(TirStmt::new(
         TirStmtKind::Let {
-            name: repr_local_name.clone(),
-            local_index: repr_local_index,
+            name: buf_local_name.clone(),
+            local_index: buf_local_index,
             is_mut: true,
             is_reactive: false,
-            type_id: repr_type,
-            value: array_new_call,
+            type_id: string_type,
+            value: candidate.init_value.clone(),
             skip_value_copy: false,
         },
         span,
     ));
 
-    // Replace the first statement (String::with_capacity / String { .. }) with a StructLiteral:
-    // let mut __r = String { repr: __tmpl_repr_N, used: 0 };
-    let struct_literal = TirExpr::new(
-        TirExprKind::StructLiteral {
-            struct_type: string_type,
-            struct_name: "String".to_string(),
-            fields: vec![
-                TirStructField {
-                    name: "repr".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::Local {
-                            index: repr_local_index,
-                            name: repr_local_name.clone(),
-                        },
-                        repr_type,
-                        span,
-                    ),
-                    field_index: 0,
-                },
-                TirStructField {
-                    name: "used".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: 0,
-                            repr: "0".to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    field_index: 1,
-                },
-            ],
-        },
-        string_type,
-        span,
-    );
-
-    // Replace the first statement's value
-    if let TirStmtKind::Let { value, .. } = &mut block.stmts[0].kind {
-        *value = struct_literal;
-    }
-
-    // Insert a sync statement before the last break:
-    // __tmpl_repr_N = __r.repr;
-    let sync_stmt = TirStmt::new(
+    // Replace the first statement (let mut __r = String { ... }) with a field reset:
+    // __tmpl_buf_N.used = 0;
+    let reset_stmt = TirStmt::new(
         TirStmtKind::Expr(TirExpr::new(
             TirExprKind::Assign {
                 target: Box::new(TirExpr::new(
-                    TirExprKind::Local {
-                        index: repr_local_index,
-                        name: repr_local_name,
-                    },
-                    repr_type,
-                    span,
-                )),
-                value: Box::new(TirExpr::new(
                     TirExprKind::FieldAccess {
                         expr: Box::new(TirExpr::new(
                             TirExprKind::Local {
-                                index: candidate.buf_local_index,
-                                name: "__r".to_string(),
+                                index: buf_local_index,
+                                name: buf_local_name.clone(),
                             },
                             string_type,
                             span,
                         )),
-                        field_index: 0,
-                        field_name: "repr".to_string(),
+                        field_index: 1,
+                        field_name: "used".to_string(),
                     },
-                    repr_type,
+                    TypeTable::I32,
+                    span,
+                )),
+                value: Box::new(TirExpr::new(
+                    TirExprKind::IntLiteral {
+                        value: 0,
+                        repr: "0".to_string(),
+                    },
+                    TypeTable::I32,
                     span,
                 )),
             },
@@ -896,8 +839,134 @@ fn transform_tmpl_block(
         )),
         span,
     );
+    block.stmts[0] = reset_stmt;
 
-    // Insert the sync before the last statement (the break)
-    let break_idx = block.stmts.len() - 1;
-    block.stmts.insert(break_idx, sync_stmt);
+    // Rename all references from __r (old local index) to __tmpl_buf_N (new local index)
+    let old_index = candidate.buf_local_index;
+    for stmt in &mut block.stmts {
+        rename_local_in_stmt(stmt, old_index, buf_local_index, &buf_local_name);
+    }
+}
+
+fn rename_local_in_stmt(stmt: &mut TirStmt, old_index: u32, new_index: u32, new_name: &str) {
+    match &mut stmt.kind {
+        TirStmtKind::Let { value, .. } => {
+            rename_local_in_expr(value, old_index, new_index, new_name);
+        }
+        TirStmtKind::Expr(expr) => {
+            rename_local_in_expr(expr, old_index, new_index, new_name);
+        }
+        TirStmtKind::Return { value: Some(expr) } => {
+            rename_local_in_expr(expr, old_index, new_index, new_name);
+        }
+        TirStmtKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
+            rename_local_in_expr(condition, old_index, new_index, new_name);
+            rename_local_in_block(then_block, old_index, new_index, new_name);
+            if let Some(eb) = else_block {
+                rename_local_in_block(eb, old_index, new_index, new_name);
+            }
+        }
+        TirStmtKind::LabeledBlock { block, .. } => {
+            rename_local_in_block(block, old_index, new_index, new_name);
+        }
+        TirStmtKind::Loop { body } => {
+            rename_local_in_block(body, old_index, new_index, new_name);
+        }
+        TirStmtKind::Break {
+            value: Some(expr), ..
+        } => {
+            rename_local_in_expr(expr, old_index, new_index, new_name);
+        }
+        TirStmtKind::IfPattern {
+            scrutinee,
+            then_block,
+            else_block,
+            ..
+        } => {
+            rename_local_in_expr(scrutinee, old_index, new_index, new_name);
+            rename_local_in_block(then_block, old_index, new_index, new_name);
+            if let Some(eb) = else_block {
+                rename_local_in_block(eb, old_index, new_index, new_name);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn rename_local_in_block(block: &mut TirBlock, old_index: u32, new_index: u32, new_name: &str) {
+    for stmt in &mut block.stmts {
+        rename_local_in_stmt(stmt, old_index, new_index, new_name);
+    }
+}
+
+fn rename_local_in_expr(expr: &mut TirExpr, old_index: u32, new_index: u32, new_name: &str) {
+    match &mut expr.kind {
+        TirExprKind::Local { index, name } if *index == old_index => {
+            *index = new_index;
+            *name = new_name.to_string();
+        }
+        TirExprKind::Call { args, .. } | TirExprKind::StaticCall { args, .. } => {
+            for arg in args {
+                rename_local_in_expr(arg, old_index, new_index, new_name);
+            }
+        }
+        TirExprKind::MethodCall { receiver, args, .. } => {
+            rename_local_in_expr(receiver, old_index, new_index, new_name);
+            for arg in args {
+                rename_local_in_expr(arg, old_index, new_index, new_name);
+            }
+        }
+        TirExprKind::IndirectCall { callee, args } => {
+            rename_local_in_expr(callee, old_index, new_index, new_name);
+            for arg in args {
+                rename_local_in_expr(arg, old_index, new_index, new_name);
+            }
+        }
+        TirExprKind::Binary { left, right, .. } => {
+            rename_local_in_expr(left, old_index, new_index, new_name);
+            rename_local_in_expr(right, old_index, new_index, new_name);
+        }
+        TirExprKind::Unary { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::FieldAccess { expr: inner, .. } => {
+            rename_local_in_expr(inner, old_index, new_index, new_name);
+        }
+        TirExprKind::Assign { target, value } => {
+            rename_local_in_expr(target, old_index, new_index, new_name);
+            rename_local_in_expr(value, old_index, new_index, new_name);
+        }
+        TirExprKind::StructLiteral { fields, .. } => {
+            for f in fields {
+                rename_local_in_expr(&mut f.value, old_index, new_index, new_name);
+            }
+        }
+        TirExprKind::Index {
+            expr: inner, index, ..
+        } => {
+            rename_local_in_expr(inner, old_index, new_index, new_name);
+            rename_local_in_expr(index, old_index, new_index, new_name);
+        }
+        TirExprKind::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            rename_local_in_expr(condition, old_index, new_index, new_name);
+            rename_local_in_block(then_branch, old_index, new_index, new_name);
+            if let Some(eb) = else_branch {
+                rename_local_in_block(eb, old_index, new_index, new_name);
+            }
+        }
+        TirExprKind::LabeledBlock { block, .. } => {
+            rename_local_in_block(block, old_index, new_index, new_name);
+        }
+        TirExprKind::Block(block) => {
+            rename_local_in_block(block, old_index, new_index, new_name);
+        }
+        _ => {}
+    }
 }
