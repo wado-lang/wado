@@ -426,8 +426,93 @@ impl FunctionTranslator<'_, '_> {
             // assignment is unnecessary (copy elision).
             TirExprKind::LabeledBlock { label, .. } if label == "__tmpl" => true,
 
+            // Labeled blocks from inlining: the block is fresh if every break
+            // value targeting this label is itself fresh (e.g., a StructLiteral
+            // return from an inlined constructor).
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                Self::all_break_values_are_fresh(label, block)
+            }
+
             // Everything else is not fresh (locals, field access, index, etc.)
             _ => false,
+        }
+    }
+
+    /// Check if every `break label(value)` in a block has a fresh value.
+    ///
+    /// Returns `true` when at least one break is found and all break values
+    /// are fresh, meaning the labeled block as a whole produces a fresh result.
+    fn all_break_values_are_fresh(label: &str, block: &TirBlock) -> bool {
+        let mut found = false;
+        if Self::check_breaks_in_block(label, block, &mut found) {
+            found
+        } else {
+            false
+        }
+    }
+
+    /// Recursively scan a block for `Break` targeting `label`.
+    /// Returns `false` if any break value is not fresh.
+    fn check_breaks_in_block(label: &str, block: &TirBlock, found: &mut bool) -> bool {
+        for stmt in &block.stmts {
+            if !Self::check_breaks_in_stmt(label, stmt, found) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn check_breaks_in_stmt(label: &str, stmt: &TirStmt, found: &mut bool) -> bool {
+        match &stmt.kind {
+            TirStmtKind::Break {
+                label: Some(l),
+                value: Some(v),
+            } if l == label => {
+                *found = true;
+                Self::is_fresh_value(v)
+            }
+            TirStmtKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                if !Self::check_breaks_in_block(label, then_block, found) {
+                    return false;
+                }
+                if let Some(eb) = else_block {
+                    if !Self::check_breaks_in_block(label, eb, found) {
+                        return false;
+                    }
+                }
+                true
+            }
+            TirStmtKind::Loop { body } => Self::check_breaks_in_block(label, body, found),
+            TirStmtKind::Expr(expr) => Self::check_breaks_in_expr(label, expr, found),
+            _ => true,
+        }
+    }
+
+    fn check_breaks_in_expr(label: &str, expr: &TirExpr, found: &mut bool) -> bool {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
+                Self::check_breaks_in_block(label, block, found)
+            }
+            TirExprKind::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                if !Self::check_breaks_in_block(label, then_branch, found) {
+                    return false;
+                }
+                if let Some(eb) = else_branch {
+                    if !Self::check_breaks_in_block(label, eb, found) {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => true,
         }
     }
 

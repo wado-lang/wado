@@ -1899,6 +1899,7 @@ fn optimize_instrs(instrs: &mut Vec<WirInstr>, types: &[WirTypeDef]) {
     for instr in instrs.iter_mut() {
         optimize_nested(instr, types);
     }
+    elide_redundant_value_copies(instrs);
     elide_multi_value_structs(instrs, types);
 }
 
@@ -1923,6 +1924,111 @@ fn optimize_nested(instr: &mut WirInstr, types: &[WirTypeDef]) {
         }
         _ => {}
     }
+}
+
+/// Remove unnecessary `ValueCopy` wrappers from `LocalSet` instructions.
+///
+/// A `ValueCopy` deep-copies a GC value to maintain Wado's value semantics.
+/// This copy is unnecessary when the source expression provably produces a
+/// **fresh** value — one with no pre-existing aliases. Fresh values include
+/// GC constructors (`StructNew`, `ArrayNew*`), function call return values,
+/// and block expressions whose result is itself fresh.
+fn elide_redundant_value_copies(instrs: &mut Vec<WirInstr>) {
+    for instr in instrs.iter_mut() {
+        let WirInstr::LocalSet { value, .. } = instr else {
+            continue;
+        };
+        let is_fresh = if let WirInstr::ValueCopy { expr, .. } = value.as_ref() {
+            is_fresh_wir_value(expr)
+        } else {
+            false
+        };
+        if is_fresh {
+            let old = std::mem::replace(value.as_mut(), WirInstr::Nop);
+            if let WirInstr::ValueCopy { expr, .. } = old {
+                *value = expr;
+            }
+        }
+    }
+}
+
+/// Check if a WIR instruction provably produces a fresh value (no aliases).
+fn is_fresh_wir_value(instr: &WirInstr) -> bool {
+    match instr {
+        // GC constructors create fresh values.
+        WirInstr::StructNew { .. }
+        | WirInstr::ArrayNew { .. }
+        | WirInstr::ArrayNewDefault { .. }
+        | WirInstr::ArrayNewData { .. }
+        | WirInstr::ArrayNewFixed { .. } => true,
+
+        // Function calls return fresh values (callee constructs them).
+        WirInstr::Call { .. } | WirInstr::CallRef { .. } => true,
+
+        // RefAsNonNull wrapping a fresh value is still fresh.
+        WirInstr::RefAsNonNull(inner) => is_fresh_wir_value(inner),
+
+        // Block with a result: trace through to find the result value.
+        WirInstr::Block {
+            body,
+            result: Some(_),
+            ..
+        } => block_result_is_fresh(body),
+
+        // Seq: check the effective result instruction.
+        WirInstr::Seq(body) => {
+            find_seq_result(body).map_or(false, is_fresh_wir_value)
+        }
+
+        _ => false,
+    }
+}
+
+/// Determine if a block's result value is fresh.
+///
+/// The block's result is produced by either:
+/// - A trailing `Seq([..., result_expr, Br(0)])` — the instruction before `Br`
+/// - A trailing `Seq([..., LocalGet(x), Br(0)])` — trace back to find `x`'s value
+/// - The last instruction in the body (fall-through)
+fn block_result_is_fresh(body: &[WirInstr]) -> bool {
+    let result_instr = match body.last() {
+        Some(WirInstr::Seq(seq)) => find_seq_result(seq),
+        Some(instr) => Some(instr),
+        None => return false,
+    };
+    match result_instr {
+        Some(WirInstr::LocalGet { name }) => {
+            // Trace back: find what this local was set to within the block.
+            find_local_set_value(body, name).map_or(false, is_fresh_wir_value)
+        }
+        Some(instr) => is_fresh_wir_value(instr),
+        None => false,
+    }
+}
+
+/// Find the effective result instruction of a `Seq`.
+///
+/// In a `Seq` ending with `Br`, the result is the instruction just before `Br`
+/// (it leaves a value on the stack that `Br` carries to the enclosing block).
+/// Otherwise, the last instruction is the result.
+fn find_seq_result(body: &[WirInstr]) -> Option<&WirInstr> {
+    if body.len() >= 2 && matches!(body.last(), Some(WirInstr::Br { .. })) {
+        Some(&body[body.len() - 2])
+    } else {
+        body.last()
+    }
+}
+
+/// Scan backward through a block body to find the value assigned to a local.
+fn find_local_set_value<'a>(body: &'a [WirInstr], target: &str) -> Option<&'a WirInstr> {
+    for instr in body.iter().rev() {
+        if let WirInstr::LocalSet { name, value } = instr {
+            if name == target {
+                return Some(value.as_ref());
+            }
+        }
+    }
+    None
 }
 
 /// Multi-value tuple elision pass.
