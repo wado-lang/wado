@@ -60,39 +60,47 @@ export fn run() with Stdout {
         };
         break __seq_lit: *__b;
     }, children: __seq_lit: {
-        let mut __b: Array<&mut Node<String>> = "Array<Node<String>>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."Array<Node<String>>^SequenceLiteralBuilder::build"();
+        let mut __b: Array<&mut Node<String>> = Array<Node<String>> { repr: core::builtin::array_new::<&mut Node<String>>(0), used: 0 };
+        break __seq_lit: *__b;
     }, is_leaf: true };
     let mut leaf2: Node<String> = Node<String> { keys: __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
-        __inline_Array_String__SequenceLiteralBuilder__push_literal_6: {
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_8: {
             let self: &mut Array<String> = &mut __b;
             let value: String = "d";
             self."Array<String>::append"(value);
         };
-        __inline_Array_String__SequenceLiteralBuilder__push_literal_7: {
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_9: {
             let self: &mut Array<String> = &mut __b;
             let value: String = "e";
             self."Array<String>::append"(value);
         };
         break __seq_lit: *__b;
     }, children: __seq_lit: {
-        let mut __b: Array<&mut Node<String>> = "Array<Node<String>>^SequenceLiteralBuilder::new_literal"(0);
-        break __seq_lit: __b."Array<Node<String>>^SequenceLiteralBuilder::build"();
+        let mut __b: Array<&mut Node<String>> = Array<Node<String>> { repr: core::builtin::array_new::<&mut Node<String>>(0), used: 0 };
+        break __seq_lit: *__b;
     }, is_leaf: true };
     let root: Node<String> = Node<String> { keys: __seq_lit: {
         let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(1), used: 0 };
-        __inline_Array_String__SequenceLiteralBuilder__push_literal_10: {
+        __inline_Array_String__SequenceLiteralBuilder__push_literal_14: {
             let self: &mut Array<String> = &mut __b;
             let value: String = "c";
             self."Array<String>::append"(value);
         };
         break __seq_lit: *__b;
     }, children: __seq_lit: {
-        let mut __b: Array<&mut Node<String>> = "Array<Node<String>>^SequenceLiteralBuilder::new_literal"(2);
-        __b."Array<Node<String>>^SequenceLiteralBuilder::push_literal"(&mut leaf1);
-        __b."Array<Node<String>>^SequenceLiteralBuilder::push_literal"(&mut leaf2);
-        break __seq_lit: __b."Array<Node<String>>^SequenceLiteralBuilder::build"();
+        let mut __b: Array<&mut Node<String>> = Array<Node<String>> { repr: core::builtin::array_new::<&mut Node<String>>(2), used: 0 };
+        __inline_Array_Node_String___SequenceLiteralBuilder__push_literal_17: {
+            let self: &mut Array<&mut Node<String>> = &mut __b;
+            let value: &mut Node<String> = &mut leaf1;
+            self."Array<Node<String>>::append"(value);
+        };
+        __inline_Array_Node_String___SequenceLiteralBuilder__push_literal_18: {
+            let self: &mut Array<&mut Node<String>> = &mut __b;
+            let value: &mut Node<String> = &mut leaf2;
+            self."Array<Node<String>>::append"(value);
+        };
+        break __seq_lit: *__b;
     }, is_leaf: false };
     root."Node<String>::traverse"(0);
 }
@@ -124,8 +132,9 @@ fn "Node<String>::traverse"(self: &Node<String>, depth: i32) with Stdout {
         __for_0: {
             let mut i: i32 = 0;
             let _licm_children: Array<&mut Node<String>> = self.children;
+            let _licm_used: i32 = _licm_children.used;
             loop {
-                if !(i < _licm_children."Array<Node<String>>::len"()) {
+                if !(i < _licm_used) {
                     break __for_0;
                 }
                 __for_0_body: {
@@ -144,14 +153,6 @@ fn "Array<Node<String>>^IndexValue::index_value"(self: &Array<&mut Node<String>>
     return core::builtin::array_get::<&mut Node<String>>(self.repr, index);
 }
 
-pub fn "Array<Node<String>>::len"(self: &Array<&mut Node<String>>) -> i32 {
-    return self.used;
-}
-
-fn "Array<Node<String>>^SequenceLiteralBuilder::push_literal"(self: &mut Array<&mut Node<String>>, value: &mut Node<String>) {
-    self."Array<Node<String>>::append"(value);
-}
-
 pub fn "Array<Node<String>>::append"(self: &mut Array<&mut Node<String>>, value: &mut Node<String>) {
     let used: i32 = self.used;
     let capacity: i32 = core::builtin::array_len(self.repr);
@@ -166,17 +167,5 @@ pub fn "Array<Node<String>>::append"(self: &mut Array<&mut Node<String>>, value:
     }
     core::builtin::array_set::<&mut Node<String>>(self.repr, used, value);
     self.used = (used + 1);
-}
-
-fn "Array<Node<String>>^SequenceLiteralBuilder::build"(self: &Array<&mut Node<String>>) -> Array<&mut Node<String>> {
-    return *self;
-}
-
-fn "Array<Node<String>>^SequenceLiteralBuilder::new_literal"(capacity: i32) -> Array<&mut Node<String>> {
-    return "Array<Node<String>>::with_capacity"(capacity);
-}
-
-pub fn "Array<Node<String>>::with_capacity"(capacity: i32) -> Array<&mut Node<String>> {
-    return Array<Node<String>> { repr: core::builtin::array_new::<&mut Node<String>>(capacity), used: 0 };
 }
 
