@@ -395,7 +395,7 @@ impl ArrayIter<T> {
     pub fn find(&mut self, pred: fn(T) -> bool) -> Option<T> {
         loop {
             if let Some(item) = self.next() {
-                if (pred)(item) {
+                if pred(item) {
                     return Option::<T>::Some(item);
                 }
             } else {
@@ -407,7 +407,7 @@ impl ArrayIter<T> {
     pub fn any(&mut self, pred: fn(T) -> bool) -> bool {
         loop {
             if let Some(item) = self.next() {
-                if (pred)(item) {
+                if pred(item) {
                     return true;
                 }
             } else {
@@ -419,7 +419,7 @@ impl ArrayIter<T> {
     pub fn all(&mut self, pred: fn(T) -> bool) -> bool {
         loop {
             if let Some(item) = self.next() {
-                if !(pred)(item) {
+                if !pred(item) {
                     return false;
                 }
             } else {
@@ -457,7 +457,7 @@ impl ArrayIter<T> {
         let mut idx = 0;
         loop {
             if let Some(item) = self.next() {
-                if (pred)(item) {
+                if pred(item) {
                     return Option::<i32>::Some(idx);
                 }
                 idx += 1;
@@ -470,7 +470,7 @@ impl ArrayIter<T> {
     pub fn for_each(&mut self, f: fn(T)) {
         loop {
             if let Some(item) = self.next() {
-                (f)(item);
+                f(item);
             } else {
                 return;
             }
@@ -482,7 +482,7 @@ impl ArrayIter<T> {
             let mut acc = first;
             loop {
                 if let Some(item) = self.next() {
-                    acc = (f)(acc, item);
+                    acc = f(acc, item);
                 } else {
                     return Option::<T>::Some(acc);
                 }
