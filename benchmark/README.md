@@ -95,7 +95,7 @@ make benchmark-fts
 
 | Component  | Version                  |
 | ---------- | ------------------------ |
-| Wado       | commit `d4e504f`         |
+| Wado       | 2026-02-27               |
 | wasmtime   | 41.0.4                   |
 | Node.js    | v24.14.0                 |
 | Python     | 3.14.3 (CPython, no JIT) |
@@ -143,10 +143,10 @@ All implementations produce the same result: 664,579 primes.
 
 ### zlib Compression (100KB x 10 iterations)
 
-| Runtime               | Compress (ms) | Decompress (ms) | Total (ms) |
-| --------------------- | ------------- | --------------- | ---------- |
-| zlib-rs (native Rust) | 1             | 0.2             | 2          |
-| **Wado** (pure Wado)  | 86            | 11,897          | 11,983     |
+| Runtime               | Compress (ms) | Decompress (ms) | Relative |
+| --------------------- | ------------- | --------------- | -------- |
+| zlib-rs (native Rust) | 1             | 0.2             | 1.00x    |
+| **Wado** (pure Wado)  | 86            | 11,897          | 9,986x   |
 
 Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significant overhead is expected compared to native. The decompression path is especially slow due to byte-at-a-time array operations.
 
