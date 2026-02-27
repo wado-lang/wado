@@ -95,7 +95,7 @@ make benchmark-fts
 
 | Component  | Version                  |
 | ---------- | ------------------------ |
-| Wado       | commit `725dfd3`         |
+| Wado       | commit `9b39202`         |
 | wasmtime   | 41.0.4                   |
 | Node.js    | v24.14.0                 |
 | Python     | 3.14.3 (CPython, no JIT) |
@@ -157,11 +157,11 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 | Zig (-OReleaseFast) | 27        | 1.00x    |
 | Rust (rustc -O)     | 39        | 1.44x    |
 | C (gcc -O3)         | 66        | 2.44x    |
-| **Wado**            | 5,845     | 216.48x  |
+| **Wado**            | 3,043     | 112.70x  |
 
 All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
 
-The overhead in Wado is primarily from GC-managed string allocation per conversion (3 GC objects per iteration: String struct, backing byte array, Formatter). String operations use `array.copy` for bulk byte transfers and short constant appends are decomposed into `append_char` calls.
+The overhead in Wado is primarily from GC struct/array allocation per conversion. Template string copy elision avoids deep-copying the formatted String, but each iteration still allocates a String struct + backing byte array + Formatter. String operations use `array.copy` for bulk byte transfers and short constant appends are decomposed into `append_char` calls.
 
 ## Profiling Wado Programs
 
