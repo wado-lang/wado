@@ -19,6 +19,8 @@ fn small_match(x: i32) -> Pair {
 }
 
 // Caller that uses the result via field access (SROA-compatible call site)
+
+
 #[inline("never")]
 fn use_small_match(x: i32) -> i32 {
     let p = small_match(x);
@@ -46,6 +48,7 @@ fn large_match(i: i32) -> HiLo {
         _ => HiLo { hi: 0, lo: 0 },
     };
 }
+
 
 #[inline("never")]
 fn use_large_match(i: i32) -> u64 {
