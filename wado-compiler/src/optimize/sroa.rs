@@ -1098,6 +1098,7 @@ fn expand_struct_let(
                         is_reactive: false,
                         type_id: *field_type,
                         value: field.value,
+                        skip_value_copy: false,
                     },
                     span,
                 ));
@@ -1124,6 +1125,7 @@ fn expand_struct_let(
                         is_reactive: false,
                         type_id: *field_type,
                         value: elem,
+                        skip_value_copy: false,
                     },
                     span,
                 ));

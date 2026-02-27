@@ -382,6 +382,21 @@ fn can_propagate_copy(
                 if su.is_assigned {
                     return false;
                 }
+            }
+
+            let is_value_type = needs_value_copy(binding.type_id, type_table);
+
+            // For value-type copies where the target is used exactly once,
+            // we can safely propagate even when the source's address was taken.
+            // The source is not reassigned (checked above), so reading it at the
+            // target's single use point yields the same value as the snapshot.
+            // This enables elimination of inlined builder patterns like:
+            //   __inline_build: { let self = __b; break: *self; }
+            let single_use_value_copy = is_value_type && target_usage.read_count == 1;
+
+            if let Some(su) = source_usage
+                && !single_use_value_copy
+            {
                 // Source could be modified through a reference
                 if su.address_taken {
                     return false;
@@ -393,8 +408,10 @@ fn can_propagate_copy(
             }
 
             // For value types (structs, arrays, tuples, strings), only propagate
-            // if the source is dead after this binding (read_count == 1)
-            if needs_value_copy(binding.type_id, type_table)
+            // if the source is dead after this binding (read_count == 1),
+            // unless the target is single-use (already verified safe above).
+            if is_value_type
+                && !single_use_value_copy
                 && let Some(su) = source_usage
             {
                 // Source must only be read once (in this binding) and not captured

@@ -256,6 +256,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         is_reactive: let_stmt.is_reactive,
                         type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     let_stmt.span,
                 )

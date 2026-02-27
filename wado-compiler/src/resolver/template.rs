@@ -98,6 +98,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 is_reactive: false,
                 type_id: string_type,
                 value: with_capacity_call,
+                skip_value_copy: false,
             },
             span,
         )];
@@ -256,6 +257,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                 is_reactive: false,
                                 type_id: formatter_type,
                                 value: formatter_expr,
+                                skip_value_copy: false,
                             },
                             span,
                         ));

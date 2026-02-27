@@ -1089,6 +1089,7 @@ impl<'a> PatternLowerer<'a> {
                 is_mut,
                 is_reactive,
                 type_id,
+                ..
             } => {
                 // Lower expressions inside the Let value
                 let mut value = value;
@@ -1101,6 +1102,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive,
                         type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     stmt.span,
                 ));
@@ -1192,6 +1194,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1251,6 +1254,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1278,6 +1282,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1325,6 +1330,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1404,6 +1410,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1422,6 +1429,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1487,6 +1495,7 @@ impl<'a> PatternLowerer<'a> {
                             is_reactive: false,
                             type_id: value.type_id,
                             value,
+                            skip_value_copy: false,
                         },
                         span,
                     );
@@ -1532,6 +1541,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: value.type_id,
                         value,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -1612,6 +1622,7 @@ impl<'a> PatternLowerer<'a> {
                     is_reactive: false,
                     type_id: scrutinee.type_id,
                     value: scrutinee.clone(),
+                    skip_value_copy: false,
                 },
                 span,
             ));
@@ -1694,6 +1705,7 @@ impl<'a> PatternLowerer<'a> {
                 is_reactive: false,
                 type_id: scrutinee.type_id,
                 value: scrutinee.clone(),
+                skip_value_copy: false,
             },
             span,
         );
@@ -1833,6 +1845,7 @@ impl<'a> PatternLowerer<'a> {
                         is_reactive: false,
                         type_id: *type_id,
                         value: scrutinee,
+                        skip_value_copy: false,
                     },
                     span,
                 );
@@ -3019,6 +3032,7 @@ impl BoxLowerer {
                     is_mut: false,
                     is_reactive: false,
                     value: ref_owned,
+                    skip_value_copy: false,
                 },
                 span,
             });
@@ -3032,6 +3046,7 @@ impl BoxLowerer {
                     is_mut: false,
                     is_reactive: false,
                     value: val_owned,
+                    skip_value_copy: false,
                 },
                 span,
             });
@@ -5105,6 +5120,7 @@ impl ClosureLowerer {
                 is_reactive,
                 type_id,
                 value,
+                ..
             } => TirStmtKind::Let {
                 local_index: local_index + 1, // Shift by 1 for self parameter
                 name: name.clone(),
@@ -5118,6 +5134,7 @@ impl ClosureLowerer {
                     self_ref_type,
                     span,
                 ),
+                skip_value_copy: false,
             },
             TirStmtKind::Expr(expr) => TirStmtKind::Expr(self.transform_closure_body(
                 expr,
@@ -6170,6 +6187,7 @@ impl ClosureLowerer {
                 is_reactive,
                 type_id,
                 value,
+                ..
             } => TirStmtKind::Let {
                 name: name.clone(),
                 local_index: *local_index,
@@ -6177,6 +6195,7 @@ impl ClosureLowerer {
                 is_reactive: *is_reactive,
                 type_id: *type_id,
                 value: self.specialize_expr(value, param_to_functor, type_table),
+                skip_value_copy: false,
             },
             TirStmtKind::Expr(expr) => {
                 TirStmtKind::Expr(self.specialize_expr(expr, param_to_functor, type_table))
