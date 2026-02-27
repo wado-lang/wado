@@ -1,0 +1,81 @@
+// Test: SROA handles `return match { ... }` expressions
+//
+// Verifies that the WIR-level SROA pass correctly decomposes struct-returning
+// functions that use `return match { ... }` into multi-value returns.
+// This covers both small match (if-else chain) and large match (BrTable) patterns.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+// Pattern 1: Small match (if-else chain) — return match with 3 arms
+fn small_match(x: i32) -> Pair {
+    return match x {
+        0 => Pair { a: 10, b: 20 },
+        1 => Pair { a: 30, b: 40 },
+        _ => Pair { a: 50, b: 60 },
+    };
+}
+
+// Caller that uses the result via field access (SROA-compatible call site)
+#[inline("never")]
+fn use_small_match(x: i32) -> i32 {
+    let p = small_match(x);
+    return p.a + p.b;
+}
+
+// Pattern 2: Large match (BrTable) — return match with many arms
+struct HiLo {
+    hi: u64,
+    lo: u64,
+}
+
+fn large_match(i: i32) -> HiLo {
+    return match i {
+        0 => HiLo { hi: 100, lo: 200 },
+        1 => HiLo { hi: 300, lo: 400 },
+        2 => HiLo { hi: 500, lo: 600 },
+        3 => HiLo { hi: 700, lo: 800 },
+        4 => HiLo { hi: 900, lo: 1000 },
+        5 => HiLo { hi: 1100, lo: 1200 },
+        6 => HiLo { hi: 1300, lo: 1400 },
+        7 => HiLo { hi: 1500, lo: 1600 },
+        8 => HiLo { hi: 1700, lo: 1800 },
+        9 => HiLo { hi: 1900, lo: 2000 },
+        _ => HiLo { hi: 0, lo: 0 },
+    };
+}
+
+#[inline("never")]
+fn use_large_match(i: i32) -> u64 {
+    let hl = large_match(i);
+    return hl.hi + hl.lo;
+}
+
+export fn run() {
+    // Test small match
+    assert use_small_match(0) == 30;
+    assert use_small_match(1) == 70;
+    assert use_small_match(2) == 110;
+
+    // Test large match
+    assert use_large_match(0) == 300;
+    assert use_large_match(5) == 2300;
+    assert use_large_match(9) == 3900;
+    assert use_large_match(99) == 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O1": [
+        "-> [i32, i32]",
+        "-> [u64, u64]",
+        "multivalue_bind [__sroa_"
+    ],
+    "wir_not_expect:O1": [
+        "Pair { a:",
+        "HiLo { hi:"
+    ]
+}

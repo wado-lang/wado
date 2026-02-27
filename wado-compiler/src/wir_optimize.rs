@@ -447,10 +447,9 @@ fn all_returns_are_variant_struct_new(
 
 fn check_return_variant_struct_new(instr: &WirInstr, valid_type_indices: &IndexSet<u32>) -> bool {
     match instr {
-        WirInstr::Return { value: Some(v) } => match v.as_ref() {
-            WirInstr::StructNew { type_id, .. } => valid_type_indices.contains(&type_id.index()),
-            _ => false,
-        },
+        WirInstr::Return { value: Some(v) } => {
+            value_expr_is_variant_struct_new(v, valid_type_indices)
+        }
         WirInstr::Return { value: None } => true,
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
             all_returns_are_variant_struct_new(body, valid_type_indices)
@@ -483,10 +482,9 @@ fn all_returns_are_struct_new(instrs: &[WirInstr], expected_type_idx: u32) -> bo
 
 fn check_return_struct_new(instr: &WirInstr, expected_type_idx: u32) -> bool {
     match instr {
-        WirInstr::Return { value: Some(v) } => match v.as_ref() {
-            WirInstr::StructNew { type_id, .. } => type_id.index() == expected_type_idx,
-            _ => false,
-        },
+        WirInstr::Return { value: Some(v) } => {
+            value_expr_is_struct_new(v, expected_type_idx)
+        }
         WirInstr::Return { value: None } => {
             // Void return is fine for our purposes (won't happen in struct-returning fn)
             true
@@ -507,6 +505,155 @@ fn check_return_struct_new(instr: &WirInstr, expected_type_idx: u32) -> bool {
         WirInstr::Seq(body) => all_returns_are_struct_new(body, expected_type_idx),
         _ => true,
     }
+}
+
+/// Check if a value-position expression always produces a `StructNew` of the expected type.
+/// This handles `return match { ... }` where the return value is a `Seq` or `If` expression
+/// that ultimately produces `StructNew` in all branches.
+fn value_expr_is_struct_new(expr: &WirInstr, expected_type_idx: u32) -> bool {
+    match expr {
+        WirInstr::StructNew { type_id, .. } => type_id.index() == expected_type_idx,
+        WirInstr::Seq(items) => {
+            // In a Seq used as a value expression, the last element produces the value
+            items
+                .last()
+                .is_some_and(|last| value_expr_is_struct_new(last, expected_type_idx))
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            result: Some(_),
+            ..
+        } => {
+            // Typed If: the last instruction in each branch produces the value
+            let then_ok = then_body
+                .last()
+                .is_some_and(|last| value_expr_is_struct_new(last, expected_type_idx));
+            let else_ok = else_body
+                .as_ref()
+                .is_some_and(|eb| {
+                    eb.last()
+                        .is_some_and(|last| value_expr_is_struct_new(last, expected_type_idx))
+                });
+            then_ok && else_ok
+        }
+        WirInstr::Block { body, result: Some(_), .. } => {
+            // Typed Block (e.g. from BrTable match): check that StructNew/Br pairs
+            // and the fallthrough all produce the expected type.
+            all_br_values_are_struct_new(body, expected_type_idx, 0)
+        }
+        _ => false,
+    }
+}
+
+/// Check that all `StructNew`; `Br` pairs targeting `target_depth` and the fallthrough
+/// `StructNew` in a typed block are of the expected type.
+fn all_br_values_are_struct_new(
+    instrs: &[WirInstr],
+    expected_type_idx: u32,
+    target_depth: u32,
+) -> bool {
+    let mut i = 0;
+    while i < instrs.len() {
+        if i + 1 < instrs.len()
+            && matches!(&instrs[i + 1], WirInstr::Br { depth } if *depth == target_depth)
+        {
+            // The instruction before Br must be a StructNew of the expected type,
+            // OR dead code (unreachable path — skip it).
+            let is_valid = contains_unreachable(&instrs[i])
+                || matches!(&instrs[i], WirInstr::StructNew { type_id, .. } if type_id.index() == expected_type_idx);
+            if !is_valid {
+                return false;
+            }
+            i += 2;
+        } else {
+            // Recurse into nested blocks
+            if let WirInstr::Block { body, .. } = &instrs[i]
+                && !all_br_values_are_struct_new(body, expected_type_idx, target_depth + 1)
+            {
+                return false;
+            }
+            i += 1;
+        }
+    }
+    true
+}
+
+/// Check if an instruction contains `Unreachable` (indicating dead code).
+fn contains_unreachable(instr: &WirInstr) -> bool {
+    match instr {
+        WirInstr::Unreachable => true,
+        WirInstr::Seq(items) => items.iter().any(contains_unreachable),
+        _ => false,
+    }
+}
+
+/// Check if a value-position expression always produces a `StructNew` of one of the valid
+/// variant case types. Handles `return match { ... }` for variant SROA.
+fn value_expr_is_variant_struct_new(
+    expr: &WirInstr,
+    valid_type_indices: &IndexSet<u32>,
+) -> bool {
+    match expr {
+        WirInstr::StructNew { type_id, .. } => valid_type_indices.contains(&type_id.index()),
+        WirInstr::Seq(items) => items
+            .last()
+            .is_some_and(|last| value_expr_is_variant_struct_new(last, valid_type_indices)),
+        WirInstr::If {
+            then_body,
+            else_body,
+            result: Some(_),
+            ..
+        } => {
+            let then_ok = then_body
+                .last()
+                .is_some_and(|last| value_expr_is_variant_struct_new(last, valid_type_indices));
+            let else_ok = else_body.as_ref().is_some_and(|eb| {
+                eb.last()
+                    .is_some_and(|last| value_expr_is_variant_struct_new(last, valid_type_indices))
+            });
+            then_ok && else_ok
+        }
+        WirInstr::Block {
+            body,
+            result: Some(_),
+            ..
+        } => all_br_variant_values_are_struct_new(body, valid_type_indices, 0),
+        _ => false,
+    }
+}
+
+/// Variant version of `all_br_values_are_struct_new`.
+fn all_br_variant_values_are_struct_new(
+    instrs: &[WirInstr],
+    valid_type_indices: &IndexSet<u32>,
+    target_depth: u32,
+) -> bool {
+    let mut i = 0;
+    while i < instrs.len() {
+        if i + 1 < instrs.len()
+            && matches!(&instrs[i + 1], WirInstr::Br { depth } if *depth == target_depth)
+        {
+            let is_valid = contains_unreachable(&instrs[i])
+                || matches!(&instrs[i], WirInstr::StructNew { type_id, .. } if valid_type_indices.contains(&type_id.index()));
+            if !is_valid {
+                return false;
+            }
+            i += 2;
+        } else {
+            if let WirInstr::Block { body, .. } = &instrs[i]
+                && !all_br_variant_values_are_struct_new(
+                    body,
+                    valid_type_indices,
+                    target_depth + 1,
+                )
+            {
+                return false;
+            }
+            i += 1;
+        }
+    }
+    true
 }
 
 /// Phase 2: validate that all call sites of candidate functions are SROA-compatible.
@@ -992,14 +1139,32 @@ fn apply_sroa(module: &mut WirModule, confirmed: &[(u32, SroaCandidate)], _impor
 }
 
 /// Rewrite `Return { value: StructNew { fields } }` → `Return { value: Seq(fields) }`.
+/// Also handles `return match { ... }` where the return value is a complex expression
+/// (`Seq`, `If`, `Block`) that ultimately produces `StructNew` in all branches. In that case,
+/// the Return is lifted into each leaf branch to avoid block result type issues.
 fn rewrite_returns_to_multi_value(instrs: &mut [WirInstr]) {
     for instr in instrs.iter_mut() {
         match instr {
             WirInstr::Return { value: Some(v) } => {
-                if let WirInstr::StructNew { fields, .. } =
-                    std::mem::replace(v.as_mut(), WirInstr::Nop)
-                {
-                    **v = WirInstr::Seq(fields);
+                match v.as_ref() {
+                    WirInstr::StructNew { .. } => {
+                        // Direct StructNew → Seq of fields
+                        if let WirInstr::StructNew { fields, .. } =
+                            std::mem::replace(v.as_mut(), WirInstr::Nop)
+                        {
+                            **v = WirInstr::Seq(fields);
+                        }
+                    }
+                    WirInstr::Seq(_) | WirInstr::If { .. } | WirInstr::Block { .. } => {
+                        // Complex value expr (e.g. return match { ... }):
+                        // Lift the Return into each StructNew leaf, then replace
+                        // the outer Return with the unwrapped expression.
+                        let mut value_expr = std::mem::replace(v.as_mut(), WirInstr::Nop);
+                        lift_return_into_struct_new_leaves(&mut value_expr);
+                        // Replace the entire Return instruction with the rewritten expression
+                        *instr = value_expr;
+                    }
+                    _ => {}
                 }
             }
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
@@ -1023,11 +1188,107 @@ fn rewrite_returns_to_multi_value(instrs: &mut [WirInstr]) {
     }
 }
 
+/// Lift `Return` into leaf `StructNew` positions within a value expression.
+/// Replaces each `StructNew { fields }` with `Return { value: Seq(fields) }`
+/// and removes block result types (since branches now return directly).
+///
+/// For typed Blocks (e.g. from `return match { ... }` with `BrTable`), this also
+/// rewrites `StructNew; Br` pairs inside the block into `Return { Seq(fields) }`.
+fn lift_return_into_struct_new_leaves(expr: &mut WirInstr) {
+    match expr {
+        WirInstr::StructNew { .. } => {
+            if let WirInstr::StructNew { fields, .. } =
+                std::mem::replace(expr, WirInstr::Nop)
+            {
+                *expr = WirInstr::Return {
+                    value: Some(Box::new(WirInstr::Seq(fields))),
+                };
+            }
+        }
+        WirInstr::Seq(items) => {
+            if let Some(last) = items.last_mut() {
+                lift_return_into_struct_new_leaves(last);
+            }
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            result,
+            ..
+        } => {
+            // Clear the block result type since branches now return directly
+            *result = None;
+            if let Some(last) = then_body.last_mut() {
+                lift_return_into_struct_new_leaves(last);
+            }
+            if let Some(eb) = else_body
+                && let Some(last) = eb.last_mut()
+            {
+                lift_return_into_struct_new_leaves(last);
+            }
+        }
+        WirInstr::Block { body, result, .. } => {
+            if result.is_some() {
+                // Typed block: rewrite StructNew/Br pairs at all depths, then clear result
+                rewrite_struct_new_br_to_return(body, 0);
+                *result = None;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Rewrite `StructNew; Br { depth }` pairs that target the outer block (at `target_depth`)
+/// into `Return { Seq(fields) }; Nop` (Nop replaces the Br). Also rewrites the fallthrough
+/// `StructNew` at the end of the block.
+fn rewrite_struct_new_br_to_return(instrs: &mut [WirInstr], target_depth: u32) {
+    let mut i = 0;
+    while i + 1 < instrs.len() {
+        if matches!(&instrs[i + 1], WirInstr::Br { depth } if *depth == target_depth) {
+            if matches!(&instrs[i], WirInstr::StructNew { .. }) {
+                // Replace StructNew with Return { Seq(fields) }
+                if let WirInstr::StructNew { fields, .. } =
+                    std::mem::replace(&mut instrs[i], WirInstr::Nop)
+                {
+                    instrs[i] = WirInstr::Return {
+                        value: Some(Box::new(WirInstr::Seq(fields))),
+                    };
+                }
+                // Remove the Br (now unreachable after Return)
+                instrs[i + 1] = WirInstr::Nop;
+            }
+            // Skip dead code (unreachable) before Br — leave as-is
+            i += 2;
+        } else {
+            // Recurse into nested blocks (which add 1 to the depth)
+            if let WirInstr::Block { body, .. } = &mut instrs[i] {
+                rewrite_struct_new_br_to_return(body, target_depth + 1);
+            }
+            i += 1;
+        }
+    }
+
+    // Handle the fallthrough (last instruction) — if it's a StructNew without Br.
+    // The `matches!` guard before `mem::replace` is intentional to avoid replacing
+    // non-StructNew instructions with Nop.
+    #[allow(clippy::collapsible_if)]
+    if let Some(last) = instrs.last_mut()
+        && matches!(last, WirInstr::StructNew { .. })
+    {
+        if let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop) {
+            *last = WirInstr::Return {
+                value: Some(Box::new(WirInstr::Seq(fields))),
+            };
+        }
+    }
+}
+
 /// Rewrite variant returns to multi-value.
 ///
 /// Transforms `Return { StructNew { type_id: case_type, fields } }` into
 /// `Return { Seq([discriminant, payload_0, ..., default_padding...]) }`.
 /// Unit cases (no payload) get default values (0/0.0/ref.null) for payload slots.
+/// Also handles `return match { ... }` where the return value is a complex expression.
 fn rewrite_variant_returns_to_multi_value(
     instrs: &mut [WirInstr],
     vi: &VariantSroaInfo,
@@ -1036,21 +1297,20 @@ fn rewrite_variant_returns_to_multi_value(
     for instr in instrs.iter_mut() {
         match instr {
             WirInstr::Return { value: Some(v) } => {
-                if let WirInstr::StructNew { fields, .. } =
-                    std::mem::replace(v.as_mut(), WirInstr::Nop)
-                {
-                    // fields[0] is always the discriminant.
-                    // fields[1..] are payload fields (if any).
-                    let payload_count = fields.len() - 1; // subtract discriminant
-                    let mut new_fields = fields;
-
-                    // Pad with default values for missing payload slots
-                    for pos in payload_count..vi.max_payload_count {
-                        let ty = &result_types[1 + pos]; // +1 to skip discriminant
-                        new_fields.push(default_value_for_type(ty));
+                match v.as_ref() {
+                    WirInstr::StructNew { .. } => {
+                        if let WirInstr::StructNew { fields, .. } =
+                            std::mem::replace(v.as_mut(), WirInstr::Nop)
+                        {
+                            **v = WirInstr::Seq(pad_variant_fields(fields, vi, result_types));
+                        }
                     }
-
-                    **v = WirInstr::Seq(new_fields);
+                    WirInstr::Seq(_) | WirInstr::If { .. } | WirInstr::Block { .. } => {
+                        let mut value_expr = std::mem::replace(v.as_mut(), WirInstr::Nop);
+                        lift_return_into_variant_leaves(&mut value_expr, vi, result_types);
+                        *instr = value_expr;
+                    }
+                    _ => {}
                 }
             }
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
@@ -1070,6 +1330,118 @@ fn rewrite_variant_returns_to_multi_value(
                 rewrite_variant_returns_to_multi_value(body, vi, result_types);
             }
             _ => {}
+        }
+    }
+}
+
+/// Pad variant fields with default values for missing payload slots.
+fn pad_variant_fields(
+    fields: Vec<WirInstr>,
+    vi: &VariantSroaInfo,
+    result_types: &[WirType],
+) -> Vec<WirInstr> {
+    let payload_count = fields.len() - 1; // subtract discriminant
+    let mut new_fields = fields;
+    for pos in payload_count..vi.max_payload_count {
+        let ty = &result_types[1 + pos]; // +1 to skip discriminant
+        new_fields.push(default_value_for_type(ty));
+    }
+    new_fields
+}
+
+/// Lift `Return` into leaf `StructNew` positions for variant SROA.
+fn lift_return_into_variant_leaves(
+    expr: &mut WirInstr,
+    vi: &VariantSroaInfo,
+    result_types: &[WirType],
+) {
+    match expr {
+        WirInstr::StructNew { .. } => {
+            if let WirInstr::StructNew { fields, .. } =
+                std::mem::replace(expr, WirInstr::Nop)
+            {
+                *expr = WirInstr::Return {
+                    value: Some(Box::new(WirInstr::Seq(
+                        pad_variant_fields(fields, vi, result_types),
+                    ))),
+                };
+            }
+        }
+        WirInstr::Seq(items) => {
+            if let Some(last) = items.last_mut() {
+                lift_return_into_variant_leaves(last, vi, result_types);
+            }
+        }
+        WirInstr::If {
+            then_body,
+            else_body,
+            result,
+            ..
+        } => {
+            *result = None;
+            if let Some(last) = then_body.last_mut() {
+                lift_return_into_variant_leaves(last, vi, result_types);
+            }
+            if let Some(eb) = else_body
+                && let Some(last) = eb.last_mut()
+            {
+                lift_return_into_variant_leaves(last, vi, result_types);
+            }
+        }
+        WirInstr::Block { body, result, .. } => {
+            if result.is_some() {
+                rewrite_variant_struct_new_br_to_return(body, 0, vi, result_types);
+                *result = None;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Variant version of `rewrite_struct_new_br_to_return`.
+fn rewrite_variant_struct_new_br_to_return(
+    instrs: &mut [WirInstr],
+    target_depth: u32,
+    vi: &VariantSroaInfo,
+    result_types: &[WirType],
+) {
+    let mut i = 0;
+    while i + 1 < instrs.len() {
+        if matches!(&instrs[i + 1], WirInstr::Br { depth } if *depth == target_depth) {
+            if matches!(&instrs[i], WirInstr::StructNew { .. }) {
+                if let WirInstr::StructNew { fields, .. } =
+                    std::mem::replace(&mut instrs[i], WirInstr::Nop)
+                {
+                    instrs[i] = WirInstr::Return {
+                        value: Some(Box::new(WirInstr::Seq(
+                            pad_variant_fields(fields, vi, result_types),
+                        ))),
+                    };
+                }
+                instrs[i + 1] = WirInstr::Nop;
+            }
+            i += 2;
+        } else {
+            if let WirInstr::Block { body, .. } = &mut instrs[i] {
+                rewrite_variant_struct_new_br_to_return(body, target_depth + 1, vi, result_types);
+            }
+            i += 1;
+        }
+    }
+
+    // Handle fallthrough.
+    // The `matches!` guard before `mem::replace` is intentional to avoid replacing
+    // non-StructNew instructions with Nop.
+    #[allow(clippy::collapsible_if)]
+    if let Some(last) = instrs.last_mut()
+        && matches!(last, WirInstr::StructNew { .. })
+    {
+        if let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop) {
+            *last = WirInstr::Return {
+                value: Some(Box::new(WirInstr::Seq(
+                    pad_variant_fields(fields, vi, result_types),
+                ))),
+            };
         }
     }
 }
