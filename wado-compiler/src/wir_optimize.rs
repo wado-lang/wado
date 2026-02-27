@@ -2757,8 +2757,8 @@ fn try_match_append_sequence(
     let mut values = Vec::with_capacity(instrs.len());
 
     for instr in instrs {
-        // Extract the Call and any local aliases from inside a Block.
-        let (call, aliases) = extract_call_from_block(instr);
+        // Extract the Call, local aliases, and value bindings from inside a Block.
+        let (call, aliases, value_bindings) = extract_call_from_block(instr);
 
         let WirInstr::Call { func_id, args } = call else {
             return None;
@@ -2778,14 +2778,32 @@ fn try_match_append_sequence(
             return None;
         }
 
-        values.push(args[1].clone());
+        // Resolve the element value through value bindings.
+        // For non-scalar elements (e.g., String, struct), the value is materialized
+        // in a preceding LocalSet and referenced via LocalGet in the call arg.
+        let element = resolve_value_binding(&args[1], &value_bindings);
+        values.push(element);
     }
 
     Some(values)
 }
 
-/// Extract a Call instruction from inside a Block, along with any local
-/// aliases created by preceding `LocalSet { name, value: LocalGet }` instructions.
+/// Resolve a value through value bindings from the enclosing block.
+/// If the instruction is a `LocalGet` that refers to a value binding, return the
+/// bound value. Otherwise return a clone of the instruction as-is.
+fn resolve_value_binding(instr: &WirInstr, value_bindings: &[(String, WirInstr)]) -> WirInstr {
+    if let WirInstr::LocalGet { name } = instr {
+        for (binding_name, binding_value) in value_bindings {
+            if binding_name == name {
+                return binding_value.clone();
+            }
+        }
+    }
+    instr.clone()
+}
+
+/// Extract a Call instruction from inside a Block, along with local aliases
+/// and value bindings from preceding `LocalSet` instructions.
 ///
 /// After inlining, a `push_literal` call often expands to:
 /// ```text
@@ -2795,36 +2813,52 @@ fn try_match_append_sequence(
 /// ] }
 /// ```
 ///
-/// Returns the Call instruction and a list of (`alias_name`, `original_name`) pairs.
-fn extract_call_from_block(instr: &WirInstr) -> (&WirInstr, Vec<(String, String)>) {
+/// For non-scalar elements (e.g., `String`), the element value is materialized
+/// in a separate `LocalSet`:
+/// ```text
+/// Block { body: [
+///   LocalSet { name: "__local_4", value: LocalGet { name: "__local_0" } },
+///   LocalSet { name: "__local_5", value: StructNew { String, ... } },
+///   Call { func_id: append, args: [LocalGet("__local_4"), LocalGet("__local_5")] }
+/// ] }
+/// ```
+///
+/// Returns the Call instruction, a list of (`alias_name`, `original_name`) pairs,
+/// and a list of (`binding_name`, `value_expr`) pairs for non-alias bindings.
+fn extract_call_from_block(
+    instr: &WirInstr,
+) -> (&WirInstr, Vec<(String, String)>, Vec<(String, WirInstr)>) {
     let WirInstr::Block {
         body, result: None, ..
     } = instr
     else {
-        return (instr, Vec::new());
+        return (instr, Vec::new(), Vec::new());
     };
 
     if body.is_empty() {
-        return (instr, Vec::new());
+        return (instr, Vec::new(), Vec::new());
     }
 
     // The last instruction should be the Call.
     let call = body.last().unwrap();
 
-    // All preceding instructions should be LocalSet aliases (LocalSet copying from LocalGet).
+    // Preceding instructions should be LocalSet: either aliases (LocalGet) or value bindings.
     let mut aliases = Vec::new();
+    let mut value_bindings = Vec::new();
     for preceding in &body[..body.len() - 1] {
-        if let WirInstr::LocalSet { name, value } = preceding
-            && let WirInstr::LocalGet { name: src_name } = value.as_ref()
-        {
-            aliases.push((name.clone(), src_name.clone()));
+        if let WirInstr::LocalSet { name, value } = preceding {
+            if let WirInstr::LocalGet { name: src_name } = value.as_ref() {
+                aliases.push((name.clone(), src_name.clone()));
+            } else {
+                value_bindings.push((name.clone(), *value.clone()));
+            }
         } else {
-            // Non-alias instruction before the call — bail out.
-            return (instr, Vec::new());
+            // Non-LocalSet instruction before the call — bail out.
+            return (instr, Vec::new(), Vec::new());
         }
     }
 
-    (call, aliases)
+    (call, aliases, value_bindings)
 }
 
 /// Check if a receiver expression matches the expected access path for the Array<T>,

@@ -576,9 +576,8 @@ fn __cm_adapter__Fields_has(self: &Fields, name: FieldName) -> bool {
 fn __cm_adapter__Fields_append(self: &Fields, name: FieldName, value: FieldValue) -> Result<(), HeaderError> {
     let __name_packed: i64 = core::internal::cm_lower_string(name);
     let __value_packed: i64 = __inline_cm_lower_array_u8_0: {
-        let arr: FieldValue = value;
-        let data: builtin::array<u8> = arr."Array<u8>::internal_raw_data"();
-        let len: i32 = arr."Array<u8>::len"();
+        let data: builtin::array<u8> = value.repr;
+        let len: i32 = value.used;
         break __inline_cm_lower_array_u8_0: core::internal::cm_lower_list_u8(data, len);
     };
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);

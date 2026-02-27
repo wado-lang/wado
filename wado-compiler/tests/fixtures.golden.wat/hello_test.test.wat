@@ -58,9 +58,7 @@
     (type (;10;) (func))
     (type (;11;) (func))
     (type (;12;) (func))
-    (type (;13;) (func (param (ref null 5)) (result (ref null 5))))
-    (type (;14;) (func (param (ref null 5) i64)))
-    (type (;15;) (func (param (ref null 5) i64)))
+    (type (;13;) (func (param (ref null 5) i64)))
     (import "mem" "realloc" (func (;0;) (type 6)))
     (import "wasi" "task-return" (func (;1;) (type 7)))
     (import "mem" "memory" (memory (;0;) 1))
@@ -118,19 +116,9 @@
         (i32.const 0))
     )
     (func (;6;) (type 12)
-      (local (ref null 5) i32 i32)
+      (local (ref null 5) i32 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i64 (ref null 5) i32)
     )
-    (func (;7;) (type 13) (param (ref null 5)) (result (ref null 5))
-      (return
-        (local.get 0))
-      (unreachable)
-    )
-    (func (;8;) (type 14) (param (ref null 5) i64)
-      (call 9
-        (local.get 0)
-        (local.get 1))
-    )
-    (func (;9;) (type 15) (param (ref null 5) i64)
+    (func (;7;) (type 13) (param (ref null 5) i64)
       (local i32 i32 i32 (ref null 4) i32 i32)
       (local.set 2
         (struct.get 5 1

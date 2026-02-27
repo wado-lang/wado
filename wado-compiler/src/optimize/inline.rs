@@ -1218,6 +1218,51 @@ fn create_default_value(type_id: TypeId, type_table: &TypeTable, span: crate::Sp
     TirExpr::new(kind, type_id, span)
 }
 
+/// Look up an inline candidate by module path and function name.
+///
+/// Tries in order:
+/// 1. Direct module path from the call site
+/// 2. Entry module (empty path) for monomorphized functions
+/// 3. Name-based search across all modules (handles cases where monomorphized
+///    functions are placed in a module different from their generic origin)
+fn find_inline_candidate<'a>(
+    candidates: &'a IndexMap<(Vec<String>, String), TirFunction>,
+    call_module_path: &[String],
+    current_module: &[String],
+    func_name: &str,
+) -> Option<(&'a TirFunction, (Vec<String>, String))> {
+    let target_module = if call_module_path.is_empty() {
+        current_module.to_vec()
+    } else {
+        call_module_path.to_vec()
+    };
+
+    // Try direct module path first
+    if let Some(candidate) = candidates.get(&(target_module.clone(), func_name.to_string())) {
+        return Some((candidate, (target_module, func_name.to_string())));
+    }
+
+    // Try entry module (empty path) for monomorphized functions
+    if !target_module.is_empty() {
+        let entry_key = (vec![], func_name.to_string());
+        if let Some(candidate) = candidates.get(&entry_key) {
+            return Some((candidate, entry_key));
+        }
+    }
+
+    // Fallback: search by function name across all modules.
+    // After monomorphization, a function may be placed in a different module
+    // than the one referenced at the call site (e.g., generic origin is
+    // prelude/array.wado but the monomorphized instance is in prelude/fpfmt.wado).
+    for (key, candidate) in candidates {
+        if key.1 == func_name {
+            return Some((candidate, key.clone()));
+        }
+    }
+
+    None
+}
+
 /// Try to inline a call expression, returning the inlined expression and key
 fn try_inline_call_expr(
     expr: &TirExpr,
@@ -1245,28 +1290,9 @@ fn try_inline_call_expr(
         return None;
     }
 
-    // Try to find the candidate function
-    // First try the call site's module path, then fall back to entry module
-    // (monomorphized functions are placed in the entry module)
-    let target_module = if module_path.is_empty() {
-        current_module.to_vec()
-    } else {
-        module_path.clone()
-    };
-
-    // Look up the candidate - try direct module first, then entry module for monomorphized functions
-    let candidate = candidates
-        .get(&(target_module.clone(), func_name.clone()))
-        .or_else(|| {
-            // For monomorphized functions, also try looking in the entry module (empty path)
-            if target_module.is_empty() {
-                None
-            } else {
-                candidates.get(&(vec![], func_name.clone()))
-            }
-        });
-
-    let candidate = candidate?;
+    // Look up the candidate function.
+    let (candidate, inlined_key) =
+        find_inline_candidate(candidates, &module_path, current_module, &func_name)?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1341,7 +1367,7 @@ fn try_inline_call_expr(
         param_offset,
         callee_param_count,
         &label,
-        &target_module,
+        &inlined_key.0,
     );
 
     block_stmts.extend(remapped_stmts);
@@ -1357,8 +1383,6 @@ fn try_inline_call_expr(
         expr.span,
     );
 
-    // Return the inlined method key for string literal tracking
-    let inlined_key = (target_module, func_name.clone());
     Some((inlined_expr, inlined_key))
 }
 
@@ -1390,28 +1414,9 @@ fn try_inline_method_call_expr(
         return None;
     }
 
-    // Try to find the candidate function
-    // First try the call site's module path, then fall back to entry module
-    // (monomorphized functions are placed in the entry module)
-    let target_module = if module_path.is_empty() {
-        current_module.to_vec()
-    } else {
-        module_path.clone()
-    };
-
-    // Look up the candidate - try direct module first, then entry module for monomorphized functions
-    let candidate = candidates
-        .get(&(target_module.clone(), func_name.clone()))
-        .or_else(|| {
-            // For monomorphized functions, also try looking in the entry module (empty path)
-            if target_module.is_empty() {
-                None
-            } else {
-                candidates.get(&(vec![], func_name.clone()))
-            }
-        });
-
-    let candidate = candidate?;
+    // Look up the candidate function.
+    let (candidate, inlined_key) =
+        find_inline_candidate(candidates, &module_path, current_module, &func_name)?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1507,7 +1512,7 @@ fn try_inline_method_call_expr(
         param_offset,
         callee_param_count,
         &label,
-        &target_module,
+        &inlined_key.0,
     );
 
     block_stmts.extend(remapped_stmts);
@@ -1522,9 +1527,6 @@ fn try_inline_method_call_expr(
         candidate.return_type,
         expr.span,
     );
-
-    // Return the inlined method key for string literal tracking
-    let inlined_key = (target_module, func_name.clone());
 
     Some((inlined_expr, inlined_key))
 }
@@ -1548,28 +1550,9 @@ fn try_inline_static_call_expr(
     let module_path = func.module_path();
     let func_name = func.name();
 
-    // Try to find the candidate function
-    // First try the call site's module path, then fall back to entry module
-    // (monomorphized functions are placed in the entry module)
-    let target_module = if module_path.is_empty() {
-        current_module.to_vec()
-    } else {
-        module_path.clone()
-    };
-
-    // Look up the candidate - try direct module first, then entry module for monomorphized functions
-    let candidate = candidates
-        .get(&(target_module.clone(), func_name.clone()))
-        .or_else(|| {
-            // For monomorphized functions, also try looking in the entry module (empty path)
-            if target_module.is_empty() {
-                None
-            } else {
-                candidates.get(&(vec![], func_name.clone()))
-            }
-        });
-
-    let candidate = candidate?;
+    // Look up the candidate function.
+    let (candidate, inlined_key) =
+        find_inline_candidate(candidates, &module_path, current_module, &func_name)?;
 
     // Get the function body
     let body = candidate.body.as_ref()?;
@@ -1643,7 +1626,7 @@ fn try_inline_static_call_expr(
         param_offset,
         callee_param_count,
         &label,
-        &target_module,
+        &inlined_key.0,
     );
 
     block_stmts.extend(remapped_stmts);
@@ -1658,9 +1641,6 @@ fn try_inline_static_call_expr(
         candidate.return_type,
         expr.span,
     );
-
-    // Return the inlined function key for string literal tracking
-    let inlined_key = (target_module, func_name.clone());
 
     Some((inlined_expr, inlined_key))
 }
