@@ -398,6 +398,20 @@ impl FunctionTranslator<'_, '_> {
     /// Fresh values are newly created and don't alias existing data,
     /// so they can be used directly without copying.
     fn is_fresh_value(expr: &TirExpr) -> bool {
+        Self::is_fresh_in_context(expr, &IndexSet::new())
+    }
+
+    /// Check if an expression is fresh, considering locals known to hold fresh values.
+    ///
+    /// `fresh_locals` tracks local variable indices that were assigned fresh values
+    /// within the enclosing block scope. This enables copy elision for patterns like:
+    /// ```text
+    /// __seq_lit: {
+    ///     let mut __b = Array { ... };   // __b is fresh
+    ///     break __seq_lit: *__b;          // *__b is fresh (deref of fresh local)
+    /// }
+    /// ```
+    fn is_fresh_in_context(expr: &TirExpr, fresh_locals: &IndexSet<u32>) -> bool {
         match &expr.kind {
             // Literals always produce fresh values
             TirExprKind::StringLiteral(_)
@@ -416,35 +430,44 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::ClosureToCanonical { .. } => true,
 
             // OptionSome wrapping a fresh value is itself fresh
-            TirExprKind::OptionSome { value } => Self::is_fresh_value(value),
+            TirExprKind::OptionSome { value } => Self::is_fresh_in_context(value, fresh_locals),
 
             // Variant/enum constructors produce fresh values
             TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
 
-            // Template string blocks produce fresh values: the builder String
-            // is created within the block and never escapes, so copying on
-            // assignment is unnecessary (copy elision).
-            TirExprKind::LabeledBlock { label, .. } if label == "__tmpl" => true,
+            // Local variable reference: fresh if the local is known to hold a fresh value
+            TirExprKind::Local { index, .. } => fresh_locals.contains(index),
 
-            // Labeled blocks from inlining: the block is fresh if every break
-            // value targeting this label is itself fresh (e.g., a StructLiteral
-            // return from an inlined constructor).
+            // Deref of a fresh value is still fresh (e.g., *self where self is fresh)
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } => Self::is_fresh_in_context(inner, fresh_locals),
+
+            // Labeled blocks: fresh if every break value targeting this label is fresh,
+            // tracking which locals hold fresh values within the block
             TirExprKind::LabeledBlock { label, block, .. } => {
-                Self::all_break_values_are_fresh(label, block)
+                Self::block_breaks_are_fresh(label, block, fresh_locals)
             }
 
-            // Everything else is not fresh (locals, field access, index, etc.)
+            // Everything else is not fresh (field access, index, etc.)
             _ => false,
         }
     }
 
     /// Check if every `break label(value)` in a block has a fresh value.
     ///
-    /// Returns `true` when at least one break is found and all break values
-    /// are fresh, meaning the labeled block as a whole produces a fresh result.
-    fn all_break_values_are_fresh(label: &str, block: &TirBlock) -> bool {
+    /// Tracks locals assigned fresh values within the block, enabling copy
+    /// elision for inlined builder patterns where the break value references
+    /// a locally-created object.
+    fn block_breaks_are_fresh(
+        label: &str,
+        block: &TirBlock,
+        parent_fresh: &IndexSet<u32>,
+    ) -> bool {
         let mut found = false;
-        if Self::check_breaks_in_block(label, block, &mut found) {
+        let mut fresh_locals = parent_fresh.clone();
+        if Self::scan_block_for_breaks(label, block, &mut found, &mut fresh_locals) {
             found
         } else {
             false
@@ -452,61 +475,89 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Recursively scan a block for `Break` targeting `label`.
-    /// Returns `false` if any break value is not fresh.
-    fn check_breaks_in_block(label: &str, block: &TirBlock, found: &mut bool) -> bool {
+    /// Tracks fresh locals and returns `false` if any break value is not fresh.
+    fn scan_block_for_breaks(
+        label: &str,
+        block: &TirBlock,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
         for stmt in &block.stmts {
-            if !Self::check_breaks_in_stmt(label, stmt, found) {
+            if !Self::scan_stmt_for_breaks(label, stmt, found, fresh_locals) {
                 return false;
             }
         }
         true
     }
 
-    fn check_breaks_in_stmt(label: &str, stmt: &TirStmt, found: &mut bool) -> bool {
+    fn scan_stmt_for_breaks(
+        label: &str,
+        stmt: &TirStmt,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
         match &stmt.kind {
+            // Track locals assigned fresh values
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => {
+                if Self::is_fresh_in_context(value, fresh_locals) {
+                    fresh_locals.insert(*local_index);
+                }
+                true
+            }
             TirStmtKind::Break {
                 label: Some(l),
                 value: Some(v),
             } if l == label => {
                 *found = true;
-                Self::is_fresh_value(v)
+                Self::is_fresh_in_context(v, fresh_locals)
             }
             TirStmtKind::If {
                 then_block,
                 else_block,
                 ..
             } => {
-                if !Self::check_breaks_in_block(label, then_block, found) {
+                if !Self::scan_block_for_breaks(label, then_block, found, fresh_locals) {
                     return false;
                 }
                 if let Some(eb) = else_block {
-                    if !Self::check_breaks_in_block(label, eb, found) {
+                    if !Self::scan_block_for_breaks(label, eb, found, fresh_locals) {
                         return false;
                     }
                 }
                 true
             }
-            TirStmtKind::Loop { body } => Self::check_breaks_in_block(label, body, found),
-            TirStmtKind::Expr(expr) => Self::check_breaks_in_expr(label, expr, found),
+            TirStmtKind::Loop { body } => {
+                Self::scan_block_for_breaks(label, body, found, fresh_locals)
+            }
+            TirStmtKind::Expr(expr) => {
+                Self::scan_expr_for_breaks(label, expr, found, fresh_locals)
+            }
             _ => true,
         }
     }
 
-    fn check_breaks_in_expr(label: &str, expr: &TirExpr, found: &mut bool) -> bool {
+    fn scan_expr_for_breaks(
+        label: &str,
+        expr: &TirExpr,
+        found: &mut bool,
+        fresh_locals: &mut IndexSet<u32>,
+    ) -> bool {
         match &expr.kind {
             TirExprKind::LabeledBlock { block, .. } | TirExprKind::Block(block) => {
-                Self::check_breaks_in_block(label, block, found)
+                Self::scan_block_for_breaks(label, block, found, fresh_locals)
             }
             TirExprKind::If {
                 then_branch,
                 else_branch,
                 ..
             } => {
-                if !Self::check_breaks_in_block(label, then_branch, found) {
+                if !Self::scan_block_for_breaks(label, then_branch, found, fresh_locals) {
                     return false;
                 }
                 if let Some(eb) = else_branch {
-                    if !Self::check_breaks_in_block(label, eb, found) {
+                    if !Self::scan_block_for_breaks(label, eb, found, fresh_locals) {
                         return false;
                     }
                 }
