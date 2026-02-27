@@ -95,7 +95,7 @@ make benchmark-fts
 
 | Component  | Version                  |
 | ---------- | ------------------------ |
-| Wado       | commit `085bb74`         |
+| Wado       | commit `725dfd3`         |
 | wasmtime   | 41.0.4                   |
 | Node.js    | v24.14.0                 |
 | Python     | 3.14.3 (CPython, no JIT) |
