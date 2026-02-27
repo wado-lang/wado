@@ -31,7 +31,6 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let b1: Box<i32> = Box<i32> { value: 42 };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "array_new<u8>"(26), used: 0 };
         __r.String::append("make_box: ");
@@ -40,16 +39,12 @@ export fn run() with Stdout {
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_5: {
-            let self: Box<i32> = Box<i32> { value: b1.value };
+            let self: Box<i32> = Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
-    let v: i32 = __inline_unwrap_box_i32__7: {
-        let b: Box<i32> = b1;
-        break __inline_unwrap_box_i32__7: b.value;
-    };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "array_new<u8>"(28), used: 0 };
         __r.String::append("unwrap_box: ");
@@ -58,7 +53,7 @@ export fn run() with Stdout {
             break __inline_Formatter__new_10: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_11: {
-            let self: Box<i32> = Box<i32> { value: v };
+            let self: Box<i32> = Box<i32> { value: 42 };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

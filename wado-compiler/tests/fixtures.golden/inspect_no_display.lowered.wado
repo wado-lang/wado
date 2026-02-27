@@ -123,10 +123,7 @@ export fn run() with Stdout {
             let value: Point = Point { x: 3, y: 4 };
             self."Array<Point>::append"(value);
         };
-        break __seq_lit: __inline_Array_Point__SequenceLiteralBuilder__build_18: {
-            let self: Array<Point> = __b;
-            break __inline_Array_Point__SequenceLiteralBuilder__build_18: *self;
-        };
+        break __seq_lit: *__b;
     };
     core::cli::println(__tmpl: {
         let mut __r: String = String { repr: "array_new<u8>"(16), used: 0 };
@@ -327,10 +324,7 @@ fn "__inspect$Array<Point>"(__val: Array<Point>, __fmt: &mut Formatter) {
     __inline_Formatter__write_char_0: {
         __fmt.buf.String::append_char('[');
     };
-    let __inspect_len: i32 = __inline_Array_Point___len_1: {
-        let self: Array<Point> = __val;
-        break __inline_Array_Point___len_1: self.used;
-    };
+    let __inspect_len: i32 = __val.used;
     let mut __inspect_i: i32 = 0;
     let _licm_buf: &mut String = __fmt.buf;
     loop {
