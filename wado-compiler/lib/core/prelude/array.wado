@@ -113,6 +113,89 @@ impl<T: Ord> Ord for Array<T> {
         return Ordering::Equal;
     }
 }
+pub struct ArraySlice<T> {
+    repr: builtin::array<T>,
+    start: i32,
+    end: i32,
+}
+
+impl ArraySlice<T> {
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.start >= self.end;
+    }
+
+    pub fn get(&self, index: i32) -> Option<T> {
+        if index < 0 || index >= self.end - self.start {
+            return null;
+        }
+        return Option::<T>::Some(builtin::array_get::<T>(self.repr, self.start + index));
+    }
+
+    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
+        let abs_start = self.start + i32_max(start, 0);
+        let abs_end = self.start + i32_min(end, self.end - self.start);
+        return ArraySlice {
+            repr: self.repr,
+            start: i32_min(abs_start, self.end),
+            end: i32_max(abs_start, i32_min(abs_end, self.end)),
+        };
+    }
+
+    pub fn to_array(&self) -> Array<T> {
+        let len = self.end - self.start;
+        if len <= 0 {
+            return Array::<T>::with_capacity(0);
+        }
+        let new_repr = builtin::array_new::<T>(len);
+        builtin::array_copy::<T>(new_repr, 0, self.repr, self.start, len);
+        return Array { repr: new_repr, used: len };
+    }
+
+    pub fn iter(&self) -> ArrayIter<T> {
+        return ArrayIter {
+            repr: self.repr,
+            used: self.end,
+            index: self.start,
+        };
+    }
+}
+
+impl IndexValue<i32> for ArraySlice<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        if index < 0 || index >= self.end - self.start {
+            panic("index out of bounds");
+        }
+        return builtin::array_get::<T>(self.repr, self.start + index);
+    }
+}
+
+impl IntoIterator for ArraySlice<T> {
+    type Item = T;
+    type Iter = ArrayIter<T>;
+
+    fn into_iter(&self) -> Self::Iter {
+        return self.iter();
+    }
+}
+
+impl Array<T> {
+    pub fn slice(&self, start: i32, end: i32) -> ArraySlice<T> {
+        let s = i32_max(start, 0);
+        let e = i32_min(end, self.used);
+        return ArraySlice {
+            repr: self.repr,
+            start: i32_min(s, self.used),
+            end: i32_max(s, e),
+        };
+    }
+}
+
 pub struct ArrayIter<T> {
     repr: builtin::array<T>,
     used: i32,

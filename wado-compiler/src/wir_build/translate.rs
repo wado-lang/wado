@@ -1896,34 +1896,28 @@ impl FunctionTranslator<'_, '_> {
         let from = self.type_table.get(from_base);
         let to = self.type_table.get(to_base);
 
-        // Simple numeric casts
+        // Numeric casts: extension/conversion mode is determined by the source
+        // type's signedness. Signed sources sign-extend, unsigned sources zero-extend.
         match (from, to) {
+            // i32-like signed → i64/u64: sign-extend
             (
                 ResolvedType::Primitive(
-                    PrimitiveType::I32
-                    | PrimitiveType::U32
-                    | PrimitiveType::I16
-                    | PrimitiveType::U16
-                    | PrimitiveType::I8
-                    | PrimitiveType::U8
-                    | PrimitiveType::Bool
-                    | PrimitiveType::Char,
+                    PrimitiveType::I32 | PrimitiveType::I16 | PrimitiveType::I8,
                 ),
-                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64),
             ) => WirInstr::I64ExtendI32S(Box::new(inner_instr)),
+            // i32-like unsigned → i64/u64: zero-extend
             (
                 ResolvedType::Primitive(
-                    PrimitiveType::I32
-                    | PrimitiveType::U32
-                    | PrimitiveType::I16
+                    PrimitiveType::U32
                     | PrimitiveType::U16
-                    | PrimitiveType::I8
                     | PrimitiveType::U8
                     | PrimitiveType::Bool
                     | PrimitiveType::Char,
                 ),
-                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64),
             ) => WirInstr::I64ExtendI32U(Box::new(inner_instr)),
+            // i64/u64 → i32-like: wrap (truncate lower 32 bits)
             (
                 ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64),
                 ResolvedType::Primitive(
@@ -1940,37 +1934,123 @@ impl FunctionTranslator<'_, '_> {
                 let wrapped = WirInstr::I32WrapI64(Box::new(inner_instr));
                 Self::truncate_to_sub_i32(wrapped, to_prim)
             }
+            // i32-like signed → f64
             (
                 ResolvedType::Primitive(
-                    PrimitiveType::I32
-                    | PrimitiveType::U32
-                    | PrimitiveType::I16
+                    PrimitiveType::I32 | PrimitiveType::I16 | PrimitiveType::I8,
+                ),
+                ResolvedType::Primitive(PrimitiveType::F64),
+            ) => WirInstr::F64ConvertI32S(Box::new(inner_instr)),
+            // i32-like unsigned → f64
+            (
+                ResolvedType::Primitive(
+                    PrimitiveType::U32
                     | PrimitiveType::U16
-                    | PrimitiveType::I8
                     | PrimitiveType::U8
                     | PrimitiveType::Bool
                     | PrimitiveType::Char,
                 ),
                 ResolvedType::Primitive(PrimitiveType::F64),
-            ) => WirInstr::F64ConvertI32S(Box::new(inner_instr)),
+            ) => WirInstr::F64ConvertI32U(Box::new(inner_instr)),
+            // i32-like signed → f32
             (
-                ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64),
+                ResolvedType::Primitive(
+                    PrimitiveType::I32 | PrimitiveType::I16 | PrimitiveType::I8,
+                ),
+                ResolvedType::Primitive(PrimitiveType::F32),
+            ) => WirInstr::F32ConvertI32S(Box::new(inner_instr)),
+            // i32-like unsigned → f32
+            (
+                ResolvedType::Primitive(
+                    PrimitiveType::U32
+                    | PrimitiveType::U16
+                    | PrimitiveType::U8
+                    | PrimitiveType::Bool
+                    | PrimitiveType::Char,
+                ),
+                ResolvedType::Primitive(PrimitiveType::F32),
+            ) => WirInstr::F32ConvertI32U(Box::new(inner_instr)),
+            // i64 → f64 (signed)
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
                 ResolvedType::Primitive(PrimitiveType::F64),
             ) => WirInstr::F64ConvertI64S(Box::new(inner_instr)),
+            // u64 → f64 (unsigned)
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::F64),
+            ) => WirInstr::F64ConvertI64U(Box::new(inner_instr)),
+            // i64 → f32 (signed)
+            (
+                ResolvedType::Primitive(PrimitiveType::I64),
+                ResolvedType::Primitive(PrimitiveType::F32),
+            ) => WirInstr::F32ConvertI64S(Box::new(inner_instr)),
+            // u64 → f32 (unsigned)
+            (
+                ResolvedType::Primitive(PrimitiveType::U64),
+                ResolvedType::Primitive(PrimitiveType::F32),
+            ) => WirInstr::F32ConvertI64U(Box::new(inner_instr)),
+            // f64 → signed i32-like
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
                 ResolvedType::Primitive(
-                    to_prim @ (PrimitiveType::I32
-                    | PrimitiveType::U32
-                    | PrimitiveType::I16
-                    | PrimitiveType::U16
-                    | PrimitiveType::I8
-                    | PrimitiveType::U8),
+                    to_prim @ (PrimitiveType::I32 | PrimitiveType::I16 | PrimitiveType::I8),
                 ),
             ) => {
                 let truncated = WirInstr::I32TruncF64S(Box::new(inner_instr));
                 Self::truncate_to_sub_i32(truncated, to_prim)
             }
+            // f64 → unsigned i32-like
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(
+                    to_prim @ (PrimitiveType::U32 | PrimitiveType::U16 | PrimitiveType::U8),
+                ),
+            ) => {
+                let truncated = WirInstr::I32TruncF64U(Box::new(inner_instr));
+                Self::truncate_to_sub_i32(truncated, to_prim)
+            }
+            // f64 → i64
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => WirInstr::I64TruncF64S(Box::new(inner_instr)),
+            // f64 → u64
+            (
+                ResolvedType::Primitive(PrimitiveType::F64),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => WirInstr::I64TruncF64U(Box::new(inner_instr)),
+            // f32 → signed i32-like
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(
+                    to_prim @ (PrimitiveType::I32 | PrimitiveType::I16 | PrimitiveType::I8),
+                ),
+            ) => {
+                let truncated = WirInstr::I32TruncF32S(Box::new(inner_instr));
+                Self::truncate_to_sub_i32(truncated, to_prim)
+            }
+            // f32 → unsigned i32-like
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(
+                    to_prim @ (PrimitiveType::U32 | PrimitiveType::U16 | PrimitiveType::U8),
+                ),
+            ) => {
+                let truncated = WirInstr::I32TruncF32U(Box::new(inner_instr));
+                Self::truncate_to_sub_i32(truncated, to_prim)
+            }
+            // f32 → i64
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(PrimitiveType::I64),
+            ) => WirInstr::I64TruncF32S(Box::new(inner_instr)),
+            // f32 → u64
+            (
+                ResolvedType::Primitive(PrimitiveType::F32),
+                ResolvedType::Primitive(PrimitiveType::U64),
+            ) => WirInstr::I64TruncF32U(Box::new(inner_instr)),
+            // f64 ↔ f32
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
                 ResolvedType::Primitive(PrimitiveType::F32),

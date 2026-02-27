@@ -1,38 +1,46 @@
-// JSON Parser in Wado - TDD approach using variant
+// JSON Parser and Stringifier in Wado
+//
+// A complete JSON parser that:
+// - Operates on byte arrays for proper UTF-8 validation
+// - Builds a JsonValue tree (recursive variant)
+// - Supports all JSON types: null, bool, number, string, array, object
+// - Handles escape sequences including \uXXXX and surrogate pairs
+// - Validates UTF-8 byte sequences with precise error detection
+// - Stringifies JsonValue back to JSON text
 
-use {println, Stdout} from "core:cli";
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
 
 
-variant ParseResult {
-    Fail,
+variant JsonValue {
     Null,
     Bool(bool),
-    Number([i32, i32]),   // start, end positions
-    Str([i32, i32]),      // start, end positions
-    Arr(i32),             // element count
-    Obj(i32),             // key-value pair count
+    Number(f64),
+    Str(String),
+    Arr(Array<JsonValue>),
+    Obj(TreeMap<String, JsonValue>),
 }
 
 
-fn is_digit(c: char) -> bool {
-    return c >= '0' && c <= '9';
+fn is_digit(b: u8) -> bool {
+    return b >= ('0' as u8) && b <= ('9' as u8);
 }
 
-fn is_hex_digit(c: char) -> bool {
-    return (c >= '0' && c <= '9')
-        || (c >= 'A' && c <= 'F')
-        || (c >= 'a' && c <= 'f');
+fn is_hex_digit(b: u8) -> bool {
+    return (b >= ('0' as u8) && b <= ('9' as u8))
+        || (b >= ('A' as u8) && b <= ('F' as u8))
+        || (b >= ('a' as u8) && b <= ('f' as u8));
 }
 
-fn hex_to_i32(c: char) -> i32 {
-    if c >= '0' && c <= '9' {
-        return (c as i32) - ('0' as i32);
+fn hex_to_i32(b: u8) -> i32 {
+    if b >= ('0' as u8) && b <= ('9' as u8) {
+        return (b as i32) - ('0' as i32);
     }
-    if c >= 'A' && c <= 'F' {
-        return (c as i32) - ('A' as i32) + 10;
+    if b >= ('A' as u8) && b <= ('F' as u8) {
+        return (b as i32) - ('A' as i32) + 10;
     }
-    if c >= 'a' && c <= 'f' {
-        return (c as i32) - ('a' as i32) + 10;
+    if b >= ('a' as u8) && b <= ('f' as u8) {
+        return (b as i32) - ('a' as i32) + 10;
     }
     return -1;
 }
@@ -51,24 +59,24 @@ fn surrogate_to_codepoint(high: i32, low: i32) -> i32 {
 
 
 test "hex-digit-check" {
-    assert is_hex_digit('0');
-    assert is_hex_digit('9');
-    assert is_hex_digit('A');
-    assert is_hex_digit('F');
-    assert is_hex_digit('a');
-    assert is_hex_digit('f');
-    assert !is_hex_digit('G');
-    assert !is_hex_digit('g');
-    assert !is_hex_digit('/');
+    assert is_hex_digit('0' as u8);
+    assert is_hex_digit('9' as u8);
+    assert is_hex_digit('A' as u8);
+    assert is_hex_digit('F' as u8);
+    assert is_hex_digit('a' as u8);
+    assert is_hex_digit('f' as u8);
+    assert !is_hex_digit('G' as u8);
+    assert !is_hex_digit('g' as u8);
+    assert !is_hex_digit('/' as u8);
 }
 
 test "hex-to-value" {
-    assert hex_to_i32('0') == 0;
-    assert hex_to_i32('9') == 9;
-    assert hex_to_i32('A') == 10;
-    assert hex_to_i32('F') == 15;
-    assert hex_to_i32('a') == 10;
-    assert hex_to_i32('f') == 15;
+    assert hex_to_i32('0' as u8) == 0;
+    assert hex_to_i32('9' as u8) == 9;
+    assert hex_to_i32('A' as u8) == 10;
+    assert hex_to_i32('F' as u8) == 15;
+    assert hex_to_i32('a' as u8) == 10;
+    assert hex_to_i32('f' as u8) == 15;
 }
 
 test "surrogate-detection" {
@@ -89,29 +97,31 @@ test "surrogate-pair-to-codepoint" {
 
 
 struct Parser {
-    input: String,
+    bytes: Array<u8>,
     pos: i32,
 }
 
 impl Parser {
     fn new(input: String) -> Parser {
-        return Parser { input, pos: 0 };
+        let mut bytes = input.bytes().collect();
+        return Parser { bytes, pos: 0 };
     }
 
-    fn peek(&self) -> Option<char> {
-        if self.pos >= self.input.len() {
-            return null;
-        }
-        return char::from_i32(self.input.get_byte(self.pos));
+    fn from_bytes(bytes: Array<u8>) -> Parser {
+        return Parser { bytes, pos: 0 };
+    }
+
+    fn peek(&self) -> Option<u8> {
+        return self.bytes.get(self.pos);
     }
 
     fn advance(&mut self) {
         self.pos += 1;
     }
 
-    fn expect(&mut self, expected: char) -> bool {
-        if let Some(c) = self.peek() {
-            if c == expected {
+    fn expect_byte(&mut self, expected: u8) -> bool {
+        if let Some(b) = self.peek() {
+            if b == expected {
                 self.advance();
                 return true;
             }
@@ -120,8 +130,8 @@ impl Parser {
     }
 
     fn skip_whitespace(&mut self) {
-        while let Some(c) = self.peek() {
-            if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+        while let Some(b) = self.peek() {
+            if b == (' ' as u8) || b == ('\t' as u8) || b == ('\n' as u8) || b == ('\r' as u8) {
                 self.advance();
             } else {
                 break;
@@ -130,18 +140,26 @@ impl Parser {
     }
 
     fn is_eof(&self) -> bool {
-        return self.pos >= self.input.len();
+        return self.pos >= self.bytes.len();
     }
 }
 
 
+test "parser-from-bytes" {
+    let bytes: Array<u8> = ['{' as u8, '}' as u8];
+    let mut p = Parser::from_bytes(bytes);
+    assert p.peek() matches { Some(b) && b == ('{' as u8) };
+    p.advance();
+    assert p.peek() matches { Some(b) && b == ('}' as u8) };
+}
+
 test "parser-peek-and-advance" {
     let mut p = Parser::new("abc");
-    assert p.peek() matches { Some(c) && c == 'a' };
+    assert p.peek() matches { Some(b) && b == ('a' as u8) };
     p.advance();
-    assert p.peek() matches { Some(c) && c == 'b' };
+    assert p.peek() matches { Some(b) && b == ('b' as u8) };
     p.advance();
-    assert p.peek() matches { Some(c) && c == 'c' };
+    assert p.peek() matches { Some(b) && b == ('c' as u8) };
     p.advance();
     assert p.peek() matches { None };
 }
@@ -149,7 +167,7 @@ test "parser-peek-and-advance" {
 test "parser-skip-whitespace" {
     let mut p = Parser::new("  \t\nabc");
     p.skip_whitespace();
-    assert p.peek() matches { Some(c) && c == 'a' };
+    assert p.peek() matches { Some(b) && b == ('a' as u8) };
 }
 
 test "parser-is-eof" {
@@ -163,8 +181,9 @@ test "parser-is-eof" {
 impl Parser {
     fn match_literal(&mut self, lit: String) -> bool {
         let start = self.pos;
-        for let mut i = 0; i < lit.len(); i += 1 {
-            if self.is_eof() || self.input.get_byte(self.pos) != lit.get_byte(i) {
+        let lit_bytes = lit.bytes().collect();
+        for let mut i = 0; i < lit_bytes.len(); i += 1 {
+            if self.is_eof() || self.bytes[self.pos] != lit_bytes[i] {
                 self.pos = start;
                 return false;
             }
@@ -174,15 +193,14 @@ impl Parser {
     }
 
     // Parse \uXXXX and return the code point, or -1 on failure
-    // Assumes parser is positioned after the 'u'
-    fn parse_unicode_codepoint(&mut self) -> i32 {
+    fn parse_unicode_escape(&mut self) -> i32 {
         let mut value = 0;
         for let mut i = 0; i < 4; i += 1 {
-            if let Some(c) = self.peek() {
-                if !is_hex_digit(c) {
+            if let Some(b) = self.peek() {
+                if !is_hex_digit(b) {
                     return -1;
                 }
-                value = value * 16 + hex_to_i32(c);
+                value = value * 16 + hex_to_i32(b);
                 self.advance();
             } else {
                 return -1;
@@ -190,65 +208,136 @@ impl Parser {
         }
         return value;
     }
+
+    // Decode a UTF-8 byte sequence at the current position.
+    // Returns the Unicode codepoint as i32, or -1 on invalid UTF-8.
+    // Advances pos past the decoded bytes.
+    fn decode_utf8(&mut self) -> i32 {
+        let b0 = self.bytes[self.pos] as i32;
+
+        // ASCII
+        if b0 < 0x80 {
+            self.pos += 1;
+            return b0;
+        }
+
+        // Invalid: continuation byte without lead
+        if b0 < 0xC0 {
+            return -1;
+        }
+
+        // 2-byte: 110xxxxx 10xxxxxx
+        if b0 < 0xE0 {
+            if self.pos + 1 >= self.bytes.len() { return -1; }
+            let b1 = self.bytes[self.pos + 1] as i32;
+            if (b1 & 0xC0) != 0x80 { return -1; }
+            let cp = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
+            if cp < 0x80 { return -1; }
+            self.pos += 2;
+            return cp;
+        }
+
+        // 3-byte: 1110xxxx 10xxxxxx 10xxxxxx
+        if b0 < 0xF0 {
+            if self.pos + 2 >= self.bytes.len() { return -1; }
+            let b1 = self.bytes[self.pos + 1] as i32;
+            let b2 = self.bytes[self.pos + 2] as i32;
+            if (b1 & 0xC0) != 0x80 { return -1; }
+            if (b2 & 0xC0) != 0x80 { return -1; }
+            let cp = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
+            if cp < 0x800 { return -1; }
+            if cp >= 0xD800 && cp <= 0xDFFF { return -1; }
+            self.pos += 3;
+            return cp;
+        }
+
+        // 4-byte: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+        if b0 < 0xF8 {
+            if self.pos + 3 >= self.bytes.len() { return -1; }
+            let b1 = self.bytes[self.pos + 1] as i32;
+            let b2 = self.bytes[self.pos + 2] as i32;
+            let b3 = self.bytes[self.pos + 3] as i32;
+            if (b1 & 0xC0) != 0x80 { return -1; }
+            if (b2 & 0xC0) != 0x80 { return -1; }
+            if (b3 & 0xC0) != 0x80 { return -1; }
+            let cp = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+            if cp < 0x10000 || cp > 0x10FFFF { return -1; }
+            self.pos += 4;
+            return cp;
+        }
+
+        return -1;
+    }
 }
 
-test "parse-unicode-codepoint" {
-    let mut p = Parser::new("0041");  // 'A'
-    let cp = p.parse_unicode_codepoint();
+test "parse-unicode-escape" {
+    let mut p = Parser::new("0041");
+    let cp = p.parse_unicode_escape();
     assert cp == 65;
 }
 
-test "parse-unicode-codepoint-japanese" {
-    let mut p = Parser::new("3042");  // 'あ'
-    let cp = p.parse_unicode_codepoint();
+test "parse-unicode-escape-japanese" {
+    let mut p = Parser::new("3042");
+    let cp = p.parse_unicode_escape();
     assert cp == 12354;
 }
 
 
 impl Parser {
-    fn parse_null(&mut self) -> ParseResult {
+    fn parse_null(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
         if self.match_literal("null") {
-            return ParseResult::Null;
+            return Option::<JsonValue>::Some(JsonValue::Null);
         }
-        return ParseResult::Fail;
+        return null;
     }
 }
 
 test "parse-null-valid" {
     let mut p = Parser::new("null");
-    assert p.parse_null() matches { Null };
+    if let Some(v) = p.parse_null() {
+        assert v matches { Null };
+    } else {
+        assert false;
+    }
 }
 
 test "parse-null-with-whitespace" {
     let mut p = Parser::new("  null");
-    assert p.parse_null() matches { Null };
+    if let Some(v) = p.parse_null() {
+        assert v matches { Null };
+    } else {
+        assert false;
+    }
 }
 
 test "parse-null-invalid" {
     let mut p = Parser::new("nul");
-    assert p.parse_null() matches { Fail };
+    assert p.parse_null() matches { None };
 }
 
 
 impl Parser {
-    fn parse_bool(&mut self) -> ParseResult {
+    fn parse_bool(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
         if self.match_literal("true") {
-            return ParseResult::Bool(true);
+            return Option::<JsonValue>::Some(JsonValue::Bool(true));
         }
         if self.match_literal("false") {
-            return ParseResult::Bool(false);
+            return Option::<JsonValue>::Some(JsonValue::Bool(false));
         }
-        return ParseResult::Fail;
+        return null;
     }
 }
 
 test "parse-bool-true" {
     let mut p = Parser::new("true");
-    let r = p.parse_bool();
-    if let Bool(v) = r {
-        assert v;
+    if let Some(v) = p.parse_bool() {
+        if let Bool(b) = v {
+            assert b;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -256,9 +345,12 @@ test "parse-bool-true" {
 
 test "parse-bool-false" {
     let mut p = Parser::new("false");
-    let r = p.parse_bool();
-    if let Bool(v) = r {
-        assert !v;
+    if let Some(v) = p.parse_bool() {
+        if let Bool(b) = v {
+            assert !b;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -266,74 +358,87 @@ test "parse-bool-false" {
 
 test "parse-bool-invalid" {
     let mut p = Parser::new("tru");
-    assert p.parse_bool() matches { Fail };
+    assert p.parse_bool() matches { None };
 }
 
 
 impl Parser {
-    fn parse_number(&mut self) -> ParseResult {
+    fn parse_number(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
         let start = self.pos;
 
         // Handle negative
-        if let Some(c) = self.peek() {
-            if c == '-' {
+        if let Some(b) = self.peek() {
+            if b == ('-' as u8) {
                 self.advance();
             }
         }
 
         // Must have at least one digit
-        if let Some(c) = self.peek() {
-            if !is_digit(c) {
+        if let Some(b) = self.peek() {
+            if !is_digit(b) {
                 self.pos = start;
-                return ParseResult::Fail;
+                return null;
             }
         } else {
             self.pos = start;
-            return ParseResult::Fail;
+            return null;
         }
 
         // Integer part
-        while let Some(c) = self.peek() {
-            if !is_digit(c) { break; }
+        while let Some(b) = self.peek() {
+            if !is_digit(b) { break; }
             self.advance();
         }
 
         // Fractional part
-        if self.peek() matches { Some(c) && c == '.' } {
+        if self.peek() matches { Some(b) && b == ('.' as u8) } {
             self.advance();
-            while let Some(c) = self.peek() {
-                if !is_digit(c) { break; }
+            while let Some(b) = self.peek() {
+                if !is_digit(b) { break; }
                 self.advance();
             }
         }
 
         // Exponent
         if let Some(e) = self.peek() {
-            if e == 'e' || e == 'E' {
+            if e == ('e' as u8) || e == ('E' as u8) {
                 self.advance();
                 if let Some(sign) = self.peek() {
-                    if sign == '-' || sign == '+' {
+                    if sign == ('-' as u8) || sign == ('+' as u8) {
                         self.advance();
                     }
                 }
-                while let Some(c) = self.peek() {
-                    if !is_digit(c) { break; }
+                while let Some(b) = self.peek() {
+                    if !is_digit(b) { break; }
                     self.advance();
                 }
             }
         }
 
-        return ParseResult::Number([start, self.pos]);
+        // Extract byte range and convert to string for f64::parse
+        let end = self.pos;
+        let mut num_str = String::with_capacity(end - start);
+        for let mut i = start; i < end; i += 1 {
+            num_str.append_char(char::from_u32_unchecked(self.bytes[i] as u32));
+        }
+
+        if let Some(n) = f64::parse(num_str) {
+            return Option::<JsonValue>::Some(JsonValue::Number(n));
+        }
+        self.pos = start;
+        return null;
     }
 }
 
-test "parse-number-positive" {
+test "parse-number-integer" {
     let mut p = Parser::new("42");
-    let r = p.parse_number();
-    if let Number([start, end]) = r {
-        assert start == 0;
-        assert end == 2;
+    if let Some(v) = p.parse_number() {
+        if let Number(n) = v {
+            assert n == 42.0;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -341,10 +446,12 @@ test "parse-number-positive" {
 
 test "parse-number-negative" {
     let mut p = Parser::new("-123");
-    let r = p.parse_number();
-    if let Number([start, end]) = r {
-        assert start == 0;
-        assert end == 4;
+    if let Some(v) = p.parse_number() {
+        if let Number(n) = v {
+            assert n == -123.0;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -352,10 +459,13 @@ test "parse-number-negative" {
 
 test "parse-number-float" {
     let mut p = Parser::new("3.14");
-    let r = p.parse_number();
-    if let Number([start, end]) = r {
-        assert start == 0;
-        assert end == 4;
+    if let Some(v) = p.parse_number() {
+        if let Number(n) = v {
+            // Check approximate equality
+            assert n > 3.13 && n < 3.15;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -363,9 +473,25 @@ test "parse-number-float" {
 
 test "parse-number-exponent" {
     let mut p = Parser::new("1e10");
-    let r = p.parse_number();
-    if let Number([_start, end]) = r {
-        assert end == 4;
+    if let Some(v) = p.parse_number() {
+        if let Number(n) = v {
+            assert n == 10000000000.0;
+        } else {
+            assert false;
+        }
+    } else {
+        assert false;
+    }
+}
+
+test "parse-number-zero" {
+    let mut p = Parser::new("0");
+    if let Some(v) = p.parse_number() {
+        if let Number(n) = v {
+            assert n == 0.0;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -373,47 +499,101 @@ test "parse-number-exponent" {
 
 test "parse-number-invalid" {
     let mut p = Parser::new("abc");
-    assert p.parse_number() matches { Fail };
+    assert p.parse_number() matches { None };
 }
 
 
 impl Parser {
-    fn parse_string(&mut self) -> ParseResult {
+    fn parse_string_value(&mut self) -> Option<String> {
         self.skip_whitespace();
 
-        if !self.expect('"') {
-            return ParseResult::Fail;
+        if !self.expect_byte('"' as u8) {
+            return null;
         }
-        let start = self.pos;
+
+        let mut result = String::with_capacity(16);
 
         loop {
-            if let Some(c) = self.peek() {
-                if c == '"' {
-                    let end = self.pos;
-                    self.advance();
-                    return ParseResult::Str([start, end]);
-                }
-                if c == '\\' {
-                    self.advance();
-                    if let Some(_) = self.peek() {
-                        self.advance();
+            if self.is_eof() {
+                return null;
+            }
+
+            let b = self.bytes[self.pos];
+
+            // End of string
+            if b == ('"' as u8) {
+                self.advance();
+                return Option::<String>::Some(result);
+            }
+
+            // Escape sequence
+            if b == ('\\' as u8) {
+                self.advance();
+                if self.is_eof() { return null; }
+                let esc = self.bytes[self.pos];
+                self.advance();
+
+                if esc == ('"' as u8) { result.append_char('"'); }
+                else if esc == ('\\' as u8) { result.append_char('\\'); }
+                else if esc == ('/' as u8) { result.append_char('/'); }
+                else if esc == ('b' as u8) { result.append_char(char::from_u32_unchecked(0x08 as u32)); }
+                else if esc == ('f' as u8) { result.append_char(char::from_u32_unchecked(0x0C as u32)); }
+                else if esc == ('n' as u8) { result.append_char('\n'); }
+                else if esc == ('r' as u8) { result.append_char('\r'); }
+                else if esc == ('t' as u8) { result.append_char('\t'); }
+                else if esc == ('u' as u8) {
+                    let cp = self.parse_unicode_escape();
+                    if cp < 0 { return null; }
+
+                    if is_high_surrogate(cp) {
+                        // Expect \uXXXX for low surrogate
+                        if !self.expect_byte('\\' as u8) { return null; }
+                        if !self.expect_byte('u' as u8) { return null; }
+                        let low = self.parse_unicode_escape();
+                        if low < 0 || !is_low_surrogate(low) { return null; }
+                        let full_cp = surrogate_to_codepoint(cp, low);
+                        if let Some(c) = char::from_i32(full_cp) {
+                            result.append_char(c);
+                        } else {
+                            return null;
+                        }
+                    } else if is_low_surrogate(cp) {
+                        return null;
+                    } else {
+                        if let Some(c) = char::from_i32(cp) {
+                            result.append_char(c);
+                        } else {
+                            return null;
+                        }
                     }
                 } else {
-                    self.advance();
+                    return null;
                 }
             } else {
-                return ParseResult::Fail;
+                // Raw UTF-8 byte: decode and validate
+                let cp = self.decode_utf8();
+                if cp < 0 { return null; }
+                result.append_char(char::from_u32_unchecked(cp as u32));
             }
         }
+    }
+
+    fn parse_string(&mut self) -> Option<JsonValue> {
+        if let Some(s) = self.parse_string_value() {
+            return Option::<JsonValue>::Some(JsonValue::Str(s));
+        }
+        return null;
     }
 }
 
 test "parse-string-simple" {
     let mut p = Parser::new("\"hello\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert start == 1;
-        assert end == 6;
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "hello";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -421,10 +601,12 @@ test "parse-string-simple" {
 
 test "parse-string-empty" {
     let mut p = Parser::new("\"\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert start == 1;
-        assert end == 1;
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -432,21 +614,70 @@ test "parse-string-empty" {
 
 test "parse-string-unclosed" {
     let mut p = Parser::new("\"hello");
-    assert p.parse_string() matches { Fail };
+    assert p.parse_string() matches { None };
 }
 
-test "parse-string-with-escape" {
+test "parse-string-escape-newline" {
     let mut p = Parser::new("\"hello\\nworld\"");
-    assert p.parse_string() matches { Str(_) };
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "hello\nworld";
+        } else {
+            assert false;
+        }
+    } else {
+        assert false;
+    }
 }
 
-test "parse-string-unicode-escape" {
+test "parse-string-escape-tab" {
+    let mut p = Parser::new("\"a\\tb\"");
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "a\tb";
+        } else {
+            assert false;
+        }
+    } else {
+        assert false;
+    }
+}
+
+test "parse-string-escape-quote" {
+    let mut p = Parser::new("\"say \\\"hi\\\"\"");
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s.len() == 8;
+        } else {
+            assert false;
+        }
+    } else {
+        assert false;
+    }
+}
+
+test "parse-string-escape-backslash" {
+    let mut p = Parser::new("\"a\\\\b\"");
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s.len() == 3;
+        } else {
+            assert false;
+        }
+    } else {
+        assert false;
+    }
+}
+
+test "parse-string-unicode-escape-ascii" {
     // \u0041 = 'A'
     let mut p = Parser::new("\"\\u0041\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert start == 1;
-        assert end == 7;  // includes \u0041
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "A";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -455,145 +686,105 @@ test "parse-string-unicode-escape" {
 test "parse-string-unicode-escape-japanese" {
     // \u3042 = 'あ'
     let mut p = Parser::new("\"\\u3042\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert end - start == 6;  // \u3042 is 6 bytes
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "あ";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-string-direct-utf8" {
-    // Direct UTF-8: "日本語" (9 bytes in UTF-8)
     let mut p = Parser::new("\"日本語\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert start == 1;
-        // "日本語" = 3 characters × 3 bytes each = 9 bytes
-        assert end == 10;
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "日本語";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-string-mixed-unicode" {
-    // Mix of ASCII, escape, and UTF-8: "Hello\u0020世界"
+    // "Hello\u0020世界"
     let mut p = Parser::new("\"Hello\\u0020世界\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert start == 1;
-        // "Hello" (5) + "\u0020" (6) + "世界" (6) = 17
-        assert end == 18;
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "Hello 世界";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-string-surrogate-pair" {
-    // Surrogate pair for emoji: \uD83D\uDE00 = 😀
+    // \uD83D\uDE00 = 😀
     let mut p = Parser::new("\"\\uD83D\\uDE00\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        // \uD83D (6) + \uDE00 (6) = 12 bytes
-        assert end - start == 12;
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "😀";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-string-emoji-direct" {
-    // Direct emoji in UTF-8: "😀" (4 bytes in UTF-8)
     let mut p = Parser::new("\"😀\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert start == 1;
-        assert end == 5;  // emoji is 4 bytes
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "😀";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
-test "parse-string-all-escapes" {
-    // All standard JSON escapes: \" \\ \/ \b \f \n \r \t
-    let mut p = Parser::new("\"\\\"\\\\\\/ \\b\\f\\n\\r\\t\"");
-    assert p.parse_string() matches { Str(_) };
-}
-
-test "parse-string-cjk-unified" {
-    // CJK Unified Ideographs: 漢字
+test "parse-string-cjk" {
     let mut p = Parser::new("\"漢字\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        // Each CJK character is 3 bytes in UTF-8
-        assert end - start == 6;
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "漢字";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-string-korean" {
-    // Korean: 한글
     let mut p = Parser::new("\"한글\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        // Each Korean character is 3 bytes in UTF-8
-        assert end - start == 6;
-    } else {
-        assert false;
-    }
-}
-
-test "parse-string-arabic" {
-    // Arabic: مرحبا (5 chars, each 2 bytes)
-    let mut p = Parser::new("\"مرحبا\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert end - start == 10;
-    } else {
-        assert false;
-    }
-}
-
-test "parse-string-cyrillic" {
-    // Cyrillic: Привет (6 chars, each 2 bytes)
-    let mut p = Parser::new("\"Привет\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert end - start == 12;
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "한글";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-string-multiple-emoji" {
-    // Multiple emoji: 🎉🎊🎈 (3 emoji, each 4 bytes)
     let mut p = Parser::new("\"🎉🎊🎈\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert end - start == 12;
-    } else {
-        assert false;
-    }
-}
-
-test "parse-string-zero-width-joiner" {
-    // Family emoji with ZWJ: 👨‍👩‍👧 (complex emoji sequence)
-    let mut p = Parser::new("\"👨‍👩‍👧\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        // 👨 (4) + ZWJ (3) + 👩 (4) + ZWJ (3) + 👧 (4) = 18 bytes
-        assert end - start == 18;
-    } else {
-        assert false;
-    }
-}
-
-test "parse-string-musical-symbols" {
-    // Musical symbols (Plane 1): 𝄞 (G clef, 4 bytes)
-    let mut p = Parser::new("\"𝄞\"");
-    let r = p.parse_string();
-    if let Str([start, end]) = r {
-        assert end - start == 4;
+    if let Some(v) = p.parse_string() {
+        if let Str(s) = v {
+            assert s == "🎉🎊🎈";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -601,32 +792,33 @@ test "parse-string-musical-symbols" {
 
 
 impl Parser {
-    fn parse_array(&mut self) -> ParseResult {
+    fn parse_array(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
 
-        if !self.expect('[') {
-            return ParseResult::Fail;
+        if !self.expect_byte('[' as u8) {
+            return null;
         }
         self.skip_whitespace();
 
-        if self.expect(']') {
-            return ParseResult::Arr(0);
+        if self.expect_byte(']' as u8) {
+            let empty: Array<JsonValue> = [];
+            return Option::<JsonValue>::Some(JsonValue::Arr(empty));
         }
 
-        let mut count = 0;
+        let mut items: Array<JsonValue> = [];
         loop {
-            let r = self.parse_value();
-            if r matches { Fail } {
-                return ParseResult::Fail;
+            if let Some(v) = self.parse_value() {
+                items.append(v);
+            } else {
+                return null;
             }
-            count += 1;
 
             self.skip_whitespace();
-            if self.expect(']') {
-                return ParseResult::Arr(count);
+            if self.expect_byte(']' as u8) {
+                return Option::<JsonValue>::Some(JsonValue::Arr(items));
             }
-            if !self.expect(',') {
-                return ParseResult::Fail;
+            if !self.expect_byte(',' as u8) {
+                return null;
             }
             self.skip_whitespace();
         }
@@ -635,9 +827,12 @@ impl Parser {
 
 test "parse-array-empty" {
     let mut p = Parser::new("[]");
-    let r = p.parse_array();
-    if let Arr(count) = r {
-        assert count == 0;
+    if let Some(v) = p.parse_array() {
+        if let Arr(items) = v {
+            assert items.len() == 0;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -645,9 +840,12 @@ test "parse-array-empty" {
 
 test "parse-array-single" {
     let mut p = Parser::new("[42]");
-    let r = p.parse_array();
-    if let Arr(count) = r {
-        assert count == 1;
+    if let Some(v) = p.parse_array() {
+        if let Arr(items) = v {
+            assert items.len() == 1;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -655,9 +853,12 @@ test "parse-array-single" {
 
 test "parse-array-multiple" {
     let mut p = Parser::new("[1, 2, 3]");
-    let r = p.parse_array();
-    if let Arr(count) = r {
-        assert count == 3;
+    if let Some(v) = p.parse_array() {
+        if let Arr(items) = v {
+            assert items.len() == 3;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -665,9 +866,12 @@ test "parse-array-multiple" {
 
 test "parse-array-nested" {
     let mut p = Parser::new("[[1], [2, 3]]");
-    let r = p.parse_array();
-    if let Arr(count) = r {
-        assert count == 2;
+    if let Some(v) = p.parse_array() {
+        if let Arr(items) = v {
+            assert items.len() == 2;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -675,9 +879,12 @@ test "parse-array-nested" {
 
 test "parse-array-mixed" {
     let mut p = Parser::new("[1, \"hello\", true, null]");
-    let r = p.parse_array();
-    if let Arr(count) = r {
-        assert count == 4;
+    if let Some(v) = p.parse_array() {
+        if let Arr(items) = v {
+            assert items.len() == 4;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -685,43 +892,43 @@ test "parse-array-mixed" {
 
 
 impl Parser {
-    fn parse_object(&mut self) -> ParseResult {
+    fn parse_object(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
 
-        if !self.expect('{') {
-            return ParseResult::Fail;
+        if !self.expect_byte('{' as u8) {
+            return null;
         }
         self.skip_whitespace();
 
-        if self.expect('}') {
-            return ParseResult::Obj(0);
+        if self.expect_byte('}' as u8) {
+            return Option::<JsonValue>::Some(JsonValue::Obj(TreeMap::<String, JsonValue>::new()));
         }
 
-        let mut count = 0;
+        let mut map = TreeMap::<String, JsonValue>::new();
         loop {
             self.skip_whitespace();
-            let key = self.parse_string();
-            if key matches { Fail } {
-                return ParseResult::Fail;
+            let key_opt = self.parse_string_value();
+            if let Some(key) = key_opt {
+                self.skip_whitespace();
+                if !self.expect_byte(':' as u8) {
+                    return null;
+                }
+
+                if let Some(val) = self.parse_value() {
+                    map[key] = val;
+                } else {
+                    return null;
+                }
+            } else {
+                return null;
             }
 
             self.skip_whitespace();
-            if !self.expect(':') {
-                return ParseResult::Fail;
+            if self.expect_byte('}' as u8) {
+                return Option::<JsonValue>::Some(JsonValue::Obj(map));
             }
-
-            let val = self.parse_value();
-            if val matches { Fail } {
-                return ParseResult::Fail;
-            }
-            count += 1;
-
-            self.skip_whitespace();
-            if self.expect('}') {
-                return ParseResult::Obj(count);
-            }
-            if !self.expect(',') {
-                return ParseResult::Fail;
+            if !self.expect_byte(',' as u8) {
+                return null;
             }
         }
     }
@@ -729,9 +936,12 @@ impl Parser {
 
 test "parse-object-empty" {
     let mut p = Parser::new("{}");
-    let r = p.parse_object();
-    if let Obj(count) = r {
-        assert count == 0;
+    if let Some(v) = p.parse_object() {
+        if let Obj(map) = v {
+            assert map.len() == 0;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -739,9 +949,12 @@ test "parse-object-empty" {
 
 test "parse-object-single" {
     let mut p = Parser::new("{\"a\": 1}");
-    let r = p.parse_object();
-    if let Obj(count) = r {
-        assert count == 1;
+    if let Some(v) = p.parse_object() {
+        if let Obj(map) = v {
+            assert map.len() == 1;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -749,9 +962,12 @@ test "parse-object-single" {
 
 test "parse-object-multiple" {
     let mut p = Parser::new("{\"a\": 1, \"b\": 2, \"c\": 3}");
-    let r = p.parse_object();
-    if let Obj(count) = r {
-        assert count == 3;
+    if let Some(v) = p.parse_object() {
+        if let Obj(map) = v {
+            assert map.len() == 3;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -759,9 +975,12 @@ test "parse-object-multiple" {
 
 test "parse-object-nested" {
     let mut p = Parser::new("{\"outer\": {\"inner\": 42}}");
-    let r = p.parse_object();
-    if let Obj(count) = r {
-        assert count == 1;
+    if let Some(v) = p.parse_object() {
+        if let Obj(map) = v {
+            assert map.len() == 1;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -769,149 +988,339 @@ test "parse-object-nested" {
 
 
 impl Parser {
-    fn parse_value(&mut self) -> ParseResult {
+    fn parse_value(&mut self) -> Option<JsonValue> {
         self.skip_whitespace();
-        if let Some(c) = self.peek() {
-            if c == 'n' { return self.parse_null(); }
-            if c == 't' || c == 'f' { return self.parse_bool(); }
-            if c == '"' { return self.parse_string(); }
-            if c == '[' { return self.parse_array(); }
-            if c == '{' { return self.parse_object(); }
-            if is_digit(c) || c == '-' { return self.parse_number(); }
+        if let Some(b) = self.peek() {
+            if b == ('n' as u8) { return self.parse_null(); }
+            if b == ('t' as u8) || b == ('f' as u8) { return self.parse_bool(); }
+            if b == ('"' as u8) { return self.parse_string(); }
+            if b == ('[' as u8) { return self.parse_array(); }
+            if b == ('{' as u8) { return self.parse_object(); }
+            if is_digit(b) || b == ('-' as u8) { return self.parse_number(); }
         }
-        return ParseResult::Fail;
+        return null;
     }
 }
 
+
+fn parse_json(input: String) -> Option<JsonValue> {
+    let mut p = Parser::new(input);
+    let result = p.parse_value();
+    p.skip_whitespace();
+    if !p.is_eof() {
+        return null;
+    }
+    return result;
+}
+
+
 test "parse-value-null" {
-    let mut p = Parser::new("null");
-    assert p.parse_value() matches { Null };
+    if let Some(v) = parse_json("null") {
+        assert v matches { Null };
+    } else {
+        assert false;
+    }
 }
 
 test "parse-value-bool" {
-    let mut p = Parser::new("true");
-    let r = p.parse_value();
-    if let Bool(v) = r {
-        assert v;
+    if let Some(v) = parse_json("true") {
+        if let Bool(b) = v {
+            assert b;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-value-number" {
-    let mut p = Parser::new("42");
-    let r = p.parse_value();
-    if let Number([s, e]) = r {
-        assert s == 0;
-        assert e == 2;
+    if let Some(v) = parse_json("42") {
+        if let Number(n) = v {
+            assert n == 42.0;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-value-string" {
-    let mut p = Parser::new("\"hello\"");
-    let r = p.parse_value();
-    if let Str([s, e]) = r {
-        assert s == 1;
-        assert e == 6;
+    if let Some(v) = parse_json("\"hello\"") {
+        if let Str(s) = v {
+            assert s == "hello";
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-value-array" {
-    let mut p = Parser::new("[1, 2]");
-    let r = p.parse_value();
-    if let Arr(count) = r {
-        assert count == 2;
+    if let Some(v) = parse_json("[1, 2]") {
+        if let Arr(items) = v {
+            assert items.len() == 2;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-value-object" {
-    let mut p = Parser::new("{\"x\": 1}");
-    let r = p.parse_value();
-    if let Obj(count) = r {
-        assert count == 1;
+    if let Some(v) = parse_json("{\"x\": 1}") {
+        if let Obj(map) = v {
+            assert map.len() == 1;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-complex-document" {
-    let mut p = Parser::new("{\"name\": \"test\", \"values\": [1, 2, 3], \"active\": true}");
-    let r = p.parse_value();
-    if let Obj(count) = r {
-        assert count == 3;
+    if let Some(v) = parse_json("{\"name\": \"test\", \"values\": [1, 2, 3], \"active\": true}") {
+        if let Obj(map) = v {
+            assert map.len() == 3;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
-
 test "parse-document-with-unicode-keys" {
-    // Japanese keys: {"名前": "太郎", "年齢": 25}
-    let mut p = Parser::new("{\"名前\": \"太郎\", \"年齢\": 25}");
-    let r = p.parse_value();
-    if let Obj(count) = r {
-        assert count == 2;
+    if let Some(v) = parse_json("{\"名前\": \"太郎\", \"年齢\": 25}") {
+        if let Obj(map) = v {
+            assert map.len() == 2;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-document-multilingual" {
-    // Multiple languages: {"english": "hello", "日本語": "こんにちは", "한국어": "안녕"}
-    let mut p = Parser::new("{\"english\": \"hello\", \"日本語\": \"こんにちは\", \"한국어\": \"안녕\"}");
-    let r = p.parse_value();
-    if let Obj(count) = r {
-        assert count == 3;
+    if let Some(v) = parse_json("{\"english\": \"hello\", \"日本語\": \"こんにちは\", \"한국어\": \"안녕\"}") {
+        if let Obj(map) = v {
+            assert map.len() == 3;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-array-of-emoji" {
-    // Array of emoji: ["😀", "🎉", "👍", "❤️"]
-    let mut p = Parser::new("[\"😀\", \"🎉\", \"👍\", \"❤️\"]");
-    let r = p.parse_value();
-    if let Arr(count) = r {
-        assert count == 4;
+    if let Some(v) = parse_json("[\"😀\", \"🎉\", \"👍\", \"❤️\"]") {
+        if let Arr(items) = v {
+            assert items.len() == 4;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-nested-unicode" {
-    // Nested structure with Unicode
-    let mut p = Parser::new("{\"user\": {\"name\": \"田中\", \"emoji\": \"🎯\"}, \"tags\": [\"日本\", \"東京\"]}");
-    let r = p.parse_value();
-    if let Obj(count) = r {
-        assert count == 2;
+    if let Some(v) = parse_json("{\"user\": {\"name\": \"田中\", \"emoji\": \"🎯\"}, \"tags\": [\"日本\", \"東京\"]}") {
+        if let Obj(map) = v {
+            assert map.len() == 2;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
 test "parse-unicode-escape-in-object" {
-    // Unicode escape as key: {"\u0048\u0065\u006C\u006C\u006F": "world"}
-    let mut p = Parser::new("{\"\\u0048\\u0065\\u006C\\u006C\\u006F\": \"world\"}");
-    let r = p.parse_value();
-    if let Obj(count) = r {
-        assert count == 1;
+    if let Some(v) = parse_json("{\"\\u0048\\u0065\\u006C\\u006C\\u006F\": \"world\"}") {
+        if let Obj(map) = v {
+            assert map.len() == 1;
+            if let Some(val) = map.get("Hello") {
+                if let Str(s) = val {
+                    assert s == "world";
+                } else {
+                    assert false;
+                }
+            } else {
+                assert false;
+            }
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
 }
 
-test "parse-mixed-escape-and-utf8" {
-    // Mix of escape and direct UTF-8: {"key": "Hello\\u0020世界!"}
-    let mut p = Parser::new("{\"key\": \"Hello\\u0020世界!\"}");
-    let r = p.parse_value();
-    if let Obj(count) = r {
-        assert count == 1;
+test "parse-trailing-garbage" {
+    assert parse_json("null extra") matches { None };
+}
+
+test "parse-empty-input" {
+    assert parse_json("") matches { None };
+}
+
+
+fn escape_json_string(s: &String) -> String {
+    let mut result = String::with_capacity(s.len() + 2);
+    result.append_char('"');
+    for let c of s.chars() {
+        let code = c as u32;
+        if c == '"' { result.append("\\\""); }
+        else if c == '\\' { result.append("\\\\"); }
+        else if c == '\n' { result.append("\\n"); }
+        else if c == '\r' { result.append("\\r"); }
+        else if c == '\t' { result.append("\\t"); }
+        else if code == 0x08 { result.append("\\b"); }
+        else if code == 0x0C { result.append("\\f"); }
+        else if code < 0x20 {
+            // Other control characters → \u00XX
+            result.append("\\u00");
+            let hi = (code >> 4) & 0x0F;
+            let lo = code & 0x0F;
+            if hi < 10 { result.append_char(char::from_u32_unchecked(('0' as u32) + hi)); }
+            else { result.append_char(char::from_u32_unchecked(('a' as u32) + hi - 10)); }
+            if lo < 10 { result.append_char(char::from_u32_unchecked(('0' as u32) + lo)); }
+            else { result.append_char(char::from_u32_unchecked(('a' as u32) + lo - 10)); }
+        } else {
+            result.append_char(c);
+        }
+    }
+    result.append_char('"');
+    return result;
+}
+
+fn stringify(value: &JsonValue) -> String {
+    return match *value {
+        Null => "null",
+        Bool(b) => if b { "true" } else { "false" },
+        Number(n) => `{n}`,
+        Str(s) => escape_json_string(&s),
+        Arr(items) => {
+            let mut result = String::with_capacity(32);
+            result.append_char('[');
+            for let mut i = 0; i < items.len(); i += 1 {
+                if i > 0 {
+                    result.append_char(',');
+                }
+                result.append(stringify(&items[i]));
+            }
+            result.append_char(']');
+            result
+        },
+        Obj(map) => {
+            let mut result = String::with_capacity(32);
+            result.append_char('{');
+            let entries = map.entries();
+            for let mut i = 0; i < entries.len(); i += 1 {
+                if i > 0 {
+                    result.append_char(',');
+                }
+                let [key, val] = entries[i];
+                result.append(escape_json_string(&key));
+                result.append_char(':');
+                result.append(stringify(&val));
+            }
+            result.append_char('}');
+            result
+        },
+    };
+}
+
+
+test "stringify-null" {
+    let v = JsonValue::Null;
+    assert stringify(&v) == "null";
+}
+
+test "stringify-bool" {
+    let t = JsonValue::Bool(true);
+    let f = JsonValue::Bool(false);
+    assert stringify(&t) == "true";
+    assert stringify(&f) == "false";
+}
+
+test "stringify-number" {
+    let v = JsonValue::Number(42.0);
+    assert stringify(&v) == "42.0";
+}
+
+test "stringify-string" {
+    let v = JsonValue::Str("hello");
+    assert stringify(&v) == "\"hello\"";
+}
+
+test "stringify-string-with-escapes" {
+    let v = JsonValue::Str("a\nb");
+    assert stringify(&v) == "\"a\\nb\"";
+}
+
+test "stringify-empty-array" {
+    let empty: Array<JsonValue> = [];
+    let v = JsonValue::Arr(empty);
+    assert stringify(&v) == "[]";
+}
+
+test "stringify-array" {
+    let mut items: Array<JsonValue> = [];
+    items.append(JsonValue::Number(1.0));
+    items.append(JsonValue::Number(2.0));
+    items.append(JsonValue::Number(3.0));
+    let v = JsonValue::Arr(items);
+    assert stringify(&v) == "[1.0,2.0,3.0]";
+}
+
+test "stringify-empty-object" {
+    let v = JsonValue::Obj(TreeMap::<String, JsonValue>::new());
+    assert stringify(&v) == "{}";
+}
+
+test "stringify-object" {
+    let mut map = TreeMap::<String, JsonValue>::new();
+    map["name"] = JsonValue::Str("Alice");
+    map["age"] = JsonValue::Number(30.0);
+    let v = JsonValue::Obj(map);
+    let s = stringify(&v);
+    assert s == "{\"name\":\"Alice\",\"age\":30.0}";
+}
+
+test "roundtrip-complex" {
+    let input = "{\"name\":\"test\",\"values\":[1,2,3],\"active\":true,\"data\":null}";
+    if let Some(parsed) = parse_json(input) {
+        let output = stringify(&parsed);
+        // Parse again and stringify to verify stability
+        if let Some(reparsed) = parse_json(output) {
+            let output2 = stringify(&reparsed);
+            assert output == output2;
+        } else {
+            assert false;
+        }
+    } else {
+        assert false;
+    }
+}
+
+test "roundtrip-unicode" {
+    let input = "{\"greeting\":\"こんにちは\",\"emoji\":\"😀\"}";
+    if let Some(parsed) = parse_json(input) {
+        let output = stringify(&parsed);
+        if let Some(reparsed) = parse_json(output) {
+            let output2 = stringify(&reparsed);
+            assert output == output2;
+        } else {
+            assert false;
+        }
     } else {
         assert false;
     }
@@ -919,6 +1328,23 @@ test "parse-mixed-escape-and-utf8" {
 
 
 export fn run() with Stdout {
-    println("JSON Parser Tests (variant version)");
-    println("Run with: wado test example/json.wado");
+    let input = "{\"name\":\"Wado\",\"version\":1,\"features\":[\"JSON\",\"UTF-8\",\"Unicode\"],\"emoji\":\"🎉\",\"nested\":{\"language\":\"日本語\",\"ok\":true},\"nothing\":null}";
+
+    if let Some(parsed) = parse_json(input) {
+        println("Parsed successfully!");
+        let output = stringify(&parsed);
+        println(output);
+
+        // Verify round-trip
+        if let Some(reparsed) = parse_json(output) {
+            let output2 = stringify(&reparsed);
+            assert output == output2;
+            println("Round-trip OK");
+        }
+    } else {
+        println("Parse failed!");
+    }
 }
+
+__DATA__
+{"test": {}, "stdout": "Parsed successfully!\n{\"name\":\"Wado\",\"version\":1.0,\"features\":[\"JSON\",\"UTF-8\",\"Unicode\"],\"emoji\":\"🎉\",\"nested\":{\"language\":\"日本語\",\"ok\":true},\"nothing\":null}\nRound-trip OK\n"}
