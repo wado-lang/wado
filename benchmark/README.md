@@ -161,8 +161,6 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 
 All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
 
-The overhead in Wado is primarily from GC struct/array allocation per conversion. Template string copy elision avoids deep-copying the formatted String, but each iteration still allocates a String struct + backing byte array + Formatter. String operations use `array.copy` for bulk byte transfers and short constant appends are decomposed into `append_char` calls.
-
 ## Profiling Wado Programs
 
 `wado run --profile <mode>` enables runtime profiling via wasmtime's profiling infrastructure.
