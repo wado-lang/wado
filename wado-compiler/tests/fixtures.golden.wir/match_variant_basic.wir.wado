@@ -443,7 +443,7 @@ fn unpack64(f) {
             return 0_i64; 0;
         };
         m_9 = raw_mantissa << 11_i64;
-        s = builtin::i64_extend_i32_u(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
+        s = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_9))));
         return m_9 << s; -1085 - builtin::i32_wrap_i64(s);
     };
     m_12 = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
@@ -762,7 +762,7 @@ fn uscale(x, pm_hi, pm_lo, s) {
     mid = __local_4;
     hi = __local_5;
     sticky = 1_i64;
-    s_mod_64 = builtin::i64_extend_i32_u(s & 63);
+    s_mod_64 = builtin::i64_extend_i32_s(s & 63);
     check_mask = (1_i64 << s_mod_64) - 1_i64;
     if (hi & check_mask) == 0_i64 {
         multivalue_bind [_, __local_11] = i64.mul_wide_u(x, pm_lo);
@@ -770,7 +770,7 @@ fn uscale(x, pm_hi, pm_lo, s) {
         sticky = builtin::i64_extend_i32_u((mid - mid2) >u 1_i64);
         hi = hi - builtin::i64_extend_i32_u(mid <u mid2);
     };
-    return (hi >>u builtin::i64_extend_i32_u(s)) | sticky;
+    return (hi >>u builtin::i64_extend_i32_s(s)) | sticky;
 }
 
 fn short(f) {
@@ -823,7 +823,7 @@ fn short(f) {
             __local_22 = e + z;
             break __inline_skewed_0: ((__local_22 * 631305) - 261663) >> 21;
         };
-        min_m = m - (1_i64 << builtin::i64_extend_i32_u(z - 2));
+        min_m = m - (1_i64 << builtin::i64_extend_i32_s(z - 2));
     } else {
         if e < -1085 {
             z = 11 + (-1085 - e);
@@ -832,10 +832,10 @@ fn short(f) {
             __local_23 = e + z;
             break __inline_log10_pow2_1: (__local_23 * 78913) >> 18;
         };
-        min_m = m - (1_i64 << builtin::i64_extend_i32_u(z - 1));
+        min_m = m - (1_i64 << builtin::i64_extend_i32_s(z - 1));
     };
-    max_m = m + (1_i64 << builtin::i64_extend_i32_u(z - 1));
-    odd = builtin::i32_wrap_i64((m >>u builtin::i64_extend_i32_u(z)) & 1_i64);
+    max_m = m + (1_i64 << builtin::i64_extend_i32_s(z - 1));
+    odd = builtin::i32_wrap_i64((m >>u builtin::i64_extend_i32_s(z)) & 1_i64);
     lp = __inline_log2_pow10_2: block -> i32 {
         __local_24 = p;
         break __inline_log2_pow10_2: (__local_24 * 108853) >> 15;
