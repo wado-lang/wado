@@ -9,7 +9,7 @@ use crate::tir::{
     TypeId, TypeTable,
 };
 use crate::wir::{WirAbstractHeapType, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
 
@@ -240,6 +240,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 match_counter: 0,
                 local_counter: 0,
                 local_names,
+                immutable_locals: IndexSet::new(),
             };
             let wir_body = translator.translate_block(body);
             drop(type_table);
@@ -272,6 +273,10 @@ struct FunctionTranslator<'a, 'b> {
     local_counter: u32,
     /// Map from local index to variable name (built from params + Let stmts).
     local_names: IndexMap<u32, String>,
+    /// Set of local indices declared as immutable (`let`, not `let mut`).
+    /// Used to skip unnecessary value copies when an immutable binding
+    /// is initialized from another immutable local.
+    immutable_locals: IndexSet<u32>,
 }
 
 impl FunctionTranslator<'_, '_> {
@@ -432,6 +437,19 @@ impl FunctionTranslator<'_, '_> {
             self.build_value_copy(value.type_id, translated)
         } else {
             translated
+        }
+    }
+
+    /// Check if a source expression's root local is immutable.
+    /// Returns true when the expression is a Local or FieldAccess chain
+    /// whose root local is in the immutable set. In that case, sharing
+    /// the value without deep-copying is safe because neither the
+    /// destination (non-mut let) nor the source can be mutated.
+    fn is_source_immutable(&self, expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => self.immutable_locals.contains(index),
+            TirExprKind::FieldAccess { expr: inner, .. } => self.is_source_immutable(inner),
+            _ => false,
         }
     }
 
@@ -754,8 +772,16 @@ impl FunctionTranslator<'_, '_> {
     fn translate_stmt(&mut self, stmt: &TirStmt) -> Option<WirInstr> {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                value,
+                is_mut,
+                skip_value_copy,
+                ..
             } => {
+                // Track immutable locals for value-copy elision on subsequent bindings.
+                if !is_mut {
+                    self.immutable_locals.insert(*local_index);
+                }
                 let value_instr = self.translate_expr(value);
                 // If the initializer diverges (`never`), no value reaches the stack,
                 // so LocalSet would be invalid. `translate_expr` already appends
@@ -769,7 +795,16 @@ impl FunctionTranslator<'_, '_> {
                     Some(value_instr)
                 } else {
                     let local_name = self.local_name(*local_index);
-                    let value_instr = self.maybe_value_copy(value, value_instr);
+                    // Skip deep value-copy when safe:
+                    // 1. LICM-hoisted variables (skip_value_copy flag set by optimizer)
+                    // 2. Immutable binding from an immutable source (no mutation possible)
+                    let can_skip_copy = *skip_value_copy
+                        || (!is_mut && self.is_source_immutable(value));
+                    let value_instr = if can_skip_copy {
+                        value_instr
+                    } else {
+                        self.maybe_value_copy(value, value_instr)
+                    };
                     Some(WirInstr::LocalSet {
                         name: local_name,
                         value: Box::new(value_instr),

@@ -131,6 +131,7 @@ pub fn let_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -
             is_reactive: false,
             type_id,
             value,
+            skip_value_copy: false,
         },
         synth_span(),
     )
@@ -146,6 +147,7 @@ pub fn let_mut_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExp
             is_reactive: false,
             type_id,
             value,
+            skip_value_copy: false,
         },
         synth_span(),
     )

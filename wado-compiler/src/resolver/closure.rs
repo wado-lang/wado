@@ -63,6 +63,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             ref_type,
                             span,
                         ),
+                            skip_value_copy: false,
                     },
                     span,
                 ));

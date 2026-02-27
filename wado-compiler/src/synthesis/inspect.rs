@@ -1318,6 +1318,7 @@ fn synth_array(
             is_reactive: false,
             type_id: TypeTable::I32,
             value: len_call,
+            skip_value_copy: false,
         },
         span,
     ));
@@ -1337,6 +1338,7 @@ fn synth_array(
                 TypeTable::I32,
                 span,
             ),
+                skip_value_copy: false,
         },
         span,
     ));
@@ -1805,6 +1807,7 @@ fn synth_flags(
             is_reactive: false,
             type_id: TypeTable::BOOL,
             value: TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span),
+            skip_value_copy: false,
         },
         span,
     ));

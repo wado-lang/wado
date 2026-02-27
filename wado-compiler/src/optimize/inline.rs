@@ -802,6 +802,7 @@ fn inline_calls_in_block(
                 is_reactive,
                 type_id,
                 value,
+                skip_value_copy,
             } => {
                 // Try to inline the value expression if it's a call or method call
                 let inline_result = try_inline_call_expr(
@@ -851,6 +852,7 @@ fn inline_calls_in_block(
                             is_reactive,
                             type_id,
                             value: inlined_expr,
+                            skip_value_copy,
                         },
                         stmt.span,
                     ));
@@ -876,6 +878,7 @@ fn inline_calls_in_block(
                             is_reactive,
                             type_id,
                             value: new_value,
+                            skip_value_copy,
                         },
                         stmt.span,
                     ));
@@ -1325,6 +1328,7 @@ fn try_inline_call_expr(
                 is_reactive: false,
                 type_id: arg.type_id,
                 value: arg.clone(),
+                skip_value_copy: false,
             },
             expr.span,
         ));
@@ -1468,6 +1472,7 @@ fn try_inline_method_call_expr(
             is_reactive: false,
             type_id: receiver.type_id,
             value: (**receiver).clone(),
+            skip_value_copy: false,
         },
         expr.span,
     ));
@@ -1489,6 +1494,7 @@ fn try_inline_method_call_expr(
                 is_reactive: false,
                 type_id: arg.type_id,
                 value: arg.clone(),
+                skip_value_copy: false,
             },
             expr.span,
         ));
@@ -1624,6 +1630,7 @@ fn try_inline_static_call_expr(
                 is_reactive: false,
                 type_id: arg.type_id,
                 value: arg.clone(),
+                skip_value_copy: false,
             },
             expr.span,
         ));
@@ -1820,6 +1827,7 @@ fn remap_stmt_with_label(
             is_reactive,
             type_id,
             value,
+            skip_value_copy,
         } => {
             let new_index =
                 remap_local_index(*local_index, param_to_local, local_offset, param_count);
@@ -1836,6 +1844,7 @@ fn remap_stmt_with_label(
                     param_count,
                     source_module,
                 ),
+                skip_value_copy: *skip_value_copy,
             }
         }
         TirStmtKind::Expr(expr) => TirStmtKind::Expr(remap_expr(
@@ -2638,6 +2647,7 @@ fn remap_stmt(
             is_reactive,
             type_id,
             value,
+            skip_value_copy,
         } => {
             let new_index =
                 remap_local_index(*local_index, param_to_local, local_offset, param_count);
@@ -2654,6 +2664,7 @@ fn remap_stmt(
                     param_count,
                     source_module,
                 ),
+                skip_value_copy: *skip_value_copy,
             }
         }
         TirStmtKind::Expr(expr) => TirStmtKind::Expr(remap_expr(

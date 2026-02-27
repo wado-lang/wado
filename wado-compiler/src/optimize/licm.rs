@@ -214,6 +214,7 @@ fn licm_loop(
                     is_reactive: false,
                     type_id: candidate.type_id,
                     value: field_access_expr,
+                    skip_value_copy: true,
                 },
                 crate::token::Span::new(0, 0, 0, 0),
             );
