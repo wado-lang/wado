@@ -1115,6 +1115,7 @@ impl Monomorphizer {
             monomorph_info: Some(MonomorphInfo {
                 generic_name: generic.name.clone(),
                 type_args: key.type_args.clone(),
+                is_blanket: false,
             }),
             fields,
             span: generic.span,
@@ -1643,6 +1644,38 @@ impl Monomorphizer {
                     }
                 }
 
+                // Blanket impl fallback: if the FunctionRef has monomorph_info from a
+                // blanket impl that matches a generic function template, queue the
+                // instantiation using that template function.
+                if let FunctionRef::External {
+                    monomorph_info: Some(mono),
+                    ..
+                } = method_func
+                    && mono.is_blanket
+                    && let Some(generic_func_rc) = generic_functions.get(&mono.generic_name)
+                {
+                    let generic_func = generic_func_rc.borrow();
+                    let method_info = generic_func.method_info.clone();
+                    let key = InstantiationKey {
+                        name: mono.generic_name.clone(),
+                        type_args: mono.type_args.clone(),
+                        method_info,
+                    };
+                    if !self.function_instantiated.contains_key(&key) {
+                        let impl_type_params_count = generic_func.impl_type_params.len();
+                        let mangled = self.method_instantiation_name_inner(
+                            &key,
+                            type_table,
+                            impl_type_params_count,
+                            &generic_func.impl_type_params,
+                        );
+                        self.function_instantiated
+                            .insert(key.clone(), mangled.clone());
+                        self.mangled_func_to_key.insert(mangled, key.clone());
+                        self.function_pending.push(key);
+                    }
+                }
+
                 self.collect_func_instantiation_sites_in_expr(
                     receiver,
                     generic_functions,
@@ -1983,6 +2016,16 @@ impl Monomorphizer {
         type_table: &TypeTable,
         impl_type_params_count: usize,
     ) -> String {
+        self.method_instantiation_name_inner(key, type_table, impl_type_params_count, &[])
+    }
+
+    fn method_instantiation_name_inner(
+        &self,
+        key: &InstantiationKey,
+        type_table: &TypeTable,
+        impl_type_params_count: usize,
+        impl_type_params: &[crate::tir::TirTypeParam],
+    ) -> String {
         // Use method_info metadata instead of parsing key.name
         let Some(ref method_info) = key.method_info else {
             // Fallback to regular function naming if no method_info
@@ -1994,18 +2037,32 @@ impl Monomorphizer {
             .type_args
             .split_at(std::cmp::min(impl_type_params_count, key.type_args.len()));
 
-        // Build mangled struct name with type args
-        // e.g., "Triple^IndexValue" -> "Triple<i32>^IndexValue"
         let impl_arg_names: Vec<String> = impl_args
             .iter()
             .map(|t| type_table.mangle_type_name(*t))
             .collect();
 
-        let mangled_struct = MethodName::format_struct_with_args(
-            &method_info.struct_name,
-            &impl_arg_names,
-            method_info.trait_name.as_deref(),
-        );
+        // Blanket impl: struct name IS the type param (e.g., "I").
+        // Detected by checking if base_struct_name matches an impl type param name.
+        let is_blanket = impl_type_params
+            .iter()
+            .any(|p| p.name == method_info.base_struct_name);
+
+        let mangled_struct = if is_blanket && !impl_arg_names.is_empty() {
+            // Replace struct name entirely: "I" → "StrCharIter"
+            MethodName::format_struct_with_args(
+                &impl_arg_names[0],
+                &[],
+                method_info.trait_name.as_deref(),
+            )
+        } else {
+            // Normal: append type args: "Array" → "Array<i32>"
+            MethodName::format_struct_with_args(
+                &method_info.struct_name,
+                &impl_arg_names,
+                method_info.trait_name.as_deref(),
+            )
+        };
 
         // Build method name: transform<i64> (using method type args)
         let method_arg_names: Vec<String> = method_args
@@ -2095,6 +2152,7 @@ impl Monomorphizer {
             monomorph_info: Some(MonomorphInfo {
                 generic_name: generic.name.clone(),
                 type_args: key.type_args.clone(),
+                is_blanket: false,
             }),
             // Update method_info with mangled struct name including impl type args
             // and method type args (from the method's own type params)
@@ -2120,7 +2178,17 @@ impl Monomorphizer {
                     .skip(impl_type_args_count)
                     .map(|&t| type_table.mangle_type_name(t))
                     .collect();
-                info.with_type_args(&impl_type_args, &method_type_args)
+                // Blanket impl: struct name IS the type param (e.g., "I").
+                // Replace it with the concrete type name instead of appending type args.
+                let is_blanket = generic
+                    .impl_type_params
+                    .iter()
+                    .any(|p| p.name == info.base_struct_name);
+                if is_blanket && !impl_type_args.is_empty() {
+                    info.with_substituted_struct_name(&impl_type_args[0])
+                } else {
+                    info.with_type_args(&impl_type_args, &method_type_args)
+                }
             }),
             params,
             return_type,
@@ -2377,16 +2445,37 @@ impl Monomorphizer {
                             };
                         } else {
                             // Normal monomorphization (e.g., Array<T>::len -> Array<i32>::len)
-                            let existing_generic_name = match method_func {
-                                FunctionRef::External {
-                                    monomorph_info: Some(mi),
-                                    ..
-                                } => Some(mi.generic_name.clone()),
-                                _ => None,
+                            let (existing_generic_name, existing_type_args, existing_is_blanket) =
+                                match method_func {
+                                    FunctionRef::External {
+                                        monomorph_info: Some(mi),
+                                        ..
+                                    } => (
+                                        Some(mi.generic_name.clone()),
+                                        Some(mi.type_args.clone()),
+                                        mi.is_blanket,
+                                    ),
+                                    _ => (None, None, false),
+                                };
+                            // For blanket impl calls (e.g., I^IntoIterator::into_iter),
+                            // substitute the existing type_args rather than building from
+                            // the enclosing substitution map. This correctly maps
+                            // ArrayIter<T> → ArrayIter<i32> instead of T → i32.
+                            let final_type_args = if existing_is_blanket
+                                && existing_type_args.is_some()
+                            {
+                                existing_type_args
+                                    .unwrap()
+                                    .iter()
+                                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                                    .collect()
+                            } else {
+                                type_args
                             };
                             let monomorph_info = Some(MonomorphInfo {
                                 generic_name: existing_generic_name.unwrap_or(old_func_name),
-                                type_args,
+                                type_args: final_type_args,
+                                is_blanket: existing_is_blanket,
                             });
                             // Use current_module_source: the monomorphized method lives
                             // in the module that triggered monomorphization, not the
@@ -2508,6 +2597,7 @@ impl Monomorphizer {
                             let monomorph_info = Some(MonomorphInfo {
                                 generic_name: old_func_name,
                                 type_args,
+                                is_blanket: false,
                             });
                             // Use current_module_source: the monomorphized method lives
                             // in the module that triggered monomorphization.
@@ -3024,6 +3114,7 @@ impl Monomorphizer {
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: func_name,
                                 type_args: key.type_args.clone(),
+                                is_blanket: false,
                             }),
                             method_info: original_method_info,
                         };
@@ -3079,6 +3170,7 @@ impl Monomorphizer {
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: full_method_name.clone(),
                                 type_args: key.type_args.clone(),
+                                is_blanket: false,
                             }),
                             method_info: original_method_info,
                         };
@@ -3111,6 +3203,7 @@ impl Monomorphizer {
                                 monomorph_info: Some(MonomorphInfo {
                                     generic_name: generic_method_name,
                                     type_args: combined_key.type_args.clone(),
+                                    is_blanket: false,
                                 }),
                                 method_info: original_method_info,
                             };
@@ -3177,11 +3270,46 @@ impl Monomorphizer {
                                 monomorph_info: Some(MonomorphInfo {
                                     generic_name: key.name.clone(),
                                     type_args: key.type_args.clone(),
+                                    is_blanket: false,
                                 }),
                                 method_info: original_method_info,
                             };
                             break;
                         }
+                    }
+                }
+                // Blanket impl fallback: if the FunctionRef has monomorph_info from a
+                // blanket impl, rewrite to the monomorphized function name.
+                {
+                    let blanket_lookup = if let FunctionRef::External {
+                        monomorph_info: Some(mono),
+                        ..
+                    } = &*method_func
+                        && mono.is_blanket
+                    {
+                        let key = InstantiationKey {
+                            name: mono.generic_name.clone(),
+                            type_args: mono.type_args.clone(),
+                            method_info: None,
+                        };
+                        self.function_instantiated.get(&key).map(|mangled| {
+                            (mangled.clone(), mono.generic_name.clone(), key.type_args)
+                        })
+                    } else {
+                        None
+                    };
+                    if let Some((mangled, generic_name, type_args)) = blanket_lookup {
+                        let original_method_info = method_func.method_info();
+                        *method_func = FunctionRef::External {
+                            module_source: module_source.clone(),
+                            name: mangled,
+                            monomorph_info: Some(MonomorphInfo {
+                                generic_name,
+                                type_args,
+                                is_blanket: true,
+                            }),
+                            method_info: original_method_info,
+                        };
                     }
                 }
                 self.rewrite_function_calls_in_expr(receiver, type_table);
@@ -3226,6 +3354,7 @@ impl Monomorphizer {
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: generic_method_name,
                                 type_args: key.type_args.clone(),
+                                is_blanket: false,
                             }),
                             method_info: original_method_info,
                         };

@@ -42,8 +42,8 @@ use crate::tir::{TirEnum, TirEnumCase, TirFlags, TirFlagsMember, TirModule, Type
 
 pub use types::TypeError;
 use types::{
-    EnumInfo, FlagsInfo, ModuleTypeMaps, ResourceInfo, StructFieldInfo, TraitDeclIndex,
-    TraitImplIndex, VariantInfo,
+    BlanketTraitImplIndex, EnumInfo, FlagsInfo, ModuleTypeMaps, ResourceInfo, StructFieldInfo,
+    TraitDeclIndex, TraitImplIndex, VariantInfo,
 };
 
 pub struct Resolver<'a, H: CompilerHost> {
@@ -124,6 +124,9 @@ pub struct Resolver<'a, H: CompilerHost> {
     trait_impl_index: Arc<TraitImplIndex>,
     /// Pre-built index: trait name → (`module_source`, `item_idx`) for trait declarations in `loaded_modules`.
     trait_decl_index: Arc<TraitDeclIndex>,
+    /// Pre-built list of blanket trait impl blocks: `impl<T: Trait> OtherTrait for T`.
+    /// Checked as fallback when concrete type lookup in `trait_impl_index` fails.
+    blanket_trait_impl_index: Arc<BlanketTraitImplIndex>,
 }
 
 impl<'a, H: CompilerHost> Resolver<'a, H> {
@@ -135,7 +138,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
     ) -> Self {
         let (wasi_registry, _) = WasiRegistry::build_from_stdlib();
         let type_table = Rc::new(RefCell::new(TypeTable::new()));
-        let (trait_impl_index, trait_decl_index) = Self::build_trait_indices(loaded_modules);
+        let (trait_impl_index, trait_decl_index, blanket_trait_impl_index) =
+            Self::build_trait_indices(loaded_modules);
         Self {
             type_table,
             symbols,
@@ -172,6 +176,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
             module_type_maps_cache: IndexMap::new(),
             trait_impl_index,
             trait_decl_index,
+            blanket_trait_impl_index,
         }
     }
 

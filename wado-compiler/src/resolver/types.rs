@@ -677,6 +677,21 @@ pub(super) type TraitImplIndex = IndexMap<String, Vec<(ModuleSource, usize)>>;
 /// Pre-built index: trait name → (`ModuleSource`, item index) for trait declarations.
 pub(super) type TraitDeclIndex = IndexMap<String, (ModuleSource, usize)>;
 
+/// Pre-built list of blanket trait impls: `impl<T: Trait> OtherTrait for T`.
+/// These are impl blocks where the impl type is a free type parameter with trait bounds.
+/// Stored separately because they can't be indexed by concrete type name.
+pub(super) type BlanketTraitImplIndex = Vec<(ModuleSource, usize)>;
+
+/// Result of finding a trait method for a type via `find_trait_method_for_type`.
+pub(super) struct TraitMethodMatch {
+    pub(super) trait_name: String,
+    pub(super) method_info: MethodInfo,
+    pub(super) impl_module_source: ModuleSource,
+    /// For blanket impl matches (e.g., `impl<I: Iterator> IntoIterator for I`),
+    /// this holds the type parameter name (e.g., `"I"`). `None` for normal impls.
+    pub(super) blanket_type_param: Option<String>,
+}
+
 /// Cached per-module type maps for cross-module type resolution.
 /// These are the flat maps that `build_module_map` produces.
 pub(super) struct ModuleTypeMaps {

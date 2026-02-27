@@ -233,15 +233,7 @@ impl Iterator for StrUtf8ByteIter {
 }
 
 // StrUtf8ByteIter uses Iterator::collect() and Iterator::count() default methods
-
-impl IntoIterator for StrUtf8ByteIter {
-    type Item = u8;
-    type Iter = StrUtf8ByteIter;
-
-    fn into_iter(&self) -> StrUtf8ByteIter {
-        return *self;
-    }
-}
+// IntoIterator is provided by the blanket impl for Iterator
 
 /// Iterator over Unicode scalar values (chars) of a String.
 /// Decodes UTF-8 and yields each character.
@@ -295,15 +287,7 @@ impl Iterator for StrCharIter {
 }
 
 // StrCharIter uses Iterator::collect() and Iterator::count() default methods
-
-impl IntoIterator for StrCharIter {
-    type Item = char;
-    type Iter = StrCharIter;
-
-    fn into_iter(&self) -> StrCharIter {
-        return *self;
-    }
-}
+// IntoIterator is provided by the blanket impl for Iterator
 
 impl String {
     /// Returns an iterator over the UTF-8 bytes of the string.
