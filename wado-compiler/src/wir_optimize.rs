@@ -482,9 +482,7 @@ fn all_returns_are_struct_new(instrs: &[WirInstr], expected_type_idx: u32) -> bo
 
 fn check_return_struct_new(instr: &WirInstr, expected_type_idx: u32) -> bool {
     match instr {
-        WirInstr::Return { value: Some(v) } => {
-            value_expr_is_struct_new(v, expected_type_idx)
-        }
+        WirInstr::Return { value: Some(v) } => value_expr_is_struct_new(v, expected_type_idx),
         WirInstr::Return { value: None } => {
             // Void return is fine for our purposes (won't happen in struct-returning fn)
             true
@@ -529,15 +527,17 @@ fn value_expr_is_struct_new(expr: &WirInstr, expected_type_idx: u32) -> bool {
             let then_ok = then_body
                 .last()
                 .is_some_and(|last| value_expr_is_struct_new(last, expected_type_idx));
-            let else_ok = else_body
-                .as_ref()
-                .is_some_and(|eb| {
-                    eb.last()
-                        .is_some_and(|last| value_expr_is_struct_new(last, expected_type_idx))
-                });
+            let else_ok = else_body.as_ref().is_some_and(|eb| {
+                eb.last()
+                    .is_some_and(|last| value_expr_is_struct_new(last, expected_type_idx))
+            });
             then_ok && else_ok
         }
-        WirInstr::Block { body, result: Some(_), .. } => {
+        WirInstr::Block {
+            body,
+            result: Some(_),
+            ..
+        } => {
             // Typed Block (e.g. from BrTable match): check that StructNew/Br pairs
             // and the fallthrough all produce the expected type.
             all_br_values_are_struct_new(body, expected_type_idx, 0)
@@ -590,10 +590,7 @@ fn contains_unreachable(instr: &WirInstr) -> bool {
 
 /// Check if a value-position expression always produces a `StructNew` of one of the valid
 /// variant case types. Handles `return match { ... }` for variant SROA.
-fn value_expr_is_variant_struct_new(
-    expr: &WirInstr,
-    valid_type_indices: &IndexSet<u32>,
-) -> bool {
+fn value_expr_is_variant_struct_new(expr: &WirInstr, valid_type_indices: &IndexSet<u32>) -> bool {
     match expr {
         WirInstr::StructNew { type_id, .. } => valid_type_indices.contains(&type_id.index()),
         WirInstr::Seq(items) => items
@@ -642,11 +639,7 @@ fn all_br_variant_values_are_struct_new(
             i += 2;
         } else {
             if let WirInstr::Block { body, .. } = &instrs[i]
-                && !all_br_variant_values_are_struct_new(
-                    body,
-                    valid_type_indices,
-                    target_depth + 1,
-                )
+                && !all_br_variant_values_are_struct_new(body, valid_type_indices, target_depth + 1)
             {
                 return false;
             }
@@ -1197,9 +1190,7 @@ fn rewrite_returns_to_multi_value(instrs: &mut [WirInstr]) {
 fn lift_return_into_struct_new_leaves(expr: &mut WirInstr) {
     match expr {
         WirInstr::StructNew { .. } => {
-            if let WirInstr::StructNew { fields, .. } =
-                std::mem::replace(expr, WirInstr::Nop)
-            {
+            if let WirInstr::StructNew { fields, .. } = std::mem::replace(expr, WirInstr::Nop) {
                 *expr = WirInstr::Return {
                     value: Some(Box::new(WirInstr::Seq(fields))),
                 };
@@ -1296,23 +1287,21 @@ fn rewrite_variant_returns_to_multi_value(
 ) {
     for instr in instrs.iter_mut() {
         match instr {
-            WirInstr::Return { value: Some(v) } => {
-                match v.as_ref() {
-                    WirInstr::StructNew { .. } => {
-                        if let WirInstr::StructNew { fields, .. } =
-                            std::mem::replace(v.as_mut(), WirInstr::Nop)
-                        {
-                            **v = WirInstr::Seq(pad_variant_fields(fields, vi, result_types));
-                        }
+            WirInstr::Return { value: Some(v) } => match v.as_ref() {
+                WirInstr::StructNew { .. } => {
+                    if let WirInstr::StructNew { fields, .. } =
+                        std::mem::replace(v.as_mut(), WirInstr::Nop)
+                    {
+                        **v = WirInstr::Seq(pad_variant_fields(fields, vi, result_types));
                     }
-                    WirInstr::Seq(_) | WirInstr::If { .. } | WirInstr::Block { .. } => {
-                        let mut value_expr = std::mem::replace(v.as_mut(), WirInstr::Nop);
-                        lift_return_into_variant_leaves(&mut value_expr, vi, result_types);
-                        *instr = value_expr;
-                    }
-                    _ => {}
                 }
-            }
+                WirInstr::Seq(_) | WirInstr::If { .. } | WirInstr::Block { .. } => {
+                    let mut value_expr = std::mem::replace(v.as_mut(), WirInstr::Nop);
+                    lift_return_into_variant_leaves(&mut value_expr, vi, result_types);
+                    *instr = value_expr;
+                }
+                _ => {}
+            },
             WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
                 rewrite_variant_returns_to_multi_value(body, vi, result_types);
             }
@@ -1357,13 +1346,13 @@ fn lift_return_into_variant_leaves(
 ) {
     match expr {
         WirInstr::StructNew { .. } => {
-            if let WirInstr::StructNew { fields, .. } =
-                std::mem::replace(expr, WirInstr::Nop)
-            {
+            if let WirInstr::StructNew { fields, .. } = std::mem::replace(expr, WirInstr::Nop) {
                 *expr = WirInstr::Return {
-                    value: Some(Box::new(WirInstr::Seq(
-                        pad_variant_fields(fields, vi, result_types),
-                    ))),
+                    value: Some(Box::new(WirInstr::Seq(pad_variant_fields(
+                        fields,
+                        vi,
+                        result_types,
+                    )))),
                 };
             }
         }
@@ -1413,9 +1402,11 @@ fn rewrite_variant_struct_new_br_to_return(
                     std::mem::replace(&mut instrs[i], WirInstr::Nop)
                 {
                     instrs[i] = WirInstr::Return {
-                        value: Some(Box::new(WirInstr::Seq(
-                            pad_variant_fields(fields, vi, result_types),
-                        ))),
+                        value: Some(Box::new(WirInstr::Seq(pad_variant_fields(
+                            fields,
+                            vi,
+                            result_types,
+                        )))),
                     };
                 }
                 instrs[i + 1] = WirInstr::Nop;
@@ -1438,9 +1429,11 @@ fn rewrite_variant_struct_new_br_to_return(
     {
         if let WirInstr::StructNew { fields, .. } = std::mem::replace(last, WirInstr::Nop) {
             *last = WirInstr::Return {
-                value: Some(Box::new(WirInstr::Seq(
-                    pad_variant_fields(fields, vi, result_types),
-                ))),
+                value: Some(Box::new(WirInstr::Seq(pad_variant_fields(
+                    fields,
+                    vi,
+                    result_types,
+                )))),
             };
         }
     }
