@@ -9,8 +9,10 @@
 
 // Powers of 10 from 10^0 to 10^19
 global POW10: Array<u64> = [
-    1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9,
-    1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19,
+    1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
+    1000000000, 10000000000, 100000000000, 1000000000000, 10000000000000,
+    100000000000000, 1000000000000000, 10000000000000000, 100000000000000000,
+    1000000000000000000, 10000000000000000000,
 ];
 
 pub fn pow10(n: i32) -> u64 {
@@ -321,7 +323,8 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     // Phase 1: Determine exact decimal position using floor of 1-digit scaling.
     // log10_pow2(e+63) approximates floor(log10(f)) but may underestimate by 1.
     // One uscale + floor check resolves the ambiguity exactly.
-    let p1 = -log10_pow2(e + 63);
+    let log10_e63 = log10_pow2(e + 63);
+    let p1 = -log10_e63;
     let lp1 = log2_pow10(p1);
     let pm1 = get_pow10(p1);
     let s1 = -(e + lp1 + 3);
@@ -334,7 +337,7 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let total_digits = int_digits + precision;
     let n = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
 
-    let p = n - 1 - log10_pow2(e + 63);
+    let p = n - 1 - log10_e63;
     let lp = log2_pow10(p);
     let pm = get_pow10(p);
     let s = -(e + lp + 3);
