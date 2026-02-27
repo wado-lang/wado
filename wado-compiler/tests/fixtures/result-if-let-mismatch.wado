@@ -1,0 +1,15 @@
+// Test: if let Ok on an Err value goes to else branch
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let r: Result<i32, String> = Result::<i32, String>::Err("bad");
+
+    if let Ok(x) = r {
+        println(`Ok: {x}`);
+    } else {
+        println("not ok");
+    }
+}
+
+__DATA__
+{"stdout": "not ok\n"}

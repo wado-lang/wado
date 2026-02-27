@@ -843,9 +843,6 @@ impl Monomorphizer {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.rewrite_types_in_expr(value, type_table);
             }
-            TirExprKind::OptionSome { value } => {
-                self.rewrite_types_in_expr(value, type_table);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.rewrite_types_in_expr(payload_expr, type_table);
@@ -862,12 +859,6 @@ impl Monomorphizer {
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.rewrite_types_in_block(block, type_table);
-            }
-            TirExprKind::IsNotNull { expr } => {
-                self.rewrite_types_in_expr(expr, type_table);
-            }
-            TirExprKind::UnwrapOption { expr, .. } => {
-                self.rewrite_types_in_expr(expr, type_table);
             }
             TirExprKind::VariantTag { expr } => {
                 self.rewrite_types_in_expr(expr, type_table);
@@ -1831,9 +1822,6 @@ impl Monomorphizer {
                     type_table,
                 );
             }
-            TirExprKind::OptionSome { value } => {
-                self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.collect_func_instantiation_sites_in_expr(
@@ -1852,12 +1840,6 @@ impl Monomorphizer {
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.collect_func_instantiation_sites_in_expr(value, generic_functions, type_table);
-            }
-            TirExprKind::IsNotNull { expr } => {
-                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
-            }
-            TirExprKind::UnwrapOption { expr, .. } => {
-                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
             }
             TirExprKind::VariantTag { expr } => {
                 self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
@@ -2659,16 +2641,6 @@ impl Monomorphizer {
                 self.substitute_types_in_expr(functor, substitution, type_table);
                 *target_fn_type = self.substitute_type(*target_fn_type, substitution, type_table);
             }
-            TirExprKind::OptionSome { value } => {
-                self.substitute_types_in_expr(value, substitution, type_table);
-                // After substitution, if expr.type_id is still a bare Variant (from
-                // generic library code), convert it to a GenericInstance using the
-                // payload type as the type arg (e.g., Option + i32 → Option<i32>).
-                // Use make_option to ensure the canonical module_source (core:prelude).
-                if matches!(type_table.get(expr.type_id), ResolvedType::Variant { .. }) {
-                    expr.type_id = type_table.make_option(value.type_id);
-                }
-            }
             TirExprKind::VariantConstruct {
                 variant_type,
                 payload,
@@ -2712,13 +2684,6 @@ impl Monomorphizer {
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.substitute_types_in_expr(value, substitution, type_table);
-            }
-            TirExprKind::IsNotNull { expr } => {
-                self.substitute_types_in_expr(expr, substitution, type_table);
-            }
-            TirExprKind::UnwrapOption { expr, inner_type } => {
-                self.substitute_types_in_expr(expr, substitution, type_table);
-                *inner_type = self.substitute_type(*inner_type, substitution, type_table);
             }
             TirExprKind::VariantTag { expr } => {
                 self.substitute_types_in_expr(expr, substitution, type_table);
@@ -3314,9 +3279,6 @@ impl Monomorphizer {
             TirExprKind::ClosureToCanonical { functor, .. } => {
                 self.rewrite_function_calls_in_expr(functor, type_table);
             }
-            TirExprKind::OptionSome { value } => {
-                self.rewrite_function_calls_in_expr(value, type_table);
-            }
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(payload_expr) = payload {
                     self.rewrite_function_calls_in_expr(payload_expr, type_table);
@@ -3327,12 +3289,6 @@ impl Monomorphizer {
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.rewrite_function_calls_in_expr(value, type_table);
-            }
-            TirExprKind::IsNotNull { expr } => {
-                self.rewrite_function_calls_in_expr(expr, type_table);
-            }
-            TirExprKind::UnwrapOption { expr, .. } => {
-                self.rewrite_function_calls_in_expr(expr, type_table);
             }
             TirExprKind::VariantTag { expr } => {
                 self.rewrite_function_calls_in_expr(expr, type_table);

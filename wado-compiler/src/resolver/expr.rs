@@ -172,7 +172,6 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 (TirExprKind::StringLiteral(s.value.clone()), string_type)
             }
             Literal::Null => {
-                // Null is Option<T> where T is unknown
                 let option_unknown = self.type_table.borrow_mut().make_option(TypeTable::UNKNOWN);
                 (TirExprKind::Null, option_unknown)
             }

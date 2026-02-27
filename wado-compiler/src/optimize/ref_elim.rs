@@ -189,7 +189,6 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
             }
             (all_ok, total)
         }
-        TirExprKind::OptionSome { value } => track_local_uses_in_expr(value, local_index),
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 track_local_uses_in_expr(payload_expr, local_index)
@@ -216,9 +215,7 @@ fn track_local_uses_in_expr(expr: &TirExpr, local_index: u32) -> (bool, u32) {
             (all_ok, total)
         }
         TirExprKind::GlobalVarSet { value, .. } => track_local_uses_in_expr(value, local_index),
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => track_local_uses_in_expr(expr, local_index),
         TirExprKind::Switch {
@@ -404,9 +401,6 @@ fn replace_ref_field_access_in_expr(
                 replace_ref_field_access_in_expr(elem, ref_local, target_local, target_name);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            replace_ref_field_access_in_expr(value, ref_local, target_local, target_name);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 replace_ref_field_access_in_expr(
@@ -440,9 +434,7 @@ fn replace_ref_field_access_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             replace_ref_field_access_in_expr(value, ref_local, target_local, target_name);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             replace_ref_field_access_in_expr(expr, ref_local, target_local, target_name);
@@ -741,9 +733,6 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
                 collect_ref_bindings_in_expr(elem, bindings);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            collect_ref_bindings_in_expr(value, bindings);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_ref_bindings_in_expr(payload_expr, bindings);
@@ -764,9 +753,7 @@ fn collect_ref_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<RefBinding>) 
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_ref_bindings_in_expr(value, bindings);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             collect_ref_bindings_in_expr(expr, bindings);
@@ -946,9 +933,6 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u
                 remove_dead_ref_bindings_in_expr(elem, dead_locals);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            remove_dead_ref_bindings_in_expr(value, dead_locals);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 remove_dead_ref_bindings_in_expr(payload_expr, dead_locals);
@@ -969,9 +953,7 @@ fn remove_dead_ref_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u
         TirExprKind::GlobalVarSet { value, .. } => {
             remove_dead_ref_bindings_in_expr(value, dead_locals);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             remove_dead_ref_bindings_in_expr(expr, dead_locals);

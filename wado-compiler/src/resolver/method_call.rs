@@ -456,46 +456,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
             })
             .collect();
 
-        // Special handling for Option::Some and Option::None
-        if let Some(_inner_type) = self.type_table.borrow().as_option(target_type_id) {
-            match static_call.method.as_str() {
-                "Some" => {
-                    // Option::Some(value) - wrap in OptionSome
-                    if args.len() != 1 {
-                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
-                            expected: 1,
-                            found: args.len(),
-                            span: static_call.span,
-                        });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
-                    }
-                    let value = args.into_iter().next().unwrap();
-                    // Return type is Option<T> where T is the inner type
-                    return TirExpr::new(
-                        TirExprKind::OptionSome {
-                            value: Box::new(value),
-                        },
-                        target_type_id,
-                        static_call.span,
-                    );
-                }
-                "None" => {
-                    // Option::None - return null with Option<T> type
-                    if !args.is_empty() {
-                        let _ = self.logger.error(TypeError::ArgumentCountMismatch {
-                            expected: 0,
-                            found: args.len(),
-                            span: static_call.span,
-                        });
-                        return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, static_call.span);
-                    }
-                    return TirExpr::new(TirExprKind::Null, target_type_id, static_call.span);
-                }
-                _ => {
-                    // Other Option methods are not yet supported
-                }
-            }
-        }
+        // Option::Some and Option::None are handled by the generic variant
+        // construction path below (line ~686). No special case needed.
 
         // Handle flags type static methods: none() and all()
         {

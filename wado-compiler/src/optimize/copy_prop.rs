@@ -269,9 +269,6 @@ fn collect_usage_in_expr(
                 collect_usage_in_expr(elem, usage, in_loop, in_condition);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            collect_usage_in_expr(value, usage, in_loop, in_condition);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_usage_in_expr(payload_expr, usage, in_loop, in_condition);
@@ -296,9 +293,7 @@ fn collect_usage_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_usage_in_expr(value, usage, in_loop, in_condition);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. } => {
             collect_usage_in_expr(expr, usage, in_loop, in_condition);
         }
@@ -584,9 +579,6 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
                 substitute_in_expr(elem, substitutions);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            substitute_in_expr(value, substitutions);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 substitute_in_expr(payload_expr, substitutions);
@@ -607,9 +599,7 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
         TirExprKind::GlobalVarSet { value, .. } => {
             substitute_in_expr(value, substitutions);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. } => {
             substitute_in_expr(expr, substitutions);
         }
@@ -777,9 +767,6 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
                 collect_copy_bindings_in_expr(elem, bindings);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            collect_copy_bindings_in_expr(value, bindings);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 collect_copy_bindings_in_expr(payload_expr, bindings);
@@ -800,9 +787,7 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_copy_bindings_in_expr(value, bindings);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. } => {
             collect_copy_bindings_in_expr(expr, bindings);
         }
@@ -976,9 +961,6 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
                 remove_copy_bindings_in_expr(elem, dead_locals);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            remove_copy_bindings_in_expr(value, dead_locals);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 remove_copy_bindings_in_expr(payload_expr, dead_locals);
@@ -999,9 +981,7 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         TirExprKind::GlobalVarSet { value, .. } => {
             remove_copy_bindings_in_expr(value, dead_locals);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. } => {
             remove_copy_bindings_in_expr(expr, dead_locals);
         }

@@ -299,18 +299,13 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
                     self.check_expr(payload_expr)?;
                 }
             }
-            TirExprKind::OptionSome { value } => {
-                self.check_expr(value)?;
-            }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.check_block(block)?;
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.check_expr(value)?;
             }
-            TirExprKind::IsNotNull { expr }
-            | TirExprKind::UnwrapOption { expr, .. }
-            | TirExprKind::VariantTag { expr }
+            TirExprKind::VariantTag { expr }
             | TirExprKind::VariantTest { expr, .. } => {
                 self.check_expr(expr)?;
             }

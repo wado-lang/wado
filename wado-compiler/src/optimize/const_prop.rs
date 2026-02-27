@@ -266,9 +266,6 @@ fn propagate_constants_in_expr(
                 changed |= propagate_constants_in_expr(elem, constants);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            changed |= propagate_constants_in_expr(value, constants);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 changed |= propagate_constants_in_expr(payload_expr, constants);
@@ -280,9 +277,7 @@ fn propagate_constants_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             changed |= propagate_constants_in_expr(value, constants);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             changed |= propagate_constants_in_expr(expr, constants);
