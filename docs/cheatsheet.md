@@ -1449,6 +1449,14 @@ trait IntoIterator {
     fn into_iter(&self) -> Self::Iter;
 }
 
+// Blanket impl: every Iterator automatically implements IntoIterator
+// This means any iterator can be used directly in for-of loops
+impl<I: Iterator> IntoIterator for I {
+    type Item = I::Item;
+    type Iter = I;
+    fn into_iter(&self) -> I { return *self; }
+}
+
 // FromIterator - create a collection from an iterator
 trait FromIterator<T> {
     type Iter;
@@ -1470,43 +1478,43 @@ for let x of arr {
 // Get iterator explicitly
 let mut iter = arr.iter();
 
-// Manual iteration
-loop {
-    if let Some(x) = iter.next() {
-        println(`{x}`);
-    } else {
-        break;
-    }
+// Iterators implement IntoIterator via blanket impl,
+// so for-of works directly on any iterator
+for let x of iter {
+    println(`{x}`);
+}
+
+// Manual iteration with while let
+let mut iter2 = arr.iter();
+while let Some(x) = iter2.next() {
+    println(`{x}`);
 }
 
 // Collect remaining elements into a new array
-let mut iter2 = arr.iter();
-iter2.next();  // skip first element
-let rest = iter2.collect();  // Array<i32> with [2, 3, 4, 5]
+let mut iter3 = arr.iter();
+iter3.next();  // skip first element
+let rest = iter3.collect();  // Array<i32> with [2, 3, 4, 5]
 ```
 
 ### Iterator vs IntoIterator
 
-| Trait            | Question                               | Examples                                         |
-| ---------------- | -------------------------------------- | ------------------------------------------------ |
-| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `StrCharIter`, `StrUtf8ByteIter` |
-| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, `StrCharIter`, `StrUtf8ByteIter`     |
+| Trait            | Question                               | Examples                             |
+| ---------------- | -------------------------------------- | ------------------------------------ |
+| **Iterator**     | "Can I call `next()` on this?"         | `ArrayIter<T>`, `StrCharIter`        |
+| **IntoIterator** | "Can I convert this into an iterator?" | `Array<T>`, and all `Iterator` types |
 
-Collections like `Array<T>` implement `IntoIterator` to produce a separate iterator object.
-String iterators (`StrCharIter`, `StrUtf8ByteIter`) implement both `Iterator` and `IntoIterator`,
-so they work directly with `for-of`:
+Every type that implements `Iterator` automatically implements `IntoIterator` via a blanket impl.
+This means all iterators can be used directly with `for-of`:
 
 ```wado
 let arr: Array<i32> = [1, 2, 3];
 // arr.next() would NOT work - Array has no next() method
 
-let mut iter: ArrayIter<i32> = arr.into_iter();
-// ArrayIter implements Iterator
-iter.next();  // Some(1)
-iter.next();  // Some(2)
-
-// String iterators (StrCharIter, StrUtf8ByteIter) implement both traits,
-// so they work directly with for-of (see Strings section for examples)
+let iter = arr.iter();
+// ArrayIter implements Iterator, which automatically provides IntoIterator
+for let x of iter {
+    println(`{x}`);  // works directly!
+}
 ```
 
 ### Custom Iterables

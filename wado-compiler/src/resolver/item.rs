@@ -418,6 +418,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     }
                 }
             }
+        } else if let ast::Type::Named(named) = impl_type {
+            // Blanket impl case: `impl<I: Iterator> IntoIterator for I`
+            // The impl type is a type parameter itself, registered by the caller.
+            // old_type_params holds the caller's type params (taken via std::mem::take above).
+            if let Some(&(idx, _)) = old_type_params.get(&named.name) {
+                let type_id = self
+                    .type_table
+                    .borrow_mut()
+                    .make_type_param(named.name.clone(), idx);
+                self.current_type_params
+                    .insert(named.name.clone(), (idx, type_id));
+                let bounds = old_type_param_bounds
+                    .get(&named.name)
+                    .cloned()
+                    .unwrap_or_default();
+                impl_type_params.push(crate::tir::TirTypeParam {
+                    name: named.name.clone(),
+                    bounds,
+                    default: None,
+                    index: idx,
+                });
+            }
         }
 
         // Populate bounds from the impl block's type_params

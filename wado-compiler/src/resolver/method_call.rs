@@ -102,17 +102,20 @@ impl<H: CompilerHost> Resolver<'_, H> {
         // If inherent method not found, try trait methods
         // Track the module source where the trait impl was found
         let mut trait_impl_module_source: Option<ModuleSource> = None;
+        let mut blanket_type_param: Option<String> = None;
         if method_info.is_none()
-            && let Some((found_trait, info, impl_source)) = self.find_trait_method_for_type(
+            && let Some(trait_match) = self.find_trait_method_for_type(
                 &struct_name,
                 &method_call.method,
                 &struct_module,
                 receiver_type_args_for_trait.as_deref(),
+                Some(base_type_id),
             )
         {
-            trait_name = Some(found_trait);
-            method_info = Some(info);
-            trait_impl_module_source = Some(impl_source);
+            trait_name = Some(trait_match.trait_name);
+            method_info = Some(trait_match.method_info);
+            trait_impl_module_source = Some(trait_match.impl_module_source);
+            blanket_type_param = trait_match.blanket_type_param;
         }
 
         // If still not found and receiver is a TypeParam, try trait bounds
@@ -365,14 +368,28 @@ impl<H: CompilerHost> Resolver<'_, H> {
         );
 
         // Build monomorph_info for method calls on generic types
-        let monomorph_info = receiver_type_args.map(|type_args| {
+        let monomorph_info = if let Some(ref blanket_param) = blanket_type_param {
+            // For blanket impls, the template function uses the type param name (e.g., "I").
+            // The call site uses the concrete receiver (e.g., "ArrayIter<i32>").
+            // monomorph_info maps from the concrete name back to the template.
             let generic_name =
-                MethodName::format_local(&base_struct_name, None, &method_call.method);
-            MonomorphInfo {
+                MethodName::format_local(blanket_param, trait_name.as_deref(), &method_call.method);
+            Some(MonomorphInfo {
                 generic_name,
-                type_args,
-            }
-        });
+                type_args: vec![base_type_id],
+                is_blanket: true,
+            })
+        } else {
+            receiver_type_args.map(|type_args| {
+                let generic_name =
+                    MethodName::format_local(&base_struct_name, None, &method_call.method);
+                MonomorphInfo {
+                    generic_name,
+                    type_args,
+                    is_blanket: false,
+                }
+            })
+        };
 
         // Convert method type args to string names for method_info
         // Use inferred type args if available, otherwise use explicit type args
@@ -877,6 +894,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     Some(MonomorphInfo {
                         generic_name,
                         type_args: struct_type_args,
+                        is_blanket: false,
                     }),
                     type_arg_names,
                 )

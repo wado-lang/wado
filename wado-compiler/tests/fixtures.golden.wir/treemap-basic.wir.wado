@@ -143,6 +143,8 @@ type "functype/write_decimal_digits" = fn(ref null array<u8>, i32, i64, i32);
 
 type "functype/fmt_i32_decimal" = fn(i32, ref null Formatter);
 
+type "functype/core:internal/StrCharIter^IntoIterator::into_iter" = fn(ref null StrCharIter) -> ref null StrCharIter;
+
 type "functype/Array<u64>^SequenceLiteralBuilder::build" = fn(ref null Array<u64>) -> ref null Array<u64>;
 
 type "functype/Array<u64>^SequenceLiteralBuilder::push_literal" = fn(ref null Array<u64>, u64);
@@ -900,25 +902,21 @@ fn "core:internal/write_escaped_string"(s, f) {  // from core:internal
     let __iter_2: ref null StrCharIter;
     let c: char;
     let __pattern_temp_0: ref null Option<char>;
-    let __local_5: ref null StrCharIter;
-    let __local_6: ref null String;
-    let __local_7: ref null Formatter;
-    let __local_8: ref null String;
-    let __local_9: ref null Formatter;
-    let __local_10: ref null String;
-    let __local_11: ref null Formatter;
-    let __local_12: ref null String;
-    let __local_13: ref null Formatter;
-    let __local_14: ref null String;
-    let __local_15: ref null Formatter;
-    let __local_16: ref null String;
-    let __local_17: ref null Formatter;
-    let __local_18: char;
+    let __local_5: ref null String;
+    let __local_6: ref null Formatter;
+    let __local_7: ref null String;
+    let __local_8: ref null Formatter;
+    let __local_9: ref null String;
+    let __local_10: ref null Formatter;
+    let __local_11: ref null String;
+    let __local_12: ref null Formatter;
+    let __local_13: ref null String;
+    let __local_14: ref null Formatter;
+    let __local_15: ref null String;
+    let __local_16: ref null Formatter;
+    let __local_17: char;
     block {
-        __iter_2 = value_copy StrCharIter(__inline_StrCharIter_IntoIterator__into_iter_0: block -> ref null StrCharIter {
-            __local_5 = StrCharIter { repr: ref.as_non_null(s.repr), used: s.used, byte_index: 0 };
-            break __inline_StrCharIter_IntoIterator__into_iter_0: __local_5;
-        });
+        __iter_2 = "core:internal/StrCharIter^IntoIterator::into_iter"(StrCharIter { repr: ref.as_non_null(s.repr), used: s.used, byte_index: 0 });
         b24: block {
             l25: loop {
                 let __sroa___pattern_temp_0_discriminant: i32;
@@ -930,28 +928,28 @@ fn "core:internal/write_escaped_string"(s, f) {  // from core:internal
                     __match_scrut_0 = c;
                     if __match_scrut_0 == 34 {
                         block {
-                            __local_8 = String { repr: ref.as_non_null(array.new_data<u8>[0](0, 2)), used: 2 };
-                            String::append(f.buf, __local_8);
+                            __local_7 = String { repr: ref.as_non_null(array.new_data<u8>[0](0, 2)), used: 2 };
+                            String::append(f.buf, __local_7);
                         };
                     } else if __match_scrut_0 == 92 {
                         block {
-                            __local_10 = String { repr: ref.as_non_null(array.new_data<u8>[1](0, 2)), used: 2 };
-                            String::append(f.buf, __local_10);
+                            __local_9 = String { repr: ref.as_non_null(array.new_data<u8>[1](0, 2)), used: 2 };
+                            String::append(f.buf, __local_9);
                         };
                     } else if __match_scrut_0 == 10 {
                         block {
-                            __local_12 = String { repr: ref.as_non_null(array.new_data<u8>[2](0, 2)), used: 2 };
-                            String::append(f.buf, __local_12);
+                            __local_11 = String { repr: ref.as_non_null(array.new_data<u8>[2](0, 2)), used: 2 };
+                            String::append(f.buf, __local_11);
                         };
                     } else if __match_scrut_0 == 9 {
                         block {
-                            __local_14 = String { repr: ref.as_non_null(array.new_data<u8>[3](0, 2)), used: 2 };
-                            String::append(f.buf, __local_14);
+                            __local_13 = String { repr: ref.as_non_null(array.new_data<u8>[3](0, 2)), used: 2 };
+                            String::append(f.buf, __local_13);
                         };
                     } else if __match_scrut_0 == 13 {
                         block {
-                            __local_16 = String { repr: ref.as_non_null(array.new_data<u8>[4](0, 2)), used: 2 };
-                            String::append(f.buf, __local_16);
+                            __local_15 = String { repr: ref.as_non_null(array.new_data<u8>[4](0, 2)), used: 2 };
+                            String::append(f.buf, __local_15);
                         };
                     } else {
                         block {
@@ -1046,6 +1044,10 @@ fn fmt_i32_decimal(value, f) {
         __local_6 = f.buf;
         break __inline_String__internal_raw_bytes_0: __local_6.repr;
     }, offset, abs_val, digit_count);
+}
+
+fn "core:internal/StrCharIter^IntoIterator::into_iter"(self) {  // from core:internal
+    return self;
 }
 
 fn Array<u64>^SequenceLiteralBuilder::build(self) {

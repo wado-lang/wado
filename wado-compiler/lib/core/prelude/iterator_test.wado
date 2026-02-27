@@ -100,20 +100,6 @@ test "position on empty array" {
     assert arr.iter().position(|x: i32| x == 1) matches { None };
 }
 
-test "for_each consumes all elements" {
-    let arr: Array<i32> = [1, 2, 3];
-    let mut iter = arr.iter();
-    iter.for_each(|x: i32| {});
-    assert iter.next() matches { None };
-}
-
-test "for_each on empty array" {
-    let arr: Array<i32> = [];
-    let mut iter = arr.iter();
-    iter.for_each(|x: i32| {});
-    assert iter.next() matches { None };
-}
-
 test "reduce with addition" {
     let arr: Array<i32> = [1, 2, 3, 4, 5];
     let result = arr.iter().reduce(|a: i32, b: i32| a + b);

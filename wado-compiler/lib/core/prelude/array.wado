@@ -308,13 +308,8 @@ impl FromIterator<T> for Array<T> {
 
     fn from_iter(iter: ArrayIter<T>) -> Array<T> {
         let mut result: Array<T> = [];
-        let mut it = iter;
-        loop {
-            if let Some(item) = it.next() {
-                result.append(item);
-            } else {
-                break;
-            }
+        for let item of iter {
+            result.append(item);
         }
         return result;
     }
@@ -355,12 +350,8 @@ impl ArrayIter<T> {
 
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc {
         let mut acc = init;
-        loop {
-            if let Some(item) = self.next() {
-                acc = f(acc, item);
-            } else {
-                break;
-            }
+        for let item of *self {
+            acc = f(acc, item);
         }
         return acc;
     }
@@ -393,100 +384,69 @@ impl ArrayIter<T> {
     }
 
     pub fn find(&mut self, pred: fn(T) -> bool) -> Option<T> {
-        loop {
-            if let Some(item) = self.next() {
-                if pred(item) {
-                    return Option::<T>::Some(item);
-                }
-            } else {
-                return null;
+        for let item of *self {
+            if pred(item) {
+                return Option::<T>::Some(item);
             }
         }
+        return null;
     }
 
     pub fn any(&mut self, pred: fn(T) -> bool) -> bool {
-        loop {
-            if let Some(item) = self.next() {
-                if pred(item) {
-                    return true;
-                }
-            } else {
-                return false;
-            }
-        }
-    }
-
-    pub fn all(&mut self, pred: fn(T) -> bool) -> bool {
-        loop {
-            if let Some(item) = self.next() {
-                if !pred(item) {
-                    return false;
-                }
-            } else {
+        for let item of *self {
+            if pred(item) {
                 return true;
             }
         }
+        return false;
+    }
+
+    pub fn all(&mut self, pred: fn(T) -> bool) -> bool {
+        for let item of *self {
+            if !pred(item) {
+                return false;
+            }
+        }
+        return true;
     }
 
     pub fn last(&mut self) -> Option<T> {
         let mut result: Option<T> = null;
-        loop {
-            if let Some(item) = self.next() {
-                result = Option::<T>::Some(item);
-            } else {
-                return result;
-            }
+        for let item of *self {
+            result = Option::<T>::Some(item);
         }
+        return result;
     }
 
     pub fn nth(&mut self, n: i32) -> Option<T> {
         let mut remaining = n;
-        loop {
-            if let Some(item) = self.next() {
-                if remaining <= 0 {
-                    return Option::<T>::Some(item);
-                }
-                remaining -= 1;
-            } else {
-                return null;
+        for let item of *self {
+            if remaining <= 0 {
+                return Option::<T>::Some(item);
             }
+            remaining -= 1;
         }
+        return null;
     }
 
     pub fn position(&mut self, pred: fn(T) -> bool) -> Option<i32> {
         let mut idx = 0;
-        loop {
-            if let Some(item) = self.next() {
-                if pred(item) {
-                    return Option::<i32>::Some(idx);
-                }
-                idx += 1;
-            } else {
-                return null;
+        for let item of *self {
+            if pred(item) {
+                return Option::<i32>::Some(idx);
             }
+            idx += 1;
         }
-    }
-
-    pub fn for_each(&mut self, f: fn(T)) {
-        loop {
-            if let Some(item) = self.next() {
-                f(item);
-            } else {
-                return;
-            }
-        }
+        return null;
     }
 
     pub fn reduce(&mut self, f: fn(T, T) -> T) -> Option<T> {
         if let Some(first) = self.next() {
             let mut acc = first;
-            loop {
-                if let Some(item) = self.next() {
-                    acc = f(acc, item);
-                } else {
-                    return Option::<T>::Some(acc);
-                }
+            for let item of *self {
+                acc = f(acc, item);
             }
+            return Option::<T>::Some(acc);
         } else {
             return null;
         }
@@ -580,12 +540,8 @@ impl MapIter<T, U> {
 
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, U) -> Acc) -> Acc {
         let mut acc = init;
-        loop {
-            if let Some(item) = self.next() {
-                acc = f(acc, item);
-            } else {
-                break;
-            }
+        for let item of *self {
+            acc = f(acc, item);
         }
         return acc;
     }
@@ -619,12 +575,8 @@ impl FilterIter<T> {
 
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, T) -> Acc) -> Acc {
         let mut acc = init;
-        loop {
-            if let Some(item) = self.next() {
-                acc = f(acc, item);
-            } else {
-                break;
-            }
+        for let item of *self {
+            acc = f(acc, item);
         }
         return acc;
     }
@@ -671,12 +623,8 @@ impl FilterMapIter<T, U> {
 
     pub fn fold<Acc>(&mut self, init: Acc, f: fn(Acc, U) -> Acc) -> Acc {
         let mut acc = init;
-        loop {
-            if let Some(item) = self.next() {
-                acc = f(acc, item);
-            } else {
-                break;
-            }
+        for let item of *self {
+            acc = f(acc, item);
         }
         return acc;
     }
@@ -772,15 +720,12 @@ impl ArrayIter<T: Ord> {
     pub fn min(&mut self) -> Option<T> {
         if let Some(first) = self.next() {
             let mut result = first;
-            loop {
-                if let Some(item) = self.next() {
-                    if let Less = item.cmp(&result) {
-                        result = item;
-                    }
-                } else {
-                    return Option::<T>::Some(result);
+            for let item of *self {
+                if let Less = item.cmp(&result) {
+                    result = item;
                 }
             }
+            return Option::<T>::Some(result);
         } else {
             return null;
         }
@@ -789,15 +734,12 @@ impl ArrayIter<T: Ord> {
     pub fn max(&mut self) -> Option<T> {
         if let Some(first) = self.next() {
             let mut result = first;
-            loop {
-                if let Some(item) = self.next() {
-                    if let Greater = item.cmp(&result) {
-                        result = item;
-                    }
-                } else {
-                    return Option::<T>::Some(result);
+            for let item of *self {
+                if let Greater = item.cmp(&result) {
+                    result = item;
                 }
             }
+            return Option::<T>::Some(result);
         } else {
             return null;
         }

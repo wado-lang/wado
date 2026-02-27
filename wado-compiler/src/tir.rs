@@ -1717,6 +1717,8 @@ pub struct MonomorphInfo {
     pub generic_name: String,
     /// Concrete type arguments used for this instantiation
     pub type_args: Vec<TypeId>,
+    /// Whether this originates from a blanket impl (e.g., `impl<I: Iterator> IntoIterator for I`)
+    pub is_blanket: bool,
 }
 
 /// Global variable declaration in TIR
