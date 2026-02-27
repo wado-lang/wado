@@ -500,6 +500,10 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 trait_decl_index: Arc::clone(&trait_decl_index),
             };
 
+            // Set file context so diagnostics emitted during resolution
+            // carry the correct module filename (not the entry module).
+            logger.set_file(module_source.diagnostic_filename());
+
             // Errors are emitted to the logger; if resolve_module returns Bail,
             // we continue to resolve remaining modules to collect more errors
             if let Ok(tir_module) = resolver.resolve_module(module, module_source.clone()) {

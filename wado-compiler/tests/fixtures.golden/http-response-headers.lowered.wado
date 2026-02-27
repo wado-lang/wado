@@ -10,10 +10,10 @@
 // wasi::task-return
 
 export fn handle(request: Request) {
-    let [trailers_future, trailers_tx] = move core::builtin::future_create_pair();
+    let [trailers_future, trailers_tx] = core::builtin::future_create_pair();
     let headers: Fields = __cm_adapter__Fields_new();
     let value: Array<u8> = __seq_lit: {
-        let mut __b: Array<u8> = move Array<u8> { repr: core::builtin::array_new::<u8>(5), used: 0 };
+        let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(5), used: 0 };
         __inline_Array_u8__SequenceLiteralBuilder__push_literal_1: {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(104);
@@ -40,10 +40,10 @@ export fn handle(request: Request) {
         };
     };
     __cm_adapter__Fields_append(&headers, "x-wado" as FieldName, value as FieldValue);
-    let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = move __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
     let response: Response = __pattern_temp_0.0;
     let _tx_future: Future<Result<(), ErrorCode>> = __pattern_temp_0.1;
-    let __task_ret: Result<Response, ErrorCode> = move Result<Response, ErrorCode>::Ok(response);
+    let __task_ret: Result<Response, ErrorCode> = Result<Response, ErrorCode>::Ok(response);
     let mut __tv_0: i32 = 0;
     let mut __tv_1: i32 = 0;
     let mut __tv_2: i32 = 0;
@@ -348,7 +348,7 @@ export fn handle(request: Request) {
         }
         cm_raw_call task-return(__tv_0, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(move Result<Option<Trailers>, ErrorCode>::Ok(null));
+    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(Result<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 fn __cm_adapter__Fields_new() -> Fields {
@@ -366,22 +366,22 @@ fn __cm_adapter__Fields_append(self: &Fields, name: FieldName, value: FieldValue
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:http/Fields::append(self, __name_packed as i32, (__name_packed >> 32) as i32, __value_packed as i32, (__value_packed >> 32) as i32, __outptr);
     let __disc: i32 = core::builtin::i32_load(__outptr);
-    let mut __result_val: Result<(), HeaderError> = move null;
+    let mut __result_val: Result<(), HeaderError> = null;
     if (__disc == 0) {
-        __result_val = move Result<(), HeaderError>::Ok;
+        __result_val = Result<(), HeaderError>::Ok;
     } else {
         let __vdisc: i32 = core::builtin::i32_load8_u((__outptr + 4));
-        let mut __vresult: HeaderError = move null;
+        let mut __vresult: HeaderError = null;
         if (__vdisc == 0) {
-            __vresult = move HeaderError::InvalidSyntax;
+            __vresult = HeaderError::InvalidSyntax;
         } else {
             if (__vdisc == 1) {
-                __vresult = move HeaderError::Forbidden;
+                __vresult = HeaderError::Forbidden;
             } else {
-                __vresult = move HeaderError::Immutable;
+                __vresult = HeaderError::Immutable;
             }
         }
-        __result_val = move Result<(), HeaderError>::Err(__vresult);
+        __result_val = Result<(), HeaderError>::Err(__vresult);
     }
     core::builtin::realloc(__outptr, 8, 4, 0);
     return __result_val;

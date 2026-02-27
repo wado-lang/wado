@@ -23,7 +23,7 @@ pub struct "ArrayIter<i32>" {
 
 fn get_numbers() -> Array<i32> {
     let arr: Array<i32> = __seq_lit: {
-        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
+        let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
         __inline_Array_i32__SequenceLiteralBuilder__push_literal_1: {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(1);
@@ -52,21 +52,21 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let nums: Array<i32> = move get_numbers();
+    let nums: Array<i32> = get_numbers();
     __for_of_0: {
-        let mut __iter_0: ArrayIter<i32> = move ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
+        let mut __iter_0: ArrayIter<i32> = ArrayIter<i32> { repr: nums.repr, used: nums.used, index: 0 };
         loop {
-            let __pattern_temp_0: Option<i32> = move __iter_0."ArrayIter<i32>^Iterator::next"();
+            let __pattern_temp_0: Option<i32> = __iter_0."ArrayIter<i32>^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let n: i32 = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
-                    let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
+                    let mut __r: String = String { repr: "array_new<u8>"(16), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_3: {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     __inline_i32_Display__fmt_4: {
-                        let self: Box<i32> = move Box<i32> { value: n };
+                        let self: Box<i32> = Box<i32> { value: n };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                     };

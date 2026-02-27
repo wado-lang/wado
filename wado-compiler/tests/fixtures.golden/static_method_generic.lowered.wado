@@ -23,16 +23,16 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut arr: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(10), used: 0 };
+    let mut arr: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(10), used: 0 };
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
-        __r.String::append(move "initial len: ");
+        let mut __r: String = String { repr: "array_new<u8>"(29), used: 0 };
+        __r.String::append("initial len: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: arr.used };
+            let self: Box<i32> = Box<i32> { value: arr.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -42,56 +42,56 @@ export fn run() with Stdout {
     arr."Array<i32>::append"(2);
     arr."Array<i32>::append"(3);
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
-        __r.String::append(move "after append len: ");
+        let mut __r: String = String { repr: "array_new<u8>"(34), used: 0 };
+        __r.String::append("after append len: ");
         let mut __f: Formatter = __inline_Formatter__new_7: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_8: {
-            let self: Box<i32> = move Box<i32> { value: arr.used };
+            let self: Box<i32> = Box<i32> { value: arr.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
-        __r.String::append(move "arr[0]: ");
+        let mut __r: String = String { repr: "array_new<u8>"(24), used: 0 };
+        __r.String::append("arr[0]: ");
         let mut __f: Formatter = __inline_Formatter__new_11: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_11: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_12: {
-            let self: Box<i32> = move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(0) };
+            let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(0) };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
-        __r.String::append(move "arr[1]: ");
+        let mut __r: String = String { repr: "array_new<u8>"(24), used: 0 };
+        __r.String::append("arr[1]: ");
         let mut __f: Formatter = __inline_Formatter__new_14: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_15: {
-            let self: Box<i32> = move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1) };
+            let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(1) };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
-        __r.String::append(move "arr[2]: ");
+        let mut __r: String = String { repr: "array_new<u8>"(24), used: 0 };
+        __r.String::append("arr[2]: ");
         let mut __f: Formatter = __inline_Formatter__new_17: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_17: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_18: {
-            let self: Box<i32> = move Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(2) };
+            let self: Box<i32> = Box<i32> { value: arr."Array<i32>^IndexValue::index_value"(2) };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -106,7 +106,7 @@ export fn __cm_export__run() {
 
 fn "Array<i32>^IndexValue::index_value"(self: &Array<i32>, index: i32) -> i32 {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<i32>(self.repr, index);
 }

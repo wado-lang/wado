@@ -30,7 +30,7 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let arr: Array<i32> = __seq_lit: {
-        let mut __b: Array<i32> = move Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
+        let mut __b: Array<i32> = Array<i32> { repr: core::builtin::array_new::<i32>(3), used: 0 };
         __inline_Array_i32__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<i32> = &mut __b;
             self."Array<i32>::append"(1);
@@ -48,10 +48,10 @@ export fn run() with Stdout {
             break __inline_Array_i32__SequenceLiteralBuilder__build_5: *self;
         };
     };
-    let mut iter: ArrayIter<i32> = move ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
+    let mut iter: ArrayIter<i32> = ArrayIter<i32> { repr: arr.repr, used: arr.used, index: 0 };
     let mut sum: i32 = 0;
     loop {
-        let __pattern_temp_0: Option<i32> = move iter."ArrayIter<i32>^Iterator::next"();
+        let __pattern_temp_0: Option<i32> = iter."ArrayIter<i32>^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let x: i32 = __variant_payload(__pattern_temp_0, case=0);
             sum = (sum + x);
@@ -60,14 +60,14 @@ export fn run() with Stdout {
         }
     }
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(21), used: 0 };
-        __r.String::append(move "sum: ");
+        let mut __r: String = String { repr: "array_new<u8>"(21), used: 0 };
+        __r.String::append("sum: ");
         let mut __f: Formatter = __inline_Formatter__new_8: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_8: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_9: {
-            let self: Box<i32> = move Box<i32> { value: sum };
+            let self: Box<i32> = Box<i32> { value: sum };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };

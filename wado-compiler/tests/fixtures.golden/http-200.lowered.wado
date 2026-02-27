@@ -10,12 +10,12 @@
 // wasi::task-return
 
 export fn handle(request: Request) {
-    let [trailers_future, trailers_tx] = move core::builtin::future_create_pair();
+    let [trailers_future, trailers_tx] = core::builtin::future_create_pair();
     let headers: Fields = __cm_adapter__Fields_new();
-    let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = move __cm_adapter__Response_new(headers, 0, 0, trailers_future);
+    let __pattern_temp_0: [Response, Future<Result<(), ErrorCode>>] = __cm_adapter__Response_new(headers, 0, 0, trailers_future);
     let response: Response = __pattern_temp_0.0;
     let _tx_future: Future<Result<(), ErrorCode>> = __pattern_temp_0.1;
-    let __task_ret: Result<Response, ErrorCode> = move Result<Response, ErrorCode>::Ok(response);
+    let __task_ret: Result<Response, ErrorCode> = Result<Response, ErrorCode>::Ok(response);
     let mut __tv_0: i32 = 0;
     let mut __tv_1: i32 = 0;
     let mut __tv_2: i32 = 0;
@@ -320,7 +320,7 @@ export fn handle(request: Request) {
         }
         cm_raw_call task-return(__tv_0, __tv_1, __tv_2, __tv_3, __tv_4, __tv_5, __tv_6, __tv_7);
     }
-    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(move Result<Option<Trailers>, ErrorCode>::Ok(null));
+    trailers_tx."FutureWritable<Result<Option<Trailers>,ErrorCode>>::write"(Result<Option<Trailers>, ErrorCode>::Ok(null));
 }
 
 fn __cm_adapter__Fields_new() -> Fields {

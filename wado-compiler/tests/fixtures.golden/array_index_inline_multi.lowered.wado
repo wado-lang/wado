@@ -28,21 +28,21 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let c: Container<String> = move Container<String> { items: __seq_lit: {
-        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
+    let c: Container<String> = Container<String> { items: __seq_lit: {
+        let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "apple";
+            let value: String = "apple";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "banana";
+            let value: String = "banana";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "cherry";
+            let value: String = "cherry";
             self."Array<String>::append"(value);
         };
         break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
@@ -50,7 +50,7 @@ export fn run() with Stdout {
             break __inline_Array_String__SequenceLiteralBuilder__build_5: *self;
         };
     }, markers: __seq_lit: {
-        let mut __b: Array<bool> = move Array<bool> { repr: core::builtin::array_new::<bool>(3), used: 0 };
+        let mut __b: Array<bool> = Array<bool> { repr: core::builtin::array_new::<bool>(3), used: 0 };
         __inline_Array_bool__SequenceLiteralBuilder__push_literal_7: {
             let self: &mut Array<bool> = &mut __b;
             self."Array<bool>::append"(true);
@@ -68,31 +68,31 @@ export fn run() with Stdout {
             break __inline_Array_bool__SequenceLiteralBuilder__build_10: *self;
         };
     } };
-    let item0: String = move c.items."Array<String>^IndexValue::index_value"(0);
-    let item1: String = move c.items."Array<String>^IndexValue::index_value"(1);
-    let item2: String = move c.items."Array<String>^IndexValue::index_value"(2);
+    let item0: String = c.items."Array<String>^IndexValue::index_value"(0);
+    let item1: String = c.items."Array<String>^IndexValue::index_value"(1);
+    let item2: String = c.items."Array<String>^IndexValue::index_value"(2);
     let flag0: bool = c.markers."Array<bool>^IndexValue::index_value"(0);
     let flag1: bool = c.markers."Array<bool>^IndexValue::index_value"(1);
     let count: i32 = c."Container<String>::count_flagged"();
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(59), used: 0 };
-        __r.String::append(move "items: ");
+        let mut __r: String = String { repr: "array_new<u8>"(59), used: 0 };
+        __r.String::append("items: ");
         __r.String::append(item0);
-        __r.String::append(move ", ");
+        __r.String::append(", ");
         __r.String::append(item1);
-        __r.String::append(move ", ");
+        __r.String::append(", ");
         __r.String::append(item2);
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(41), used: 0 };
-        __r.String::append(move "flags: ");
+        let mut __r: String = String { repr: "array_new<u8>"(41), used: 0 };
+        __r.String::append("flags: ");
         let mut __f: Formatter = __inline_Formatter__new_18: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_18: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_bool_Display__fmt_19: {
-            let self: Box<bool> = move Box<bool> { value: flag0 };
+            let self: Box<bool> = Box<bool> { value: flag0 };
             let f: &mut Formatter = &mut __f;
             f.Formatter::pad(if self.value {
                 "true";
@@ -100,13 +100,13 @@ export fn run() with Stdout {
                 "false";
             });
         };
-        __r.String::append(move ", ");
+        __r.String::append(", ");
         __f = __inline_Formatter__new_20: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_20: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_bool_Display__fmt_21: {
-            let self: Box<bool> = move Box<bool> { value: flag1 };
+            let self: Box<bool> = Box<bool> { value: flag1 };
             let f: &mut Formatter = &mut __f;
             f.Formatter::pad(if self.value {
                 "true";
@@ -117,14 +117,14 @@ export fn run() with Stdout {
         break __tmpl: __r;
     });
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
-        __r.String::append(move "count: ");
+        let mut __r: String = String { repr: "array_new<u8>"(23), used: 0 };
+        __r.String::append("count: ");
         let mut __f: Formatter = __inline_Formatter__new_23: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_23: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_24: {
-            let self: Box<i32> = move Box<i32> { value: count };
+            let self: Box<i32> = Box<i32> { value: count };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -176,14 +176,14 @@ fn "Container<String>::count_flagged"(self: &Container<String>) -> i32 {
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<bool>(self.repr, index);
 }
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);
 }

@@ -23,16 +23,16 @@ export fn run() with Stdout, Environment {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let arguments: Array<String> = move core::cli::args();
+    let arguments: Array<String> = core::cli::args();
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
-        __r.String::append(move "args.len = ");
+        let mut __r: String = String { repr: "array_new<u8>"(27), used: 0 };
+        __r.String::append("args.len = ");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = move Box<i32> { value: arguments.used };
+            let self: Box<i32> = Box<i32> { value: arguments.used };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -45,7 +45,7 @@ fn __cm_adapter__Environment_get_arguments() -> Array<String> {
     cm_raw_call wasi:cli/Environment::get_arguments(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(__count), used: 0 };
+    let mut __result: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(__count), used: 0 };
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {

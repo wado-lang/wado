@@ -17,10 +17,10 @@ global mut __modules_initialized: bool = false;
 
 fn join_names(names: Array<String>) -> String {
     return __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(37), used: 0 };
-        __r.String::append(move names."Array<String>^IndexValue::index_value"(0));
-        __r.String::append(move " and ");
-        __r.String::append(move names."Array<String>^IndexValue::index_value"(1));
+        let mut __r: String = String { repr: "array_new<u8>"(37), used: 0 };
+        __r.String::append(names."Array<String>^IndexValue::index_value"(0));
+        __r.String::append(" and ");
+        __r.String::append(names."Array<String>^IndexValue::index_value"(1));
         break __tmpl: __r;
     };
 }
@@ -33,16 +33,16 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let result: String = move join_names(__seq_lit: {
-        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
+    let result: String = join_names(__seq_lit: {
+        let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "Alice";
+            let value: String = "Alice";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "Bob";
+            let value: String = "Bob";
             self."Array<String>::append"(value);
         };
         break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_4: {
@@ -76,7 +76,7 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);
 }

@@ -24,21 +24,21 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let m: Metric = __inline_make_metric_1: {
-        let u: String = move "meters";
+        let u: String = "meters";
         break __inline_make_metric_1: Metric { value: 3.14, unit: u };
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
+        let mut __r: String = String { repr: "array_new<u8>"(33), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_f64_Display__fmt_4: {
-            let self: Box<f64> = move Box<f64> { value: m.value };
+            let self: Box<f64> = Box<f64> { value: m.value };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_f64"(self.value, f);
         };
-        __r.String::append(move " ");
+        __r.String::append(" ");
         __r.String::append(m.unit);
         break __tmpl: __r;
     });

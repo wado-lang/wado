@@ -95,7 +95,7 @@ make benchmark-fts
 
 | Component  | Version                  |
 | ---------- | ------------------------ |
-| Wado       | commit `ef75dd1`         |
+| Wado       | commit `d93ef73`         |
 | wasmtime   | 41.0.4                   |
 | Node.js    | v24.14.0                 |
 | Python     | 3.14.3 (CPython, no JIT) |
@@ -154,10 +154,10 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 
 | Runtime             | Time (ms) | Relative  |
 | ------------------- | --------- | --------- |
-| Zig (-OReleaseFast) | 29        | 1.00x     |
-| Rust (rustc -O)     | 41        | 1.41x     |
-| C (gcc -O3)         | 65        | 2.24x     |
-| **Wado**            | 83,256    | 2,871.59x |
+| Zig (-OReleaseFast) | 27        | 1.00x     |
+| Rust (rustc -O)     | 38        | 1.41x     |
+| C (gcc -O3)         | 61        | 2.26x     |
+| **Wado**            | 72,999    | 2,703.67x |
 
 All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
 

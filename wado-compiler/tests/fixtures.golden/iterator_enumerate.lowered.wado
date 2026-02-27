@@ -37,20 +37,20 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let arr: Array<String> = __seq_lit: {
-        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
+        let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "a";
+            let value: String = "a";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "b";
+            let value: String = "b";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "c";
+            let value: String = "c";
             self."Array<String>::append"(value);
         };
         break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
@@ -63,23 +63,23 @@ export fn run() with Stdout {
         break __inline_ArrayIter_String___enumerate_6: EnumerateIter<String> { repr: self.repr, used: self.used, index: self.index, count: 0 };
     };
     loop {
-        let __pattern_temp_0: Option<[i32, String]> = move iter."EnumerateIter<String>^Iterator::next"();
+        let __pattern_temp_0: Option<[i32, String]> = iter."EnumerateIter<String>^Iterator::next"();
         if __variant_test(__pattern_temp_0, case=0, name=Some) {
             let pair: [i32, String] = __variant_payload(__pattern_temp_0, case=0);
             let idx: i32 = pair.0;
             let val: String = pair.1;
             core::cli::println(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(34), used: 0 };
+                let mut __r: String = String { repr: "array_new<u8>"(34), used: 0 };
                 let mut __f: Formatter = __inline_Formatter__new_9: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_10: {
-                    let self: Box<i32> = move Box<i32> { value: idx };
+                    let self: Box<i32> = Box<i32> { value: idx };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move ": ");
+                __r.String::append(": ");
                 __r.String::append(val);
                 break __tmpl: __r;
             });
@@ -114,7 +114,7 @@ fn "EnumerateIter<String>^Iterator::next"(self: &mut EnumerateIter<String>) -> O
     if (self.index >= self.used) {
         return null;
     }
-    let item: String = move core::builtin::array_get::<String>(self.repr, self.index);
+    let item: String = core::builtin::array_get::<String>(self.repr, self.index);
     let idx: i32 = self.count;
     self.index = (self.index + 1);
     self.count = (self.count + 1);

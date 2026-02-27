@@ -24,14 +24,14 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let arr: Array<Option<i32>> = __seq_lit: {
-        let mut __b: Array<Option<i32>> = move "Array<Option<i32>>^SequenceLiteralBuilder::new_literal"(3);
+        let mut __b: Array<Option<i32>> = "Array<Option<i32>>^SequenceLiteralBuilder::new_literal"(3);
         __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(Option::Some(1));
-        __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(move null);
+        __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(null);
         __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(Option::Some(3));
         break __seq_lit: __b."Array<Option<i32>>^SequenceLiteralBuilder::build"();
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
+        let mut __r: String = String { repr: "array_new<u8>"(16), used: 0 };
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -54,7 +54,7 @@ fn "__inspect$Array<Option<i32>>"(__val: Array<Option<i32>>, __fmt: &mut Formatt
         }
         if (__inspect_i > 0) {
             __inline_Formatter__write_str_1: {
-                let s: String = move ", ";
+                let s: String = ", ";
                 _licm_buf.String::append(s);
             };
         };
@@ -69,7 +69,7 @@ fn "__inspect$Array<Option<i32>>"(__val: Array<Option<i32>>, __fmt: &mut Formatt
 fn "__inspect$Option<i32>"(__val: Option<i32>, __fmt: &mut Formatter) {
     if __variant_test(__val, case=0, name=Some) {
         __inline_Formatter__write_str_0: {
-            let s: String = move "Some(";
+            let s: String = "Some(";
             __fmt.buf.String::append(s);
         };
         __inline___inspect_i32_1: {
@@ -83,7 +83,7 @@ fn "__inspect$Option<i32>"(__val: Option<i32>, __fmt: &mut Formatter) {
         };
     } else {
         __inline_Formatter__write_str_4: {
-            let s: String = move "null";
+            let s: String = "null";
             __fmt.buf.String::append(s);
         };
     };

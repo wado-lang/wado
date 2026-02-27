@@ -25,15 +25,15 @@ pub fn "Point^Display::fmt"(self: &Point, f: &mut Formatter) {
         f.buf.String::append_char('(');
     };
     __inline_Formatter__write_str_1: {
-        let s: String = move Box<i32> { value: self.x }.i32::to_string();
+        let s: String = Box<i32> { value: self.x }.i32::to_string();
         f.buf.String::append(s);
     };
     __inline_Formatter__write_str_2: {
-        let s: String = move ", ";
+        let s: String = ", ";
         f.buf.String::append(s);
     };
     __inline_Formatter__write_str_3: {
-        let s: String = move Box<i32> { value: self.y }.i32::to_string();
+        let s: String = Box<i32> { value: self.y }.i32::to_string();
         f.buf.String::append(s);
     };
     __inline_Formatter__write_char_4: {
@@ -49,16 +49,16 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let p: Point = move Point { x: 10, y: 20 };
-    let mut buf: String = move String { repr: "array_new<u8>"(64), used: 0 };
+    let p: Point = Point { x: 10, y: 20 };
+    let mut buf: String = String { repr: "array_new<u8>"(64), used: 0 };
     let mut f: Formatter = __inline_Formatter__new_2: {
         let buf: &mut String = &mut buf;
         break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
     };
     p."Point^Display::fmt"(&mut f);
     core::cli::println(buf);
-    let o: Point = move Point { x: 0, y: 0 };
-    buf = move String { repr: "array_new<u8>"(64), used: 0 };
+    let o: Point = Point { x: 0, y: 0 };
+    buf = String { repr: "array_new<u8>"(64), used: 0 };
     f = __inline_Formatter__new_4: {
         let buf: &mut String = &mut buf;
         break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };

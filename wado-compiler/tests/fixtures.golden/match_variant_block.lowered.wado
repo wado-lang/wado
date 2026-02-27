@@ -16,18 +16,18 @@
 global mut __modules_initialized: bool = false;
 
 fn apply_align(align: Align) -> String {
-    let mut result: String = move "";
+    let mut result: String = "";
     return match align {
         Left => {
-            result = move "left";
+            result = "left";
             result;
         },
         Center => {
-            result = move "center";
+            result = "center";
             result;
         },
         Right => {
-            result = move "right";
+            result = "right";
             result;
         },
     };
@@ -41,9 +41,9 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    core::cli::println(move apply_align(move Align::Left));
-    core::cli::println(move apply_align(move Align::Center));
-    core::cli::println(move apply_align(move Align::Right));
+    core::cli::println(apply_align(Align::Left));
+    core::cli::println(apply_align(Align::Center));
+    core::cli::println(apply_align(Align::Right));
 }
 
 export fn __cm_export__run() {

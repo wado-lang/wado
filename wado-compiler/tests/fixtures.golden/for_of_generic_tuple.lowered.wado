@@ -33,16 +33,16 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let h: Holder<String,i32> = move Holder<String,i32> { items: __seq_lit: {
-        let mut __b: Array<[String, i32]> = move Array<Tuple<String,i32>> { repr: core::builtin::array_new::<[String, i32]>(2), used: 0 };
+    let h: Holder<String,i32> = Holder<String,i32> { items: __seq_lit: {
+        let mut __b: Array<[String, i32]> = Array<Tuple<String,i32>> { repr: core::builtin::array_new::<[String, i32]>(2), used: 0 };
         __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<[String, i32]> = &mut __b;
-            let value: [String, i32] = move ["a", 1];
+            let value: [String, i32] = ["a", 1];
             self."Array<Tuple<String,i32>>::append"(value);
         };
         __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__push_literal_3: {
             let self: &mut Array<[String, i32]> = &mut __b;
-            let value: [String, i32] = move ["b", 2];
+            let value: [String, i32] = ["b", 2];
             self."Array<Tuple<String,i32>>::append"(value);
         };
         break __seq_lit: __inline_Array_Tuple_String_i32___SequenceLiteralBuilder__build_4: {
@@ -51,7 +51,7 @@ export fn run() with Stdout {
         };
     } };
     h."Holder<String,i32>::process"();
-    core::cli::println(move "ok");
+    core::cli::println("ok");
 }
 
 export fn __cm_export__run() {
@@ -66,7 +66,7 @@ fn "Holder<String,i32>::process"(self: &Holder<String,i32>) {
             break __inline_Array_Tuple_String_i32___IntoIterator__into_iter_0: ArrayIter<Tuple<String,i32>> { repr: self.repr, used: self.used, index: 0 };
         };
         loop {
-            let __pattern_temp_0: Option<[String, i32]> = move __iter_0."ArrayIter<Tuple<String,i32>>^Iterator::next"();
+            let __pattern_temp_0: Option<[String, i32]> = __iter_0."ArrayIter<Tuple<String,i32>>^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let pair: [String, i32] = __variant_payload(__pattern_temp_0, case=0);
             } else {
@@ -80,7 +80,7 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
     if (self.index >= self.used) {
         return null;
     }
-    let item: [String, i32] = move core::builtin::array_get::<[String, i32]>(self.repr, self.index);
+    let item: [String, i32] = core::builtin::array_get::<[String, i32]>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }
