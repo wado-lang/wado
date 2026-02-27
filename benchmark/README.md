@@ -154,10 +154,10 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 
 | Runtime             | Time (ms) | Relative |
 | ------------------- | --------- | -------- |
-| Zig (-OReleaseFast) | 28        | 1.00x    |
-| Rust (rustc -O)     | 41        | 1.46x    |
-| C (gcc -O3)         | 64        | 2.29x    |
-| **Wado**            | 279       | 9.96x    |
+| Zig (-OReleaseFast) | 24        | 1.00x    |
+| Rust (rustc -O)     | 36        | 1.50x    |
+| C (gcc -O3)         | 55        | 2.29x    |
+| **Wado**            | 198       | 8.25x    |
 
 All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
 
