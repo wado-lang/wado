@@ -1037,8 +1037,7 @@ fn analyze_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             analyze_expr(value, current_module, type_table, analysis);
         }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             analyze_expr(expr, current_module, type_table, analysis);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -1629,8 +1628,7 @@ fn collect_types_from_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_types_from_expr(value, type_table, reachable);
         }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             collect_types_from_expr(expr, type_table, reachable);
         }
         TirExprKind::VariantPayload {

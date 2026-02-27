@@ -400,7 +400,7 @@ fn "ArrayIter<Tuple<String,i32>>^Iterator::next"(self: &mut ArrayIter<Tuple<Stri
     }
     let item: [String, i32] = core::builtin::array_get::<[String, i32]>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<[String, i32]>::Some(item);
 }
 
 fn "TreeMap<String,i32>::iter"(self: &TreeMap<String,i32>) -> Array<[String, i32]> {
@@ -553,7 +553,7 @@ fn "TreeMap<String,i32>::search_in_node"(self: &TreeMap<String,i32>, node: &BTre
         break __inline_Array_String___len_1: self.used;
     }) && *key."String^Eq::eq"(&node.keys."Array<String>^IndexValue::index_value"(i))) {
         if !node.deleted."Array<bool>^IndexValue::index_value"(i) {
-            return Option::Some(node.values."Array<i32>^IndexValue::index_value"(i));
+            return Option<i32>::Some(node.values."Array<i32>^IndexValue::index_value"(i));
         }
         return null;
     }

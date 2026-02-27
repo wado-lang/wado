@@ -29,9 +29,9 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let a: Option<i32> = Option::Some(42);
+    let a: Option<i32> = Option<i32>::Some(42);
     let b: Option<i32> = null;
-    let c: Option<i32> = Option::Some(99);
+    let c: Option<i32> = Option<i32>::Some(99);
     let arr: Array<Option<i32>> = __seq_lit: {
         let mut __b: Array<Option<i32>> = "Array<Option<i32>>^SequenceLiteralBuilder::new_literal"(3);
         __b."Array<Option<i32>>^SequenceLiteralBuilder::push_literal"(a);
@@ -104,7 +104,7 @@ fn "ArrayIter<Option<i32>>^Iterator::next"(self: &mut ArrayIter<Option<i32>>) ->
     }
     let item: Option<i32> = core::builtin::array_get::<Option<i32>>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<Option<i32>>::Some(item);
 }
 
 fn "Array<Option<i32>>^IntoIterator::into_iter"(self: &Array<Option<i32>>) -> ArrayIter<Option<i32>> {

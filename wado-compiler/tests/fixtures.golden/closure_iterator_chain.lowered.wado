@@ -184,7 +184,7 @@ fn "MapIter<i32,i32>^Iterator::next"(self: &mut MapIter<i32,i32>) -> Option<i32>
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(self.f(item));
+    return Option<i32>::Some(self.f(item));
 }
 
 fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
@@ -193,7 +193,7 @@ fn "ArrayIter<i32>^Iterator::next"(self: &mut ArrayIter<i32>) -> Option<i32> {
     }
     let item: i32 = core::builtin::array_get::<i32>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<i32>::Some(item);
 }
 
 pub fn "FilterIter<i32>::map<i32>"(self: &FilterIter<i32>, f: fn(i32) -> i32) -> FilterMapIter<i32,i32> {
@@ -245,7 +245,7 @@ fn "FilterMapIter<i32,i32>^Iterator::next"(self: &mut FilterMapIter<i32,i32>) ->
         let item: i32 = core::builtin::array_get::<i32>(_licm_repr, self.index);
         self.index = (self.index + 1);
         if _licm_pred(item) {
-            return Option::Some(_licm_f(item));
+            return Option<i32>::Some(_licm_f(item));
         }
     }
 }

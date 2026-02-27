@@ -164,7 +164,7 @@ export fn run() with Stdout {
         },
     };
     core::cli::println(desc);
-    let opt: Option<Point> = Option::Some(Point { x: 7, y: 8 });
+    let opt: Option<Point> = Option<Point>::Some(Point { x: 7, y: 8 });
     if __variant_test(opt, case=0, name=Some) {
         let __pattern_temp_8: Point = __variant_payload(opt, case=0);
         let x: i32 = __pattern_temp_8.x;
@@ -196,7 +196,7 @@ fn "ArrayIter<Tagged>^Iterator::next"(self: &mut ArrayIter<Tagged>) -> Option<Ta
     }
     let item: Tagged = core::builtin::array_get::<Tagged>(self.repr, self.index);
     self.index = (self.index + 1);
-    return Option::Some(item);
+    return Option<Tagged>::Some(item);
 }
 
 pub fn "Array<Tagged>::append"(self: &mut Array<Tagged>, value: Tagged) {

@@ -305,8 +305,7 @@ impl<'a, H: CompilerHost> EffectChecker<'a, H> {
             TirExprKind::GlobalVarSet { value, .. } => {
                 self.check_expr(value)?;
             }
-            TirExprKind::VariantTag { expr }
-            | TirExprKind::VariantTest { expr, .. } => {
+            TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
                 self.check_expr(expr)?;
             }
             TirExprKind::VariantPayload { expr, .. } => {

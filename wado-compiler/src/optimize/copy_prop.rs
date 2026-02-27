@@ -293,8 +293,7 @@ fn collect_usage_in_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_usage_in_expr(value, usage, in_loop, in_condition);
         }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             collect_usage_in_expr(expr, usage, in_loop, in_condition);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -599,8 +598,7 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
         TirExprKind::GlobalVarSet { value, .. } => {
             substitute_in_expr(value, substitutions);
         }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             substitute_in_expr(expr, substitutions);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -787,8 +785,7 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_copy_bindings_in_expr(value, bindings);
         }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             collect_copy_bindings_in_expr(expr, bindings);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -981,8 +978,7 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
         TirExprKind::GlobalVarSet { value, .. } => {
             remove_copy_bindings_in_expr(value, dead_locals);
         }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             remove_copy_bindings_in_expr(expr, dead_locals);
         }
         TirExprKind::VariantPayload { expr, .. } => {

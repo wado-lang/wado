@@ -549,8 +549,7 @@ fn check_escape_in_expr(expr: &TirExpr, candidates: &IndexSet<u32>, escaped: &mu
         TirExprKind::GlobalVarSet { value, .. } => {
             check_escape_in_expr(value, candidates, escaped);
         }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             check_escape_in_expr(expr, candidates, escaped);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -1628,8 +1627,7 @@ fn rewrite_expr(
                 reconstruct_info,
             );
         }
-        TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             rewrite_expr(
                 expr,
                 safe_set,

@@ -28,8 +28,8 @@ use crate::tir::{
 use super::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, cast, cm_raw_call, expr_stmt,
     generic_method_call, generic_static_call, i32_const, i64_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none, option_some,
-    return_stmt, synth_span,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, null_expr, option_none, option_some, return_stmt,
+    synth_span,
 };
 
 /// Context for lifting CM values to GC types, providing access to
@@ -4354,7 +4354,7 @@ fn fixup_adapter_let(
     }
 }
 
-/// Fix up an expression statement (e.g., Assign with VariantConstruct).
+/// Fix up an expression statement (e.g., Assign with `VariantConstruct`).
 fn fixup_adapter_expr(expr: &mut TirExpr, return_type: TypeId) {
     if let TirExprKind::Assign { target, value } = &mut expr.kind {
         fixup_variant_construct(value, return_type);
@@ -4367,16 +4367,13 @@ fn fixup_adapter_expr(expr: &mut TirExpr, return_type: TypeId) {
 
 /// Fix up `VariantConstruct` expressions to use the real type.
 fn fixup_variant_construct(expr: &mut TirExpr, return_type: TypeId) {
-    match &mut expr.kind {
-        TirExprKind::VariantConstruct { variant_type, .. } => {
-            if *variant_type == TypeTable::I32 {
-                *variant_type = return_type;
-            }
-            if expr.type_id == TypeTable::I32 {
-                expr.type_id = return_type;
-            }
+    if let TirExprKind::VariantConstruct { variant_type, .. } = &mut expr.kind {
+        if *variant_type == TypeTable::I32 {
+            *variant_type = return_type;
         }
-        _ => {}
+        if expr.type_id == TypeTable::I32 {
+            expr.type_id = return_type;
+        }
     }
 }
 
