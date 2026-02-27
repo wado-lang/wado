@@ -1,0 +1,22 @@
+// Escape analysis: mixed case — one safe, one escaping in same loop.
+// Only the safe template should be hoisted.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut total = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        // safe: only used as receiver
+        let safe = `s={i}`;
+        total += safe.len();
+        // escaped: passed as arg to println (core lib, not inlined)
+        let escaped = `e={i}`;
+        println(escaped);
+    }
+    println(`total={total}`);
+}
+
+__DATA__
+{
+    "stdout": "e=0\ne=1\ne=2\ntotal=9\n",
+    "wir_expect:O2": ["__tmpl_repr_"]
+}
