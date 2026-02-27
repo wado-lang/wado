@@ -447,6 +447,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         modules: &indexmap::IndexMap<ModuleSource, Module>,
     ) -> Result<(), Bail> {
         for (source, module) in modules {
+            self.logger.set_file(source.diagnostic_filename());
             self.validate_imports(module, source, modules)?;
         }
         Ok(())

@@ -17,8 +17,8 @@ global mut __modules_initialized: bool = false;
 
 fn read_and_format(r: Box<i32>) -> String {
     return __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(22), used: 0 };
-        __r.String::append(move "value=");
+        let mut __r: String = String { repr: "array_new<u8>"(22), used: 0 };
+        __r.String::append("value=");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -33,7 +33,7 @@ fn read_and_format(r: Box<i32>) -> String {
 }
 
 fn print_via(r: Box<i32>) with Stdout {
-    let s: String = move read_and_format(r);
+    let s: String = read_and_format(r);
     core::cli::println(s);
 }
 
@@ -45,7 +45,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut n: Box<i32> = move Box<i32> { value: 0 };
+    let mut n: Box<i32> = Box<i32> { value: 0 };
     __inline_add_four_1: {
         let r: Box<i32> = n;
         __inline_add_two_2: {

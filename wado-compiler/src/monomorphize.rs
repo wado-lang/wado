@@ -851,9 +851,6 @@ impl Monomorphizer {
                     self.rewrite_types_in_expr(payload_expr, type_table);
                 }
             }
-            TirExprKind::Move { expr } => {
-                self.rewrite_types_in_expr(expr, type_table);
-            }
             TirExprKind::IndirectCall { callee, args } => {
                 self.rewrite_types_in_expr(callee, type_table);
                 for arg in args {
@@ -1846,9 +1843,6 @@ impl Monomorphizer {
                     );
                 }
             }
-            TirExprKind::Move { expr } => {
-                self.collect_func_instantiation_sites_in_expr(expr, generic_functions, type_table);
-            }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.collect_func_instantiation_sites_in_block(
                     block,
@@ -2713,9 +2707,6 @@ impl Monomorphizer {
                 }
                 // Unit cases (None) will be handled by the translator's fallback
             }
-            TirExprKind::Move { expr } => {
-                self.substitute_types_in_expr(expr, substitution, type_table);
-            }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.substitute_types_in_block(block, substitution, type_table);
             }
@@ -3330,9 +3321,6 @@ impl Monomorphizer {
                 if let Some(payload_expr) = payload {
                     self.rewrite_function_calls_in_expr(payload_expr, type_table);
                 }
-            }
-            TirExprKind::Move { expr } => {
-                self.rewrite_function_calls_in_expr(expr, type_table);
             }
             TirExprKind::LabeledBlock { block, .. } => {
                 self.rewrite_function_calls_in_block(block, type_table);

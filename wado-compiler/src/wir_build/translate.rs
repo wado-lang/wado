@@ -390,20 +390,35 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Check if an expression is "fresh" (doesn't need value copy).
+    /// Fresh values are newly created and don't alias existing data,
+    /// so they can be used directly without copying.
     fn is_fresh_value(expr: &TirExpr) -> bool {
-        matches!(
-            &expr.kind,
-            TirExprKind::Move { .. }
-                | TirExprKind::StructLiteral { .. }
-                | TirExprKind::TupleLiteral { .. }
-                | TirExprKind::VariantConstruct { .. }
-                | TirExprKind::EnumConstruct { .. }
-                | TirExprKind::OptionSome { .. }
-                | TirExprKind::Null
-                | TirExprKind::Call { .. }
-                | TirExprKind::MethodCall { .. }
-                | TirExprKind::StaticCall { .. }
-        )
+        match &expr.kind {
+            // Literals always produce fresh values
+            TirExprKind::StringLiteral(_)
+            | TirExprKind::StructLiteral { .. }
+            | TirExprKind::TupleLiteral { .. }
+            | TirExprKind::Null => true,
+
+            // All call variants return fresh values (callee constructs the return value)
+            TirExprKind::Call { .. }
+            | TirExprKind::StaticCall { .. }
+            | TirExprKind::MethodCall { .. }
+            | TirExprKind::CmRawCall { .. }
+            | TirExprKind::IndirectCall { .. } => true,
+
+            // ClosureToCanonical creates a fresh closure struct
+            TirExprKind::ClosureToCanonical { .. } => true,
+
+            // OptionSome wrapping a fresh value is itself fresh
+            TirExprKind::OptionSome { value } => Self::is_fresh_value(value),
+
+            // Variant/enum constructors produce fresh values
+            TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
+
+            // Everything else is not fresh (locals, field access, index, etc.)
+            _ => false,
+        }
     }
 
     /// Wrap a translated value instruction in `ValueCopy` if needed.
@@ -1322,12 +1337,6 @@ impl FunctionTranslator<'_, '_> {
                 expr: scrutinee,
                 arms,
             } => self.translate_match(scrutinee, arms, expr.type_id),
-
-            // === Move ===
-            TirExprKind::Move { expr: inner } => {
-                // Move means no copy needed (fresh value)
-                self.translate_expr(inner)
-            }
 
             // === Index ===
             TirExprKind::Index {

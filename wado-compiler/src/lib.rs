@@ -644,6 +644,8 @@ pub enum CompileError {
     /// Semantic analysis error
     Analyzer {
         message: String,
+        line: usize,
+        column: usize,
         filename: Option<String>,
     },
 }
@@ -685,9 +687,16 @@ impl std::fmt::Display for CompileError {
                     write!(f, "{message}")
                 }
             }
-            CompileError::Analyzer { message, filename } => {
+            CompileError::Analyzer {
+                message,
+                line,
+                column,
+                filename,
+            } => {
                 if let Some(file) = filename {
-                    write!(f, "{file}: analysis error: {message}")
+                    write!(f, "{file}:{line}:{column}: analysis error: {message}")
+                } else if *line > 0 {
+                    write!(f, "{line}:{column}: analysis error: {message}")
                 } else {
                     write!(f, "analysis error: {message}")
                 }

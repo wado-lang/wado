@@ -481,9 +481,6 @@ fn collect_modified_vars_in_expr(expr: &TirExpr, modified: &mut ModifiedVars) {
                 collect_modified_vars_in_expr(payload_expr, modified);
             }
         }
-        TirExprKind::Move { expr } => {
-            collect_modified_vars_in_expr(expr, modified);
-        }
         TirExprKind::LabeledBlock { block, .. } => {
             collect_modified_vars_in_block(block, modified);
         }
@@ -773,9 +770,6 @@ fn collect_licm_ref_bindings_in_expr(
             if let Some(payload_expr) = payload {
                 collect_licm_ref_bindings_in_expr(payload_expr, type_table, bindings);
             }
-        }
-        TirExprKind::Move { expr } => {
-            collect_licm_ref_bindings_in_expr(expr, type_table, bindings);
         }
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_licm_ref_bindings_in_expr(value, type_table, bindings);
@@ -1322,16 +1316,6 @@ fn find_hoist_candidates_in_expr(
                 );
             }
         }
-        TirExprKind::Move { expr } => {
-            find_hoist_candidates_in_expr(
-                expr,
-                modified_vars,
-                ref_bindings,
-                candidates,
-                seen,
-                next_local,
-            );
-        }
         TirExprKind::LabeledBlock { block, .. } => {
             find_hoist_candidates_in_block(
                 block,
@@ -1620,9 +1604,6 @@ fn replace_hoisted_in_expr(
             if let Some(payload_expr) = payload {
                 replace_hoisted_in_expr(payload_expr, candidates, ref_bindings);
             }
-        }
-        TirExprKind::Move { expr } => {
-            replace_hoisted_in_expr(expr, candidates, ref_bindings);
         }
         TirExprKind::LabeledBlock { block, .. } => {
             replace_hoisted_in_block(block, candidates, ref_bindings);

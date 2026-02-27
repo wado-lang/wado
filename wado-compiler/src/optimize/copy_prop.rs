@@ -277,9 +277,6 @@ fn collect_usage_in_expr(
                 collect_usage_in_expr(payload_expr, usage, in_loop, in_condition);
             }
         }
-        TirExprKind::Move { expr } => {
-            collect_usage_in_expr(expr, usage, in_loop, in_condition);
-        }
         TirExprKind::Closure { body, captures, .. } => {
             // Mark all captured variables as captured
             for capture in captures {
@@ -595,9 +592,6 @@ fn substitute_in_expr(expr: &mut TirExpr, substitutions: &IndexMap<u32, CopySour
                 substitute_in_expr(payload_expr, substitutions);
             }
         }
-        TirExprKind::Move { expr } => {
-            substitute_in_expr(expr, substitutions);
-        }
         TirExprKind::Closure { body, .. } => {
             substitute_in_expr(body, substitutions);
         }
@@ -790,9 +784,6 @@ fn collect_copy_bindings_in_expr(expr: &TirExpr, bindings: &mut Vec<CopyBinding>
             if let Some(payload_expr) = payload {
                 collect_copy_bindings_in_expr(payload_expr, bindings);
             }
-        }
-        TirExprKind::Move { expr } => {
-            collect_copy_bindings_in_expr(expr, bindings);
         }
         TirExprKind::Closure { body, .. } => {
             collect_copy_bindings_in_expr(body, bindings);
@@ -992,9 +983,6 @@ fn remove_copy_bindings_in_expr(expr: &mut TirExpr, dead_locals: &IndexSet<u32>)
             if let Some(payload_expr) = payload {
                 remove_copy_bindings_in_expr(payload_expr, dead_locals);
             }
-        }
-        TirExprKind::Move { expr } => {
-            remove_copy_bindings_in_expr(expr, dead_locals);
         }
         TirExprKind::Closure { body, .. } => {
             remove_copy_bindings_in_expr(body, dead_locals);

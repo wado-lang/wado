@@ -21,19 +21,19 @@ struct Item {
 
 pub fn "Item^Describable::short_desc"(self: &Item) -> String {
     return __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(18), used: 0 };
-        __r.String::append(move "[");
+        let mut __r: String = String { repr: "array_new<u8>"(18), used: 0 };
+        __r.String::append("[");
         __r.String::append(self.name);
-        __r.String::append(move "]");
+        __r.String::append("]");
         break __tmpl: __r;
     };
 }
 
 pub fn "Item^Describable::full_desc"(self: &Item) -> String {
     return __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(29), used: 0 };
-        __r.String::append(move "Description: ");
-        __r.String::append(move self."Item^Describable::short_desc"());
+        let mut __r: String = String { repr: "array_new<u8>"(29), used: 0 };
+        __r.String::append("Description: ");
+        __r.String::append(self."Item^Describable::short_desc"());
         break __tmpl: __r;
     };
 }
@@ -46,10 +46,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let item: Item = move Item { name: "Widget" };
+    let item: Item = Item { name: "Widget" };
     core::cli::println(item.name);
-    core::cli::println(move item."Item^Describable::short_desc"());
-    core::cli::println(move item."Item^Describable::full_desc"());
+    core::cli::println(item."Item^Describable::short_desc"());
+    core::cli::println(item."Item^Describable::full_desc"());
 }
 
 export fn __cm_export__run() {

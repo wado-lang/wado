@@ -44,21 +44,21 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let mut map: TreeMap<String,i32> = move "TreeMap<String,i32>::new"();
+    let mut map: TreeMap<String,i32> = "TreeMap<String,i32>::new"();
     __inline_TreeMap_String_i32__IndexAssign__index_assign_1: {
         let self: &mut TreeMap<String,i32> = &mut map;
-        let key: String = move "hello";
+        let key: String = "hello";
         self."TreeMap<String,i32>::insert"(key, 42);
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(23), used: 0 };
-        __r.String::append(move "value: ");
+        let mut __r: String = String { repr: "array_new<u8>"(23), used: 0 };
+        __r.String::append("value: ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: map."TreeMap<String,i32>^IndexValue::index_value"(move "hello") };
+            let self: Box<i32> = Box<i32> { value: map."TreeMap<String,i32>^IndexValue::index_value"("hello") };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -75,8 +75,8 @@ fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key
     let index: i32 = self."TreeMap<String,i32>::find_index"(key);
     if (index < 0) {
         core::internal::panic(__tmpl: {
-            let mut __r: String = move String { repr: "array_new<u8>"(31), used: 0 };
-            __r.String::append(move "key not found: ");
+            let mut __r: String = String { repr: "array_new<u8>"(31), used: 0 };
+            __r.String::append("key not found: ");
             let mut __f: Formatter = __inline_Formatter__new_1: {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -100,7 +100,7 @@ fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key
 
 fn "Array<TreeMapEntry<String,i32>>^IndexValue::index_value"(self: &Array<TreeMapEntry<String,i32>>, index: i32) -> TreeMapEntry<String,i32> {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<TreeMapEntry<String,i32>>(self.repr, index);
 }
@@ -138,9 +138,9 @@ fn "TreeMap<String,i32>::insert"(self: &mut TreeMap<String,i32>, key: String, va
         return;
     }
     let new_index: i32 = self.entries."Array<TreeMapEntry<String,i32>>::len"();
-    let entry: TreeMapEntry<String,i32> = move TreeMapEntry<String,i32> { key: key, value: value, deleted: false };
+    let entry: TreeMapEntry<String,i32> = TreeMapEntry<String,i32> { key: key, value: value, deleted: false };
     self.entries."Array<TreeMapEntry<String,i32>>::append"(entry);
-    self.root = move self."TreeMap<String,i32>::insert_node"(self.root, key, new_index);
+    self.root = self."TreeMap<String,i32>::insert_node"(self.root, key, new_index);
     self.size = (self.size + 1);
 }
 
@@ -152,14 +152,14 @@ fn "TreeMap<String,i32>::insert_node"(self: &mut TreeMap<String,i32>, node: Opti
             return Option<&mut TreeMapNode<String>>::Some(n);
         }
         if (key."String^Ord::cmp"(&n.key) == Ordering::Less) {
-            n.left = move self."TreeMap<String,i32>::insert_node"(n.left, key, index);
+            n.left = self."TreeMap<String,i32>::insert_node"(n.left, key, index);
         } else {
-            n.right = move self."TreeMap<String,i32>::insert_node"(n.right, key, index);
+            n.right = self."TreeMap<String,i32>::insert_node"(n.right, key, index);
         }
-        let after_skew: Option<&mut TreeMapNode<String>> = move self."TreeMap<String,i32>::skew"(move Option<&mut TreeMapNode<String>>::Some(n));
+        let after_skew: Option<&mut TreeMapNode<String>> = self."TreeMap<String,i32>::skew"(Option<&mut TreeMapNode<String>>::Some(n));
         return self."TreeMap<String,i32>::split"(after_skew);
     }
-    let mut new_node: TreeMapNode<String> = move TreeMapNode<String> { key: key, index: index, level: 1, left: null, right: null };
+    let mut new_node: TreeMapNode<String> = TreeMapNode<String> { key: key, index: index, level: 1, left: null, right: null };
     return Option<&mut TreeMapNode<String>>::Some(&mut new_node);
 }
 
@@ -174,7 +174,7 @@ fn "TreeMap<String,i32>::split"(self: &mut TreeMap<String,i32>, node: Option<&mu
                 let rr: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_2, case=0);
                 if (rr.level == n.level) {
                     n.right = right.left;
-                    right.left = move Option<&mut TreeMapNode<String>>::Some(n);
+                    right.left = Option<&mut TreeMapNode<String>>::Some(n);
                     right.level = (right.level + 1);
                     return Option<&mut TreeMapNode<String>>::Some(right);
                 }
@@ -193,7 +193,7 @@ fn "TreeMap<String,i32>::skew"(self: &mut TreeMap<String,i32>, node: Option<&mut
             let left: &mut TreeMapNode<String> = __variant_payload(__pattern_temp_1, case=0);
             if (left.level == n.level) {
                 n.left = left.right;
-                left.right = move Option<&mut TreeMapNode<String>>::Some(n);
+                left.right = Option<&mut TreeMapNode<String>>::Some(n);
                 return Option<&mut TreeMapNode<String>>::Some(left);
             }
         }
@@ -224,7 +224,7 @@ pub fn "Array<TreeMapEntry<String,i32>>::len"(self: &Array<TreeMapEntry<String,i
 
 pub fn "TreeMap<String,i32>::new"() -> TreeMap<String,i32> {
     return TreeMap<String,i32> { root: null, entries: __seq_lit: {
-        let mut __b: Array<TreeMapEntry<String,i32>> = move "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(0);
+        let mut __b: Array<TreeMapEntry<String,i32>> = "Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::new_literal"(0);
         break __seq_lit: __b."Array<TreeMapEntry<String,i32>>^SequenceLiteralBuilder::build"();
     }, size: 0, deleted_count: 0 };
 }

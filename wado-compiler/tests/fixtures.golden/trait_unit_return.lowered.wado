@@ -21,8 +21,8 @@ struct Message {
 
 fn "Message^Printable::print"(self: &Message) with Stdout {
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(25), used: 0 };
-        __r.String::append(move "Message: ");
+        let mut __r: String = String { repr: "array_new<u8>"(25), used: 0 };
+        __r.String::append("Message: ");
         __r.String::append(self.text);
         break __tmpl: __r;
     });
@@ -36,7 +36,7 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let m: Message = move Message { text: "Hello, World!" };
+    let m: Message = Message { text: "Hello, World!" };
     m."Message^Printable::print"();
 }
 

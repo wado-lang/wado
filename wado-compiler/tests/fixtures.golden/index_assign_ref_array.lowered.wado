@@ -24,20 +24,20 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let mut strings: Array<String> = __seq_lit: {
-        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
+        let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "a";
+            let value: String = "a";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "b";
+            let value: String = "b";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "c";
+            let value: String = "c";
             self."Array<String>::append"(value);
         };
         break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
@@ -45,27 +45,27 @@ export fn run() with Stdout {
             break __inline_Array_String__SequenceLiteralBuilder__build_5: *self;
         };
     };
-    strings."Array<String>^IndexAssign::index_assign"(0, move "hello");
-    strings."Array<String>^IndexAssign::index_assign"(1, move "world");
+    strings."Array<String>^IndexAssign::index_assign"(0, "hello");
+    strings."Array<String>^IndexAssign::index_assign"(1, "world");
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(50), used: 0 };
-        __r.String::append(move strings."Array<String>^IndexValue::index_value"(0));
-        __r.String::append(move " ");
-        __r.String::append(move strings."Array<String>^IndexValue::index_value"(1));
-        __r.String::append(move " ");
-        __r.String::append(move strings."Array<String>^IndexValue::index_value"(2));
+        let mut __r: String = String { repr: "array_new<u8>"(50), used: 0 };
+        __r.String::append(strings."Array<String>^IndexValue::index_value"(0));
+        __r.String::append(" ");
+        __r.String::append(strings."Array<String>^IndexValue::index_value"(1));
+        __r.String::append(" ");
+        __r.String::append(strings."Array<String>^IndexValue::index_value"(2));
         break __tmpl: __r;
     });
     let mut messages: Array<String> = __seq_lit: {
-        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
+        let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_8: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "";
+            let value: String = "";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_9: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "";
+            let value: String = "";
             self."Array<String>::append"(value);
         };
         break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_10: {
@@ -73,13 +73,13 @@ export fn run() with Stdout {
             break __inline_Array_String__SequenceLiteralBuilder__build_10: *self;
         };
     };
-    messages."Array<String>^IndexAssign::index_assign"(0, move "first");
-    messages."Array<String>^IndexAssign::index_assign"(1, move "second");
+    messages."Array<String>^IndexAssign::index_assign"(0, "first");
+    messages."Array<String>^IndexAssign::index_assign"(1, "second");
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
-        __r.String::append(move messages."Array<String>^IndexValue::index_value"(0));
-        __r.String::append(move " ");
-        __r.String::append(move messages."Array<String>^IndexValue::index_value"(1));
+        let mut __r: String = String { repr: "array_new<u8>"(33), used: 0 };
+        __r.String::append(messages."Array<String>^IndexValue::index_value"(0));
+        __r.String::append(" ");
+        __r.String::append(messages."Array<String>^IndexValue::index_value"(1));
         break __tmpl: __r;
     });
 }
@@ -107,14 +107,14 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);
 }
 
 fn "Array<String>^IndexAssign::index_assign"(self: &mut Array<String>, index: i32, value: String) {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     core::builtin::array_set::<String>(self.repr, index, value);
 }

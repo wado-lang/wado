@@ -26,16 +26,16 @@ export fn run() with Stdout, MonotonicClock {
     let start: Mark = __cm_adapter__MonotonicClock_now();
     let res: Duration = __cm_adapter__MonotonicClock_get_resolution();
     if ((start > 0) && (res > 0)) {
-        core::cli::println(move "both newtypes have positive values");
+        core::cli::println("both newtypes have positive values");
     }
     let end: Mark = __cm_adapter__MonotonicClock_now();
     let elapsed: Mark = (end - start);
     if (elapsed >= 0) {
-        core::cli::println(move "elapsed time is non-negative");
+        core::cli::println("elapsed time is non-negative");
     }
     let elapsed_u64: u64 = elapsed as u64;
     let res_u64: u64 = res as u64;
-    core::cli::println(move "multiple wasi newtype tests passed");
+    core::cli::println("multiple wasi newtype tests passed");
 }
 
 fn __cm_adapter__MonotonicClock_now() -> Mark {

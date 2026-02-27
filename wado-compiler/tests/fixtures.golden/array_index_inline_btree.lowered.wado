@@ -33,26 +33,26 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let tree: Tree<String> = move Tree<String> { root: Node<String> { keys: __seq_lit: {
-        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(4), used: 0 };
+    let tree: Tree<String> = Tree<String> { root: Node<String> { keys: __seq_lit: {
+        let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(4), used: 0 };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "apple";
+            let value: String = "apple";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "banana";
+            let value: String = "banana";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "cherry";
+            let value: String = "cherry";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_5: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "date";
+            let value: String = "date";
             self."Array<String>::append"(value);
         };
         break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_6: {
@@ -60,7 +60,7 @@ export fn run() with Stdout {
             break __inline_Array_String__SequenceLiteralBuilder__build_6: *self;
         };
     }, deleted: __seq_lit: {
-        let mut __b: Array<bool> = move Array<bool> { repr: core::builtin::array_new::<bool>(4), used: 0 };
+        let mut __b: Array<bool> = Array<bool> { repr: core::builtin::array_new::<bool>(4), used: 0 };
         __inline_Array_bool__SequenceLiteralBuilder__push_literal_8: {
             let self: &mut Array<bool> = &mut __b;
             self."Array<bool>::append"(false);
@@ -84,14 +84,14 @@ export fn run() with Stdout {
     } }, max_keys: 5 };
     let result: i32 = tree."Tree<String>::check"();
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
-        __r.String::append(move "result: ");
+        let mut __r: String = String { repr: "array_new<u8>"(24), used: 0 };
+        __r.String::append("result: ");
         let mut __f: Formatter = __inline_Formatter__new_14: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_15: {
-            let self: Box<i32> = move Box<i32> { value: result };
+            let self: Box<i32> = Box<i32> { value: result };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
@@ -145,7 +145,7 @@ fn "Node<String>::find_index"(self: &Node<String>, key: &String) -> i32 {
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);
 }
@@ -174,7 +174,7 @@ fn "Node<String>::is_full"(self: &Node<String>, max_keys: i32) -> bool {
 
 fn "Array<bool>^IndexValue::index_value"(self: &Array<bool>, index: i32) -> bool {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<bool>(self.repr, index);
 }

@@ -23,8 +23,8 @@ struct Point {
 fn "Point^Describable::describe"(self: &Point) -> String {
     let s: i32 = (self.x + self.y);
     return __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(62), used: 0 };
-        __r.String::append(move "Point(");
+        let mut __r: String = String { repr: "array_new<u8>"(62), used: 0 };
+        __r.String::append("Point(");
         let mut __f: Formatter = __inline_Formatter__new_2: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -34,7 +34,7 @@ fn "Point^Describable::describe"(self: &Point) -> String {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
         };
-        __r.String::append(move ", ");
+        __r.String::append(", ");
         __f = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -44,7 +44,7 @@ fn "Point^Describable::describe"(self: &Point) -> String {
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(__sroa_self_value, f);
         };
-        __r.String::append(move ") sum=");
+        __r.String::append(") sum=");
         __f = __inline_Formatter__new_6: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_6: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -65,8 +65,8 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let p: Point = move Point { x: 3, y: 4 };
-    core::cli::println(move p."Point^Describable::describe"());
+    let p: Point = Point { x: 3, y: 4 };
+    core::cli::println(p."Point^Describable::describe"());
 }
 
 export fn __cm_export__run() {

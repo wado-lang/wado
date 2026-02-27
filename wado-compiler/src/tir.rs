@@ -1429,14 +1429,6 @@ pub enum TirExprKind {
         case_name: String,
     },
 
-    /// Move semantics: the inner value is moved without copying.
-    /// Inserted by the optimizer for expressions that produce fresh values
-    /// (e.g., function call results, literals).
-    /// Future: When user-facing, `move x` invalidates `x` after the expression.
-    Move {
-        expr: Box<TirExpr>,
-    },
-
     /// Labeled block expression: `label: { ... }` that produces a value
     /// The value must be returned via `break label: expr;`
     LabeledBlock {

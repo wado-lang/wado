@@ -25,12 +25,12 @@ export fn run() with Stdout, Stdin {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let __pattern_temp_0: [Stream<u8>, Future<Result<(), ErrorCode>>] = move __cm_adapter__Stdin_read_via_stream();
+    let __pattern_temp_0: [Stream<u8>, Future<Result<(), ErrorCode>>] = __cm_adapter__Stdin_read_via_stream();
     let stdin_stream: Stream<u8> = __pattern_temp_0.0;
     let _done: Future<Result<(), ErrorCode>> = __pattern_temp_0.1;
     let mut total: i32 = 0;
     loop {
-        let chunk: Array<u8> = move stdin_stream."Stream<u8>::read"(4096);
+        let chunk: Array<u8> = stdin_stream."Stream<u8>::read"(4096);
         if (chunk.used == 0) {
             break;
         }
@@ -38,18 +38,18 @@ export fn run() with Stdout, Stdin {
     }
     stdin_stream."Stream<u8>::close"();
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(27), used: 0 };
-        __r.String::append(move "read ");
+        let mut __r: String = String { repr: "array_new<u8>"(27), used: 0 };
+        __r.String::append("read ");
         let mut __f: Formatter = __inline_Formatter__new_4: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_5: {
-            let self: Box<i32> = move Box<i32> { value: total };
+            let self: Box<i32> = Box<i32> { value: total };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r.String::append(move " bytes");
+        __r.String::append(" bytes");
         break __tmpl: __r;
     });
 }

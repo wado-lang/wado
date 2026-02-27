@@ -24,15 +24,15 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let names: Array<String> = __seq_lit: {
-        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
+        let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(2), used: 0 };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "Hello";
+            let value: String = "Hello";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "World";
+            let value: String = "World";
             self."Array<String>::append"(value);
         };
         break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_4: {
@@ -41,10 +41,10 @@ export fn run() with Stdout {
         };
     };
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(33), used: 0 };
-        __r.String::append(move names."Array<String>^IndexValue::index_value"(0));
-        __r.String::append(move " ");
-        __r.String::append(move names."Array<String>^IndexValue::index_value"(1));
+        let mut __r: String = String { repr: "array_new<u8>"(33), used: 0 };
+        __r.String::append(names."Array<String>^IndexValue::index_value"(0));
+        __r.String::append(" ");
+        __r.String::append(names."Array<String>^IndexValue::index_value"(1));
         break __tmpl: __r;
     });
 }
@@ -72,7 +72,7 @@ pub fn "Array<String>::append"(self: &mut Array<String>, value: String) {
 
 fn "Array<String>^IndexValue::index_value"(self: &Array<String>, index: i32) -> String {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<String>(self.repr, index);
 }
