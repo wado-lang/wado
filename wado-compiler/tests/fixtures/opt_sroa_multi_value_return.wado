@@ -33,12 +33,14 @@ struct MixedScalar {
 
 // Two-field struct return
 
+
 #[inline("never")]
 fn make_pair(a: i32, b: i32) -> Pair {
     return Pair { a, b };
 }
 
 // Three-field struct return (f64)
+
 
 #[inline("never")]
 fn make_triple(x: f64, y: f64, z: f64) -> Triple {
@@ -47,6 +49,7 @@ fn make_triple(x: f64, y: f64, z: f64) -> Triple {
 
 // Four-field struct return (maximum for SROA)
 
+
 #[inline("never")]
 fn make_quad(w: i32, x: i32, y: i32, z: i32) -> Quad {
     return Quad { w, x, y, z };
@@ -54,12 +57,14 @@ fn make_quad(w: i32, x: i32, y: i32, z: i32) -> Quad {
 
 // Mixed scalar types (i32 + f64)
 
+
 #[inline("never")]
 fn make_mixed(i: i32, f: f64) -> MixedScalar {
     return MixedScalar { i, f };
 }
 
 // Conditional return (multiple return paths)
+
 
 #[inline("never")]
 fn conditional_pair(flag: bool) -> Pair {
@@ -71,6 +76,7 @@ fn conditional_pair(flag: bool) -> Pair {
 }
 
 // Multiple callers of the same function
+
 
 #[inline("never")]
 fn caller_a() -> i32 {
@@ -86,6 +92,7 @@ fn caller_b() -> i32 {
 }
 
 // Chain: return struct then pass to another function
+
 
 #[inline("never")]
 fn sum_pair(p: Pair) -> i32 {
