@@ -429,16 +429,6 @@ impl FunctionTranslator<'_, '_> {
             // ClosureToCanonical creates a fresh closure struct
             TirExprKind::ClosureToCanonical { .. } => true,
 
-<<<<<<< HEAD
-||||||| 88f21b9
-            // OptionSome wrapping a fresh value is itself fresh
-            TirExprKind::OptionSome { value } => Self::is_fresh_value(value),
-
-=======
-            // OptionSome wrapping a fresh value is itself fresh
-            TirExprKind::OptionSome { value } => Self::is_fresh_in_context(value, fresh_locals),
-
->>>>>>> origin/main
             // Variant/enum constructors produce fresh values
             TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
 
