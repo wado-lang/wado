@@ -1219,12 +1219,6 @@ fn create_default_value(type_id: TypeId, type_table: &TypeTable, span: crate::Sp
 }
 
 /// Look up an inline candidate by module path and function name.
-///
-/// Tries in order:
-/// 1. Direct module path from the call site
-/// 2. Entry module (empty path) for monomorphized functions
-/// 3. Name-based search across all modules (handles cases where monomorphized
-///    functions are placed in a module different from their generic origin)
 fn find_inline_candidate<'a>(
     candidates: &'a IndexMap<(Vec<String>, String), TirFunction>,
     call_module_path: &[String],
@@ -1237,30 +1231,8 @@ fn find_inline_candidate<'a>(
         call_module_path.to_vec()
     };
 
-    // Try direct module path first
-    if let Some(candidate) = candidates.get(&(target_module.clone(), func_name.to_string())) {
-        return Some((candidate, (target_module, func_name.to_string())));
-    }
-
-    // Try entry module (empty path) for monomorphized functions
-    if !target_module.is_empty() {
-        let entry_key = (vec![], func_name.to_string());
-        if let Some(candidate) = candidates.get(&entry_key) {
-            return Some((candidate, entry_key));
-        }
-    }
-
-    // Fallback: search by function name across all modules.
-    // After monomorphization, a function may be placed in a different module
-    // than the one referenced at the call site (e.g., generic origin is
-    // prelude/array.wado but the monomorphized instance is in prelude/fpfmt.wado).
-    for (key, candidate) in candidates {
-        if key.1 == func_name {
-            return Some((candidate, key.clone()));
-        }
-    }
-
-    None
+    let key = (target_module, func_name.to_string());
+    candidates.get(&key).map(|c| (c, key))
 }
 
 /// Try to inline a call expression, returning the inlined expression and key

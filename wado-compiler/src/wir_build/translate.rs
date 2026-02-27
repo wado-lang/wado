@@ -368,15 +368,11 @@ impl FunctionTranslator<'_, '_> {
             ResolvedType::Struct {
                 name,
                 module_source,
-                base_name,
                 ..
             } => {
                 // Internal Box<T> types are GC reference cells for primitive boxing.
                 // They should share the heap object on assignment, not deep-copy.
-                // Monomorphized Box<T> may have EntryPoint as module_source, so also
-                // check the base_name field.
-                let is_box = (name.starts_with("Box<") && module_source.is_core_internal())
-                    || base_name.as_deref() == Some("Box");
+                let is_box = name.starts_with("Box<") && module_source.is_core_internal();
                 !is_box
             }
             ResolvedType::GenericInstance {

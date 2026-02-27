@@ -29,8 +29,8 @@ use crate::token::Span;
 /// This performs monomorphization of generic types and functions
 /// within a single module without cross-module generic function support.
 pub fn monomorphize_module(module: TirModule) -> TirModule {
-    let entry_module_source = module.module_source.clone();
-    let mut monomorph = Monomorphizer::new(entry_module_source);
+    let module_source = module.module_source.clone();
+    let mut monomorph = Monomorphizer::new(module_source);
     monomorph.monomorphize(module)
 }
 
@@ -200,14 +200,14 @@ fn monomorphize_with_externals(
         }
     }
 
-    let mut monomorph = Monomorphizer::new(entry_module_source.clone());
+    let mut monomorph = Monomorphizer::new(current_module_source.clone());
     monomorph.monomorphize_with_externals(module, all_generic_functions, &all_generic_structs)
 }
 
 /// Monomorphizer collects generic instantiations and generates concrete types
 struct Monomorphizer {
-    /// The entry module source for generated code
-    entry_module_source: ModuleSource,
+    /// The module source where monomorphized entities are being generated
+    current_module_source: ModuleSource,
     /// Map from (`generic_name`, `type_args`) to mangled name for structs
     instantiated: IndexMap<InstantiationKey, String>,
     /// Work queue of pending struct instantiations
@@ -227,9 +227,9 @@ struct Monomorphizer {
 }
 
 impl Monomorphizer {
-    fn new(entry_module_source: ModuleSource) -> Self {
+    fn new(current_module_source: ModuleSource) -> Self {
         Self {
-            entry_module_source,
+            current_module_source,
             instantiated: IndexMap::new(),
             pending: Vec::new(),
             type_substitutions: IndexMap::new(),
@@ -1036,6 +1036,27 @@ impl Monomorphizer {
     ) -> Option<TirStruct> {
         let mangled_name = self.instantiated.get(key)?.clone();
 
+        // Find the GenericInstance's module_source from the type table.
+        // Use the generic's original module (where it was defined) for the struct type,
+        // ensuring consistency across modules that share the same type table.
+        let struct_module_source = type_table
+            .iter_type_ids()
+            .find_map(|id| {
+                if let ResolvedType::GenericInstance {
+                    name,
+                    module_source,
+                    type_args,
+                } = type_table.get(id)
+                    && name == &key.name
+                    && type_args == &key.type_args
+                {
+                    Some(module_source.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| self.current_module_source.clone());
+
         // Register the concrete struct type in the type table BEFORE substituting field types.
         // This is critical for self-referential structs like:
         //   struct Node<T> { left: Option<&mut Node<T>>, right: Option<&mut Node<T>> }
@@ -1043,7 +1064,7 @@ impl Monomorphizer {
         // monomorphized struct type, not a GenericInstance.
         let concrete_type_id = type_table.make_monomorphized_struct(
             mangled_name.clone(),
-            self.entry_module_source.clone(),
+            struct_module_source,
             key.name.clone(), // base_name: the original generic struct name
         );
 
@@ -2367,8 +2388,11 @@ impl Monomorphizer {
                                 generic_name: existing_generic_name.unwrap_or(old_func_name),
                                 type_args,
                             });
+                            // Use current_module_source: the monomorphized method lives
+                            // in the module that triggered monomorphization, not the
+                            // original module where the generic was defined.
                             *method_func = FunctionRef::External {
-                                module_source,
+                                module_source: self.current_module_source.clone(),
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
@@ -2485,8 +2509,10 @@ impl Monomorphizer {
                                 generic_name: old_func_name,
                                 type_args,
                             });
+                            // Use current_module_source: the monomorphized method lives
+                            // in the module that triggered monomorphization.
                             *static_func = FunctionRef::External {
-                                module_source,
+                                module_source: self.current_module_source.clone(),
                                 name: new_func_name,
                                 monomorph_info,
                                 method_info: Some(new_info),
@@ -2990,11 +3016,10 @@ impl Monomorphizer {
                         method_info: original_method_info.clone(),
                     };
                     if let Some(mangled) = self.function_instantiated.get(&key) {
-                        // Use entry module source since monomorphized functions are
-                        // generated in the current (calling) module, not the original
-                        // module where the generic function was defined.
+                        // Use current module source — monomorphized functions are
+                        // generated in the module that uses them.
                         *func = FunctionRef::External {
-                            module_source: self.entry_module_source.clone(),
+                            module_source: self.current_module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: func_name,
@@ -3030,7 +3055,7 @@ impl Monomorphizer {
                     .method_info()
                     .map(|info| info.method_name)
                     .unwrap_or_else(|| method_func.name());
-                let module_source = method_func.module_source();
+                let _module_source = method_func.module_source();
                 // If this is a generic method call, rewrite to monomorphized name
                 if !type_args.is_empty()
                     && let Some(struct_name) =
@@ -3049,7 +3074,7 @@ impl Monomorphizer {
                         // Preserve original method_info
                         let original_method_info = method_func.method_info();
                         *method_func = FunctionRef::External {
-                            module_source: module_source.clone(),
+                            module_source: self.current_module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: full_method_name.clone(),
@@ -3081,7 +3106,7 @@ impl Monomorphizer {
                             // Preserve original method_info
                             let original_method_info = method_func.method_info();
                             *method_func = FunctionRef::External {
-                                module_source: module_source.clone(),
+                                module_source: self.current_module_source.clone(),
                                 name: mangled.clone(),
                                 monomorph_info: Some(MonomorphInfo {
                                     generic_name: generic_method_name,
@@ -3147,7 +3172,7 @@ impl Monomorphizer {
                             // Preserve original method_info
                             let original_method_info = method_func.method_info();
                             *method_func = FunctionRef::External {
-                                module_source: module_source.clone(),
+                                module_source: self.current_module_source.clone(),
                                 name: mangled.clone(),
                                 monomorph_info: Some(MonomorphInfo {
                                     generic_name: key.name.clone(),
@@ -3196,7 +3221,7 @@ impl Monomorphizer {
                     if let Some(mangled) = self.function_instantiated.get(&key) {
                         let original_method_info = static_func.method_info();
                         *static_func = FunctionRef::External {
-                            module_source: self.entry_module_source.clone(),
+                            module_source: self.current_module_source.clone(),
                             name: mangled.clone(),
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name: generic_method_name,

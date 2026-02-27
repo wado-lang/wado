@@ -31,7 +31,7 @@ export fn run() with Stdout, Stderr, Preopens {
     let dir: Descriptor = dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0).0;
     let preopen_path: String = dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0).1;
     core::cli::println(__tmpl: {
-        let mut __r: String = String { repr: "array_new<u8>"(43), used: 0 };
+        let mut __r: String = String { repr: "core::prelude/string.wado::array_new<u8>"(43), used: 0 };
         __r.String::append("open_at: preopened dir = \"");
         __r.String::append(preopen_path);
         __r.String::append("\"");
@@ -115,7 +115,7 @@ pub fn "Array<Tuple<Descriptor,String>>::append"(self: &mut Array<[Descriptor, S
     if core::builtin::unlikely((used >= capacity)) {
         let new_capacity: i32 = __inline_i32_max_0: {
             let a: i32 = (capacity * 2);
-            break __inline_i32_max_0: "select<i32>"((a > 4), a, 4);
+            break __inline_i32_max_0: "core::prelude/array.wado::select<i32>"((a > 4), a, 4);
         };
         let new_repr: builtin::array<[Descriptor, String]> = core::builtin::array_new::<[Descriptor, String]>(new_capacity);
         core::builtin::array_copy::<[Descriptor, String]>(new_repr, 0, self.repr, 0, used);
