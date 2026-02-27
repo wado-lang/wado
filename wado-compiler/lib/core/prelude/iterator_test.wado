@@ -1,0 +1,270 @@
+// Tests for iterator methods on ArrayIter<T>
+
+// Tier 1: Consuming methods
+
+test "find returns first matching element" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let found = arr.iter().find(|x: i32| x % 2 == 0);
+    assert found matches { Some(v) && v == 2 };
+}
+
+test "find returns null when no match" {
+    let arr: Array<i32> = [1, 2, 3];
+    let found = arr.iter().find(|x: i32| x > 10);
+    assert found matches { None };
+}
+
+test "find on empty array" {
+    let arr: Array<i32> = [];
+    let found = arr.iter().find(|x: i32| x == 1);
+    assert found matches { None };
+}
+
+test "any returns true when predicate matches" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    assert arr.iter().any(|x: i32| x % 2 == 0);
+}
+
+test "any returns false when no match" {
+    let arr: Array<i32> = [1, 2, 3];
+    assert !arr.iter().any(|x: i32| x > 10);
+}
+
+test "any on empty array returns false" {
+    let arr: Array<i32> = [];
+    assert !arr.iter().any(|x: i32| x > 0);
+}
+
+test "all returns true when all match" {
+    let arr: Array<i32> = [2, 4, 6, 8];
+    assert arr.iter().all(|x: i32| x % 2 == 0);
+}
+
+test "all returns false when some don't match" {
+    let arr: Array<i32> = [2, 3, 6, 8];
+    assert !arr.iter().all(|x: i32| x % 2 == 0);
+}
+
+test "all on empty array returns true" {
+    let arr: Array<i32> = [];
+    assert arr.iter().all(|x: i32| x > 0);
+}
+
+test "last returns last element" {
+    let arr: Array<i32> = [10, 20, 30];
+    let result = arr.iter().last();
+    assert result matches { Some(v) && v == 30 };
+}
+
+test "last on single element" {
+    let arr: Array<i32> = [42];
+    let result = arr.iter().last();
+    assert result matches { Some(v) && v == 42 };
+}
+
+test "last on empty array" {
+    let arr: Array<i32> = [];
+    assert arr.iter().last() matches { None };
+}
+
+test "nth returns nth element" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let result = arr.iter().nth(2);
+    assert result matches { Some(v) && v == 30 };
+}
+
+test "nth 0 returns first element" {
+    let arr: Array<i32> = [10, 20, 30];
+    let result = arr.iter().nth(0);
+    assert result matches { Some(v) && v == 10 };
+}
+
+test "nth out of bounds returns null" {
+    let arr: Array<i32> = [10, 20, 30];
+    assert arr.iter().nth(10) matches { None };
+}
+
+test "position returns index of first match" {
+    let arr: Array<i32> = [10, 20, 30, 40, 50];
+    let pos = arr.iter().position(|x: i32| x == 30);
+    assert pos matches { Some(v) && v == 2 };
+}
+
+test "position returns null when not found" {
+    let arr: Array<i32> = [10, 20, 30];
+    assert arr.iter().position(|x: i32| x == 99) matches { None };
+}
+
+test "position on empty array" {
+    let arr: Array<i32> = [];
+    assert arr.iter().position(|x: i32| x == 1) matches { None };
+}
+
+test "reduce with addition" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let result = arr.iter().reduce(|a: i32, b: i32| a + b);
+    assert result matches { Some(v) && v == 15 };
+}
+
+test "reduce on single element" {
+    let arr: Array<i32> = [42];
+    let result = arr.iter().reduce(|a: i32, b: i32| a + b);
+    assert result matches { Some(v) && v == 42 };
+}
+
+test "reduce on empty array" {
+    let arr: Array<i32> = [];
+    assert arr.iter().reduce(|a: i32, b: i32| a + b) matches { None };
+}
+
+// Tier 2: Adapter iterators
+
+test "take first n elements" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let result = arr.iter().take(3).collect();
+    assert result.len() == 3;
+    assert result[0] == 1;
+    assert result[1] == 2;
+    assert result[2] == 3;
+}
+
+test "take more than available" {
+    let arr: Array<i32> = [1, 2, 3];
+    let result = arr.iter().take(100).collect();
+    assert result.len() == 3;
+}
+
+test "take 0 yields empty" {
+    let arr: Array<i32> = [1, 2, 3];
+    let result = arr.iter().take(0).collect();
+    assert result.len() == 0;
+}
+
+test "skip first n elements" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let result = arr.iter().skip(2).collect();
+    assert result.len() == 3;
+    assert result[0] == 3;
+    assert result[1] == 4;
+    assert result[2] == 5;
+}
+
+test "skip all elements" {
+    let arr: Array<i32> = [1, 2, 3];
+    let result = arr.iter().skip(100).collect();
+    assert result.len() == 0;
+}
+
+test "skip 0 yields all" {
+    let arr: Array<i32> = [1, 2, 3];
+    let result = arr.iter().skip(0).collect();
+    assert result.len() == 3;
+}
+
+test "chain two iterators" {
+    let a: Array<i32> = [1, 2, 3];
+    let b: Array<i32> = [4, 5, 6];
+    let result = a.iter().chain(b.iter()).collect();
+    assert result.len() == 6;
+    assert result[0] == 1;
+    assert result[3] == 4;
+    assert result[5] == 6;
+}
+
+test "chain with empty" {
+    let a: Array<i32> = [1, 2, 3];
+    let empty: Array<i32> = [];
+    let result = a.iter().chain(empty.iter()).collect();
+    assert result.len() == 3;
+
+    let result2 = empty.iter().chain(a.iter()).collect();
+    assert result2.len() == 3;
+    assert result2[0] == 1;
+}
+
+test "zip pairs elements" {
+    let a: Array<i32> = [1, 2, 3];
+    let b: Array<i32> = [10, 20, 30];
+    let mut iter = a.iter().zip::<i32>(b.iter());
+
+    let first = iter.next();
+    assert first matches { Some(pair) && pair.0 == 1 && pair.1 == 10 };
+
+    let second = iter.next();
+    assert second matches { Some(pair) && pair.0 == 2 && pair.1 == 20 };
+
+    let third = iter.next();
+    assert third matches { Some(pair) && pair.0 == 3 && pair.1 == 30 };
+
+    assert iter.next() matches { None };
+}
+
+test "zip stops at shorter" {
+    let a: Array<i32> = [1, 2];
+    let b: Array<i32> = [10, 20, 30, 40];
+    let result = a.iter().zip::<i32>(b.iter()).count();
+    assert result == 2;
+}
+
+// Tier 3: Bounded methods
+
+test "sum of integers" {
+    let arr: Array<i32> = [1, 2, 3, 4, 5];
+    let result = arr.iter().sum();
+    assert result matches { Some(v) && v == 15 };
+}
+
+test "sum of single element" {
+    let arr: Array<i32> = [42];
+    let result = arr.iter().sum();
+    assert result matches { Some(v) && v == 42 };
+}
+
+test "sum of empty array" {
+    let arr: Array<i32> = [];
+    assert arr.iter().sum() matches { None };
+}
+
+test "min of integers" {
+    let arr: Array<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
+    let result = arr.iter().min();
+    assert result matches { Some(v) && v == 1 };
+}
+
+test "max of integers" {
+    let arr: Array<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
+    let result = arr.iter().max();
+    assert result matches { Some(v) && v == 9 };
+}
+
+test "min of single element" {
+    let arr: Array<i32> = [42];
+    assert arr.iter().min() matches { Some(v) && v == 42 };
+}
+
+test "max of single element" {
+    let arr: Array<i32> = [42];
+    assert arr.iter().max() matches { Some(v) && v == 42 };
+}
+
+test "min of empty array" {
+    let arr: Array<i32> = [];
+    assert arr.iter().min() matches { None };
+}
+
+test "max of empty array" {
+    let arr: Array<i32> = [];
+    assert arr.iter().max() matches { None };
+}
+
+test "sum of f64" {
+    let arr: Array<f64> = [1.5, 2.5, 3.0];
+    let result = arr.iter().sum();
+    assert result matches { Some(v) && v == 7.0 };
+}
+
+test "min and max of f64" {
+    let arr: Array<f64> = [3.14, 1.41, 2.72];
+    assert arr.iter().min() matches { Some(v) && v == 1.41 };
+    assert arr.iter().max() matches { Some(v) && v == 3.14 };
+}

@@ -505,6 +505,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::new_literal"),
                             type_args: type_arg_ids.clone(),
+                            is_blanket: false,
                         })
                     },
                     method_info: Some(new_method_info),
@@ -630,6 +631,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 Some(MonomorphInfo {
                     generic_name: format!("{builder_base_name}::build"),
                     type_args: type_arg_ids,
+                    is_blanket: false,
                 })
             };
             TirExpr::new(
@@ -747,6 +749,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::new_literal"),
                             type_args: type_arg_ids.clone(),
+                            is_blanket: false,
                         })
                     },
                     method_info: Some(new_method_info),
@@ -830,6 +833,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             Some(MonomorphInfo {
                                 generic_name: format!("{builder_base_name}::push_literal"),
                                 type_args: type_arg_ids.clone(),
+                                is_blanket: false,
                             })
                         },
                         method_info: Some(push_method_info.clone()),
@@ -872,6 +876,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         Some(MonomorphInfo {
                             generic_name: format!("{builder_base_name}::build"),
                             type_args: type_arg_ids,
+                            is_blanket: false,
                         })
                     },
                     method_info: Some(build_method_info),

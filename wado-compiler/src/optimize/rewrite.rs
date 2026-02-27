@@ -304,6 +304,7 @@ fn try_lower_to_select(
         monomorph_info: Some(MonomorphInfo {
             generic_name: "select".to_string(),
             type_args: vec![result_type],
+            is_blanket: false,
         }),
         method_info: None,
     };

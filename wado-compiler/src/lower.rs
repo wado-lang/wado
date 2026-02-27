@@ -2873,6 +2873,7 @@ impl BoxLowerer {
             monomorph_info: Some(MonomorphInfo {
                 generic_name: "Box".to_string(),
                 type_args: vec![inner_type_id],
+                is_blanket: false,
             }),
             fields: vec![TirField {
                 name: "value".to_string(),

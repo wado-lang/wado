@@ -288,6 +288,7 @@ pub fn generic_static_call(
         Some(MonomorphInfo {
             generic_name: mangled_name.clone(),
             type_args,
+            is_blanket: false,
         })
     };
     TirExpr::new(

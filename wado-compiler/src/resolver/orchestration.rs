@@ -366,7 +366,8 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
         // Build trait lookup indices once for all modules.
         // This allows find_trait_method_for_type and find_indexing_trait_impl to do O(1)
         // lookups by type name instead of scanning all items in all modules per method call.
-        let (trait_impl_index, trait_decl_index) = Self::build_trait_indices(modules);
+        let (trait_impl_index, trait_decl_index, blanket_trait_impl_index) =
+            Self::build_trait_indices(modules);
 
         // Second pass: resolve each module with per-module function_return_types and imports
         for module_source in &sorted_sources {
@@ -498,6 +499,7 @@ impl<'a, H: CompilerHost> Resolver<'a, H> {
                 module_type_maps_cache: IndexMap::new(),
                 trait_impl_index: Arc::clone(&trait_impl_index),
                 trait_decl_index: Arc::clone(&trait_decl_index),
+                blanket_trait_impl_index: Arc::clone(&blanket_trait_impl_index),
             };
 
             // Set file context so diagnostics emitted during resolution

@@ -5,7 +5,9 @@ use indexmap::{IndexMap, IndexSet};
 use crate::ast::{self, BinaryOp, Expr, Function, Item, Literal, Type, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::name::{LocalMethodName, MethodName, ModuleSource};
-use crate::tir::{FunctionRef, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable};
+use crate::tir::{
+    FunctionRef, PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 use super::Resolver;
@@ -1045,8 +1047,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
         method_name: &str,
         _struct_module: &ModuleSource,
         receiver_type_args: Option<&[TypeId]>,
-    ) -> Option<(String, MethodInfo, ModuleSource)> {
-        let mut found_traits: Vec<(String, MethodInfo, ModuleSource)> = Vec::new();
+        receiver_type_id: Option<TypeId>,
+    ) -> Option<super::types::TraitMethodMatch> {
+        use super::types::TraitMethodMatch;
+        let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
 
         // Build names_to_check first (struct name + newtype chain), then use the
         // pre-built index to fetch only the matching impl blocks instead of scanning
@@ -1115,12 +1119,51 @@ impl<H: CompilerHost> Resolver<'_, H> {
             }
         }
 
+        // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the receiver
+        // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
+        // any concrete type that implements Iterator.
+        for (module_src, item_idx) in self.blanket_trait_impl_index.as_ref() {
+            let module = &self.loaded_modules[module_src];
+            if let Item::Impl(impl_block) = &module.items[*item_idx]
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                // Find the type param that is the impl target
+                let impl_type_name = Self::get_type_name_static(&impl_block.ty);
+                let matching_param = impl_block
+                    .type_params
+                    .iter()
+                    .find(|tp| tp.name == impl_type_name);
+                if let Some(param) = matching_param {
+                    // Check if the receiver type satisfies ALL trait bounds
+                    let bounds_satisfied = param.bounds.iter().all(|bound| {
+                        let bound_trait_name = &bound.name;
+                        names_to_check
+                            .iter()
+                            .any(|name| self.find_trait_impl_for_type(name, bound_trait_name))
+                    });
+                    if bounds_satisfied {
+                        impl_blocks_to_check.push((
+                            impl_block.ty.clone(),
+                            trait_type.clone(),
+                            impl_block.methods.clone(),
+                            impl_block.associated_types.clone(),
+                            module_src.clone(),
+                        ));
+                    }
+                }
+            }
+        }
+
         // Now process the collected impl blocks with mutable access
         for (impl_ty, trait_type, methods, associated_types, impl_module_source) in
             impl_blocks_to_check
         {
             let impl_struct_name = self.get_type_name(&impl_ty);
-            if names_to_check.contains(&impl_struct_name) {
+            // Accept if the type matches by name, or if it's a blanket impl type parameter
+            // (blanket impls already had their bounds checked before being added).
+            let is_blanket_type_param =
+                matches!(&impl_ty, Type::Named(named) if !self.is_known_type_name(&named.name));
+            if names_to_check.contains(&impl_struct_name) || is_blanket_type_param {
                 // Set up type parameters for resolving generic associated types
                 // e.g., for `impl Container for Box_<T>` called on `Box_<i32>`,
                 // we need to map T -> i32 so `type Item = T` resolves to i32
@@ -1140,19 +1183,24 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
 
                 // For blanket impls where impl_ty is a free type parameter
-                // (e.g., `impl<T: Trait> OtherTrait for T`), register T as a TypeParam
-                // so T::AssocType in associated type bindings resolves to
-                // AssocTypeProjection(T, "AssocType") rather than emitting an error.
+                // (e.g., `impl<I: Iterator> IntoIterator for I`):
+                // If we have the receiver's concrete type ID, map the type param to it
+                // so associated types like `type Iter = I` resolve to the receiver type.
+                // Otherwise, register as a TypeParam for AssocTypeProjection resolution.
                 if let Type::Named(named) = &impl_ty {
                     let name = &named.name;
                     if !self.current_type_params.contains_key(name)
                         && !self.is_known_type_name(name)
                     {
-                        let type_id = self
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(name.clone(), 0);
-                        self.current_type_params.insert(name.clone(), (0, type_id));
+                        if let Some(recv_id) = receiver_type_id {
+                            self.current_type_params.insert(name.clone(), (0, recv_id));
+                        } else {
+                            let type_id = self
+                                .type_table
+                                .borrow_mut()
+                                .make_type_param(name.clone(), 0);
+                            self.current_type_params.insert(name.clone(), (0, type_id));
+                        }
                     }
                 }
 
@@ -1164,6 +1212,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     self.current_associated_type_bindings
                         .insert(binding.name.clone(), type_id);
                 }
+
+                let blanket_type_param = if is_blanket_type_param {
+                    Some(impl_struct_name.clone())
+                } else {
+                    None
+                };
 
                 let mut method_found = false;
                 for method in &methods {
@@ -1180,16 +1234,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             .map(|p| p.self_kind)
                             .unwrap_or(ast::SelfKind::None);
                         let param_types = self.extract_param_types(&method.params);
-                        found_traits.push((
+                        found_traits.push(TraitMethodMatch {
                             trait_name,
-                            MethodInfo {
+                            method_info: MethodInfo {
                                 return_type,
                                 self_kind,
                                 param_types,
                                 inherited_from_base: None,
                             },
-                            impl_module_source.clone(),
-                        ));
+                            impl_module_source: impl_module_source.clone(),
+                            blanket_type_param: blanket_type_param.clone(),
+                        });
                         method_found = true;
                     }
                 }
@@ -1212,16 +1267,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
                                     .map(|p| p.self_kind)
                                     .unwrap_or(ast::SelfKind::None);
                                 let param_types = self.extract_param_types(&default_method.params);
-                                found_traits.push((
-                                    trait_name_str.clone(),
-                                    MethodInfo {
+                                found_traits.push(TraitMethodMatch {
+                                    trait_name: trait_name_str.clone(),
+                                    method_info: MethodInfo {
                                         return_type,
                                         self_kind,
                                         param_types,
                                         inherited_from_base: None,
                                     },
-                                    impl_module_source.clone(),
-                                ));
+                                    impl_module_source: impl_module_source.clone(),
+                                    blanket_type_param: blanket_type_param.clone(),
+                                });
                             }
                         }
                     }
@@ -1234,7 +1290,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
         }
 
         // Remove duplicates
-        found_traits.dedup_by(|a, b| a.0 == b.0);
+        found_traits.dedup_by(|a, b| a.trait_name == b.trait_name);
 
         // Return the first one found (if there are multiple, it would be ambiguous,
         // but we'll handle that later with explicit disambiguation syntax)
@@ -1773,7 +1829,12 @@ impl<H: CompilerHost> Resolver<'_, H> {
             match trait_name {
                 // All primitives implement Eq and Ord
                 "Eq" | "Ord" => return true,
-                // Add other built-in trait implementations as needed
+                // Numeric primitives implement arithmetic traits
+                "Add" | "Sub" | "Mul" | "Div" | "Rem"
+                    if !matches!(prim, PrimitiveType::Bool | PrimitiveType::Char) =>
+                {
+                    return true;
+                }
                 _ => {}
             }
             // For other traits, check the type name
@@ -1854,6 +1915,33 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     && self.check_impl_block_bounds(impl_block, type_args)
                 {
                     return true;
+                }
+            }
+        }
+
+        // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the
+        // concrete type satisfies the bound.
+        for (module_src, item_idx) in self.blanket_trait_impl_index.as_ref() {
+            let module = &self.loaded_modules[module_src];
+            if let Item::Impl(impl_block) = &module.items[*item_idx]
+                && let Some(trait_type) = &impl_block.trait_type
+            {
+                let impl_trait_name = self.get_type_name(trait_type);
+                if impl_trait_name == trait_name {
+                    let impl_type_name = Self::get_type_name_static(&impl_block.ty);
+                    let matching_param = impl_block
+                        .type_params
+                        .iter()
+                        .find(|tp| tp.name == impl_type_name);
+                    if let Some(param) = matching_param {
+                        let bounds_satisfied = param
+                            .bounds
+                            .iter()
+                            .all(|bound| self.find_trait_impl_for_type(type_name, &bound.name));
+                        if bounds_satisfied {
+                            return true;
+                        }
+                    }
                 }
             }
         }
@@ -2638,16 +2726,17 @@ impl<H: CompilerHost> Resolver<'_, H> {
         let mut method_trait_impl_source: Option<ModuleSource> = None;
 
         if method_info.is_none()
-            && let Some((found_trait, info, impl_source)) = self.find_trait_method_for_type(
+            && let Some(trait_match) = self.find_trait_method_for_type(
                 &output_struct_name,
                 &method_call.method,
                 &output_module_source,
                 output_type_args.as_deref(),
+                Some(output_type),
             )
         {
-            method_trait_name = Some(found_trait);
-            method_info = Some(info);
-            method_trait_impl_source = Some(impl_source);
+            method_trait_name = Some(trait_match.trait_name);
+            method_info = Some(trait_match.method_info);
+            method_trait_impl_source = Some(trait_match.impl_module_source);
         }
 
         let MethodInfo {

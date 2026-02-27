@@ -9,8 +9,8 @@ use crate::tir::{TypeId, TypeTable};
 
 use super::Resolver;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, StructFieldInfo, TraitDeclIndex,
-    TraitImplIndex, VariantCaseData, VariantInfo,
+    BlanketTraitImplIndex, EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, StructFieldInfo,
+    TraitDeclIndex, TraitImplIndex, VariantCaseData, VariantInfo,
 };
 use crate::name::MethodName;
 use std::sync::Arc;
@@ -341,14 +341,27 @@ impl<H: CompilerHost> Resolver<'_, H> {
     /// The indices enable O(1) trait lookup by type/trait name instead of scanning all modules.
     pub(super) fn build_trait_indices(
         modules: &IndexMap<ModuleSource, Module>,
-    ) -> (Arc<TraitImplIndex>, Arc<TraitDeclIndex>) {
+    ) -> (
+        Arc<TraitImplIndex>,
+        Arc<TraitDeclIndex>,
+        Arc<BlanketTraitImplIndex>,
+    ) {
         let mut impl_index: TraitImplIndex = IndexMap::new();
         let mut decl_index: TraitDeclIndex = IndexMap::new();
+        let mut blanket_index: BlanketTraitImplIndex = Vec::new();
         for (module_source, module) in modules {
             for (item_idx, item) in module.items.iter().enumerate() {
                 match item {
                     Item::Impl(impl_block) if impl_block.trait_type.is_some() => {
                         let type_name = Self::get_type_name_static(&impl_block.ty);
+                        // Detect blanket impls: impl_ty is a type parameter from type_params
+                        let is_blanket = impl_block
+                            .type_params
+                            .iter()
+                            .any(|tp| tp.name == type_name && !tp.bounds.is_empty());
+                        if is_blanket {
+                            blanket_index.push((module_source.clone(), item_idx));
+                        }
                         impl_index
                             .entry(type_name)
                             .or_default()
@@ -363,7 +376,11 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 }
             }
         }
-        (Arc::new(impl_index), Arc::new(decl_index))
+        (
+            Arc::new(impl_index),
+            Arc::new(decl_index),
+            Arc::new(blanket_index),
+        )
     }
 
     pub(super) fn get_type_name(&self, ty: &Type) -> String {
