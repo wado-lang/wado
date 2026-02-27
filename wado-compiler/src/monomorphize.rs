@@ -3301,7 +3301,7 @@ impl Monomorphizer {
                     if let Some((mangled, generic_name, type_args)) = blanket_lookup {
                         let original_method_info = method_func.method_info();
                         *method_func = FunctionRef::External {
-                            module_source: module_source.clone(),
+                            module_source: self.current_module_source.clone(),
                             name: mangled,
                             monomorph_info: Some(MonomorphInfo {
                                 generic_name,
