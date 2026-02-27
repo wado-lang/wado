@@ -1976,9 +1976,7 @@ fn is_fresh_wir_value(instr: &WirInstr) -> bool {
         } => block_result_is_fresh(body),
 
         // Seq: check the effective result instruction.
-        WirInstr::Seq(body) => {
-            find_seq_result(body).map_or(false, is_fresh_wir_value)
-        }
+        WirInstr::Seq(body) => find_seq_result(body).is_some_and(is_fresh_wir_value),
 
         _ => false,
     }
@@ -1999,7 +1997,7 @@ fn block_result_is_fresh(body: &[WirInstr]) -> bool {
     match result_instr {
         Some(WirInstr::LocalGet { name }) => {
             // Trace back: find what this local was set to within the block.
-            find_local_set_value(body, name).map_or(false, is_fresh_wir_value)
+            find_local_set_value(body, name).is_some_and(is_fresh_wir_value)
         }
         Some(instr) => is_fresh_wir_value(instr),
         None => false,
@@ -2022,10 +2020,10 @@ fn find_seq_result(body: &[WirInstr]) -> Option<&WirInstr> {
 /// Scan backward through a block body to find the value assigned to a local.
 fn find_local_set_value<'a>(body: &'a [WirInstr], target: &str) -> Option<&'a WirInstr> {
     for instr in body.iter().rev() {
-        if let WirInstr::LocalSet { name, value } = instr {
-            if name == target {
-                return Some(value.as_ref());
-            }
+        if let WirInstr::LocalSet { name, value } = instr
+            && name == target
+        {
+            return Some(value.as_ref());
         }
     }
     None

@@ -460,11 +460,7 @@ impl FunctionTranslator<'_, '_> {
     /// Tracks locals assigned fresh values within the block, enabling copy
     /// elision for inlined builder patterns where the break value references
     /// a locally-created object.
-    fn block_breaks_are_fresh(
-        label: &str,
-        block: &TirBlock,
-        parent_fresh: &IndexSet<u32>,
-    ) -> bool {
+    fn block_breaks_are_fresh(label: &str, block: &TirBlock, parent_fresh: &IndexSet<u32>) -> bool {
         let mut found = false;
         let mut fresh_locals = parent_fresh.clone();
         if Self::scan_block_for_breaks(label, block, &mut found, &mut fresh_locals) {
@@ -521,19 +517,17 @@ impl FunctionTranslator<'_, '_> {
                 if !Self::scan_block_for_breaks(label, then_block, found, fresh_locals) {
                     return false;
                 }
-                if let Some(eb) = else_block {
-                    if !Self::scan_block_for_breaks(label, eb, found, fresh_locals) {
-                        return false;
-                    }
+                if let Some(eb) = else_block
+                    && !Self::scan_block_for_breaks(label, eb, found, fresh_locals)
+                {
+                    return false;
                 }
                 true
             }
             TirStmtKind::Loop { body } => {
                 Self::scan_block_for_breaks(label, body, found, fresh_locals)
             }
-            TirStmtKind::Expr(expr) => {
-                Self::scan_expr_for_breaks(label, expr, found, fresh_locals)
-            }
+            TirStmtKind::Expr(expr) => Self::scan_expr_for_breaks(label, expr, found, fresh_locals),
             _ => true,
         }
     }
@@ -556,10 +550,10 @@ impl FunctionTranslator<'_, '_> {
                 if !Self::scan_block_for_breaks(label, then_branch, found, fresh_locals) {
                     return false;
                 }
-                if let Some(eb) = else_branch {
-                    if !Self::scan_block_for_breaks(label, eb, found, fresh_locals) {
-                        return false;
-                    }
+                if let Some(eb) = else_branch
+                    && !Self::scan_block_for_breaks(label, eb, found, fresh_locals)
+                {
+                    return false;
                 }
                 true
             }
@@ -577,7 +571,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Check if a source expression's root local is immutable.
-    /// Returns true when the expression is a Local or FieldAccess chain
+    /// Returns true when the expression is a Local or `FieldAccess` chain
     /// whose root local is in the immutable set. In that case, sharing
     /// the value without deep-copying is safe because neither the
     /// destination (non-mut let) nor the source can be mutated.
@@ -934,8 +928,8 @@ impl FunctionTranslator<'_, '_> {
                     // Skip deep value-copy when safe:
                     // 1. LICM-hoisted variables (skip_value_copy flag set by optimizer)
                     // 2. Immutable binding from an immutable source (no mutation possible)
-                    let can_skip_copy = *skip_value_copy
-                        || (!is_mut && self.is_source_immutable(value));
+                    let can_skip_copy =
+                        *skip_value_copy || (!is_mut && self.is_source_immutable(value));
                     let value_instr = if can_skip_copy {
                         value_instr
                     } else {

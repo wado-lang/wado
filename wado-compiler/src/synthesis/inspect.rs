@@ -1338,7 +1338,7 @@ fn synth_array(
                 TypeTable::I32,
                 span,
             ),
-                skip_value_copy: false,
+            skip_value_copy: false,
         },
         span,
     ));

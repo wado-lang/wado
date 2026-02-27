@@ -64,10 +64,7 @@ export fn run() with Stdout {
             let value: String = "#0000FF";
             self."TreeMap<String,String>::insert"(key, value);
         };
-        break __kv_lit: __inline_TreeMap_String_String__KeyValueLiteralBuilder__build_5: {
-            let self: TreeMap<String,String> = __b;
-            break __inline_TreeMap_String_String__KeyValueLiteralBuilder__build_5: *self;
-        };
+        break __kv_lit: *__b;
     };
     __assert_0: {
         let __v0: i32 = colors.size;
@@ -208,12 +205,11 @@ fn "TreeMap<String,String>^IndexValue::index_value"(self: &TreeMap<String,String
                 break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             __inline___inspect_String_2: {
-                let __val: String = key;
                 let __fmt: &mut Formatter = &mut __f;
                 __inline_Formatter__write_char_3: {
                     __fmt.buf.String::append_char('"');
                 };
-                core::internal::write_escaped_string(__val, __fmt);
+                core::internal::write_escaped_string(key, __fmt);
                 __inline_Formatter__write_char_4: {
                     __fmt.buf.String::append_char('"');
                 };

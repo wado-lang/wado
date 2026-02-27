@@ -28,10 +28,7 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let mut count: Box<i32> = Box<i32> { value: 0 };
-    let inc: fn() -> () = {
-        let __ref_count: Box<i32> = count;
-        &__Closure_0 { __capture_0: __ref_count };
-    };
+    let inc: fn() -> () = &__Closure_0 { __capture_0: count };
     inc();
     inc();
     inc();
@@ -42,9 +39,8 @@ export fn run() with Stdout {
             break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_3: {
-            let self: Box<i32> = count;
             let f: &mut Formatter = &mut __f;
-            "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
+            "core::prelude/primitives.wado::fmt_i32_decimal"(count.value, f);
         };
         break __tmpl: __r;
     });

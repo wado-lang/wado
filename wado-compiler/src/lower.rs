@@ -1089,7 +1089,8 @@ impl<'a> PatternLowerer<'a> {
                 is_mut,
                 is_reactive,
                 type_id,
-            .. } => {
+                ..
+            } => {
                 // Lower expressions inside the Let value
                 let mut value = value;
                 self.lower_expr(&mut value, type_table);
@@ -5119,7 +5120,8 @@ impl ClosureLowerer {
                 is_reactive,
                 type_id,
                 value,
-            .. } => TirStmtKind::Let {
+                ..
+            } => TirStmtKind::Let {
                 local_index: local_index + 1, // Shift by 1 for self parameter
                 name: name.clone(),
                 is_mut: *is_mut,
@@ -6185,7 +6187,8 @@ impl ClosureLowerer {
                 is_reactive,
                 type_id,
                 value,
-            .. } => TirStmtKind::Let {
+                ..
+            } => TirStmtKind::Let {
                 name: name.clone(),
                 local_index: *local_index,
                 is_mut: *is_mut,

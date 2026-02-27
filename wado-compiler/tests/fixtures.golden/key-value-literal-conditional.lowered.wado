@@ -51,10 +51,7 @@ export fn run() with Stdout {
             let key: String = "a";
             self."TreeMap<String,i32>::insert"(key, 1);
         };
-        break __kv_lit: __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_3: {
-            let self: TreeMap<String,i32> = __b;
-            break __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_3: *self;
-        };
+        break __kv_lit: *__b;
     };
     __assert_0: {
         let __v0: i32 = m."TreeMap<String,i32>^IndexValue::index_value"("a");
@@ -99,10 +96,7 @@ export fn run() with Stdout {
             let key: String = "b";
             self."TreeMap<String,i32>::insert"(key, 2);
         };
-        break __kv_lit: __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_17: {
-            let self: TreeMap<String,i32> = __b;
-            break __inline_TreeMap_String_i32__KeyValueLiteralBuilder__build_17: *self;
-        };
+        break __kv_lit: *__b;
     };
     __assert_1: {
         let __v0: i32 = m2."TreeMap<String,i32>^IndexValue::index_value"("b");
@@ -159,12 +153,11 @@ fn "TreeMap<String,i32>^IndexValue::index_value"(self: &TreeMap<String,i32>, key
                 break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             __inline___inspect_String_2: {
-                let __val: String = key;
                 let __fmt: &mut Formatter = &mut __f;
                 __inline_Formatter__write_char_3: {
                     __fmt.buf.String::append_char('"');
                 };
-                core::internal::write_escaped_string(__val, __fmt);
+                core::internal::write_escaped_string(key, __fmt);
                 __inline_Formatter__write_char_4: {
                     __fmt.buf.String::append_char('"');
                 };
