@@ -1,0 +1,52 @@
+// Test: cross-module array literal optimization with 3-level module nesting.
+// Verifies that:
+// 1. Array literals in sub-modules are collapsed to array.new_fixed
+// 2. Generic functions monomorphized across modules are correctly inlined
+// 3. Non-scalar elements (String) are optimized even across module boundaries
+
+use { println, Stdout } from "core:cli";
+use { string_pair, int_triple, string_literals } from "./sub/opt_crossmod_level2.wado";
+use { make_pair, pair_to_array, Pair } from "./sub/opt_crossmod_level1.wado";
+
+export fn run() with Stdout {
+    // From level2: generic pair -> array conversion
+    let sp = string_pair();
+    assert sp.len() == 2;
+    assert sp[0] == "hello";
+    assert sp[1] == "world";
+
+    // From level2: simple int array literal
+    let it = int_triple();
+    assert it.len() == 3;
+    assert it[0] == 10;
+    assert it[1] == 20;
+    assert it[2] == 30;
+
+    // From level2: string array literal (non-scalar elements)
+    let sl = string_literals();
+    assert sl.len() == 3;
+    assert sl[0] == "alpha";
+    assert sl[1] == "beta";
+    assert sl[2] == "gamma";
+
+    // Direct usage of level1 generics from entry module (4th monomorphization site)
+    let ip = make_pair::<i32>(100, 200);
+    let ia = pair_to_array::<i32>(ip);
+    assert ia.len() == 2;
+    assert ia[0] == 100;
+    assert ia[1] == 200;
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "wir_expect:O2": [
+        "array.new_fixed<i32>(10, 20, 30)",
+        "array.new_fixed<ref null String>("
+    ],
+    "wir_not_expect:O2": [
+        "SequenceLiteralBuilder::push_literal("
+    ]
+}
