@@ -98,8 +98,6 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
@@ -176,9 +174,6 @@ fn simplify_labeled_blocks_in_expr(expr: &mut TirExpr) -> bool {
             for elem in elements {
                 changed |= simplify_labeled_blocks_in_expr(elem);
             }
-        }
-        TirExprKind::OptionSome { value } => {
-            changed |= simplify_labeled_blocks_in_expr(value);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

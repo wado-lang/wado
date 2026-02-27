@@ -1026,9 +1026,6 @@ fn analyze_expr(
             );
             analysis.callees.insert(FunctionId::Method(method_name));
         }
-        TirExprKind::OptionSome { value } => {
-            analyze_expr(value, current_module, type_table, analysis);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 analyze_expr(payload_expr, current_module, type_table, analysis);
@@ -1040,10 +1037,7 @@ fn analyze_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             analyze_expr(value, current_module, type_table, analysis);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             analyze_expr(expr, current_module, type_table, analysis);
         }
         TirExprKind::VariantPayload { expr, .. } => {
@@ -1618,9 +1612,6 @@ fn collect_types_from_expr(
             collect_types_from_expr(functor, type_table, reachable);
             collect_type_transitive(*target_fn_type, type_table, reachable);
         }
-        TirExprKind::OptionSome { value } => {
-            collect_types_from_expr(value, type_table, reachable);
-        }
         TirExprKind::VariantConstruct {
             variant_type,
             payload,
@@ -1637,10 +1628,7 @@ fn collect_types_from_expr(
         TirExprKind::GlobalVarSet { value, .. } => {
             collect_types_from_expr(value, type_table, reachable);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
-        | TirExprKind::VariantTest { expr, .. } => {
+        TirExprKind::VariantTag { expr } | TirExprKind::VariantTest { expr, .. } => {
             collect_types_from_expr(expr, type_table, reachable);
         }
         TirExprKind::VariantPayload {
@@ -2048,8 +2036,6 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
@@ -2098,9 +2084,6 @@ fn collect_global_reads_expr(expr: &TirExpr, used: &mut IndexSet<(String, String
         }
         TirExprKind::ClosureToCanonical { functor, .. } => {
             collect_global_reads_expr(functor, used);
-        }
-        TirExprKind::OptionSome { value } => {
-            collect_global_reads_expr(value, used);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
@@ -2436,8 +2419,6 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. } => {
@@ -2507,9 +2488,6 @@ fn prune_branches_in_expr(expr: &mut TirExpr) -> bool {
             for elem in elements {
                 changed |= prune_branches_in_expr(elem);
             }
-        }
-        TirExprKind::OptionSome { value } => {
-            changed |= prune_branches_in_expr(value);
         }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(p) = payload {

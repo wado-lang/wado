@@ -429,9 +429,6 @@ impl FunctionTranslator<'_, '_> {
             // ClosureToCanonical creates a fresh closure struct
             TirExprKind::ClosureToCanonical { .. } => true,
 
-            // OptionSome wrapping a fresh value is itself fresh
-            TirExprKind::OptionSome { value } => Self::is_fresh_in_context(value, fresh_locals),
-
             // Variant/enum constructors produce fresh values
             TirExprKind::VariantConstruct { .. } | TirExprKind::EnumConstruct { .. } => true,
 
@@ -1535,14 +1532,6 @@ impl FunctionTranslator<'_, '_> {
             } => self.translate_switch(scrutinee, *min_value, arms, default, expr.type_id),
 
             // === Variant Operations (lowered) ===
-            TirExprKind::IsNotNull { expr: inner } => {
-                let val = self.translate_expr(inner);
-                WirInstr::I32Eqz(Box::new(WirInstr::RefIsNull(Box::new(val))))
-            }
-            TirExprKind::UnwrapOption { expr: inner, .. } => {
-                let val = self.translate_expr(inner);
-                WirInstr::RefAsNonNull(Box::new(val))
-            }
             TirExprKind::VariantTag { expr: inner } => {
                 // Get discriminant field from variant base type
                 let val = self.translate_expr(inner);
@@ -1580,17 +1569,6 @@ impl FunctionTranslator<'_, '_> {
                 expr.type_id,
             ),
             TirExprKind::EnumConstruct { case_index, .. } => WirInstr::I32Const(*case_index as i32),
-            TirExprKind::OptionSome { value } => {
-                // SubtypeHierarchy: construct Some variant struct
-                // TODO: Future NullableRef optimization would pass-through the value
-                self.translate_variant_construct(
-                    expr.type_id, // variant_type (Option<T>)
-                    0,            // case_index: Some is case 0
-                    "Some",
-                    Some(value),  // payload
-                    expr.type_id, // result_type
-                )
-            }
 
             // === CM Raw Call ===
             TirExprKind::CmRawCall {

@@ -1,0 +1,15 @@
+// Test: if let Err(e) = result pattern matching
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let r: Result<i32, String> = Result::<i32, String>::Err("bad");
+
+    if let Err(e) = r {
+        println(`Err: {e}`);
+    } else {
+        println("Ok");
+    }
+}
+
+__DATA__
+{"stdout": "Err: bad\n"}

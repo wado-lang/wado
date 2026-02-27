@@ -205,9 +205,6 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
                 changed |= fold_constants_in_expr(elem, type_table);
             }
         }
-        TirExprKind::OptionSome { value } => {
-            changed |= fold_constants_in_expr(value, type_table);
-        }
         TirExprKind::VariantConstruct { payload, .. } => {
             if let Some(payload_expr) = payload {
                 changed |= fold_constants_in_expr(payload_expr, type_table);
@@ -219,9 +216,7 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
         TirExprKind::GlobalVarSet { value, .. } => {
             changed |= fold_constants_in_expr(value, type_table);
         }
-        TirExprKind::IsNotNull { expr }
-        | TirExprKind::UnwrapOption { expr, .. }
-        | TirExprKind::VariantTag { expr }
+        TirExprKind::VariantTag { expr }
         | TirExprKind::VariantTest { expr, .. }
         | TirExprKind::VariantPayload { expr, .. } => {
             changed |= fold_constants_in_expr(expr, type_table);

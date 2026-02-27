@@ -120,9 +120,9 @@ fn __cm_adapter__TerminalStdin_get_terminal_stdin() -> Option<TerminalInput> {
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/TerminalStdin::get_terminal_stdin(__outptr);
     let __disc: i32 = core::builtin::i32_load8_u(__outptr);
-    let mut __option_result: Option<TerminalInput> = null;
+    let mut __option_result: Option<TerminalInput> = Option<TerminalInput>::None;
     if (__disc != 0) {
-        __option_result = Option::Some(core::builtin::i32_load((__outptr + 4)));
+        __option_result = Option<TerminalInput>::Some(core::builtin::i32_load((__outptr + 4)));
     }
     core::builtin::realloc(__outptr, 8, 4, 0);
     return __option_result;
@@ -132,9 +132,9 @@ fn __cm_adapter__TerminalStdout_get_terminal_stdout() -> Option<TerminalOutput> 
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/TerminalStdout::get_terminal_stdout(__outptr);
     let __disc: i32 = core::builtin::i32_load8_u(__outptr);
-    let mut __option_result: Option<TerminalOutput> = null;
+    let mut __option_result: Option<TerminalOutput> = Option<TerminalOutput>::None;
     if (__disc != 0) {
-        __option_result = Option::Some(core::builtin::i32_load((__outptr + 4)));
+        __option_result = Option<TerminalOutput>::Some(core::builtin::i32_load((__outptr + 4)));
     }
     core::builtin::realloc(__outptr, 8, 4, 0);
     return __option_result;
@@ -144,9 +144,9 @@ fn __cm_adapter__TerminalStderr_get_terminal_stderr() -> Option<TerminalOutput> 
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:cli/TerminalStderr::get_terminal_stderr(__outptr);
     let __disc: i32 = core::builtin::i32_load8_u(__outptr);
-    let mut __option_result: Option<TerminalOutput> = null;
+    let mut __option_result: Option<TerminalOutput> = Option<TerminalOutput>::None;
     if (__disc != 0) {
-        __option_result = Option::Some(core::builtin::i32_load((__outptr + 4)));
+        __option_result = Option<TerminalOutput>::Some(core::builtin::i32_load((__outptr + 4)));
     }
     core::builtin::realloc(__outptr, 8, 4, 0);
     return __option_result;

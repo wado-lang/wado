@@ -637,9 +637,6 @@ fn walk_expr(
         }
         TirExprKind::Unary { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::OptionSome { value: inner }
-        | TirExprKind::IsNotNull { expr: inner }
-        | TirExprKind::UnwrapOption { expr: inner, .. }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantTag { expr: inner }
         | TirExprKind::VariantTest { expr: inner, .. }
