@@ -274,9 +274,6 @@ fn propagate_constants_in_expr(
                 changed |= propagate_constants_in_expr(payload_expr, constants);
             }
         }
-        TirExprKind::Move { expr } => {
-            changed |= propagate_constants_in_expr(expr, constants);
-        }
         TirExprKind::Closure { body, .. } => {
             changed |= propagate_constants_in_expr(body, constants);
         }

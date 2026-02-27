@@ -213,9 +213,6 @@ fn fold_constants_in_expr(expr: &mut TirExpr, type_table: &TypeTable) -> bool {
                 changed |= fold_constants_in_expr(payload_expr, type_table);
             }
         }
-        TirExprKind::Move { expr } => {
-            changed |= fold_constants_in_expr(expr, type_table);
-        }
         TirExprKind::Closure { body, .. } => {
             changed |= fold_constants_in_expr(body, type_table);
         }

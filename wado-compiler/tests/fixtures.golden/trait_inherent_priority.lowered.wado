@@ -21,8 +21,8 @@ struct Robot {
 
 fn Robot::greet(self: &Robot) -> String {
     return __tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(39), used: 0 };
-        __r.String::append(move "Beep boop, I am Robot #");
+        let mut __r: String = String { repr: "array_new<u8>"(39), used: 0 };
+        __r.String::append("Beep boop, I am Robot #");
         let mut __f: Formatter = __inline_Formatter__new_1: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_1: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
@@ -44,8 +44,8 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let r: Robot = move Robot { id: 42 };
-    core::cli::println(move r.Robot::greet());
+    let r: Robot = Robot { id: 42 };
+    core::cli::println(r.Robot::greet());
 }
 
 export fn __cm_export__run() {

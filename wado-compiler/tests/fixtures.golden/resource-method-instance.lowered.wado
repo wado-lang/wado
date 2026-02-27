@@ -24,12 +24,12 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let family: IpAddressFamily = IpAddressFamily::Ipv4;
-    let result: Result<TcpSocket, ErrorCode> = move __cm_adapter__TcpSocket_create(family);
+    let result: Result<TcpSocket, ErrorCode> = __cm_adapter__TcpSocket_create(family);
     if __variant_test(result, case=0, name=Ok) {
         let socket: TcpSocket = __variant_payload(result, case=0);
-        core::cli::println(move "Resource extracted from Result");
+        core::cli::println("Resource extracted from Result");
     } else {
-        core::cli::println(move "Failed to create socket");
+        core::cli::println("Failed to create socket");
     }
 }
 
@@ -37,11 +37,11 @@ fn __cm_adapter__TcpSocket_create(address_family: i32) -> Result<TcpSocket, Erro
     let __outptr: i32 = core::builtin::realloc(0, 0, 4, 8);
     cm_raw_call wasi:sockets/TcpSocket::create(address_family, __outptr);
     let __disc: i32 = core::builtin::i32_load(__outptr);
-    let mut __result_val: Result<TcpSocket, ErrorCode> = move null;
+    let mut __result_val: Result<TcpSocket, ErrorCode> = null;
     if (__disc == 0) {
-        __result_val = move Result<TcpSocket, ErrorCode>::Ok(core::builtin::i32_load((__outptr + 4)));
+        __result_val = Result<TcpSocket, ErrorCode>::Ok(core::builtin::i32_load((__outptr + 4)));
     } else {
-        __result_val = move Result<TcpSocket, ErrorCode>::Err(core::builtin::i32_load((__outptr + 4)));
+        __result_val = Result<TcpSocket, ErrorCode>::Err(core::builtin::i32_load((__outptr + 4)));
     }
     core::builtin::realloc(__outptr, 8, 4, 0);
     return __result_val;

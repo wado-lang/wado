@@ -28,7 +28,7 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
         return s;
     }
     let pad_len: i32 = (opts.width - s.used);
-    let mut pad: String = move String { repr: "array_new<u8>"(pad_len), used: 0 };
+    let mut pad: String = String { repr: "array_new<u8>"(pad_len), used: 0 };
     __for_0: {
         let mut i: i32 = 0;
         loop {
@@ -36,7 +36,7 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
                 break __for_0;
             }
             __for_0_body: {
-                pad.String::append(move " ");
+                pad.String::append(" ");
             }
             i = (i + 1);
         }
@@ -47,8 +47,8 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
         Center => {
             let left: i32 = (pad_len / 2);
             let right: i32 = (pad_len - left);
-            let mut lpad: String = move String { repr: "array_new<u8>"(left), used: 0 };
-            let mut rpad: String = move String { repr: "array_new<u8>"(right), used: 0 };
+            let mut lpad: String = String { repr: "array_new<u8>"(left), used: 0 };
+            let mut rpad: String = String { repr: "array_new<u8>"(right), used: 0 };
             __for_0: {
                 let mut i: i32 = 0;
                 loop {
@@ -56,7 +56,7 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
                         break __for_0;
                     }
                     __for_0_body: {
-                        lpad.String::append(move " ");
+                        lpad.String::append(" ");
                     }
                     i = (i + 1);
                 }
@@ -68,12 +68,12 @@ pub fn format_with_opts(s: String, opts: Options) -> String {
                         break __for_1;
                     }
                     __for_1_body: {
-                        rpad.String::append(move " ");
+                        rpad.String::append(" ");
                     }
                     i = (i + 1);
                 }
             }
-            String::concat(move String::concat(lpad, s), rpad);
+            String::concat(String::concat(lpad, s), rpad);
         },
     };
 }
@@ -86,8 +86,8 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let opts: Options = move Options { align: Align::Right, width: 0 };
-    let s: String = move format_with_opts(move "test", opts);
+    let opts: Options = Options { align: Align::Right, width: 0 };
+    let s: String = format_with_opts("test", opts);
     core::cli::println(s);
 }
 

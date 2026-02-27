@@ -30,26 +30,26 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let mut arr: Array<u32> = __seq_lit: {
-        let mut __b: Array<u32> = move Array<u32> { repr: core::builtin::array_new::<u32>(0), used: 0 };
+        let mut __b: Array<u32> = Array<u32> { repr: core::builtin::array_new::<u32>(0), used: 0 };
         break __seq_lit: *__b;
     };
     arr."Array<u32>::append"(100000);
     arr."Array<u32>::append"(200000);
     arr."Array<u32>::append"(300000);
     __for_of_0: {
-        let mut __iter_0: ArrayIter<u32> = move ArrayIter<u32> { repr: arr.repr, used: arr.used, index: 0 };
+        let mut __iter_0: ArrayIter<u32> = ArrayIter<u32> { repr: arr.repr, used: arr.used, index: 0 };
         loop {
-            let __pattern_temp_0: Option<u32> = move __iter_0."ArrayIter<u32>^Iterator::next"();
+            let __pattern_temp_0: Option<u32> = __iter_0."ArrayIter<u32>^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let x: u32 = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
-                    let mut __r: String = move String { repr: "array_new<u8>"(16), used: 0 };
+                    let mut __r: String = String { repr: "array_new<u8>"(16), used: 0 };
                     let mut __f: Formatter = __inline_Formatter__new_5: {
                         let buf: &mut String = &mut __r;
                         break __inline_Formatter__new_5: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                     };
                     __inline_u32_Display__fmt_6: {
-                        let self: Box<u32> = move Box<u32> { value: x };
+                        let self: Box<u32> = Box<u32> { value: x };
                         let f: &mut Formatter = &mut __f;
                         "core::prelude/primitives.wado::fmt_u32_decimal"(self.value, f);
                     };

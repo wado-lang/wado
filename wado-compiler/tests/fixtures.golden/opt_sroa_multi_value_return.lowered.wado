@@ -69,13 +69,13 @@ fn conditional_pair(flag: bool) -> Pair {
 
 #[inline(never)]
 fn caller_a() -> i32 {
-    let p: Pair = move make_pair(10, 20);
+    let p: Pair = make_pair(10, 20);
     return (p.a + p.b);
 }
 
 #[inline(never)]
 fn caller_b() -> i32 {
-    let p: Pair = move make_pair(100, 200);
+    let p: Pair = make_pair(100, 200);
     return (p.a * p.b);
 }
 
@@ -86,7 +86,7 @@ fn sum_pair(p: Pair) -> i32 {
 
 #[inline(never)]
 fn chained() -> i32 {
-    let p: Pair = move make_pair(5, 7);
+    let p: Pair = make_pair(5, 7);
     return sum_pair(p);
 }
 
@@ -98,104 +98,104 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let p: Pair = move make_pair(3, 4);
+    let p: Pair = make_pair(3, 4);
     let pa: i32 = p.a;
     let pb: i32 = p.b;
     if (pa != 3) {
-        core::internal::panic(move "pair.a failed");
+        core::internal::panic("pair.a failed");
     }
     if (pb != 4) {
-        core::internal::panic(move "pair.b failed");
+        core::internal::panic("pair.b failed");
     }
-    let t: Triple = move make_triple(1.0, 2.0, 3.0);
+    let t: Triple = make_triple(1.0, 2.0, 3.0);
     let tx: f64 = t.x;
     let ty: f64 = t.y;
     let tz: f64 = t.z;
     if (tx != 1.0) {
-        core::internal::panic(move "triple.x failed");
+        core::internal::panic("triple.x failed");
     }
     if (ty != 2.0) {
-        core::internal::panic(move "triple.y failed");
+        core::internal::panic("triple.y failed");
     }
     if (tz != 3.0) {
-        core::internal::panic(move "triple.z failed");
+        core::internal::panic("triple.z failed");
     }
-    let q: Quad = move make_quad(1, 2, 3, 4);
+    let q: Quad = make_quad(1, 2, 3, 4);
     let qw: i32 = q.w;
     let qx: i32 = q.x;
     let qy: i32 = q.y;
     let qz: i32 = q.z;
     if (qw != 1) {
-        core::internal::panic(move "quad.w failed");
+        core::internal::panic("quad.w failed");
     }
     if (qx != 2) {
-        core::internal::panic(move "quad.x failed");
+        core::internal::panic("quad.x failed");
     }
     if (qy != 3) {
-        core::internal::panic(move "quad.y failed");
+        core::internal::panic("quad.y failed");
     }
     if (qz != 4) {
-        core::internal::panic(move "quad.z failed");
+        core::internal::panic("quad.z failed");
     }
-    let m: MixedScalar = move make_mixed(42, 3.14);
+    let m: MixedScalar = make_mixed(42, 3.14);
     let mi: i32 = m.i;
     let mf: f64 = m.f;
     if (mi != 42) {
-        core::internal::panic(move "mixed.i failed");
+        core::internal::panic("mixed.i failed");
     }
     if (mf != 3.14) {
-        core::internal::panic(move "mixed.f failed");
+        core::internal::panic("mixed.f failed");
     }
-    let c1: Pair = move conditional_pair(true);
+    let c1: Pair = conditional_pair(true);
     let c1a: i32 = c1.a;
     let c1b: i32 = c1.b;
     if (c1a != 1) {
-        core::internal::panic(move "cond1.a failed");
+        core::internal::panic("cond1.a failed");
     }
     if (c1b != 2) {
-        core::internal::panic(move "cond1.b failed");
+        core::internal::panic("cond1.b failed");
     }
-    let c2: Pair = move conditional_pair(false);
+    let c2: Pair = conditional_pair(false);
     let c2a: i32 = c2.a;
     let c2b: i32 = c2.b;
     if (c2a != 3) {
-        core::internal::panic(move "cond2.a failed");
+        core::internal::panic("cond2.a failed");
     }
     if (c2b != 4) {
-        core::internal::panic(move "cond2.b failed");
+        core::internal::panic("cond2.b failed");
     }
     __assert_0: {
         let __v0: i32 = caller_a();
         let __cond: bool = (__v0 == 30);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(131), used: 0 };
-                __r.String::append(move "Assertion failed in ");
-                __r.String::append(move "run");
-                __r.String::append(move " at ");
-                __r.String::append(move "wado-compiler/tests/fixtures/opt_sroa_multi_value_return.wado");
-                __r.String::append(move ":");
+                let mut __r: String = String { repr: "array_new<u8>"(131), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/opt_sroa_multi_value_return.wado");
+                __r.String::append(":");
                 let mut __f: Formatter = __inline_Formatter__new_2: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_3: {
-                    let self: Box<i32> = move Box<i32> { value: 180 };
+                    let self: Box<i32> = Box<i32> { value: 180 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: caller_a() == 30\n");
-                __r.String::append(move "caller_a(): ");
+                __r.String::append("\ncondition: caller_a() == 30\n");
+                __r.String::append("caller_a(): ");
                 __f = __inline_Formatter__new_4: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_4: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_5: {
-                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\n");
+                __r.String::append("\n");
                 break __tmpl: __r;
             });
         }
@@ -205,33 +205,33 @@ export fn run() with Stdout {
         let __cond: bool = (__v0 == 20000);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(134), used: 0 };
-                __r.String::append(move "Assertion failed in ");
-                __r.String::append(move "run");
-                __r.String::append(move " at ");
-                __r.String::append(move "wado-compiler/tests/fixtures/opt_sroa_multi_value_return.wado");
-                __r.String::append(move ":");
+                let mut __r: String = String { repr: "array_new<u8>"(134), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/opt_sroa_multi_value_return.wado");
+                __r.String::append(":");
                 let mut __f: Formatter = __inline_Formatter__new_7: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_7: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_8: {
-                    let self: Box<i32> = move Box<i32> { value: 181 };
+                    let self: Box<i32> = Box<i32> { value: 181 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: caller_b() == 20000\n");
-                __r.String::append(move "caller_b(): ");
+                __r.String::append("\ncondition: caller_b() == 20000\n");
+                __r.String::append("caller_b(): ");
                 __f = __inline_Formatter__new_9: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_9: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_10: {
-                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\n");
+                __r.String::append("\n");
                 break __tmpl: __r;
             });
         }
@@ -241,38 +241,38 @@ export fn run() with Stdout {
         let __cond: bool = (__v0 == 12);
         if !__cond {
             core::internal::panic(__tmpl: {
-                let mut __r: String = move String { repr: "array_new<u8>"(129), used: 0 };
-                __r.String::append(move "Assertion failed in ");
-                __r.String::append(move "run");
-                __r.String::append(move " at ");
-                __r.String::append(move "wado-compiler/tests/fixtures/opt_sroa_multi_value_return.wado");
-                __r.String::append(move ":");
+                let mut __r: String = String { repr: "array_new<u8>"(129), used: 0 };
+                __r.String::append("Assertion failed in ");
+                __r.String::append("run");
+                __r.String::append(" at ");
+                __r.String::append("wado-compiler/tests/fixtures/opt_sroa_multi_value_return.wado");
+                __r.String::append(":");
                 let mut __f: Formatter = __inline_Formatter__new_12: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_12: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_13: {
-                    let self: Box<i32> = move Box<i32> { value: 184 };
+                    let self: Box<i32> = Box<i32> { value: 184 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\ncondition: chained() == 12\n");
-                __r.String::append(move "chained(): ");
+                __r.String::append("\ncondition: chained() == 12\n");
+                __r.String::append("chained(): ");
                 __f = __inline_Formatter__new_14: {
                     let buf: &mut String = &mut __r;
                     break __inline_Formatter__new_14: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
                 };
                 __inline_i32_Display__fmt_15: {
-                    let self: Box<i32> = move Box<i32> { value: __v0 };
+                    let self: Box<i32> = Box<i32> { value: __v0 };
                     let f: &mut Formatter = &mut __f;
                     "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
                 };
-                __r.String::append(move "\n");
+                __r.String::append("\n");
                 break __tmpl: __r;
             });
         }
     }
-    core::cli::println(move "ok");
+    core::cli::println("ok");
 }
 
 export fn __cm_export__run() {

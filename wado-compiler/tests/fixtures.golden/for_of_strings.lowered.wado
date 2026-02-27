@@ -30,20 +30,20 @@ export fn run() with Stdout {
         __modules_initialized = true;
     };
     let names: Array<String> = __seq_lit: {
-        let mut __b: Array<String> = move Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
+        let mut __b: Array<String> = Array<String> { repr: core::builtin::array_new::<String>(3), used: 0 };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "Alice";
+            let value: String = "Alice";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_3: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "Bob";
+            let value: String = "Bob";
             self."Array<String>::append"(value);
         };
         __inline_Array_String__SequenceLiteralBuilder__push_literal_4: {
             let self: &mut Array<String> = &mut __b;
-            let value: String = move "Charlie";
+            let value: String = "Charlie";
             self."Array<String>::append"(value);
         };
         break __seq_lit: __inline_Array_String__SequenceLiteralBuilder__build_5: {
@@ -52,16 +52,16 @@ export fn run() with Stdout {
         };
     };
     __for_of_0: {
-        let mut __iter_0: ArrayIter<String> = move ArrayIter<String> { repr: names.repr, used: names.used, index: 0 };
+        let mut __iter_0: ArrayIter<String> = ArrayIter<String> { repr: names.repr, used: names.used, index: 0 };
         loop {
-            let __pattern_temp_0: Option<String> = move __iter_0."ArrayIter<String>^Iterator::next"();
+            let __pattern_temp_0: Option<String> = __iter_0."ArrayIter<String>^Iterator::next"();
             if __variant_test(__pattern_temp_0, case=0, name=Some) {
                 let name: String = __variant_payload(__pattern_temp_0, case=0);
                 core::cli::println(__tmpl: {
-                    let mut __r: String = move String { repr: "array_new<u8>"(24), used: 0 };
-                    __r.String::append(move "Hello, ");
+                    let mut __r: String = String { repr: "array_new<u8>"(24), used: 0 };
+                    __r.String::append("Hello, ");
                     __r.String::append(name);
-                    __r.String::append(move "!");
+                    __r.String::append("!");
                     break __tmpl: __r;
                 });
             } else {
@@ -96,7 +96,7 @@ fn "ArrayIter<String>^Iterator::next"(self: &mut ArrayIter<String>) -> Option<St
     if (self.index >= self.used) {
         return null;
     }
-    let item: String = move core::builtin::array_get::<String>(self.repr, self.index);
+    let item: String = core::builtin::array_get::<String>(self.repr, self.index);
     self.index = (self.index + 1);
     return Option::Some(item);
 }

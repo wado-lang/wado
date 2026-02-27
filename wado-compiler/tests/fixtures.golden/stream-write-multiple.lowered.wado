@@ -24,10 +24,10 @@ export fn run() with Stdout {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let [rx, tx] = move core::builtin::stream_create_pair();
+    let [rx, tx] = core::builtin::stream_create_pair();
     rx."Stream<u8>::close"();
     let chunk: Array<u8> = __seq_lit: {
-        let mut __b: Array<u8> = move Array<u8> { repr: core::builtin::array_new::<u8>(4), used: 0 };
+        let mut __b: Array<u8> = Array<u8> { repr: core::builtin::array_new::<u8>(4), used: 0 };
         __inline_Array_u8__SequenceLiteralBuilder__push_literal_2: {
             let self: &mut Array<u8> = &mut __b;
             self."Array<u8>::append"(65);
@@ -51,7 +51,7 @@ export fn run() with Stdout {
     };
     tx."StreamWritable<u8>::write"(chunk);
     tx."StreamWritable<u8>::close"();
-    core::cli::println(move "multi write ok");
+    core::cli::println("multi write ok");
 }
 
 export fn __cm_export__run() {

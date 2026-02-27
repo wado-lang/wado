@@ -23,34 +23,34 @@ export fn run() with Stdout, Preopens {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let dirs: Array<[Descriptor, String]> = move __cm_adapter__Preopens_get_directories();
+    let dirs: Array<[Descriptor, String]> = __cm_adapter__Preopens_get_directories();
     let dir_count: i32 = dirs.used;
     core::cli::println(__tmpl: {
-        let mut __r: String = move String { repr: "array_new<u8>"(52), used: 0 };
-        __r.String::append(move "test: preopens returned ");
+        let mut __r: String = String { repr: "array_new<u8>"(52), used: 0 };
+        __r.String::append("test: preopens returned ");
         let mut __f: Formatter = __inline_Formatter__new_3: {
             let buf: &mut String = &mut __r;
             break __inline_Formatter__new_3: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
         };
         __inline_i32_Display__fmt_4: {
-            let self: Box<i32> = move Box<i32> { value: dir_count };
+            let self: Box<i32> = Box<i32> { value: dir_count };
             let f: &mut Formatter = &mut __f;
             "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
         };
-        __r.String::append(move " directories");
+        __r.String::append(" directories");
         break __tmpl: __r;
     });
     if (dir_count > 0) {
-        let first: [Descriptor, String] = move dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0);
+        let first: [Descriptor, String] = dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0);
         let path: String = first.1;
-        core::cli::println(move "test: first preopened path exists");
+        core::cli::println("test: first preopened path exists");
         if (path.used >= 0) {
-            core::cli::println(move "test: preopened path is valid string");
+            core::cli::println("test: preopened path is valid string");
         }
     } else {
-        core::cli::println(move "test: no preopened directories (valid for sandboxed env)");
+        core::cli::println("test: no preopened directories (valid for sandboxed env)");
     }
-    core::cli::println(move "all filesystem tests passed");
+    core::cli::println("all filesystem tests passed");
 }
 
 fn __cm_adapter__Preopens_get_directories() -> Array<[Descriptor, String]> {
@@ -58,14 +58,14 @@ fn __cm_adapter__Preopens_get_directories() -> Array<[Descriptor, String]> {
     cm_raw_call wasi:filesystem/Preopens::get_directories(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<[Descriptor, String]> = move Array<Tuple<Descriptor,String>> { repr: core::builtin::array_new::<[Descriptor, String]>(__count), used: 0 };
+    let mut __result: Array<[Descriptor, String]> = Array<Tuple<Descriptor,String>> { repr: core::builtin::array_new::<[Descriptor, String]>(__count), used: 0 };
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {
             break;
         }
         let __elem_addr: i32 = (__base + (__i * 12));
-        __result."Array<Tuple<Descriptor,String>>::append"(move [core::builtin::i32_load((__elem_addr + 0)), __inline_memory_to_gc_string_1: {
+        __result."Array<Tuple<Descriptor,String>>::append"([core::builtin::i32_load((__elem_addr + 0)), __inline_memory_to_gc_string_1: {
             let ptr: i32 = core::builtin::i32_load((__elem_addr + 4));
             let len: i32 = core::builtin::i32_load(((__elem_addr + 4) + 4));
             let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);
@@ -104,7 +104,7 @@ pub fn "Array<Tuple<Descriptor,String>>::append"(self: &mut Array<[Descriptor, S
 
 fn "Array<Tuple<Descriptor,String>>^IndexValue::index_value"(self: &Array<[Descriptor, String]>, index: i32) -> [Descriptor, String] {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<[Descriptor, String]>(self.repr, index);
 }

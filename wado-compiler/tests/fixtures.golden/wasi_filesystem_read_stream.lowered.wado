@@ -23,21 +23,21 @@ export fn run() with Stdout, Stderr, Preopens {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let dirs: Array<[Descriptor, String]> = move __cm_adapter__Preopens_get_directories();
+    let dirs: Array<[Descriptor, String]> = __cm_adapter__Preopens_get_directories();
     if (dirs.used == 0) {
-        core::cli::eprintln(move "read_stream: no preopened directories available");
+        core::cli::eprintln("read_stream: no preopened directories available");
         return;
     }
     let dir: Descriptor = dirs."Array<Tuple<Descriptor,String>>^IndexValue::index_value"(0).0;
-    let open_result: Result<Descriptor, ErrorCode> = move __cm_adapter__Descriptor_open_at(&dir, 0, move "hello.txt", 0, 1);
+    let open_result: Result<Descriptor, ErrorCode> = __cm_adapter__Descriptor_open_at(&dir, 0, "hello.txt", 0, 1);
     if __variant_test(open_result, case=0, name=Ok) {
         let file: Descriptor = __variant_payload(open_result, case=0);
-        let __pattern_temp_1: [Stream<u8>, Future<Result<(), ErrorCode>>] = move __cm_adapter__Descriptor_read_via_stream(&file, 0);
+        let __pattern_temp_1: [Stream<u8>, Future<Result<(), ErrorCode>>] = __cm_adapter__Descriptor_read_via_stream(&file, 0);
         let read_stream: Stream<u8> = __pattern_temp_1.0;
         let _done: Future<Result<(), ErrorCode>> = __pattern_temp_1.1;
         __cm_adapter__Stdout_write_via_stream(read_stream);
     } else {
-        core::cli::eprintln(move "read_stream: failed to open hello.txt");
+        core::cli::eprintln("read_stream: failed to open hello.txt");
     }
 }
 
@@ -46,14 +46,14 @@ fn __cm_adapter__Preopens_get_directories() -> Array<[Descriptor, String]> {
     cm_raw_call wasi:filesystem/Preopens::get_directories(__outptr);
     let __base: i32 = core::builtin::i32_load(__outptr);
     let __count: i32 = core::builtin::i32_load((__outptr + 4));
-    let mut __result: Array<[Descriptor, String]> = move Array<Tuple<Descriptor,String>> { repr: core::builtin::array_new::<[Descriptor, String]>(__count), used: 0 };
+    let mut __result: Array<[Descriptor, String]> = Array<Tuple<Descriptor,String>> { repr: core::builtin::array_new::<[Descriptor, String]>(__count), used: 0 };
     let mut __i: i32 = 0;
     loop {
         if (__i >= __count) {
             break;
         }
         let __elem_addr: i32 = (__base + (__i * 12));
-        __result."Array<Tuple<Descriptor,String>>::append"(move [core::builtin::i32_load((__elem_addr + 0)), __inline_memory_to_gc_string_1: {
+        __result."Array<Tuple<Descriptor,String>>::append"([core::builtin::i32_load((__elem_addr + 0)), __inline_memory_to_gc_string_1: {
             let ptr: i32 = core::builtin::i32_load((__elem_addr + 4));
             let len: i32 = core::builtin::i32_load(((__elem_addr + 4) + 4));
             let arr: builtin::array<u8> = core::internal::memory_to_gc_array(ptr, len);
@@ -81,11 +81,11 @@ fn __cm_adapter__Descriptor_open_at(self: &Descriptor, path_flags: PathFlags, pa
     let __subtask: i32 = cm_raw_call wasi:filesystem/Descriptor::open_at(__params_buf, 2048);
     core::internal::wait_for_subtask(__subtask);
     let __disc: i32 = core::builtin::i32_load(2048);
-    let mut __result_val: Result<Descriptor, ErrorCode> = move null;
+    let mut __result_val: Result<Descriptor, ErrorCode> = null;
     if (__disc == 0) {
-        __result_val = move Result<Descriptor, ErrorCode>::Ok(core::builtin::i32_load(2052));
+        __result_val = Result<Descriptor, ErrorCode>::Ok(core::builtin::i32_load(2052));
     } else {
-        __result_val = move Result<Descriptor, ErrorCode>::Err(core::builtin::i32_load(2052));
+        __result_val = Result<Descriptor, ErrorCode>::Err(core::builtin::i32_load(2052));
     }
     return __result_val;
 }
@@ -101,11 +101,11 @@ fn __cm_adapter__Stdout_write_via_stream(data: Stream<u8>) -> Result<(), ErrorCo
     let __subtask: i32 = cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
     core::internal::wait_for_subtask(__subtask);
     let __disc: i32 = core::builtin::i32_load(2048);
-    let mut __result_val: Result<(), ErrorCode> = move null;
+    let mut __result_val: Result<(), ErrorCode> = null;
     if (__disc == 0) {
-        __result_val = move Result<(), ErrorCode>::Ok;
+        __result_val = Result<(), ErrorCode>::Ok;
     } else {
-        __result_val = move Result<(), ErrorCode>::Err(core::builtin::i32_load(2052));
+        __result_val = Result<(), ErrorCode>::Err(core::builtin::i32_load(2052));
     }
     return __result_val;
 }
@@ -133,7 +133,7 @@ pub fn "Array<Tuple<Descriptor,String>>::append"(self: &mut Array<[Descriptor, S
 
 fn "Array<Tuple<Descriptor,String>>^IndexValue::index_value"(self: &Array<[Descriptor, String]>, index: i32) -> [Descriptor, String] {
     if (index >= self.used) {
-        core::internal::panic(move "index out of bounds");
+        core::internal::panic("index out of bounds");
     }
     return core::builtin::array_get::<[Descriptor, String]>(self.repr, index);
 }

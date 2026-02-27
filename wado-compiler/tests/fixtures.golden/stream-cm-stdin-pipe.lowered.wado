@@ -20,7 +20,7 @@ export fn run() with Stdout, Stdin {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    let __pattern_temp_0: [Stream<u8>, Future<Result<(), ErrorCode>>] = move __cm_adapter__Stdin_read_via_stream();
+    let __pattern_temp_0: [Stream<u8>, Future<Result<(), ErrorCode>>] = __cm_adapter__Stdin_read_via_stream();
     let stdin_stream: Stream<u8> = __pattern_temp_0.0;
     let _done: Future<Result<(), ErrorCode>> = __pattern_temp_0.1;
     __cm_adapter__Stdout_write_via_stream(stdin_stream);
@@ -37,11 +37,11 @@ fn __cm_adapter__Stdout_write_via_stream(data: Stream<u8>) -> Result<(), ErrorCo
     let __subtask: i32 = cm_raw_call wasi:cli/Stdout::write_via_stream(data, 2048);
     core::internal::wait_for_subtask(__subtask);
     let __disc: i32 = core::builtin::i32_load(2048);
-    let mut __result_val: Result<(), ErrorCode> = move null;
+    let mut __result_val: Result<(), ErrorCode> = null;
     if (__disc == 0) {
-        __result_val = move Result<(), ErrorCode>::Ok;
+        __result_val = Result<(), ErrorCode>::Ok;
     } else {
-        __result_val = move Result<(), ErrorCode>::Err(core::builtin::i32_load(2052));
+        __result_val = Result<(), ErrorCode>::Err(core::builtin::i32_load(2052));
     }
     return __result_val;
 }

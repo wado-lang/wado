@@ -23,7 +23,7 @@ fn __test_trap_0_panics_with_message() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    core::internal::panic(move "intentional panic");
+    core::internal::panic("intentional panic");
 }
 
 fn __test_trap_1_unreachable() {
@@ -47,24 +47,24 @@ fn __test_trap_2_assert_failure() {
     };
     __assert_0: {
         core::internal::panic(__tmpl: {
-            let mut __r: String = move String { repr: "array_new<u8>"(110), used: 0 };
-            __r.String::append(move "Assertion failed in ");
-            __r.String::append(move "__test_trap_2_assert_failure");
-            __r.String::append(move " at ");
-            __r.String::append(move "wado-compiler/tests/fixtures/test_expect_trap.wado");
-            __r.String::append(move ":");
+            let mut __r: String = String { repr: "array_new<u8>"(110), used: 0 };
+            __r.String::append("Assertion failed in ");
+            __r.String::append("__test_trap_2_assert_failure");
+            __r.String::append(" at ");
+            __r.String::append("wado-compiler/tests/fixtures/test_expect_trap.wado");
+            __r.String::append(":");
             let mut __f: Formatter = __inline_Formatter__new_2: {
                 let buf: &mut String = &mut __r;
                 break __inline_Formatter__new_2: Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -1, buf: buf };
             };
             __inline_i32_Display__fmt_3: {
-                let self: Box<i32> = move Box<i32> { value: 19 };
+                let self: Box<i32> = Box<i32> { value: 19 };
                 let f: &mut Formatter = &mut __f;
                 "core::prelude/primitives.wado::fmt_i32_decimal"(self.value, f);
             };
-            __r.String::append(move ": ");
-            __r.String::append(move "this assertion should fail");
-            __r.String::append(move "\ncondition: 1 == 2\n");
+            __r.String::append(": ");
+            __r.String::append("this assertion should fail");
+            __r.String::append("\ncondition: 1 == 2\n");
             break __tmpl: __r;
         });
     }
@@ -78,7 +78,7 @@ fn __test_trap_3() {
         "core::prelude/fpfmt.wado::__initialize_module"();
         __modules_initialized = true;
     };
-    core::internal::panic(move "unnamed trap test");
+    core::internal::panic("unnamed trap test");
 }
 
 export fn __cm_export____test_trap_0_panics_with_message() {
@@ -90,7 +90,7 @@ export fn __cm_export____test_trap_0_panics_with_message() {
             "core::prelude/fpfmt.wado::__initialize_module"();
             __modules_initialized = true;
         };
-        core::internal::panic(move "intentional panic");
+        core::internal::panic("intentional panic");
     };
     cm_raw_call task-return(0);
 }
@@ -123,7 +123,7 @@ export fn __cm_export____test_trap_3() {
             "core::prelude/fpfmt.wado::__initialize_module"();
             __modules_initialized = true;
         };
-        core::internal::panic(move "unnamed trap test");
+        core::internal::panic("unnamed trap test");
     };
     cm_raw_call task-return(0);
 }
