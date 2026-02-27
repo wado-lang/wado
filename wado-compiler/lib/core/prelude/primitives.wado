@@ -8,7 +8,7 @@
 
 use {
     check_special, SpecialKind,
-    short, short32, fixed_width, digits,
+    short, short32, fixed_width, fixed_width_for_prec, digits,
     format_decimal, format_exp,
     format_decimal_prec, format_exp_prec,
     write_decimal, write_exp,
@@ -385,13 +385,7 @@ fn fmt_f64_fixed(value: f64, precision: i32, f: &mut Formatter) {
         return;
     }
     let abs_f = if is_neg { -value } else { value };
-    let short_result = short(abs_f);
-    let short_nd = digits(short_result.digits);
-    let decimal_pos = short_nd + short_result.exponent;
-    let int_digits = if decimal_pos > 0 { decimal_pos } else { 1 };
-    let total_digits = int_digits + precision;
-    let clamped = if total_digits > 18 { 18 } else if total_digits < 1 { 1 } else { total_digits };
-    let result = fixed_width(abs_f, clamped);
+    let result = fixed_width_for_prec(abs_f, precision);
     let d = result.digits;
     let p = result.exponent;
     let nd = digits(d);
