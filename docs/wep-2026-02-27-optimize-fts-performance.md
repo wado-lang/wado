@@ -33,6 +33,7 @@ break __tmpl: __r;                                               // (4) result
 ### Problem 1: Per-Iteration GC Allocations (Critical)
 
 Every iteration allocates:
+
 - A `String` struct (2 fields) + its backing `array<u8>(16)` — **2 GC objects**
 - A `Formatter` struct (8 fields) — **1 GC object**
 
@@ -45,6 +46,7 @@ When a template string expression is inside a loop body and the result is consum
 This is a TIR-level optimization: detect `__tmpl` blocks inside loops, and if the resulting String does not escape the loop body, hoist the allocation before the loop and reset inside.
 
 Before (current):
+
 ```
 loop {
     let __r = String { repr: array_new<u8>(16), used: 0 };
@@ -55,6 +57,7 @@ loop {
 ```
 
 After (optimized):
+
 ```
 let __r = String { repr: array_new<u8>(16), used: 0 };
 let __f = Formatter { ..., buf: &mut __r };
@@ -135,6 +138,7 @@ pub fn append_byte(&mut self, byte: u8) {
 ### Problem 4: Redundant `short()` Call in `fmt_f64_fixed` (Medium)
 
 `fmt_f64_fixed` calls `short(abs_f)` first (to determine the decimal position), then calls `fixed_width(abs_f, clamped)` (which internally calls `unpack64` and `mul_pow10` again). Both call chains perform:
+
 - `unpack64(f)` — IEEE 754 bit extraction
 - `mul_pow10(p)` — 128-bit multiply with power-of-10 decomposition (coarse×fine)
 - `uscale(m, pm_hi, pm_lo, s)` — 128-bit multiply
@@ -203,6 +207,7 @@ For the FTS benchmark, most Formatter fields are constants (`fill=' '`, `align=R
 **Fix: Argument Promotion for Formatter**
 
 The `fmt_f64_fixed` function only accesses these Formatter fields:
+
 - `f.buf` (to get the String buffer)
 - `f.sign_plus` (to check sign)
 - `f.mark()` → `f.buf.used` (to get current position)
@@ -263,16 +268,16 @@ Since POW10 values are compile-time constants (10^0 through 10^19), the optimize
 
 ## Summary and Priority
 
-| # | Optimization | Category | Expected Impact | Difficulty |
-|---|---|---|---|---|
-| 1 | Template string buffer reuse in loops | TIR optimizer | ~3x | Medium |
-| 2 | `String::append`/`grow` → `array.copy` | Stdlib fix | ~2-5x | Easy |
-| 3 | Short-constant `append` → `append_byte` | TIR optimizer / Stdlib | ~1.5x | Easy-Medium |
-| 4 | Eliminate redundant `unpack64`/`mul_pow10` | Stdlib refactor | ~1.3x | Medium |
-| 5 | Inline `apply_padding` fast path | Stdlib + optimizer | ~1.1x | Easy |
-| 6 | Specialize Formatter for simple cases | TIR optimizer | ~1.2x | Hard |
-| 7 | `array.copy` for decimal point insertion | Stdlib fix | ~1.1x | Easy |
-| 8 | Unchecked POW10 access | Optimizer | negligible | Easy |
+| # | Optimization                               | Category               | Expected Impact | Difficulty  |
+| - | ------------------------------------------ | ---------------------- | --------------- | ----------- |
+| 1 | Template string buffer reuse in loops      | TIR optimizer          | ~3x             | Medium      |
+| 2 | `String::append`/`grow` → `array.copy`     | Stdlib fix             | ~2-5x           | Easy        |
+| 3 | Short-constant `append` → `append_byte`    | TIR optimizer / Stdlib | ~1.5x           | Easy-Medium |
+| 4 | Eliminate redundant `unpack64`/`mul_pow10` | Stdlib refactor        | ~1.3x           | Medium      |
+| 5 | Inline `apply_padding` fast path           | Stdlib + optimizer     | ~1.1x           | Easy        |
+| 6 | Specialize Formatter for simple cases      | TIR optimizer          | ~1.2x           | Hard        |
+| 7 | `array.copy` for decimal point insertion   | Stdlib fix             | ~1.1x           | Easy        |
+| 8 | Unchecked POW10 access                     | Optimizer              | negligible      | Easy        |
 
 **Combined expected impact**: ~10-20x speedup, bringing FTS from ~2700x to ~135-270x.
 

@@ -179,8 +179,13 @@ impl<H: CompilerHost> Resolver<'_, H> {
         for attr in attrs {
             if attr.name == "comp_feature" {
                 for arg in &attr.args {
-                    if arg.as_str() == "array_append" {
-                        features |= crate::wir::COMP_FEATURE_ARRAY_APPEND;
+                    match arg.as_str() {
+                        "array_append" => features |= crate::wir::COMP_FEATURE_ARRAY_APPEND,
+                        "string_append" => features |= crate::wir::COMP_FEATURE_STRING_APPEND,
+                        "string_append_char" => {
+                            features |= crate::wir::COMP_FEATURE_STRING_APPEND_CHAR;
+                        }
+                        _ => {}
                     }
                 }
             }

@@ -95,7 +95,7 @@ make benchmark-fts
 
 | Component  | Version                  |
 | ---------- | ------------------------ |
-| Wado       | commit `d93ef73`         |
+| Wado       | commit `085bb74`         |
 | wasmtime   | 41.0.4                   |
 | Node.js    | v24.14.0                 |
 | Python     | 3.14.3 (CPython, no JIT) |
@@ -152,16 +152,16 @@ Wado's `core:zlib` is a pure Wado implementation compiled to Wasm, so significan
 
 ### Float-to-String (500,000 conversions, 6 decimal places)
 
-| Runtime             | Time (ms) | Relative  |
-| ------------------- | --------- | --------- |
-| Zig (-OReleaseFast) | 27        | 1.00x     |
-| Rust (rustc -O)     | 38        | 1.41x     |
-| C (gcc -O3)         | 61        | 2.26x     |
-| **Wado**            | 72,999    | 2,703.67x |
+| Runtime             | Time (ms) | Relative |
+| ------------------- | --------- | -------- |
+| Zig (-OReleaseFast) | 27        | 1.00x    |
+| Rust (rustc -O)     | 39        | 1.44x    |
+| C (gcc -O3)         | 66        | 2.44x    |
+| **Wado**            | 5,845     | 216.48x  |
 
 All implementations produce: Total bytes: 4,000,000. Byte sums are nearly identical (Wado's fts has minor last-digit rounding differences in some values).
 
-The large overhead in Wado is due to the float-to-string conversion going through the pure Wado fts implementation, which involves GC-managed string allocation per conversion.
+The overhead in Wado is primarily from GC-managed string allocation per conversion (3 GC objects per iteration: String struct, backing byte array, Formatter). String operations use `array.copy` for bulk byte transfers and short constant appends are decomposed into `append_char` calls.
 
 ## Profiling Wado Programs
 
@@ -258,6 +258,7 @@ samply record wado run --profile perfmap benchmark/count_prime/count_prime.wado
 - Python uses CPython (no JIT)
 - Ruby uses CRuby
 - Times include program initialization overhead
+- Wado CLI is built with `--release` for fair comparison with natively-compiled competitors
 - Wado benchmarks use `MonotonicClock::now()` from `core:clocks` for timing
 - zlib benchmark compares Wado's pure Wado zlib against native zlib-rs (Rust)
 - fts benchmark compares Wado, C (`snprintf`), Rust (`write!`), and Zig (`std.fmt`)

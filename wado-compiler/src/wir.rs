@@ -516,6 +516,10 @@ pub enum WirAbstractHeapType {
 
 /// Compiler feature flag: function implements `Array<T>::append`.
 pub const COMP_FEATURE_ARRAY_APPEND: u32 = 1 << 0;
+/// Compiler feature flag: function implements `String::append`.
+pub const COMP_FEATURE_STRING_APPEND: u32 = 1 << 1;
+/// Compiler feature flag: function implements `String::append_char`.
+pub const COMP_FEATURE_STRING_APPEND_CHAR: u32 = 1 << 2;
 
 /// A function declaration with optional body.
 #[derive(Debug)]

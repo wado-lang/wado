@@ -17,7 +17,7 @@ run = """
 set -e
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o count_prime/count_prime.wasm count_prime/count_prime.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o count_prime/count_prime.wasm count_prime/count_prime.wado
 
 echo "=== Compiling C benchmark ==="
 cc -O3 -o count_prime/count_prime_c count_prime/count_prime.c
@@ -35,7 +35,7 @@ echo "=== Ruby ==="
 ruby count_prime/count_prime.rb
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 count_prime/count_prime.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 count_prime/count_prime.wado
 """
 
 [tasks.mandelbrot]
@@ -45,7 +45,7 @@ run = """
 set -e
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o mandelbrot/mandelbrot.wasm mandelbrot/mandelbrot.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o mandelbrot/mandelbrot.wasm mandelbrot/mandelbrot.wado
 
 echo "=== Compiling C benchmark ==="
 cc -O3 -ffp-contract=off -o mandelbrot/mandelbrot_c mandelbrot/mandelbrot.c
@@ -63,7 +63,7 @@ echo "=== Ruby ==="
 ruby mandelbrot/mandelbrot.rb
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 mandelbrot/mandelbrot.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 mandelbrot/mandelbrot.wado
 """
 
 [tasks.sieve]
@@ -73,7 +73,7 @@ run = """
 set -e
 
 echo "=== Compiling Wado benchmark ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o sieve/sieve.wasm sieve/sieve.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- compile -O2 -o sieve/sieve.wasm sieve/sieve.wado
 
 echo "=== Compiling C benchmark ==="
 cc -O3 -o sieve/sieve_c sieve/sieve.c
@@ -91,7 +91,7 @@ echo "=== Ruby ==="
 ruby sieve/sieve.rb
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sieve/sieve.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 sieve/sieve.wado
 """
 
 [tasks.zlib]
@@ -107,7 +107,7 @@ echo "=== zlib-rs (native Rust) ==="
 ./zlib/target/release/zlib_rs_bench
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib/zlib_bench.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 zlib/zlib_bench.wado
 """
 
 [tasks.fts]
@@ -137,7 +137,7 @@ echo "=== Zig ==="
 ./fts/fts_zig
 
 echo "=== Wado ==="
-cargo run --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 fts/fts.wado
+cargo run --release --manifest-path ../wado-cli/Cargo.toml --quiet -- run -O2 fts/fts.wado
 """
 
 [tasks.all]
