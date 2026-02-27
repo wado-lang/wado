@@ -426,8 +426,8 @@ fn fmt_f64_exp(value: f64, precision: i32, upper: i32, f: &mut Formatter) {
                 buf.append(".");
                 buf.append_byte_filled('0' as u8, precision);
             }
-            buf.append_char(if upper_bool { 'E' } else { 'e' });
-            buf.append_char('0');
+            buf.append(if upper_bool { "E" } else { "e" });
+            buf.append("0");
         }
         f.apply_padding(mark);
         return;
