@@ -1,0 +1,15 @@
+// Test: nested generics with trait bounds violation — Array<Array<Foo>> where Foo doesn't impl Eq
+struct Foo {
+    x: i32,
+}
+
+export fn run() {
+    // Foo doesn't implement Eq, so Array<Foo> doesn't implement Eq,
+    // so Array<Array<Foo>> == ... should fail
+    let a: Array<Array<Foo>> = [[Foo { x: 1 }]];
+    let b: Array<Array<Foo>> = [[Foo { x: 1 }]];
+    assert a == b;
+}
+
+__DATA__
+{"compile_error": "=="}

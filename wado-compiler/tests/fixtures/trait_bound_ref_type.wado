@@ -1,0 +1,30 @@
+// Test: trait bounds with reference types — &T in bounded generic context
+use { println, Stdout } from "core:cli";
+
+trait Measurable {
+    fn measure(&self) -> i32;
+}
+
+struct Size {
+    width: i32,
+    height: i32,
+}
+
+impl Measurable for Size {
+    fn measure(&self) -> i32 {
+        return self.width * self.height;
+    }
+}
+
+fn measure_ref<T: Measurable>(item: &T) -> i32 {
+    return item.measure();
+}
+
+export fn run() with Stdout {
+    let s = Size { width: 3, height: 4 };
+    let result = measure_ref::<Size>(&s);
+    println(`{result}`);
+}
+
+__DATA__
+{"stdout": "12\n"}

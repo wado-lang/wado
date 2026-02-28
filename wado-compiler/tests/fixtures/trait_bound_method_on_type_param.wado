@@ -1,0 +1,25 @@
+// Test: calling trait method on type parameter — T.method() where T: Trait
+// This is explicitly listed as "Not Yet Implemented" in cheatsheet.md
+use { println, Stdout } from "core:cli";
+
+trait Stringify {
+    fn to_str(&self) -> String;
+}
+
+impl Stringify for i32 {
+    fn to_str(&self) -> String {
+        return `{*self}`;
+    }
+}
+
+fn print_it<T: Stringify>(x: T) with Stdout {
+    // Calling trait method on type parameter T
+    println(x.to_str());
+}
+
+export fn run() with Stdout {
+    print_it::<i32>(42);
+}
+
+__DATA__
+{"TODO": true, "stdout": "42\n"}

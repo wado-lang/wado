@@ -1,0 +1,15 @@
+// Test: cross-module function trait bound violation — call imported bounded fn with wrong type
+use { total } from "./sub/trait_bound_helper.wado";
+
+struct Unrelated {
+    value: i32,
+}
+
+export fn run() {
+    // Unrelated doesn't implement Summable, so total::<Unrelated>() should fail
+    let u = Unrelated { value: 5 };
+    let t = total::<Unrelated>(u);
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'Summable'"}

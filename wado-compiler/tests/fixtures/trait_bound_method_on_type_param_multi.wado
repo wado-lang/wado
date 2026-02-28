@@ -1,0 +1,39 @@
+// Test: calling methods from multiple trait bounds on a type parameter
+use { println, Stdout } from "core:cli";
+
+trait Named {
+    fn name(&self) -> String;
+}
+
+trait Scored {
+    fn score(&self) -> i32;
+}
+
+struct Player {
+    player_name: String,
+    player_score: i32,
+}
+
+impl Named for Player {
+    fn name(&self) -> String {
+        return self.player_name;
+    }
+}
+
+impl Scored for Player {
+    fn score(&self) -> i32 {
+        return self.player_score;
+    }
+}
+
+fn describe<T: Named + Scored>(x: &T) -> String {
+    return `{x.name()}: {x.score()}`;
+}
+
+export fn run() with Stdout {
+    let p = Player { player_name: "Alice", player_score: 100 };
+    println(describe::<Player>(&p));
+}
+
+__DATA__
+{"stdout": "Alice: 100\n"}

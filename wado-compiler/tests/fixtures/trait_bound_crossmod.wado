@@ -1,0 +1,15 @@
+// Test: cross-module trait bounds — import bounded struct and function from another module
+use { println, Stdout } from "core:cli";
+use { Summable, Pair, BoundedBox, total } from "./sub/trait_bound_helper.wado";
+
+export fn run() with Stdout {
+    let p = Pair { x: 10, y: 20 };
+    let b = BoundedBox { item: p };
+    let t = total::<Pair>(p);
+    println(`{t}`);
+    let bt = b.item.sum();
+    println(`{bt}`);
+}
+
+__DATA__
+{"stdout": "30\n30\n"}

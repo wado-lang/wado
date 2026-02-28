@@ -1,0 +1,17 @@
+// Test: trait bound propagation through Option<T> — Option<T> == Option<T> requires T: Eq
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a: Option<i32> = Option::<i32>::Some(42);
+    let b: Option<i32> = Option::<i32>::Some(42);
+    let c: Option<i32> = null;
+    if a == b {
+        println("a == b");
+    }
+    if a != c {
+        println("a != c");
+    }
+}
+
+__DATA__
+{"TODO": true, "stdout": "a == b\na != c\n"}
