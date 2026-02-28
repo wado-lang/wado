@@ -1,0 +1,209 @@
+// zlib cross-validation compress driver
+//
+// Reads a command from stdin as binary bytes and outputs results as text.
+//
+// Protocol: stdin[0] = command, rest depends on command
+//
+// Commands:
+//   0: compress2 - stdin[1]=level, stdin[2..]=data → compressed bytes as space-separated decimal
+//   1: deflate_raw2 - stdin[1]=level, stdin[2..]=data → compressed bytes
+//   2: gzip_compress2 - stdin[1]=level, stdin[2..]=data → compressed bytes
+//   3: zlib_compress_stored - stdin[2..]=data → compressed bytes
+//   4: compress_with_strategy - stdin[1]=level, stdin[2]=strategy, stdin[3..]=data → compressed bytes
+//   5: checksums - stdin[1..]=data → "adler32 crc32" as decimal
+//   6: compress_bound - stdin[1..4]=size as big-endian i32 → bound as decimal
+//   7: version → version string
+//   8: adler32_combine - stdin[1..5]=adler1, stdin[5..9]=adler2, stdin[9..13]=len2 → combined
+//   9: crc32_combine - stdin[1..5]=crc1, stdin[5..9]=crc2, stdin[9..13]=len2 → combined
+//  10: adler32_incremental - stdin[1..5]=split_point as BE i32, stdin[5..]=data → adler32
+//  11: crc32_incremental - stdin[1..5]=split_point as BE i32, stdin[5..]=data → crc32
+//  12: deflate_stream_zlib - stdin[1]=level, stdin[2..]=data → compressed bytes
+//  13: deflate_stream_raw - stdin[1]=level, stdin[2..]=data → compressed bytes
+//  14: deflate_stream_gzip - stdin[1]=level, stdin[2..]=data → compressed bytes
+
+use { print, println, Stdout } from "core:cli";
+use { Stdin } from "wasi:cli";
+use {
+    compress2, deflate_raw2, gzip_compress2, zlib_compress_stored,
+    compress_with_strategy, compress_bound, zlib_version,
+    adler32, adler32_init, adler32_combine,
+    crc32, crc32_init, crc32_combine,
+    DeflateStream, RAW_FORMAT, GZIP_FORMAT
+} from "core:zlib";
+
+fn read_all_stdin() -> Array<u8> with Stdin {
+    let [stdin_stream, _done] = Stdin::read_via_stream();
+    let mut buf: Array<u8> = [];
+    loop {
+        let chunk = stdin_stream.read(65536);
+        if chunk.len() == 0 {
+            break;
+        }
+        for let mut i = 0; i < chunk.len(); i += 1 {
+            buf.append(chunk[i]);
+        }
+    }
+    stdin_stream.close();
+    return buf;
+}
+
+fn print_bytes(data: &Array<u8>) with Stdout {
+    for let mut i = 0; i < data.len(); i += 1 {
+        if i > 0 { print(" "); }
+        print(`{data[i] as i32}`);
+    }
+    println("");
+}
+
+fn read_be_u32(buf: &Array<u8>, offset: i32) -> u32 {
+    return (buf[offset] as u32 << 24)
+         | (buf[offset + 1] as u32 << 16)
+         | (buf[offset + 2] as u32 << 8)
+         | (buf[offset + 3] as u32);
+}
+
+fn read_be_i32(buf: &Array<u8>, offset: i32) -> i32 {
+    return read_be_u32(buf, offset) as i32;
+}
+
+export fn run() with Stdout, Stdin {
+    let input = read_all_stdin();
+    if input.len() == 0 {
+        println("error: empty stdin");
+        return;
+    }
+
+    let cmd = input[0] as i32;
+
+    if cmd == 0 {
+        // compress2: level=input[1], data=input[2..]
+        let level = input[1] as i32;
+        let mut data: Array<u8> = [];
+        for let mut i = 2; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let result = compress2(&data, level);
+        print_bytes(&result);
+    } else if cmd == 1 {
+        // deflate_raw2: level=input[1], data=input[2..]
+        let level = input[1] as i32;
+        let mut data: Array<u8> = [];
+        for let mut i = 2; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let result = deflate_raw2(&data, level);
+        print_bytes(&result);
+    } else if cmd == 2 {
+        // gzip_compress2: level=input[1], data=input[2..]
+        let level = input[1] as i32;
+        let mut data: Array<u8> = [];
+        for let mut i = 2; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let result = gzip_compress2(&data, level);
+        print_bytes(&result);
+    } else if cmd == 3 {
+        // zlib_compress_stored: data=input[1..]
+        let mut data: Array<u8> = [];
+        for let mut i = 1; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let result = zlib_compress_stored(&data);
+        print_bytes(&result);
+    } else if cmd == 4 {
+        // compress_with_strategy: level=input[1], strategy=input[2], data=input[3..]
+        let level = input[1] as i32;
+        let strategy = input[2] as i32;
+        let mut data: Array<u8> = [];
+        for let mut i = 3; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let result = compress_with_strategy(&data, level, strategy);
+        print_bytes(&result);
+    } else if cmd == 5 {
+        // checksums: data=input[1..]
+        let mut data: Array<u8> = [];
+        for let mut i = 1; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let len = data.len();
+        let a = adler32(adler32_init(), &data, 0, len);
+        let c = crc32(crc32_init(), &data, 0, len);
+        println(`{a} {c}`);
+    } else if cmd == 6 {
+        // compress_bound: size=BE i32 at input[1..5]
+        let size = read_be_i32(&input, 1);
+        println(`{compress_bound(size)}`);
+    } else if cmd == 7 {
+        // version
+        println(zlib_version());
+    } else if cmd == 8 {
+        // adler32_combine: adler1=BE u32 at 1, adler2=BE u32 at 5, len2=BE i32 at 9
+        let a1 = read_be_u32(&input, 1);
+        let a2 = read_be_u32(&input, 5);
+        let len2 = read_be_i32(&input, 9);
+        let combined = adler32_combine(a1, a2, len2);
+        println(`{combined}`);
+    } else if cmd == 9 {
+        // crc32_combine: crc1=BE u32 at 1, crc2=BE u32 at 5, len2=BE i32 at 9
+        let c1 = read_be_u32(&input, 1);
+        let c2 = read_be_u32(&input, 5);
+        let len2 = read_be_i32(&input, 9);
+        let combined = crc32_combine(c1, c2, len2);
+        println(`{combined}`);
+    } else if cmd == 10 {
+        // adler32_incremental: split=BE i32 at 1, data=input[5..]
+        let split = read_be_i32(&input, 1);
+        let mut data: Array<u8> = [];
+        for let mut i = 5; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let total_len = data.len();
+        let a1 = adler32(adler32_init(), &data, 0, split);
+        let a2 = adler32(a1, &data, split, total_len - split);
+        println(`{a2}`);
+    } else if cmd == 11 {
+        // crc32_incremental: split=BE i32 at 1, data=input[5..]
+        let split = read_be_i32(&input, 1);
+        let mut data: Array<u8> = [];
+        for let mut i = 5; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let total_len = data.len();
+        let c1 = crc32(crc32_init(), &data, 0, split);
+        let c2 = crc32(c1, &data, split, total_len - split);
+        println(`{c2}`);
+    } else if cmd == 12 {
+        // deflate_stream_zlib: level=input[1], data=input[2..]
+        let level = input[1] as i32;
+        let mut data: Array<u8> = [];
+        for let mut i = 2; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let mut ds = DeflateStream::new(level);
+        let result = ds.compress(&data);
+        print_bytes(&result);
+    } else if cmd == 13 {
+        // deflate_stream_raw: level=input[1], data=input[2..]
+        let level = input[1] as i32;
+        let mut data: Array<u8> = [];
+        for let mut i = 2; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let mut ds = DeflateStream::new_with_format(level, RAW_FORMAT);
+        let result = ds.compress(&data);
+        print_bytes(&result);
+    } else if cmd == 14 {
+        // deflate_stream_gzip: level=input[1], data=input[2..]
+        let level = input[1] as i32;
+        let mut data: Array<u8> = [];
+        for let mut i = 2; i < input.len(); i += 1 {
+            data.append(input[i]);
+        }
+        let mut ds = DeflateStream::new_with_format(level, GZIP_FORMAT);
+        let result = ds.compress(&data);
+        print_bytes(&result);
+    } else {
+        println(`error: unknown command {cmd}`);
+    }
+}
