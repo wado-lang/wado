@@ -340,6 +340,9 @@ impl<'a> Unparser<'a> {
             self.output.push('\n');
         }
         self.write_indent();
+        if field.is_pub {
+            self.output.push_str("pub ");
+        }
         self.output.push_str(&field.name);
         self.output.push_str(": ");
         self.unparse_type(&field.ty);
@@ -2744,6 +2747,9 @@ impl<'a> TirUnparser<'a> {
 
         for field in &s.fields {
             self.write_indent();
+            if field.is_pub {
+                self.output.push_str("pub ");
+            }
             self.output.push_str(&field.name);
             self.output.push_str(": ");
             self.output

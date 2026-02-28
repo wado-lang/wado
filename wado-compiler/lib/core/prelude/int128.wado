@@ -231,7 +231,7 @@ fn fmt_u128_base(val: &u128, f: &mut Formatter, base: i32, upper: bool) {
     let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
     let mask: u64 = (base - 1) as u64;
 
-    let prefix = if f.alternate() {
+    let prefix = if f.alternate {
         if base == 2 {
             "0b"
         } else if base == 8 {
@@ -767,7 +767,7 @@ fn fmt_i128_base(val: &i128, f: &mut Formatter, base: i32, upper: bool) {
     let bits_per_digit = if base == 2 { 1 } else if base == 8 { 3 } else { 4 };
     let mask: u64 = (base - 1) as u64;
 
-    let prefix = if f.alternate() {
+    let prefix = if f.alternate {
         if base == 2 {
             "0b"
         } else if base == 8 {

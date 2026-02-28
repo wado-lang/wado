@@ -145,7 +145,7 @@ impl WadoCodeGenerator {
             self.write_doc_comment(field.doc_comment.as_ref());
             self.writeln(&format!("#[wasi(\"{}\")]", field.wasi_attr));
             self.writeln(&format!(
-                "{}: {},",
+                "pub {}: {},",
                 field.name,
                 Self::format_type(&field.ty)
             ));

@@ -1,0 +1,9 @@
+// Test: constructing a struct literal with non-pub fields from another module is an error
+use { Config } from "./sub/pub_struct_field_module.wado";
+
+export fn run() {
+    let c = Config { name: "hello", secret: 42 };
+}
+
+__DATA__
+{"compile_error": "field `secret` of struct `Config` is private"}

@@ -1,0 +1,33 @@
+// Private fields are accessible within the same module
+use { println, Stdout } from "core:cli";
+
+struct Secret {
+    value: i32,
+    label: String,
+}
+
+impl Secret {
+    fn describe(&self) -> String {
+        return `{self.label}: {self.value}`;
+    }
+}
+
+export fn run() with Stdout {
+    // Construction with private fields in the same module
+    let s = Secret { value: 42, label: "answer" };
+
+    // Field access on private fields in the same module
+    assert s.value == 42;
+    assert s.label == "answer";
+
+    // Method accessing private fields
+    println(s.describe());
+
+    // Mutable field access
+    let mut m = Secret { value: 0, label: "counter" };
+    m.value = 10;
+    println(`{m.value}`);
+}
+
+__DATA__
+{"stdout": "answer: 42\n10\n"}

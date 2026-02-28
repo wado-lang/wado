@@ -149,15 +149,46 @@ impl<H: CompilerHost> Resolver<'_, H> {
                 if struct_lit.name.is_none() {
                     // Check if target type is a struct
                     let target_resolved = self.type_table.borrow().get(target_type).clone();
-                    if let ResolvedType::Struct { name, .. } = target_resolved {
+                    if let ResolvedType::Struct {
+                        name,
+                        module_source,
+                        ..
+                    } = target_resolved
+                    {
                         let name = name.clone();
                         let struct_type = target_type;
 
                         let struct_field_types: Vec<(String, TypeId)> = self
                             .struct_fields
                             .get(&name)
-                            .map(|info| info.fields.clone())
+                            .map(|info| {
+                                info.fields
+                                    .iter()
+                                    .map(|(n, t, _)| (n.clone(), *t))
+                                    .collect()
+                            })
                             .unwrap_or_default();
+
+                        // Check field visibility for cross-module struct literal
+                        if module_source != self.current_module_source
+                            && let Some(struct_info) = self.struct_fields.get(&name)
+                        {
+                            for (fname, _, is_pub) in &struct_info.fields {
+                                if !is_pub && struct_lit.fields.iter().any(|f| f.name == *fname) {
+                                    let _ =
+                                            self.logger.error(TypeError::TypeMismatch {
+                                                expected: format!(
+                                                    "accessible field (field `{fname}` of struct `{name}` is private)"
+                                                ),
+                                                found: format!(
+                                                    "private field in struct literal from module `{}`",
+                                                    self.current_module_source
+                                                ),
+                                                span: struct_lit.span,
+                                            });
+                                }
+                            }
+                        }
 
                         let fields: Vec<TirStructField> = struct_lit
                             .fields
@@ -442,8 +473,8 @@ impl<H: CompilerHost> Resolver<'_, H> {
                         let missing: Vec<_> = struct_info
                             .fields
                             .iter()
-                            .filter(|(name, _)| !fields.iter().any(|f| f.field_name == *name))
-                            .map(|(name, _)| name.clone())
+                            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
+                            .map(|(name, _, _)| name.clone())
                             .collect();
                         if !missing.is_empty() {
                             let _ = self.logger.error(TypeError::TypeMismatch {
@@ -859,8 +890,10 @@ impl<H: CompilerHost> Resolver<'_, H> {
                             let missing: Vec<_> = struct_info
                                 .fields
                                 .iter()
-                                .filter(|(name, _)| !fields.iter().any(|f| f.field_name == *name))
-                                .map(|(name, _)| name.clone())
+                                .filter(|(name, _, _)| {
+                                    !fields.iter().any(|f| f.field_name == *name)
+                                })
+                                .map(|(name, _, _)| name.clone())
                                 .collect();
                             if !missing.is_empty() {
                                 let _ = self.logger.error(TypeError::TypeMismatch {

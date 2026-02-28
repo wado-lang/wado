@@ -75,7 +75,7 @@ impl<H: CompilerHost> Resolver<'_, H> {
                     let mut fields = Vec::new();
                     for field in &struct_decl.fields {
                         let type_id = self.resolve_type(&field.ty);
-                        fields.push((field.name.clone(), type_id));
+                        fields.push((field.name.clone(), type_id, field.is_pub));
                     }
                     // Extract type parameter bounds
                     let type_param_bounds: Vec<(String, Vec<String>)> = struct_decl

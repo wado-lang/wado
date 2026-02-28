@@ -27,8 +27,8 @@ pub(super) struct ParsedFormatSpec {
 #[derive(Clone)]
 pub(super) struct StructFieldInfo {
     pub(super) module_source: ModuleSource,
-    /// Field definitions: (name, `type_id`) pairs
-    pub(super) fields: Vec<(String, TypeId)>,
+    /// Field definitions: (name, `type_id`, `is_pub`) triples
+    pub(super) fields: Vec<(String, TypeId, bool)>,
     /// Type parameter bounds: (`param_name`, `trait_bounds`)
     /// E.g., for `struct Sorted<T: Ord>`, this would be `[("T", ["Ord"])]`
     pub(super) type_param_bounds: Vec<(String, Vec<String>)>,

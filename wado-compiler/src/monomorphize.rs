@@ -1099,6 +1099,7 @@ impl Monomorphizer {
                 let new_type_id = self.substitute_type(field.type_id, &substitution, type_table);
                 TirField {
                     name: field.name.clone(),
+                    is_pub: field.is_pub,
                     type_id: new_type_id,
                     index: field.index,
                     span: field.span,

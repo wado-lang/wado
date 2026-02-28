@@ -3201,6 +3201,12 @@ impl Parser {
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
             let start_span = self.peek().span;
+            let is_pub = if self.check(&TokenKind::Pub) {
+                self.advance();
+                true
+            } else {
+                false
+            };
             // Allow keywords as field names (unambiguous in context)
             let name = self.consume_field_name()?;
             self.expect(&TokenKind::Colon)?;
@@ -3208,6 +3214,7 @@ impl Parser {
 
             fields.push(StructField {
                 name,
+                is_pub,
                 ty,
                 attrs,
                 span: start_span,
