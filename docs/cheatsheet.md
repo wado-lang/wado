@@ -908,15 +908,15 @@ if let Some(x) = opt {
     println("None");
 }
 
-// Match ergonomics: patterns auto-deref &T scrutinees
-// Bindings through &T get reference types (Rust-compatible)
+// Match ergonomics: &T scrutinees match against inner type
+// Payload bindings become refs (e.g. Some(x) from &Option<i32> gives x: &i32)
 let ro = &opt;
-if let Some(x) = ro {       // &Option<i32> auto-dereferenced
-    println(`Got: {*x}`);   // x: &i32 — dereference to use
+if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
+    println(`Got: {*x}`);   // dereference to use the value
 }
 let c = Color::Red;
 let rc = &c;
-let name = match rc {        // &Color auto-dereferenced
+let name = match rc {        // rc: &Color, patterns match Color cases
     Red => "red",
     Green => "green",
     Blue => "blue",
