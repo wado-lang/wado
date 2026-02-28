@@ -1,0 +1,31 @@
+// Test: multiple bounds violation — type satisfies one bound but not the other
+trait Drawable {
+    fn draw(&self) -> String;
+}
+
+trait Clickable {
+    fn click(&self);
+}
+
+struct Label {
+    text: String,
+}
+
+// Label implements Drawable but NOT Clickable
+impl Drawable for Label {
+    fn draw(&self) -> String {
+        return self.text;
+    }
+}
+
+struct Widget<T: Drawable + Clickable> {
+    item: T,
+}
+
+export fn run() {
+    // Label implements Drawable but not Clickable — should fail
+    let w = Widget { item: Label { text: "hi" } };
+}
+
+__DATA__
+{"TODO": true, "compile_error": "does not implement trait 'Clickable'"}

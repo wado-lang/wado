@@ -1,0 +1,24 @@
+// Helper module for cross-module trait bounds tests
+
+pub trait Summable {
+    fn sum(&self) -> i32;
+}
+
+pub struct Pair {
+    x: i32,
+    y: i32,
+}
+
+impl Summable for Pair {
+    fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+pub struct BoundedBox<T: Summable> {
+    item: T,
+}
+
+pub fn total<T: Summable>(a: T) -> i32 {
+    return a.sum();
+}

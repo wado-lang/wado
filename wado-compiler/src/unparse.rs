@@ -2704,7 +2704,7 @@ impl<'a> TirUnparser<'a> {
         }
         self.output.push_str(&g.name);
         self.output.push_str(": ");
-        self.output.push_str(&self.type_table.type_name(g.ty));
+        self.output.push_str(&self.type_table.try_type_name(g.ty));
         self.output.push_str(" = ");
         self.unparse_expr(&g.initializer);
         self.output.push_str(";\n");
@@ -2733,7 +2733,7 @@ impl<'a> TirUnparser<'a> {
                 if let Some(default_type) = param.default {
                     self.output.push_str(" = ");
                     self.output
-                        .push_str(&self.type_table.type_name(default_type));
+                        .push_str(&self.type_table.try_type_name(default_type));
                 }
             }
             self.output.push('>');
@@ -2747,7 +2747,7 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str(&field.name);
             self.output.push_str(": ");
             self.output
-                .push_str(&self.type_table.type_name(field.type_id));
+                .push_str(&self.type_table.try_type_name(field.type_id));
             self.output.push_str(",\n");
         }
 
@@ -2842,7 +2842,7 @@ impl<'a> TirUnparser<'a> {
                 if let Some(default_type) = param.default {
                     self.output.push_str(" = ");
                     self.output
-                        .push_str(&self.type_table.type_name(default_type));
+                        .push_str(&self.type_table.try_type_name(default_type));
                 }
             }
             self.output.push('>');
@@ -2861,7 +2861,7 @@ impl<'a> TirUnparser<'a> {
         if f.return_type != TypeTable::UNIT {
             self.output.push_str(" -> ");
             self.output
-                .push_str(&self.type_table.type_name(f.return_type));
+                .push_str(&self.type_table.try_type_name(f.return_type));
         }
 
         // Effects
@@ -2887,7 +2887,7 @@ impl<'a> TirUnparser<'a> {
         self.output.push_str(&param.name);
         self.output.push_str(": ");
         self.output
-            .push_str(&self.type_table.type_name(param.type_id));
+            .push_str(&self.type_table.try_type_name(param.type_id));
     }
 
     fn unparse_block(&mut self, block: &TirBlock) {
@@ -2916,7 +2916,8 @@ impl<'a> TirUnparser<'a> {
                 }
                 self.output.push_str(name);
                 self.output.push_str(": ");
-                self.output.push_str(&self.type_table.type_name(*type_id));
+                self.output
+                    .push_str(&self.type_table.try_type_name(*type_id));
                 self.output.push_str(" = ");
                 self.unparse_expr(value);
                 self.output.push_str(";\n");
@@ -3154,7 +3155,7 @@ impl<'a> TirUnparser<'a> {
                 case_name, payload, ..
             } => {
                 // Get the variant type name from the type_id
-                let type_name = self.type_table.type_name(expr.type_id);
+                let type_name = self.type_table.try_type_name(expr.type_id);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
@@ -3166,7 +3167,7 @@ impl<'a> TirUnparser<'a> {
             }
             TirExprKind::EnumConstruct { case_name, .. } => {
                 // Get the enum type name from the type_id
-                let type_name = self.type_table.type_name(expr.type_id);
+                let type_name = self.type_table.try_type_name(expr.type_id);
                 self.output.push_str(&type_name);
                 self.output.push_str("::");
                 self.output.push_str(case_name);
@@ -3242,7 +3243,7 @@ impl<'a> TirUnparser<'a> {
                 self.unparse_expr(inner);
                 self.output.push_str(" as ");
                 self.output
-                    .push_str(&self.type_table.type_name(*target_type));
+                    .push_str(&self.type_table.try_type_name(*target_type));
             }
             TirExprKind::Call {
                 func,
@@ -3263,7 +3264,8 @@ impl<'a> TirUnparser<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        self.output.push_str(&self.type_table.type_name(*type_arg));
+                        self.output
+                            .push_str(&self.type_table.try_type_name(*type_arg));
                     }
                     self.output.push('>');
                 }
@@ -3319,7 +3321,8 @@ impl<'a> TirUnparser<'a> {
                         if i > 0 {
                             self.output.push_str(", ");
                         }
-                        self.output.push_str(&self.type_table.type_name(*type_arg));
+                        self.output
+                            .push_str(&self.type_table.try_type_name(*type_arg));
                     }
                     self.output.push('>');
                 }
@@ -3461,7 +3464,8 @@ impl<'a> TirUnparser<'a> {
                     }
                     self.output.push_str(name);
                     self.output.push_str(": ");
-                    self.output.push_str(&self.type_table.type_name(*type_id));
+                    self.output
+                        .push_str(&self.type_table.try_type_name(*type_id));
                 }
                 self.output.push('|');
                 // Show captures if any

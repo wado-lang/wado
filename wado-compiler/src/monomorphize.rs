@@ -2672,6 +2672,7 @@ impl Monomorphizer {
             } => {
                 self.substitute_types_in_expr(scrutinee, substitution, type_table);
                 for arm in arms {
+                    self.substitute_types_in_pattern(&mut arm.pattern, substitution, type_table);
                     if let Some(guard) = &mut arm.guard {
                         self.substitute_types_in_expr(guard, substitution, type_table);
                     }

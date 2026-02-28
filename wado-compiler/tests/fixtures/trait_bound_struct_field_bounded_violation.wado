@@ -1,0 +1,23 @@
+// Test: bounded impl block method unavailable for unbounded type
+struct NoOrd {
+    x: i32,
+}
+
+struct Holder<T> {
+    items: Array<T>,
+}
+
+impl Holder<T: Ord> {
+    fn min(&self) -> T {
+        return self.items[0];
+    }
+}
+
+export fn run() {
+    let h = Holder { items: [NoOrd { x: 1 }] as Array<NoOrd> };
+    // NoOrd doesn't implement Ord, so min() should not be available
+    let m = h.min();
+}
+
+__DATA__
+{"compile_error": "no method 'min' found"}

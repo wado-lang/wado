@@ -1,0 +1,29 @@
+// Test: calling trait method on type parameter via &self — &T where T: Trait
+use { println, Stdout } from "core:cli";
+
+trait Label {
+    fn label(&self) -> String;
+}
+
+struct Item {
+    name: String,
+}
+
+impl Label for Item {
+    fn label(&self) -> String {
+        return self.name;
+    }
+}
+
+fn show_label<T: Label>(x: &T) -> String {
+    return x.label();
+}
+
+export fn run() with Stdout {
+    let item = Item { name: "widget" };
+    let l = show_label::<Item>(&item);
+    println(l);
+}
+
+__DATA__
+{"stdout": "widget\n"}

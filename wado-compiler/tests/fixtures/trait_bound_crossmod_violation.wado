@@ -1,0 +1,14 @@
+// Test: cross-module trait bounds violation — pass a type that doesn't satisfy imported bound
+use { BoundedBox } from "./sub/trait_bound_helper.wado";
+
+struct Local {
+    value: i32,
+}
+
+export fn run() {
+    // Local does not implement Summable, so BoundedBox<Local> should fail
+    let b = BoundedBox { item: Local { value: 1 } };
+}
+
+__DATA__
+{"TODO": true, "compile_error": "does not implement trait 'Summable'"}

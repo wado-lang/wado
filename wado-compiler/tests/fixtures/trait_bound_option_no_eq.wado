@@ -1,0 +1,14 @@
+// Test: Option<Foo> == fails when Foo doesn't implement Eq
+struct Foo {
+    x: i32,
+}
+
+export fn run() {
+    let a: Option<Foo> = Option::<Foo>::Some(Foo { x: 1 });
+    let b: Option<Foo> = Option::<Foo>::Some(Foo { x: 1 });
+    // Foo doesn't implement Eq, so Option<Foo> == should fail
+    assert a == b;
+}
+
+__DATA__
+{"compile_error": "=="}
