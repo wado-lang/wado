@@ -24,9 +24,9 @@ Internal functions that are used to provide language features are implemented in
 
 `wado-compiler` must compile for `wasm32-unknown-unknown`. Do not use OS-dependent `std` modules in production code. CI enforces this via `cargo check -p wado-compiler --target wasm32-unknown-unknown`.
 
-### E2E Test Specification
+### E2E Test Specification (Compiler Tests)
 
-E2E tests are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__` section containing JSON test expectations.
+E2E tests verify **compiler behavior** (codegen, error messages, optimization). They are `.wado` files in `wado-compiler/tests/fixtures/` with a `__DATA__` section containing JSON test expectations.
 
 Each test fixture group has the same prefix in their filenames.
 
@@ -161,9 +161,9 @@ touch wado-compiler/tests/e2e.rs
 
 Without this, `cargo test` will not detect the new fixture because `datatest_mini` discovers files at compile time.
 
-### Standard Library Tests
+### Standard Library Tests (Library Logic)
 
-Logic tests for standard library modules (e.g., `zlib_test.wado`, `string_test.wado`) live alongside implementations in `wado-compiler/lib/`. These are plain `.wado` files with `test` blocks — no `__DATA__` section — run directly with `wado test`. Use this style for library logic tests; use E2E fixtures (`tests/fixtures/`) for compiler behavior tests.
+Tests for **standard library logic** (e.g., `zlib_test.wado`, `string_test.wado`) live alongside implementations in `wado-compiler/lib/`. These are plain `.wado` files with `test` blocks — no `__DATA__` section — run directly with `wado test`.
 
 ### The `wasi:*` Modules
 
