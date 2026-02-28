@@ -1988,12 +1988,12 @@ When both mechanisms are available, forward inference takes precedence for type 
 
 **Scope of inference:**
 
-| Constructor kind          | Forward | Backward | Status      |
-| ------------------------- | ------- | -------- | ----------- |
-| Struct literals            | yes     | yes      | implemented |
-| Variant constructors       | yes     | yes      | implemented |
-| Generic function calls     | —       | —        | not yet implemented |
-| Generic method calls       | —       | —        | not yet implemented |
+| Constructor kind       | Forward | Backward | Status              |
+| ---------------------- | ------- | -------- | ------------------- |
+| Struct literals        | yes     | yes      | implemented         |
+| Variant constructors   | yes     | yes      | implemented         |
+| Generic function calls | —       | —        | not yet implemented |
+| Generic method calls   | —       | —        | not yet implemented |
 
 For generic function and method calls, explicit turbofish syntax is required:
 

@@ -1426,7 +1426,6 @@ let x = identity::<i32>(42);
 let y = container.transform::<i32, i64>(10, 20 as i64);
 ```
 
-
 ## Closures
 
 See [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation.md).
