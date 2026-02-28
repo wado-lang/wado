@@ -368,7 +368,7 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     if s.fields.is_empty() && s.has_private_fields {
-        writeln!(out, "\n*Fields are private.*").unwrap();
+        writeln!(out, "\n_Fields are private._").unwrap();
     }
     for f in &s.fields {
         render_md_entity(out, &format!("{}: {}", f.name, f.ty), f.doc.as_deref(), h4);
@@ -463,23 +463,129 @@ fn sig_name_part(sig: &str) -> &str {
 }
 
 fn render_md_doc(out: &mut String, doc: &str) {
-    let mut prev_blank = false;
+    let mut prev_blank = true;
+    let mut in_list = false;
+    let mut in_blockquote = false;
+    let mut prev_heading = false;
+
     for line in doc.lines() {
-        let trimmed = line.trim();
+        let normalized = normalize_md_line(line);
+        let trimmed = normalized.trim();
+
         if trimmed.is_empty() {
             if !prev_blank {
                 out.push('\n');
+                prev_blank = true;
             }
-            prev_blank = true;
-        } else {
-            if !prev_blank && !out.is_empty() && !out.ends_with('\n') {
-                out.push('\n');
-            }
-            out.push_str(line);
+            in_list = false;
+            in_blockquote = false;
+            prev_heading = false;
+            continue;
+        }
+
+        let is_list_item = trimmed.starts_with("- ") || is_ordered_list_item(trimmed);
+        let blockquote_line = trimmed.starts_with("> ");
+        let is_heading = trimmed.starts_with('#');
+
+        // Insert blank line before block elements or after headings
+        if !prev_blank
+            && ((is_list_item && !in_list) || (blockquote_line && !in_blockquote) || prev_heading)
+        {
             out.push('\n');
-            prev_blank = false;
+        }
+
+        // Write line with appropriate continuation prefix
+        if in_blockquote && !blockquote_line && !is_heading {
+            out.push_str("> ");
+            out.push_str(&normalized);
+        } else if in_list && !is_list_item && !is_heading && !blockquote_line {
+            out.push_str("  ");
+            out.push_str(&normalized);
+        } else {
+            out.push_str(&normalized);
+        }
+        out.push('\n');
+
+        prev_blank = false;
+        prev_heading = is_heading;
+        if is_list_item {
+            in_list = true;
+            in_blockquote = false;
+        } else if blockquote_line {
+            in_blockquote = true;
+            in_list = false;
+        } else if is_heading {
+            in_list = false;
+            in_blockquote = false;
         }
     }
+}
+
+fn normalize_md_line(line: &str) -> String {
+    let stripped = line.trim_start();
+    let collapsed = collapse_md_spaces(stripped);
+    replace_md_emphasis(&collapsed)
+}
+
+/// Collapse multiple consecutive spaces to single space, preserving code spans.
+fn collapse_md_spaces(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut in_code = false;
+    let mut prev_space = false;
+
+    for c in s.chars() {
+        if c == '`' {
+            in_code = !in_code;
+            result.push(c);
+            prev_space = false;
+        } else if c == ' ' && !in_code {
+            if !prev_space {
+                result.push(' ');
+            }
+            prev_space = true;
+        } else {
+            result.push(c);
+            prev_space = false;
+        }
+    }
+
+    result
+}
+
+/// Replace `*text*` emphasis with `_text_` (dprint preference), preserving
+/// `**bold**` markers and code spans.
+fn replace_md_emphasis(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    let mut in_code = false;
+
+    while i < chars.len() {
+        if chars[i] == '`' {
+            in_code = !in_code;
+            result.push('`');
+            i += 1;
+        } else if !in_code && chars[i] == '*' {
+            if i + 1 < chars.len() && chars[i + 1] == '*' {
+                result.push('*');
+                result.push('*');
+                i += 2;
+            } else {
+                result.push('_');
+                i += 1;
+            }
+        } else {
+            result.push(chars[i]);
+            i += 1;
+        }
+    }
+
+    result
+}
+
+fn is_ordered_list_item(s: &str) -> bool {
+    let rest = s.trim_start_matches(|c: char| c.is_ascii_digit());
+    rest != s && rest.starts_with(". ")
 }
 
 fn render_simple(doc: &DocModule, h_offset: usize) -> String {

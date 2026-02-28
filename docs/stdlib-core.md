@@ -241,11 +241,13 @@ This trait enables closure monomorphization - functions with `fn(A) -> R` parame
 are desugared to generic functions with `Fn<[A], R>` bounds.
 
 Type parameters:
+
 - `Args`: Tuple of argument types using `[...]` syntax, e.g., `[i32, String]`
 - `Ret`: Return type
 - `Effects`: Tuple of effect types, defaults to `[]` (pure)
 
 Examples:
+
 - `Fn<[i32], bool>` - takes i32, returns bool, pure
 - `Fn<[i32, String], ()>` - takes i32 and String, returns unit, pure
 - `Fn<[i32], (), [Stdout]>` - takes i32, returns unit, has Stdout effect
@@ -433,6 +435,7 @@ If no width is set or content is already at least as wide, writes content as-is.
 
 Return the current byte position in the output buffer.
 Used with `apply_padding` for the speculative-write pattern:
+
 1. Call `mark()` to record the start position
 2. Write content directly to `buf_mut()`
 3. Call `apply_padding(mark)` to insert padding if needed
@@ -462,7 +465,7 @@ The caller **must** fill exactly `digit_count` bytes (backwards) via
 Unsigned 128-bit integer
 Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn from_u64(value: u64) -> u128`
 
@@ -601,7 +604,7 @@ Convert u128 to String (for template string interpolation)
 Signed 128-bit integer
 Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, signed)
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn from_i64(value: i64) -> i128`
 
@@ -661,9 +664,10 @@ Create i128 from u128 (reinterpret bits)
 
 Divide self by divisor, returning (quotient, remainder)
 Uses signed division semantics:
+
 - quotient is negative if signs differ
 - remainder has the same sign as dividend
-Panics if divisor is zero
+  Panics if divisor is zero
 
 ##### `pub fn to_string(&self) -> String`
 
@@ -749,7 +753,7 @@ Convert i128 to String (for template string interpolation)
 
 UTF-8 encoded string type with O(1) amortized append
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn with_capacity(capacity: i32) -> String`
 
@@ -875,7 +879,7 @@ Returns a new string with leading and trailing Unicode whitespace removed.
 Iterator over UTF-8 bytes of a String.
 Yields each byte as u8.
 
-*Fields are private.*
+_Fields are private._
 
 ##### `impl Iterator for StrUtf8ByteIter`
 
@@ -886,7 +890,7 @@ Yields each byte as u8.
 Iterator over Unicode scalar values (chars) of a String.
 Decodes UTF-8 and yields each character.
 
-*Fields are private.*
+_Fields are private._
 
 ##### `impl Iterator for StrCharIter`
 
@@ -894,7 +898,7 @@ Decodes UTF-8 and yields each character.
 
 #### `pub struct Array<T>`
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn with_capacity(capacity: i32) -> Array<T>`
 
@@ -958,7 +962,7 @@ In-place sort with comparator. Stable, O(n log n) worst case.
 
 #### `pub struct ArrayIter<T>`
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn collect(&mut self) -> Array<T>`
 
@@ -1004,7 +1008,7 @@ In-place sort with comparator. Stable, O(n log n) worst case.
 
 #### `pub struct EnumerateIter<T>`
 
-*Fields are private.*
+_Fields are private._
 
 ##### `impl Iterator for EnumerateIter<T>`
 
@@ -1012,7 +1016,7 @@ In-place sort with comparator. Stable, O(n log n) worst case.
 
 #### `pub struct MapIter<T, U>`
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, U) -> Acc) -> Acc`
 
@@ -1022,7 +1026,7 @@ In-place sort with comparator. Stable, O(n log n) worst case.
 
 #### `pub struct FilterIter<T>`
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn fold<Acc>(&mut self, init: Acc, f: Fn(Acc, T) -> Acc) -> Acc`
 
@@ -1251,7 +1255,7 @@ are stored in a dense array for fast, insertion-order iteration.
 This is similar to Rust's `indexmap::IndexMap` but uses a tree instead
 of a hash table for key lookups.
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn new() -> TreeMap<K, V>`
 
@@ -1428,7 +1432,7 @@ zlib compression and decompression (RFC 1950/1951/1952).
 
 Represents a gzip header for customization (deflateSetHeader / inflateGetHeader).
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn new() -> GzipHeader`
 
@@ -1452,7 +1456,7 @@ Creates a new GzipHeader with default values.
 
 Streaming deflate compressor. Supports chunked input via update()/finish().
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn new(level: i32) -> DeflateStream`
 
@@ -1522,7 +1526,7 @@ Compresses input data in one shot and returns the result.
 
 Streaming inflate decompressor. Supports chunked input via update()/finish().
 
-*Fields are private.*
+_Fields are private._
 
 ##### `pub fn new() -> InflateStream`
 

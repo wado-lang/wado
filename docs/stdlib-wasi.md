@@ -571,12 +571,12 @@ implementation and not otherwise exposed.
 
 Implementations are encouraged to provide the following properties:
 
- - If the file is not modified or replaced, the computed hash value should
-   usually not change.
- - If the object is modified or replaced, the computed hash value should
-   usually change.
- - The inputs to the hash should not be easily computable from the
-   computed hash.
+- If the file is not modified or replaced, the computed hash value should
+  usually not change.
+- If the object is modified or replaced, the computed hash value should
+  usually change.
+- The inputs to the hash should not be easily computable from the
+  computed hash.
 
 However, none of these is required.
 
@@ -865,12 +865,12 @@ Set the Method for the Request. Fails if the string present in a
 
 ##### `fn get_path_with_query(self: &Request) -> Option<String>`
 
-Get the combination of the HTTP Path and Query for the Request.  When
+Get the combination of the HTTP Path and Query for the Request. When
 `none`, this represents an empty Path and empty Query.
 
 ##### `fn set_path_with_query(self: &Request, path_with_query: Option<String>) -> Result<(), ()>`
 
-Set the combination of the HTTP Path and Query for the Request.  When
+Set the combination of the HTTP Path and Query for the Request. When
 `none`, this represents an empty Path and empty Query. Fails is the
 string given is not a syntactically valid path and query uri component.
 
@@ -1096,7 +1096,7 @@ This type corresponds to HTTP standard Related Schemes.
 #### `pub variant ErrorCode`
 
 These cases are inspired by the IANA HTTP Proxy Error Types:
-  <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
+<https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
 
 ##### `DnsTimeout`
 
@@ -1313,7 +1313,7 @@ time of the currently configured timezone, at the exact time of
 
 The magnitude of the returned value will always be less than
 86,400,000,000,000 which is the number of nanoseconds in a day
-(24*60*60*1e9).
+(24_60_60_1e9).
 
 If the implementation does not expose an actual timezone, or is unable
 to provide mappings from times to deltas between the configured timezone
@@ -1458,6 +1458,7 @@ Error codes.
 In theory, every API can return any error code.
 In practice, API's typically only return the errors documented per API
 combined with a couple of errors that are always possible:
+
 - `unknown`
 - `access-denied`
 - `not-supported`
@@ -1539,6 +1540,7 @@ The returned future will resolve to an error code in case of failure.
 It will resolve to success once the returned stream is exhausted.
 
 # References:
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
 - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
@@ -1551,17 +1553,18 @@ It will resolve to success once the returned stream is exhausted.
 A TCP socket resource.
 
 The socket can be in one of the following states:
+
 - `unbound`
 - `bound` (See note below)
 - `listening`
 - `connecting`
 - `connected`
 - `closed`
-See <https://github.com/WebAssembly/wasi-sockets/blob/main/TcpSocketOperationalSemantics-0.3.0-draft.md>
-for more information.
+  See <https://github.com/WebAssembly/wasi-sockets/blob/main/TcpSocketOperationalSemantics-0.3.0-draft.md>
+  for more information.
 
 Note: Except where explicitly mentioned, whenever this documentation uses
-the term "bound" without backticks it actually means: in the `bound` state *or higher*.
+the term "bound" without backticks it actually means: in the `bound` state _or higher_.
 (i.e. `bound`, `listening`, `connecting` or `connected`)
 
 In addition to the general error codes documented on the
@@ -1580,6 +1583,7 @@ Unlike POSIX, WASI sockets have no notion of a socket-level
 async support.
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
 - <https://man7.org/linux/man-pages/man2/socket.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
@@ -1599,21 +1603,24 @@ only as long as the previous bind failed. Once a bind succeeds, the
 binding can't be changed anymore.
 
 # Typical errors
-- `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
-- `invalid-argument`:          `local-address` is not a unicast address. (EINVAL)
-- `invalid-argument`:          `local-address` is an IPv4-mapped IPv6 address. (EINVAL)
-- `invalid-state`:             The socket is already bound. (EINVAL)
-- `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
-- `address-in-use`:            Address is already in use. (EADDRINUSE)
-- `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
+
+- `invalid-argument`: The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
+- `invalid-argument`: `local-address` is not a unicast address. (EINVAL)
+- `invalid-argument`: `local-address` is an IPv4-mapped IPv6 address. (EINVAL)
+- `invalid-state`: The socket is already bound. (EINVAL)
+- `address-in-use`: No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
+- `address-in-use`: Address is already in use. (EADDRINUSE)
+- `address-not-bindable`: `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
 
 # Implementors note
+
 When binding to a non-zero port, this bind operation shouldn't be affected by the TIME_WAIT
 state of a recently closed socket on the same local address. In practice this means that the SO_REUSEADDR
 socket option should be set implicitly on all platforms, except on Windows where this is the default behavior
 and SO_REUSEADDR performs something different entirely.
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
 - <https://man7.org/linux/man-pages/man2/bind.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
@@ -1630,22 +1637,24 @@ state and the only valid action left is to `drop` the socket. A single
 socket can not be used to connect more than once.
 
 # Typical errors
-- `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-- `invalid-argument`:          `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
-- `invalid-argument`:          `remote-address` is an IPv4-mapped IPv6 address. (EINVAL, EADDRNOTAVAIL on Illumos)
-- `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EADDRNOTAVAIL on Windows)
-- `invalid-argument`:          The port in `remote-address` is set to 0. (EADDRNOTAVAIL on Windows)
-- `invalid-state`:             The socket is already in the `connecting` state. (EALREADY)
-- `invalid-state`:             The socket is already in the `connected` state. (EISCONN)
-- `invalid-state`:             The socket is already in the `listening` state. (EOPNOTSUPP, EINVAL on Windows)
-- `timeout`:                   Connection timed out. (ETIMEDOUT)
-- `connection-refused`:        The connection was forcefully rejected. (ECONNREFUSED)
-- `connection-reset`:          The connection was reset. (ECONNRESET)
-- `connection-aborted`:        The connection was aborted. (ECONNABORTED)
-- `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-- `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+
+- `invalid-argument`: The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+- `invalid-argument`: `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
+- `invalid-argument`: `remote-address` is an IPv4-mapped IPv6 address. (EINVAL, EADDRNOTAVAIL on Illumos)
+- `invalid-argument`: The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EADDRNOTAVAIL on Windows)
+- `invalid-argument`: The port in `remote-address` is set to 0. (EADDRNOTAVAIL on Windows)
+- `invalid-state`: The socket is already in the `connecting` state. (EALREADY)
+- `invalid-state`: The socket is already in the `connected` state. (EISCONN)
+- `invalid-state`: The socket is already in the `listening` state. (EOPNOTSUPP, EINVAL on Windows)
+- `timeout`: Connection timed out. (ETIMEDOUT)
+- `connection-refused`: The connection was forcefully rejected. (ECONNREFUSED)
+- `connection-reset`: The connection was reset. (ECONNRESET)
+- `connection-aborted`: The connection was aborted. (ECONNABORTED)
+- `remote-unreachable`: The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+- `address-in-use`: Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
 - <https://man7.org/linux/man-pages/man2/connect.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
@@ -1669,6 +1678,7 @@ is true regardless of whether the WASI implementation uses
 "synthesized" sockets or not (see Implementors Notes below).
 
 The following properties are inherited from the listener socket:
+
 - `address-family`
 - `keep-alive-enabled`
 - `keep-alive-idle-time`
@@ -1679,11 +1689,13 @@ The following properties are inherited from the listener socket:
 - `send-buffer-size`
 
 # Typical errors
-- `invalid-state`:             The socket is already in the `connected` state. (EISCONN, EINVAL on BSD)
-- `invalid-state`:             The socket is already in the `listening` state.
-- `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
+
+- `invalid-state`: The socket is already in the `connected` state. (EISCONN, EINVAL on BSD)
+- `invalid-state`: The socket is already in the `listening` state.
+- `address-in-use`: Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
 
 # Implementors note
+
 This method returns a single perpetual stream that should only close
 on fatal errors (if any). Yet, the POSIX' `accept` function may also
 return transient errors (e.g. ECONNABORTED). The exact details differ
@@ -1696,9 +1708,10 @@ per operation system. For example, the Linux manual mentions:
 > protocol after accept() and treat them like EAGAIN by retrying.
 > In the case of TCP/IP, these are ENETDOWN, EPROTO, ENOPROTOOPT,
 > EHOSTDOWN, ENONET, EHOSTUNREACH, EOPNOTSUPP, and ENETUNREACH.
-Source: https://man7.org/linux/man-pages/man2/accept.2.html
+> Source: https://man7.org/linux/man-pages/man2/accept.2.html
 
 WASI implementations have two options to handle this:
+
 - Optionally log it and then skip over non-fatal errors returned by
   `accept`. Guest code never gets to see these failures. Or:
 - Synthesize a `tcp-socket` resource that exposes the error when
@@ -1709,6 +1722,7 @@ In either case, the stream returned by this `listen` method remains
 operational.
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html>
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/accept.html>
 - <https://man7.org/linux/man-pages/man2/listen.2.html>
@@ -1731,11 +1745,13 @@ This function may be called at most once and returns once the full
 contents of the stream are transmitted or an error is encountered.
 
 # Typical errors
-- `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
-- `connection-reset`:          The connection was reset. (ECONNRESET)
-- `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
 
- # References
+- `invalid-state`: The socket is not in the `connected` state. (ENOTCONN)
+- `connection-reset`: The connection was reset. (ECONNRESET)
+- `remote-unreachable`: The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+
+# References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/send.html>
 - <https://man7.org/linux/man-pages/man2/send.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
@@ -1765,11 +1781,13 @@ will be discarded. This is equivalent to calling `shutdown(SHUT_RD)`
 in POSIX.
 
 # Typical errors
-- `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
-- `connection-reset`:          The connection was reset. (ECONNRESET)
-- `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+
+- `invalid-state`: The socket is not in the `connected` state. (ENOTCONN)
+- `connection-reset`: The connection was reset. (ECONNRESET)
+- `remote-unreachable`: The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recv.html>
 - <https://man7.org/linux/man-pages/man2/recv.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
@@ -1780,15 +1798,18 @@ in POSIX.
 Get the bound local address.
 
 POSIX mentions:
+
 > If the socket has not been bound to a local name, the value
 > stored in the object pointed to by `address` is unspecified.
 
 WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
 
 # Typical errors
+
 - `invalid-state`: The socket is not bound to any local address.
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
 - <https://man7.org/linux/man-pages/man2/getsockname.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
@@ -1799,9 +1820,11 @@ WASI is stricter and requires `get-local-address` to return `invalid-state` when
 Get the remote address.
 
 # Typical errors
+
 - `invalid-state`: The socket is not connected to a remote address. (ENOTCONN)
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
 - <https://man7.org/linux/man-pages/man2/getpeername.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
@@ -1829,19 +1852,21 @@ If the provided value is 0, an `invalid-argument` error is returned.
 Any other value will never cause an error, but it might be silently clamped and/or rounded.
 
 # Typical errors
-- `not-supported`:        (set) The platform does not support changing the backlog size after the initial listen.
-- `invalid-argument`:     (set) The provided value was 0.
-- `invalid-state`:        (set) The socket is in the `connecting` or `connected` state.
+
+- `not-supported`: (set) The platform does not support changing the backlog size after the initial listen.
+- `invalid-argument`: (set) The provided value was 0.
+- `invalid-state`: (set) The socket is in the `connecting` or `connected` state.
 
 ##### `fn get_keep_alive_enabled(self: &TcpSocket) -> Result<bool, ErrorCode>`
 
 Enables or disables keepalive.
 
 The keepalive behavior can be adjusted using:
+
 - `keep-alive-idle-time`
 - `keep-alive-interval`
 - `keep-alive-count`
-These properties can be configured while `keep-alive-enabled` is false, but only come into effect when `keep-alive-enabled` is true.
+  These properties can be configured while `keep-alive-enabled` is false, but only come into effect when `keep-alive-enabled` is true.
 
 Equivalent to the SO_KEEPALIVE socket option.
 
@@ -1858,7 +1883,8 @@ I.e. after setting a value, reading the same setting back may return a different
 Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
 
 # Typical errors
-- `invalid-argument`:     (set) The provided value was 0.
+
+- `invalid-argument`: (set) The provided value was 0.
 
 ##### `fn set_keep_alive_idle_time(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>`
 
@@ -1873,7 +1899,8 @@ I.e. after setting a value, reading the same setting back may return a different
 Equivalent to the TCP_KEEPINTVL socket option.
 
 # Typical errors
-- `invalid-argument`:     (set) The provided value was 0.
+
+- `invalid-argument`: (set) The provided value was 0.
 
 ##### `fn set_keep_alive_interval(self: &TcpSocket, value: Duration) -> Result<(), ErrorCode>`
 
@@ -1888,7 +1915,8 @@ I.e. after setting a value, reading the same setting back may return a different
 Equivalent to the TCP_KEEPCNT socket option.
 
 # Typical errors
-- `invalid-argument`:     (set) The provided value was 0.
+
+- `invalid-argument`: (set) The provided value was 0.
 
 ##### `fn set_keep_alive_count(self: &TcpSocket, value: u32) -> Result<(), ErrorCode>`
 
@@ -1899,7 +1927,8 @@ Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
 If the provided value is 0, an `invalid-argument` error is returned.
 
 # Typical errors
-- `invalid-argument`:     (set) The TTL value must be 1 or higher.
+
+- `invalid-argument`: (set) The TTL value must be 1 or higher.
 
 ##### `fn set_hop_limit(self: &TcpSocket, value: u8) -> Result<(), ErrorCode>`
 
@@ -1914,7 +1943,8 @@ I.e. after setting a value, reading the same setting back may return a different
 Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 # Typical errors
-- `invalid-argument`:     (set) The provided value was 0.
+
+- `invalid-argument`: (set) The provided value was 0.
 
 ##### `fn set_receive_buffer_size(self: &TcpSocket, value: u64) -> Result<(), ErrorCode>`
 
@@ -1938,6 +1968,7 @@ Unlike POSIX, WASI sockets have no notion of a socket-level
 async support.
 
 # References:
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
 - <https://man7.org/linux/man-pages/man2/socket.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
@@ -1952,13 +1983,15 @@ network interface(s) to bind to.
 If the port is zero, the socket will be bound to a random free port.
 
 # Typical errors
-- `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
-- `invalid-state`:             The socket is already bound. (EINVAL)
-- `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
-- `address-in-use`:            Address is already in use. (EADDRINUSE)
-- `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
+
+- `invalid-argument`: The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
+- `invalid-state`: The socket is already bound. (EINVAL)
+- `address-in-use`: No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
+- `address-in-use`: Address is already in use. (EADDRINUSE)
+- `address-not-bindable`: `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
 - <https://man7.org/linux/man-pages/man2/bind.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
@@ -1976,6 +2009,7 @@ free port.
 
 When a UDP socket is "connected", the `send` and `receive` methods
 are limited to communicating with that peer only:
+
 - `send` can only be used to send to this destination.
 - `receive` will only return datagrams sent from the provided `remote-address`.
 
@@ -1988,16 +2022,19 @@ This method may be called multiple times on the same socket to change
 its association, but only the most recent one will be effective.
 
 # Typical errors
-- `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-- `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
-- `invalid-argument`:          The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-- `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+
+- `invalid-argument`: The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+- `invalid-argument`: The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+- `invalid-argument`: The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+- `address-in-use`: Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
 
 # Implementors note
+
 If the socket is already connected, some platforms (e.g. Linux)
 require a disconnect before connecting to a different peer address.
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
 - <https://man7.org/linux/man-pages/man2/connect.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
@@ -2013,9 +2050,11 @@ with any address again.
 The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
 
 # Typical errors
-- `invalid-state`:           The socket is not connected.
+
+- `invalid-state`: The socket is not connected.
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
 - <https://man7.org/linux/man-pages/man2/connect.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
@@ -2036,16 +2075,18 @@ passed to `connect`.
 Implementations may trap if the `data` length exceeds 64 KiB.
 
 # Typical errors
-- `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
-- `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
-- `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
-- `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `connect`. (EISCONN)
-- `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
-- `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-- `connection-refused`:      The connection was refused. (ECONNREFUSED)
-- `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
+
+- `invalid-argument`: The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+- `invalid-argument`: The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+- `invalid-argument`: The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+- `invalid-argument`: The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `connect`. (EISCONN)
+- `invalid-argument`: The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
+- `remote-unreachable`: The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+- `connection-refused`: The connection was refused. (ECONNREFUSED)
+- `datagram-too-large`: The datagram is too large. (EMSGSIZE)
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
 - <https://man7.org/linux/man-pages/man2/send.2.html>
@@ -2068,11 +2109,13 @@ If the socket is connected, the sender address is guaranteed to
 match the remote address passed to `connect`.
 
 # Typical errors
-- `invalid-state`:        The socket has not been bound yet.
-- `remote-unreachable`:   The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
-- `connection-refused`:   The connection was refused. (ECONNREFUSED)
+
+- `invalid-state`: The socket has not been bound yet.
+- `remote-unreachable`: The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+- `connection-refused`: The connection was refused. (ECONNREFUSED)
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
 - <https://man7.org/linux/man-pages/man2/recv.2.html>
@@ -2086,15 +2129,18 @@ match the remote address passed to `connect`.
 Get the current bound address.
 
 POSIX mentions:
+
 > If the socket has not been bound to a local name, the value
 > stored in the object pointed to by `address` is unspecified.
 
 WASI is stricter and requires `get-local-address` to return `invalid-state` when the socket hasn't been bound yet.
 
 # Typical errors
+
 - `invalid-state`: The socket is not bound to any local address.
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
 - <https://man7.org/linux/man-pages/man2/getsockname.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
@@ -2105,9 +2151,11 @@ WASI is stricter and requires `get-local-address` to return `invalid-state` when
 Get the address the socket is currently "connected" to.
 
 # Typical errors
+
 - `invalid-state`: The socket is not "connected" to a specific remote address. (ENOTCONN)
 
 # References
+
 - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
 - <https://man7.org/linux/man-pages/man2/getpeername.2.html>
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
@@ -2128,7 +2176,8 @@ Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
 If the provided value is 0, an `invalid-argument` error is returned.
 
 # Typical errors
-- `invalid-argument`:     (set) The TTL value must be 1 or higher.
+
+- `invalid-argument`: (set) The TTL value must be 1 or higher.
 
 ##### `fn set_unicast_hop_limit(self: &UdpSocket, value: u8) -> Result<(), ErrorCode>`
 
@@ -2143,7 +2192,8 @@ I.e. after setting a value, reading the same setting back may return a different
 Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 # Typical errors
-- `invalid-argument`:     (set) The provided value was 0.
+
+- `invalid-argument`: (set) The provided value was 0.
 
 ##### `fn set_receive_buffer_size(self: &UdpSocket, value: u64) -> Result<(), ErrorCode>`
 

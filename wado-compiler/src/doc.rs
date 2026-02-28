@@ -444,9 +444,7 @@ fn extract_doc_comment_with_attrs(
     // When attributes are present, the doc comment is before the first attribute,
     // not immediately before the keyword. Use the first attribute's line as the
     // start to bridge the gap.
-    let item_line = attrs
-        .first()
-        .map_or(span.line, |a| a.span.line);
+    let item_line = attrs.first().map_or(span.line, |a| a.span.line);
     let mut expected_line = item_line;
     let mut doc_comments: Vec<&crate::comment::Comment> = Vec::new();
 
