@@ -1,0 +1,13 @@
+// Test: Result<Foo, String> == fails when Foo doesn't implement Eq
+struct Foo {
+    x: i32,
+}
+
+export fn run() {
+    let a: Result<Foo, String> = Result::<Foo, String>::Ok(Foo { x: 1 });
+    let b: Result<Foo, String> = Result::<Foo, String>::Ok(Foo { x: 1 });
+    assert a == b;
+}
+
+__DATA__
+{"compile_error": "=="}

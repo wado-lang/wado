@@ -503,7 +503,7 @@ if let Number(n) = r {
 }
 ```
 
-Note: Generic variants (custom `Maybe<T>`) and `Result<T, E>` pattern matching are not yet implemented. Non-generic custom variants work with `if let`.
+Generic variant pattern matching works with `match`, `if let`, and `matches`.
 
 ## Functions
 
@@ -842,6 +842,9 @@ impl<T: Eq> Eq for Pair<T> {
 Built-in trait implementations:
 
 - All primitive types (`i32`, `f64`, `bool`, etc.) implement `Eq` and `Ord`
+- `Option<T>` implements `Eq` when `T: Eq`
+- `Result<T, E>` implements `Eq` when `T: Eq` and `E: Eq`
+- `Array<T>` implements `Eq` when `T: Eq`, and `Ord` when `T: Ord`
 - Custom types must explicitly implement traits
 
 ## Control Flow
@@ -1655,8 +1658,6 @@ Wado intentionally does not support macros.
 - postfix `?` operator (error propagation)
 - JSX
 - Generic function/method type inference
-- Generic variant pattern matching (custom `Maybe<T>`)
-- `Result<T, E>` pattern matching
 
 ## See Also
 

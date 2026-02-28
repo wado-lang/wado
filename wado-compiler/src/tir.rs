@@ -873,6 +873,16 @@ impl TypeTable {
         }
     }
 
+    /// Get a human-readable name for a type, returning a fallback for missing `TypeIds`.
+    /// Useful in diagnostic/unparse contexts where types may not be in the local `TypeTable`.
+    pub fn try_type_name(&self, id: TypeId) -> String {
+        if self.try_get(id).is_some() {
+            self.type_name(id)
+        } else {
+            format!("<TypeId({})>", id.0)
+        }
+    }
+
     /// Get a mangled name for a type suitable for use in struct/function names.
     ///
     /// Unlike `type_name` which returns human-readable names (e.g., `[i32, String]`),
